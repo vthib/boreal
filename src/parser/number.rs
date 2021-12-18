@@ -1,3 +1,6 @@
+//! Parsing related to numbers.
+//!
+//! This implements the _NUMBER_ and _DOUBLE_ lexical patterns from libyara.
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -7,7 +10,9 @@ use nom::{
     IResult,
 };
 
-// \d+(MB|KB)?
+/// Parse a decimal number.
+///
+/// This function matches the pattern `/\d+(MB|KB)?`/.
 fn decimal_number(input: &str) -> IResult<&str, i64> {
     map_res(
         pair(
@@ -22,31 +27,41 @@ fn decimal_number(input: &str) -> IResult<&str, i64> {
     )(input)
 }
 
-// 0x\d+
+/// Parse an hexadecimal number.
+///
+/// This function matches the pattern `/0x\d+`/.
 fn hexadecimal_number(input: &str) -> IResult<&str, i64> {
     let (input, _) = tag("0x")(input)?;
 
     cut(map_res(hex_digit1, |v| i64::from_str_radix(v, 16)))(input)
 }
 
-// 0o\d+
+/// Parse an octal number.
+///
+/// This function matches the pattern `/0o\d+`/.
 fn octal_number(input: &str) -> IResult<&str, i64> {
     let (input, _) = tag("0o")(input)?;
 
     cut(map_res(oct_digit1, |v| i64::from_str_radix(v, 8)))(input)
 }
 
-// A number can be:
-// - hexadecimal with 0x prefix,
-// - octal with 0o prefix,
-// - decimal with optional KB/MB suffix.
+/// Parse a number (integer).
+///
+/// Equivalent to the _NUMBER_ lexical pattern in libyara.
+/// Can be:
+/// - hexadecimal with 0x prefix,
+/// - octal with 0o prefix,
+/// - decimal with optional KB/MB suffix.
 pub fn number(input: &str) -> IResult<&str, i64> {
     // XXX: decimal number must be last, otherwise, it would parse the '0'
     // in the '0x'/'0o' prefix.
     alt((hexadecimal_number, octal_number, decimal_number))(input)
 }
 
-// \d+\.\d+
+/// Parse a double.
+///
+/// Equivalent to the _DOUBLE_ lexical pattern in libyara.
+/// This functions matches the pattern `/\d+\.\d+/`.
 pub fn double(input: &str) -> IResult<&str, f64> {
     let (input, payload) = recognize(tuple((digit1, char('.'), digit1)))(input)?;
 

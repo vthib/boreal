@@ -1,3 +1,6 @@
+//! Parsing methods for .yar files.
+//!
+//! This module mainly intends to match the lexical patterns used in libyara.
 use nom::{
     branch::alt,
     bytes::complete::tag,

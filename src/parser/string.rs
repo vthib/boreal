@@ -1,23 +1,27 @@
+//! Parsing related to strings.
+//!
+//! This implements the _TEXT_STRING_ lexical patterns from libyara.
 use nom::{
     branch::alt,
-    bytes::complete::{escaped_transform, is_not, tag, take_while},
-    character::{
-        complete::{char, digit1, hex_digit1, oct_digit1, one_of},
-        is_hex_digit,
-    },
-    combinator::{cut, map, map_res, opt, recognize, success, value},
+    bytes::complete::{escaped_transform, is_not},
+    character::complete::{char, one_of},
+    combinator::{cut, map, value},
     multi::fold_many_m_n,
-    sequence::{pair, preceded, terminated, tuple},
+    sequence::{preceded, terminated},
     IResult,
 };
 
-// "..."
-// control characters: \t, \r, \n, \", \\, \x[0-9a-fA-F]{2}
+/// Parse a quoted string with escapable characters.
+///
+/// Equivalent to the _TEXT_STRING_ lexical pattern in libyara.
+/// This is roughly equivalent to the pattern `/"[^\n\"]*"/`, with control
+/// patterns `\t`, `\r`, `\n`, `\"`, `\\`, and `\x[0-9a-fA-F]{2}`.
 pub fn quoted_string(input: &str) -> IResult<&str, String> {
     let (input, _) = char('"')(input)?;
 
     // escaped transform does not handle having no content, so
     // handle empty string explicitly.
+    // TODO: ticket for nom?
     if let Ok((next_input, '"')) = char::<&str, nom::error::Error<&str>>('"')(input) {
         return Ok((next_input, "".to_owned()));
     }
