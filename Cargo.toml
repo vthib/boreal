@@ -1,0 +1,8 @@
+[package]
+name = "yarr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Parsing .yar files
+nom = "7.1"
