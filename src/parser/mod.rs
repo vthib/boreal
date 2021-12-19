@@ -11,6 +11,7 @@ use nom::{
     IResult,
 };
 
+mod hex_string;
 mod number;
 mod primary_expression;
 mod string;
