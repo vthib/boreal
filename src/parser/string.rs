@@ -157,26 +157,7 @@ fn regex_contents(mut input: &str) -> IResult<&str, String> {
 
 #[cfg(test)]
 mod tests {
-    use nom::Finish;
-
-    fn parse<F, O>(f: F, input: &str, expected_rest_input: &str, expected_number: O)
-    where
-        F: FnOnce(&str) -> nom::IResult<&str, O>,
-        O: PartialEq + std::fmt::Debug,
-    {
-        let res = f(input).unwrap();
-        assert_eq!(res.0, expected_rest_input);
-        assert_eq!(res.1, expected_number);
-    }
-
-    fn parse_err<F, O>(f: F, input: &str)
-    where
-        F: FnOnce(&str) -> nom::IResult<&str, O>,
-        O: PartialEq + std::fmt::Debug,
-    {
-        let res = f(input).finish();
-        assert!(res.is_err());
-    }
+    use super::super::test_utils::{parse, parse_err};
 
     #[test]
     fn test_parse_quoted_string() {

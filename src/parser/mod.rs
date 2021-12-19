@@ -16,6 +16,9 @@ mod number;
 mod primary_expression;
 mod string;
 
+#[cfg(test)]
+mod test_utils;
+
 #[derive(Debug, PartialEq)]
 pub struct Rule {
     name: String,
