@@ -68,13 +68,19 @@ fn singleline_comment(input: &str) -> IResult<&str, ()> {
     value((), tuple((tag("//"), take_until("\n"), char('\n'))))(input)
 }
 
-/// A range, [a-b], [-b], [a-] or [-]
+/// A jump range, which can be expressed in multiple ways:
+///
+/// - `[a-b]` means between `a` and `b`, inclusive.
+/// - `[-b]` is equivalent to `[0-b]`.
+/// - `[a-]` means `a` or more.
+/// - `[-]` is equivalent to `[0-]`.
+/// - `[a]` is equivalent to `[a-a]`.
 #[derive(Debug, PartialEq)]
 struct Range {
-    /// Left value of the range.
-    left: Option<u32>,
-    /// Right value of the range.
-    right: Option<u32>,
+    /// Beginning of the range, included.
+    from: u32,
+    /// Optional end of the range, included.
+    to: Option<u32>,
 }
 
 /// Parse a range.
@@ -83,14 +89,28 @@ struct Range {
 fn range(input: &str) -> IResult<&str, Range> {
     delimited(
         char('['),
-        cut(map(
-            separated_pair(
-                preceded(sp0, opt(map_res(digit1, |a: &str| a.parse()))),
-                preceded(sp0, char('-')),
-                preceded(sp0, opt(map_res(digit1, |a: &str| a.parse()))),
+        cut(alt((
+            // Parses [a?-b?]
+            map(
+                separated_pair(
+                    preceded(sp0, opt(map_res(digit1, |a: &str| a.parse()))),
+                    preceded(sp0, char('-')),
+                    preceded(sp0, opt(map_res(digit1, |a: &str| a.parse()))),
+                ),
+                |(from, to)| Range {
+                    from: from.unwrap_or(0),
+                    to,
+                },
             ),
-            |(left, right)| Range { left, right },
-        )),
+            // Parses [a]
+            map(
+                preceded(sp0, map_res(digit1, |a: &str| a.parse())),
+                |value| Range {
+                    from: value,
+                    to: Some(value),
+                },
+            ),
+        ))),
         preceded(sp0, char(']')),
     )(input)
 }
@@ -161,40 +181,24 @@ mod tests {
     fn test_range() {
         use super::{range, Range};
 
-        parse(
-            range,
-            "[-] a",
-            " a",
-            Range {
-                left: None,
-                right: None,
-            },
-        );
+        parse(range, "[-] a", " a", Range { from: 0, to: None });
         parse(
             range,
             "[ 15 -35]",
             "",
             Range {
-                left: Some(15),
-                right: Some(35),
+                from: 15,
+                to: Some(35),
             },
         );
-        parse(
-            range,
-            "[1-  ]",
-            "",
-            Range {
-                left: Some(1),
-                right: None,
-            },
-        );
+        parse(range, "[1-  ]", "", Range { from: 1, to: None });
         parse(
             range,
             "[1-2]]",
             "]",
             Range {
-                left: Some(1),
-                right: Some(2),
+                from: 1,
+                to: Some(2),
             },
         );
         parse(
@@ -202,8 +206,8 @@ mod tests {
             "[  1  -  2  ]",
             "",
             Range {
-                left: Some(1),
-                right: Some(2),
+                from: 1,
+                to: Some(2),
             },
         );
         parse(
@@ -211,14 +215,22 @@ mod tests {
             "[-1]",
             "",
             Range {
-                left: None,
-                right: Some(1),
+                from: 0,
+                to: Some(1),
+            },
+        );
+        parse(
+            range,
+            "[12 ]",
+            "",
+            Range {
+                from: 12,
+                to: Some(12),
             },
         );
 
         parse_err(range, "[");
         parse_err(range, "[]");
-        parse_err(range, "[1]");
         parse_err(range, "[--]");
         parse_err(range, "[1-2-3]");
         parse_err(range, "[1-2-]");
