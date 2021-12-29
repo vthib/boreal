@@ -7,7 +7,7 @@ use nom::{
     character::complete::{char, digit1, multispace0 as sp0},
     combinator::{cut, map, map_res, opt, value},
     error::{Error, ErrorKind, FromExternalError, ParseError},
-    multi::fold_many_m_n,
+    multi::many1,
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
     IResult,
 };
@@ -31,7 +31,9 @@ fn hex_digit(input: &str) -> IResult<&str, u8> {
 ///
 /// Equivalent to the _BYTE_ lexical pattern in libyara.
 fn byte(input: &str) -> IResult<&str, u8> {
-    fold_many_m_n(2, 2, hex_digit, || 0, |acc, v| (acc << 4) | v)(input)
+    let (input, digit0) = hex_digit(input)?;
+
+    map(cut(hex_digit), move |digit1| (digit0 << 4) | digit1)(input)
 }
 
 /// Mask on a byte.
@@ -138,6 +140,75 @@ fn validate_range(range: &Range) -> Result<(), String> {
     Ok(())
 }
 
+/// A token in an hex string.
+#[derive(Debug, PartialEq)]
+enum HexToken {
+    /// A fully declared byte, eg `9C`
+    Byte(u8),
+    /// A masked byte, eg `?5`, `C?`, `??`
+    MaskedByte(u8, Mask),
+    /// A range, eg `[5-10]`, `[3-]`, ...
+    Range(Range),
+    /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
+    Alternatives(Vec<HexToken>, Vec<HexToken>),
+}
+
+/// Parse an alternative between two sets of tokens.
+///
+/// This looks like `( AB .. | CD .. )`.
+///
+/// This is equivalent to the `alternatives` from hex_grammar.y in libyara.
+fn alternatives(input: &str) -> IResult<&str, HexToken> {
+    delimited(
+        terminated(char('('), sp0),
+        map(
+            cut(separated_pair(
+                many1(hex_token),
+                terminated(char('|'), sp0),
+                many1(hex_token),
+            )),
+            |(left, right)| HexToken::Alternatives(left, right),
+        ),
+        terminated(char(')'), sp0),
+    )(input)
+}
+
+/// Parse an hex token.
+///
+/// This is equivalent to the `tokens` rule in hex_grammar.y in libyara.
+fn hex_token(input: &str) -> IResult<&str, HexToken> {
+    alt((
+        // Always have at least one space after a byte or a masked byte
+        map(terminated(byte, sp0), HexToken::Byte),
+        map(terminated(masked_byte, sp0), |(v, mask)| {
+            HexToken::MaskedByte(v, mask)
+        }),
+        map(range, |range| {
+            // Jump of one is equivalent to ??
+            if let Some(to) = &range.to {
+                if range.from == *to && range.from == 1 {
+                    return HexToken::MaskedByte(0, Mask::All);
+                }
+            }
+            HexToken::Range(range)
+        }),
+        alternatives,
+    ))(input)
+}
+
+/// Parse an hex string.
+///
+/// This looks like `{ AB .. }`.
+///
+/// This is equivalent to the `hex_string` rule in hex_grammar.y in libyara.
+fn hex_string(input: &str) -> IResult<&str, Vec<HexToken>> {
+    delimited(
+        terminated(char('{'), sp0),
+        cut(many1(hex_token)),
+        terminated(char('}'), sp0),
+    )(input)
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::{parse, parse_err};
@@ -188,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn test_singleine_comment() {
+    fn test_singleline_comment() {
         use super::singleline_comment;
 
         parse(singleline_comment, "//\n", "", ());
@@ -285,5 +356,97 @@ mod tests {
                 to: Some(1),
             },
         );
+    }
+
+    #[test]
+    fn test_alternatives() {
+        use super::{alternatives, HexToken, Mask, Range};
+
+        parse(
+            alternatives,
+            "( AB | 56 ?F ) ",
+            "",
+            HexToken::Alternatives(
+                vec![HexToken::Byte(0xAB)],
+                vec![HexToken::Byte(0x56), HexToken::MaskedByte(0x0F, Mask::Left)],
+            ),
+        );
+        parse(
+            alternatives,
+            "(12[1-3]|[3-5])",
+            "",
+            HexToken::Alternatives(
+                vec![
+                    HexToken::Byte(0x12),
+                    HexToken::Range(Range {
+                        from: 1,
+                        to: Some(3),
+                    }),
+                ],
+                vec![HexToken::Range(Range {
+                    from: 3,
+                    to: Some(5),
+                })],
+            ),
+        );
+        parse(
+            alternatives,
+            "( ( 12 | 23)| 15) ",
+            "",
+            HexToken::Alternatives(
+                vec![HexToken::Alternatives(
+                    vec![HexToken::Byte(0x12)],
+                    vec![HexToken::Byte(0x23)],
+                )],
+                vec![HexToken::Byte(0x15)],
+            ),
+        );
+
+        parse_err(alternatives, ")");
+        parse_err(alternatives, "()");
+        parse_err(alternatives, "(");
+        parse_err(alternatives, "(|)");
+        parse_err(alternatives, "(|");
+        parse_err(alternatives, "(AB|)");
+        parse_err(alternatives, "(|12)");
+        parse_err(alternatives, "(|123)");
+    }
+
+    #[test]
+    fn test_hex_string() {
+        use super::{hex_string, HexToken, Mask, Range};
+
+        parse(hex_string, "{ AB }", "", vec![HexToken::Byte(0xAB)]);
+
+        parse(
+            hex_string,
+            "{ DE AD BE EF }",
+            "",
+            vec![
+                HexToken::Byte(0xDE),
+                HexToken::Byte(0xAD),
+                HexToken::Byte(0xBE),
+                HexToken::Byte(0xEF),
+            ],
+        );
+        parse(
+            hex_string,
+            "{ 01 ?2 ?? [1-] ( AF | DC ) }",
+            "",
+            vec![
+                HexToken::Byte(1),
+                HexToken::MaskedByte(2, Mask::Left),
+                HexToken::MaskedByte(0, Mask::All),
+                HexToken::Range(Range { from: 1, to: None }),
+                HexToken::Alternatives(vec![HexToken::Byte(0xAF)], vec![HexToken::Byte(0xDC)]),
+            ],
+        );
+
+        parse_err(hex_string, "AB");
+        parse_err(hex_string, "{");
+        parse_err(hex_string, "{}");
+        parse_err(hex_string, "{A}");
+        parse_err(hex_string, "{ABA}");
+        parse_err(hex_string, "{AB");
     }
 }
