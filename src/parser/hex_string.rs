@@ -6,7 +6,7 @@ use nom::{
     bytes::complete::{tag, take_until},
     character::complete::{char, digit1, multispace0 as sp0},
     combinator::{cut, map, map_res, opt, value},
-    error::{Error, ErrorKind, ParseError},
+    error::{Error, ErrorKind, FromExternalError, ParseError},
     multi::fold_many_m_n,
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
     IResult,
@@ -87,15 +87,15 @@ struct Range {
 ///
 /// This is equivalent to the range state in libyara.
 fn range(input: &str) -> IResult<&str, Range> {
-    delimited(
-        char('['),
+    let (input, range) = delimited(
+        terminated(char('['), sp0),
         cut(alt((
             // Parses [a?-b?]
             map(
                 separated_pair(
-                    preceded(sp0, opt(map_res(digit1, |a: &str| a.parse()))),
-                    preceded(sp0, char('-')),
-                    preceded(sp0, opt(map_res(digit1, |a: &str| a.parse()))),
+                    opt(map_res(terminated(digit1, sp0), |a: &str| a.parse())),
+                    terminated(char('-'), sp0),
+                    opt(map_res(terminated(digit1, sp0), |a: &str| a.parse())),
                 ),
                 |(from, to)| Range {
                     from: from.unwrap_or(0),
@@ -104,15 +104,38 @@ fn range(input: &str) -> IResult<&str, Range> {
             ),
             // Parses [a]
             map(
-                preceded(sp0, map_res(digit1, |a: &str| a.parse())),
+                map_res(terminated(digit1, sp0), |a: &str| a.parse()),
                 |value| Range {
                     from: value,
                     to: Some(value),
                 },
             ),
         ))),
-        preceded(sp0, char(']')),
-    )(input)
+        terminated(char(']'), sp0),
+    )(input)?;
+
+    if let Err(desc) = validate_range(&range) {
+        return Err(nom::Err::Failure(Error::from_external_error(
+            input,
+            ErrorKind::Verify,
+            desc,
+        )));
+    }
+    Ok((input, range))
+}
+
+/// Validate a range is well-formed.
+fn validate_range(range: &Range) -> Result<(), String> {
+    if let Some(to) = range.to {
+        if range.from == 0 && to == 0 {
+            return Err("invalid jump length".to_owned());
+        }
+        if range.from > to {
+            return Err("invalid jump range".to_owned());
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -181,7 +204,7 @@ mod tests {
     fn test_range() {
         use super::{range, Range};
 
-        parse(range, "[-] a", " a", Range { from: 0, to: None });
+        parse(range, "[-] a", "a", Range { from: 0, to: None });
         parse(
             range,
             "[ 15 -35]",
@@ -238,5 +261,29 @@ mod tests {
         parse_err(range, "[d-e]");
         parse_err(range, "[999999999999-]");
         parse_err(range, "[-999999999999]");
+
+        // validation errors
+        parse_err(range, "[4-2]");
+        parse_err(range, "[4-3]");
+        parse(
+            range,
+            "[4-4]",
+            "",
+            Range {
+                from: 4,
+                to: Some(4),
+            },
+        );
+        parse_err(range, "[0]");
+        parse_err(range, "[0-0]");
+        parse(
+            range,
+            "[1]",
+            "",
+            Range {
+                from: 1,
+                to: Some(1),
+            },
+        );
     }
 }
