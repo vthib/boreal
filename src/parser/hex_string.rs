@@ -12,6 +12,9 @@ use nom::{
     IResult,
 };
 
+// TODO: handle this limit in some way
+const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
+
 // Parse an hex-digit, and return its value in [0-15].
 fn hex_digit(input: &str) -> IResult<&str, u8> {
     match input
@@ -147,8 +150,8 @@ enum HexToken {
     Byte(u8),
     /// A masked byte, eg `?5`, `C?`, `??`
     MaskedByte(u8, Mask),
-    /// A range, eg `[5-10]`, `[3-]`, ...
-    Range(Range),
+    /// A jump of unknown bytes, eg `[5-10]`, `[3-]`, ...
+    Jump(Range),
     /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
     Alternatives(Vec<HexToken>, Vec<HexToken>),
 }
@@ -163,9 +166,9 @@ fn alternatives(input: &str) -> IResult<&str, HexToken> {
         terminated(char('('), sp0),
         map(
             cut(separated_pair(
-                many1(hex_token),
+                many1(|input| hex_token(input, true)),
                 terminated(char('|'), sp0),
-                many1(hex_token),
+                many1(|input| hex_token(input, true)),
             )),
             |(left, right)| HexToken::Alternatives(left, right),
         ),
@@ -173,24 +176,55 @@ fn alternatives(input: &str) -> IResult<&str, HexToken> {
     )(input)
 }
 
+fn validate_range_in_alternatives(range: &Range) -> Result<(), String> {
+    match range.to {
+        None => Err("unbounded jumps not allowed inside alternation (|)".to_owned()),
+        Some(to) => {
+            // No need to test from, as from <= to, if from is over the limit, to will be.
+            if to > JUMP_LIMIT_IN_ALTERNATIVES {
+                Err(format!(
+                    "jumps over {} not allowed inside alternation (|)",
+                    JUMP_LIMIT_IN_ALTERNATIVES
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
 /// Parse an hex token.
 ///
+/// Some token are not allowed inside an alternatives, which is why a
+/// `in_alternatives` flag is needed.
+///
 /// This is equivalent to the `tokens` rule in hex_grammar.y in libyara.
-fn hex_token(input: &str) -> IResult<&str, HexToken> {
+fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
     alt((
         // Always have at least one space after a byte or a masked byte
         map(terminated(byte, sp0), HexToken::Byte),
         map(terminated(masked_byte, sp0), |(v, mask)| {
             HexToken::MaskedByte(v, mask)
         }),
-        map(range, |range| {
+        map_res(range, |range| {
+            // Some jumps are forbidden inside an alternatives
+            if in_alternatives {
+                if let Err(desc) = validate_range_in_alternatives(&range) {
+                    return Err(nom::Err::Failure(Error::from_external_error(
+                        input,
+                        ErrorKind::Verify,
+                        desc,
+                    )));
+                }
+            }
+
             // Jump of one is equivalent to ??
             if let Some(to) = &range.to {
                 if range.from == *to && range.from == 1 {
-                    return HexToken::MaskedByte(0, Mask::All);
+                    return Ok(HexToken::MaskedByte(0, Mask::All));
                 }
             }
-            HexToken::Range(range)
+            Ok(HexToken::Jump(range))
         }),
         alternatives,
     ))(input)
@@ -204,7 +238,7 @@ fn hex_token(input: &str) -> IResult<&str, HexToken> {
 fn hex_string(input: &str) -> IResult<&str, Vec<HexToken>> {
     delimited(
         terminated(char('{'), sp0),
-        cut(many1(hex_token)),
+        cut(many1(|input| hex_token(input, false))),
         terminated(char('}'), sp0),
     )(input)
 }
@@ -378,12 +412,12 @@ mod tests {
             HexToken::Alternatives(
                 vec![
                     HexToken::Byte(0x12),
-                    HexToken::Range(Range {
+                    HexToken::Jump(Range {
                         from: 1,
                         to: Some(3),
                     }),
                 ],
-                vec![HexToken::Range(Range {
+                vec![HexToken::Jump(Range {
                     from: 3,
                     to: Some(5),
                 })],
@@ -391,17 +425,25 @@ mod tests {
         );
         parse(
             alternatives,
-            "( ( 12 | 23)| 15) ",
+            "( ( [1-5] | 23)| 15) ",
             "",
             HexToken::Alternatives(
                 vec![HexToken::Alternatives(
-                    vec![HexToken::Byte(0x12)],
+                    vec![HexToken::Jump(Range {
+                        from: 1,
+                        to: Some(5),
+                    })],
                     vec![HexToken::Byte(0x23)],
                 )],
                 vec![HexToken::Byte(0x15)],
             ),
         );
 
+        parse_err(alternatives, "( AB | [-] )");
+        parse_err(alternatives, "( AB | [1-] )");
+        parse_err(alternatives, "( AB | [1-250] )");
+        parse_err(alternatives, "( AB | [199-201] )");
+        parse_err(alternatives, "( AB | [200-201] )");
         parse_err(alternatives, ")");
         parse_err(alternatives, "()");
         parse_err(alternatives, "(");
@@ -437,7 +479,7 @@ mod tests {
                 HexToken::Byte(1),
                 HexToken::MaskedByte(2, Mask::Left),
                 HexToken::MaskedByte(0, Mask::All),
-                HexToken::Range(Range { from: 1, to: None }),
+                HexToken::Jump(Range { from: 1, to: None }),
                 HexToken::Alternatives(vec![HexToken::Byte(0xAF)], vec![HexToken::Byte(0xDC)]),
             ],
         );
