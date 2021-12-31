@@ -1,6 +1,18 @@
 //! Parsing methods for .yar files.
 //!
 //! This module mainly intends to match the lexical patterns used in libyara.
+//!
+//! Progress:
+//! [x] hex strings initial impl is complete, need integration testing.
+//! [ ] re strings needs to be investigated.
+//! [ ] yar files are in progress.
+//!   lexer:
+//!     [x] identifiers
+//!     [x] strings
+//!     [x] regexes
+//!     [ ] includes
+//!   parser:
+//!     [ ] all
 use nom::{
     branch::alt,
     bytes::complete::tag,
