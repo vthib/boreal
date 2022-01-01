@@ -45,17 +45,17 @@ fn string_identifier(input: &str) -> IResult<&str, (String, bool)> {
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
-fn string_count(input: &str) -> IResult<&str, String> {
+pub fn string_count(input: &str) -> IResult<&str, String> {
     preceded(char('#'), cut(identifier_contents))(input)
 }
 
 /// Parse a string offset, roughly equivalent to `@[a-zA-Z0-9_]*`.
-fn string_offset(input: &str) -> IResult<&str, String> {
+pub fn string_offset(input: &str) -> IResult<&str, String> {
     preceded(char('@'), cut(identifier_contents))(input)
 }
 
 /// Parse a string length, roughly equivalent to `![a-zA-Z0-9_]*`.
-fn string_length(input: &str) -> IResult<&str, String> {
+pub fn string_length(input: &str) -> IResult<&str, String> {
     preceded(char('!'), cut(identifier_contents))(input)
 }
 
@@ -76,7 +76,7 @@ where
 /// the end of the identifier has a wildcard.
 ///
 /// This is roughly equivalent to `[a-ZA-Z_][a-zA-Z0-9_]*`.
-fn identifier(input: &str) -> IResult<&str, (String, bool)> {
+pub fn identifier(input: &str) -> IResult<&str, (String, bool)> {
     tuple((
         map(
             recognize(tuple((
