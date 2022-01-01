@@ -13,6 +13,8 @@ use nom::{
     IResult,
 };
 
+use super::nom_recipes::{rtrim, take_one};
+
 /// Returns true if the char is an identifier digit, ie a-z, a-Z, 0-9, _
 fn is_identifier_digit(c: char) -> bool {
     matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_')
@@ -22,6 +24,9 @@ fn is_identifier_digit(c: char) -> bool {
 ///
 /// This is always the rest of an identifier type, where the first
 /// character determines which type of identifier is being parsed.
+///
+/// This function *does not* right-trim, as it can be followed
+/// by a '*' character that is meaningful in some contexts.
 fn identifier_contents(input: &str) -> IResult<&str, String> {
     map(take_while(is_identifier_digit), |s: &str| s.to_owned())(input)
 }
@@ -35,39 +40,28 @@ fn identifier_contents(input: &str) -> IResult<&str, String> {
 /// lexical patterns in libyara.
 /// Roughly equivalent to `$[a-ZA-Z0-9_]*\*?`.
 fn string_identifier(input: &str) -> IResult<&str, (String, bool)> {
-    preceded(
+    rtrim(preceded(
         char('$'),
         cut(tuple((
             identifier_contents,
             map(opt(char('*')), |v| v.is_some()),
         ))),
-    )(input)
+    ))(input)
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
 pub fn string_count(input: &str) -> IResult<&str, String> {
-    preceded(char('#'), cut(identifier_contents))(input)
+    rtrim(preceded(char('#'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string offset, roughly equivalent to `@[a-zA-Z0-9_]*`.
 pub fn string_offset(input: &str) -> IResult<&str, String> {
-    preceded(char('@'), cut(identifier_contents))(input)
+    rtrim(preceded(char('@'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string length, roughly equivalent to `![a-zA-Z0-9_]*`.
 pub fn string_length(input: &str) -> IResult<&str, String> {
-    preceded(char('!'), cut(identifier_contents))(input)
-}
-
-/// Accepts a single character if the passed function returns true on it.
-fn take_one<F>(f: F) -> impl Fn(&str) -> IResult<&str, char>
-where
-    F: Fn(char) -> bool,
-{
-    move |input| match input.chars().next().map(|c| (c, f(c))) {
-        Some((c, true)) => Ok((&input[c.len_utf8()..], c)),
-        _ => Err(nom::Err::Error(Error::from_char(input, '0'))),
-    }
+    rtrim(preceded(char('!'), cut(identifier_contents)))(input)
 }
 
 /// Parse an identifier.
@@ -77,7 +71,7 @@ where
 ///
 /// This is roughly equivalent to `[a-ZA-Z_][a-zA-Z0-9_]*`.
 pub fn identifier(input: &str) -> IResult<&str, (String, bool)> {
-    tuple((
+    rtrim(tuple((
         map(
             recognize(tuple((
                 take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
@@ -86,7 +80,7 @@ pub fn identifier(input: &str) -> IResult<&str, (String, bool)> {
             |s| s.to_owned(),
         ),
         map(opt(char('*')), |v| v.is_some()),
-    ))(input)
+    )))(input)
 }
 
 /// Parse a quoted string with escapable characters.
@@ -104,7 +98,7 @@ pub fn quoted_string(input: &str) -> IResult<&str, String> {
         return Ok((next_input, "".to_owned()));
     }
 
-    cut(terminated(
+    rtrim(cut(terminated(
         escaped_transform(
             is_not("\\\n\""),
             '\\',
@@ -130,7 +124,7 @@ pub fn quoted_string(input: &str) -> IResult<&str, String> {
             )),
         ),
         char('"'),
-    ))(input)
+    )))(input)
 }
 
 /// A regular expression.
@@ -168,8 +162,7 @@ pub fn regex(input: &str) -> IResult<&str, Regex> {
         )));
     }
 
-    let (input, no_case) = opt(char('i'))(input)?;
-    let (input, dot_all) = opt(char('s'))(input)?;
+    let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
 
     Ok((
         input,
@@ -241,7 +234,7 @@ mod tests {
 
         parse(quoted_string, "\"\"", "", "".to_owned());
         parse(quoted_string, "\"1\"b", "b", "1".to_owned());
-        parse(quoted_string, "\"abc +$\"", "", "abc +$".to_owned());
+        parse(quoted_string, "\"abc +$\" b", "b", "abc +$".to_owned());
 
         parse(
             quoted_string,
@@ -300,8 +293,8 @@ mod tests {
         );
         parse(
             regex,
-            r#"/.{2}/si"#,
-            "i",
+            r#"/.{2}/si c"#,
+            "i c",
             Regex {
                 expr: ".{2}".to_owned(),
                 case_insensitive: false,
@@ -310,8 +303,8 @@ mod tests {
         );
         parse(
             regex,
-            "/\0\\\0/",
-            "",
+            "/\0\\\0/ c",
+            "c",
             Regex {
                 expr: "\0\\\0".to_owned(),
                 case_insensitive: false,
@@ -332,7 +325,7 @@ mod tests {
 
         parse(string_identifier, "$-", "-", ("".to_owned(), false));
         parse(string_identifier, "$*", "", ("".to_owned(), true));
-        parse(string_identifier, "$a", "", ("a".to_owned(), false));
+        parse(string_identifier, "$a c", "c", ("a".to_owned(), false));
         parse(string_identifier, "$9b*c", "c", ("9b".to_owned(), true));
         parse(
             string_identifier,
@@ -351,7 +344,7 @@ mod tests {
 
         parse(string_count, "#-", "-", "".to_owned());
         parse(string_count, "#*", "*", "".to_owned());
-        parse(string_count, "#a", "", "a".to_owned());
+        parse(string_count, "#a c", "c", "a".to_owned());
         parse(string_count, "#9b*c", "*c", "9b".to_owned());
         parse(string_count, "#_1Bd_F+", "+", "_1Bd_F".to_owned());
 
@@ -368,7 +361,7 @@ mod tests {
 
         parse(string_offset, "@-", "-", "".to_owned());
         parse(string_offset, "@*", "*", "".to_owned());
-        parse(string_offset, "@a", "", "a".to_owned());
+        parse(string_offset, "@a c", "c", "a".to_owned());
         parse(string_offset, "@9b*c", "*c", "9b".to_owned());
         parse(string_offset, "@_1Bd_F+", "+", "_1Bd_F".to_owned());
 
@@ -385,7 +378,7 @@ mod tests {
 
         parse(string_length, "!-", "-", "".to_owned());
         parse(string_length, "!*", "*", "".to_owned());
-        parse(string_length, "!a", "", "a".to_owned());
+        parse(string_length, "!a c", "c", "a".to_owned());
         parse(string_length, "!9b*c", "*c", "9b".to_owned());
         parse(string_length, "!_1Bd_F+", "+", "_1Bd_F".to_owned());
 
@@ -402,7 +395,7 @@ mod tests {
 
         parse(identifier, "a+", "+", ("a".to_owned(), false));
         parse(identifier, "_*", "", ("_".to_owned(), true));
-        parse(identifier, "A5", "", ("A5".to_owned(), false));
+        parse(identifier, "A5 c", "c", ("A5".to_owned(), false));
         parse(identifier, "g9b*c", "c", ("g9b".to_owned(), true));
         parse(identifier, "__1Bd_F+", "+", ("__1Bd_F".to_owned(), false));
 

@@ -2,6 +2,12 @@
 //!
 //! This module mainly intends to match the lexical patterns used in libyara.
 //!
+//! All of the parsing functions, unless otherwise indicated, depends on the
+//! following invariants:
+//! - The received input has already been left-trimmed
+//! - The returned input is right-trimmed
+//! The [`nom_recipes::rtrim`] function is provided to make this easier.
+//!
 //! Progress:
 //! [x] hex strings initial impl is complete, need integration testing.
 //! [ ] re strings needs to be investigated.
@@ -24,6 +30,7 @@ use nom::{
 };
 
 mod hex_string;
+mod nom_recipes;
 mod number;
 mod primary_expression;
 mod string;

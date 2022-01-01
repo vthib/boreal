@@ -4,13 +4,13 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{char, multispace0 as sp0},
+    character::complete::char,
     combinator::{cut, map, opt},
     sequence::{delimited, pair, separated_pair, terminated, tuple},
     IResult,
 };
 
-use super::{number, string};
+use super::{nom_recipes::rtrim, number, string};
 
 /// Size of the integer to read, see [`PrimaryExpression::ReadInteger`].
 #[derive(Debug, PartialEq)]
@@ -102,7 +102,7 @@ pub enum PrimaryExpression {
 /// - the size of the integer
 /// - a boolean indicating the endianness (true if big-endian).
 fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
-    tuple((
+    rtrim(tuple((
         map(opt(char('u')), |v| v.is_some()),
         alt((
             map(tag("int8"), |_| ReadIntegerSize::Int8),
@@ -110,45 +110,38 @@ fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
             map(tag("int32"), |_| ReadIntegerSize::Int32),
         )),
         map(opt(tag("be")), |v| v.is_some()),
-    ))(input)
+    )))(input)
 }
 
 fn range(input: &str) -> IResult<&str, (PrimaryExpression, PrimaryExpression)> {
-    delimited(
-        terminated(char('('), sp0),
-        cut(separated_pair(
-            primary_expression,
-            terminated(tag(".."), sp0),
-            primary_expression,
-        )),
-        cut(terminated(char(')'), sp0)),
-    )(input)
+    let (input, _) = rtrim(char('('))(input)?;
+
+    cut(terminated(
+        separated_pair(primary_expression, rtrim(tag("..")), primary_expression),
+        rtrim(char(')')),
+    ))(input)
 }
 
 fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
     alt((
         // '(' primary_expression ')'
         delimited(
-            terminated(char('('), sp0),
+            rtrim(char('(')),
             cut(primary_expression),
-            cut(terminated(char(')'), sp0)),
+            cut(rtrim(char(')'))),
         ),
         // 'filesize'
-        map(terminated(tag("filesize"), sp0), |_| {
-            PrimaryExpression::Filesize
-        }),
+        map(rtrim(tag("filesize")), |_| PrimaryExpression::Filesize),
         // 'entrypoint'
-        map(terminated(tag("entrypoint"), sp0), |_| {
-            PrimaryExpression::Entrypoint
-        }),
+        map(rtrim(tag("entrypoint")), |_| PrimaryExpression::Entrypoint),
         // read_integer '(' primary_expresion ')'
         map(
             pair(
-                terminated(read_integer, sp0),
+                read_integer,
                 cut(delimited(
-                    terminated(char('('), sp0),
+                    rtrim(char('(')),
                     primary_expression,
-                    terminated(char(')'), sp0),
+                    rtrim(char(')')),
                 )),
             ),
             |((unsigned, size, big_endian), expr)| PrimaryExpression::ReadInteger {
@@ -159,21 +152,14 @@ fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
             },
         ),
         // double
-        map(terminated(number::double, sp0), PrimaryExpression::Double),
+        map(number::double, PrimaryExpression::Double),
         // number
-        map(terminated(number::number, sp0), PrimaryExpression::Number),
+        map(number::number, PrimaryExpression::Number),
         // text string
-        map(
-            terminated(string::quoted_string, sp0),
-            PrimaryExpression::String,
-        ),
+        map(string::quoted_string, PrimaryExpression::String),
         // string_count 'in' range
         map(
-            separated_pair(
-                terminated(string::string_count, sp0),
-                terminated(tag("in"), sp0),
-                cut(range),
-            ),
+            separated_pair(string::string_count, rtrim(tag("in")), cut(range)),
             |(identifier, (a, b))| PrimaryExpression::CountInRange {
                 identifier,
                 from: Box::new(a),
@@ -181,18 +167,15 @@ fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
             },
         ),
         // string_count
-        map(
-            terminated(string::string_count, sp0),
-            PrimaryExpression::Count,
-        ),
+        map(string::string_count, PrimaryExpression::Count),
         // string_offset | string_offset '[' primary_expression ']'
         map(
             pair(
-                terminated(string::string_offset, sp0),
+                string::string_offset,
                 opt(delimited(
-                    terminated(char('['), sp0),
-                    primary_expression,
-                    terminated(char(']'), sp0),
+                    rtrim(char('[')),
+                    cut(primary_expression),
+                    cut(rtrim(char(']'))),
                 )),
             ),
             |(identifier, expr)| PrimaryExpression::Offset {
@@ -203,11 +186,11 @@ fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
         // string_length | string_length '[' primary_expression ']'
         map(
             pair(
-                terminated(string::string_length, sp0),
+                string::string_length,
                 opt(delimited(
-                    terminated(char('['), sp0),
+                    rtrim(char('[')),
                     cut(primary_expression),
-                    cut(terminated(char(']'), sp0)),
+                    cut(rtrim(char(']'))),
                 )),
             ),
             |(identifier, expr)| PrimaryExpression::Length {
@@ -216,13 +199,12 @@ fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
             },
         ),
         // identifier
-        map(
-            terminated(string::identifier, sp0),
-            |(name, wildcard_at_end)| PrimaryExpression::Identifier {
+        map(string::identifier, |(name, wildcard_at_end)| {
+            PrimaryExpression::Identifier {
                 name,
                 wildcard_at_end,
-            },
-        ),
+            }
+        }),
     ))(input)
 }
 
@@ -235,17 +217,17 @@ mod tests {
         use super::{read_integer, ReadIntegerSize as RIS};
 
         parse(read_integer, "int8b", "b", (false, RIS::Int8, false));
-        parse(read_integer, "uint8 be", " be", (true, RIS::Int8, false));
+        parse(read_integer, "uint8 be", "be", (true, RIS::Int8, false));
         parse(read_integer, "int8bet", "t", (false, RIS::Int8, true));
         parse(read_integer, "uint8be", "", (true, RIS::Int8, true));
 
         parse(read_integer, "int16b", "b", (false, RIS::Int16, false));
-        parse(read_integer, "uint16 be", " be", (true, RIS::Int16, false));
+        parse(read_integer, "uint16 be", "be", (true, RIS::Int16, false));
         parse(read_integer, "int16bet", "t", (false, RIS::Int16, true));
         parse(read_integer, "uint16be", "", (true, RIS::Int16, true));
 
         parse(read_integer, "int32b", "b", (false, RIS::Int32, false));
-        parse(read_integer, "uint32 be", " be", (true, RIS::Int32, false));
+        parse(read_integer, "uint32 be", "be", (true, RIS::Int32, false));
         parse(read_integer, "int32bet", "t", (false, RIS::Int32, true));
         parse(read_integer, "uint32be", "", (true, RIS::Int32, true));
 
@@ -369,6 +351,8 @@ mod tests {
         parse_err(pe, "");
         parse_err(pe, "(");
         parse_err(pe, "(a");
+        parse_err(pe, "!a[1");
+        parse_err(pe, "@a[1");
         parse_err(pe, "()");
         parse_err(pe, "int16");
         parse_err(pe, "uint32(");

@@ -1,9 +1,9 @@
 use nom::Finish;
 
 #[track_caller]
-pub fn parse<F, O>(f: F, input: &str, expected_rest_input: &str, expected_result: O)
+pub fn parse<'a, F: 'a, O>(f: F, input: &'a str, expected_rest_input: &str, expected_result: O)
 where
-    F: FnOnce(&str) -> nom::IResult<&str, O>,
+    F: FnOnce(&'a str) -> nom::IResult<&'a str, O>,
     O: PartialEq + std::fmt::Debug,
 {
     let res = f(input).unwrap();

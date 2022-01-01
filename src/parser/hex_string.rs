@@ -8,14 +8,16 @@ use nom::{
     combinator::{cut, map, map_res, opt, value},
     error::{Error, ErrorKind, FromExternalError, ParseError},
     multi::many1,
-    sequence::{delimited, preceded, separated_pair, terminated, tuple},
+    sequence::{preceded, separated_pair, terminated, tuple},
     IResult,
 };
+
+use super::nom_recipes::rtrim;
 
 // TODO: handle this limit in some way
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
 
-// Parse an hex-digit, and return its value in [0-15].
+/// Parse an hex-digit, and return its value in [0-15].
 fn hex_digit(input: &str) -> IResult<&str, u8> {
     match input
         .chars()
@@ -36,7 +38,7 @@ fn hex_digit(input: &str) -> IResult<&str, u8> {
 fn byte(input: &str) -> IResult<&str, u8> {
     let (input, digit0) = hex_digit(input)?;
 
-    map(cut(hex_digit), move |digit1| (digit0 << 4) | digit1)(input)
+    map(cut(rtrim(hex_digit)), move |digit1| (digit0 << 4) | digit1)(input)
 }
 
 /// Mask on a byte.
@@ -54,23 +56,23 @@ enum Mask {
 ///
 /// Equivalent to the _MASKED_BYTE_ lexical pattern in libyara.
 fn masked_byte(input: &str) -> IResult<&str, (u8, Mask)> {
-    alt((
+    rtrim(alt((
         map(tag("??"), |_| (0, Mask::All)),
         map(preceded(char('?'), hex_digit), |v| (v, Mask::Left)),
         map(terminated(hex_digit, char('?')), |v| (v, Mask::Right)),
-    ))(input)
+    )))(input)
 }
 
 /// Parse a C-style /* ... */ comment.
 ///
 /// Equivalent to the `comment` state in libyara.
 fn multiline_comment(input: &str) -> IResult<&str, ()> {
-    value((), tuple((tag("/*"), take_until("*/"), tag("*/"))))(input)
+    rtrim(value((), tuple((tag("/*"), take_until("*/"), tag("*/")))))(input)
 }
 
 /// Parse single line // ... comments.
 fn singleline_comment(input: &str) -> IResult<&str, ()> {
-    value((), tuple((tag("//"), take_until("\n"), char('\n'))))(input)
+    rtrim(value((), tuple((tag("//"), take_until("\n"), char('\n')))))(input)
 }
 
 /// A jump range, which can be expressed in multiple ways:
@@ -92,15 +94,16 @@ struct Range {
 ///
 /// This is equivalent to the range state in libyara.
 fn range(input: &str) -> IResult<&str, Range> {
-    let (input, range) = delimited(
-        terminated(char('['), sp0),
-        cut(alt((
+    let (input, _) = rtrim(char('['))(input)?;
+
+    let (input, range) = cut(terminated(
+        alt((
             // Parses [a?-b?]
             map(
                 separated_pair(
-                    opt(map_res(terminated(digit1, sp0), |a: &str| a.parse())),
-                    terminated(char('-'), sp0),
-                    opt(map_res(terminated(digit1, sp0), |a: &str| a.parse())),
+                    opt(map_res(rtrim(digit1), |a: &str| a.parse())),
+                    rtrim(char('-')),
+                    opt(map_res(rtrim(digit1), |a: &str| a.parse())),
                 ),
                 |(from, to)| Range {
                     from: from.unwrap_or(0),
@@ -108,16 +111,13 @@ fn range(input: &str) -> IResult<&str, Range> {
                 },
             ),
             // Parses [a]
-            map(
-                map_res(terminated(digit1, sp0), |a: &str| a.parse()),
-                |value| Range {
-                    from: value,
-                    to: Some(value),
-                },
-            ),
-        ))),
-        terminated(char(']'), sp0),
-    )(input)?;
+            map(map_res(rtrim(digit1), |a: &str| a.parse()), |value| Range {
+                from: value,
+                to: Some(value),
+            }),
+        )),
+        rtrim(char(']')),
+    ))(input)?;
 
     if let Err(desc) = validate_range(&range) {
         return Err(nom::Err::Failure(Error::from_external_error(
@@ -162,18 +162,19 @@ enum HexToken {
 ///
 /// This is equivalent to the `alternatives` from hex_grammar.y in libyara.
 fn alternatives(input: &str) -> IResult<&str, HexToken> {
-    delimited(
-        terminated(char('('), sp0),
+    let (input, _) = rtrim(char('('))(input)?;
+
+    cut(terminated(
         map(
-            cut(separated_pair(
+            separated_pair(
                 many1(|input| hex_token(input, true)),
                 terminated(char('|'), sp0),
                 many1(|input| hex_token(input, true)),
-            )),
+            ),
             |(left, right)| HexToken::Alternatives(left, right),
         ),
-        terminated(char(')'), sp0),
-    )(input)
+        rtrim(char(')')),
+    ))(input)
 }
 
 fn validate_range_in_alternatives(range: &Range) -> Result<(), String> {
@@ -202,10 +203,8 @@ fn validate_range_in_alternatives(range: &Range) -> Result<(), String> {
 fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
     alt((
         // Always have at least one space after a byte or a masked byte
-        map(terminated(byte, sp0), HexToken::Byte),
-        map(terminated(masked_byte, sp0), |(v, mask)| {
-            HexToken::MaskedByte(v, mask)
-        }),
+        map(byte, HexToken::Byte),
+        map(masked_byte, |(v, mask)| HexToken::MaskedByte(v, mask)),
         map_res(range, |range| {
             // Some jumps are forbidden inside an alternatives
             if in_alternatives {
@@ -236,11 +235,12 @@ fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
 ///
 /// This is equivalent to the `hex_string` rule in hex_grammar.y in libyara.
 fn hex_string(input: &str) -> IResult<&str, Vec<HexToken>> {
-    delimited(
-        terminated(char('{'), sp0),
-        cut(many1(|input| hex_token(input, false))),
-        terminated(char('}'), sp0),
-    )(input)
+    let (input, _) = rtrim(char('{'))(input)?;
+
+    cut(terminated(
+        many1(|input| hex_token(input, false)),
+        rtrim(char('}')),
+    ))(input)
 }
 
 #[cfg(test)]
@@ -253,7 +253,7 @@ mod tests {
 
         parse(byte, "AF", "", 0xAF);
         parse(byte, "10F", "F", 0x10);
-        parse(byte, "9E 1", " 1", 0x9E);
+        parse(byte, "9E 1", "1", 0x9E);
 
         parse_err(byte, "G1");
         parse_err(byte, "1G");
@@ -267,7 +267,7 @@ mod tests {
 
         parse(masked_byte, "?1", "", (1, Mask::Left));
         parse(masked_byte, "C??", "?", (0xC, Mask::Right));
-        parse(masked_byte, "?? ", " ", (0, Mask::All));
+        parse(masked_byte, "?? ", "", (0, Mask::All));
 
         parse_err(masked_byte, "AB");
         parse_err(masked_byte, " ?");
@@ -280,9 +280,9 @@ mod tests {
         use super::multiline_comment;
 
         parse(multiline_comment, "/**/a", "a", ());
-        parse(multiline_comment, "/* a\n */\n", "\n", ());
+        parse(multiline_comment, "/* a\n */\n", "", ());
         parse(multiline_comment, "/*** a\n\n**//* a */c", "/* a */c", ());
-        parse(multiline_comment, "/*** a\n//*/\n*/", "\n*/", ());
+        parse(multiline_comment, "/*** a\n//*/\n*/", "*/", ());
 
         parse_err(multiline_comment, "/");
         parse_err(multiline_comment, "/*");

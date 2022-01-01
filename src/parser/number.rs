@@ -10,15 +10,17 @@ use nom::{
     IResult,
 };
 
+use super::nom_recipes::rtrim;
+
 /// Parse a decimal number.
 ///
 /// This function matches the pattern `/\d+(MB|KB)?`/.
 fn decimal_number(input: &str) -> IResult<&str, i64> {
     map_res(
-        pair(
+        rtrim(pair(
             map_res(digit1, |v: &str| v.parse::<i64>()),
             opt(alt((tag("MB"), tag("KB")))),
-        ),
+        )),
         |(n, suffix)| match suffix {
             Some("MB") => n.checked_mul(1024 * 1024).ok_or(()),
             Some("KB") => n.checked_mul(1024).ok_or(()),
@@ -33,7 +35,7 @@ fn decimal_number(input: &str) -> IResult<&str, i64> {
 fn hexadecimal_number(input: &str) -> IResult<&str, i64> {
     let (input, _) = tag("0x")(input)?;
 
-    cut(map_res(hex_digit1, |v| i64::from_str_radix(v, 16)))(input)
+    cut(map_res(rtrim(hex_digit1), |v| i64::from_str_radix(v, 16)))(input)
 }
 
 /// Parse an octal number.
@@ -42,7 +44,7 @@ fn hexadecimal_number(input: &str) -> IResult<&str, i64> {
 fn octal_number(input: &str) -> IResult<&str, i64> {
     let (input, _) = tag("0o")(input)?;
 
-    cut(map_res(oct_digit1, |v| i64::from_str_radix(v, 8)))(input)
+    cut(map_res(rtrim(oct_digit1), |v| i64::from_str_radix(v, 8)))(input)
 }
 
 /// Parse a number (integer).
@@ -63,7 +65,7 @@ pub fn number(input: &str) -> IResult<&str, i64> {
 /// Equivalent to the _DOUBLE_ lexical pattern in libyara.
 /// This functions matches the pattern `/\d+\.\d+/`.
 pub fn double(input: &str) -> IResult<&str, f64> {
-    let (input, payload) = recognize(tuple((digit1, char('.'), digit1)))(input)?;
+    let (input, payload) = rtrim(recognize(tuple((digit1, char('.'), digit1))))(input)?;
 
     cut(map_res(success(payload), |v| v.parse::<f64>()))(input)
 }
@@ -79,7 +81,7 @@ mod tests {
         parse(number, "0x2", "", 2);
         parse(number, "0x10", "", 16);
         parse(number, "0xfFaAbBcCdDeE5", "", 0xffaabbccddee5);
-        parse(number, "0xfF 3", " 3", 0xff);
+        parse(number, "0xfF 3", "3", 0xff);
         parse(number, "0x1cg", "g", 0x1c);
 
         parse(number, "0x7FFFFFFFFFFFFFFF", "", i64::MAX);
@@ -87,14 +89,14 @@ mod tests {
 
         parse(number, "0o10", "", 8);
         parse(number, "0o1234567", "", 0o1234567);
-        parse(number, "0o2 4", " 4", 2);
+        parse(number, "0o2 4", "4", 2);
         parse(number, "0o789", "89", 7);
         parse(number, "0o777777777777777777777", "", i64::MAX);
         parse_err(number, "0o1777777777777777777777");
 
         parse(number, "010", "", 10);
         parse(number, "123456790", "", 123456790);
-        parse(number, "52 5", " 5", 52);
+        parse(number, "52 5", "5", 52);
         parse(number, "52af", "af", 52);
         parse(number, "12MB", "", 12 * 1024 * 1024);
         parse(number, "456KB", "", 456 * 1024);
