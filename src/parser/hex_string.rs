@@ -43,7 +43,7 @@ fn byte(input: &str) -> IResult<&str, u8> {
 
 /// Mask on a byte.
 #[derive(Debug, PartialEq)]
-enum Mask {
+pub enum Mask {
     /// The left part is masked, ie ?X
     Left,
     /// The right part is masked, ie X?
@@ -83,7 +83,7 @@ fn singleline_comment(input: &str) -> IResult<&str, ()> {
 /// - `[-]` is equivalent to `[0-]`.
 /// - `[a]` is equivalent to `[a-a]`.
 #[derive(Debug, PartialEq)]
-struct Range {
+pub struct Range {
     /// Beginning of the range, included.
     from: u32,
     /// Optional end of the range, included.
@@ -145,7 +145,7 @@ fn validate_range(range: &Range) -> Result<(), String> {
 
 /// A token in an hex string.
 #[derive(Debug, PartialEq)]
-enum HexToken {
+pub enum HexToken {
     /// A fully declared byte, eg `9C`
     Byte(u8),
     /// A masked byte, eg `?5`, `C?`, `??`
@@ -155,6 +155,7 @@ enum HexToken {
     /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
     Alternatives(Vec<HexToken>, Vec<HexToken>),
 }
+pub type HexString = Vec<HexToken>;
 
 /// Parse an alternative between two sets of tokens.
 ///
@@ -234,7 +235,7 @@ fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
 /// This looks like `{ AB .. }`.
 ///
 /// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
-fn hex_string(input: &str) -> IResult<&str, Vec<HexToken>> {
+pub fn hex_string(input: &str) -> IResult<&str, HexString> {
     let (input, _) = rtrim(char('{'))(input)?;
 
     cut(terminated(
