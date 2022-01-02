@@ -128,14 +128,14 @@ pub fn quoted_string(input: &str) -> IResult<&str, String> {
 }
 
 /// A regular expression.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Regex {
     /// The regular expression parsed inside the `/` delimiters.
-    expr: String,
+    pub expr: String,
     /// case insensitive (`i` flag).
-    case_insensitive: bool,
+    pub case_insensitive: bool,
     /// `.` matches `\n` (`s` flag).
-    dot_all: bool,
+    pub dot_all: bool,
 }
 
 /// Parse a regular expression.

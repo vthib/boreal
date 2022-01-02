@@ -12,8 +12,11 @@ use nom::{
 
 use super::{nom_recipes::rtrim, number, string};
 
+// TODO: not quite happy about how operator precedence has been implemented.
+// Maybe implementing Shunting-Yard would be better, to bench and test.
+
 /// Size of the integer to read, see [`PrimaryExpression::ReadInteger`].
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ReadIntegerSize {
     /// 8 bits
     Int8,
@@ -23,7 +26,7 @@ pub enum ReadIntegerSize {
     Int32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PrimaryExpression {
     /// Size of the file being analyzed.
     Filesize,
@@ -90,6 +93,32 @@ pub enum PrimaryExpression {
         /// e.g. `Rule*`
         wildcard_at_end: bool,
     },
+    /// Negation
+    Neg(Box<PrimaryExpression>),
+    /// Addition
+    Add(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Substraction
+    Sub(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Multiplication
+    Mul(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Division
+    Div(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Modulo
+    Mod(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Bitwise Xor
+    BitwiseXor(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Bitwise and
+    BitwiseAnd(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Bitwise or
+    BitwiseOr(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Bitwise not
+    BitwiseNot(Box<PrimaryExpression>),
+    /// Shift left
+    ShiftLeft(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Shift right
+    ShiftRight(Box<PrimaryExpression>, Box<PrimaryExpression>),
+    /// Regex
+    Regex(string::Regex),
 }
 
 /// Parse a read of an integer.
@@ -113,6 +142,9 @@ fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
     )))(input)
 }
 
+/// Parse a 'in' range for primary expressions.
+///
+/// Equivalent to the range pattern in grammar.y in libyara.
 fn range(input: &str) -> IResult<&str, (PrimaryExpression, PrimaryExpression)> {
     let (input, _) = rtrim(char('('))(input)?;
 
@@ -122,7 +154,104 @@ fn range(input: &str) -> IResult<&str, (PrimaryExpression, PrimaryExpression)> {
     ))(input)
 }
 
+/// parse | operator
 fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
+    let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
+
+    while let Ok((i, _)) = rtrim(char('|'))(input) {
+        let (i2, right_elem) = cut(primary_expression_bitwise_xor)(i)?;
+        input = i2;
+        res = PrimaryExpression::BitwiseOr(Box::new(res), Box::new(right_elem));
+    }
+    Ok((input, res))
+}
+
+/// parse ^ operator
+fn primary_expression_bitwise_xor(input: &str) -> IResult<&str, PrimaryExpression> {
+    let (mut input, mut res) = primary_expression_bitwise_and(input)?;
+
+    while let Ok((i, _)) = rtrim(char('^'))(input) {
+        let (i2, right_elem) = cut(primary_expression_bitwise_and)(i)?;
+        input = i2;
+        res = PrimaryExpression::BitwiseXor(Box::new(res), Box::new(right_elem));
+    }
+    Ok((input, res))
+}
+
+/// parse & operator
+fn primary_expression_bitwise_and(input: &str) -> IResult<&str, PrimaryExpression> {
+    let (mut input, mut res) = primary_expression_shift(input)?;
+
+    while let Ok((i, _)) = rtrim(char('&'))(input) {
+        let (i2, right_elem) = cut(primary_expression_shift)(i)?;
+        input = i2;
+        res = PrimaryExpression::BitwiseAnd(Box::new(res), Box::new(right_elem));
+    }
+    Ok((input, res))
+}
+
+/// parse <<, >> operators
+fn primary_expression_shift(input: &str) -> IResult<&str, PrimaryExpression> {
+    let (mut input, mut res) = primary_expression_add(input)?;
+
+    while let Ok((i, op)) = rtrim(alt((tag("<<"), tag(">>"))))(input) {
+        let (i2, right_elem) = cut(primary_expression_add)(i)?;
+        input = i2;
+        res = match op {
+            "<<" => PrimaryExpression::ShiftLeft(Box::new(res), Box::new(right_elem)),
+            ">>" => PrimaryExpression::ShiftRight(Box::new(res), Box::new(right_elem)),
+            _ => unreachable!(),
+        }
+    }
+    Ok((input, res))
+}
+
+/// parse +, - operators
+fn primary_expression_add(input: &str) -> IResult<&str, PrimaryExpression> {
+    let (mut input, mut res) = primary_expression_mul(input)?;
+
+    while let Ok((i, op)) = rtrim(alt((char('+'), char('-'))))(input) {
+        let (i2, right_elem) = cut(primary_expression_mul)(i)?;
+        input = i2;
+        res = match op {
+            '+' => PrimaryExpression::Add(Box::new(res), Box::new(right_elem)),
+            '-' => PrimaryExpression::Sub(Box::new(res), Box::new(right_elem)),
+            _ => unreachable!(),
+        }
+    }
+    Ok((input, res))
+}
+
+/// parse *, \, % operators
+fn primary_expression_mul(input: &str) -> IResult<&str, PrimaryExpression> {
+    let (mut input, mut res) = primary_expression_neg(input)?;
+
+    while let Ok((i, op)) = rtrim(alt((char('*'), char('\\'), char('%'))))(input) {
+        let (i2, right_elem) = cut(primary_expression_neg)(i)?;
+        input = i2;
+        res = match op {
+            '*' => PrimaryExpression::Mul(Box::new(res), Box::new(right_elem)),
+            '\\' => PrimaryExpression::Div(Box::new(res), Box::new(right_elem)),
+            '%' => PrimaryExpression::Mod(Box::new(res), Box::new(right_elem)),
+            _ => unreachable!(),
+        }
+    }
+    Ok((input, res))
+}
+
+/// parse ~, - operators
+fn primary_expression_neg(input: &str) -> IResult<&str, PrimaryExpression> {
+    map(
+        tuple((opt(alt((char('~'), char('-')))), primary_expression_item)),
+        |(unary_op, expr)| match unary_op {
+            Some('~') => PrimaryExpression::BitwiseNot(Box::new(expr)),
+            Some('-') => PrimaryExpression::Neg(Box::new(expr)),
+            _ => expr,
+        },
+    )(input)
+}
+
+fn primary_expression_item(input: &str) -> IResult<&str, PrimaryExpression> {
     alt((
         // '(' primary_expression ')'
         delimited(
@@ -157,6 +286,8 @@ fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
         map(number::number, PrimaryExpression::Number),
         // text string
         map(string::quoted_string, PrimaryExpression::String),
+        // regex
+        map(string::regex, PrimaryExpression::Regex),
         // string_count 'in' range
         map(
             separated_pair(string::string_count, rtrim(tag("in")), cut(range)),
@@ -211,11 +342,13 @@ fn primary_expression(input: &str) -> IResult<&str, PrimaryExpression> {
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::{parse, parse_err};
+    use super::{
+        primary_expression as pe, range, read_integer, PrimaryExpression as PE,
+        ReadIntegerSize as RIS,
+    };
 
     #[test]
     fn test_read_integer() {
-        use super::{read_integer, ReadIntegerSize as RIS};
-
         parse(read_integer, "int8b", "b", (false, RIS::Int8, false));
         parse(read_integer, "uint8 be", "be", (true, RIS::Int8, false));
         parse(read_integer, "int8bet", "t", (false, RIS::Int8, true));
@@ -241,8 +374,6 @@ mod tests {
 
     #[test]
     fn test_range() {
-        use super::{range, PrimaryExpression as PE};
-
         parse(range, "(1..1) b", "b", (PE::Number(1), PE::Number(1)));
         parse(
             range,
@@ -262,8 +393,6 @@ mod tests {
 
     #[test]
     fn test_primary_expression() {
-        use super::{primary_expression as pe, PrimaryExpression as PE, ReadIntegerSize};
-
         parse(pe, "filesize a", "a", PE::Filesize);
         parse(pe, "( filesize) a", "a", PE::Filesize);
         parse(pe, "entrypoint a", "a", PE::Entrypoint);
@@ -273,7 +402,7 @@ mod tests {
             "",
             PE::ReadInteger {
                 unsigned: true,
-                size: ReadIntegerSize::Int8,
+                size: RIS::Int8,
                 big_endian: false,
                 addr: Box::new(PE::Number(3)),
             },
@@ -347,6 +476,16 @@ mod tests {
                 wildcard_at_end: true,
             },
         );
+        parse(
+            pe,
+            "/a*b$/i c",
+            "c",
+            PE::Regex(super::string::Regex {
+                expr: "a*b$".to_owned(),
+                case_insensitive: true,
+                dot_all: false,
+            }),
+        );
 
         parse_err(pe, "");
         parse_err(pe, "(");
@@ -357,5 +496,195 @@ mod tests {
         parse_err(pe, "int16");
         parse_err(pe, "uint32(");
         parse_err(pe, "uint32be ( 3");
+    }
+
+    #[test]
+    fn test_primary_expression_associativity() {
+        // Check handling of chain of operators, and associativity
+        parse(
+            pe,
+            "1 + 2 - 3b",
+            "b",
+            PE::Sub(
+                Box::new(PE::Add(Box::new(PE::Number(1)), Box::new(PE::Number(2)))),
+                Box::new(PE::Number(3)),
+            ),
+        );
+        parse(
+            pe,
+            "1 \\ 2 % 3 * 4",
+            "",
+            PE::Mul(
+                Box::new(PE::Mod(
+                    Box::new(PE::Div(Box::new(PE::Number(1)), Box::new(PE::Number(2)))),
+                    Box::new(PE::Number(3)),
+                )),
+                Box::new(PE::Number(4)),
+            ),
+        );
+        parse(
+            pe,
+            "1 << 2 >> 3 << 4",
+            "",
+            PE::ShiftLeft(
+                Box::new(PE::ShiftRight(
+                    Box::new(PE::ShiftLeft(
+                        Box::new(PE::Number(1)),
+                        Box::new(PE::Number(2)),
+                    )),
+                    Box::new(PE::Number(3)),
+                )),
+                Box::new(PE::Number(4)),
+            ),
+        );
+        parse(
+            pe,
+            "1 & 2 & 3",
+            "",
+            PE::BitwiseAnd(
+                Box::new(PE::BitwiseAnd(
+                    Box::new(PE::Number(1)),
+                    Box::new(PE::Number(2)),
+                )),
+                Box::new(PE::Number(3)),
+            ),
+        );
+        parse(
+            pe,
+            "1 ^ 2 ^ 3",
+            "",
+            PE::BitwiseXor(
+                Box::new(PE::BitwiseXor(
+                    Box::new(PE::Number(1)),
+                    Box::new(PE::Number(2)),
+                )),
+                Box::new(PE::Number(3)),
+            ),
+        );
+        parse(
+            pe,
+            "1 | 2 | 3",
+            "",
+            PE::BitwiseOr(
+                Box::new(PE::BitwiseOr(
+                    Box::new(PE::Number(1)),
+                    Box::new(PE::Number(2)),
+                )),
+                Box::new(PE::Number(3)),
+            ),
+        );
+
+        parse(
+            pe,
+            "-1--2",
+            "",
+            PE::Sub(
+                Box::new(PE::Neg(Box::new(PE::Number(1)))),
+                Box::new(PE::Neg(Box::new(PE::Number(2)))),
+            ),
+        );
+        parse(
+            pe,
+            "~1^~2",
+            "",
+            PE::BitwiseXor(
+                Box::new(PE::BitwiseNot(Box::new(PE::Number(1)))),
+                Box::new(PE::BitwiseNot(Box::new(PE::Number(2)))),
+            ),
+        );
+    }
+
+    #[test]
+    fn test_primary_expression_precedence() {
+        #[track_caller]
+        fn test_precedence<F, F2>(
+            higher_op: &str,
+            lower_op: &str,
+            higher_constructor: F,
+            lower_constructor: F2,
+        ) where
+            F: FnOnce(Box<PE>, Box<PE>) -> PE,
+            F2: FnOnce(Box<PE>, Box<PE>) -> PE,
+        {
+            let input = format!("1 {} 2 {} 3", lower_op, higher_op);
+
+            parse(
+                pe,
+                &input,
+                "",
+                lower_constructor(
+                    Box::new(PE::Number(1)),
+                    Box::new(higher_constructor(
+                        Box::new(PE::Number(2)),
+                        Box::new(PE::Number(3)),
+                    )),
+                ),
+            );
+        }
+
+        // Test precedence of *, \\, % over +, %
+        test_precedence("*", "+", PE::Mul, PE::Add);
+        test_precedence("*", "-", PE::Mul, PE::Sub);
+        test_precedence("\\", "+", PE::Div, PE::Add);
+        test_precedence("\\", "-", PE::Div, PE::Sub);
+        test_precedence("%", "+", PE::Mod, PE::Add);
+        test_precedence("%", "-", PE::Mod, PE::Sub);
+
+        // Test precedence of *, \\, %, +, - over >>, <<
+        test_precedence("*", ">>", PE::Mul, PE::ShiftRight);
+        test_precedence("*", "<<", PE::Mul, PE::ShiftLeft);
+        test_precedence("\\", ">>", PE::Div, PE::ShiftRight);
+        test_precedence("\\", "<<", PE::Div, PE::ShiftLeft);
+        test_precedence("%", ">>", PE::Mod, PE::ShiftRight);
+        test_precedence("%", "<<", PE::Mod, PE::ShiftLeft);
+        test_precedence("+", ">>", PE::Add, PE::ShiftRight);
+        test_precedence("+", "<<", PE::Add, PE::ShiftLeft);
+        test_precedence("-", ">>", PE::Sub, PE::ShiftRight);
+        test_precedence("-", "<<", PE::Sub, PE::ShiftLeft);
+
+        // Test precedence of *, \\, %, +, - over &, |, ^
+        test_precedence("*", "&", PE::Mul, PE::BitwiseAnd);
+        test_precedence("*", "^", PE::Mul, PE::BitwiseXor);
+        test_precedence("*", "|", PE::Mul, PE::BitwiseOr);
+        test_precedence("\\", "&", PE::Div, PE::BitwiseAnd);
+        test_precedence("\\", "^", PE::Div, PE::BitwiseXor);
+        test_precedence("\\", "|", PE::Div, PE::BitwiseOr);
+        test_precedence("%", "&", PE::Mod, PE::BitwiseAnd);
+        test_precedence("%", "^", PE::Mod, PE::BitwiseXor);
+        test_precedence("%", "|", PE::Mod, PE::BitwiseOr);
+        test_precedence("+", "&", PE::Add, PE::BitwiseAnd);
+        test_precedence("+", "^", PE::Add, PE::BitwiseXor);
+        test_precedence("+", "|", PE::Add, PE::BitwiseOr);
+        test_precedence("-", "&", PE::Sub, PE::BitwiseAnd);
+        test_precedence("-", "^", PE::Sub, PE::BitwiseXor);
+        test_precedence("-", "|", PE::Sub, PE::BitwiseOr);
+        test_precedence(">>", "&", PE::ShiftRight, PE::BitwiseAnd);
+        test_precedence(">>", "^", PE::ShiftRight, PE::BitwiseXor);
+        test_precedence(">>", "|", PE::ShiftRight, PE::BitwiseOr);
+        test_precedence("<<", "&", PE::ShiftLeft, PE::BitwiseAnd);
+        test_precedence("<<", "^", PE::ShiftLeft, PE::BitwiseXor);
+        test_precedence("<<", "|", PE::ShiftLeft, PE::BitwiseOr);
+
+        // Test precedence of & over |, ^
+        test_precedence("&", "^", PE::BitwiseAnd, PE::BitwiseXor);
+        test_precedence("&", "|", PE::BitwiseAnd, PE::BitwiseOr);
+
+        // Test precedence of ^ over |
+        test_precedence("^", "|", PE::BitwiseXor, PE::BitwiseOr);
+
+        // global test
+        let expected = PE::BitwiseXor(
+            Box::new(PE::Add(
+                Box::new(PE::Number(1)),
+                Box::new(PE::Mul(Box::new(PE::Number(2)), Box::new(PE::Number(3)))),
+            )),
+            Box::new(PE::Sub(
+                Box::new(PE::Mod(Box::new(PE::Number(4)), Box::new(PE::Number(5)))),
+                Box::new(PE::Number(6)),
+            )),
+        );
+
+        parse(pe, "1 + 2 * 3 ^ 4 % 5 - 6", "", expected.clone());
+        parse(pe, "(1 + (2 * 3) ) ^ ((4)%5 - 6)", "", expected);
     }
 }
