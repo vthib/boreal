@@ -7,6 +7,11 @@ use nom::{
     IResult,
 };
 
+// TODO: have a "tag" equivalent, that enforces that the following character
+// is not alnum.
+// For example, string modifiers should be split by whitespace, but shouldn't
+// force a trailing whitespace.
+
 /// Right trim after the given parser.
 pub fn rtrim<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
 where

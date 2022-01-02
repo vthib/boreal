@@ -1,9 +1,15 @@
 //! Parse yara rules.
+//!
+//! Missing features:
+//!  - Xor range modifier on strings
+//!  - base64 alphabet modifier on strings
+use bitflags::bitflags;
 use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::char,
     combinator::{cut, map, opt},
+    error::{Error, ErrorKind, FromExternalError},
     multi::many1,
     sequence::{delimited, pair, preceded, separated_pair, tuple},
     IResult,
@@ -144,6 +150,19 @@ fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
     )(input)
 }
 
+bitflags! {
+    struct StringFlags: u32 {
+        const WIDE = 0b0000_0001;
+        const ASCII = 0b000_0010;
+        const NOCASE = 0b0000_0100;
+        const FULLWORD = 0b0000_1000;
+        const PRIVATE = 0b0001_0000;
+        const XOR = 0b0010_0000;
+        const BASE64 = 0b0100_0000;
+        const BASE64WIDE = 0b1000_0000;
+    }
+}
+
 /// Value for a string associated with a rule.
 #[derive(Debug, PartialEq)]
 enum StringDeclarationValue {
@@ -162,6 +181,8 @@ struct StringDeclaration {
     name: String,
     /// Value of the string.
     value: StringDeclarationValue,
+    /// Modifiers for the string. This is a bitflags field.
+    modifiers: StringFlags,
 }
 
 /// Parse the "strings:" section
@@ -184,13 +205,85 @@ fn string_declaration(input: &str) -> IResult<&str, StringDeclaration> {
             string::string_identifier,
             rtrim(char('=')),
             alt((
-                map(string::quoted, StringDeclarationValue::String),
-                map(string::regex, StringDeclarationValue::Regex),
-                map(hex_string::hex_string, StringDeclarationValue::HexString),
+                pair(
+                    map(string::quoted, StringDeclarationValue::String),
+                    string_modifiers,
+                ),
+                pair(
+                    map(string::regex, StringDeclarationValue::Regex),
+                    regex_modifiers,
+                ),
+                pair(
+                    map(hex_string::hex_string, StringDeclarationValue::HexString),
+                    hex_string_modifiers,
+                ),
             )),
         ),
-        |(name, value)| StringDeclaration { name, value },
+        |(name, (value, modifiers))| StringDeclaration {
+            name,
+            value,
+            modifiers,
+        },
     )(input)
+}
+
+fn accumulate_modifiers<F>(parser: F, mut input: &str) -> IResult<&str, StringFlags>
+where
+    F: Fn(&str) -> IResult<&str, StringFlags>,
+{
+    let mut flags = StringFlags::empty();
+
+    while let Ok((i, flag)) = parser(input) {
+        if flags.contains(flag) {
+            return Err(nom::Err::Failure(Error::from_external_error(
+                input,
+                ErrorKind::Verify,
+                format!("flag {:?} duplicated", flag),
+            )));
+        }
+        input = i;
+        flags |= flag;
+    }
+    Ok((input, flags))
+}
+
+fn string_modifiers(input: &str) -> IResult<&str, StringFlags> {
+    accumulate_modifiers(string_modifier, input)
+}
+
+fn regex_modifiers(input: &str) -> IResult<&str, StringFlags> {
+    accumulate_modifiers(regex_modifier, input)
+}
+
+fn hex_string_modifiers(input: &str) -> IResult<&str, StringFlags> {
+    accumulate_modifiers(hex_string_modifier, input)
+}
+
+fn string_modifier(input: &str) -> IResult<&str, StringFlags> {
+    rtrim(alt((
+        map(tag("base64wide"), |_| StringFlags::BASE64WIDE),
+        map(tag("wide"), |_| StringFlags::WIDE),
+        map(tag("ascii"), |_| StringFlags::ASCII),
+        map(tag("nocase"), |_| StringFlags::NOCASE),
+        map(tag("fullword"), |_| StringFlags::FULLWORD),
+        map(tag("private"), |_| StringFlags::PRIVATE),
+        map(tag("xor"), |_| StringFlags::XOR),
+        map(tag("base64"), |_| StringFlags::BASE64),
+    )))(input)
+}
+
+fn regex_modifier(input: &str) -> IResult<&str, StringFlags> {
+    rtrim(alt((
+        map(tag("wide"), |_| StringFlags::WIDE),
+        map(tag("ascii"), |_| StringFlags::ASCII),
+        map(tag("nocase"), |_| StringFlags::NOCASE),
+        map(tag("fullword"), |_| StringFlags::FULLWORD),
+        map(tag("private"), |_| StringFlags::PRIVATE),
+    )))(input)
+}
+
+fn hex_string_modifier(input: &str) -> IResult<&str, StringFlags> {
+    map(rtrim(tag("private")), |_| StringFlags::PRIVATE)(input)
 }
 
 /// Parse a condition
@@ -279,18 +372,73 @@ mod tests {
     }
 
     #[test]
+    fn parse_modifiers() {
+        parse(
+            string_modifiers,
+            "private wide ascii xor base64wide nocase fullword base64 Xor",
+            "Xor",
+            StringFlags::PRIVATE
+                | StringFlags::WIDE
+                | StringFlags::ASCII
+                | StringFlags::XOR
+                | StringFlags::BASE64WIDE
+                | StringFlags::NOCASE
+                | StringFlags::FULLWORD
+                | StringFlags::BASE64,
+        );
+
+        parse(
+            regex_modifiers,
+            "private wide ascii nocase fullword base64",
+            "base64",
+            StringFlags::PRIVATE
+                | StringFlags::WIDE
+                | StringFlags::ASCII
+                | StringFlags::NOCASE
+                | StringFlags::FULLWORD,
+        );
+
+        parse(
+            hex_string_modifiers,
+            "private wide",
+            "wide",
+            StringFlags::PRIVATE,
+        );
+
+        parse_err(string_modifier, "");
+        parse_err(string_modifier, "w");
+
+        parse_err(regex_modifier, "");
+        parse_err(regex_modifier, "w");
+        parse_err(regex_modifier, "base64");
+        parse_err(regex_modifier, "base64wide");
+        parse_err(regex_modifier, "xor");
+
+        parse_err(hex_string_modifier, "");
+        parse_err(hex_string_modifier, "w");
+        parse_err(hex_string_modifier, "ascii");
+        parse_err(hex_string_modifier, "wide");
+        parse_err(hex_string_modifier, "nocase");
+        parse_err(hex_string_modifier, "fullword");
+        parse_err(hex_string_modifier, "base64");
+        parse_err(hex_string_modifier, "base64wide");
+        parse_err(hex_string_modifier, "xor");
+    }
+
+    #[test]
     fn parse_strings() {
         use super::super::hex_string::{HexToken, Mask};
         use super::super::string::Regex;
 
         parse(
             strings,
-            "strings : $a = \"b\td\" \n  $b= /a?b/  $c= { ?B} d",
+            "strings : $a = \"b\td\" xor ascii \n  $b= /a?b/  $c= { ?B} private d",
             "d",
             vec![
                 StringDeclaration {
                     name: "a".to_owned(),
                     value: StringDeclarationValue::String("b\td".to_owned()),
+                    modifiers: StringFlags::XOR | StringFlags::ASCII,
                 },
                 StringDeclaration {
                     name: "b".to_owned(),
@@ -299,6 +447,7 @@ mod tests {
                         case_insensitive: false,
                         dot_all: false,
                     }),
+                    modifiers: StringFlags::empty(),
                 },
                 StringDeclaration {
                     name: "c".to_owned(),
@@ -306,6 +455,7 @@ mod tests {
                         0x0B,
                         Mask::Left,
                     )]),
+                    modifiers: StringFlags::PRIVATE,
                 },
             ],
         );
@@ -338,7 +488,11 @@ mod tests {
                     Metadata { name: "a".to_owned(), value: MetadataValue::Boolean(true) }
                 ],
                 strings: vec![
-                    StringDeclaration { name: "b".to_owned(), value: StringDeclarationValue::String("t".to_owned()) }
+                    StringDeclaration {
+                        name: "b".to_owned(),
+                        value: StringDeclarationValue::String("t".to_owned()),
+                        modifiers: StringFlags::empty()
+                    }
                 ],
                 condition: "false".to_owned(),
                 is_private: true,

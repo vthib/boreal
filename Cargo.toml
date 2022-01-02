@@ -7,3 +7,6 @@ edition = "2021"
 [dependencies]
 # Parsing .yar files
 nom = "7.1"
+
+# packing multiple flags together
+bitflags = "1.3"
