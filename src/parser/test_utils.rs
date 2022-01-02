@@ -1,14 +1,14 @@
 use nom::Finish;
 
 #[track_caller]
-pub fn parse<'a, F: 'a, O>(f: F, input: &'a str, expected_rest_input: &str, expected_result: O)
+pub fn parse<'a, F: 'a, O, O2>(f: F, input: &'a str, expected_rest_input: &str, expected_result: O2)
 where
     F: FnOnce(&'a str) -> nom::IResult<&'a str, O>,
-    O: PartialEq + std::fmt::Debug,
+    O: PartialEq + std::fmt::Debug + From<O2>,
 {
     let res = f(input).unwrap();
     assert_eq!(res.0, expected_rest_input);
-    assert_eq!(res.1, expected_result);
+    assert_eq!(res.1, expected_result.into());
 }
 
 #[track_caller]

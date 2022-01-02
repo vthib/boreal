@@ -1,7 +1,6 @@
-//! Parsing related to strings.
-//!
-//! This implements the _TEXT_STRING_ and _REGEX_ lexical patterns from
-//! libyara.
+//! Parsing related to strings, regexes and identifiers.
+use std::borrow::ToOwned;
+
 use nom::{
     branch::alt,
     bytes::complete::{escaped_transform, is_not, take_while},
@@ -28,7 +27,7 @@ fn is_identifier_digit(c: char) -> bool {
 /// This function *does not* right-trim, as it can be followed
 /// by a '*' character that is meaningful in some contexts.
 fn identifier_contents(input: &str) -> IResult<&str, String> {
-    map(take_while(is_identifier_digit), |s: &str| s.to_owned())(input)
+    map(take_while(is_identifier_digit), ToOwned::to_owned)(input)
 }
 
 /// Parse a string identifier
@@ -36,7 +35,7 @@ fn identifier_contents(input: &str) -> IResult<&str, String> {
 /// Returns the identifier name, and a boolean indicating whether
 /// the end of the identifier has a wildcard.
 ///
-/// This is equivalent to the _STRING_IDENTIFIER(_WITH_WILDCARD)_
+/// This is equivalent to the `_STRING_IDENTIFIER(_WITH_WILDCARD)_`
 /// lexical patterns in libyara.
 /// Roughly equivalent to `$[a-ZA-Z0-9_]*\*?`.
 fn string_identifier(input: &str) -> IResult<&str, (String, bool)> {
@@ -50,17 +49,17 @@ fn string_identifier(input: &str) -> IResult<&str, (String, bool)> {
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
-pub fn string_count(input: &str) -> IResult<&str, String> {
+pub fn count(input: &str) -> IResult<&str, String> {
     rtrim(preceded(char('#'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string offset, roughly equivalent to `@[a-zA-Z0-9_]*`.
-pub fn string_offset(input: &str) -> IResult<&str, String> {
+pub fn offset(input: &str) -> IResult<&str, String> {
     rtrim(preceded(char('@'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string length, roughly equivalent to `![a-zA-Z0-9_]*`.
-pub fn string_length(input: &str) -> IResult<&str, String> {
+pub fn length(input: &str) -> IResult<&str, String> {
     rtrim(preceded(char('!'), cut(identifier_contents)))(input)
 }
 
@@ -77,7 +76,7 @@ pub fn identifier(input: &str) -> IResult<&str, (String, bool)> {
                 take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
                 cut(take_while(is_identifier_digit)),
             ))),
-            |s| s.to_owned(),
+            ToOwned::to_owned,
         ),
         map(opt(char('*')), |v| v.is_some()),
     )))(input)
@@ -85,16 +84,16 @@ pub fn identifier(input: &str) -> IResult<&str, (String, bool)> {
 
 /// Parse a quoted string with escapable characters.
 ///
-/// Equivalent to the _TEXT_STRING_ lexical pattern in libyara.
+/// Equivalent to the `_TEXT_STRING_` lexical pattern in libyara.
 /// This is roughly equivalent to the pattern `/"[^\n\"]*"/`, with control
 /// patterns `\t`, `\r`, `\n`, `\"`, `\\`, and `\x[0-9a-fA-F]{2}`.
-pub fn quoted_string(input: &str) -> IResult<&str, String> {
+pub fn quoted(input: &str) -> IResult<&str, String> {
     let (input, _) = char('"')(input)?;
 
     // escaped transform does not handle having no content, so
     // handle empty string explicitly.
     // TODO: ticket for nom?
-    if let Ok((next_input, '"')) = char::<&str, nom::error::Error<&str>>('"')(input) {
+    if let Ok((next_input, '"')) = char::<&str, Error<&str>>('"')(input) {
         return Ok((next_input, "".to_owned()));
     }
 
@@ -116,7 +115,12 @@ pub fn quoted_string(input: &str) -> IResult<&str, String> {
                             2,
                             one_of("0123456789abcdefABCDEF"),
                             || 0,
-                            |acc, v| (acc << 4) + (v.to_digit(16).unwrap_or(0) as u8),
+                            |acc, v| {
+                                // Cannot truncate, so disable clippy on this line
+                                #[allow(clippy::cast_possible_truncation)]
+                                let n = v.to_digit(16).unwrap_or(0) as u8;
+                                (acc << 4) + n
+                            },
                         ),
                         |v| v as char,
                     )),
@@ -147,7 +151,7 @@ pub struct Regex {
 ///
 /// XXX: There is change of behavior from libyara. `\<nul_byte>` was forbidden,
 /// but we do not have an issue about this (we do not save the regular expression
-/// as a C string). See https://github.com/VirusTotal/yara/issues/576.
+/// as a C string). See [Issue #576 in Yara](https://github.com/VirusTotal/yara/issues/576).
 pub fn regex(input: &str) -> IResult<&str, Regex> {
     let (input, _) = char('/')(input)?;
 
@@ -191,9 +195,8 @@ fn regex_contents(mut input: &str) -> IResult<&str, String> {
                     return Ok((new_input, res));
                 } else if new_input.len() == input.len() {
                     return Ok((input, res));
-                } else {
-                    input = new_input;
                 }
+                input = new_input;
             }
             Err(nom::Err::Error(_)) => {
                 // access [0] is safe since input.len() > 0.
@@ -229,32 +232,27 @@ mod tests {
     use super::super::test_utils::{parse, parse_err};
 
     #[test]
-    fn test_parse_quoted_string() {
-        use super::quoted_string;
+    fn test_parse_quoted() {
+        use super::quoted;
 
-        parse(quoted_string, "\"\"", "", "".to_owned());
-        parse(quoted_string, "\"1\"b", "b", "1".to_owned());
-        parse(quoted_string, "\"abc +$\" b", "b", "abc +$".to_owned());
+        parse(quoted, "\"\"", "", "");
+        parse(quoted, "\"1\"b", "b", "1");
+        parse(quoted, "\"abc +$\" b", "b", "abc +$");
 
         parse(
-            quoted_string,
+            quoted,
             r#"" \r \n \t \"\\a \\r""#,
             "",
-            " \r \n \t \"\\a \\r".to_owned(),
+            " \r \n \t \"\\a \\r",
         );
-        parse(quoted_string, r#""\x10 \x32""#, "", "\u{10} 2".to_owned());
-        parse(
-            quoted_string,
-            r#""\x00 \xFF""#,
-            "",
-            "\u{00} \u{FF}".to_owned(),
-        );
+        parse(quoted, r#""\x10 \x32""#, "", "\u{10} 2");
+        parse(quoted, r#""\x00 \xFF""#, "", "\u{00} \u{FF}");
 
-        parse_err(quoted_string, "a");
-        parse_err(quoted_string, "\"");
-        parse_err(quoted_string, "\"\n\"");
-        parse_err(quoted_string, "\"\n\"");
-        parse_err(quoted_string, r#""\a""#);
+        parse_err(quoted, "a");
+        parse_err(quoted, "\"");
+        parse_err(quoted, "\"\n\"");
+        parse_err(quoted, "\"\n\"");
+        parse_err(quoted, r#""\a""#);
     }
 
     #[test]
@@ -339,54 +337,54 @@ mod tests {
     }
 
     #[test]
-    fn test_string_count() {
-        use super::string_count;
+    fn test_count() {
+        use super::count;
 
-        parse(string_count, "#-", "-", "".to_owned());
-        parse(string_count, "#*", "*", "".to_owned());
-        parse(string_count, "#a c", "c", "a".to_owned());
-        parse(string_count, "#9b*c", "*c", "9b".to_owned());
-        parse(string_count, "#_1Bd_F+", "+", "_1Bd_F".to_owned());
+        parse(count, "#-", "-", "");
+        parse(count, "#*", "*", "");
+        parse(count, "#a c", "c", "a");
+        parse(count, "#9b*c", "*c", "9b");
+        parse(count, "#_1Bd_F+", "+", "_1Bd_F");
 
-        parse_err(string_count, "");
-        parse_err(string_count, "$");
-        parse_err(string_count, "@");
-        parse_err(string_count, "!");
-        parse_err(string_count, "*");
+        parse_err(count, "");
+        parse_err(count, "$");
+        parse_err(count, "@");
+        parse_err(count, "!");
+        parse_err(count, "*");
     }
 
     #[test]
-    fn test_string_offset() {
-        use super::string_offset;
+    fn test_offset() {
+        use super::offset;
 
-        parse(string_offset, "@-", "-", "".to_owned());
-        parse(string_offset, "@*", "*", "".to_owned());
-        parse(string_offset, "@a c", "c", "a".to_owned());
-        parse(string_offset, "@9b*c", "*c", "9b".to_owned());
-        parse(string_offset, "@_1Bd_F+", "+", "_1Bd_F".to_owned());
+        parse(offset, "@-", "-", "");
+        parse(offset, "@*", "*", "");
+        parse(offset, "@a c", "c", "a");
+        parse(offset, "@9b*c", "*c", "9b");
+        parse(offset, "@_1Bd_F+", "+", "_1Bd_F");
 
-        parse_err(string_offset, "");
-        parse_err(string_offset, "$");
-        parse_err(string_offset, "#");
-        parse_err(string_offset, "!");
-        parse_err(string_offset, "*");
+        parse_err(offset, "");
+        parse_err(offset, "$");
+        parse_err(offset, "#");
+        parse_err(offset, "!");
+        parse_err(offset, "*");
     }
 
     #[test]
-    fn test_string_length() {
-        use super::string_length;
+    fn test_length() {
+        use super::length;
 
-        parse(string_length, "!-", "-", "".to_owned());
-        parse(string_length, "!*", "*", "".to_owned());
-        parse(string_length, "!a c", "c", "a".to_owned());
-        parse(string_length, "!9b*c", "*c", "9b".to_owned());
-        parse(string_length, "!_1Bd_F+", "+", "_1Bd_F".to_owned());
+        parse(length, "!-", "-", "");
+        parse(length, "!*", "*", "");
+        parse(length, "!a c", "c", "a");
+        parse(length, "!9b*c", "*c", "9b");
+        parse(length, "!_1Bd_F+", "+", "_1Bd_F");
 
-        parse_err(string_length, "");
-        parse_err(string_length, "$");
-        parse_err(string_length, "#");
-        parse_err(string_length, "@");
-        parse_err(string_length, "*");
+        parse_err(length, "");
+        parse_err(length, "$");
+        parse_err(length, "#");
+        parse_err(length, "@");
+        parse_err(length, "*");
     }
 
     #[test]

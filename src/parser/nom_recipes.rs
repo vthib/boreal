@@ -46,7 +46,7 @@ mod tests {
     fn test_take_one() {
         use super::take_one;
 
-        parse(take_one(|c| c.is_lowercase()), "bc", "c", 'b');
-        parse_err(take_one(|c| c.is_lowercase()), "Bc");
+        parse(take_one(char::is_lowercase), "bc", "c", 'b');
+        parse_err(take_one(char::is_lowercase), "Bc");
     }
 }

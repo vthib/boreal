@@ -1,6 +1,6 @@
 //! Parsing related to hex strings, eg { AB 0F [0-300] ... }
 //!
-//! This implements the hex_lexer files from libyara.
+//! This implements the `hex_lexer/hex_grammar` files from libyara.
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
@@ -19,11 +19,11 @@ const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
 
 /// Parse an hex-digit, and return its value in [0-15].
 fn hex_digit(input: &str) -> IResult<&str, u8> {
-    match input
-        .chars()
-        .next()
-        .and_then(|c| c.to_digit(16).map(|v| v as u8))
-    {
+    match input.chars().next().and_then(|c| {
+        // Cannot truncate, so allow lint
+        #[allow(clippy::cast_possible_truncation)]
+        c.to_digit(16).map(|v| v as u8)
+    }) {
         Some(v) => Ok((&input[1..], v)),
         _ => Err(nom::Err::Error(Error::from_error_kind(
             input,
@@ -54,7 +54,7 @@ enum Mask {
 
 /// Parse a masked hex byte, ie X?, ?X or ??.
 ///
-/// Equivalent to the _MASKED_BYTE_ lexical pattern in libyara.
+/// Equivalent to the `_MASKED_BYTE_` lexical pattern in libyara.
 fn masked_byte(input: &str) -> IResult<&str, (u8, Mask)> {
     rtrim(alt((
         map(tag("??"), |_| (0, Mask::All)),
@@ -101,9 +101,9 @@ fn range(input: &str) -> IResult<&str, Range> {
             // Parses [a?-b?]
             map(
                 separated_pair(
-                    opt(map_res(rtrim(digit1), |a: &str| a.parse())),
+                    opt(map_res(rtrim(digit1), str::parse)),
                     rtrim(char('-')),
-                    opt(map_res(rtrim(digit1), |a: &str| a.parse())),
+                    opt(map_res(rtrim(digit1), str::parse)),
                 ),
                 |(from, to)| Range {
                     from: from.unwrap_or(0),
@@ -111,7 +111,7 @@ fn range(input: &str) -> IResult<&str, Range> {
                 },
             ),
             // Parses [a]
-            map(map_res(rtrim(digit1), |a: &str| a.parse()), |value| Range {
+            map(map_res(rtrim(digit1), str::parse), |value| Range {
                 from: value,
                 to: Some(value),
             }),
@@ -160,7 +160,7 @@ enum HexToken {
 ///
 /// This looks like `( AB .. | CD .. )`.
 ///
-/// This is equivalent to the `alternatives` from hex_grammar.y in libyara.
+/// This is equivalent to the `alternatives` from `hex_grammar.y` in libyara.
 fn alternatives(input: &str) -> IResult<&str, HexToken> {
     let (input, _) = rtrim(char('('))(input)?;
 
@@ -199,7 +199,7 @@ fn validate_range_in_alternatives(range: &Range) -> Result<(), String> {
 /// Some token are not allowed inside an alternatives, which is why a
 /// `in_alternatives` flag is needed.
 ///
-/// This is equivalent to the `tokens` rule in hex_grammar.y in libyara.
+/// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
 fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
     alt((
         // Always have at least one space after a byte or a masked byte
@@ -233,7 +233,7 @@ fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
 ///
 /// This looks like `{ AB .. }`.
 ///
-/// This is equivalent to the `hex_string` rule in hex_grammar.y in libyara.
+/// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
 fn hex_string(input: &str) -> IResult<&str, Vec<HexToken>> {
     let (input, _) = rtrim(char('{'))(input)?;
 

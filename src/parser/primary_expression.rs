@@ -123,7 +123,7 @@ pub enum PrimaryExpression {
 
 /// Parse a read of an integer.
 ///
-/// Equivalent to the _INTEGER_FUNCTION_ lexical pattern in libyara.
+/// Equivalent to the `_INTEGER_FUNCTION_` lexical pattern in libyara.
 /// This is roughly equivalent to `u?int(8|16|32)(be)?`.
 ///
 /// it returns a triple that consists of, in order:
@@ -285,12 +285,12 @@ fn primary_expression_item(input: &str) -> IResult<&str, PrimaryExpression> {
         // number
         map(number::number, PrimaryExpression::Number),
         // text string
-        map(string::quoted_string, PrimaryExpression::String),
+        map(string::quoted, PrimaryExpression::String),
         // regex
         map(string::regex, PrimaryExpression::Regex),
         // string_count 'in' range
         map(
-            separated_pair(string::string_count, rtrim(tag("in")), cut(range)),
+            separated_pair(string::count, rtrim(tag("in")), cut(range)),
             |(identifier, (a, b))| PrimaryExpression::CountInRange {
                 identifier,
                 from: Box::new(a),
@@ -298,11 +298,11 @@ fn primary_expression_item(input: &str) -> IResult<&str, PrimaryExpression> {
             },
         ),
         // string_count
-        map(string::string_count, PrimaryExpression::Count),
+        map(string::count, PrimaryExpression::Count),
         // string_offset | string_offset '[' primary_expression ']'
         map(
             pair(
-                string::string_offset,
+                string::offset,
                 opt(delimited(
                     rtrim(char('[')),
                     cut(primary_expression),
@@ -317,7 +317,7 @@ fn primary_expression_item(input: &str) -> IResult<&str, PrimaryExpression> {
         // string_length | string_length '[' primary_expression ']'
         map(
             pair(
-                string::string_length,
+                string::length,
                 opt(delimited(
                     rtrim(char('[')),
                     cut(primary_expression),
@@ -392,6 +392,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_primary_expression() {
         parse(pe, "filesize a", "a", PE::Filesize);
         parse(pe, "( filesize) a", "a", PE::Filesize);
