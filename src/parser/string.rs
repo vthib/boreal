@@ -30,22 +30,29 @@ fn identifier_contents(input: &str) -> IResult<&str, String> {
     map(take_while(is_identifier_digit), ToOwned::to_owned)(input)
 }
 
-/// Parse a string identifier
+/// Helper for [`string_identifier`] and [`string_identifier_with_wildcard`].
+fn string_identifier_no_rtrim(input: &str) -> IResult<&str, String> {
+    preceded(char('$'), cut(identifier_contents))(input)
+}
+
+/// Parse a string identifier.
 ///
-/// Returns the identifier name, and a boolean indicating whether
-/// the end of the identifier has a wildcard.
-///
-/// This is equivalent to the `_STRING_IDENTIFIER(_WITH_WILDCARD)_`
-/// lexical patterns in libyara.
+/// This is equivalent to the `_STRING_IDENTIFIER_` lexical patterns in
+/// libyara.
 /// Roughly equivalent to `$[a-ZA-Z0-9_]*\*?`.
-fn string_identifier(input: &str) -> IResult<&str, (String, bool)> {
-    rtrim(preceded(
-        char('$'),
-        cut(tuple((
-            identifier_contents,
-            map(opt(char('*')), |v| v.is_some()),
-        ))),
-    ))(input)
+#[allow(clippy::module_name_repetitions)]
+pub fn string_identifier(input: &str) -> IResult<&str, String> {
+    rtrim(string_identifier_no_rtrim)(input)
+}
+
+/// Parse a string identifier with a trailing wildcard.
+///
+/// This is equivalent to the `_STRING_IDENTIFIER_WITH_WILDCARD_`
+/// lexical patterns in /// libyara.
+/// Roughly equivalent to `$[a-ZA-Z0-9_]*\*?`.
+#[allow(clippy::module_name_repetitions)]
+pub fn string_identifier_with_wildcard(input: &str) -> IResult<&str, String> {
+    rtrim(terminated(string_identifier_no_rtrim, char('*')))(input)
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
@@ -65,21 +72,15 @@ pub fn length(input: &str) -> IResult<&str, String> {
 
 /// Parse an identifier.
 ///
-/// Returns the identifier name, and a boolean indicating whether
-/// the end of the identifier has a wildcard.
-///
 /// This is roughly equivalent to `[a-ZA-Z_][a-zA-Z0-9_]*`.
-pub fn identifier(input: &str) -> IResult<&str, (String, bool)> {
-    rtrim(tuple((
-        map(
-            recognize(tuple((
-                take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
-                cut(take_while(is_identifier_digit)),
-            ))),
-            ToOwned::to_owned,
-        ),
-        map(opt(char('*')), |v| v.is_some()),
-    )))(input)
+pub fn identifier(input: &str) -> IResult<&str, String> {
+    rtrim(map(
+        recognize(tuple((
+            take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
+            cut(take_while(is_identifier_digit)),
+        ))),
+        ToOwned::to_owned,
+    ))(input)
 }
 
 /// Parse a quoted string with escapable characters.
@@ -321,19 +322,30 @@ mod tests {
     fn test_string_identifier() {
         use super::string_identifier;
 
-        parse(string_identifier, "$-", "-", ("".to_owned(), false));
-        parse(string_identifier, "$*", "", ("".to_owned(), true));
-        parse(string_identifier, "$a c", "c", ("a".to_owned(), false));
-        parse(string_identifier, "$9b*c", "c", ("9b".to_owned(), true));
-        parse(
-            string_identifier,
-            "$_1Bd_F+",
-            "+",
-            ("_1Bd_F".to_owned(), false),
-        );
+        parse(string_identifier, "$-", "-", "");
+        parse(string_identifier, "$*", "*", "");
+        parse(string_identifier, "$a c", "c", "a");
+        parse(string_identifier, "$9b*c", "*c", "9b");
+        parse(string_identifier, "$_1Bd_F+", "+", "_1Bd_F");
 
         parse_err(string_identifier, "");
         parse_err(string_identifier, "*");
+    }
+
+    #[test]
+    fn test_string_identifier_with_wildcard() {
+        use super::string_identifier_with_wildcard as siww;
+
+        parse(siww, "$_*", "", "_");
+        parse(siww, "$*", "", "");
+        parse(siww, "$a* c", "c", "a");
+        parse(siww, "$9b*c", "c", "9b");
+        parse(siww, "$_1Bd_F*+", "+", "_1Bd_F");
+
+        parse_err(siww, "");
+        parse_err(siww, "$");
+        parse_err(siww, "$a");
+        parse_err(siww, "*");
     }
 
     #[test]
@@ -391,11 +403,11 @@ mod tests {
     fn test_identifier() {
         use super::identifier;
 
-        parse(identifier, "a+", "+", ("a".to_owned(), false));
-        parse(identifier, "_*", "", ("_".to_owned(), true));
-        parse(identifier, "A5 c", "c", ("A5".to_owned(), false));
-        parse(identifier, "g9b*c", "c", ("g9b".to_owned(), true));
-        parse(identifier, "__1Bd_F+", "+", ("__1Bd_F".to_owned(), false));
+        parse(identifier, "a+", "+", "a");
+        parse(identifier, "_*", "*", "_");
+        parse(identifier, "A5 c", "c", "A5");
+        parse(identifier, "g9b*c", "*c", "g9b");
+        parse(identifier, "__1Bd_F+", "+", "__1Bd_F");
 
         parse_err(identifier, "");
         parse_err(identifier, "*");

@@ -85,14 +85,7 @@ pub enum PrimaryExpression {
         occurence_number: Box<PrimaryExpression>,
     },
     /// A raw identifier.
-    Identifier {
-        /// Name of the identifier.
-        name: String,
-        /// True if a wildcard was used at the end of the identifier.
-        ///
-        /// e.g. `Rule*`
-        wildcard_at_end: bool,
-    },
+    Identifier(String),
     /// Negation
     Neg(Box<PrimaryExpression>),
     /// Addition
@@ -330,12 +323,8 @@ fn primary_expression_item(input: &str) -> IResult<&str, PrimaryExpression> {
             },
         ),
         // identifier
-        map(string::identifier, |(name, wildcard_at_end)| {
-            PrimaryExpression::Identifier {
-                name,
-                wildcard_at_end,
-            }
-        }),
+        // TODO: wrong rule
+        map(string::identifier, PrimaryExpression::Identifier),
     ))(input)
 }
 
@@ -459,24 +448,8 @@ mod tests {
             },
         );
 
-        parse(
-            pe,
-            "a c",
-            "c",
-            PE::Identifier {
-                name: "a".to_owned(),
-                wildcard_at_end: false,
-            },
-        );
-        parse(
-            pe,
-            "aze* c",
-            "c",
-            PE::Identifier {
-                name: "aze".to_owned(),
-                wildcard_at_end: true,
-            },
-        );
+        parse(pe, "a c", "c", PE::Identifier("a".to_owned()));
+        parse(pe, "aze", "", PE::Identifier("aze".to_owned()));
         parse(
             pe,
             "/a*b$/i c",
