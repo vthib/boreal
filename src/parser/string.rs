@@ -13,6 +13,7 @@ use nom::{
 };
 
 use super::nom_recipes::{rtrim, take_one};
+use crate::regex::Regex;
 
 /// Returns true if the char is an identifier digit, ie a-z, a-Z, 0-9, _
 fn is_identifier_digit(c: char) -> bool {
@@ -130,17 +131,6 @@ pub fn quoted(input: &str) -> IResult<&str, String> {
         ),
         char('"'),
     )))(input)
-}
-
-/// A regular expression.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Regex {
-    /// The regular expression parsed inside the `/` delimiters.
-    pub expr: String,
-    /// case insensitive (`i` flag).
-    pub case_insensitive: bool,
-    /// `.` matches `\n` (`s` flag).
-    pub dot_all: bool,
 }
 
 /// Parse a regular expression.

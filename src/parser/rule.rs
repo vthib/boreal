@@ -16,6 +16,7 @@ use nom::{
 };
 
 use super::{hex_string, nom_recipes::rtrim, number, string};
+use crate::regex::Regex;
 
 /// A Yara rule.
 #[derive(Debug, Default, PartialEq)]
@@ -169,7 +170,7 @@ enum StringDeclarationValue {
     /// A raw string.
     String(String),
     /// A regular expression.
-    Regex(string::Regex),
+    Regex(Regex),
     /// A hex string.
     HexString(hex_string::HexString),
 }
@@ -428,7 +429,7 @@ mod tests {
     #[test]
     fn parse_strings() {
         use super::super::hex_string::{HexToken, Mask};
-        use super::super::string::Regex;
+        use crate::regex::Regex;
 
         parse(
             strings,
