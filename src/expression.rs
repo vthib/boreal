@@ -14,6 +14,8 @@ pub enum ReadIntegerSize {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
+    // Numeric expressions
+    //
     /// Size of the file being analyzed.
     Filesize,
     /// Entrypoint address if the file is executable.
@@ -33,8 +35,6 @@ pub enum Expression {
     Number(i64),
     /// A literal floating-point number.
     Double(f64),
-    /// A literal string.
-    String(String),
     /// Is the number of occurences of an identifier in a given range.
     CountInRange {
         /// The identifier being counted.
@@ -70,8 +70,6 @@ pub enum Expression {
         ///  ...
         occurence_number: Box<Expression>,
     },
-    /// A raw identifier.
-    Identifier(String),
     /// Negation
     Neg(Box<Expression>),
     /// Addition
@@ -96,6 +94,86 @@ pub enum Expression {
     ShiftLeft(Box<Expression>, Box<Expression>),
     /// Shift right
     ShiftRight(Box<Expression>, Box<Expression>),
+
+    // Boolean expressions
+    //
+    /// Boolean and operator
+    And(Box<Expression>, Box<Expression>),
+    /// Boolean or operator
+    Or(Box<Expression>, Box<Expression>),
+    /// Comparison
+    Cmp {
+        /// Left side of the comparison
+        left: Box<Expression>,
+        /// Right side of the comparison
+        right: Box<Expression>,
+        /// If true, test `left < right`, otherwise test `left > right`.
+        less_than: bool,
+        /// If true, `left == right` also matches.
+        can_be_equal: bool,
+    },
+    /// Equality
+    Eq(Box<Expression>, Box<Expression>),
+    /// Contains
+    Contains {
+        /// Expression containing the other one.
+        haystack: Box<Expression>,
+        /// Expression contained in the other one.
+        needle: Box<Expression>,
+        /// If true, comparisons are not case sensitive.
+        case_insensitive: bool,
+    },
+    /// Starts with
+    StartsWith {
+        /// Expression to test
+        expr: Box<Expression>,
+        /// Prefix to look for in the expression.
+        prefix: Box<Expression>,
+        /// If true, comparisons are not case sensitive.
+        case_insensitive: bool,
+    },
+    /// Ends with
+    EndsWith {
+        /// Expression to test
+        expr: Box<Expression>,
+        /// Suffix to look for in the expression.
+        suffix: Box<Expression>,
+        /// If true, comparisons are not case sensitive.
+        case_insensitive: bool,
+    },
+    /// Case-insensitive equality
+    IEquals(Box<Expression>, Box<Expression>),
+    /// Matching a regular expression
+    Matches(Box<Expression>, Regex),
+    /// Is an expression `defined`, ie not `undefined`.
+    Defined(Box<Expression>),
+    /// Negation of a boolean expression
+    Not(Box<Expression>),
+    /// Boolean value
+    Boolean(bool),
+    /// Is a variable ("strings" in yara terms) found
+    Variable(String),
+    /// Is a variable found at a given index.
+    VariableAt(String, Box<Expression>),
+    /// Is a variable found in a given range.
+    VariableIn {
+        /// Name of the variable
+        variable: String,
+        /// Starting offset, included
+        from: Box<Expression>,
+        /// Ending offset, included
+        to: Box<Expression>,
+    },
+
+    // String expressions
+    //
+    /// A raw identifier.
+    Identifier(String),
+    /// A literal string.
+    String(String),
+
+    // Regex expressions
+    //
     /// Regex
     Regex(Regex),
 }

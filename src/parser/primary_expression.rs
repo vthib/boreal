@@ -40,7 +40,7 @@ fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
 /// Parse a 'in' range for primary expressions.
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
-fn range(input: &str) -> IResult<&str, (Expression, Expression)> {
+pub fn range(input: &str) -> IResult<&str, (Expression, Expression)> {
     let (input, _) = rtrim(char('('))(input)?;
 
     cut(terminated(
@@ -50,7 +50,7 @@ fn range(input: &str) -> IResult<&str, (Expression, Expression)> {
 }
 
 /// parse | operator
-fn primary_expression(input: &str) -> IResult<&str, Expression> {
+pub fn primary_expression(input: &str) -> IResult<&str, Expression> {
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
     while let Ok((i, _)) = rtrim(char('|'))(input) {
@@ -455,6 +455,7 @@ mod tests {
             ),
         );
 
+        // FIXME: simplify this into a negative number
         parse(
             pe,
             "-1--2",

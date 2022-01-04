@@ -28,6 +28,7 @@
 //! [ ] replace `from_external_error` with a custom err: the desc is dropped
 //!     by nom...
 
+mod expression;
 mod hex_string;
 mod nom_recipes;
 mod number;
