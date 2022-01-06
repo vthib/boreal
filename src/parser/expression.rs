@@ -191,6 +191,32 @@ mod tests {
     use super::super::test_utils::{parse, parse_err};
     use super::{expression, expression_variable, Expression};
 
+    #[track_caller]
+    fn test_precedence<F, F2>(
+        higher_op: &str,
+        lower_op: &str,
+        higher_constructor: F,
+        lower_constructor: F2,
+    ) where
+        F: FnOnce(Box<Expression>, Box<Expression>) -> Expression,
+        F2: FnOnce(Box<Expression>, Box<Expression>) -> Expression,
+    {
+        let input = format!("1 {} 2 {} 3", lower_op, higher_op);
+
+        parse(
+            expression,
+            &input,
+            "",
+            lower_constructor(
+                Box::new(Expression::Number(1)),
+                Box::new(higher_constructor(
+                    Box::new(Expression::Number(2)),
+                    Box::new(Expression::Number(3)),
+                )),
+            ),
+        );
+    }
+
     #[test]
     fn test_expression_variable() {
         parse(
@@ -334,7 +360,145 @@ mod tests {
         parse_err(expression, "toto matches 1");
     }
 
-    // TODO: test operators precedence
+    #[test]
+    fn test_expression_precedence_cmp_eq() {
+        let build_cmp = |less_than, can_be_equal| {
+            move |a, b| Expression::Cmp {
+                left: a,
+                right: b,
+                less_than,
+                can_be_equal,
+            }
+        };
+
+        // Test precedence of <, <=, >=, > over eq, etc
+        test_precedence("<", "==", build_cmp(true, false), Expression::Eq);
+        test_precedence("<=", "==", build_cmp(true, true), Expression::Eq);
+        test_precedence(">", "==", build_cmp(false, false), Expression::Eq);
+        test_precedence(">=", "==", build_cmp(false, true), Expression::Eq);
+        test_precedence("<", "!=", build_cmp(true, false), |a, b| {
+            Expression::Not(Box::new(Expression::Eq(a, b)))
+        });
+        test_precedence("<", "contains", build_cmp(true, false), |a, b| {
+            Expression::Contains {
+                haystack: a,
+                needle: b,
+                case_insensitive: false,
+            }
+        });
+        test_precedence("<", "icontains", build_cmp(true, false), |a, b| {
+            Expression::Contains {
+                haystack: a,
+                needle: b,
+                case_insensitive: true,
+            }
+        });
+        test_precedence("<", "startswith", build_cmp(true, false), |a, b| {
+            Expression::StartsWith {
+                expr: a,
+                prefix: b,
+                case_insensitive: false,
+            }
+        });
+        test_precedence("<", "istartswith", build_cmp(true, false), |a, b| {
+            Expression::StartsWith {
+                expr: a,
+                prefix: b,
+                case_insensitive: true,
+            }
+        });
+        test_precedence("<", "endswith", build_cmp(true, false), |a, b| {
+            Expression::EndsWith {
+                expr: a,
+                suffix: b,
+                case_insensitive: false,
+            }
+        });
+        test_precedence("<", "iendswith", build_cmp(true, false), |a, b| {
+            Expression::EndsWith {
+                expr: a,
+                suffix: b,
+                case_insensitive: true,
+            }
+        });
+        test_precedence("<", "iequals", build_cmp(true, false), Expression::IEquals);
+    }
+
+    #[test]
+    fn test_expression_precedence_eq_and_or() {
+        // Test precedence of over eq, etc over and
+        test_precedence("==", "and", Expression::Eq, Expression::And);
+        test_precedence(
+            "!=",
+            "and",
+            |a, b| Expression::Not(Box::new(Expression::Eq(a, b))),
+            Expression::And,
+        );
+        test_precedence(
+            "contains",
+            "and",
+            |a, b| Expression::Contains {
+                haystack: a,
+                needle: b,
+                case_insensitive: false,
+            },
+            Expression::And,
+        );
+        test_precedence(
+            "icontains",
+            "and",
+            |a, b| Expression::Contains {
+                haystack: a,
+                needle: b,
+                case_insensitive: true,
+            },
+            Expression::And,
+        );
+        test_precedence(
+            "startswith",
+            "and",
+            |a, b| Expression::StartsWith {
+                expr: a,
+                prefix: b,
+                case_insensitive: false,
+            },
+            Expression::And,
+        );
+        test_precedence(
+            "istartswith",
+            "and",
+            |a, b| Expression::StartsWith {
+                expr: a,
+                prefix: b,
+                case_insensitive: true,
+            },
+            Expression::And,
+        );
+        test_precedence(
+            "endswith",
+            "and",
+            |a, b| Expression::EndsWith {
+                expr: a,
+                suffix: b,
+                case_insensitive: false,
+            },
+            Expression::And,
+        );
+        test_precedence(
+            "iendswith",
+            "and",
+            |a, b| Expression::EndsWith {
+                expr: a,
+                suffix: b,
+                case_insensitive: true,
+            },
+            Expression::And,
+        );
+        test_precedence("iequals", "and", Expression::IEquals, Expression::And);
+
+        // Test precedence of and over or
+        test_precedence("and", "or", Expression::And, Expression::Or);
+    }
 
     #[test]
     fn test_expression() {
