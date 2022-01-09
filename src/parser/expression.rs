@@ -146,7 +146,8 @@ fn primary_expression_eq_all(input: &str) -> IResult<&str, Expression> {
 
 /// parse `<=`, `>=`, `<`, `>`, operators.
 fn primary_expression_cmp(input: &str) -> IResult<&str, Expression> {
-    let (mut input, mut res) = primary_expression(input)?;
+    let (mut input, res) = primary_expression(input)?;
+    let mut res = res.expr;
 
     while let Ok((i, op)) = rtrim(alt((tag("<="), tag(">="), tag("<"), tag(">"))))(input) {
         let (i2, right_elem) = cut(primary_expression)(i)?;
@@ -155,7 +156,7 @@ fn primary_expression_cmp(input: &str) -> IResult<&str, Expression> {
         let can_be_equal = op.len() == 2;
         res = Expression::Cmp {
             left: Box::new(res),
-            right: Box::new(right_elem),
+            right: Box::new(right_elem.expr),
             less_than,
             can_be_equal,
         };
@@ -169,15 +170,15 @@ fn expression_variable(input: &str) -> IResult<&str, Expression> {
 
     // string_identifier 'at' primary_expression
     if let Ok((input, expr)) = preceded(rtrim(tag("at")), primary_expression)(input) {
-        Ok((input, Expression::VariableAt(variable, Box::new(expr))))
+        Ok((input, Expression::VariableAt(variable, Box::new(expr.expr))))
     // string_identifier 'in' range
     } else if let Ok((input, (from, to))) = preceded(rtrim(tag("in")), range)(input) {
         Ok((
             input,
             Expression::VariableIn {
                 variable,
-                from: Box::new(from),
-                to: Box::from(to),
+                from: Box::new(from.expr),
+                to: Box::from(to.expr),
             },
         ))
     // string_identifier

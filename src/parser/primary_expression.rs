@@ -6,7 +6,8 @@ use nom::{
     bytes::complete::tag,
     character::complete::char,
     combinator::{cut, map, opt},
-    sequence::{delimited, pair, separated_pair, terminated, tuple},
+    error::{Error, ErrorKind, FromExternalError},
+    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     IResult,
 };
 
@@ -15,6 +16,55 @@ use crate::expression::{Expression, ReadIntegerSize};
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
+
+/// Type of a parsed expression
+///
+/// This is useful to know the type of a parsed expression, and reject
+/// during parsing expressions which are incompatible.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum Type {
+    Integer,
+    Float,
+    String,
+    Regex,
+    Boolean,
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.write_str(match self {
+            Self::Integer => "integer",
+            Self::Float => "floating-point number",
+            Self::String => "string",
+            Self::Regex => "regex",
+            Self::Boolean => "boolean",
+        })
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct ParsedExpr {
+    pub expr: Expression,
+    ty: Type,
+}
+
+impl ParsedExpr {
+    fn try_unwrap<I>(
+        self,
+        input: I,
+        expected_type: Type,
+    ) -> Result<Box<Expression>, nom::Err<Error<I>>> {
+        if self.ty == expected_type {
+            Ok(Box::new(self.expr))
+        } else {
+            Err(nom::Err::Error(Error::from_external_error(
+                input,
+                ErrorKind::Verify,
+                format!("{} expression expected", expected_type),
+            )))
+        }
+    }
+}
 
 /// Parse a read of an integer.
 ///
@@ -37,10 +87,34 @@ fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
     )))(input)
 }
 
+fn read_integer_expression(input: &str) -> IResult<&str, ParsedExpr> {
+    let (input, ((unsigned, size, big_endian), expr)) = pair(
+        read_integer,
+        cut(delimited(
+            rtrim(char('(')),
+            primary_expression,
+            rtrim(char(')')),
+        )),
+    )(input)?;
+
+    Ok((
+        input,
+        ParsedExpr {
+            expr: Expression::ReadInteger {
+                unsigned,
+                size,
+                big_endian,
+                addr: expr.try_unwrap(input, Type::Integer)?,
+            },
+            ty: Type::Integer,
+        },
+    ))
+}
+
 /// Parse a 'in' range for primary expressions.
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
-pub fn range(input: &str) -> IResult<&str, (Expression, Expression)> {
+pub fn range(input: &str) -> IResult<&str, (ParsedExpr, ParsedExpr)> {
     let (input, _) = rtrim(char('('))(input)?;
 
     cut(terminated(
@@ -50,103 +124,155 @@ pub fn range(input: &str) -> IResult<&str, (Expression, Expression)> {
 }
 
 /// parse | operator
-pub fn primary_expression(input: &str) -> IResult<&str, Expression> {
+pub fn primary_expression(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
     while let Ok((i, _)) = rtrim(char('|'))(input) {
         let (i2, right_elem) = cut(primary_expression_bitwise_xor)(i)?;
         input = i2;
-        res = Expression::BitwiseOr(Box::new(res), Box::new(right_elem));
+
+        res = ParsedExpr {
+            expr: Expression::BitwiseOr(
+                res.try_unwrap(input, Type::Integer)?,
+                right_elem.try_unwrap(input, Type::Integer)?,
+            ),
+            ty: Type::Integer,
+        }
     }
     Ok((input, res))
 }
 
 /// parse ^ operator
-fn primary_expression_bitwise_xor(input: &str) -> IResult<&str, Expression> {
+fn primary_expression_bitwise_xor(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_bitwise_and(input)?;
 
     while let Ok((i, _)) = rtrim(char('^'))(input) {
         let (i2, right_elem) = cut(primary_expression_bitwise_and)(i)?;
         input = i2;
-        res = Expression::BitwiseXor(Box::new(res), Box::new(right_elem));
+
+        res = ParsedExpr {
+            expr: Expression::BitwiseXor(
+                res.try_unwrap(input, Type::Integer)?,
+                right_elem.try_unwrap(input, Type::Integer)?,
+            ),
+            ty: Type::Integer,
+        };
     }
     Ok((input, res))
 }
 
 /// parse & operator
-fn primary_expression_bitwise_and(input: &str) -> IResult<&str, Expression> {
+fn primary_expression_bitwise_and(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_shift(input)?;
 
     while let Ok((i, _)) = rtrim(char('&'))(input) {
         let (i2, right_elem) = cut(primary_expression_shift)(i)?;
         input = i2;
-        res = Expression::BitwiseAnd(Box::new(res), Box::new(right_elem));
+
+        res = ParsedExpr {
+            expr: Expression::BitwiseAnd(
+                res.try_unwrap(input, Type::Integer)?,
+                right_elem.try_unwrap(input, Type::Integer)?,
+            ),
+            ty: Type::Integer,
+        }
     }
     Ok((input, res))
 }
 
 /// parse <<, >> operators
-fn primary_expression_shift(input: &str) -> IResult<&str, Expression> {
+fn primary_expression_shift(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_add(input)?;
 
     while let Ok((i, op)) = rtrim(alt((tag("<<"), tag(">>"))))(input) {
         let (i2, right_elem) = cut(primary_expression_add)(i)?;
         input = i2;
-        res = match op {
-            "<<" => Expression::ShiftLeft(Box::new(res), Box::new(right_elem)),
-            ">>" => Expression::ShiftRight(Box::new(res), Box::new(right_elem)),
-            _ => unreachable!(),
+
+        let left = res.try_unwrap(input, Type::Integer)?;
+        let right = right_elem.try_unwrap(input, Type::Integer)?;
+        res = ParsedExpr {
+            expr: match op {
+                "<<" => Expression::ShiftLeft(left, right),
+                ">>" => Expression::ShiftRight(left, right),
+                _ => unreachable!(),
+            },
+            ty: Type::Integer,
         }
     }
     Ok((input, res))
 }
 
 /// parse +, - operators
-fn primary_expression_add(input: &str) -> IResult<&str, Expression> {
+fn primary_expression_add(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_mul(input)?;
 
-    while let Ok((i, op)) = rtrim(alt((char('+'), char('-'))))(input) {
+    while let Ok((i, op)) = rtrim(alt((tag("+"), tag("-"))))(input) {
         let (i2, right_elem) = cut(primary_expression_mul)(i)?;
         input = i2;
-        res = match op {
-            '+' => Expression::Add(Box::new(res), Box::new(right_elem)),
-            '-' => Expression::Sub(Box::new(res), Box::new(right_elem)),
-            _ => unreachable!(),
+
+        let left = res.try_unwrap(input, Type::Integer)?;
+        let right = right_elem.try_unwrap(input, Type::Integer)?;
+        res = ParsedExpr {
+            expr: match op {
+                "+" => Expression::Add(left, right),
+                "-" => Expression::Sub(left, right),
+                _ => unreachable!(),
+            },
+            ty: Type::Integer,
         }
     }
     Ok((input, res))
 }
 
 /// parse *, \, % operators
-fn primary_expression_mul(input: &str) -> IResult<&str, Expression> {
+fn primary_expression_mul(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_neg(input)?;
 
-    while let Ok((i, op)) = rtrim(alt((char('*'), char('\\'), char('%'))))(input) {
+    while let Ok((i, op)) = rtrim(alt((tag("*"), tag("\\"), tag("%"))))(input) {
         let (i2, right_elem) = cut(primary_expression_neg)(i)?;
         input = i2;
-        res = match op {
-            '*' => Expression::Mul(Box::new(res), Box::new(right_elem)),
-            '\\' => Expression::Div(Box::new(res), Box::new(right_elem)),
-            '%' => Expression::Mod(Box::new(res), Box::new(right_elem)),
-            _ => unreachable!(),
+
+        let left = res.try_unwrap(input, Type::Integer)?;
+        let right = right_elem.try_unwrap(input, Type::Integer)?;
+        res = ParsedExpr {
+            expr: match op {
+                "*" => Expression::Mul(left, right),
+                "\\" => Expression::Div(left, right),
+                "%" => Expression::Mod(left, right),
+                _ => unreachable!(),
+            },
+            ty: Type::Integer,
         }
     }
     Ok((input, res))
 }
 
 /// parse ~, - operators
-fn primary_expression_neg(input: &str) -> IResult<&str, Expression> {
-    map(
-        tuple((opt(alt((char('~'), char('-')))), primary_expression_item)),
-        |(unary_op, expr)| match unary_op {
-            Some('~') => Expression::BitwiseNot(Box::new(expr)),
-            Some('-') => Expression::Neg(Box::new(expr)),
-            _ => expr,
+fn primary_expression_neg(input: &str) -> IResult<&str, ParsedExpr> {
+    let (input, (op, expr)) =
+        tuple((opt(alt((tag("~"), tag("-")))), primary_expression_item))(input)?;
+
+    Ok((
+        input,
+        match op {
+            None => expr,
+            Some(op) => {
+                let expr = expr.try_unwrap(input, Type::Integer)?;
+
+                ParsedExpr {
+                    expr: match op {
+                        "~" => Expression::BitwiseNot(expr),
+                        "-" => Expression::Neg(expr),
+                        _ => unreachable!(),
+                    },
+                    ty: Type::Integer,
+                }
+            }
         },
-    )(input)
+    ))
 }
 
-fn primary_expression_item(input: &str) -> IResult<&str, Expression> {
+fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
     alt((
         // '(' primary_expression ')'
         delimited(
@@ -155,86 +281,130 @@ fn primary_expression_item(input: &str) -> IResult<&str, Expression> {
             cut(rtrim(char(')'))),
         ),
         // 'filesize'
-        map(rtrim(tag("filesize")), |_| Expression::Filesize),
+        map(rtrim(tag("filesize")), |_| ParsedExpr {
+            expr: Expression::Filesize,
+            ty: Type::Integer,
+        }),
         // 'entrypoint'
-        map(rtrim(tag("entrypoint")), |_| Expression::Entrypoint),
+        map(rtrim(tag("entrypoint")), |_| ParsedExpr {
+            expr: Expression::Entrypoint,
+            ty: Type::Integer,
+        }),
         // read_integer '(' primary_expresion ')'
-        map(
-            pair(
-                read_integer,
-                cut(delimited(
-                    rtrim(char('(')),
-                    primary_expression,
-                    rtrim(char(')')),
-                )),
-            ),
-            |((unsigned, size, big_endian), expr)| Expression::ReadInteger {
-                unsigned,
-                size,
-                big_endian,
-                addr: Box::new(expr),
-            },
-        ),
+        read_integer_expression,
         // double
-        map(number::double, Expression::Double),
+        map(number::double, |v| ParsedExpr {
+            expr: Expression::Double(v),
+            ty: Type::Float,
+        }),
         // number
-        map(number::number, Expression::Number),
+        map(number::number, |v| ParsedExpr {
+            expr: Expression::Number(v),
+            ty: Type::Integer,
+        }),
         // text string
-        map(string::quoted, Expression::String),
+        map(string::quoted, |v| ParsedExpr {
+            expr: Expression::String(v),
+            ty: Type::String,
+        }),
         // regex
-        map(string::regex, Expression::Regex),
-        // string_count 'in' range
-        map(
-            separated_pair(string::count, rtrim(tag("in")), cut(range)),
-            |(identifier, (a, b))| Expression::CountInRange {
-                identifier,
-                from: Box::new(a),
-                to: Box::new(b),
-            },
-        ),
-        // string_count
-        map(string::count, Expression::Count),
+        map(string::regex, |v| ParsedExpr {
+            expr: Expression::Regex(v),
+            ty: Type::Regex,
+        }),
+        // string_count | string_count 'in' range
+        string_count_expression,
         // string_offset | string_offset '[' primary_expression ']'
-        map(
-            pair(
-                string::offset,
-                opt(delimited(
-                    rtrim(char('[')),
-                    cut(primary_expression),
-                    cut(rtrim(char(']'))),
-                )),
-            ),
-            |(identifier, expr)| Expression::Offset {
-                identifier,
-                occurence_number: Box::new(expr.unwrap_or(Expression::Number(1))),
-            },
-        ),
+        string_offset_expression,
         // string_length | string_length '[' primary_expression ']'
-        map(
-            pair(
-                string::length,
-                opt(delimited(
-                    rtrim(char('[')),
-                    cut(primary_expression),
-                    cut(rtrim(char(']'))),
-                )),
-            ),
-            |(identifier, expr)| Expression::Length {
-                identifier,
-                occurence_number: Box::new(expr.unwrap_or(Expression::Number(1))),
-            },
-        ),
+        string_length_expression,
         // identifier
         // TODO: wrong rule
-        map(string::identifier, Expression::Identifier),
+        map(string::identifier, |v| ParsedExpr {
+            expr: Expression::Identifier(v),
+            ty: Type::String,
+        }),
     ))(input)
 }
 
+fn string_count_expression(input: &str) -> IResult<&str, ParsedExpr> {
+    let (input, identifier) = string::count(input)?;
+    let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input)?;
+
+    let expr = match range {
+        // string_count
+        None => Expression::Count(identifier),
+        // string_count 'in' range
+        Some((a, b)) => Expression::CountInRange {
+            identifier,
+            from: a.try_unwrap(input, Type::Integer)?,
+            to: b.try_unwrap(input, Type::Integer)?,
+        },
+    };
+    Ok((
+        input,
+        ParsedExpr {
+            expr,
+            ty: Type::Integer,
+        },
+    ))
+}
+
+fn string_offset_expression(input: &str) -> IResult<&str, ParsedExpr> {
+    // string_offset | string_offset '[' primary_expression ']'
+    let (input, identifier) = string::offset(input)?;
+    let (input, expr) = opt(delimited(
+        rtrim(char('[')),
+        cut(primary_expression),
+        cut(rtrim(char(']'))),
+    ))(input)?;
+
+    let expr = Expression::Offset {
+        identifier,
+        occurence_number: match expr {
+            Some(v) => v.try_unwrap(input, Type::Integer)?,
+            None => Box::new(Expression::Number(1)),
+        },
+    };
+    Ok((
+        input,
+        ParsedExpr {
+            expr,
+            ty: Type::Integer,
+        },
+    ))
+}
+
+fn string_length_expression(input: &str) -> IResult<&str, ParsedExpr> {
+    // string_length | string_length '[' primary_expression ']'
+    let (input, identifier) = string::length(input)?;
+    let (input, expr) = opt(delimited(
+        rtrim(char('[')),
+        cut(primary_expression),
+        cut(rtrim(char(']'))),
+    ))(input)?;
+
+    let expr = Expression::Length {
+        identifier,
+        occurence_number: match expr {
+            Some(v) => v.try_unwrap(input, Type::Integer)?,
+            None => Box::new(Expression::Number(1)),
+        },
+    };
+    Ok((
+        input,
+        ParsedExpr {
+            expr,
+            ty: Type::Integer,
+        },
+    ))
+}
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::{parse, parse_err};
     use super::{
-        primary_expression as pe, range, read_integer, Expression as Expr, ReadIntegerSize as RIS,
+        primary_expression as pe, range, read_integer, Expression as Expr, ParsedExpr,
+        ReadIntegerSize as RIS, Type,
     };
 
     #[test]
@@ -264,12 +434,35 @@ mod tests {
 
     #[test]
     fn test_range() {
-        parse(range, "(1..1) b", "b", (Expr::Number(1), Expr::Number(1)));
+        parse(
+            range,
+            "(1..1) b",
+            "b",
+            (
+                ParsedExpr {
+                    expr: Expr::Number(1),
+                    ty: Type::Integer,
+                },
+                ParsedExpr {
+                    expr: Expr::Number(1),
+                    ty: Type::Integer,
+                },
+            ),
+        );
         parse(
             range,
             "( filesize .. entrypoint )",
             "",
-            (Expr::Filesize, Expr::Entrypoint),
+            (
+                ParsedExpr {
+                    expr: Expr::Filesize,
+                    ty: Type::Integer,
+                },
+                ParsedExpr {
+                    expr: Expr::Entrypoint,
+                    ty: Type::Integer,
+                },
+            ),
         );
 
         parse_err(range, "");
@@ -284,82 +477,175 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn test_primary_expression() {
-        parse(pe, "filesize a", "a", Expr::Filesize);
-        parse(pe, "( filesize) a", "a", Expr::Filesize);
-        parse(pe, "entrypoint a", "a", Expr::Entrypoint);
+        parse(
+            pe,
+            "filesize a",
+            "a",
+            ParsedExpr {
+                expr: Expr::Filesize,
+                ty: Type::Integer,
+            },
+        );
+        parse(
+            pe,
+            "( filesize) a",
+            "a",
+            ParsedExpr {
+                expr: Expr::Filesize,
+                ty: Type::Integer,
+            },
+        );
+        parse(
+            pe,
+            "entrypoint a",
+            "a",
+            ParsedExpr {
+                expr: Expr::Entrypoint,
+                ty: Type::Integer,
+            },
+        );
         parse(
             pe,
             "uint8(3)",
             "",
-            Expr::ReadInteger {
-                unsigned: true,
-                size: RIS::Int8,
-                big_endian: false,
-                addr: Box::new(Expr::Number(3)),
+            ParsedExpr {
+                expr: Expr::ReadInteger {
+                    unsigned: true,
+                    size: RIS::Int8,
+                    big_endian: false,
+                    addr: Box::new(Expr::Number(3)),
+                },
+                ty: Type::Integer,
             },
         );
-        parse(pe, "15  2", "2", Expr::Number(15));
-        parse(pe, "0.25 c", "c", Expr::Double(0.25));
-        parse(pe, "\"a\\nb \" b", "b", Expr::String("a\nb ".to_owned()));
-        parse(pe, "#foo bar", "bar", Expr::Count("foo".to_owned()));
+        parse(
+            pe,
+            "15  2",
+            "2",
+            ParsedExpr {
+                expr: Expr::Number(15),
+                ty: Type::Integer,
+            },
+        );
+        parse(
+            pe,
+            "0.25 c",
+            "c",
+            ParsedExpr {
+                expr: Expr::Double(0.25),
+                ty: Type::Float,
+            },
+        );
+        parse(
+            pe,
+            "\"a\\nb \" b",
+            "b",
+            ParsedExpr {
+                expr: Expr::String("a\nb ".to_owned()),
+                ty: Type::String,
+            },
+        );
+        parse(
+            pe,
+            "#foo bar",
+            "bar",
+            ParsedExpr {
+                expr: Expr::Count("foo".to_owned()),
+                ty: Type::Integer,
+            },
+        );
         parse(
             pe,
             "#foo in (0 ..filesize ) c",
             "c",
-            Expr::CountInRange {
-                identifier: "foo".to_owned(),
-                from: Box::new(Expr::Number(0)),
-                to: Box::new(Expr::Filesize),
+            ParsedExpr {
+                expr: Expr::CountInRange {
+                    identifier: "foo".to_owned(),
+                    from: Box::new(Expr::Number(0)),
+                    to: Box::new(Expr::Filesize),
+                },
+                ty: Type::Integer,
             },
         );
         parse(
             pe,
             "@a c",
             "c",
-            Expr::Offset {
-                identifier: "a".to_owned(),
-                occurence_number: Box::new(Expr::Number(1)),
+            ParsedExpr {
+                expr: Expr::Offset {
+                    identifier: "a".to_owned(),
+                    occurence_number: Box::new(Expr::Number(1)),
+                },
+                ty: Type::Integer,
             },
         );
         parse(
             pe,
             "@a [ 2] c",
             "c",
-            Expr::Offset {
-                identifier: "a".to_owned(),
-                occurence_number: Box::new(Expr::Number(2)),
+            ParsedExpr {
+                expr: Expr::Offset {
+                    identifier: "a".to_owned(),
+                    occurence_number: Box::new(Expr::Number(2)),
+                },
+                ty: Type::Integer,
             },
         );
         parse(
             pe,
             "!a c",
             "c",
-            Expr::Length {
-                identifier: "a".to_owned(),
-                occurence_number: Box::new(Expr::Number(1)),
+            ParsedExpr {
+                expr: Expr::Length {
+                    identifier: "a".to_owned(),
+                    occurence_number: Box::new(Expr::Number(1)),
+                },
+                ty: Type::Integer,
             },
         );
         parse(
             pe,
             "!a [ 2] c",
             "c",
-            Expr::Length {
-                identifier: "a".to_owned(),
-                occurence_number: Box::new(Expr::Number(2)),
+            ParsedExpr {
+                expr: Expr::Length {
+                    identifier: "a".to_owned(),
+                    occurence_number: Box::new(Expr::Number(2)),
+                },
+                ty: Type::Integer,
             },
         );
 
-        parse(pe, "a c", "c", Expr::Identifier("a".to_owned()));
-        parse(pe, "aze", "", Expr::Identifier("aze".to_owned()));
+        parse(
+            pe,
+            "a c",
+            "c",
+            ParsedExpr {
+                expr: Expr::Identifier("a".to_owned()),
+                ty: Type::String,
+            },
+        );
+        parse(
+            pe,
+            "aze",
+            "",
+            ParsedExpr {
+                expr: Expr::Identifier("aze".to_owned()),
+                ty: Type::String,
+            },
+        );
         parse(
             pe,
             "/a*b$/i c",
             "c",
-            Expr::Regex(crate::regex::Regex {
-                expr: "a*b$".to_owned(),
-                case_insensitive: true,
-                dot_all: false,
-            }),
+            ParsedExpr {
+                expr: Expr::Regex(crate::regex::Regex {
+                    expr: "a*b$".to_owned(),
+                    case_insensitive: true,
+                    dot_all: false,
+                }),
+                ty: Type::Regex,
+            },
         );
 
         parse_err(pe, "");
@@ -373,6 +659,7 @@ mod tests {
         parse_err(pe, "uint32be ( 3");
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_primary_expression_associativity() {
         // Check handling of chain of operators, and associativity
@@ -380,79 +667,97 @@ mod tests {
             pe,
             "1 + 2 - 3b",
             "b",
-            Expr::Sub(
-                Box::new(Expr::Add(
-                    Box::new(Expr::Number(1)),
-                    Box::new(Expr::Number(2)),
-                )),
-                Box::new(Expr::Number(3)),
-            ),
+            ParsedExpr {
+                expr: Expr::Sub(
+                    Box::new(Expr::Add(
+                        Box::new(Expr::Number(1)),
+                        Box::new(Expr::Number(2)),
+                    )),
+                    Box::new(Expr::Number(3)),
+                ),
+                ty: Type::Integer,
+            },
         );
         parse(
             pe,
             "1 \\ 2 % 3 * 4",
             "",
-            Expr::Mul(
-                Box::new(Expr::Mod(
-                    Box::new(Expr::Div(
-                        Box::new(Expr::Number(1)),
-                        Box::new(Expr::Number(2)),
+            ParsedExpr {
+                expr: Expr::Mul(
+                    Box::new(Expr::Mod(
+                        Box::new(Expr::Div(
+                            Box::new(Expr::Number(1)),
+                            Box::new(Expr::Number(2)),
+                        )),
+                        Box::new(Expr::Number(3)),
                     )),
-                    Box::new(Expr::Number(3)),
-                )),
-                Box::new(Expr::Number(4)),
-            ),
+                    Box::new(Expr::Number(4)),
+                ),
+                ty: Type::Integer,
+            },
         );
         parse(
             pe,
             "1 << 2 >> 3 << 4",
             "",
-            Expr::ShiftLeft(
-                Box::new(Expr::ShiftRight(
-                    Box::new(Expr::ShiftLeft(
-                        Box::new(Expr::Number(1)),
-                        Box::new(Expr::Number(2)),
+            ParsedExpr {
+                expr: Expr::ShiftLeft(
+                    Box::new(Expr::ShiftRight(
+                        Box::new(Expr::ShiftLeft(
+                            Box::new(Expr::Number(1)),
+                            Box::new(Expr::Number(2)),
+                        )),
+                        Box::new(Expr::Number(3)),
                     )),
-                    Box::new(Expr::Number(3)),
-                )),
-                Box::new(Expr::Number(4)),
-            ),
+                    Box::new(Expr::Number(4)),
+                ),
+                ty: Type::Integer,
+            },
         );
         parse(
             pe,
             "1 & 2 & 3",
             "",
-            Expr::BitwiseAnd(
-                Box::new(Expr::BitwiseAnd(
-                    Box::new(Expr::Number(1)),
-                    Box::new(Expr::Number(2)),
-                )),
-                Box::new(Expr::Number(3)),
-            ),
+            ParsedExpr {
+                expr: Expr::BitwiseAnd(
+                    Box::new(Expr::BitwiseAnd(
+                        Box::new(Expr::Number(1)),
+                        Box::new(Expr::Number(2)),
+                    )),
+                    Box::new(Expr::Number(3)),
+                ),
+                ty: Type::Integer,
+            },
         );
         parse(
             pe,
             "1 ^ 2 ^ 3",
             "",
-            Expr::BitwiseXor(
-                Box::new(Expr::BitwiseXor(
-                    Box::new(Expr::Number(1)),
-                    Box::new(Expr::Number(2)),
-                )),
-                Box::new(Expr::Number(3)),
-            ),
+            ParsedExpr {
+                expr: Expr::BitwiseXor(
+                    Box::new(Expr::BitwiseXor(
+                        Box::new(Expr::Number(1)),
+                        Box::new(Expr::Number(2)),
+                    )),
+                    Box::new(Expr::Number(3)),
+                ),
+                ty: Type::Integer,
+            },
         );
         parse(
             pe,
             "1 | 2 | 3",
             "",
-            Expr::BitwiseOr(
-                Box::new(Expr::BitwiseOr(
-                    Box::new(Expr::Number(1)),
-                    Box::new(Expr::Number(2)),
-                )),
-                Box::new(Expr::Number(3)),
-            ),
+            ParsedExpr {
+                expr: Expr::BitwiseOr(
+                    Box::new(Expr::BitwiseOr(
+                        Box::new(Expr::Number(1)),
+                        Box::new(Expr::Number(2)),
+                    )),
+                    Box::new(Expr::Number(3)),
+                ),
+                ty: Type::Integer,
+            },
         );
 
         // FIXME: simplify this into a negative number
@@ -460,22 +765,29 @@ mod tests {
             pe,
             "-1--2",
             "",
-            Expr::Sub(
-                Box::new(Expr::Neg(Box::new(Expr::Number(1)))),
-                Box::new(Expr::Neg(Box::new(Expr::Number(2)))),
-            ),
+            ParsedExpr {
+                expr: Expr::Sub(
+                    Box::new(Expr::Neg(Box::new(Expr::Number(1)))),
+                    Box::new(Expr::Neg(Box::new(Expr::Number(2)))),
+                ),
+                ty: Type::Integer,
+            },
         );
         parse(
             pe,
             "~1^~2",
             "",
-            Expr::BitwiseXor(
-                Box::new(Expr::BitwiseNot(Box::new(Expr::Number(1)))),
-                Box::new(Expr::BitwiseNot(Box::new(Expr::Number(2)))),
-            ),
+            ParsedExpr {
+                expr: Expr::BitwiseXor(
+                    Box::new(Expr::BitwiseNot(Box::new(Expr::Number(1)))),
+                    Box::new(Expr::BitwiseNot(Box::new(Expr::Number(2)))),
+                ),
+                ty: Type::Integer,
+            },
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_primary_expression_precedence() {
         #[track_caller]
@@ -494,13 +806,16 @@ mod tests {
                 pe,
                 &input,
                 "",
-                lower_constructor(
-                    Box::new(Expr::Number(1)),
-                    Box::new(higher_constructor(
-                        Box::new(Expr::Number(2)),
-                        Box::new(Expr::Number(3)),
-                    )),
-                ),
+                ParsedExpr {
+                    expr: lower_constructor(
+                        Box::new(Expr::Number(1)),
+                        Box::new(higher_constructor(
+                            Box::new(Expr::Number(2)),
+                            Box::new(Expr::Number(3)),
+                        )),
+                    ),
+                    ty: Type::Integer,
+                },
             );
         }
 
@@ -572,7 +887,23 @@ mod tests {
             )),
         );
 
-        parse(pe, "1 + 2 * 3 ^ 4 % 5 - 6", "", expected.clone());
-        parse(pe, "(1 + (2 * 3) ) ^ ((4)%5 - 6)", "", expected);
+        parse(
+            pe,
+            "1 + 2 * 3 ^ 4 % 5 - 6",
+            "",
+            ParsedExpr {
+                expr: expected.clone(),
+                ty: Type::Integer,
+            },
+        );
+        parse(
+            pe,
+            "(1 + (2 * 3) ) ^ ((4)%5 - 6)",
+            "",
+            ParsedExpr {
+                expr: expected,
+                ty: Type::Integer,
+            },
+        );
     }
 }
