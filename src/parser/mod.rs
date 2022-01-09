@@ -32,7 +32,6 @@ mod expression;
 mod hex_string;
 mod nom_recipes;
 mod number;
-mod primary_expression;
 mod rule;
 mod string;
 

@@ -10,11 +10,11 @@ use nom::{
     IResult,
 };
 
-use super::{
+use super::super::{
     nom_recipes::rtrim,
-    primary_expression::{primary_expression, range},
     string::{regex, string_identifier},
 };
+use super::primary_expression::{primary_expression, range};
 use crate::expression::Expression;
 
 /// parse or operator
@@ -189,7 +189,7 @@ fn expression_variable(input: &str) -> IResult<&str, Expression> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_utils::{parse, parse_err};
+    use super::super::super::test_utils::{parse, parse_err};
     use super::{expression, expression_variable, Expression};
 
     #[track_caller]
