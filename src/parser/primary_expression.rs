@@ -48,20 +48,28 @@ pub struct ParsedExpr {
     ty: Type,
 }
 
+fn nom_err_invalid_expression_type<'a>(
+    input: &'a str,
+    expr: &ParsedExpr,
+    expected_type: Type,
+) -> nom::Err<Error<&'a str>> {
+    nom::Err::Failure(Error::from_external_error(
+        input,
+        ErrorKind::Verify,
+        format!("{} expression expected, found {}", expected_type, expr.ty),
+    ))
+}
+
 impl ParsedExpr {
-    fn try_unwrap<I>(
+    fn try_unwrap(
         self,
-        input: I,
+        input: &str,
         expected_type: Type,
-    ) -> Result<Box<Expression>, nom::Err<Error<I>>> {
+    ) -> Result<Box<Expression>, nom::Err<Error<&str>>> {
         if self.ty == expected_type {
             Ok(Box::new(self.expr))
         } else {
-            Err(nom::Err::Error(Error::from_external_error(
-                input,
-                ErrorKind::Verify,
-                format!("{} expression expected", expected_type),
-            )))
+            Err(nom_err_invalid_expression_type(input, &self, expected_type))
         }
     }
 }
@@ -210,15 +218,18 @@ fn primary_expression_add(input: &str) -> IResult<&str, ParsedExpr> {
         let (i2, right_elem) = cut(primary_expression_mul)(i)?;
         input = i2;
 
-        let left = res.try_unwrap(input, Type::Integer)?;
-        let right = right_elem.try_unwrap(input, Type::Integer)?;
+        let ty = match (res.ty, right_elem.ty) {
+            (Type::Integer, Type::Integer) => Type::Integer,
+            (_, Type::Float) | (Type::Float, _) => Type::Float,
+            _ => return Err(nom_err_invalid_expression_type(input, &res, Type::Integer)),
+        };
         res = ParsedExpr {
             expr: match op {
-                "+" => Expression::Add(left, right),
-                "-" => Expression::Sub(left, right),
+                "+" => Expression::Add(Box::new(res.expr), Box::new(right_elem.expr)),
+                "-" => Expression::Sub(Box::new(res.expr), Box::new(right_elem.expr)),
                 _ => unreachable!(),
             },
-            ty: Type::Integer,
+            ty,
         }
     }
     Ok((input, res))
@@ -232,16 +243,34 @@ fn primary_expression_mul(input: &str) -> IResult<&str, ParsedExpr> {
         let (i2, right_elem) = cut(primary_expression_neg)(i)?;
         input = i2;
 
-        let left = res.try_unwrap(input, Type::Integer)?;
-        let right = right_elem.try_unwrap(input, Type::Integer)?;
+        let ty = match (res.ty, right_elem.ty) {
+            (Type::Integer, Type::Integer) => Type::Integer,
+            (Type::Float, _) => {
+                if op == "%" {
+                    return Err(nom_err_invalid_expression_type(input, &res, Type::Integer));
+                }
+                Type::Float
+            }
+            (_, Type::Float) => {
+                if op == "%" {
+                    return Err(nom_err_invalid_expression_type(
+                        input,
+                        &right_elem,
+                        Type::Integer,
+                    ));
+                }
+                Type::Float
+            }
+            _ => return Err(nom_err_invalid_expression_type(input, &res, Type::Integer)),
+        };
         res = ParsedExpr {
             expr: match op {
-                "*" => Expression::Mul(left, right),
-                "\\" => Expression::Div(left, right),
-                "%" => Expression::Mod(left, right),
+                "*" => Expression::Mul(Box::new(res.expr), Box::new(right_elem.expr)),
+                "\\" => Expression::Div(Box::new(res.expr), Box::new(right_elem.expr)),
+                "%" => Expression::Mod(Box::new(res.expr), Box::new(right_elem.expr)),
                 _ => unreachable!(),
             },
-            ty: Type::Integer,
+            ty,
         }
     }
     Ok((input, res))
@@ -256,18 +285,30 @@ fn primary_expression_neg(input: &str) -> IResult<&str, ParsedExpr> {
         input,
         match op {
             None => expr,
-            Some(op) => {
-                let expr = expr.try_unwrap(input, Type::Integer)?;
-
-                ParsedExpr {
-                    expr: match op {
-                        "~" => Expression::BitwiseNot(expr),
-                        "-" => Expression::Neg(expr),
-                        _ => unreachable!(),
-                    },
+            Some(op) => match op {
+                "~" => ParsedExpr {
+                    expr: Expression::BitwiseNot(expr.try_unwrap(input, Type::Integer)?),
                     ty: Type::Integer,
+                },
+                "-" => {
+                    let ty = match expr.ty {
+                        Type::Integer => Type::Integer,
+                        Type::Float => Type::Float,
+                        _ => {
+                            return Err(nom_err_invalid_expression_type(
+                                input,
+                                &expr,
+                                Type::Integer,
+                            ))
+                        }
+                    };
+                    ParsedExpr {
+                        expr: Expression::Neg(Box::new(expr.expr)),
+                        ty,
+                    }
                 }
-            }
+                _ => unreachable!(),
+            },
         },
     ))
 }
@@ -787,7 +828,6 @@ mod tests {
         );
     }
 
-    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_primary_expression_precedence() {
         #[track_caller]
@@ -868,8 +908,11 @@ mod tests {
 
         // Test precedence of ^ over |
         test_precedence("^", "|", Expr::BitwiseXor, Expr::BitwiseOr);
+    }
 
-        // global test
+    #[test]
+    fn test_primary_expression_precedence_global() {
+        // global test on precedence
         let expected = Expr::BitwiseXor(
             Box::new(Expr::Add(
                 Box::new(Expr::Number(1)),
@@ -903,6 +946,89 @@ mod tests {
             ParsedExpr {
                 expr: expected,
                 ty: Type::Integer,
+            },
+        );
+    }
+
+    #[test]
+    fn test_types() {
+        parse_err(pe, "uint8(/a/)");
+
+        parse_err(pe, "1 | /a/");
+        parse_err(pe, "/a/ | 1");
+        parse_err(pe, "1 ^ /a/");
+        parse_err(pe, "/a/ ^ 1");
+        parse_err(pe, "1 & /a/");
+        parse_err(pe, "/a/ & 1");
+        parse_err(pe, "1.2 << 1");
+        parse_err(pe, "1 << 1.2");
+        parse_err(pe, "1.2 >> 1");
+        parse_err(pe, "1 >> 1.2");
+
+        parse_err(pe, "1 + /a/");
+        parse_err(pe, "\"a\" + 1");
+        parse_err(pe, "1 - /a/");
+        parse_err(pe, "\"a\" - 1");
+
+        parse_err(pe, "1 * /a/");
+        parse_err(pe, "\"a\" * 1");
+
+        parse_err(pe, "1 \\ /a/");
+        parse_err(pe, "\"a\" \\ 1");
+
+        parse_err(pe, "1 % 1.2");
+        parse_err(pe, "1.2 % 1");
+
+        parse_err(pe, "~1.2");
+        parse_err(pe, "-/a/");
+    }
+
+    #[test]
+    fn test_type_integer_or_float() {
+        parse(
+            pe,
+            "1 + 1",
+            "",
+            ParsedExpr {
+                expr: Expr::Add(Box::new(Expr::Number(1)), Box::new(Expr::Number(1))),
+                ty: Type::Integer,
+            },
+        );
+        parse(
+            pe,
+            "1 + 1.2",
+            "",
+            ParsedExpr {
+                expr: Expr::Add(Box::new(Expr::Number(1)), Box::new(Expr::Double(1.2))),
+                ty: Type::Float,
+            },
+        );
+        parse(
+            pe,
+            "1.2 + 1",
+            "",
+            ParsedExpr {
+                expr: Expr::Add(Box::new(Expr::Double(1.2)), Box::new(Expr::Number(1))),
+                ty: Type::Float,
+            },
+        );
+
+        parse(
+            pe,
+            "-1",
+            "",
+            ParsedExpr {
+                expr: Expr::Neg(Box::new(Expr::Number(1))),
+                ty: Type::Integer,
+            },
+        );
+        parse(
+            pe,
+            "-1.2",
+            "",
+            ParsedExpr {
+                expr: Expr::Neg(Box::new(Expr::Double(1.2))),
+                ty: Type::Float,
             },
         );
     }
