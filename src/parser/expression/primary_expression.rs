@@ -6,25 +6,13 @@ use nom::{
     bytes::complete::tag,
     character::complete::char,
     combinator::{cut, map, opt},
-    sequence::{delimited, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, tuple},
     IResult,
 };
 
 use super::super::{nom_recipes::rtrim, number, string};
-use super::{nom_err_invalid_expression_type, read_integer, ParsedExpr, Type};
+use super::{nom_err_invalid_expression_type, read_integer, string_expression, ParsedExpr, Type};
 use crate::expression::Expression;
-
-/// Parse a 'in' range for primary expressions.
-///
-/// Equivalent to the range pattern in grammar.y in libyara.
-pub fn range(input: &str) -> IResult<&str, (ParsedExpr, ParsedExpr)> {
-    let (input, _) = rtrim(char('('))(input)?;
-
-    cut(terminated(
-        separated_pair(primary_expression, rtrim(tag("..")), primary_expression),
-        rtrim(char(')')),
-    ))(input)
-}
 
 /// parse | operator
 pub fn primary_expression(input: &str) -> IResult<&str, ParsedExpr> {
@@ -249,11 +237,11 @@ fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
             ty: Type::Regex,
         }),
         // string_count | string_count 'in' range
-        string_count_expression,
+        string_expression::string_count_expression,
         // string_offset | string_offset '[' primary_expression ']'
-        string_offset_expression,
+        string_expression::string_offset_expression,
         // string_length | string_length '[' primary_expression ']'
-        string_length_expression,
+        string_expression::string_length_expression,
         // identifier
         // TODO: wrong rule
         map(string::identifier, |v| ParsedExpr {
@@ -263,126 +251,12 @@ fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
     ))(input)
 }
 
-fn string_count_expression(input: &str) -> IResult<&str, ParsedExpr> {
-    let (input, identifier) = string::count(input)?;
-    let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input)?;
-
-    let expr = match range {
-        // string_count
-        None => Expression::Count(identifier),
-        // string_count 'in' range
-        Some((a, b)) => Expression::CountInRange {
-            identifier,
-            from: a.try_unwrap(input, Type::Integer)?,
-            to: b.try_unwrap(input, Type::Integer)?,
-        },
-    };
-    Ok((
-        input,
-        ParsedExpr {
-            expr,
-            ty: Type::Integer,
-        },
-    ))
-}
-
-fn string_offset_expression(input: &str) -> IResult<&str, ParsedExpr> {
-    // string_offset | string_offset '[' primary_expression ']'
-    let (input, identifier) = string::offset(input)?;
-    let (input, expr) = opt(delimited(
-        rtrim(char('[')),
-        cut(primary_expression),
-        cut(rtrim(char(']'))),
-    ))(input)?;
-
-    let expr = Expression::Offset {
-        identifier,
-        occurence_number: match expr {
-            Some(v) => v.try_unwrap(input, Type::Integer)?,
-            None => Box::new(Expression::Number(1)),
-        },
-    };
-    Ok((
-        input,
-        ParsedExpr {
-            expr,
-            ty: Type::Integer,
-        },
-    ))
-}
-
-fn string_length_expression(input: &str) -> IResult<&str, ParsedExpr> {
-    // string_length | string_length '[' primary_expression ']'
-    let (input, identifier) = string::length(input)?;
-    let (input, expr) = opt(delimited(
-        rtrim(char('[')),
-        cut(primary_expression),
-        cut(rtrim(char(']'))),
-    ))(input)?;
-
-    let expr = Expression::Length {
-        identifier,
-        occurence_number: match expr {
-            Some(v) => v.try_unwrap(input, Type::Integer)?,
-            None => Box::new(Expression::Number(1)),
-        },
-    };
-    Ok((
-        input,
-        ParsedExpr {
-            expr,
-            ty: Type::Integer,
-        },
-    ))
-}
 #[cfg(test)]
 mod tests {
     use crate::expression::ReadIntegerSize;
 
     use super::super::super::test_utils::{parse, parse_err};
-    use super::{primary_expression as pe, range, Expression as Expr, ParsedExpr, Type};
-
-    #[test]
-    fn test_range() {
-        parse(
-            range,
-            "(1..1) b",
-            "b",
-            (
-                ParsedExpr {
-                    expr: Expr::Number(1),
-                    ty: Type::Integer,
-                },
-                ParsedExpr {
-                    expr: Expr::Number(1),
-                    ty: Type::Integer,
-                },
-            ),
-        );
-        parse(
-            range,
-            "( filesize .. entrypoint )",
-            "",
-            (
-                ParsedExpr {
-                    expr: Expr::Filesize,
-                    ty: Type::Integer,
-                },
-                ParsedExpr {
-                    expr: Expr::Entrypoint,
-                    ty: Type::Integer,
-                },
-            ),
-        );
-
-        parse_err(range, "");
-        parse_err(range, "(");
-        parse_err(range, "(1)");
-        parse_err(range, "()");
-        parse_err(range, "(..)");
-        parse_err(range, "(1..)");
-        parse_err(range, "(..1)");
-    }
+    use super::{primary_expression as pe, Expression as Expr, ParsedExpr, Type};
 
     #[test]
     #[allow(clippy::too_many_lines)]

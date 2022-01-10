@@ -14,7 +14,7 @@ use super::super::{
     nom_recipes::rtrim,
     string::{regex, string_identifier},
 };
-use super::primary_expression::{primary_expression, range};
+use super::{common::range, primary_expression::primary_expression};
 use crate::expression::Expression;
 
 /// parse or operator

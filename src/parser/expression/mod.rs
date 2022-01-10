@@ -3,8 +3,10 @@ use nom::error::{Error, ErrorKind, FromExternalError};
 use crate::expression::Expression;
 
 mod boolean_expression;
+mod common;
 mod primary_expression;
 mod read_integer;
+mod string_expression;
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
