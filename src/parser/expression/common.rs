@@ -7,26 +7,28 @@ use nom::{
     IResult,
 };
 
-use super::{primary_expression::primary_expression, ParsedExpr};
+use super::{primary_expression::primary_expression, Expression, Type};
 use crate::parser::nom_recipes::rtrim;
 
 /// Parse a 'in' range for primary expressions.
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
-pub fn range(input: &str) -> IResult<&str, (ParsedExpr, ParsedExpr)> {
+pub fn range(input: &str) -> IResult<&str, (Box<Expression>, Box<Expression>)> {
     let (input, _) = rtrim(char('('))(input)?;
 
-    cut(terminated(
+    let (input, (a, b)) = cut(terminated(
         separated_pair(primary_expression, rtrim(tag("..")), primary_expression),
         rtrim(char(')')),
-    ))(input)
+    ))(input)?;
+
+    let a = a.try_unwrap(input, Type::Integer)?;
+    let b = b.try_unwrap(input, Type::Integer)?;
+    Ok((input, (a, b)))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::Type;
     use super::*;
-    use crate::expression::Expression;
     use crate::parser::test_utils::{parse, parse_err};
 
     #[test]
@@ -36,14 +38,8 @@ mod tests {
             "(1..1) b",
             "b",
             (
-                ParsedExpr {
-                    expr: Expression::Number(1),
-                    ty: Type::Integer,
-                },
-                ParsedExpr {
-                    expr: Expression::Number(1),
-                    ty: Type::Integer,
-                },
+                Box::new(Expression::Number(1)),
+                Box::new(Expression::Number(1)),
             ),
         );
         parse(
@@ -51,14 +47,8 @@ mod tests {
             "( filesize .. entrypoint )",
             "",
             (
-                ParsedExpr {
-                    expr: Expression::Filesize,
-                    ty: Type::Integer,
-                },
-                ParsedExpr {
-                    expr: Expression::Entrypoint,
-                    ty: Type::Integer,
-                },
+                Box::new(Expression::Filesize),
+                Box::new(Expression::Entrypoint),
             ),
         );
 
@@ -69,5 +59,8 @@ mod tests {
         parse_err(range, "(..)");
         parse_err(range, "(1..)");
         parse_err(range, "(..1)");
+
+        parse_err(range, "(1..\"a\")");
+        parse_err(range, "(/a/ .. 1)");
     }
 }

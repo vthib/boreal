@@ -23,10 +23,10 @@ pub fn string_count_expression(input: &str) -> IResult<&str, ParsedExpr> {
         // string_count
         None => Expression::Count(identifier),
         // string_count 'in' range
-        Some((a, b)) => Expression::CountInRange {
+        Some((from, to)) => Expression::CountInRange {
             identifier,
-            from: a.try_unwrap(input, Type::Integer)?,
-            to: b.try_unwrap(input, Type::Integer)?,
+            from,
+            to,
         },
     };
     Ok((

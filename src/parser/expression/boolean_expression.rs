@@ -173,14 +173,7 @@ fn expression_variable(input: &str) -> IResult<&str, Expression> {
         Ok((input, Expression::VariableAt(variable, Box::new(expr.expr))))
     // string_identifier 'in' range
     } else if let Ok((input, (from, to))) = preceded(rtrim(tag("in")), range)(input) {
-        Ok((
-            input,
-            Expression::VariableIn {
-                variable,
-                from: Box::new(from.expr),
-                to: Box::from(to.expr),
-            },
-        ))
+        Ok((input, Expression::VariableIn { variable, from, to }))
     // string_identifier
     } else {
         Ok((input, Expression::Variable(variable)))
