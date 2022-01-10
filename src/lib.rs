@@ -22,6 +22,7 @@
 // Do the same for clippy
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
+#![allow(clippy::module_name_repetitions)]
 
 // TODO: To activate before release
 // #![deny(clippy::cargo)]

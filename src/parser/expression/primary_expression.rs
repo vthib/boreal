@@ -6,58 +6,13 @@ use nom::{
     bytes::complete::tag,
     character::complete::char,
     combinator::{cut, map, opt},
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, preceded, separated_pair, terminated, tuple},
     IResult,
 };
 
 use super::super::{nom_recipes::rtrim, number, string};
-use super::{nom_err_invalid_expression_type, ParsedExpr, Type};
-use crate::expression::{Expression, ReadIntegerSize};
-
-/// Parse a read of an integer.
-///
-/// Equivalent to the `_INTEGER_FUNCTION_` lexical pattern in libyara.
-/// This is roughly equivalent to `u?int(8|16|32)(be)?`.
-///
-/// it returns a triple that consists of, in order:
-/// - a boolean indicating the sign (true if unsigned).
-/// - the size of the integer
-/// - a boolean indicating the endianness (true if big-endian).
-fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
-    rtrim(tuple((
-        map(opt(char('u')), |v| v.is_some()),
-        alt((
-            map(tag("int8"), |_| ReadIntegerSize::Int8),
-            map(tag("int16"), |_| ReadIntegerSize::Int16),
-            map(tag("int32"), |_| ReadIntegerSize::Int32),
-        )),
-        map(opt(tag("be")), |v| v.is_some()),
-    )))(input)
-}
-
-fn read_integer_expression(input: &str) -> IResult<&str, ParsedExpr> {
-    let (input, ((unsigned, size, big_endian), expr)) = pair(
-        read_integer,
-        cut(delimited(
-            rtrim(char('(')),
-            primary_expression,
-            rtrim(char(')')),
-        )),
-    )(input)?;
-
-    Ok((
-        input,
-        ParsedExpr {
-            expr: Expression::ReadInteger {
-                unsigned,
-                size,
-                big_endian,
-                addr: expr.try_unwrap(input, Type::Integer)?,
-            },
-            ty: Type::Integer,
-        },
-    ))
-}
+use super::{nom_err_invalid_expression_type, read_integer, ParsedExpr, Type};
+use crate::expression::Expression;
 
 /// Parse a 'in' range for primary expressions.
 ///
@@ -272,7 +227,7 @@ fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
             ty: Type::Integer,
         }),
         // read_integer '(' primary_expresion ')'
-        read_integer_expression,
+        read_integer::read_integer_expression,
         // double
         map(number::double, |v| ParsedExpr {
             expr: Expression::Double(v),
@@ -382,36 +337,10 @@ fn string_length_expression(input: &str) -> IResult<&str, ParsedExpr> {
 }
 #[cfg(test)]
 mod tests {
+    use crate::expression::ReadIntegerSize;
+
     use super::super::super::test_utils::{parse, parse_err};
-    use super::{
-        primary_expression as pe, range, read_integer, Expression as Expr, ParsedExpr,
-        ReadIntegerSize as RIS, Type,
-    };
-
-    #[test]
-    fn test_read_integer() {
-        parse(read_integer, "int8b", "b", (false, RIS::Int8, false));
-        parse(read_integer, "uint8 be", "be", (true, RIS::Int8, false));
-        parse(read_integer, "int8bet", "t", (false, RIS::Int8, true));
-        parse(read_integer, "uint8be", "", (true, RIS::Int8, true));
-
-        parse(read_integer, "int16b", "b", (false, RIS::Int16, false));
-        parse(read_integer, "uint16 be", "be", (true, RIS::Int16, false));
-        parse(read_integer, "int16bet", "t", (false, RIS::Int16, true));
-        parse(read_integer, "uint16be", "", (true, RIS::Int16, true));
-
-        parse(read_integer, "int32b", "b", (false, RIS::Int32, false));
-        parse(read_integer, "uint32 be", "be", (true, RIS::Int32, false));
-        parse(read_integer, "int32bet", "t", (false, RIS::Int32, true));
-        parse(read_integer, "uint32be", "", (true, RIS::Int32, true));
-
-        parse_err(read_integer, "");
-        parse_err(read_integer, "u");
-        parse_err(read_integer, "uint");
-        parse_err(read_integer, "int");
-        parse_err(read_integer, "int9");
-        parse_err(read_integer, "uint1");
-    }
+    use super::{primary_expression as pe, range, Expression as Expr, ParsedExpr, Type};
 
     #[test]
     fn test_range() {
@@ -492,7 +421,7 @@ mod tests {
             ParsedExpr {
                 expr: Expr::ReadInteger {
                     unsigned: true,
-                    size: RIS::Int8,
+                    size: ReadIntegerSize::Int8,
                     big_endian: false,
                     addr: Box::new(Expr::Number(3)),
                 },

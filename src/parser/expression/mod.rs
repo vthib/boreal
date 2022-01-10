@@ -4,6 +4,7 @@ use crate::expression::Expression;
 
 mod boolean_expression;
 mod primary_expression;
+mod read_integer;
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
