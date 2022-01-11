@@ -8,6 +8,8 @@ mod primary_expression;
 mod read_integer;
 mod string_expression;
 
+pub use boolean_expression::boolean_expression;
+
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
 

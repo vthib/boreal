@@ -15,11 +15,12 @@ use nom::{
     IResult,
 };
 
-use super::{hex_string, nom_recipes::rtrim, number, string};
+use super::{expression, hex_string, nom_recipes::rtrim, number, string};
+use crate::expression::Expression;
 use crate::regex::Regex;
 
 /// A Yara rule.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Rule {
     /// Name of the rule.
     name: String,
@@ -34,7 +35,7 @@ pub struct Rule {
     strings: Vec<StringDeclaration>,
 
     /// Condition of the rule.
-    condition: String,
+    condition: Expression,
 
     // Is the rule private.
     is_private: bool,
@@ -290,15 +291,10 @@ fn hex_string_modifier(input: &str) -> IResult<&str, StringFlags> {
 /// Parse a condition
 ///
 /// Related to the `condition` pattern in `grammar.y` in libyara.
-fn condition(input: &str) -> IResult<&str, String> {
+fn condition(input: &str) -> IResult<&str, Expression> {
     let (input, _) = rtrim(tag("condition"))(input)?;
 
-    cut(preceded(rtrim(char(':')), boolean_expression))(input)
-}
-
-fn boolean_expression(input: &str) -> IResult<&str, String> {
-    // TODO
-    string::identifier(input)
+    cut(preceded(rtrim(char(':')), expression::boolean_expression))(input)
 }
 
 #[cfg(test)]
@@ -474,8 +470,12 @@ mod tests {
             "",
             Rule {
                 name: "a".to_owned(),
-                condition: "false".to_owned(),
-                ..Rule::default()
+                condition: Expression::Boolean(false),
+                tags: Vec::new(),
+                metadatas: Vec::new(),
+                strings: Vec::new(),
+                is_private: false,
+                is_global: false,
             },
         );
         parse(
@@ -495,7 +495,7 @@ mod tests {
                         modifiers: StringFlags::empty()
                     }
                 ],
-                condition: "false".to_owned(),
+                condition: Expression::Boolean(false),
                 is_private: true,
                 is_global: true,
             },
@@ -507,10 +507,12 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: "false".to_owned(),
+                condition: Expression::Boolean(false),
+                tags: Vec::new(),
+                metadatas: Vec::new(),
+                strings: Vec::new(),
                 is_private: true,
                 is_global: true,
-                ..Rule::default()
             },
         );
         parse(
@@ -519,9 +521,12 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: "false".to_owned(),
+                condition: Expression::Boolean(false),
+                tags: Vec::new(),
+                metadatas: Vec::new(),
+                strings: Vec::new(),
                 is_private: true,
-                ..Rule::default()
+                is_global: false,
             },
         );
         parse(
@@ -530,9 +535,12 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: "false".to_owned(),
+                condition: Expression::Boolean(false),
+                tags: Vec::new(),
+                metadatas: Vec::new(),
+                strings: Vec::new(),
+                is_private: false,
                 is_global: true,
-                ..Rule::default()
             },
         );
 
