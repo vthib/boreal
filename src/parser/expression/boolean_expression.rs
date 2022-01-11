@@ -6,7 +6,7 @@ use nom::{
     bytes::complete::tag,
     character::complete::char,
     combinator::{cut, map, opt},
-    sequence::{delimited, pair, preceded},
+    sequence::{delimited, preceded},
     IResult,
 };
 
@@ -15,17 +15,30 @@ use super::super::{
     string::{regex, string_identifier},
 };
 use super::{common::range, primary_expression::primary_expression, ParsedExpr, Type};
-use crate::expression::Expression;
+use crate::{expression::Expression, parser::expression::nom_err_invalid_expression_type};
+
+/// parse boolean expressions
+pub fn boolean_expression(input: &str) -> IResult<&str, Expression> {
+    let (input, expr) = expression(input)?;
+
+    if expr.ty != Type::Boolean {
+        return Err(nom_err_invalid_expression_type(input, &expr, Type::Boolean));
+    }
+    Ok((input, expr.expr))
+}
 
 /// parse or operator
-pub fn expression(input: &str) -> IResult<&str, ParsedExpr> {
+fn expression(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = expression_and(input)?;
 
     while let Ok((i, _)) = rtrim(tag("or"))(input) {
         let (i2, right_elem) = cut(expression_and)(i)?;
         input = i2;
         res = ParsedExpr {
-            expr: Expression::Or(Box::new(res.expr), Box::new(right_elem.expr)),
+            expr: Expression::Or(
+                res.try_unwrap(input, Type::Boolean)?,
+                right_elem.try_unwrap(input, Type::Boolean)?,
+            ),
             ty: Type::Boolean,
         }
     }
@@ -40,7 +53,10 @@ fn expression_and(input: &str) -> IResult<&str, ParsedExpr> {
         let (i2, right_elem) = cut(expression_not)(i)?;
         input = i2;
         res = ParsedExpr {
-            expr: Expression::And(Box::new(res.expr), Box::new(right_elem.expr)),
+            expr: Expression::And(
+                res.try_unwrap(input, Type::Boolean)?,
+                right_elem.try_unwrap(input, Type::Boolean)?,
+            ),
             ty: Type::Boolean,
         }
     }
@@ -49,36 +65,40 @@ fn expression_and(input: &str) -> IResult<&str, ParsedExpr> {
 
 /// parse not operator
 fn expression_not(input: &str) -> IResult<&str, ParsedExpr> {
-    map(
-        pair(opt(rtrim(tag("not"))), expression_defined),
-        |(op, expr)| {
-            if op.is_some() {
-                ParsedExpr {
-                    expr: Expression::Not(Box::new(expr.expr)),
-                    ty: Type::Boolean,
-                }
-            } else {
-                expr
-            }
-        },
-    )(input)
+    let (input, not) = opt(rtrim(tag("not")))(input)?;
+
+    if not.is_some() {
+        let (input, expr) = cut(expression_defined)(input)?;
+        Ok((
+            input,
+            ParsedExpr {
+                expr: Expression::Not(expr.try_unwrap(input, Type::Boolean)?),
+                ty: Type::Boolean,
+            },
+        ))
+    } else {
+        expression_defined(input)
+    }
 }
 
 /// parse defined operator
 fn expression_defined(input: &str) -> IResult<&str, ParsedExpr> {
-    map(
-        pair(opt(rtrim(tag("defined"))), expression_item),
-        |(op, expr)| {
-            if op.is_some() {
-                ParsedExpr {
-                    expr: Expression::Defined(Box::new(expr.expr)),
-                    ty: Type::Boolean,
-                }
-            } else {
-                expr
-            }
-        },
-    )(input)
+    let (input, defined) = opt(rtrim(tag("defined")))(input)?;
+
+    if defined.is_some() {
+        let (input, expr) = cut(expression_item)(input)?;
+        Ok((
+            input,
+            ParsedExpr {
+                // FIXME: in libyara, _DEFINED_ takes a boolean expression. That
+                // does not look correct though, to investigate.
+                expr: Expression::Defined(Box::new(expr.expr)),
+                ty: Type::Boolean,
+            },
+        ))
+    } else {
+        expression_item(input)
+    }
 }
 
 /// parse rest of boolean expressions
@@ -242,7 +262,7 @@ mod tests {
         F: FnOnce(Box<Expression>, Box<Expression>) -> Expression,
         F2: FnOnce(Box<Expression>, Box<Expression>) -> Expression,
     {
-        let input = format!(r#""a" {} "b" {} "c""#, lower_op, higher_op);
+        let input = format!("not true {} 1 {} 2", lower_op, higher_op);
 
         parse(
             expression,
@@ -250,10 +270,10 @@ mod tests {
             "",
             ParsedExpr {
                 expr: lower_constructor(
-                    Box::new(Expression::String("a".to_owned())),
+                    Box::new(Expression::Not(Box::new(Expression::Boolean(true)))),
                     Box::new(higher_constructor(
-                        Box::new(Expression::String("b".to_owned())),
-                        Box::new(Expression::String("c".to_owned())),
+                        Box::new(Expression::Number(1)),
+                        Box::new(Expression::Number(2)),
                     )),
                 ),
                 ty: Type::Boolean,
@@ -313,8 +333,39 @@ mod tests {
         parse_err(variable_expression, "50");
     }
 
+    // Test operators that require bool operands
     #[test]
-    fn test_operators() {
+    fn test_bool_operators() {
+        parse(
+            expression,
+            "true and false b",
+            "b",
+            ParsedExpr {
+                expr: Expression::And(
+                    Box::new(Expression::Boolean(true)),
+                    Box::new(Expression::Boolean(false)),
+                ),
+                ty: Type::Boolean,
+            },
+        );
+        parse(
+            expression,
+            "not true or defined $b",
+            "",
+            ParsedExpr {
+                expr: Expression::Or(
+                    Box::new(Expression::Not(Box::new(Expression::Boolean(true)))),
+                    Box::new(Expression::Defined(Box::new(Expression::Variable(
+                        "b".to_owned(),
+                    )))),
+                ),
+                ty: Type::Boolean,
+            },
+        );
+    }
+
+    #[test]
+    fn test_rest_operators() {
         #[track_caller]
         fn test_op<F>(op: &str, constructor: F)
         where
@@ -370,9 +421,6 @@ mod tests {
         });
         test_op("iequals", Expression::IEquals);
 
-        test_op("and", Expression::And);
-        test_op("or", Expression::Or);
-
         test_op("<", |a, b| Expression::Cmp {
             left: a,
             right: b,
@@ -423,6 +471,23 @@ mod tests {
 
     #[test]
     fn test_expression_precedence_eq_and_or() {
+        // Test precedence of and over or
+        parse(
+            expression,
+            "not true or false and true",
+            "",
+            ParsedExpr {
+                expr: Expression::Or(
+                    Box::new(Expression::Not(Box::new(Expression::Boolean(true)))),
+                    Box::new(Expression::And(
+                        Box::new(Expression::Boolean(false)),
+                        Box::new(Expression::Boolean(true)),
+                    )),
+                ),
+                ty: Type::Boolean,
+            },
+        );
+
         // Test precedence of over eq, etc over and
         test_precedence("==", "and", Expression::Eq, Expression::And);
         test_precedence(
@@ -431,70 +496,6 @@ mod tests {
             |a, b| Expression::Not(Box::new(Expression::Eq(a, b))),
             Expression::And,
         );
-        test_precedence(
-            "contains",
-            "and",
-            |a, b| Expression::Contains {
-                haystack: a,
-                needle: b,
-                case_insensitive: false,
-            },
-            Expression::And,
-        );
-        test_precedence(
-            "icontains",
-            "and",
-            |a, b| Expression::Contains {
-                haystack: a,
-                needle: b,
-                case_insensitive: true,
-            },
-            Expression::And,
-        );
-        test_precedence(
-            "startswith",
-            "and",
-            |a, b| Expression::StartsWith {
-                expr: a,
-                prefix: b,
-                case_insensitive: false,
-            },
-            Expression::And,
-        );
-        test_precedence(
-            "istartswith",
-            "and",
-            |a, b| Expression::StartsWith {
-                expr: a,
-                prefix: b,
-                case_insensitive: true,
-            },
-            Expression::And,
-        );
-        test_precedence(
-            "endswith",
-            "and",
-            |a, b| Expression::EndsWith {
-                expr: a,
-                suffix: b,
-                case_insensitive: false,
-            },
-            Expression::And,
-        );
-        test_precedence(
-            "iendswith",
-            "and",
-            |a, b| Expression::EndsWith {
-                expr: a,
-                suffix: b,
-                case_insensitive: true,
-            },
-            Expression::And,
-        );
-        test_precedence("iequals", "and", Expression::IEquals, Expression::And);
-
-        // Test precedence of and over or
-        test_precedence("and", "or", Expression::And, Expression::Or);
     }
 
     #[test]
@@ -582,6 +583,14 @@ mod tests {
 
         parse_err(expression, "1 matches /a/");
         parse_err(expression, "\"a\" matches 1");
+
+        parse_err(expression, "true and 1");
+        parse_err(expression, "1 and true");
+
+        parse_err(expression, "true or 1");
+        parse_err(expression, "1 or true");
+
+        parse_err(expression, "not 1");
 
         parse_err(expression, "$a at 1.2");
     }
