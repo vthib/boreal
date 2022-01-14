@@ -12,6 +12,28 @@ pub enum ReadIntegerSize {
     Int32,
 }
 
+/// Identifier used in expressions.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Identifier {
+    /// Raw identifier, i.e. `pe`.
+    Raw(String),
+    /// Array subscript, i.e. `identifier[subscript]`.
+    Subscript {
+        identifier: Box<Identifier>,
+        subscript: Box<Expression>,
+    },
+    /// Object subfield, i.e. `identifier.subfield`.
+    Subfield {
+        identifier: Box<Identifier>,
+        subfield: String,
+    },
+    /// Function call, i.e. `identifier(arguments)`.
+    FunctionCall {
+        identifier: Box<Identifier>,
+        arguments: Vec<Expression>,
+    },
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     // Numeric expressions
@@ -168,7 +190,7 @@ pub enum Expression {
     // String expressions
     //
     /// A raw identifier.
-    Identifier(String),
+    Identifier(Identifier),
     /// A literal string.
     String(String),
 

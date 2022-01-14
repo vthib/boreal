@@ -28,7 +28,7 @@ pub fn boolean_expression(input: &str) -> IResult<&str, Expression> {
 }
 
 /// parse or operator
-fn expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn expression(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = expression_and(input)?;
 
     while let Ok((i, _)) = rtrim(tag("or"))(input) {

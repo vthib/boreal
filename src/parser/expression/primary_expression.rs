@@ -11,7 +11,9 @@ use nom::{
 };
 
 use super::super::{nom_recipes::rtrim, number, string};
-use super::{nom_err_invalid_expression_type, read_integer, string_expression, ParsedExpr, Type};
+use super::{
+    identifier, nom_err_invalid_expression_type, read_integer, string_expression, ParsedExpr, Type,
+};
 use crate::expression::Expression;
 
 /// parse | operator
@@ -243,8 +245,8 @@ fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
         // string_length | string_length '[' primary_expression ']'
         string_expression::string_length_expression,
         // identifier
-        // TODO: wrong rule
-        map(string::identifier, |v| ParsedExpr {
+        // TODO: wrong type
+        map(identifier::identifier, |v| ParsedExpr {
             expr: Expression::Identifier(v),
             ty: Type::String,
         }),
@@ -253,7 +255,7 @@ fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::ReadIntegerSize;
+    use crate::expression::{Identifier, ReadIntegerSize};
 
     use super::super::super::test_utils::{parse, parse_err};
     use super::{primary_expression as pe, Expression as Expr, ParsedExpr, Type};
@@ -405,7 +407,7 @@ mod tests {
             "a c",
             "c",
             ParsedExpr {
-                expr: Expr::Identifier("a".to_owned()),
+                expr: Expr::Identifier(Identifier::Raw("a".to_owned())),
                 ty: Type::String,
             },
         );
@@ -414,7 +416,7 @@ mod tests {
             "aze",
             "",
             ParsedExpr {
-                expr: Expr::Identifier("aze".to_owned()),
+                expr: Expr::Identifier(Identifier::Raw("aze".to_owned())),
                 ty: Type::String,
             },
         );

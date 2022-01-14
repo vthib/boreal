@@ -4,6 +4,7 @@ use crate::expression::Expression;
 
 mod boolean_expression;
 mod common;
+mod identifier;
 mod primary_expression;
 mod read_integer;
 mod string_expression;
