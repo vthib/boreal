@@ -158,17 +158,24 @@ struct ValidatedExpression {
 }
 
 impl ValidatedExpression {
-    fn unwrap_expr(
-        self,
-        expected_type: Type,
-    ) -> Result<Box<crate::expression::Expression>, String> {
+    fn check_type(&self, expected_type: Type) -> Result<(), String> {
         if self.ty != expected_type {
             return Err(format!(
                 "{} expression expected, found {}",
                 expected_type, self.ty
             ));
         }
-        Ok(Box::new(self.expression))
+        Ok(())
+    }
+
+    fn unwrap_expr(
+        self,
+        expected_type: Type,
+    ) -> Result<Box<crate::expression::Expression>, String> {
+        match self.check_type(expected_type) {
+            Err(e) => Err(e),
+            Ok(()) => Ok(Box::new(self.expression)),
+        }
     }
 }
 
@@ -227,6 +234,15 @@ impl Identifier {
 }
 
 impl ParsedExpr {
+    /// Validate a boolean parsed expression.
+    ///
+    /// Ensure the expression is well-formed, and returns a boolean.
+    pub fn validate_boolean_expression(self) -> Result<crate::expression::Expression, String> {
+        let validated_expr = self.validate()?;
+        validated_expr.check_type(Type::Boolean)?;
+        Ok(validated_expr.expression)
+    }
+
     /// Validate a parsed expression, and return a
     /// [`crate::expression::Expression`] with related metadata.
     ///

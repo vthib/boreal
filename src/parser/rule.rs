@@ -8,14 +8,19 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::char,
-    combinator::{cut, map, opt},
+    combinator::{cut, map, map_res, opt},
     error::{Error, ErrorKind, FromExternalError},
     multi::many1,
     sequence::{delimited, pair, preceded, separated_pair, tuple},
     IResult,
 };
 
-use super::{hex_string, nom_recipes::rtrim, number, string};
+use super::{
+    expression::{self, ParsedExpr},
+    hex_string,
+    nom_recipes::rtrim,
+    number, string,
+};
 use crate::expression::Expression;
 use crate::regex::Regex;
 
@@ -294,9 +299,10 @@ fn hex_string_modifier(input: &str) -> IResult<&str, StringFlags> {
 fn condition(input: &str) -> IResult<&str, Expression> {
     let (input, _) = rtrim(tag("condition"))(input)?;
 
-    // FIXME
-    // cut(preceded(rtrim(char(':')), expression::boolean_expression))(input)
-    Ok((input, Expression::Filesize))
+    map_res(
+        cut(preceded(rtrim(char(':')), expression::boolean_expression)),
+        ParsedExpr::validate_boolean_expression,
+    )(input)
 }
 
 #[cfg(test)]
@@ -465,7 +471,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn parse_rule() {
         parse(
             rule,
