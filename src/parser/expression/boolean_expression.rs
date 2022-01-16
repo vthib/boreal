@@ -468,6 +468,73 @@ mod tests {
         );
 
         parse_err(expression, "\"a\" matches");
+        parse_err(expression, "\"a\" matches 1");
+    }
+
+    #[test]
+    fn test_expression_precedence_cmp_eq() {
+        let build_cmp = |less_than, can_be_equal| {
+            move |a, b| Expression::Cmp {
+                left: a,
+                right: b,
+                less_than,
+                can_be_equal,
+            }
+        };
+
+        // Test precedence of <, <=, >=, > over eq, etc
+        test_precedence("<", "==", build_cmp(true, false), Expression::Eq);
+        test_precedence("<=", "==", build_cmp(true, true), Expression::Eq);
+        test_precedence(">", "==", build_cmp(false, false), Expression::Eq);
+        test_precedence(">=", "==", build_cmp(false, true), Expression::Eq);
+        test_precedence("<", "!=", build_cmp(true, false), |a, b| {
+            Expression::Not(Box::new(ParsedExpr {
+                expr: Expression::Eq(a, b),
+            }))
+        });
+        test_precedence("<", "contains", build_cmp(true, false), |a, b| {
+            Expression::Contains {
+                haystack: a,
+                needle: b,
+                case_insensitive: false,
+            }
+        });
+        test_precedence("<", "icontains", build_cmp(true, false), |a, b| {
+            Expression::Contains {
+                haystack: a,
+                needle: b,
+                case_insensitive: true,
+            }
+        });
+        test_precedence("<", "startswith", build_cmp(true, false), |a, b| {
+            Expression::StartsWith {
+                expr: a,
+                prefix: b,
+                case_insensitive: false,
+            }
+        });
+        test_precedence("<", "istartswith", build_cmp(true, false), |a, b| {
+            Expression::StartsWith {
+                expr: a,
+                prefix: b,
+                case_insensitive: true,
+            }
+        });
+        test_precedence("<", "endswith", build_cmp(true, false), |a, b| {
+            Expression::EndsWith {
+                expr: a,
+                suffix: b,
+                case_insensitive: false,
+            }
+        });
+        test_precedence("<", "iendswith", build_cmp(true, false), |a, b| {
+            Expression::EndsWith {
+                expr: a,
+                suffix: b,
+                case_insensitive: true,
+            }
+        });
+        test_precedence("<", "iequals", build_cmp(true, false), Expression::IEquals);
     }
 
     #[test]
