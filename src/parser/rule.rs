@@ -300,7 +300,7 @@ fn condition(input: &str) -> IResult<&str, Expression> {
     let (input, _) = rtrim(tag("condition"))(input)?;
 
     map_res(
-        cut(preceded(rtrim(char(':')), expression::boolean_expression)),
+        cut(preceded(rtrim(char(':')), expression::expression)),
         ParsedExpr::validate_boolean_expression,
     )(input)
 }
