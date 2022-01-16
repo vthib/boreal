@@ -1,4 +1,5 @@
 use super::{Expression, Identifier, ParsedExpr};
+use crate::expression::Expression as EExpr;
 
 /// Type of a parsed expression
 ///
@@ -125,15 +126,13 @@ pub fn validate_boolean_expression(
 /// formed.
 #[allow(clippy::too_many_lines)]
 fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
-    use crate::expression::Expression as E;
-
     match expr.expr {
         Expression::Filesize => Ok(ValidatedExpression {
-            expression: E::Filesize,
+            expression: EExpr::Filesize,
             ty: Type::Integer,
         }),
         Expression::Entrypoint => Ok(ValidatedExpression {
-            expression: E::Entrypoint,
+            expression: EExpr::Entrypoint,
             ty: Type::Integer,
         }),
         Expression::ReadInteger {
@@ -145,7 +144,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let addr = validate_expr(*addr)?;
 
             Ok(ValidatedExpression {
-                expression: E::ReadInteger {
+                expression: EExpr::ReadInteger {
                     size,
                     unsigned,
                     big_endian,
@@ -155,11 +154,11 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             })
         }
         Expression::Number(v) => Ok(ValidatedExpression {
-            expression: E::Number(v),
+            expression: EExpr::Number(v),
             ty: Type::Integer,
         }),
         Expression::Double(v) => Ok(ValidatedExpression {
-            expression: E::Double(v),
+            expression: EExpr::Double(v),
             ty: Type::Float,
         }),
         Expression::CountInRange {
@@ -171,7 +170,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let to = validate_expr(*to)?;
 
             Ok(ValidatedExpression {
-                expression: E::CountInRange {
+                expression: EExpr::CountInRange {
                     identifier,
                     from: from.unwrap_expr(Type::Integer)?,
                     to: to.unwrap_expr(Type::Integer)?,
@@ -180,7 +179,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             })
         }
         Expression::Count(v) => Ok(ValidatedExpression {
-            expression: E::Count(v),
+            expression: EExpr::Count(v),
             ty: Type::Integer,
         }),
         Expression::Offset {
@@ -190,7 +189,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let on = validate_expr(*occurence_number)?;
 
             Ok(ValidatedExpression {
-                expression: E::Offset {
+                expression: EExpr::Offset {
                     identifier,
                     occurence_number: on.unwrap_expr(Type::Integer)?,
                 },
@@ -204,7 +203,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let on = validate_expr(*occurence_number)?;
 
             Ok(ValidatedExpression {
-                expression: E::Length {
+                expression: EExpr::Length {
                     identifier,
                     occurence_number: on.unwrap_expr(Type::Integer)?,
                 },
@@ -216,142 +215,49 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
 
             if v.ty == Type::Float {
                 Ok(ValidatedExpression {
-                    expression: E::Neg(Box::new(v.expression)),
+                    expression: EExpr::Neg(Box::new(v.expression)),
                     ty: Type::Float,
                 })
             } else {
                 Ok(ValidatedExpression {
-                    expression: E::Neg(v.unwrap_expr(Type::Integer)?),
+                    expression: EExpr::Neg(v.unwrap_expr(Type::Integer)?),
                     ty: Type::Integer,
                 })
             }
         }
-        Expression::Add(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            let (a, b, ty) = check_numeric_op(a, b)?;
-
-            Ok(ValidatedExpression {
-                expression: E::Add(a, b),
-                ty,
-            })
-        }
-        Expression::Sub(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            let (a, b, ty) = check_numeric_op(a, b)?;
-
-            Ok(ValidatedExpression {
-                expression: E::Sub(a, b),
-                ty,
-            })
-        }
-        Expression::Mul(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            let (a, b, ty) = check_numeric_op(a, b)?;
-
-            Ok(ValidatedExpression {
-                expression: E::Mul(a, b),
-                ty,
-            })
-        }
-        Expression::Div(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            let (a, b, ty) = check_numeric_op(a, b)?;
-
-            Ok(ValidatedExpression {
-                expression: E::Div(a, b),
-                ty,
-            })
-        }
+        Expression::Add(a, b) => validate_primary_op(*a, *b, "+", EExpr::Add, false),
+        Expression::Sub(a, b) => validate_primary_op(*a, *b, "-", EExpr::Sub, false),
+        Expression::Mul(a, b) => validate_primary_op(*a, *b, "*", EExpr::Mul, false),
+        Expression::Div(a, b) => validate_primary_op(*a, *b, "\\", EExpr::Div, false),
         Expression::Mod(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::Mod(a.unwrap_expr(Type::Integer)?, b.unwrap_expr(Type::Integer)?),
-                ty: Type::Integer,
-            })
+            validate_binary_op(*a, *b, Type::Integer, Type::Integer, EExpr::Mod)
         }
         Expression::BitwiseXor(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::BitwiseXor(
-                    a.unwrap_expr(Type::Integer)?,
-                    b.unwrap_expr(Type::Integer)?,
-                ),
-                ty: Type::Integer,
-            })
+            validate_binary_op(*a, *b, Type::Integer, Type::Integer, EExpr::BitwiseXor)
         }
         Expression::BitwiseAnd(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::BitwiseAnd(
-                    a.unwrap_expr(Type::Integer)?,
-                    b.unwrap_expr(Type::Integer)?,
-                ),
-                ty: Type::Integer,
-            })
+            validate_binary_op(*a, *b, Type::Integer, Type::Integer, EExpr::BitwiseAnd)
         }
         Expression::BitwiseOr(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::BitwiseOr(
-                    a.unwrap_expr(Type::Integer)?,
-                    b.unwrap_expr(Type::Integer)?,
-                ),
-                ty: Type::Integer,
-            })
+            validate_binary_op(*a, *b, Type::Integer, Type::Integer, EExpr::BitwiseOr)
         }
         Expression::BitwiseNot(a) => {
             let a = validate_expr(*a)?;
             Ok(ValidatedExpression {
-                expression: E::BitwiseNot(a.unwrap_expr(Type::Integer)?),
+                expression: EExpr::BitwiseNot(a.unwrap_expr(Type::Integer)?),
                 ty: Type::Integer,
             })
         }
         Expression::ShiftLeft(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::ShiftLeft(
-                    a.unwrap_expr(Type::Integer)?,
-                    b.unwrap_expr(Type::Integer)?,
-                ),
-                ty: Type::Integer,
-            })
+            validate_binary_op(*a, *b, Type::Integer, Type::Integer, EExpr::ShiftLeft)
         }
         Expression::ShiftRight(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::ShiftRight(
-                    a.unwrap_expr(Type::Integer)?,
-                    b.unwrap_expr(Type::Integer)?,
-                ),
-                ty: Type::Integer,
-            })
+            validate_binary_op(*a, *b, Type::Integer, Type::Integer, EExpr::ShiftRight)
         }
         Expression::And(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::And(a.unwrap_expr(Type::Boolean)?, b.unwrap_expr(Type::Boolean)?),
-                ty: Type::Integer,
-            })
+            validate_binary_op(*a, *b, Type::Boolean, Type::Boolean, EExpr::And)
         }
-        Expression::Or(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::Or(a.unwrap_expr(Type::Boolean)?, b.unwrap_expr(Type::Boolean)?),
-                ty: Type::Integer,
-            })
-        }
+        Expression::Or(a, b) => validate_binary_op(*a, *b, Type::Boolean, Type::Boolean, EExpr::Or),
         Expression::Cmp {
             left,
             right,
@@ -360,22 +266,26 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
         } => {
             let left = validate_expr(*left)?;
             let right = validate_expr(*right)?;
+            validate_comparison(&left, &right)?;
+
             Ok(ValidatedExpression {
-                expression: E::Cmp {
+                expression: EExpr::Cmp {
                     left: Box::new(left.expression),
                     right: Box::new(right.expression),
                     less_than,
                     can_be_equal,
                 },
-                ty: Type::Integer,
+                ty: Type::Boolean,
             })
         }
         Expression::Eq(a, b) => {
             let a = validate_expr(*a)?;
             let b = validate_expr(*b)?;
+            validate_comparison(&a, &b)?;
+
             Ok(ValidatedExpression {
-                expression: E::Eq(Box::new(a.expression), Box::new(b.expression)),
-                ty: Type::Integer,
+                expression: EExpr::Eq(Box::new(a.expression), Box::new(b.expression)),
+                ty: Type::Boolean,
             })
         }
         Expression::Contains {
@@ -386,7 +296,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let haystack = validate_expr(*haystack)?;
             let needle = validate_expr(*needle)?;
             Ok(ValidatedExpression {
-                expression: E::Contains {
+                expression: EExpr::Contains {
                     haystack: haystack.unwrap_expr(Type::String)?,
                     needle: needle.unwrap_expr(Type::String)?,
                     case_insensitive,
@@ -402,7 +312,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let expr = validate_expr(*expr)?;
             let prefix = validate_expr(*prefix)?;
             Ok(ValidatedExpression {
-                expression: E::StartsWith {
+                expression: EExpr::StartsWith {
                     expr: expr.unwrap_expr(Type::String)?,
                     prefix: prefix.unwrap_expr(Type::String)?,
                     case_insensitive,
@@ -418,7 +328,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let expr = validate_expr(*expr)?;
             let suffix = validate_expr(*suffix)?;
             Ok(ValidatedExpression {
-                expression: E::EndsWith {
+                expression: EExpr::EndsWith {
                     expr: expr.unwrap_expr(Type::String)?,
                     suffix: suffix.unwrap_expr(Type::String)?,
                     case_insensitive,
@@ -427,47 +337,42 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             })
         }
         Expression::IEquals(a, b) => {
-            let a = validate_expr(*a)?;
-            let b = validate_expr(*b)?;
-            Ok(ValidatedExpression {
-                expression: E::IEquals(a.unwrap_expr(Type::String)?, b.unwrap_expr(Type::String)?),
-                ty: Type::Boolean,
-            })
+            validate_binary_op(*a, *b, Type::String, Type::Boolean, EExpr::IEquals)
         }
         Expression::Matches(a, regexp) => {
             let a = validate_expr(*a)?;
             Ok(ValidatedExpression {
-                expression: E::Matches(a.unwrap_expr(Type::String)?, regexp),
+                expression: EExpr::Matches(a.unwrap_expr(Type::String)?, regexp),
                 ty: Type::Boolean,
             })
         }
         Expression::Defined(a) => {
             let a = validate_expr(*a)?;
             Ok(ValidatedExpression {
-                expression: E::Defined(Box::new(a.expression)),
+                expression: EExpr::Defined(Box::new(a.expression)),
                 ty: Type::Boolean,
             })
         }
         Expression::Not(a) => {
             let a = validate_expr(*a)?;
             Ok(ValidatedExpression {
-                expression: E::Not(a.unwrap_expr(Type::Boolean)?),
+                expression: EExpr::Not(a.unwrap_expr(Type::Boolean)?),
                 ty: Type::Boolean,
             })
         }
         Expression::Boolean(a) => Ok(ValidatedExpression {
-            expression: E::Boolean(a),
+            expression: EExpr::Boolean(a),
             ty: Type::Boolean,
         }),
         Expression::Variable(a) => Ok(ValidatedExpression {
-            expression: E::Variable(a),
+            expression: EExpr::Variable(a),
             ty: Type::Boolean,
         }),
         Expression::VariableAt(a, expr) => {
             let expr = validate_expr(*expr)?;
 
             Ok(ValidatedExpression {
-                expression: E::VariableAt(a, expr.unwrap_expr(Type::Integer)?),
+                expression: EExpr::VariableAt(a, expr.unwrap_expr(Type::Integer)?),
                 ty: Type::Boolean,
             })
         }
@@ -476,7 +381,7 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             let to = validate_expr(*to)?;
 
             Ok(ValidatedExpression {
-                expression: E::VariableIn {
+                expression: EExpr::VariableIn {
                     variable,
                     from: from.unwrap_expr(Type::Integer)?,
                     to: to.unwrap_expr(Type::Integer)?,
@@ -487,52 +392,92 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
         Expression::Identifier(ident) => {
             let identifier = validate_identifier(ident)?;
             Ok(ValidatedExpression {
-                expression: E::Identifier(identifier),
+                expression: EExpr::Identifier(identifier),
                 // TODO: typing identifiers
                 ty: Type::Boolean,
             })
         }
         Expression::String(v) => Ok(ValidatedExpression {
-            expression: E::String(v),
+            expression: EExpr::String(v),
             ty: Type::String,
         }),
         Expression::Regex(v) => Ok(ValidatedExpression {
-            expression: E::Regex(v),
+            expression: EExpr::Regex(v),
             ty: Type::Regex,
         }),
     }
 }
 
-fn check_numeric_op(
-    a: ValidatedExpression,
-    b: ValidatedExpression,
-) -> Result<
-    (
-        Box<crate::expression::Expression>,
-        Box<crate::expression::Expression>,
-        Type,
-    ),
-    String,
-> {
-    match (a.ty, b.ty) {
-        (Type::Integer, Type::Integer) => Ok((
-            Box::new(a.expression),
-            Box::new(b.expression),
-            Type::Integer,
-        )),
-        (Type::Float | Type::Integer, Type::Integer | Type::Float) => {
-            Ok((Box::new(a.expression), Box::new(b.expression), Type::Float))
+fn validate_primary_op<F>(
+    a: ParsedExpr,
+    b: ParsedExpr,
+    operator: &str,
+    constructor: F,
+    string_allowed: bool,
+) -> Result<ValidatedExpression, String>
+where
+    F: Fn(Box<EExpr>, Box<EExpr>) -> EExpr,
+{
+    let a = validate_expr(a)?;
+    let b = validate_expr(b)?;
+
+    let ty = match (a.ty, b.ty) {
+        (Type::Integer, Type::Integer) => Type::Integer,
+        (Type::Float | Type::Integer, Type::Integer | Type::Float) => Type::Float,
+        (Type::String, Type::String) if string_allowed => Type::String,
+        _ => {
+            return Err(format!(
+                "invalid type of expressions used with operator {}",
+                operator
+            ))
         }
+    };
+
+    Ok(ValidatedExpression {
+        expression: constructor(Box::new(a.expression), Box::new(b.expression)),
+        ty,
+    })
+}
+
+fn validate_binary_op<F>(
+    a: ParsedExpr,
+    b: ParsedExpr,
+    type_wanted: Type,
+    type_result: Type,
+    constructor: F,
+) -> Result<ValidatedExpression, String>
+where
+    F: Fn(Box<EExpr>, Box<EExpr>) -> EExpr,
+{
+    let a = validate_expr(a)?;
+    let b = validate_expr(b)?;
+
+    Ok(ValidatedExpression {
+        expression: constructor(a.unwrap_expr(type_wanted)?, b.unwrap_expr(type_wanted)?),
+        ty: type_result,
+    })
+}
+fn validate_comparison(a: &ValidatedExpression, b: &ValidatedExpression) -> Result<(), String> {
+    match (a.ty, b.ty) {
+        (Type::String, Type::String)
+        | (Type::Integer | Type::Float, Type::Integer | Type::Float) => Ok(()),
         _ => Err(format!(
-            "integer or float expression expected, found {}",
-            a.ty
+            "incompatible types for comparison: {} and {}",
+            a.ty, b.ty
         )),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::Type;
     use crate::parser::expression::expression;
+
+    #[track_caller]
+    fn test_validation(expression_str: &str, expected_type: Type) {
+        let (_, expr) = expression(expression_str).unwrap();
+        assert_eq!(super::validate_expr(expr).unwrap().ty, expected_type);
+    }
 
     #[track_caller]
     fn test_validation_err(expression_str: &str) {
@@ -616,4 +561,22 @@ mod tests {
         test_validation_err("#foo in (0../a/)");
         test_validation_err("#foo in (1.2 .. 3)");
     }
+
+    #[test]
+    fn test_validation_cmp() {
+        test_validation("1 < 2", Type::Boolean);
+        test_validation("1 <= 2.2", Type::Boolean);
+        test_validation("1.1 > 2", Type::Boolean);
+        test_validation("1.1 >= 2.2", Type::Boolean);
+
+        test_validation("\"a\" > \"b\"", Type::Boolean);
+        test_validation("\"a\" == \"b\"", Type::Boolean);
+        test_validation("\"a\" != \"b\"", Type::Boolean);
+
+        test_validation_err("\"a\" < 1");
+        test_validation_err("2 == a");
+        test_validation_err("/a/ != 1");
+    }
+
+    // TODO: add tests to check the "ty" field in ValidatedExpression
 }
