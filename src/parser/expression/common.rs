@@ -7,13 +7,13 @@ use nom::{
     IResult,
 };
 
-use super::{primary_expression::primary_expression, Expression, Type};
+use super::{primary_expression::primary_expression, ParsedExpr};
 use crate::parser::nom_recipes::rtrim;
 
 /// Parse a 'in' range for primary expressions.
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
-pub fn range(input: &str) -> IResult<&str, (Box<Expression>, Box<Expression>)> {
+pub fn range(input: &str) -> IResult<&str, (Box<ParsedExpr>, Box<ParsedExpr>)> {
     let (input, _) = rtrim(char('('))(input)?;
 
     let (input, (a, b)) = cut(terminated(
@@ -21,14 +21,13 @@ pub fn range(input: &str) -> IResult<&str, (Box<Expression>, Box<Expression>)> {
         rtrim(char(')')),
     ))(input)?;
 
-    let a = a.try_unwrap(input, Type::Integer)?;
-    let b = b.try_unwrap(input, Type::Integer)?;
-    Ok((input, (a, b)))
+    Ok((input, (Box::new(a), Box::new(b))))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::expression::Expression;
     use crate::parser::test_utils::{parse, parse_err};
 
     #[test]
@@ -38,8 +37,12 @@ mod tests {
             "(1..1) b",
             "b",
             (
-                Box::new(Expression::Number(1)),
-                Box::new(Expression::Number(1)),
+                Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                }),
+                Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                }),
             ),
         );
         parse(
@@ -47,8 +50,12 @@ mod tests {
             "( filesize .. entrypoint )",
             "",
             (
-                Box::new(Expression::Filesize),
-                Box::new(Expression::Entrypoint),
+                Box::new(ParsedExpr {
+                    expr: Expression::Filesize,
+                }),
+                Box::new(ParsedExpr {
+                    expr: Expression::Entrypoint,
+                }),
             ),
         );
 
@@ -60,7 +67,8 @@ mod tests {
         parse_err(range, "(1..)");
         parse_err(range, "(..1)");
 
-        parse_err(range, "(1..\"a\")");
-        parse_err(range, "(/a/ .. 1)");
+        // FIXME: test types
+        // parse_err(range, "(1..\"a\")");
+        // parse_err(range, "(/a/ .. 1)");
     }
 }

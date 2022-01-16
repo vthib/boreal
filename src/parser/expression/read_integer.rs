@@ -10,12 +10,9 @@ use nom::{
     IResult,
 };
 
-use crate::{
-    expression::{Expression, ReadIntegerSize},
-    parser::nom_recipes::rtrim,
-};
+use crate::{expression::ReadIntegerSize, parser::nom_recipes::rtrim};
 
-use super::{primary_expression::primary_expression, ParsedExpr, Type};
+use super::{primary_expression::primary_expression, Expression, ParsedExpr};
 
 /// Parse a read of an integer.
 ///
@@ -55,9 +52,8 @@ pub fn read_integer_expression(input: &str) -> IResult<&str, ParsedExpr> {
                 unsigned,
                 size,
                 big_endian,
-                addr: expr.try_unwrap(input, Type::Integer)?,
+                addr: Box::new(expr),
             },
-            ty: Type::Integer,
         },
     ))
 }
@@ -66,7 +62,7 @@ pub fn read_integer_expression(input: &str) -> IResult<&str, ParsedExpr> {
 mod tests {
     use super::super::super::test_utils::{parse, parse_err};
     use super::{
-        read_integer, read_integer_expression, Expression, ParsedExpr, ReadIntegerSize as RIS, Type,
+        read_integer, read_integer_expression, Expression, ParsedExpr, ReadIntegerSize as RIS,
     };
 
     #[test]
@@ -105,9 +101,10 @@ mod tests {
                     unsigned: true,
                     size: RIS::Int8,
                     big_endian: false,
-                    addr: Box::new(Expression::Number(3)),
+                    addr: Box::new(ParsedExpr {
+                        expr: Expression::Number(3),
+                    }),
                 },
-                ty: Type::Integer,
             },
         );
 

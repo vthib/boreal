@@ -10,8 +10,7 @@ use nom::{
     IResult,
 };
 
-use super::{common::range, primary_expression::primary_expression, ParsedExpr, Type};
-use crate::expression::Expression;
+use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
 use crate::parser::{nom_recipes::rtrim, string};
 
 /// Parse a `string_count ( 'in' range )` expression
@@ -29,13 +28,7 @@ pub fn string_count_expression(input: &str) -> IResult<&str, ParsedExpr> {
             to,
         },
     };
-    Ok((
-        input,
-        ParsedExpr {
-            expr,
-            ty: Type::Integer,
-        },
-    ))
+    Ok((input, ParsedExpr { expr }))
 }
 
 /// Parse a `string_offset ( '[' primary_expression ']' )` expression
@@ -50,17 +43,13 @@ pub fn string_offset_expression(input: &str) -> IResult<&str, ParsedExpr> {
     let expr = Expression::Offset {
         identifier,
         occurence_number: match expr {
-            Some(v) => v.try_unwrap(input, Type::Integer)?,
-            None => Box::new(Expression::Number(1)),
+            Some(v) => Box::new(v),
+            None => Box::new(ParsedExpr {
+                expr: Expression::Number(1),
+            }),
         },
     };
-    Ok((
-        input,
-        ParsedExpr {
-            expr,
-            ty: Type::Integer,
-        },
-    ))
+    Ok((input, ParsedExpr { expr }))
 }
 
 /// Parse a `string_length ( '[' primary_expression ']' )` expression
@@ -75,17 +64,13 @@ pub fn string_length_expression(input: &str) -> IResult<&str, ParsedExpr> {
     let expr = Expression::Length {
         identifier,
         occurence_number: match expr {
-            Some(v) => v.try_unwrap(input, Type::Integer)?,
-            None => Box::new(Expression::Number(1)),
+            Some(v) => Box::new(v),
+            None => Box::new(ParsedExpr {
+                expr: Expression::Number(1),
+            }),
         },
     };
-    Ok((
-        input,
-        ParsedExpr {
-            expr,
-            ty: Type::Integer,
-        },
-    ))
+    Ok((input, ParsedExpr { expr }))
 }
 
 #[cfg(test)]
@@ -101,7 +86,6 @@ mod tests {
             "bar",
             ParsedExpr {
                 expr: Expression::Count("foo".to_owned()),
-                ty: Type::Integer,
             },
         );
         parse(
@@ -111,17 +95,22 @@ mod tests {
             ParsedExpr {
                 expr: Expression::CountInRange {
                     identifier: "foo".to_owned(),
-                    from: Box::new(Expression::Number(0)),
-                    to: Box::new(Expression::Filesize),
+                    from: Box::new(ParsedExpr {
+                        expr: Expression::Number(0),
+                    }),
+                    to: Box::new(ParsedExpr {
+                        expr: Expression::Filesize,
+                    }),
                 },
-                ty: Type::Integer,
             },
         );
 
         parse_err(string_count_expression, "");
         parse_err(string_count_expression, "foo");
-        parse_err(string_count_expression, "#foo in (0../a/)");
-        parse_err(string_count_expression, "#foo in (1.2 .. 3)");
+
+        // FIXME: type check
+        // parse_err(string_count_expression, "#foo in (0../a/)");
+        // parse_err(string_count_expression, "#foo in (1.2 .. 3)");
     }
 
     #[test]
@@ -133,9 +122,10 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Offset {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(1)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(1),
+                    }),
                 },
-                ty: Type::Integer,
             },
         );
         parse(
@@ -145,9 +135,10 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Offset {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(2)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(2),
+                    }),
                 },
-                ty: Type::Integer,
             },
         );
     }
@@ -161,9 +152,10 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Length {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(1)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(1),
+                    }),
                 },
-                ty: Type::Integer,
             },
         );
         parse(
@@ -173,15 +165,18 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Length {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(2)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(2),
+                    }),
                 },
-                ty: Type::Integer,
             },
         );
 
         parse_err(string_length_expression, "");
         parse_err(string_length_expression, "foo");
-        parse_err(string_length_expression, "!foo [ 1.2 ]");
-        parse_err(string_length_expression, "!foo[/a/]");
+
+        // FIXME: type check
+        // parse_err(string_length_expression, "!foo [ 1.2 ]");
+        // parse_err(string_length_expression, "!foo[/a/]");
     }
 }

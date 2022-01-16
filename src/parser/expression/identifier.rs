@@ -3,14 +3,11 @@
 //! This parses the [`crate::expression::Identifier`] object.
 //! See the `identifier` rule in `grammar.y` in libyara.
 use nom::{
-    character::complete::char,
-    combinator::{cut, map},
-    multi::separated_list0,
-    sequence::terminated,
+    character::complete::char, combinator::cut, multi::separated_list0, sequence::terminated,
     IResult,
 };
 
-use crate::expression::{Expression, Identifier};
+use super::{Identifier, ParsedExpr};
 use crate::parser::{nom_recipes::rtrim, string::identifier as raw_identifier};
 
 use super::boolean_expression::expression;
@@ -22,17 +19,15 @@ fn trailing_subfield(input: &str) -> IResult<&str, String> {
 }
 
 /// Parse a trailing subscript, i.e. after the `[` has been parsed
-fn trailing_subscript(input: &str) -> IResult<&str, Expression> {
-    map(cut(terminated(primary_expression, rtrim(char(']')))), |v| {
-        v.expr
-    })(input)
+fn trailing_subscript(input: &str) -> IResult<&str, ParsedExpr> {
+    cut(terminated(primary_expression, rtrim(char(']'))))(input)
 }
 
 /// Parse a trailing argument specification, i.e. after the `(` has been
 /// parsed.
-fn trailing_arguments(input: &str) -> IResult<&str, Vec<Expression>> {
+fn trailing_arguments(input: &str) -> IResult<&str, Vec<ParsedExpr>> {
     cut(terminated(
-        separated_list0(rtrim(char(',')), map(expression, |v| v.expr)),
+        separated_list0(rtrim(char(',')), expression),
         rtrim(char(')')),
     ))(input)
 }
@@ -82,6 +77,7 @@ pub fn identifier(input: &str) -> IResult<&str, Identifier> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::expression::Expression;
     use crate::parser::test_utils::{parse, parse_err};
 
     #[test]
@@ -102,7 +98,9 @@ mod tests {
             "",
             Identifier::Subscript {
                 identifier: Box::new(Identifier::Raw("a".to_owned())),
-                subscript: Box::new(Expression::Number(2)),
+                subscript: Box::new(ParsedExpr {
+                    expr: Expression::Number(2),
+                }),
             },
         );
         parse(
@@ -121,8 +119,12 @@ mod tests {
             Identifier::FunctionCall {
                 identifier: Box::new(Identifier::Raw("foo".to_owned())),
                 arguments: vec![
-                    Expression::Identifier(Identifier::Raw("pe".to_owned())),
-                    Expression::Boolean(true),
+                    ParsedExpr {
+                        expr: Expression::Identifier(Identifier::Raw("pe".to_owned())),
+                    },
+                    ParsedExpr {
+                        expr: Expression::Boolean(true),
+                    },
                 ],
             },
         );
@@ -145,20 +147,28 @@ mod tests {
                 subfield: "b".to_owned(),
             }),
             arguments: vec![
-                Expression::Identifier(Identifier::Subfield {
-                    identifier: Box::new(Identifier::Subscript {
-                        identifier: Box::new(Identifier::Raw("c".to_owned())),
-                        subscript: Box::new(Expression::String("d".to_owned())),
+                ParsedExpr {
+                    expr: Expression::Identifier(Identifier::Subfield {
+                        identifier: Box::new(Identifier::Subscript {
+                            identifier: Box::new(Identifier::Raw("c".to_owned())),
+                            subscript: Box::new(ParsedExpr {
+                                expr: Expression::String("d".to_owned()),
+                            }),
+                        }),
+                        subfield: "e".to_owned(),
                     }),
-                    subfield: "e".to_owned(),
-                }),
-                Expression::Identifier(Identifier::FunctionCall {
-                    identifier: Box::new(Identifier::FunctionCall {
-                        identifier: Box::new(Identifier::Raw("f".to_owned())),
-                        arguments: vec![],
+                },
+                ParsedExpr {
+                    expr: Expression::Identifier(Identifier::FunctionCall {
+                        identifier: Box::new(Identifier::FunctionCall {
+                            identifier: Box::new(Identifier::Raw("f".to_owned())),
+                            arguments: vec![],
+                        }),
+                        arguments: vec![ParsedExpr {
+                            expr: Expression::Boolean(true),
+                        }],
                     }),
-                    arguments: vec![Expression::Boolean(true)],
-                }),
+                },
             ],
         };
 
@@ -171,13 +181,17 @@ mod tests {
                     identifier: Box::new(Identifier::Subfield {
                         identifier: Box::new(Identifier::Subscript {
                             identifier: Box::new(identifier_call),
-                            subscript: Box::new(Expression::Number(3)),
+                            subscript: Box::new(ParsedExpr {
+                                expr: Expression::Number(3),
+                            }),
                         }),
                         subfield: "g".to_owned(),
                     }),
                     subfield: "h".to_owned(),
                 }),
-                subscript: Box::new(Expression::Number(1)),
+                subscript: Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                }),
             },
         );
     }

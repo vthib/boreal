@@ -1,7 +1,3 @@
-use nom::error::{Error, ErrorKind, FromExternalError};
-
-use crate::expression::Expression;
-
 mod boolean_expression;
 mod common;
 mod identifier;
@@ -9,64 +5,121 @@ mod primary_expression;
 mod read_integer;
 mod string_expression;
 
-pub use boolean_expression::boolean_expression;
+pub use boolean_expression::expression as boolean_expression;
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
 
-/// Type of a parsed expression
-///
-/// This is useful to know the type of a parsed expression, and reject
-/// during parsing expressions which are incompatible.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum Type {
-    Integer,
-    Float,
-    String,
-    Regex,
-    Boolean,
+/// Parsed identifier used in expressions.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Identifier {
+    /// Raw identifier, i.e. `pe`.
+    Raw(String),
+    /// Array subscript, i.e. `identifier[subscript]`.
+    Subscript {
+        identifier: Box<Identifier>,
+        subscript: Box<ParsedExpr>,
+    },
+    /// Object subfield, i.e. `identifier.subfield`.
+    Subfield {
+        identifier: Box<Identifier>,
+        subfield: String,
+    },
+    /// Function call, i.e. `identifier(arguments)`.
+    FunctionCall {
+        identifier: Box<Identifier>,
+        arguments: Vec<ParsedExpr>,
+    },
 }
 
-impl std::fmt::Display for Type {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.write_str(match self {
-            Self::Integer => "integer",
-            Self::Float => "floating-point number",
-            Self::String => "string",
-            Self::Regex => "regex",
-            Self::Boolean => "boolean",
-        })
-    }
-}
-
-#[derive(PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ParsedExpr {
-    pub expr: Expression,
-    ty: Type,
+    expr: Expression,
 }
 
-fn nom_err_invalid_expression_type<'a>(
-    input: &'a str,
-    expr: &ParsedExpr,
-    expected_type: Type,
-) -> nom::Err<Error<&'a str>> {
-    nom::Err::Failure(Error::from_external_error(
-        input,
-        ErrorKind::Verify,
-        format!("{} expression expected, found {}", expected_type, expr.ty),
-    ))
-}
+/// An expression parsed in a Rule.
+///
+/// This represents an expression immediately parsed, which may be invalid.
+/// It is then compiled into a [`crate::expression::Expression`] after
+/// validation. See this aforementioned type for more documentation
+/// on every type.
+#[derive(Clone, Debug, PartialEq)]
+enum Expression {
+    Filesize,
+    Entrypoint,
+    ReadInteger {
+        size: crate::expression::ReadIntegerSize,
+        unsigned: bool,
+        big_endian: bool,
+        addr: Box<ParsedExpr>,
+    },
+    Number(i64),
+    Double(f64),
+    CountInRange {
+        identifier: String,
+        from: Box<ParsedExpr>,
+        to: Box<ParsedExpr>,
+    },
+    Count(String),
+    Offset {
+        identifier: String,
+        occurence_number: Box<ParsedExpr>,
+    },
+    Length {
+        identifier: String,
+        occurence_number: Box<ParsedExpr>,
+    },
+    Neg(Box<ParsedExpr>),
+    Add(Box<ParsedExpr>, Box<ParsedExpr>),
+    Sub(Box<ParsedExpr>, Box<ParsedExpr>),
+    Mul(Box<ParsedExpr>, Box<ParsedExpr>),
+    Div(Box<ParsedExpr>, Box<ParsedExpr>),
+    Mod(Box<ParsedExpr>, Box<ParsedExpr>),
+    BitwiseXor(Box<ParsedExpr>, Box<ParsedExpr>),
+    BitwiseAnd(Box<ParsedExpr>, Box<ParsedExpr>),
+    BitwiseOr(Box<ParsedExpr>, Box<ParsedExpr>),
+    BitwiseNot(Box<ParsedExpr>),
+    ShiftLeft(Box<ParsedExpr>, Box<ParsedExpr>),
+    ShiftRight(Box<ParsedExpr>, Box<ParsedExpr>),
 
-impl ParsedExpr {
-    fn try_unwrap(
-        self,
-        input: &str,
-        expected_type: Type,
-    ) -> Result<Box<Expression>, nom::Err<Error<&str>>> {
-        if self.ty == expected_type {
-            Ok(Box::new(self.expr))
-        } else {
-            Err(nom_err_invalid_expression_type(input, &self, expected_type))
-        }
-    }
+    And(Box<ParsedExpr>, Box<ParsedExpr>),
+    Or(Box<ParsedExpr>, Box<ParsedExpr>),
+    Cmp {
+        left: Box<ParsedExpr>,
+        right: Box<ParsedExpr>,
+        less_than: bool,
+        can_be_equal: bool,
+    },
+    Eq(Box<ParsedExpr>, Box<ParsedExpr>),
+    Contains {
+        haystack: Box<ParsedExpr>,
+        needle: Box<ParsedExpr>,
+        case_insensitive: bool,
+    },
+    StartsWith {
+        expr: Box<ParsedExpr>,
+        prefix: Box<ParsedExpr>,
+        case_insensitive: bool,
+    },
+    EndsWith {
+        expr: Box<ParsedExpr>,
+        suffix: Box<ParsedExpr>,
+        case_insensitive: bool,
+    },
+    IEquals(Box<ParsedExpr>, Box<ParsedExpr>),
+    Matches(Box<ParsedExpr>, crate::regex::Regex),
+    Defined(Box<ParsedExpr>),
+    Not(Box<ParsedExpr>),
+    Boolean(bool),
+    Variable(String),
+    VariableAt(String, Box<ParsedExpr>),
+    VariableIn {
+        variable: String,
+        from: Box<ParsedExpr>,
+        to: Box<ParsedExpr>,
+    },
+
+    Identifier(Identifier),
+    String(String),
+    Regex(crate::regex::Regex),
 }
