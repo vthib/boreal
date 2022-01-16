@@ -716,40 +716,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn test_types() {
-        parse_err(pe, "uint8(/a/)");
-
-        parse_err(pe, "1 | /a/");
-        parse_err(pe, "/a/ | 1");
-        parse_err(pe, "1 ^ /a/");
-        parse_err(pe, "/a/ ^ 1");
-        parse_err(pe, "1 & /a/");
-        parse_err(pe, "/a/ & 1");
-        parse_err(pe, "1.2 << 1");
-        parse_err(pe, "1 << 1.2");
-        parse_err(pe, "1.2 >> 1");
-        parse_err(pe, "1 >> 1.2");
-
-        parse_err(pe, "1 + /a/");
-        parse_err(pe, "\"a\" + 1");
-        parse_err(pe, "1 - /a/");
-        parse_err(pe, "\"a\" - 1");
-
-        parse_err(pe, "1 * /a/");
-        parse_err(pe, "\"a\" * 1");
-
-        parse_err(pe, "1 \\ /a/");
-        parse_err(pe, "\"a\" \\ 1");
-
-        parse_err(pe, "1 % 1.2");
-        parse_err(pe, "1.2 % 1");
-
-        parse_err(pe, "~1.2");
-        parse_err(pe, "-/a/");
-    }
-
-    #[test]
     fn test_type_integer_or_float() {
         parse(
             pe,

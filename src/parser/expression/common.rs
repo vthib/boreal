@@ -66,9 +66,5 @@ mod tests {
         parse_err(range, "(..)");
         parse_err(range, "(1..)");
         parse_err(range, "(..1)");
-
-        // FIXME: test types
-        // parse_err(range, "(1..\"a\")");
-        // parse_err(range, "(/a/ .. 1)");
     }
 }

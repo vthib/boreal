@@ -658,6 +658,39 @@ mod tests {
     }
 
     #[test]
+    fn test_primary_expression_types() {
+        test_validation_err("uint8(/a/)");
+
+        test_validation_err("1 | /a/");
+        test_validation_err("/a/ | 1");
+        test_validation_err("1 ^ /a/");
+        test_validation_err("/a/ ^ 1");
+        test_validation_err("1 & /a/");
+        test_validation_err("/a/ & 1");
+        test_validation_err("1.2 << 1");
+        test_validation_err("1 << 1.2");
+        test_validation_err("1.2 >> 1");
+        test_validation_err("1 >> 1.2");
+
+        test_validation_err("1 + /a/");
+        test_validation_err("\"a\" + 1");
+        test_validation_err("1 - /a/");
+        test_validation_err("\"a\" - 1");
+
+        test_validation_err("1 * /a/");
+        test_validation_err("\"a\" * 1");
+
+        test_validation_err("1 \\ /a/");
+        test_validation_err("\"a\" \\ 1");
+
+        test_validation_err("1 % 1.2");
+        test_validation_err("1.2 % 1");
+
+        test_validation_err("~1.2");
+        test_validation_err("-/a/");
+    }
+
+    #[test]
     fn test_expression_types() {
         test_validation_err("1 contains \"a\"");
         test_validation_err("\"a\" contains 1");
@@ -691,5 +724,13 @@ mod tests {
         test_validation_err("not 1");
 
         test_validation_err("$a at 1.2");
+
+        test_validation_err("$a in (1..\"a\")");
+        test_validation_err("$a in (/a/ .. 1)");
+
+        test_validation_err("!foo [ 1.2 ]");
+        test_validation_err("!foo[/a/]");
+        test_validation_err("#foo in (0../a/)");
+        test_validation_err("#foo in (1.2 .. 3)");
     }
 }

@@ -107,10 +107,6 @@ mod tests {
 
         parse_err(string_count_expression, "");
         parse_err(string_count_expression, "foo");
-
-        // FIXME: type check
-        // parse_err(string_count_expression, "#foo in (0../a/)");
-        // parse_err(string_count_expression, "#foo in (1.2 .. 3)");
     }
 
     #[test]
@@ -174,9 +170,5 @@ mod tests {
 
         parse_err(string_length_expression, "");
         parse_err(string_length_expression, "foo");
-
-        // FIXME: type check
-        // parse_err(string_length_expression, "!foo [ 1.2 ]");
-        // parse_err(string_length_expression, "!foo[/a/]");
     }
 }
