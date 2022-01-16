@@ -637,42 +637,4 @@ mod tests {
         parse_err(expression, "defined");
         parse_err(expression, "1 == ");
     }
-
-    #[test]
-    #[ignore]
-    fn test_types() {
-        parse_err(expression, "1 contains \"a\"");
-        parse_err(expression, "\"a\" contains 1");
-
-        parse_err(expression, "1 icontains \"a\"");
-        parse_err(expression, "\"a\" icontains 1");
-
-        parse_err(expression, "1 startswith \"a\"");
-        parse_err(expression, "\"a\" startswith 1");
-
-        parse_err(expression, "1 istartswith \"a\"");
-        parse_err(expression, "\"a\" istartswith 1");
-
-        parse_err(expression, "1 endswith \"a\"");
-        parse_err(expression, "\"a\" endswith 1");
-
-        parse_err(expression, "1 iendswith \"a\"");
-        parse_err(expression, "\"a\" iendswith 1");
-
-        parse_err(expression, "1 iequals \"a\"");
-        parse_err(expression, "\"a\" iequals 1");
-
-        parse_err(expression, "1 matches /a/");
-        parse_err(expression, "\"a\" matches 1");
-
-        parse_err(expression, "true and 1");
-        parse_err(expression, "1 and true");
-
-        parse_err(expression, "true or 1");
-        parse_err(expression, "1 or true");
-
-        parse_err(expression, "not 1");
-
-        parse_err(expression, "$a at 1.2");
-    }
 }

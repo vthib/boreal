@@ -15,7 +15,7 @@ use nom::{
     IResult,
 };
 
-use super::{expression, hex_string, nom_recipes::rtrim, number, string};
+use super::{hex_string, nom_recipes::rtrim, number, string};
 use crate::expression::Expression;
 use crate::regex::Regex;
 
