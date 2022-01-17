@@ -13,6 +13,7 @@ use nom::{
 };
 
 use super::nom_recipes::rtrim;
+use crate::hex_string::{HexString, HexToken, Jump, Mask};
 
 // TODO: handle this limit in some way
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
@@ -41,17 +42,6 @@ fn byte(input: &str) -> IResult<&str, u8> {
     map(cut(rtrim(hex_digit)), move |digit1| (digit0 << 4) | digit1)(input)
 }
 
-/// Mask on a byte.
-#[derive(Debug, PartialEq)]
-pub enum Mask {
-    /// The left part is masked, ie ?X
-    Left,
-    /// The right part is masked, ie X?
-    Right,
-    /// Both parts are masked, ie ??
-    All,
-}
-
 /// Parse a masked hex byte, ie X?, ?X or ??.
 ///
 /// Equivalent to the `_MASKED_BYTE_` lexical pattern in libyara.
@@ -75,28 +65,19 @@ fn singleline_comment(input: &str) -> IResult<&str, ()> {
     rtrim(value((), tuple((tag("//"), take_until("\n"), char('\n')))))(input)
 }
 
-/// A jump range, which can be expressed in multiple ways:
+/// Parse a jump range, which can be expressed in multiple ways:
 ///
 /// - `[a-b]` means between `a` and `b`, inclusive.
 /// - `[-b]` is equivalent to `[0-b]`.
 /// - `[a-]` means `a` or more.
 /// - `[-]` is equivalent to `[0-]`.
 /// - `[a]` is equivalent to `[a-a]`.
-#[derive(Debug, PartialEq)]
-pub struct Range {
-    /// Beginning of the range, included.
-    from: u32,
-    /// Optional end of the range, included.
-    to: Option<u32>,
-}
-
-/// Parse a range.
 ///
 /// This is equivalent to the range state in libyara.
-fn range(input: &str) -> IResult<&str, Range> {
+fn range(input: &str) -> IResult<&str, Jump> {
     let (input, _) = rtrim(char('['))(input)?;
 
-    let (input, range) = cut(terminated(
+    let (input, jump) = cut(terminated(
         alt((
             // Parses [a?-b?]
             map(
@@ -105,13 +86,13 @@ fn range(input: &str) -> IResult<&str, Range> {
                     rtrim(char('-')),
                     opt(map_res(rtrim(digit1), str::parse)),
                 ),
-                |(from, to)| Range {
+                |(from, to)| Jump {
                     from: from.unwrap_or(0),
                     to,
                 },
             ),
             // Parses [a]
-            map(map_res(rtrim(digit1), str::parse), |value| Range {
+            map(map_res(rtrim(digit1), str::parse), |value| Jump {
                 from: value,
                 to: Some(value),
             }),
@@ -119,18 +100,18 @@ fn range(input: &str) -> IResult<&str, Range> {
         rtrim(char(']')),
     ))(input)?;
 
-    if let Err(desc) = validate_range(&range) {
+    if let Err(desc) = validate_jump(&jump) {
         return Err(nom::Err::Failure(Error::from_external_error(
             input,
             ErrorKind::Verify,
             desc,
         )));
     }
-    Ok((input, range))
+    Ok((input, jump))
 }
 
-/// Validate a range is well-formed.
-fn validate_range(range: &Range) -> Result<(), String> {
+/// Validate that a jump is well-formed.
+fn validate_jump(range: &Jump) -> Result<(), String> {
     if let Some(to) = range.to {
         if range.from == 0 && to == 0 {
             return Err("invalid jump length".to_owned());
@@ -142,20 +123,6 @@ fn validate_range(range: &Range) -> Result<(), String> {
 
     Ok(())
 }
-
-/// A token in an hex string.
-#[derive(Debug, PartialEq)]
-pub enum HexToken {
-    /// A fully declared byte, eg `9C`
-    Byte(u8),
-    /// A masked byte, eg `?5`, `C?`, `??`
-    MaskedByte(u8, Mask),
-    /// A jump of unknown bytes, eg `[5-10]`, `[3-]`, ...
-    Jump(Range),
-    /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
-    Alternatives(Vec<HexToken>, Vec<HexToken>),
-}
-pub type HexString = Vec<HexToken>;
 
 /// Parse an alternative between two sets of tokens.
 ///
@@ -178,8 +145,8 @@ fn alternatives(input: &str) -> IResult<&str, HexToken> {
     ))(input)
 }
 
-fn validate_range_in_alternatives(range: &Range) -> Result<(), String> {
-    match range.to {
+fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), String> {
+    match jump.to {
         None => Err("unbounded jumps not allowed inside alternation (|)".to_owned()),
         Some(to) => {
             // No need to test from, as from <= to, if from is over the limit, to will be.
@@ -209,7 +176,7 @@ fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
         map_res(range, |range| {
             // Some jumps are forbidden inside an alternatives
             if in_alternatives {
-                if let Err(desc) = validate_range_in_alternatives(&range) {
+                if let Err(desc) = validate_jump_in_alternatives(&range) {
                     return Err(nom::Err::Failure(Error::from_external_error(
                         input,
                         ErrorKind::Verify,
@@ -246,12 +213,11 @@ pub fn hex_string(input: &str) -> IResult<&str, HexString> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_utils::{parse, parse_err};
+    use super::*;
+    use crate::parser::test_utils::{parse, parse_err};
 
     #[test]
     fn test_parse_hex_byte() {
-        use super::byte;
-
         parse(byte, "AF", "", 0xAF);
         parse(byte, "10F", "F", 0x10);
         parse(byte, "9E 1", "1", 0x9E);
@@ -264,8 +230,6 @@ mod tests {
 
     #[test]
     fn test_parse_masked_byte() {
-        use super::{masked_byte, Mask};
-
         parse(masked_byte, "?1", "", (1, Mask::Left));
         parse(masked_byte, "C??", "?", (0xC, Mask::Right));
         parse(masked_byte, "?? ", "", (0, Mask::All));
@@ -278,8 +242,6 @@ mod tests {
 
     #[test]
     fn test_multiline_comment() {
-        use super::multiline_comment;
-
         parse(multiline_comment, "/**/a", "a", ());
         parse(multiline_comment, "/* a\n */\n", "", ());
         parse(multiline_comment, "/*** a\n\n**//* a */c", "/* a */c", ());
@@ -295,8 +257,6 @@ mod tests {
 
     #[test]
     fn test_singleline_comment() {
-        use super::singleline_comment;
-
         parse(singleline_comment, "//\n", "", ());
         parse(singleline_comment, "// comment\n// 2", "// 2", ());
 
@@ -308,24 +268,22 @@ mod tests {
 
     #[test]
     fn test_range() {
-        use super::{range, Range};
-
-        parse(range, "[-] a", "a", Range { from: 0, to: None });
+        parse(range, "[-] a", "a", Jump { from: 0, to: None });
         parse(
             range,
             "[ 15 -35]",
             "",
-            Range {
+            Jump {
                 from: 15,
                 to: Some(35),
             },
         );
-        parse(range, "[1-  ]", "", Range { from: 1, to: None });
+        parse(range, "[1-  ]", "", Jump { from: 1, to: None });
         parse(
             range,
             "[1-2]]",
             "]",
-            Range {
+            Jump {
                 from: 1,
                 to: Some(2),
             },
@@ -334,7 +292,7 @@ mod tests {
             range,
             "[  1  -  2  ]",
             "",
-            Range {
+            Jump {
                 from: 1,
                 to: Some(2),
             },
@@ -343,7 +301,7 @@ mod tests {
             range,
             "[-1]",
             "",
-            Range {
+            Jump {
                 from: 0,
                 to: Some(1),
             },
@@ -352,7 +310,7 @@ mod tests {
             range,
             "[12 ]",
             "",
-            Range {
+            Jump {
                 from: 12,
                 to: Some(12),
             },
@@ -375,7 +333,7 @@ mod tests {
             range,
             "[4-4]",
             "",
-            Range {
+            Jump {
                 from: 4,
                 to: Some(4),
             },
@@ -386,7 +344,7 @@ mod tests {
             range,
             "[1]",
             "",
-            Range {
+            Jump {
                 from: 1,
                 to: Some(1),
             },
@@ -395,8 +353,6 @@ mod tests {
 
     #[test]
     fn test_alternatives() {
-        use super::{alternatives, HexToken, Mask, Range};
-
         parse(
             alternatives,
             "( AB | 56 ?F ) ",
@@ -413,12 +369,12 @@ mod tests {
             HexToken::Alternatives(
                 vec![
                     HexToken::Byte(0x12),
-                    HexToken::Jump(Range {
+                    HexToken::Jump(Jump {
                         from: 1,
                         to: Some(3),
                     }),
                 ],
-                vec![HexToken::Jump(Range {
+                vec![HexToken::Jump(Jump {
                     from: 3,
                     to: Some(5),
                 })],
@@ -430,7 +386,7 @@ mod tests {
             "",
             HexToken::Alternatives(
                 vec![HexToken::Alternatives(
-                    vec![HexToken::Jump(Range {
+                    vec![HexToken::Jump(Jump {
                         from: 1,
                         to: Some(5),
                     })],
@@ -457,8 +413,6 @@ mod tests {
 
     #[test]
     fn test_hex_string() {
-        use super::{hex_string, HexToken, Mask, Range};
-
         parse(hex_string, "{ AB }", "", vec![HexToken::Byte(0xAB)]);
 
         parse(
@@ -480,7 +434,7 @@ mod tests {
                 HexToken::Byte(1),
                 HexToken::MaskedByte(2, Mask::Left),
                 HexToken::MaskedByte(0, Mask::All),
-                HexToken::Jump(Range { from: 1, to: None }),
+                HexToken::Jump(Jump { from: 1, to: None }),
                 HexToken::Alternatives(vec![HexToken::Byte(0xAF)], vec![HexToken::Byte(0xDC)]),
             ],
         );

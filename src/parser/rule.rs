@@ -3,7 +3,6 @@
 //! Missing features:
 //!  - Xor range modifier on strings
 //!  - base64 alphabet modifier on strings
-use bitflags::bitflags;
 use nom::{
     branch::alt,
     character::complete::char,
@@ -20,32 +19,9 @@ use super::{
     nom_recipes::{rtrim, textual_tag as ttag},
     number, string,
 };
-use crate::expression::Expression;
-use crate::regex::Regex;
-
-/// A Yara rule.
-#[derive(Debug, PartialEq)]
-pub struct Rule {
-    /// Name of the rule.
-    name: String,
-
-    /// Tags associated with the rule
-    tags: Vec<String>,
-
-    /// Metadata associated with the rule.
-    metadatas: Vec<Metadata>,
-
-    /// Strings associated with the rule.
-    strings: Vec<StringDeclaration>,
-
-    /// Condition of the rule.
-    condition: Expression,
-
-    // Is the rule private.
-    is_private: bool,
-    // Is the rule global.
-    is_global: bool,
-}
+use crate::rule::StringDeclarationValue;
+use crate::rule::{Metadata, MetadataValue, Rule, StringFlags};
+use crate::{expression::Expression, rule::StringDeclaration};
 
 /// Parse a rule
 ///
@@ -106,23 +82,6 @@ fn tags(input: &str) -> IResult<&str, Vec<String>> {
     cut(many1(string::identifier))(input)
 }
 
-/// Value associated with a metadata key.
-#[derive(Debug, PartialEq)]
-enum MetadataValue {
-    String(String),
-    Number(i64),
-    Boolean(bool),
-}
-
-/// A metadata key-value, associated with a rule.
-#[derive(Debug, PartialEq)]
-struct Metadata {
-    /// Name of the metadata.
-    name: String,
-    /// Value of the metadata.
-    value: MetadataValue,
-}
-
 /// Parse the "meta:" section in a rule.
 ///
 /// Related to the `meta` and `meta_declarations` patterns
@@ -154,41 +113,6 @@ fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
         ),
         |(name, value)| Metadata { name, value },
     )(input)
-}
-
-bitflags! {
-    struct StringFlags: u32 {
-        const WIDE = 0b0000_0001;
-        const ASCII = 0b000_0010;
-        const NOCASE = 0b0000_0100;
-        const FULLWORD = 0b0000_1000;
-        const PRIVATE = 0b0001_0000;
-        const XOR = 0b0010_0000;
-        const BASE64 = 0b0100_0000;
-        const BASE64WIDE = 0b1000_0000;
-    }
-}
-
-/// Value for a string associated with a rule.
-#[derive(Debug, PartialEq)]
-enum StringDeclarationValue {
-    /// A raw string.
-    String(String),
-    /// A regular expression.
-    Regex(Regex),
-    /// A hex string.
-    HexString(hex_string::HexString),
-}
-
-/// String declared in a rule.
-#[derive(Debug, PartialEq)]
-struct StringDeclaration {
-    /// Name of the string.
-    name: String,
-    /// Value of the string.
-    value: StringDeclarationValue,
-    /// Modifiers for the string. This is a bitflags field.
-    modifiers: StringFlags,
 }
 
 /// Parse the "strings:" section
@@ -306,6 +230,9 @@ fn condition(input: &str) -> IResult<&str, Expression> {
 
 #[cfg(test)]
 mod tests {
+    use crate::hex_string::{HexToken, Mask};
+    use crate::regex::Regex;
+
     use super::super::test_utils::{parse, parse_err};
     use super::*;
 
@@ -431,9 +358,6 @@ mod tests {
 
     #[test]
     fn parse_strings() {
-        use super::super::hex_string::{HexToken, Mask};
-        use crate::regex::Regex;
-
         parse(
             strings,
             "strings : $a = \"b\td\" xor ascii \n  $b= /a?b/  $c= { ?B} private d",

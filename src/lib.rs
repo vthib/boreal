@@ -33,4 +33,6 @@
 pub mod parser;
 
 mod expression;
+mod hex_string;
 mod regex;
+mod rule;
