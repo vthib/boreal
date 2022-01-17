@@ -1,15 +1,11 @@
 //! Parse yara rules.
-//!
-//! Missing features:
-//!  - Xor range modifier on strings
-//!  - base64 alphabet modifier on strings
 use nom::{
     branch::alt,
     character::complete::char,
     combinator::{cut, map, map_res, opt},
     error::{Error, ErrorKind, FromExternalError},
     multi::many1,
-    sequence::{delimited, pair, preceded, separated_pair, tuple},
+    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     IResult,
 };
 
@@ -19,8 +15,9 @@ use super::{
     nom_recipes::{rtrim, textual_tag as ttag},
     number, string,
 };
-use crate::rule::StringDeclarationValue;
-use crate::rule::{Metadata, MetadataValue, Rule, StringFlags};
+use crate::rule::{
+    Metadata, MetadataValue, Rule, StringDeclarationValue, StringFlags, StringModifiers,
+};
 use crate::{expression::Expression, rule::StringDeclaration};
 
 /// Parse a rule
@@ -157,63 +154,176 @@ fn string_declaration(input: &str) -> IResult<&str, StringDeclaration> {
     )(input)
 }
 
-fn accumulate_modifiers<F>(parser: F, mut input: &str) -> IResult<&str, StringFlags>
-where
-    F: Fn(&str) -> IResult<&str, StringFlags>,
-{
-    let mut flags = StringFlags::empty();
-
-    while let Ok((i, flag)) = parser(input) {
-        if flags.contains(flag) {
-            return Err(nom::Err::Failure(Error::from_external_error(
-                input,
-                ErrorKind::Verify,
-                format!("flag {:?} duplicated", flag),
-            )));
-        }
-        input = i;
-        flags |= flag;
-    }
-    Ok((input, flags))
+/// A single parsed modifier
+#[derive(Debug, PartialEq)]
+enum Modifier {
+    // Must not use this enum value for the flags XOR and BASE64(WIDE).
+    // Instead, use the other enum values to ensure the associated data
+    // is properly set.
+    Flag(StringFlags),
+    Xor(u8, u8),
+    Base64(Option<[u8; 64]>),
+    Base64Wide(Option<[u8; 64]>),
 }
 
-fn string_modifiers(input: &str) -> IResult<&str, StringFlags> {
+fn accumulate_modifiers<F>(parser: F, mut input: &str) -> IResult<&str, StringModifiers>
+where
+    F: Fn(&str) -> IResult<&str, Modifier>,
+{
+    let mut modifiers = StringModifiers::default();
+
+    while let Ok((i, modifier)) = parser(input) {
+        match modifier {
+            Modifier::Flag(flag) => {
+                if modifiers.flags.contains(flag) {
+                    return Err(nom::Err::Failure(Error::from_external_error(
+                        input,
+                        ErrorKind::Verify,
+                        format!("flag {:?} duplicated", flag),
+                    )));
+                }
+                modifiers.flags |= flag;
+            }
+            Modifier::Xor(from, to) => {
+                modifiers.flags |= StringFlags::XOR;
+                modifiers.xor_range = (from, to);
+            }
+            Modifier::Base64(alphabet) => {
+                modifiers.flags |= StringFlags::BASE64;
+                modifiers.base64_alphabet = alphabet;
+            }
+            Modifier::Base64Wide(alphabet) => {
+                modifiers.flags |= StringFlags::BASE64WIDE;
+                modifiers.base64_alphabet = alphabet;
+            }
+        }
+        input = i;
+    }
+    Ok((input, modifiers))
+}
+
+fn string_modifiers(input: &str) -> IResult<&str, StringModifiers> {
     accumulate_modifiers(string_modifier, input)
 }
 
-fn regex_modifiers(input: &str) -> IResult<&str, StringFlags> {
+fn regex_modifiers(input: &str) -> IResult<&str, StringModifiers> {
     accumulate_modifiers(regex_modifier, input)
 }
 
-fn hex_string_modifiers(input: &str) -> IResult<&str, StringFlags> {
+fn hex_string_modifiers(input: &str) -> IResult<&str, StringModifiers> {
     accumulate_modifiers(hex_string_modifier, input)
 }
 
-fn string_modifier(input: &str) -> IResult<&str, StringFlags> {
+fn string_modifier(input: &str) -> IResult<&str, Modifier> {
     rtrim(alt((
-        map(ttag("wide"), |_| StringFlags::WIDE),
-        map(ttag("ascii"), |_| StringFlags::ASCII),
-        map(ttag("nocase"), |_| StringFlags::NOCASE),
-        map(ttag("fullword"), |_| StringFlags::FULLWORD),
-        map(ttag("private"), |_| StringFlags::PRIVATE),
-        map(ttag("xor"), |_| StringFlags::XOR),
-        map(ttag("base64"), |_| StringFlags::BASE64),
-        map(ttag("base64wide"), |_| StringFlags::BASE64WIDE),
+        map(ttag("wide"), |_| Modifier::Flag(StringFlags::WIDE)),
+        map(ttag("ascii"), |_| Modifier::Flag(StringFlags::ASCII)),
+        map(ttag("nocase"), |_| Modifier::Flag(StringFlags::NOCASE)),
+        map(ttag("fullword"), |_| Modifier::Flag(StringFlags::FULLWORD)),
+        map(ttag("private"), |_| Modifier::Flag(StringFlags::PRIVATE)),
+        xor_modifier,
+        base64_modifier,
     )))(input)
 }
 
-fn regex_modifier(input: &str) -> IResult<&str, StringFlags> {
+fn regex_modifier(input: &str) -> IResult<&str, Modifier> {
     rtrim(alt((
-        map(ttag("wide"), |_| StringFlags::WIDE),
-        map(ttag("ascii"), |_| StringFlags::ASCII),
-        map(ttag("nocase"), |_| StringFlags::NOCASE),
-        map(ttag("fullword"), |_| StringFlags::FULLWORD),
-        map(ttag("private"), |_| StringFlags::PRIVATE),
+        map(ttag("wide"), |_| Modifier::Flag(StringFlags::WIDE)),
+        map(ttag("ascii"), |_| Modifier::Flag(StringFlags::ASCII)),
+        map(ttag("nocase"), |_| Modifier::Flag(StringFlags::NOCASE)),
+        map(ttag("fullword"), |_| Modifier::Flag(StringFlags::FULLWORD)),
+        map(ttag("private"), |_| Modifier::Flag(StringFlags::PRIVATE)),
     )))(input)
 }
 
-fn hex_string_modifier(input: &str) -> IResult<&str, StringFlags> {
-    map(rtrim(ttag("private")), |_| StringFlags::PRIVATE)(input)
+fn hex_string_modifier(input: &str) -> IResult<&str, Modifier> {
+    map(rtrim(ttag("private")), |_| {
+        Modifier::Flag(StringFlags::PRIVATE)
+    })(input)
+}
+
+/// Parse a XOR modifier, ie:
+/// - `'xor'`
+/// - `'xor' '(' number ')'`
+/// - `'xor' '(' number '-' number ')'`
+fn xor_modifier(input: &str) -> IResult<&str, Modifier> {
+    let (input, _) = rtrim(ttag("xor"))(input)?;
+
+    let (input, open_paren) = opt(rtrim(char('(')))(input)?;
+    if open_paren.is_none() {
+        return Ok((input, Modifier::Xor(0, 255)));
+    }
+
+    let (input, from) = cut(number::number)(input)?;
+    let from = number_to_u8(input, from)?;
+
+    let (input, to) = cut(terminated(
+        opt(preceded(rtrim(char('-')), number::number)),
+        rtrim(char(')')),
+    ))(input)?;
+
+    let res = match to {
+        Some(to) => {
+            let to = number_to_u8(input, to)?;
+            if to < from {
+                return Err(nom::Err::Failure(Error::from_external_error(
+                    input,
+                    ErrorKind::Verify,
+                    format!("invalid xor range, {} > {}", from, to),
+                )));
+            }
+            Modifier::Xor(from, to)
+        }
+        None => Modifier::Xor(from, from),
+    };
+    Ok((input, res))
+}
+
+/// Parse a base64 modifier, ie:
+/// - `'base64(wide)'`
+/// - `'base64(wide)' '(' string ')'`
+fn base64_modifier(input: &str) -> IResult<&str, Modifier> {
+    let (input, is_wide) = rtrim(alt((
+        map(ttag("base64"), |_| false),
+        map(ttag("base64wide"), |_| true),
+    )))(input)?;
+
+    let (mut input, open_paren) = opt(rtrim(char('(')))(input)?;
+
+    let mut alphabet: Option<[u8; 64]> = None;
+    if open_paren.is_some() {
+        let res = cut(terminated(string::quoted, rtrim(char(')'))))(input)?;
+        match res.1.as_bytes().try_into() {
+            Ok(v) => alphabet = Some(v),
+            Err(_) => {
+                return Err(nom::Err::Failure(Error::from_external_error(
+                    input,
+                    ErrorKind::Verify,
+                    "base64 alphabet must contain 64 characters",
+                )));
+            }
+        };
+        input = res.0;
+    }
+
+    Ok((
+        input,
+        if is_wide {
+            Modifier::Base64Wide(alphabet)
+        } else {
+            Modifier::Base64(alphabet)
+        },
+    ))
+}
+
+fn number_to_u8(input: &str, value: i64) -> Result<u8, nom::Err<Error<&str>>> {
+    u8::try_from(value).map_err(|_| {
+        nom::Err::Failure(Error::from_external_error(
+            input,
+            ErrorKind::Verify,
+            format!("invalid value in xor range: {}, must be in [0-255]", value),
+        ))
+    })
 }
 
 /// Parse a condition
@@ -308,32 +418,68 @@ mod tests {
             string_modifiers,
             "private wide ascii xor base64wide nocase fullword base64 Xor",
             "Xor",
-            StringFlags::PRIVATE
-                | StringFlags::WIDE
-                | StringFlags::ASCII
-                | StringFlags::XOR
-                | StringFlags::BASE64WIDE
-                | StringFlags::NOCASE
-                | StringFlags::FULLWORD
-                | StringFlags::BASE64,
+            StringModifiers {
+                flags: StringFlags::PRIVATE
+                    | StringFlags::WIDE
+                    | StringFlags::ASCII
+                    | StringFlags::XOR
+                    | StringFlags::BASE64WIDE
+                    | StringFlags::NOCASE
+                    | StringFlags::FULLWORD
+                    | StringFlags::BASE64,
+                xor_range: (0, 255),
+                base64_alphabet: None,
+            },
+        );
+
+        let alphabet = "!@#$%^&*(){}[].,|ABCDEFGHIJ\x09LMNOPQRSTUVWXYZabcdefghijklmnopqrstu";
+        let alphabet_array: [u8; 64] = alphabet.as_bytes().try_into().unwrap();
+        parse(
+            string_modifiers,
+            &format!("xor ( 15 ) base64( \"{}\" )", alphabet),
+            "",
+            StringModifiers {
+                flags: StringFlags::XOR | StringFlags::BASE64,
+                xor_range: (15, 15),
+                base64_alphabet: Some(alphabet_array),
+            },
+        );
+        parse(
+            string_modifiers,
+            &format!(
+                "base64wide ( \"{}\" ) xor(15 ) xor (50 - 120) private",
+                alphabet
+            ),
+            "",
+            StringModifiers {
+                flags: StringFlags::XOR | StringFlags::BASE64WIDE | StringFlags::PRIVATE,
+                xor_range: (50, 120),
+                base64_alphabet: Some(alphabet_array),
+            },
         );
 
         parse(
             regex_modifiers,
             "private wide ascii nocase fullword base64",
             "base64",
-            StringFlags::PRIVATE
-                | StringFlags::WIDE
-                | StringFlags::ASCII
-                | StringFlags::NOCASE
-                | StringFlags::FULLWORD,
+            StringModifiers {
+                flags: StringFlags::PRIVATE
+                    | StringFlags::WIDE
+                    | StringFlags::ASCII
+                    | StringFlags::NOCASE
+                    | StringFlags::FULLWORD,
+                ..StringModifiers::default()
+            },
         );
 
         parse(
             hex_string_modifiers,
             "private wide",
             "wide",
-            StringFlags::PRIVATE,
+            StringModifiers {
+                flags: StringFlags::PRIVATE,
+                ..StringModifiers::default()
+            },
         );
 
         parse_err(string_modifier, "");
@@ -366,7 +512,11 @@ mod tests {
                 StringDeclaration {
                     name: "a".to_owned(),
                     value: StringDeclarationValue::String("b\td".to_owned()),
-                    modifiers: StringFlags::XOR | StringFlags::ASCII,
+                    modifiers: StringModifiers {
+                        flags: StringFlags::XOR | StringFlags::ASCII,
+                        xor_range: (0, 255),
+                        ..StringModifiers::default()
+                    },
                 },
                 StringDeclaration {
                     name: "b".to_owned(),
@@ -375,7 +525,10 @@ mod tests {
                         case_insensitive: false,
                         dot_all: false,
                     }),
-                    modifiers: StringFlags::empty(),
+                    modifiers: StringModifiers {
+                        flags: StringFlags::empty(),
+                        ..StringModifiers::default()
+                    },
                 },
                 StringDeclaration {
                     name: "c".to_owned(),
@@ -383,7 +536,10 @@ mod tests {
                         0x0B,
                         Mask::Left,
                     )]),
-                    modifiers: StringFlags::PRIVATE,
+                    modifiers: StringModifiers {
+                        flags: StringFlags::PRIVATE,
+                        ..StringModifiers::default()
+                    },
                 },
             ],
         );
@@ -423,7 +579,7 @@ mod tests {
                     StringDeclaration {
                         name: "b".to_owned(),
                         value: StringDeclarationValue::String("t".to_owned()),
-                        modifiers: StringFlags::empty()
+                        modifiers: StringModifiers { flags: StringFlags::empty(), ..StringModifiers::default() }
                     }
                 ],
                 condition: Expression::Boolean(false),
@@ -513,5 +669,57 @@ mod tests {
         parse_err(regex_modifier, "privatexor");
 
         parse_err(hex_string_modifier, "privatexor");
+    }
+
+    #[test]
+    fn parse_xor_modifier() {
+        parse(xor_modifier, "xor a", "a", Modifier::Xor(0, 255));
+        parse(xor_modifier, "xor(23)", "", Modifier::Xor(23, 23));
+        parse(xor_modifier, "xor ( 12 -15 )b", "b", Modifier::Xor(12, 15));
+
+        parse_err(xor_modifier, "");
+        parse_err(xor_modifier, "xora");
+        parse_err(xor_modifier, "xor(");
+        parse_err(xor_modifier, "xor(13");
+        parse_err(xor_modifier, "xor()");
+        parse_err(xor_modifier, "xor(-1)");
+        parse_err(xor_modifier, "xor(256)");
+        parse_err(xor_modifier, "xor(50-4)");
+        parse_err(xor_modifier, "xor(0-256)");
+    }
+
+    #[test]
+    fn parse_base64_modifier() {
+        let alphabet = "!@#$%^&*(){}[].,|ABCDEFGHIJ\x09LMNOPQRSTUVWXYZabcdefghijklmnopqrstu";
+        let alphabet_array: [u8; 64] = alphabet.as_bytes().try_into().unwrap();
+
+        parse(base64_modifier, "base64 a", "a", Modifier::Base64(None));
+        parse(
+            base64_modifier,
+            "base64wide a",
+            "a",
+            Modifier::Base64Wide(None),
+        );
+        parse(
+            base64_modifier,
+            &format!(r#"base64("{}")"#, alphabet),
+            "",
+            Modifier::Base64(Some(alphabet_array)),
+        );
+        parse(
+            base64_modifier,
+            &format!(r#"base64wide ( "{}")b"#, alphabet),
+            "b",
+            Modifier::Base64Wide(Some(alphabet_array)),
+        );
+
+        parse_err(base64_modifier, "");
+        parse_err(base64_modifier, "base64a");
+        parse_err(base64_modifier, "base64widea");
+        parse_err(base64_modifier, "base64a(");
+        parse_err(base64_modifier, "base64widea(");
+        parse_err(base64_modifier, &format!(r#"base64("{}""#, alphabet));
+        parse_err(base64_modifier, "base64(\"123\")");
+        parse_err(base64_modifier, "base64wide(15)");
     }
 }

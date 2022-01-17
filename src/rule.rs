@@ -46,6 +46,7 @@ pub struct Metadata {
 }
 
 bitflags! {
+    #[derive(Default)]
     pub struct StringFlags: u32 {
         const WIDE = 0b0000_0001;
         const ASCII = 0b000_0010;
@@ -69,6 +70,22 @@ pub enum StringDeclarationValue {
     HexString(HexString),
 }
 
+/// Modifiers applicable on a string.
+#[derive(Default, Debug, PartialEq)]
+pub struct StringModifiers {
+    /// Bitflags of possibles flags modifying the string.
+    pub flags: StringFlags,
+    /// Xor range.
+    ///
+    /// This is only applicable if `flags` contains [`StringFlags::Xor`].
+    pub xor_range: (u8, u8),
+    /// Base64 alphabet.
+    ///
+    /// This is only applicable if `flags` contains [`StringFlags::Base64`]
+    /// or [`StringFlags::Base64Wide`].
+    pub base64_alphabet: Option<[u8; 64]>,
+}
+
 /// String declared in a rule.
 #[derive(Debug, PartialEq)]
 pub struct StringDeclaration {
@@ -76,6 +93,6 @@ pub struct StringDeclaration {
     pub name: String,
     /// Value of the string.
     pub value: StringDeclarationValue,
-    /// Modifiers for the string. This is a bitflags field.
-    pub modifiers: StringFlags,
+    /// Modifiers for the string.
+    pub modifiers: StringModifiers,
 }

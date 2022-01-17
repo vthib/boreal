@@ -20,9 +20,6 @@
 //!   parser:
 //!     [ ] all
 //!
-//! Not handled:
-//! [ ] string modifiers xor range and base64 alphabet.
-//!
 //! TODO:
 //! [ ] check error reporting
 //! [ ] replace `from_external_error` with a custom err: the desc is dropped
