@@ -2,15 +2,10 @@
 
 use nom::{
     character::complete::multispace0,
-    error::{Error, ParseError},
+    error::{Error, ErrorKind, ParseError},
     sequence::terminated,
     IResult,
 };
-
-// TODO: have a "tag" equivalent, that enforces that the following character
-// is not alnum.
-// For example, string modifiers should be split by whitespace, but shouldn't
-// force a trailing whitespace.
 
 /// Right trim after the given parser.
 pub fn rtrim<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
@@ -28,6 +23,31 @@ where
     move |input| match input.chars().next().map(|c| (c, f(c))) {
         Some((c, true)) => Ok((&input[c.len_utf8()..], c)),
         _ => Err(nom::Err::Error(Error::from_char(input, '0'))),
+    }
+}
+
+/// Recognize a textual tag.
+///
+/// This is the same as [`nom::bytes::complete::tag`], but ensures the
+/// following character is not alphanumeric.
+/// This avoids recognizing a tag inside a word, for example, recognizing
+/// `foo` in `foobar`.
+pub fn textual_tag(tag: &'static str) -> impl Fn(&str) -> IResult<&str, &'static str> {
+    move |input: &str| {
+        if let Some(input) = input.strip_prefix(tag) {
+            match input.chars().next() {
+                Some(c) if c.is_alphanumeric() => Err(nom::Err::Error(Error::from_error_kind(
+                    input,
+                    ErrorKind::Tag,
+                ))),
+                _ => Ok((input, tag)),
+            }
+        } else {
+            Err(nom::Err::Error(Error::from_error_kind(
+                input,
+                ErrorKind::Tag,
+            )))
+        }
     }
 }
 

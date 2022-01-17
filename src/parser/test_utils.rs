@@ -20,3 +20,14 @@ where
     let res = f(input).finish();
     assert!(res.is_err());
 }
+
+#[track_caller]
+pub fn parse_check<F, O, C>(f: F, input: &str, check: C)
+where
+    F: FnOnce(&str) -> nom::IResult<&str, O>,
+    O: PartialEq + std::fmt::Debug,
+    C: FnOnce(O),
+{
+    let res = f(input).finish();
+    check(res.unwrap().1);
+}

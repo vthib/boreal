@@ -10,7 +10,7 @@ use nom::{
     IResult,
 };
 
-use super::nom_recipes::rtrim;
+use super::nom_recipes::{rtrim, textual_tag as ttag};
 
 /// Parse a decimal number.
 ///
@@ -19,7 +19,7 @@ fn decimal_number(input: &str) -> IResult<&str, i64> {
     map_res(
         rtrim(pair(
             map_res(digit1, str::parse::<i64>),
-            opt(alt((tag("MB"), tag("KB")))),
+            opt(alt((ttag("MB"), ttag("KB")))),
         )),
         |(n, suffix)| match suffix {
             Some("MB") => n.checked_mul(1024 * 1024).ok_or(()),
@@ -72,12 +72,11 @@ pub fn double(input: &str) -> IResult<&str, f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_utils::{parse, parse_err};
+    use super::*;
+    use crate::parser::test_utils::{parse, parse_err};
 
     #[test]
     fn test_parse_number() {
-        use super::number;
-
         parse(number, "0x2", "", 2);
         parse(number, "0x10", "", 16);
         parse(number, "0xfFaAbBcCdDeE5", "", 0xf_faab_bccd_dee5_i64);
@@ -115,10 +114,20 @@ mod tests {
 
     #[test]
     fn test_parse_double() {
-        use super::double;
-
         parse(double, "3.4", "", 3.4);
         parse(double, "015.340b", "b", 15.34);
         parse_err(double, "a");
+    }
+
+    #[test]
+    fn test_textual_tags() {
+        // Parse two numbers consecutively, to detect
+        // invalid acceptance of non textual "tag".
+        fn f(input: &str) -> IResult<&str, (i64, i64)> {
+            pair(number, number)(input)
+        }
+
+        parse_err(f, "1MB2");
+        parse_err(f, "1KB2");
     }
 }

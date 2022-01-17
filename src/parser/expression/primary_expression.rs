@@ -10,7 +10,10 @@ use nom::{
     IResult,
 };
 
-use super::super::{nom_recipes::rtrim, number, string};
+use super::super::{
+    nom_recipes::{rtrim, textual_tag as ttag},
+    number, string,
+};
 use super::{identifier, read_integer, string_expression, Expression, ParsedExpr};
 
 /// parse | operator
@@ -149,11 +152,11 @@ fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
             cut(rtrim(char(')'))),
         ),
         // 'filesize'
-        map(rtrim(tag("filesize")), |_| ParsedExpr {
+        map(rtrim(ttag("filesize")), |_| ParsedExpr {
             expr: Expression::Filesize,
         }),
         // 'entrypoint'
-        map(rtrim(tag("entrypoint")), |_| ParsedExpr {
+        map(rtrim(ttag("entrypoint")), |_| ParsedExpr {
             expr: Expression::Entrypoint,
         }),
         // read_integer '(' primary_expresion ')'
@@ -193,7 +196,7 @@ mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression as Expr, ParsedExpr};
     use crate::expression::ReadIntegerSize;
-    use crate::parser::test_utils::{parse, parse_err};
+    use crate::parser::test_utils::{parse, parse_check, parse_err};
 
     #[test]
     #[allow(clippy::too_many_lines)]
@@ -783,5 +786,21 @@ mod tests {
                 })),
             },
         );
+    }
+
+    #[test]
+    fn test_textual_tag() {
+        parse_check(pe, "filesizea", |e| {
+            assert_eq!(
+                e.expr,
+                Expr::Identifier(Identifier::Raw("filesizea".to_owned()))
+            );
+        });
+        parse_check(pe, "entrypointa", |e| {
+            assert_eq!(
+                e.expr,
+                Expr::Identifier(Identifier::Raw("entrypointa".to_owned()))
+            );
+        });
     }
 }

@@ -6,7 +6,6 @@
 use bitflags::bitflags;
 use nom::{
     branch::alt,
-    bytes::complete::tag,
     character::complete::char,
     combinator::{cut, map, map_res, opt},
     error::{Error, ErrorKind, FromExternalError},
@@ -18,7 +17,7 @@ use nom::{
 use super::{
     expression::{self, ParsedExpr},
     hex_string,
-    nom_recipes::rtrim,
+    nom_recipes::{rtrim, textual_tag as ttag},
     number, string,
 };
 use crate::expression::Expression;
@@ -56,16 +55,16 @@ pub fn rule(mut input: &str) -> IResult<&str, Rule> {
     let mut is_global = false;
 
     loop {
-        match rtrim(tag("rule"))(input) {
+        match rtrim(ttag("rule"))(input) {
             Ok((i, _)) => {
                 input = i;
                 break;
             }
             Err(e) => {
-                if let Ok((i, _)) = rtrim(tag("private"))(input) {
+                if let Ok((i, _)) = rtrim(ttag("private"))(input) {
                     input = i;
                     is_private = true;
-                } else if let Ok((i, _)) = rtrim(tag("global"))(input) {
+                } else if let Ok((i, _)) = rtrim(ttag("global"))(input) {
                     input = i;
                     is_global = true;
                 } else {
@@ -130,7 +129,7 @@ struct Metadata {
 /// in `grammar.y` in libyara.
 fn meta(input: &str) -> IResult<&str, Vec<Metadata>> {
     preceded(
-        pair(rtrim(tag("meta")), rtrim(char(':'))),
+        pair(rtrim(ttag("meta")), rtrim(char(':'))),
         cut(many1(meta_declaration)),
     )(input)
 }
@@ -149,8 +148,8 @@ fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
                 map(preceded(rtrim(char('-')), number::number), |v| {
                     MetadataValue::Number(-v)
                 }),
-                map(rtrim(tag("true")), |_| MetadataValue::Boolean(true)),
-                map(rtrim(tag("false")), |_| MetadataValue::Boolean(false)),
+                map(rtrim(ttag("true")), |_| MetadataValue::Boolean(true)),
+                map(rtrim(ttag("false")), |_| MetadataValue::Boolean(false)),
             )),
         ),
         |(name, value)| Metadata { name, value },
@@ -198,7 +197,7 @@ struct StringDeclaration {
 /// in `grammar.y` in libyara.
 fn strings(input: &str) -> IResult<&str, Vec<StringDeclaration>> {
     preceded(
-        pair(rtrim(tag("strings")), rtrim(char(':'))),
+        pair(rtrim(ttag("strings")), rtrim(char(':'))),
         cut(many1(string_declaration)),
     )(input)
 }
@@ -268,36 +267,36 @@ fn hex_string_modifiers(input: &str) -> IResult<&str, StringFlags> {
 
 fn string_modifier(input: &str) -> IResult<&str, StringFlags> {
     rtrim(alt((
-        map(tag("base64wide"), |_| StringFlags::BASE64WIDE),
-        map(tag("wide"), |_| StringFlags::WIDE),
-        map(tag("ascii"), |_| StringFlags::ASCII),
-        map(tag("nocase"), |_| StringFlags::NOCASE),
-        map(tag("fullword"), |_| StringFlags::FULLWORD),
-        map(tag("private"), |_| StringFlags::PRIVATE),
-        map(tag("xor"), |_| StringFlags::XOR),
-        map(tag("base64"), |_| StringFlags::BASE64),
+        map(ttag("wide"), |_| StringFlags::WIDE),
+        map(ttag("ascii"), |_| StringFlags::ASCII),
+        map(ttag("nocase"), |_| StringFlags::NOCASE),
+        map(ttag("fullword"), |_| StringFlags::FULLWORD),
+        map(ttag("private"), |_| StringFlags::PRIVATE),
+        map(ttag("xor"), |_| StringFlags::XOR),
+        map(ttag("base64"), |_| StringFlags::BASE64),
+        map(ttag("base64wide"), |_| StringFlags::BASE64WIDE),
     )))(input)
 }
 
 fn regex_modifier(input: &str) -> IResult<&str, StringFlags> {
     rtrim(alt((
-        map(tag("wide"), |_| StringFlags::WIDE),
-        map(tag("ascii"), |_| StringFlags::ASCII),
-        map(tag("nocase"), |_| StringFlags::NOCASE),
-        map(tag("fullword"), |_| StringFlags::FULLWORD),
-        map(tag("private"), |_| StringFlags::PRIVATE),
+        map(ttag("wide"), |_| StringFlags::WIDE),
+        map(ttag("ascii"), |_| StringFlags::ASCII),
+        map(ttag("nocase"), |_| StringFlags::NOCASE),
+        map(ttag("fullword"), |_| StringFlags::FULLWORD),
+        map(ttag("private"), |_| StringFlags::PRIVATE),
     )))(input)
 }
 
 fn hex_string_modifier(input: &str) -> IResult<&str, StringFlags> {
-    map(rtrim(tag("private")), |_| StringFlags::PRIVATE)(input)
+    map(rtrim(ttag("private")), |_| StringFlags::PRIVATE)(input)
 }
 
 /// Parse a condition
 ///
 /// Related to the `condition` pattern in `grammar.y` in libyara.
 fn condition(input: &str) -> IResult<&str, Expression> {
-    let (input, _) = rtrim(tag("condition"))(input)?;
+    let (input, _) = rtrim(ttag("condition"))(input)?;
 
     map_res(
         cut(preceded(rtrim(char(':')), expression::expression)),
@@ -562,5 +561,33 @@ mod tests {
             "rule c { strings: $a = /a/ meta: a = 3 condition: true }",
         );
         parse_err(rule, "rule d { condition: true");
+    }
+
+    // Test that we use textual tags
+    #[test]
+    fn test_tags() {
+        parse_err(rule, "rulea{condition:true}");
+        parse_err(rule, "privaterule a{condition:true}");
+        parse_err(rule, "globalrule a{condition:true}");
+
+        parse_err(meta, "meta: a=trueb=false");
+        parse_err(meta, "meta: a=falseb=true");
+
+        parse_err(string_modifier, "widexor");
+        parse_err(string_modifier, "asciixor");
+        parse_err(string_modifier, "nocasexor");
+        parse_err(string_modifier, "fullwordxor");
+        parse_err(string_modifier, "privatexor");
+        parse_err(string_modifier, "xorwide");
+        parse_err(string_modifier, "base64xor");
+        parse_err(string_modifier, "base64widexor");
+
+        parse_err(regex_modifier, "widexor");
+        parse_err(regex_modifier, "asciixor");
+        parse_err(regex_modifier, "nocasexor");
+        parse_err(regex_modifier, "fullwordxor");
+        parse_err(regex_modifier, "privatexor");
+
+        parse_err(hex_string_modifier, "privatexor");
     }
 }

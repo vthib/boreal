@@ -11,7 +11,7 @@ use nom::{
 };
 
 use super::super::{
-    nom_recipes::rtrim,
+    nom_recipes::{rtrim, textual_tag as ttag},
     string::{regex, string_identifier},
 };
 use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
@@ -20,7 +20,7 @@ use super::{common::range, primary_expression::primary_expression, Expression, P
 pub fn expression(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = expression_and(input)?;
 
-    while let Ok((i, _)) = rtrim(tag("or"))(input) {
+    while let Ok((i, _)) = rtrim(ttag("or"))(input) {
         let (i2, right_elem) = cut(expression_and)(i)?;
         input = i2;
         res = ParsedExpr {
@@ -34,7 +34,7 @@ pub fn expression(input: &str) -> IResult<&str, ParsedExpr> {
 fn expression_and(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = expression_not(input)?;
 
-    while let Ok((i, _)) = rtrim(tag("and"))(input) {
+    while let Ok((i, _)) = rtrim(ttag("and"))(input) {
         let (i2, right_elem) = cut(expression_not)(i)?;
         input = i2;
         res = ParsedExpr {
@@ -46,7 +46,7 @@ fn expression_and(input: &str) -> IResult<&str, ParsedExpr> {
 
 /// parse not operator
 fn expression_not(input: &str) -> IResult<&str, ParsedExpr> {
-    let (input, not) = opt(rtrim(tag("not")))(input)?;
+    let (input, not) = opt(rtrim(ttag("not")))(input)?;
 
     if not.is_some() {
         let (input, expr) = cut(expression_defined)(input)?;
@@ -63,7 +63,7 @@ fn expression_not(input: &str) -> IResult<&str, ParsedExpr> {
 
 /// parse defined operator
 fn expression_defined(input: &str) -> IResult<&str, ParsedExpr> {
-    let (input, defined) = opt(rtrim(tag("defined")))(input)?;
+    let (input, defined) = opt(rtrim(ttag("defined")))(input)?;
 
     if defined.is_some() {
         let (input, expr) = cut(expression_item)(input)?;
@@ -84,11 +84,11 @@ fn expression_defined(input: &str) -> IResult<&str, ParsedExpr> {
 fn expression_item(input: &str) -> IResult<&str, ParsedExpr> {
     alt((
         // 'true'
-        map(rtrim(tag("true")), |_| ParsedExpr {
+        map(rtrim(ttag("true")), |_| ParsedExpr {
             expr: Expression::Boolean(true),
         }),
         // 'false'
-        map(rtrim(tag("false")), |_| ParsedExpr {
+        map(rtrim(ttag("false")), |_| ParsedExpr {
             expr: Expression::Boolean(false),
         }),
         // '(' expression ')'
@@ -106,16 +106,16 @@ fn primary_expression_eq_all(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_cmp(input)?;
 
     while let Ok((i, op)) = rtrim(alt((
-        tag("=="),
-        tag("!="),
-        tag("contains"),
-        tag("icontains"),
-        tag("startswith"),
-        tag("istartswith"),
-        tag("endswith"),
-        tag("iendswith"),
-        tag("iequals"),
-        tag("matches"),
+        ttag("=="),
+        ttag("!="),
+        ttag("contains"),
+        ttag("icontains"),
+        ttag("startswith"),
+        ttag("istartswith"),
+        ttag("endswith"),
+        ttag("iendswith"),
+        ttag("iequals"),
+        ttag("matches"),
     )))(input)
     {
         if op == "matches" {
@@ -186,7 +186,7 @@ fn variable_expression(input: &str) -> IResult<&str, ParsedExpr> {
     let (input, variable) = string_identifier(input)?;
 
     // string_identifier 'at' primary_expression
-    if let Ok((input, expr)) = preceded(rtrim(tag("at")), primary_expression)(input) {
+    if let Ok((input, expr)) = preceded(rtrim(ttag("at")), primary_expression)(input) {
         Ok((
             input,
             ParsedExpr {
@@ -215,7 +215,10 @@ fn variable_expression(input: &str) -> IResult<&str, ParsedExpr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::test_utils::{parse, parse_err};
+    use crate::parser::{
+        expression::Identifier,
+        test_utils::{parse, parse_check, parse_err},
+    };
 
     #[track_caller]
     fn test_precedence<F, F2>(
@@ -636,5 +639,47 @@ mod tests {
         parse_err(expression, "not");
         parse_err(expression, "defined");
         parse_err(expression, "1 == ");
+    }
+
+    #[test]
+    fn test_textual_tag() {
+        // Not parsed as "1 or a", but as "1" with trailing "ora", which
+        // makes the parsing of ( expr ) fail.
+        parse_err(expression, "(1ora)");
+        parse_err(expression, "(1anda)");
+        parse_check(expression, "nota", |e| {
+            assert_eq!(
+                e.expr,
+                Expression::Identifier(Identifier::Raw("nota".to_owned()))
+            );
+        });
+        parse_check(expression, "defineda", |e| {
+            assert_eq!(
+                e.expr,
+                Expression::Identifier(Identifier::Raw("defineda".to_owned()))
+            );
+        });
+        parse_check(expression, "truea", |e| {
+            assert_eq!(
+                e.expr,
+                Expression::Identifier(Identifier::Raw("truea".to_owned()))
+            );
+        });
+        parse_check(expression, "falsea", |e| {
+            assert_eq!(
+                e.expr,
+                Expression::Identifier(Identifier::Raw("falsea".to_owned()))
+            );
+        });
+
+        parse_err(expression, "(a containsb)");
+        parse_err(expression, "(a icontainsb)");
+        parse_err(expression, "(a startswitha)");
+        parse_err(expression, "(a istartswitha)");
+        parse_err(expression, "(a endswitha)");
+        parse_err(expression, "(a iendswitha)");
+        parse_err(expression, "(a iequalsa)");
+
+        parse_err(expression, "($a atb)");
     }
 }
