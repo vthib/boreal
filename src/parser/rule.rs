@@ -16,9 +16,9 @@ use super::{
     number, string,
 };
 use crate::rule::{
-    Metadata, MetadataValue, Rule, StringDeclarationValue, StringFlags, StringModifiers,
+    Metadata, MetadataValue, Rule, VariableDeclarationValue, VariableFlags, VariableModifiers,
 };
-use crate::{expression::Expression, rule::StringDeclaration};
+use crate::{expression::Expression, rule::VariableDeclaration};
 
 /// Parse a rule
 ///
@@ -61,7 +61,7 @@ pub fn rule(mut input: &str) -> IResult<&str, Rule> {
             name,
             tags: tags.unwrap_or_else(Vec::new),
             metadatas: meta.unwrap_or_else(Vec::new),
-            strings: strings.unwrap_or_else(Vec::new),
+            variables: strings.unwrap_or_else(Vec::new),
             condition,
             is_private,
             is_global,
@@ -116,7 +116,7 @@ fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
 ///
 /// Related to the `strings` and `strings_declarations` pattern
 /// in `grammar.y` in libyara.
-fn strings(input: &str) -> IResult<&str, Vec<StringDeclaration>> {
+fn strings(input: &str) -> IResult<&str, Vec<VariableDeclaration>> {
     preceded(
         pair(rtrim(ttag("strings")), rtrim(char(':'))),
         cut(many1(string_declaration)),
@@ -126,27 +126,27 @@ fn strings(input: &str) -> IResult<&str, Vec<StringDeclaration>> {
 /// Parse a single string declaration.
 ///
 /// Related to the `string_declaration` pattern in `grammar.y` in libyara.
-fn string_declaration(input: &str) -> IResult<&str, StringDeclaration> {
+fn string_declaration(input: &str) -> IResult<&str, VariableDeclaration> {
     map(
         separated_pair(
             string::string_identifier,
             rtrim(char('=')),
             alt((
                 pair(
-                    map(string::quoted, StringDeclarationValue::String),
+                    map(string::quoted, VariableDeclarationValue::String),
                     string_modifiers,
                 ),
                 pair(
-                    map(string::regex, StringDeclarationValue::Regex),
+                    map(string::regex, VariableDeclarationValue::Regex),
                     regex_modifiers,
                 ),
                 pair(
-                    map(hex_string::hex_string, StringDeclarationValue::HexString),
+                    map(hex_string::hex_string, VariableDeclarationValue::HexString),
                     hex_string_modifiers,
                 ),
             )),
         ),
-        |(name, (value, modifiers))| StringDeclaration {
+        |(name, (value, modifiers))| VariableDeclaration {
             name,
             value,
             modifiers,
@@ -160,17 +160,17 @@ enum Modifier {
     // Must not use this enum value for the flags XOR and BASE64(WIDE).
     // Instead, use the other enum values to ensure the associated data
     // is properly set.
-    Flag(StringFlags),
+    Flag(VariableFlags),
     Xor(u8, u8),
     Base64(Option<[u8; 64]>),
     Base64Wide(Option<[u8; 64]>),
 }
 
-fn accumulate_modifiers<F>(parser: F, mut input: &str) -> IResult<&str, StringModifiers>
+fn accumulate_modifiers<F>(parser: F, mut input: &str) -> IResult<&str, VariableModifiers>
 where
     F: Fn(&str) -> IResult<&str, Modifier>,
 {
-    let mut modifiers = StringModifiers::default();
+    let mut modifiers = VariableModifiers::default();
 
     while let Ok((i, modifier)) = parser(input) {
         match modifier {
@@ -185,15 +185,15 @@ where
                 modifiers.flags |= flag;
             }
             Modifier::Xor(from, to) => {
-                modifiers.flags |= StringFlags::XOR;
+                modifiers.flags |= VariableFlags::XOR;
                 modifiers.xor_range = (from, to);
             }
             Modifier::Base64(alphabet) => {
-                modifiers.flags |= StringFlags::BASE64;
+                modifiers.flags |= VariableFlags::BASE64;
                 modifiers.base64_alphabet = alphabet;
             }
             Modifier::Base64Wide(alphabet) => {
-                modifiers.flags |= StringFlags::BASE64WIDE;
+                modifiers.flags |= VariableFlags::BASE64WIDE;
                 modifiers.base64_alphabet = alphabet;
             }
         }
@@ -211,25 +211,25 @@ where
     Ok((input, modifiers))
 }
 
-fn validate_flags(flags: StringFlags) -> Result<(), &'static str> {
-    if flags.contains(StringFlags::XOR | StringFlags::NOCASE) {
+fn validate_flags(flags: VariableFlags) -> Result<(), &'static str> {
+    if flags.contains(VariableFlags::XOR | VariableFlags::NOCASE) {
         return Err("incompatible modifiers: xor nocase");
     }
 
-    if flags.contains(StringFlags::NOCASE) {
-        if flags.contains(StringFlags::BASE64) {
+    if flags.contains(VariableFlags::NOCASE) {
+        if flags.contains(VariableFlags::BASE64) {
             return Err("incompatible modifiers: nocase base64");
         }
-        if flags.contains(StringFlags::BASE64WIDE) {
+        if flags.contains(VariableFlags::BASE64WIDE) {
             return Err("incompatible modifiers: nocase base64wide");
         }
     }
 
-    if flags.contains(StringFlags::FULLWORD) {
-        if flags.contains(StringFlags::BASE64) {
+    if flags.contains(VariableFlags::FULLWORD) {
+        if flags.contains(VariableFlags::BASE64) {
             return Err("incompatible modifiers: fullword base64");
         }
-        if flags.contains(StringFlags::BASE64WIDE) {
+        if flags.contains(VariableFlags::BASE64WIDE) {
             return Err("incompatible modifiers: fullword base64wide");
         }
     }
@@ -237,25 +237,27 @@ fn validate_flags(flags: StringFlags) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn string_modifiers(input: &str) -> IResult<&str, StringModifiers> {
+fn string_modifiers(input: &str) -> IResult<&str, VariableModifiers> {
     accumulate_modifiers(string_modifier, input)
 }
 
-fn regex_modifiers(input: &str) -> IResult<&str, StringModifiers> {
+fn regex_modifiers(input: &str) -> IResult<&str, VariableModifiers> {
     accumulate_modifiers(regex_modifier, input)
 }
 
-fn hex_string_modifiers(input: &str) -> IResult<&str, StringModifiers> {
+fn hex_string_modifiers(input: &str) -> IResult<&str, VariableModifiers> {
     accumulate_modifiers(hex_string_modifier, input)
 }
 
 fn string_modifier(input: &str) -> IResult<&str, Modifier> {
     rtrim(alt((
-        map(ttag("wide"), |_| Modifier::Flag(StringFlags::WIDE)),
-        map(ttag("ascii"), |_| Modifier::Flag(StringFlags::ASCII)),
-        map(ttag("nocase"), |_| Modifier::Flag(StringFlags::NOCASE)),
-        map(ttag("fullword"), |_| Modifier::Flag(StringFlags::FULLWORD)),
-        map(ttag("private"), |_| Modifier::Flag(StringFlags::PRIVATE)),
+        map(ttag("wide"), |_| Modifier::Flag(VariableFlags::WIDE)),
+        map(ttag("ascii"), |_| Modifier::Flag(VariableFlags::ASCII)),
+        map(ttag("nocase"), |_| Modifier::Flag(VariableFlags::NOCASE)),
+        map(ttag("fullword"), |_| {
+            Modifier::Flag(VariableFlags::FULLWORD)
+        }),
+        map(ttag("private"), |_| Modifier::Flag(VariableFlags::PRIVATE)),
         xor_modifier,
         base64_modifier,
     )))(input)
@@ -263,17 +265,19 @@ fn string_modifier(input: &str) -> IResult<&str, Modifier> {
 
 fn regex_modifier(input: &str) -> IResult<&str, Modifier> {
     rtrim(alt((
-        map(ttag("wide"), |_| Modifier::Flag(StringFlags::WIDE)),
-        map(ttag("ascii"), |_| Modifier::Flag(StringFlags::ASCII)),
-        map(ttag("nocase"), |_| Modifier::Flag(StringFlags::NOCASE)),
-        map(ttag("fullword"), |_| Modifier::Flag(StringFlags::FULLWORD)),
-        map(ttag("private"), |_| Modifier::Flag(StringFlags::PRIVATE)),
+        map(ttag("wide"), |_| Modifier::Flag(VariableFlags::WIDE)),
+        map(ttag("ascii"), |_| Modifier::Flag(VariableFlags::ASCII)),
+        map(ttag("nocase"), |_| Modifier::Flag(VariableFlags::NOCASE)),
+        map(ttag("fullword"), |_| {
+            Modifier::Flag(VariableFlags::FULLWORD)
+        }),
+        map(ttag("private"), |_| Modifier::Flag(VariableFlags::PRIVATE)),
     )))(input)
 }
 
 fn hex_string_modifier(input: &str) -> IResult<&str, Modifier> {
     map(rtrim(ttag("private")), |_| {
-        Modifier::Flag(StringFlags::PRIVATE)
+        Modifier::Flag(VariableFlags::PRIVATE)
     })(input)
 }
 
@@ -453,12 +457,12 @@ mod tests {
             string_modifiers,
             "private wide ascii xor base64wide Xor",
             "Xor",
-            StringModifiers {
-                flags: StringFlags::PRIVATE
-                    | StringFlags::WIDE
-                    | StringFlags::ASCII
-                    | StringFlags::XOR
-                    | StringFlags::BASE64WIDE,
+            VariableModifiers {
+                flags: VariableFlags::PRIVATE
+                    | VariableFlags::WIDE
+                    | VariableFlags::ASCII
+                    | VariableFlags::XOR
+                    | VariableFlags::BASE64WIDE,
                 xor_range: (0, 255),
                 base64_alphabet: None,
             },
@@ -467,8 +471,8 @@ mod tests {
             string_modifiers,
             "nocase fullword",
             "",
-            StringModifiers {
-                flags: StringFlags::NOCASE | StringFlags::FULLWORD,
+            VariableModifiers {
+                flags: VariableFlags::NOCASE | VariableFlags::FULLWORD,
                 xor_range: (0, 0),
                 base64_alphabet: None,
             },
@@ -477,8 +481,8 @@ mod tests {
             string_modifiers,
             "base64wide ascii",
             "",
-            StringModifiers {
-                flags: StringFlags::BASE64WIDE | StringFlags::ASCII,
+            VariableModifiers {
+                flags: VariableFlags::BASE64WIDE | VariableFlags::ASCII,
                 xor_range: (0, 0),
                 base64_alphabet: None,
             },
@@ -490,8 +494,8 @@ mod tests {
             string_modifiers,
             &format!("xor ( 15 ) base64( \"{}\" )", alphabet),
             "",
-            StringModifiers {
-                flags: StringFlags::XOR | StringFlags::BASE64,
+            VariableModifiers {
+                flags: VariableFlags::XOR | VariableFlags::BASE64,
                 xor_range: (15, 15),
                 base64_alphabet: Some(alphabet_array),
             },
@@ -503,8 +507,8 @@ mod tests {
                 alphabet
             ),
             "",
-            StringModifiers {
-                flags: StringFlags::XOR | StringFlags::BASE64WIDE | StringFlags::PRIVATE,
+            VariableModifiers {
+                flags: VariableFlags::XOR | VariableFlags::BASE64WIDE | VariableFlags::PRIVATE,
                 xor_range: (50, 120),
                 base64_alphabet: Some(alphabet_array),
             },
@@ -514,13 +518,13 @@ mod tests {
             regex_modifiers,
             "private wide ascii nocase fullword base64",
             "base64",
-            StringModifiers {
-                flags: StringFlags::PRIVATE
-                    | StringFlags::WIDE
-                    | StringFlags::ASCII
-                    | StringFlags::NOCASE
-                    | StringFlags::FULLWORD,
-                ..StringModifiers::default()
+            VariableModifiers {
+                flags: VariableFlags::PRIVATE
+                    | VariableFlags::WIDE
+                    | VariableFlags::ASCII
+                    | VariableFlags::NOCASE
+                    | VariableFlags::FULLWORD,
+                ..VariableModifiers::default()
             },
         );
 
@@ -528,9 +532,9 @@ mod tests {
             hex_string_modifiers,
             "private wide",
             "wide",
-            StringModifiers {
-                flags: StringFlags::PRIVATE,
-                ..StringModifiers::default()
+            VariableModifiers {
+                flags: VariableFlags::PRIVATE,
+                ..VariableModifiers::default()
             },
         );
 
@@ -570,36 +574,36 @@ mod tests {
             "strings : $a = \"b\td\" xor ascii \n  $b= /a?b/  $c= { ?B} private d",
             "d",
             vec![
-                StringDeclaration {
+                VariableDeclaration {
                     name: "a".to_owned(),
-                    value: StringDeclarationValue::String("b\td".to_owned()),
-                    modifiers: StringModifiers {
-                        flags: StringFlags::XOR | StringFlags::ASCII,
+                    value: VariableDeclarationValue::String("b\td".to_owned()),
+                    modifiers: VariableModifiers {
+                        flags: VariableFlags::XOR | VariableFlags::ASCII,
                         xor_range: (0, 255),
-                        ..StringModifiers::default()
+                        ..VariableModifiers::default()
                     },
                 },
-                StringDeclaration {
+                VariableDeclaration {
                     name: "b".to_owned(),
-                    value: StringDeclarationValue::Regex(Regex {
+                    value: VariableDeclarationValue::Regex(Regex {
                         expr: "a?b".to_owned(),
                         case_insensitive: false,
                         dot_all: false,
                     }),
-                    modifiers: StringModifiers {
-                        flags: StringFlags::empty(),
-                        ..StringModifiers::default()
+                    modifiers: VariableModifiers {
+                        flags: VariableFlags::empty(),
+                        ..VariableModifiers::default()
                     },
                 },
-                StringDeclaration {
+                VariableDeclaration {
                     name: "c".to_owned(),
-                    value: StringDeclarationValue::HexString(vec![HexToken::MaskedByte(
+                    value: VariableDeclarationValue::HexString(vec![HexToken::MaskedByte(
                         0x0B,
                         Mask::Left,
                     )]),
-                    modifiers: StringModifiers {
-                        flags: StringFlags::PRIVATE,
-                        ..StringModifiers::default()
+                    modifiers: VariableModifiers {
+                        flags: VariableFlags::PRIVATE,
+                        ..VariableModifiers::default()
                     },
                 },
             ],
@@ -621,7 +625,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                strings: Vec::new(),
+                variables: Vec::new(),
                 is_private: false,
                 is_global: false,
             },
@@ -636,11 +640,11 @@ mod tests {
                 metadatas: vec![
                     Metadata { name: "a".to_owned(), value: MetadataValue::Boolean(true) }
                 ],
-                strings: vec![
-                    StringDeclaration {
+                variables: vec![
+                    VariableDeclaration {
                         name: "b".to_owned(),
-                        value: StringDeclarationValue::String("t".to_owned()),
-                        modifiers: StringModifiers { flags: StringFlags::empty(), ..StringModifiers::default() }
+                        value: VariableDeclarationValue::String("t".to_owned()),
+                        modifiers: VariableModifiers { flags: VariableFlags::empty(), ..VariableModifiers::default() }
                     }
                 ],
                 condition: Expression::Boolean(false),
@@ -658,7 +662,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                strings: Vec::new(),
+                variables: Vec::new(),
                 is_private: true,
                 is_global: true,
             },
@@ -672,7 +676,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                strings: Vec::new(),
+                variables: Vec::new(),
                 is_private: true,
                 is_global: false,
             },
@@ -686,7 +690,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                strings: Vec::new(),
+                variables: Vec::new(),
                 is_private: false,
                 is_global: true,
             },

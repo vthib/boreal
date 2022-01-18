@@ -16,8 +16,15 @@ pub struct Rule {
     /// Metadata associated with the rule.
     pub metadatas: Vec<Metadata>,
 
-    /// Strings associated with the rule.
-    pub strings: Vec<StringDeclaration>,
+    /// Variables associated with the rule.
+    ///
+    /// In Yara terms, those are "strings" (and they are declared
+    /// with the "strings:" declaration in a rule).
+    /// However, the "string" denomination is exceedingly confusing in the
+    /// implementation. Instead, name those "variables", as they are
+    /// declared with a prefix '$', which in multiple languages
+    /// indicates variables.
+    pub variables: Vec<VariableDeclaration>,
 
     /// Condition of the rule.
     pub condition: Expression,
@@ -47,7 +54,7 @@ pub struct Metadata {
 
 bitflags! {
     #[derive(Default)]
-    pub struct StringFlags: u32 {
+    pub struct VariableFlags: u32 {
         const WIDE = 0b0000_0001;
         const ASCII = 0b000_0010;
         const NOCASE = 0b0000_0100;
@@ -61,7 +68,7 @@ bitflags! {
 
 /// Value for a string associated with a rule.
 #[derive(Debug, PartialEq)]
-pub enum StringDeclarationValue {
+pub enum VariableDeclarationValue {
     /// A raw string.
     String(String),
     /// A regular expression.
@@ -72,9 +79,9 @@ pub enum StringDeclarationValue {
 
 /// Modifiers applicable on a string.
 #[derive(Default, Debug, PartialEq)]
-pub struct StringModifiers {
+pub struct VariableModifiers {
     /// Bitflags of possibles flags modifying the string.
-    pub flags: StringFlags,
+    pub flags: VariableFlags,
     /// Xor range.
     ///
     /// This is only applicable if `flags` contains [`StringFlags::Xor`].
@@ -88,11 +95,11 @@ pub struct StringModifiers {
 
 /// String declared in a rule.
 #[derive(Debug, PartialEq)]
-pub struct StringDeclaration {
+pub struct VariableDeclaration {
     /// Name of the string.
     pub name: String,
     /// Value of the string.
-    pub value: StringDeclarationValue,
+    pub value: VariableDeclarationValue,
     /// Modifiers for the string.
-    pub modifiers: StringModifiers,
+    pub modifiers: VariableModifiers,
 }
