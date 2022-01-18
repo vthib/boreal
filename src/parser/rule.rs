@@ -199,7 +199,42 @@ where
         }
         input = i;
     }
+
+    if let Err(desc) = validate_flags(modifiers.flags) {
+        return Err(nom::Err::Failure(Error::from_external_error(
+            input,
+            ErrorKind::Verify,
+            desc,
+        )));
+    }
+
     Ok((input, modifiers))
+}
+
+fn validate_flags(flags: StringFlags) -> Result<(), &'static str> {
+    if flags.contains(StringFlags::XOR | StringFlags::NOCASE) {
+        return Err("incompatible modifiers: xor nocase");
+    }
+
+    if flags.contains(StringFlags::NOCASE) {
+        if flags.contains(StringFlags::BASE64) {
+            return Err("incompatible modifiers: nocase base64");
+        }
+        if flags.contains(StringFlags::BASE64WIDE) {
+            return Err("incompatible modifiers: nocase base64wide");
+        }
+    }
+
+    if flags.contains(StringFlags::FULLWORD) {
+        if flags.contains(StringFlags::BASE64) {
+            return Err("incompatible modifiers: fullword base64");
+        }
+        if flags.contains(StringFlags::BASE64WIDE) {
+            return Err("incompatible modifiers: fullword base64wide");
+        }
+    }
+
+    Ok(())
 }
 
 fn string_modifiers(input: &str) -> IResult<&str, StringModifiers> {
@@ -416,18 +451,35 @@ mod tests {
     fn parse_modifiers() {
         parse(
             string_modifiers,
-            "private wide ascii xor base64wide nocase fullword base64 Xor",
+            "private wide ascii xor base64wide Xor",
             "Xor",
             StringModifiers {
                 flags: StringFlags::PRIVATE
                     | StringFlags::WIDE
                     | StringFlags::ASCII
                     | StringFlags::XOR
-                    | StringFlags::BASE64WIDE
-                    | StringFlags::NOCASE
-                    | StringFlags::FULLWORD
-                    | StringFlags::BASE64,
+                    | StringFlags::BASE64WIDE,
                 xor_range: (0, 255),
+                base64_alphabet: None,
+            },
+        );
+        parse(
+            string_modifiers,
+            "nocase fullword",
+            "",
+            StringModifiers {
+                flags: StringFlags::NOCASE | StringFlags::FULLWORD,
+                xor_range: (0, 0),
+                base64_alphabet: None,
+            },
+        );
+        parse(
+            string_modifiers,
+            "base64wide ascii",
+            "",
+            StringModifiers {
+                flags: StringFlags::BASE64WIDE | StringFlags::ASCII,
+                xor_range: (0, 0),
                 base64_alphabet: None,
             },
         );
@@ -500,6 +552,15 @@ mod tests {
         parse_err(hex_string_modifier, "base64");
         parse_err(hex_string_modifier, "base64wide");
         parse_err(hex_string_modifier, "xor");
+    }
+
+    #[test]
+    fn test_flags_validation() {
+        parse_err(string_modifiers, "xor nocase");
+        parse_err(string_modifiers, "base64 nocase");
+        parse_err(string_modifiers, "nocase base64wide");
+        parse_err(string_modifiers, "fullword base64");
+        parse_err(string_modifiers, "base64wide fullword");
     }
 
     #[test]
