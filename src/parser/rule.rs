@@ -1,4 +1,6 @@
 //! Parse yara rules.
+use std::collections::HashMap;
+
 use nom::{
     branch::alt,
     character::complete::char,
@@ -61,7 +63,7 @@ pub fn rule(mut input: &str) -> IResult<&str, Rule> {
             name,
             tags: tags.unwrap_or_else(Vec::new),
             metadatas: meta.unwrap_or_else(Vec::new),
-            variables: strings.unwrap_or_else(Vec::new),
+            variables: strings.unwrap_or_else(HashMap::new),
             condition,
             is_private,
             is_global,
@@ -116,11 +118,37 @@ fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
 ///
 /// Related to the `strings` and `strings_declarations` pattern
 /// in `grammar.y` in libyara.
-fn strings(input: &str) -> IResult<&str, Vec<VariableDeclaration>> {
-    preceded(
-        pair(rtrim(ttag("strings")), rtrim(char(':'))),
-        cut(many1(string_declaration)),
-    )(input)
+fn strings(input: &str) -> IResult<&str, HashMap<String, VariableDeclaration>> {
+    let (input, _) = pair(rtrim(ttag("strings")), rtrim(char(':')))(input)?;
+    let (mut input, mut var) = cut(string_declaration)(input)?;
+
+    let mut map = HashMap::new();
+    loop {
+        if var.name.is_empty() {
+            return Err(nom::Err::Failure(Error::from_external_error(
+                input,
+                ErrorKind::Verify,
+                "empty string name not allowed",
+            )));
+        }
+        if let Some(old_var) = map.insert(var.name.clone(), var) {
+            return Err(nom::Err::Failure(Error::from_external_error(
+                input,
+                ErrorKind::Verify,
+                format!("duplicated string ${}", &old_var.name),
+            )));
+        }
+
+        match string_declaration(input) {
+            Ok((i, new_var)) => {
+                input = i;
+                var = new_var;
+            }
+            _ => break,
+        }
+    }
+
+    Ok((input, map))
 }
 
 /// Parse a single string declaration.
@@ -569,11 +597,9 @@ mod tests {
 
     #[test]
     fn parse_strings() {
-        parse(
-            strings,
-            "strings : $a = \"b\td\" xor ascii \n  $b= /a?b/  $c= { ?B} private d",
-            "d",
-            vec![
+        let variables: HashMap<_, _> = [
+            (
+                "a".to_owned(),
                 VariableDeclaration {
                     name: "a".to_owned(),
                     value: VariableDeclarationValue::String("b\td".to_owned()),
@@ -583,6 +609,9 @@ mod tests {
                         ..VariableModifiers::default()
                     },
                 },
+            ),
+            (
+                "b".to_owned(),
                 VariableDeclaration {
                     name: "b".to_owned(),
                     value: VariableDeclarationValue::Regex(Regex {
@@ -595,6 +624,9 @@ mod tests {
                         ..VariableModifiers::default()
                     },
                 },
+            ),
+            (
+                "c".to_owned(),
                 VariableDeclaration {
                     name: "c".to_owned(),
                     value: VariableDeclarationValue::HexString(vec![HexToken::MaskedByte(
@@ -606,12 +638,24 @@ mod tests {
                         ..VariableModifiers::default()
                     },
                 },
-            ],
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        parse(
+            strings,
+            "strings : $a = \"b\td\" xor ascii \n  $b= /a?b/  $c= { ?B} private d",
+            "d",
+            variables,
         );
 
         parse_err(strings, "");
         parse_err(strings, "strings");
         parse_err(strings, "strings:");
+
+        parse_err(strings, "strings: $ = /a/");
+        parse_err(strings, "strings: $a = /a/ $b = /b/ $a = /c/");
     }
 
     #[test]
@@ -625,7 +669,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: Vec::new(),
+                variables: HashMap::new(),
                 is_private: false,
                 is_global: false,
             },
@@ -640,13 +684,14 @@ mod tests {
                 metadatas: vec![
                     Metadata { name: "a".to_owned(), value: MetadataValue::Boolean(true) }
                 ],
-                variables: vec![
+                variables: [
+                    ("b".to_owned(),
                     VariableDeclaration {
                         name: "b".to_owned(),
                         value: VariableDeclarationValue::String("t".to_owned()),
                         modifiers: VariableModifiers { flags: VariableFlags::empty(), ..VariableModifiers::default() }
-                    }
-                ],
+                    })
+                ].into_iter().collect(),
                 condition: Expression::Boolean(false),
                 is_private: true,
                 is_global: true,
@@ -662,7 +707,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: Vec::new(),
+                variables: HashMap::new(),
                 is_private: true,
                 is_global: true,
             },
@@ -676,7 +721,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: Vec::new(),
+                variables: HashMap::new(),
                 is_private: true,
                 is_global: false,
             },
@@ -690,7 +735,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: Vec::new(),
+                variables: HashMap::new(),
                 is_private: false,
                 is_global: true,
             },
