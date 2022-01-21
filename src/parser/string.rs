@@ -8,7 +8,7 @@ use nom::{
     combinator::{cut, map, opt, recognize, value},
     error::{Error, ErrorKind, FromExternalError, ParseError},
     multi::fold_many_m_n,
-    sequence::{preceded, terminated, tuple},
+    sequence::{pair, preceded, terminated, tuple},
     IResult,
 };
 
@@ -40,20 +40,22 @@ fn string_identifier_no_rtrim(input: &str) -> IResult<&str, String> {
 ///
 /// This is equivalent to the `_STRING_IDENTIFIER_` lexical patterns in
 /// libyara.
-/// Roughly equivalent to `$[a-ZA-Z0-9_]*\*?`.
+/// Roughly equivalent to `$[a-ZA-Z0-9_]*`.
 #[allow(clippy::module_name_repetitions)]
 pub fn string_identifier(input: &str) -> IResult<&str, String> {
     rtrim(string_identifier_no_rtrim)(input)
 }
 
-/// Parse a string identifier with a trailing wildcard.
+/// Parse a string identifier with an optional trailing wildcard.
 ///
-/// This is equivalent to the `_STRING_IDENTIFIER_WITH_WILDCARD_`
-/// lexical patterns in /// libyara.
-/// Roughly equivalent to `$[a-ZA-Z0-9_]*\*?`.
+/// This is equivalent to
+/// `_STRING_IDENTIFIER_ | _STRING_IDENTIFIER_WITH_WILDCARD_` in libyara.
 #[allow(clippy::module_name_repetitions)]
-pub fn string_identifier_with_wildcard(input: &str) -> IResult<&str, String> {
-    rtrim(terminated(string_identifier_no_rtrim, char('*')))(input)
+pub fn string_identifier_with_wildcard(input: &str) -> IResult<&str, (String, bool)> {
+    rtrim(pair(
+        string_identifier_no_rtrim,
+        map(opt(char('*')), |v| v.is_some()),
+    ))(input)
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
@@ -326,15 +328,13 @@ mod tests {
     fn test_string_identifier_with_wildcard() {
         use super::string_identifier_with_wildcard as siww;
 
-        parse(siww, "$_*", "", "_");
-        parse(siww, "$*", "", "");
-        parse(siww, "$a* c", "c", "a");
-        parse(siww, "$9b*c", "c", "9b");
-        parse(siww, "$_1Bd_F*+", "+", "_1Bd_F");
+        parse(siww, "$_*", "", ("_".to_owned(), true));
+        parse(siww, "$", "", ("".to_owned(), false));
+        parse(siww, "$a* c", "c", ("a".to_owned(), true));
+        parse(siww, "$9b*c", "c", ("9b".to_owned(), true));
+        parse(siww, "$_1Bd_F+", "+", ("_1Bd_F".to_owned(), false));
 
         parse_err(siww, "");
-        parse_err(siww, "$");
-        parse_err(siww, "$a");
         parse_err(siww, "*");
     }
 
