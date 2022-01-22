@@ -7,9 +7,9 @@
 use nom::{
     branch::alt,
     character::complete::char,
-    combinator::{cut, map},
+    combinator::{cut, map, opt},
     multi::separated_list1,
-    sequence::delimited,
+    sequence::{delimited, preceded},
     IResult,
 };
 
@@ -18,25 +18,31 @@ use crate::parser::{
     string::string_identifier_with_wildcard,
 };
 
-use super::{primary_expression::primary_expression, ParsedExpr};
+use super::{
+    common::range, primary_expression::primary_expression, Expression, ForSelection, ParsedExpr,
+    VariableSet,
+};
 
-/// Selection of variables in a 'for' expression.
+/// Parse for expressions without any for keyword or body content.
 ///
-/// This indicates how many variables must match the for condition
-/// for it to be considered true.
-#[derive(Debug, PartialEq)]
-enum ForSelection {
-    /// Any variable in the set must match the condition.
-    Any,
-    /// All of the variables in the set must match the condition.
-    All,
-    /// None of the variables in the set must match the condition.
-    None,
-    /// Expression that should evaluate to a number, indicating
-    /// how many variables in the set must match the condition.
-    ///
-    /// Usually, a simple number.
-    Expr(Box<ParsedExpr>),
+/// This parses:
+/// - `selection 'of' set`
+/// - `selection 'of' set 'in' range`
+fn for_expression_abbrev(input: &str) -> IResult<&str, ParsedExpr> {
+    let (input, selection) = for_selection(input)?;
+    let (input, set) = cut(preceded(rtrim(ttag("of")), string_set))(input)?;
+    let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
+
+    let expr = match range {
+        None => Expression::For { selection, set },
+        Some((from, to)) => Expression::ForIn {
+            selection,
+            set,
+            from,
+            to,
+        },
+    };
+    Ok((input, ParsedExpr { expr }))
 }
 
 /// Parse the variable selection for a 'for' expression.
@@ -51,17 +57,6 @@ fn for_selection(input: &str) -> IResult<&str, ForSelection> {
             ForSelection::Expr(Box::new(expr))
         }),
     ))(input)
-}
-
-/// Set of multiple variables.
-#[derive(Debug, PartialEq)]
-struct VariableSet {
-    /// Names of the variables in the set.
-    ///
-    /// If empty, the set is considered as containing *all* variables.
-    /// The associated boolean indicates if the name has a trailing
-    /// wildcard.
-    elements: Vec<(String, bool)>,
 }
 
 /// Parse a set of variables.
@@ -180,5 +175,48 @@ mod tests {
         parse_err(string_enumeration, ")");
         parse_err(string_enumeration, "()");
         parse_err(string_enumeration, "($a,a)");
+    }
+
+    #[test]
+    fn test_for_expression_abbrev() {
+        parse(
+            for_expression_abbrev,
+            "any of them a",
+            "a",
+            ParsedExpr {
+                expr: Expression::For {
+                    selection: ForSelection::Any,
+                    set: VariableSet { elements: vec![] },
+                },
+            },
+        );
+        parse(
+            for_expression_abbrev,
+            "5 of ($a, $b*) in (100..entrypoint)",
+            "",
+            ParsedExpr {
+                expr: Expression::ForIn {
+                    selection: ForSelection::Expr(Box::new(ParsedExpr {
+                        expr: Expression::Number(5),
+                    })),
+                    set: VariableSet {
+                        elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
+                    },
+                    from: Box::new(ParsedExpr {
+                        expr: Expression::Number(100),
+                    }),
+                    to: Box::new(ParsedExpr {
+                        expr: Expression::Entrypoint,
+                    }),
+                },
+            },
+        );
+
+        parse_err(for_expression_abbrev, "");
+        parse_err(for_expression_abbrev, "any");
+        parse_err(for_expression_abbrev, "any of");
+        parse_err(for_expression_abbrev, "any of thema");
+        parse_err(for_expression_abbrev, "all of them in");
+        parse_err(for_expression_abbrev, "all of them in ()");
     }
 }

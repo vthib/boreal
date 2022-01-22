@@ -121,9 +121,50 @@ enum Expression {
         to: Box<ParsedExpr>,
     },
 
+    For {
+        selection: ForSelection,
+        set: VariableSet,
+    },
+    ForIn {
+        selection: ForSelection,
+        set: VariableSet,
+        from: Box<ParsedExpr>,
+        to: Box<ParsedExpr>,
+    },
+
     Identifier(Identifier),
     String(String),
     Regex(crate::regex::Regex),
+}
+
+/// Selection of variables in a 'for' expression.
+///
+/// This indicates how many variables must match the for condition
+/// for it to be considered true.
+#[derive(Clone, Debug, PartialEq)]
+enum ForSelection {
+    /// Any variable in the set must match the condition.
+    Any,
+    /// All of the variables in the set must match the condition.
+    All,
+    /// None of the variables in the set must match the condition.
+    None,
+    /// Expression that should evaluate to a number, indicating
+    /// how many variables in the set must match the condition.
+    ///
+    /// Usually, a simple number.
+    Expr(Box<ParsedExpr>),
+}
+
+/// Set of multiple variables.
+#[derive(Clone, Debug, PartialEq)]
+struct VariableSet {
+    /// Names of the variables in the set.
+    ///
+    /// If empty, the set is considered as containing *all* variables.
+    /// The associated boolean indicates if the name has a trailing
+    /// wildcard.
+    elements: Vec<(String, bool)>,
 }
 
 impl ParsedExpr {

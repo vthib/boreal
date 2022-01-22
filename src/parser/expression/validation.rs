@@ -405,6 +405,8 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             expression: EExpr::Regex(v),
             ty: Type::Regex,
         }),
+
+        Expression::For { .. } | Expression::ForIn { .. } => todo!(),
     }
 }
 
