@@ -18,6 +18,41 @@ use crate::parser::{
     string::string_identifier_with_wildcard,
 };
 
+use super::{primary_expression::primary_expression, ParsedExpr};
+
+/// Selection of variables in a 'for' expression.
+///
+/// This indicates how many variables must match the for condition
+/// for it to be considered true.
+#[derive(Debug, PartialEq)]
+enum ForSelection {
+    /// Any variable in the set must match the condition.
+    Any,
+    /// All of the variables in the set must match the condition.
+    All,
+    /// None of the variables in the set must match the condition.
+    None,
+    /// Expression that should evaluate to a number, indicating
+    /// how many variables in the set must match the condition.
+    ///
+    /// Usually, a simple number.
+    Expr(Box<ParsedExpr>),
+}
+
+/// Parse the variable selection for a 'for' expression.
+///
+/// Equivalent to the `for_expression` pattern in grammar.y in libyara.
+fn for_selection(input: &str) -> IResult<&str, ForSelection> {
+    alt((
+        map(rtrim(ttag("any")), |_| ForSelection::Any),
+        map(rtrim(ttag("all")), |_| ForSelection::All),
+        map(rtrim(ttag("none")), |_| ForSelection::None),
+        map(primary_expression, |expr| {
+            ForSelection::Expr(Box::new(expr))
+        }),
+    ))(input)
+}
+
 /// Set of multiple variables.
 #[derive(Debug, PartialEq)]
 struct VariableSet {
@@ -55,8 +90,35 @@ fn string_enumeration(input: &str) -> IResult<&str, Vec<(String, bool)>> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::test_utils::{parse, parse_err};
     use super::*;
+    use crate::parser::expression::{Expression, Identifier};
+    use crate::parser::test_utils::{parse, parse_err};
+
+    #[test]
+    fn test_for_selection() {
+        parse(for_selection, "any a", "a", ForSelection::Any);
+        parse(for_selection, "all a", "a", ForSelection::All);
+        parse(for_selection, "none a", "a", ForSelection::None);
+        parse(
+            for_selection,
+            "1a",
+            "a",
+            ForSelection::Expr(Box::new(ParsedExpr {
+                expr: Expression::Number(1),
+            })),
+        );
+
+        parse(
+            for_selection,
+            "anya",
+            "",
+            ForSelection::Expr(Box::new(ParsedExpr {
+                expr: Expression::Identifier(Identifier::Raw("anya".to_owned())),
+            })),
+        );
+
+        parse_err(for_selection, "");
+    }
 
     #[test]
     fn test_string_enumeration() {
