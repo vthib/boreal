@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use bitflags::bitflags;
 
 use crate::expression::Expression;
@@ -26,7 +24,7 @@ pub struct Rule {
     /// implementation. Instead, name those "variables", as they are
     /// declared with a prefix '$', which in multiple languages
     /// indicates variables.
-    pub variables: HashMap<String, VariableDeclaration>,
+    pub variables: Vec<VariableDeclaration>,
 
     /// Condition of the rule.
     pub condition: Expression,

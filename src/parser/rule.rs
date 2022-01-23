@@ -1,5 +1,5 @@
 //! Parse yara rules.
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use nom::{
     branch::alt,
@@ -62,7 +62,7 @@ pub fn rule(mut input: &str) -> IResult<&str, Rule> {
             name,
             tags: tags.unwrap_or_else(Vec::new),
             metadatas: meta.unwrap_or_else(Vec::new),
-            variables: strings.unwrap_or_else(HashMap::new),
+            variables: strings.unwrap_or_else(Vec::new),
             condition,
             is_private,
             is_global,
@@ -117,26 +117,23 @@ fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
 ///
 /// Related to the `strings` and `strings_declarations` pattern
 /// in `grammar.y` in libyara.
-fn strings(input: &str) -> IResult<&str, HashMap<String, VariableDeclaration>> {
+fn strings(input: &str) -> IResult<&str, Vec<VariableDeclaration>> {
     let (input, _) = pair(rtrim(ttag("strings")), rtrim(char(':')))(input)?;
     let (mut input, mut var) = cut(string_declaration)(input)?;
 
-    let mut map = HashMap::new();
+    let mut existing_variables = HashSet::new();
+    let mut decls = Vec::new();
     loop {
-        if var.name.is_empty() {
+        // If var.name is empty, this is an anonymous string.
+        // This is allowed, do not add it in the hashset.
+        if !var.name.is_empty() && !existing_variables.insert(var.name.clone()) {
             return Err(nom::Err::Failure(Error::from_external_error(
                 input,
                 ErrorKind::Verify,
-                "empty string name not allowed",
+                format!("duplicated string ${}", &var.name),
             )));
         }
-        if let Some(old_var) = map.insert(var.name.clone(), var) {
-            return Err(nom::Err::Failure(Error::from_external_error(
-                input,
-                ErrorKind::Verify,
-                format!("duplicated string ${}", &old_var.name),
-            )));
-        }
+        decls.push(var);
 
         match string_declaration(input) {
             Ok((i, new_var)) => {
@@ -147,7 +144,7 @@ fn strings(input: &str) -> IResult<&str, HashMap<String, VariableDeclaration>> {
         }
     }
 
-    Ok((input, map))
+    Ok((input, decls))
 }
 
 /// Parse a single string declaration.
@@ -600,9 +597,11 @@ mod tests {
 
     #[test]
     fn parse_strings() {
-        let variables: HashMap<_, _> = [
-            (
-                "a".to_owned(),
+        parse(
+            strings,
+            "strings : $a = \"b\td\" xor ascii \n  $b= /a?b/  $= { ?B} private d",
+            "d",
+            [
                 VariableDeclaration {
                     name: "a".to_owned(),
                     value: VariableDeclarationValue::String("b\td".to_owned()),
@@ -612,9 +611,6 @@ mod tests {
                         ..VariableModifiers::default()
                     },
                 },
-            ),
-            (
-                "b".to_owned(),
                 VariableDeclaration {
                     name: "b".to_owned(),
                     value: VariableDeclarationValue::Regex(Regex {
@@ -627,11 +623,8 @@ mod tests {
                         ..VariableModifiers::default()
                     },
                 },
-            ),
-            (
-                "c".to_owned(),
                 VariableDeclaration {
-                    name: "c".to_owned(),
+                    name: "".to_owned(),
                     value: VariableDeclarationValue::HexString(vec![HexToken::MaskedByte(
                         0x0B,
                         Mask::Left,
@@ -641,23 +634,13 @@ mod tests {
                         ..VariableModifiers::default()
                     },
                 },
-            ),
-        ]
-        .into_iter()
-        .collect();
-
-        parse(
-            strings,
-            "strings : $a = \"b\td\" xor ascii \n  $b= /a?b/  $c= { ?B} private d",
-            "d",
-            variables,
+            ],
         );
 
         parse_err(strings, "");
         parse_err(strings, "strings");
         parse_err(strings, "strings:");
 
-        parse_err(strings, "strings: $ = /a/");
         parse_err(strings, "strings: $a = /a/ $b = /b/ $a = /c/");
     }
 
@@ -672,7 +655,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: HashMap::new(),
+                variables: Vec::new(),
                 is_private: false,
                 is_global: false,
             },
@@ -687,14 +670,16 @@ mod tests {
                 metadatas: vec![
                     Metadata { name: "a".to_owned(), value: MetadataValue::Boolean(true) }
                 ],
-                variables: [
-                    ("b".to_owned(),
+                variables: vec![
                     VariableDeclaration {
                         name: "b".to_owned(),
                         value: VariableDeclarationValue::String("t".to_owned()),
-                        modifiers: VariableModifiers { flags: VariableFlags::empty(), ..VariableModifiers::default() }
-                    })
-                ].into_iter().collect(),
+                        modifiers: VariableModifiers {
+                            flags: VariableFlags::empty(),
+                            ..VariableModifiers::default()
+                        }
+                    }
+                ],
                 condition: Expression::For {
                     selection: ForSelection::All,
                     set: vec![],
@@ -714,7 +699,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: HashMap::new(),
+                variables: Vec::new(),
                 is_private: true,
                 is_global: true,
             },
@@ -728,7 +713,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: HashMap::new(),
+                variables: Vec::new(),
                 is_private: true,
                 is_global: false,
             },
@@ -742,7 +727,7 @@ mod tests {
                 condition: Expression::Boolean(false),
                 tags: Vec::new(),
                 metadatas: Vec::new(),
-                variables: HashMap::new(),
+                variables: Vec::new(),
                 is_private: false,
                 is_global: true,
             },
