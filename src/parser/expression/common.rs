@@ -16,10 +16,14 @@ use crate::parser::nom_recipes::rtrim;
 pub fn range(input: &str) -> IResult<&str, (Box<ParsedExpr>, Box<ParsedExpr>)> {
     let (input, _) = rtrim(char('('))(input)?;
 
-    let (input, (a, b)) = cut(terminated(
-        separated_pair(primary_expression, rtrim(tag("..")), primary_expression),
-        rtrim(char(')')),
-    ))(input)?;
+    let (input, (a, b)) = terminated(
+        separated_pair(
+            primary_expression,
+            rtrim(tag("..")),
+            cut(primary_expression),
+        ),
+        cut(rtrim(char(')'))),
+    )(input)?;
 
     Ok((input, (Box::new(a), Box::new(b))))
 }

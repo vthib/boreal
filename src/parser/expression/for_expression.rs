@@ -9,7 +9,7 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt},
     multi::separated_list1,
-    sequence::{delimited, pair, preceded},
+    sequence::{delimited, pair, preceded, terminated},
     IResult,
 };
 
@@ -19,8 +19,8 @@ use crate::parser::{
 };
 
 use super::{
-    common::range, primary_expression::primary_expression, Expression, ForSelection, ParsedExpr,
-    VariableSet,
+    common::range, expression, identifier::identifier, primary_expression::primary_expression,
+    Expression, ForIterator, ForSelection, ParsedExpr, VariableSet,
 };
 
 /// Parse for expressions without any for keyword or body content.
@@ -34,7 +34,11 @@ fn for_expression_abbrev(input: &str) -> IResult<&str, ParsedExpr> {
     let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
 
     let expr = match range {
-        None => Expression::For { selection, set },
+        None => Expression::For {
+            selection,
+            set,
+            body: None,
+        },
         Some((from, to)) => Expression::ForIn {
             selection,
             set,
@@ -42,7 +46,50 @@ fn for_expression_abbrev(input: &str) -> IResult<&str, ParsedExpr> {
             to,
         },
     };
+
     Ok((input, ParsedExpr { expr }))
+}
+
+/// Parse a full fledge for expression:
+///
+/// This parses:
+/// - 'for' selection 'of' set ':' '(' body ')'
+/// - 'for' selection identifier 'of' iterator ':' '(' body ')'
+fn for_expression_full(input: &str) -> IResult<&str, ParsedExpr> {
+    let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection))(input)?;
+    let (i2, has_of) = opt(rtrim(ttag("of")))(input)?;
+
+    if has_of.is_some() {
+        let (input, set) = cut(terminated(string_set, rtrim(char(':'))))(i2)?;
+        let (input, body) = cut(delimited(rtrim(char('(')), expression, rtrim(char(')'))))(input)?;
+
+        Ok((
+            input,
+            ParsedExpr {
+                expr: Expression::For {
+                    selection,
+                    set,
+                    body: Some(Box::new(body)),
+                },
+            },
+        ))
+    } else {
+        let (input, identifiers) = cut(terminated(for_variables, rtrim(ttag("of"))))(input)?;
+        let (input, iterator) = cut(terminated(iterator, rtrim(char(':'))))(input)?;
+        let (input, body) = cut(delimited(rtrim(char('(')), expression, rtrim(char(')'))))(input)?;
+
+        Ok((
+            input,
+            ParsedExpr {
+                expr: Expression::ForIdentifiers {
+                    selection,
+                    identifiers,
+                    iterator,
+                    body: Box::new(body),
+                },
+            },
+        ))
+    }
 }
 
 /// Parse the variable selection for a 'for' expression.
@@ -85,6 +132,31 @@ fn string_set(input: &str) -> IResult<&str, VariableSet> {
 /// Equivalent to the `string_enumeration` pattern in grammar.y in libyara.
 fn string_enumeration(input: &str) -> IResult<&str, Vec<(String, bool)>> {
     separated_list1(rtrim(char(',')), string_identifier_with_wildcard)(input)
+}
+
+/// Parse a list of identifiers to bind for a for expression.
+///
+/// Equivalent to the `for_variables` pattern in grammar.y in libyara.
+fn for_variables(input: &str) -> IResult<&str, Vec<String>> {
+    separated_list1(rtrim(char(',')), crate::parser::string::identifier)(input)
+}
+
+/// Parse an iterator for a for over an identifier.
+///
+/// Equivalent to the `iterator` pattern in grammar.y in libyara.
+fn iterator(input: &str) -> IResult<&str, ForIterator> {
+    alt((
+        map(identifier, ForIterator::Identifier),
+        map(
+            delimited(
+                rtrim(char('(')),
+                separated_list1(rtrim(char(',')), primary_expression),
+                rtrim(char(')')),
+            ),
+            ForIterator::List,
+        ),
+        map(range, |(from, to)| ForIterator::Range { from, to }),
+    ))(input)
 }
 
 #[cfg(test)]
@@ -208,6 +280,7 @@ mod tests {
                 expr: Expression::For {
                     selection: ForSelection::Any,
                     set: VariableSet { elements: vec![] },
+                    body: None,
                 },
             },
         );
@@ -224,6 +297,7 @@ mod tests {
                         as_percent: true,
                     },
                     set: VariableSet { elements: vec![] },
+                    body: None,
                 },
             },
         );
@@ -258,5 +332,158 @@ mod tests {
         parse_err(for_expression_abbrev, "any of thema");
         parse_err(for_expression_abbrev, "all of them in");
         parse_err(for_expression_abbrev, "all of them in ()");
+    }
+
+    #[test]
+    fn test_for_expression_full() {
+        parse(
+            for_expression_full,
+            "for 25% of ($foo*) : ($)",
+            "",
+            ParsedExpr {
+                expr: Expression::For {
+                    selection: ForSelection::Expr {
+                        expr: Box::new(ParsedExpr {
+                            expr: Expression::Number(25),
+                        }),
+                        as_percent: true,
+                    },
+                    set: VariableSet {
+                        elements: vec![("foo".to_owned(), true)],
+                    },
+                    body: Some(Box::new(ParsedExpr {
+                        expr: Expression::Variable("".to_owned()),
+                    })),
+                },
+            },
+        );
+        parse(
+            for_expression_full,
+            "for all i of (1 ,3) : ( false )",
+            "",
+            ParsedExpr {
+                expr: Expression::ForIdentifiers {
+                    selection: ForSelection::All,
+                    identifiers: vec!["i".to_owned()],
+                    iterator: ForIterator::List(vec![
+                        ParsedExpr {
+                            expr: Expression::Number(1),
+                        },
+                        ParsedExpr {
+                            expr: Expression::Number(3),
+                        },
+                    ]),
+                    body: Box::new(ParsedExpr {
+                        expr: Expression::Boolean(false),
+                    }),
+                },
+            },
+        );
+        parse(
+            for_expression_full,
+            "for any a,b,c of toto:(false) b",
+            "b",
+            ParsedExpr {
+                expr: Expression::ForIdentifiers {
+                    selection: ForSelection::Any,
+                    identifiers: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
+                    iterator: ForIterator::Identifier(Identifier::Raw("toto".to_owned())),
+                    body: Box::new(ParsedExpr {
+                        expr: Expression::Boolean(false),
+                    }),
+                },
+            },
+        );
+
+        parse_err(for_expression_full, "");
+        parse_err(for_expression_full, "for");
+        parse_err(for_expression_full, "for all");
+        parse_err(for_expression_full, "for all of");
+        parse_err(for_expression_full, "for all of them");
+        parse_err(for_expression_full, "for 5% of them :");
+        parse_err(for_expression_full, "for 5% of them: (");
+        parse_err(for_expression_full, "for 5% of them: (");
+        parse_err(for_expression_full, "for 5% of them: ()");
+        parse_err(for_expression_full, "for 5% of them :)");
+        parse_err(for_expression_full, "for 5% of them :(");
+
+        parse_err(for_expression_full, "for all i");
+        parse_err(for_expression_full, "for all i of");
+        parse_err(for_expression_full, "for all i of (1)");
+        parse_err(for_expression_full, "for all i of (1) :");
+        parse_err(for_expression_full, "for all i of (1) : (");
+        parse_err(for_expression_full, "for all i of (1) : )");
+        parse_err(for_expression_full, "for all i of (1) : ())");
+    }
+
+    #[test]
+    fn test_for_variables() {
+        parse(for_variables, "i a", "a", vec!["i".to_owned()]);
+        parse(
+            for_variables,
+            "i, ae ,t b",
+            "b",
+            vec!["i".to_owned(), "ae".to_owned(), "t".to_owned()],
+        );
+
+        parse_err(for_variables, "");
+        parse_err(for_variables, "5");
+    }
+
+    #[test]
+    fn test_iterator() {
+        parse(
+            iterator,
+            "i.b a",
+            "a",
+            ForIterator::Identifier(Identifier::Subfield {
+                identifier: Box::new(Identifier::Raw("i".to_owned())),
+                subfield: "b".to_owned(),
+            }),
+        );
+        parse(
+            iterator,
+            "(1)b",
+            "b",
+            ForIterator::List(vec![ParsedExpr {
+                expr: Expression::Number(1),
+            }]),
+        );
+        parse(
+            iterator,
+            "(1, 2,#a)b",
+            "b",
+            ForIterator::List(vec![
+                ParsedExpr {
+                    expr: Expression::Number(1),
+                },
+                ParsedExpr {
+                    expr: Expression::Number(2),
+                },
+                ParsedExpr {
+                    expr: Expression::Count("a".to_owned()),
+                },
+            ]),
+        );
+        parse(
+            iterator,
+            "(1..#t) b",
+            "b",
+            ForIterator::Range {
+                from: Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                }),
+                to: Box::new(ParsedExpr {
+                    expr: Expression::Count("t".to_owned()),
+                }),
+            },
+        );
+
+        parse_err(iterator, "");
+        parse_err(iterator, "(");
+        parse_err(iterator, "()");
+        parse_err(iterator, ")");
+        parse_err(iterator, "(1,2");
+        parse_err(iterator, "(1..2");
     }
 }

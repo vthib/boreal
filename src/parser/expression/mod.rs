@@ -121,15 +121,26 @@ enum Expression {
         to: Box<ParsedExpr>,
     },
 
+    // selection 'of' set
+    // 'for' selection 'of' set ':' '(' body ')'
     For {
         selection: ForSelection,
         set: VariableSet,
+        body: Option<Box<ParsedExpr>>,
     },
+    // selection 'of' set 'in' '(' from '..' to ')'
     ForIn {
         selection: ForSelection,
         set: VariableSet,
         from: Box<ParsedExpr>,
         to: Box<ParsedExpr>,
+    },
+    // 'for' selection identifiers 'of' iterator ':' '(' body ')'
+    ForIdentifiers {
+        selection: ForSelection,
+        identifiers: Vec<String>,
+        iterator: ForIterator,
+        body: Box<ParsedExpr>,
     },
 
     Identifier(Identifier),
@@ -161,6 +172,17 @@ enum ForSelection {
         expr: Box<ParsedExpr>,
         as_percent: bool,
     },
+}
+
+/// Iterator for a 'for' expression over an identifier.
+#[derive(Clone, Debug, PartialEq)]
+enum ForIterator {
+    Identifier(Identifier),
+    Range {
+        from: Box<ParsedExpr>,
+        to: Box<ParsedExpr>,
+    },
+    List(Vec<ParsedExpr>),
 }
 
 /// Set of multiple variables.
