@@ -8,6 +8,7 @@ mod string_expression;
 mod validation;
 
 pub use boolean_expression::expression;
+pub use validation::Validator;
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
@@ -194,13 +195,4 @@ struct VariableSet {
     /// The associated boolean indicates if the name has a trailing
     /// wildcard.
     elements: Vec<(String, bool)>,
-}
-
-impl ParsedExpr {
-    /// Validate a boolean parsed expression.
-    ///
-    /// Ensure the expression is well-formed, and returns a boolean.
-    pub fn validate_boolean_expression(self) -> Result<crate::expression::Expression, String> {
-        validation::validate_boolean_expression(self)
-    }
 }

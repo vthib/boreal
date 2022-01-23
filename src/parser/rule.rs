@@ -12,8 +12,7 @@ use nom::{
 };
 
 use super::{
-    expression::{self, ParsedExpr},
-    hex_string,
+    expression, hex_string,
     nom_recipes::{rtrim, textual_tag as ttag},
     number, string,
 };
@@ -401,7 +400,10 @@ fn condition(input: &str) -> IResult<&str, Expression> {
 
     map_res(
         cut(preceded(rtrim(char(':')), expression::expression)),
-        ParsedExpr::validate_boolean_expression,
+        |expr| {
+            let validator = expression::Validator {};
+            validator.validate_boolean_expression(expr)
+        },
     )(input)
 }
 
