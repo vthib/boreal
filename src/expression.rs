@@ -187,6 +187,61 @@ pub enum Expression {
         to: Box<Expression>,
     },
 
+    // Boolean for expression
+    //
+    /// Iterate over a set of variables.
+    ///
+    /// This expression is true if a given amount of
+    /// variables in a given set matches a given condition.
+    ///
+    /// e.g. `for 2 of ($a, $b, $c) : ( $ at entrypoint )`
+    For {
+        /// Decides how many variables in the set must match the condition
+        /// for this condition to be considered true.
+        selection: ForSelection,
+
+        /// List of variables considered.
+        ///
+        /// If empty, all variables declared in the rule are part of the set.
+        set: Vec<String>,
+
+        /// Optional condition.
+        ///
+        /// If set, the expression is evaluated for every variable in the
+        /// set. '$' can be used to refer to the picked variable.
+        ///
+        /// If unset, this is equivalent to `$`, ie the [`Expression::Variable`]
+        /// expression for the picked variable.
+        condition: Option<Box<Expression>>,
+    },
+
+    /// Iterate over a set of bound identifiers.
+    ///
+    /// This expression is true if a given amount of
+    /// conditions are true, while binding some given identifiers to a set
+    /// of possible values.
+    ///
+    /// e.g. `for any i of (1..#a) : ( @a[i] < 100 )`
+    ForIdentifiers {
+        /// Decides how many times the condition must be true in order
+        /// for this condition to be considered true.
+        selection: ForSelection,
+
+        /// Identifiers to bind to values from the iterator.
+        ///
+        /// Usually, should contain a single element.
+        /// However, if the iterator is an object that evaluates to an
+        /// array or a dict, multiple identifiers can be bound accordingly.
+        identifiers: Vec<String>,
+
+        /// Set of values to bind to the given identifiers in order.
+        iterator: ForIterator,
+
+        /// Condition to evaluate on every binding until the selection
+        /// is matched.
+        condition: Box<Expression>,
+    },
+
     // String expressions
     //
     /// A raw identifier.
@@ -198,4 +253,53 @@ pub enum Expression {
     //
     /// Regex
     Regex(Regex),
+}
+
+/// Selection in a 'for' expression.
+///
+/// This indicates how many times the condition of a for expression
+/// must be true for the expression to be considered true.
+/// See [`Expression::For`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum ForSelection {
+    /// Any variable/identifier in the set must match the condition.
+    Any,
+
+    /// All of the variables/identifiers in the set must match the condition.
+    All,
+
+    /// None of the variables/identifiers in the set must match the condition.
+    None,
+
+    /// Expression that should evaluate to a number, indicating:
+    /// - if as_percent is false, how many variables/identifiers in the set
+    ///   must match the condition.
+    /// - if as_percent is true, which percentage of variables in the set
+    ///   msut match the condition.
+    ///
+    /// Usually, the expression is a simple number.
+    Expr {
+        expr: Box<Expression>,
+        as_percent: bool,
+    },
+}
+
+/// Iterator for a 'for' expression over an identifier.
+///
+/// See [`Expression::ForIdentifiers`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum ForIterator {
+    /// An identifier.
+    ///
+    /// This can be an array or a dictionary.
+    Identifier(Identifier),
+
+    /// A numeric range.
+    Range {
+        from: Box<Expression>,
+        to: Box<Expression>,
+    },
+
+    /// A list of values.
+    List(Vec<Expression>),
 }

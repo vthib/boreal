@@ -23,6 +23,11 @@ use super::{
     Expression, ForIterator, ForSelection, ParsedExpr, VariableSet,
 };
 
+/// Parse all variantes of for expressions.
+pub fn for_expression(input: &str) -> IResult<&str, ParsedExpr> {
+    alt((for_expression_full, for_expression_abbrev))(input)
+}
+
 /// Parse for expressions without any for keyword or body content.
 ///
 /// This parses:
@@ -30,7 +35,7 @@ use super::{
 /// - `selection 'of' set 'in' range`
 fn for_expression_abbrev(input: &str) -> IResult<&str, ParsedExpr> {
     let (input, selection) = for_selection(input)?;
-    let (input, set) = cut(preceded(rtrim(ttag("of")), string_set))(input)?;
+    let (input, set) = preceded(rtrim(ttag("of")), cut(string_set))(input)?;
     let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
 
     let expr = match range {

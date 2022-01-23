@@ -10,9 +10,12 @@ use nom::{
     IResult,
 };
 
-use super::super::{
-    nom_recipes::{rtrim, textual_tag as ttag},
-    string::{regex, string_identifier},
+use super::{
+    super::{
+        nom_recipes::{rtrim, textual_tag as ttag},
+        string::{regex, string_identifier},
+    },
+    for_expression::for_expression,
 };
 use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
 
@@ -93,6 +96,8 @@ fn expression_item(input: &str) -> IResult<&str, ParsedExpr> {
         }),
         // '(' expression ')'
         delimited(rtrim(char('(')), expression, rtrim(char(')'))),
+        // all variants of for expressions
+        for_expression,
         // string_identifier ...
         variable_expression,
         // primary_expression ...

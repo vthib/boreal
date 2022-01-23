@@ -407,6 +407,7 @@ fn condition(input: &str) -> IResult<&str, Expression> {
 
 #[cfg(test)]
 mod tests {
+    use crate::expression::ForSelection;
     use crate::hex_string::{HexToken, Mask};
     use crate::regex::Regex;
 
@@ -676,7 +677,7 @@ mod tests {
         );
         parse(
             rule,
-            "private global rule b : tag1 tag2 { meta: a = true strings: $b = \"t\" condition: false }",
+            "private global rule b : tag1 tag2 { meta: a = true strings: $b = \"t\" condition: all of them }",
             "",
             Rule {
                 name: "b".to_owned(),
@@ -692,7 +693,11 @@ mod tests {
                         modifiers: VariableModifiers { flags: VariableFlags::empty(), ..VariableModifiers::default() }
                     })
                 ].into_iter().collect(),
-                condition: Expression::Boolean(false),
+                condition: Expression::For {
+                    selection: ForSelection::All,
+                    set: vec![],
+                    condition: None,
+                },
                 is_private: true,
                 is_global: true,
             },

@@ -1,4 +1,4 @@
-use super::{Expression, Identifier, ParsedExpr};
+use super::{Expression, ForIterator, ForSelection, Identifier, ParsedExpr};
 use crate::expression::Expression as EExpr;
 
 /// Type of a parsed expression
@@ -94,15 +94,14 @@ fn validate_identifier(ident: Identifier) -> Result<crate::expression::Identifie
             arguments,
         } => {
             let identifier = validate_identifier(*identifier)?;
-            let mut args = Vec::new();
-            for arg in arguments {
-                let arg = validate_expr(arg)?;
-                args.push(arg.expression);
-            }
+            let args: Result<Vec<_>, _> = arguments
+                .into_iter()
+                .map(|v| validate_expr(v).map(|v| v.expression))
+                .collect();
 
             Ok(I::FunctionCall {
                 identifier: Box::new(identifier),
-                arguments: args,
+                arguments: args?,
             })
         }
     }
@@ -406,8 +405,82 @@ fn validate_expr(expr: ParsedExpr) -> Result<ValidatedExpression, String> {
             ty: Type::Regex,
         }),
 
-        Expression::For { .. } | Expression::ForIn { .. } | Expression::ForIdentifiers { .. } => {
-            todo!()
+        Expression::For {
+            selection,
+            set,
+            body,
+        } => {
+            let condition = match body {
+                None => None,
+                Some(body) => {
+                    let body = validate_expr(*body)?;
+
+                    Some(body.unwrap_expr(Type::Boolean)?)
+                }
+            };
+            let selection = validate_for_selection(selection)?;
+            // TODO: validate set with list of variables
+            let set = set.elements.into_iter().map(|a| a.0).collect();
+
+            Ok(ValidatedExpression {
+                expression: EExpr::For {
+                    selection,
+                    set,
+                    condition,
+                },
+                ty: Type::Boolean,
+            })
+        }
+
+        Expression::ForIn {
+            selection,
+            set,
+            from,
+            to,
+        } => {
+            let from = validate_expr(*from)?;
+            let to = validate_expr(*to)?;
+
+            // convert the ForIn expression to a simple for, with
+            // a condition '$ in range'.
+            let condition = EExpr::VariableIn {
+                variable: String::new(),
+                from: from.unwrap_expr(Type::Integer)?,
+                to: to.unwrap_expr(Type::Integer)?,
+            };
+            let selection = validate_for_selection(selection)?;
+            // TODO: validate set with list of variables
+            let set = set.elements.into_iter().map(|a| a.0).collect();
+
+            Ok(ValidatedExpression {
+                expression: EExpr::For {
+                    selection,
+                    set,
+                    condition: Some(Box::new(condition)),
+                },
+                ty: Type::Boolean,
+            })
+        }
+
+        Expression::ForIdentifiers {
+            selection,
+            identifiers,
+            iterator,
+            body,
+        } => {
+            let body = validate_expr(*body)?;
+            let selection = validate_for_selection(selection)?;
+            let iterator = validate_for_iterator(iterator)?;
+
+            Ok(ValidatedExpression {
+                expression: EExpr::ForIdentifiers {
+                    selection,
+                    identifiers,
+                    iterator,
+                    condition: body.unwrap_expr(Type::Boolean)?,
+                },
+                ty: Type::Boolean,
+            })
         }
     }
 }
@@ -461,6 +534,7 @@ where
         ty: type_result,
     })
 }
+
 fn validate_comparison(a: &ValidatedExpression, b: &ValidatedExpression) -> Result<(), String> {
     match (a.ty, b.ty) {
         (Type::String, Type::String)
@@ -470,6 +544,52 @@ fn validate_comparison(a: &ValidatedExpression, b: &ValidatedExpression) -> Resu
             a.ty, b.ty
         )),
     }
+}
+
+fn validate_for_selection(
+    selection: ForSelection,
+) -> Result<crate::expression::ForSelection, String> {
+    use crate::expression::ForSelection as FS;
+
+    Ok(match selection {
+        ForSelection::Any => FS::Any,
+        ForSelection::All => FS::All,
+        ForSelection::None => FS::None,
+        ForSelection::Expr { expr, as_percent } => {
+            let expr = validate_expr(*expr)?;
+            let expr = expr.unwrap_expr(Type::Integer)?;
+
+            FS::Expr { expr, as_percent }
+        }
+    })
+}
+
+fn validate_for_iterator(iterator: ForIterator) -> Result<crate::expression::ForIterator, String> {
+    use crate::expression::ForIterator as FI;
+
+    Ok(match iterator {
+        ForIterator::Identifier(ident) => {
+            let ident = validate_identifier(ident)?;
+            FI::Identifier(ident)
+        }
+        ForIterator::Range { from, to } => {
+            let from = validate_expr(*from)?;
+            let to = validate_expr(*to)?;
+
+            FI::Range {
+                from: from.unwrap_expr(Type::Integer)?,
+                to: to.unwrap_expr(Type::Integer)?,
+            }
+        }
+        ForIterator::List(values) => {
+            let values: Result<Vec<_>, _> = values
+                .into_iter()
+                .map(|v| validate_expr(v).map(|v| v.expression))
+                .collect();
+
+            FI::List(values?)
+        }
+    })
 }
 
 #[cfg(test)]
@@ -580,6 +700,24 @@ mod tests {
         test_validation_err("\"a\" < 1");
         test_validation_err("2 == a");
         test_validation_err("/a/ != 1");
+    }
+
+    #[test]
+    fn test_validation_for_expression() {
+        test_validation("any of them", Type::Boolean);
+        test_validation("all of ($a, $b*)", Type::Boolean);
+        test_validation("all of them in (1..3)", Type::Boolean);
+        test_validation("for any of them: (true)", Type::Boolean);
+        test_validation("for all i of (1, 2): (true)", Type::Boolean);
+
+        test_validation_err("for any of them: (1)");
+        test_validation_err("/a/ of them");
+        test_validation_err("1.2% of them");
+        test_validation_err("1.2% of them");
+        test_validation_err("any of them in (1../a/)");
+        test_validation_err("any of them in (/a/..2)");
+        test_validation_err("for any i of (1../a/): (true)");
+        test_validation_err("for any i of (/a/..1): (true)");
     }
 
     // TODO: add tests to check the "ty" field in ValidatedExpression
