@@ -9,7 +9,7 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt},
     multi::separated_list1,
-    sequence::{delimited, preceded},
+    sequence::{delimited, pair, preceded},
     IResult,
 };
 
@@ -53,9 +53,13 @@ fn for_selection(input: &str) -> IResult<&str, ForSelection> {
         map(rtrim(ttag("any")), |_| ForSelection::Any),
         map(rtrim(ttag("all")), |_| ForSelection::All),
         map(rtrim(ttag("none")), |_| ForSelection::None),
-        map(primary_expression, |expr| {
-            ForSelection::Expr(Box::new(expr))
-        }),
+        map(
+            pair(primary_expression, opt(rtrim(char('%')))),
+            |(expr, percent)| ForSelection::Expr {
+                expr: Box::new(expr),
+                as_percent: percent.is_some(),
+            },
+        ),
     ))(input)
 }
 
@@ -98,18 +102,35 @@ mod tests {
             for_selection,
             "1a",
             "a",
-            ForSelection::Expr(Box::new(ParsedExpr {
-                expr: Expression::Number(1),
-            })),
+            ForSelection::Expr {
+                expr: Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                }),
+                as_percent: false,
+            },
+        );
+        parse(
+            for_selection,
+            "50% of",
+            "of",
+            ForSelection::Expr {
+                expr: Box::new(ParsedExpr {
+                    expr: Expression::Number(50),
+                }),
+                as_percent: true,
+            },
         );
 
         parse(
             for_selection,
             "anya",
             "",
-            ForSelection::Expr(Box::new(ParsedExpr {
-                expr: Expression::Identifier(Identifier::Raw("anya".to_owned())),
-            })),
+            ForSelection::Expr {
+                expr: Box::new(ParsedExpr {
+                    expr: Expression::Identifier(Identifier::Raw("anya".to_owned())),
+                }),
+                as_percent: false,
+            },
         );
 
         parse_err(for_selection, "");
@@ -192,13 +213,32 @@ mod tests {
         );
         parse(
             for_expression_abbrev,
+            "50% of them",
+            "",
+            ParsedExpr {
+                expr: Expression::For {
+                    selection: ForSelection::Expr {
+                        expr: Box::new(ParsedExpr {
+                            expr: Expression::Number(50),
+                        }),
+                        as_percent: true,
+                    },
+                    set: VariableSet { elements: vec![] },
+                },
+            },
+        );
+        parse(
+            for_expression_abbrev,
             "5 of ($a, $b*) in (100..entrypoint)",
             "",
             ParsedExpr {
                 expr: Expression::ForIn {
-                    selection: ForSelection::Expr(Box::new(ParsedExpr {
-                        expr: Expression::Number(5),
-                    })),
+                    selection: ForSelection::Expr {
+                        expr: Box::new(ParsedExpr {
+                            expr: Expression::Number(5),
+                        }),
+                        as_percent: false,
+                    },
                     set: VariableSet {
                         elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
                     },

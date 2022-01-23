@@ -149,11 +149,18 @@ enum ForSelection {
     All,
     /// None of the variables in the set must match the condition.
     None,
-    /// Expression that should evaluate to a number, indicating
-    /// how many variables in the set must match the condition.
+    /// Expression that should evaluate to a number, indicating:
+    /// - if as_percent is false, how many variables in the set must match
+    ///   the condition.
+    /// - if as_percent is true, which percentage of variables in the set
+    ///   msut match the condition.
+    ///   the condition.
     ///
-    /// Usually, a simple number.
-    Expr(Box<ParsedExpr>),
+    /// Usually, the expression is a simple number.
+    Expr {
+        expr: Box<ParsedExpr>,
+        as_percent: bool,
+    },
 }
 
 /// Set of multiple variables.

@@ -5,7 +5,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::char,
-    combinator::{cut, map, opt},
+    combinator::{cut, map, opt, peek},
     sequence::{delimited, tuple},
     IResult,
 };
@@ -105,15 +105,27 @@ fn primary_expression_add(input: &str) -> IResult<&str, ParsedExpr> {
 fn primary_expression_mul(input: &str) -> IResult<&str, ParsedExpr> {
     let (mut input, mut res) = primary_expression_neg(input)?;
 
-    while let Ok((i, op)) = rtrim(alt((tag("*"), tag("\\"), tag("%"))))(input) {
-        let (i2, right_elem) = cut(primary_expression_neg)(i)?;
+    while let Ok((i, op)) = rtrim(alt((char('*'), char('\\'), char('%'))))(input) {
+        if op == '%' {
+            // XXX: workaround issue with parsing the for as_percent expression:
+            // - '50% of them'
+            //   => should parse the expression as '50', not as '50' mod 'of'
+            // Not sure how yacc manages to properly handle those rules, but
+            // I have no easy solution for this in nom.
+            let (_, of) = opt(peek(ttag("of")))(i)?;
+            if of.is_some() {
+                return Ok((input, res));
+            }
+        }
+
+        let (i2, right_elem) = primary_expression_neg(i)?;
         input = i2;
 
         res = ParsedExpr {
             expr: match op {
-                "*" => Expression::Mul(Box::new(res), Box::new(right_elem)),
-                "\\" => Expression::Div(Box::new(res), Box::new(right_elem)),
-                "%" => Expression::Mod(Box::new(res), Box::new(right_elem)),
+                '*' => Expression::Mul(Box::new(res), Box::new(right_elem)),
+                '\\' => Expression::Div(Box::new(res), Box::new(right_elem)),
+                '%' => Expression::Mod(Box::new(res), Box::new(right_elem)),
                 _ => unreachable!(),
             },
         }
