@@ -3,12 +3,12 @@ use std::collections::HashSet;
 
 use nom::{
     branch::alt,
-    character::complete::char,
+    character::complete::{char, multispace0},
     combinator::{cut, map, map_res, opt},
     error::{Error, ErrorKind, FromExternalError},
     multi::many1,
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
-    IResult,
+    Finish, IResult,
 };
 
 use super::{
@@ -21,10 +21,22 @@ use crate::rule::{
 };
 use crate::{expression::Expression, rule::VariableDeclaration};
 
+/// Parse a YARA file.
+pub fn parse_yara_file(input: &str) -> Result<(&str, Vec<Rule>), Error<&str>> {
+    parse_yara_file_inner(input).finish()
+}
+
+fn parse_yara_file_inner(input: &str) -> IResult<&str, Vec<Rule>> {
+    let (input, _) = multispace0(input)?;
+    many1(rule)(input)
+}
+
+///
+/// Related to the `rule` pattern in `grammar.y` in libyara.
 /// Parse a rule
 ///
 /// Related to the `rule` pattern in `grammar.y` in libyara.
-pub fn rule(mut input: &str) -> IResult<&str, Rule> {
+fn rule(mut input: &str) -> IResult<&str, Rule> {
     let mut is_private = false;
     let mut is_global = false;
 
@@ -823,5 +835,19 @@ mod tests {
         parse_err(base64_modifier, &format!(r#"base64("{}""#, alphabet));
         parse_err(base64_modifier, "base64(\"123\")");
         parse_err(base64_modifier, "base64wide(15)");
+    }
+
+    #[test]
+    fn test_parse_yara_file() {
+        assert!(parse_yara_file("  global rule c { condition: false }").is_ok());
+        assert!(parse_yara_file(
+            "
+            global rule c { condition: false }
+            rule d { condition: true }
+            a
+        "
+        )
+        .is_ok());
+        assert!(parse_yara_file("").is_err());
     }
 }
