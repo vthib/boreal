@@ -8,7 +8,7 @@ use nom::{
     error::{Error, ErrorKind, FromExternalError},
     multi::many1,
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
-    Finish, IResult,
+    IResult,
 };
 
 use super::{
@@ -21,12 +21,8 @@ use crate::rule::{
 };
 use crate::{expression::Expression, rule::VariableDeclaration};
 
-/// Parse a YARA file.
-pub fn parse_yara_file(input: &str) -> Result<(&str, Vec<Rule>), Error<&str>> {
-    parse_yara_file_inner(input).finish()
-}
-
-fn parse_yara_file_inner(input: &str) -> IResult<&str, Vec<Rule>> {
+/// Parse a full YARA file.
+pub fn parse_yara_file(input: &str) -> IResult<&str, Vec<Rule>> {
     let (input, _) = multispace0(input)?;
     many1(rule)(input)
 }
@@ -839,15 +835,48 @@ mod tests {
 
     #[test]
     fn test_parse_yara_file() {
-        assert!(parse_yara_file("  global rule c { condition: false }").is_ok());
-        assert!(parse_yara_file(
-            "
-            global rule c { condition: false }
-            rule d { condition: true }
-            a
-        "
-        )
-        .is_ok());
-        assert!(parse_yara_file("").is_err());
+        parse(
+            parse_yara_file,
+            "  global rule c { condition: false }",
+            "",
+            vec![Rule {
+                name: "c".to_owned(),
+                condition: Expression::Boolean(false),
+                tags: Vec::new(),
+                metadatas: Vec::new(),
+                variables: Vec::new(),
+                is_private: false,
+                is_global: true,
+            }],
+        );
+
+        parse(
+            parse_yara_file,
+            "global rule c { condition: false }\n  rule d { condition: true }\n  a",
+            "a",
+            vec![
+                Rule {
+                    name: "c".to_owned(),
+                    condition: Expression::Boolean(false),
+                    tags: Vec::new(),
+                    metadatas: Vec::new(),
+                    variables: Vec::new(),
+                    is_private: false,
+                    is_global: true,
+                },
+                Rule {
+                    name: "d".to_owned(),
+                    condition: Expression::Boolean(true),
+                    tags: Vec::new(),
+                    metadatas: Vec::new(),
+                    variables: Vec::new(),
+                    is_private: false,
+                    is_global: false,
+                },
+            ],
+        );
+
+        parse_err(parse_yara_file, "");
+        parse_err(parse_yara_file, "rule");
     }
 }
