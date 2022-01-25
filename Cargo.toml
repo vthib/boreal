@@ -10,3 +10,7 @@ nom = "7.1"
 
 # packing multiple flags together
 bitflags = "1.3"
+
+[dev-dependencies]
+# To test all files in a repository
+glob = "0.3"

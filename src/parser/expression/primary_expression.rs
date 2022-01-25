@@ -208,7 +208,7 @@ mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression as Expr, ParsedExpr};
     use crate::expression::ReadIntegerSize;
-    use crate::parser::test_utils::{parse, parse_check, parse_err};
+    use crate::parser::tests::{parse, parse_check, parse_err};
 
     #[test]
     #[allow(clippy::too_many_lines)]

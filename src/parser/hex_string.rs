@@ -214,7 +214,7 @@ pub fn hex_string(input: &str) -> IResult<&str, HexString> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::test_utils::{parse, parse_err};
+    use crate::parser::tests::{parse, parse_err};
 
     #[test]
     fn test_parse_hex_byte() {

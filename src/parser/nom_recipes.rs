@@ -53,7 +53,7 @@ pub fn textual_tag(tag: &'static str) -> impl Fn(&str) -> IResult<&str, &'static
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_utils::{parse, parse_err};
+    use super::super::tests::{parse, parse_err};
 
     fn dummy_parser(input: &str) -> nom::IResult<&str, char> {
         nom::character::complete::char('-')(input)

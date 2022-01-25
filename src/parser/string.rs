@@ -222,7 +222,7 @@ fn regex_contents(mut input: &str) -> IResult<&str, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_utils::{parse, parse_err};
+    use super::super::tests::{parse, parse_err};
 
     #[test]
     fn test_parse_quoted() {

@@ -31,3 +31,16 @@ where
     let res = f(input).finish();
     check(res.unwrap().1);
 }
+
+#[test]
+fn test_parsing_global() {
+    let glob_str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/parsing/**/*.yara");
+
+    for entry in glob::glob(glob_str).expect("Failed to read glob pattern") {
+        let entry = entry.unwrap();
+        match super::parse_file(&entry) {
+            Ok(_) => println!("OK   {:?}", &entry),
+            Err(e) => println!("FAIL {:?}\n  {:?}", &entry, e),
+        };
+    }
+}

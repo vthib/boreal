@@ -222,7 +222,7 @@ mod tests {
     use super::*;
     use crate::parser::{
         expression::Identifier,
-        test_utils::{parse, parse_check, parse_err},
+        tests::{parse, parse_check, parse_err},
     };
 
     #[track_caller]

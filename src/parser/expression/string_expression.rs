@@ -76,7 +76,7 @@ pub fn string_length_expression(input: &str) -> IResult<&str, ParsedExpr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::test_utils::{parse, parse_err};
+    use crate::parser::tests::{parse, parse_err};
 
     #[test]
     fn test_string_count_expression() {

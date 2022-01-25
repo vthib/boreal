@@ -418,7 +418,7 @@ mod tests {
     use crate::hex_string::{HexToken, Mask};
     use crate::regex::Regex;
 
-    use super::super::test_utils::{parse, parse_err};
+    use super::super::tests::{parse, parse_err};
     use super::*;
 
     #[test]

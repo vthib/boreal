@@ -60,7 +60,7 @@ pub fn read_integer_expression(input: &str) -> IResult<&str, ParsedExpr> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::test_utils::{parse, parse_err};
+    use super::super::super::tests::{parse, parse_err};
     use super::{
         read_integer, read_integer_expression, Expression, ParsedExpr, ReadIntegerSize as RIS,
     };

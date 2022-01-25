@@ -32,7 +32,7 @@ pub fn range(input: &str) -> IResult<&str, (Box<ParsedExpr>, Box<ParsedExpr>)> {
 mod tests {
     use super::*;
     use crate::parser::expression::Expression;
-    use crate::parser::test_utils::{parse, parse_err};
+    use crate::parser::tests::{parse, parse_err};
 
     #[test]
     fn test_range() {

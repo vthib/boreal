@@ -73,7 +73,7 @@ pub fn double(input: &str) -> IResult<&str, f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::test_utils::{parse, parse_err};
+    use crate::parser::tests::{parse, parse_err};
 
     #[test]
     fn test_parse_number() {
