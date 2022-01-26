@@ -6,7 +6,7 @@ use nom::{
     character::complete::{char, multispace0},
     combinator::{cut, map, map_res, opt},
     error::{Error, ErrorKind, FromExternalError},
-    multi::many1,
+    multi::{many0, many1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     IResult,
 };
@@ -27,14 +27,15 @@ pub fn parse_yara_file(input: &str) -> IResult<&str, Vec<Rule>> {
     many1(rule)(input)
 }
 
-///
-/// Related to the `rule` pattern in `grammar.y` in libyara.
 /// Parse a rule
 ///
 /// Related to the `rule` pattern in `grammar.y` in libyara.
-fn rule(mut input: &str) -> IResult<&str, Rule> {
+fn rule(input: &str) -> IResult<&str, Rule> {
     let mut is_private = false;
     let mut is_global = false;
+
+    // TODO: handle imports
+    let (mut input, _) = opt(many0(import))(input)?;
 
     loop {
         match rtrim(ttag("rule"))(input) {
@@ -76,6 +77,11 @@ fn rule(mut input: &str) -> IResult<&str, Rule> {
             is_global,
         },
     )(input)
+}
+
+/// Parse an import declaration
+fn import(input: &str) -> IResult<&str, String> {
+    preceded(rtrim(ttag("import")), cut(string::quoted))(input)
 }
 
 /// Parse a list of tags
@@ -852,7 +858,12 @@ mod tests {
 
         parse(
             parse_yara_file,
-            "global rule c { condition: false }\n  rule d { condition: true }\n  a",
+            r#" import "pe"
+                global rule c { condition: false }
+                import "foo"
+                import "quux"
+                rule d { condition: true }
+                a"#,
             "a",
             vec![
                 Rule {
