@@ -10,7 +10,10 @@ use nom::{
 };
 
 use crate::expression::ReadIntegerSize;
-use crate::parser::nom_recipes::{rtrim, Input, ParseResult};
+use crate::parser::{
+    nom_recipes::rtrim,
+    types::{Input, ParseResult},
+};
 
 use super::{primary_expression::primary_expression, Expression, ParsedExpr};
 

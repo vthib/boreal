@@ -13,8 +13,9 @@ use nom::{
 };
 
 use crate::parser::{
-    nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult},
+    nom_recipes::{rtrim, textual_tag as ttag},
     string::string_identifier_with_wildcard,
+    types::{Input, ParseResult},
 };
 
 use super::{

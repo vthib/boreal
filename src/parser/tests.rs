@@ -1,4 +1,4 @@
-use super::nom_recipes::{Input, ParseResult};
+use super::types::{Input, ParseResult};
 use nom::Finish;
 
 #[track_caller]

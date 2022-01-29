@@ -9,7 +9,8 @@ use nom::{
     sequence::{pair, tuple},
 };
 
-use super::nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult};
+use super::nom_recipes::{rtrim, textual_tag as ttag};
+use super::types::{Input, ParseResult};
 
 /// Parse a decimal number.
 ///

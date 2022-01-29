@@ -12,8 +12,9 @@ use nom::{
 
 use super::{
     expression, hex_string,
-    nom_recipes::{ltrim, rtrim, textual_tag as ttag, Input, ParseResult},
+    nom_recipes::{ltrim, rtrim, textual_tag as ttag},
     number, string,
+    types::{Input, ParseResult},
 };
 use crate::rule::{
     Metadata, MetadataValue, Rule, VariableDeclarationValue, VariableFlags, VariableModifiers,

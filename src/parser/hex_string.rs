@@ -11,7 +11,8 @@ use nom::{
     sequence::{preceded, separated_pair, terminated},
 };
 
-use super::nom_recipes::{rtrim, Input, ParseResult};
+use super::nom_recipes::rtrim;
+use super::types::{Input, ParseResult};
 use crate::hex_string::{HexString, HexToken, Jump, Mask};
 
 // TODO: handle this limit in some way

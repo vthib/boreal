@@ -7,7 +7,8 @@ use nom::{
 };
 
 use super::{primary_expression::primary_expression, ParsedExpr};
-use crate::parser::nom_recipes::{rtrim, Input, ParseResult};
+use crate::parser::nom_recipes::rtrim;
+use crate::parser::types::{Input, ParseResult};
 
 /// Parse a 'in' range for primary expressions.
 ///

@@ -34,6 +34,7 @@ mod nom_recipes;
 mod number;
 mod rule;
 mod string;
+mod types;
 
 /// Parse a YARA file.
 ///

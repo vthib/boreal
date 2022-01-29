@@ -7,8 +7,9 @@ use nom::{
 };
 
 use super::{Identifier, ParsedExpr};
-use crate::parser::nom_recipes::{rtrim, Input, ParseResult};
+use crate::parser::nom_recipes::rtrim;
 use crate::parser::string::identifier as raw_identifier;
+use crate::parser::types::{Input, ParseResult};
 
 use super::boolean_expression::expression;
 use super::primary_expression::primary_expression;

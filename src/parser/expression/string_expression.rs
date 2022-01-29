@@ -11,8 +11,9 @@ use nom::{
 
 use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
 use crate::parser::{
-    nom_recipes::{rtrim, Input, ParseResult},
+    nom_recipes::rtrim,
     string,
+    types::{Input, ParseResult},
 };
 
 /// Parse a `string_count ( 'in' range )` expression

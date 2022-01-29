@@ -11,7 +11,8 @@ use nom::{
     sequence::{pair, preceded, terminated, tuple},
 };
 
-use super::nom_recipes::{rtrim, take_one, Input, ParseResult};
+use super::nom_recipes::{rtrim, take_one};
+use super::types::{Input, ParseResult};
 use crate::regex::Regex;
 
 /// Returns true if the char is an identifier digit, ie a-z, a-Z, 0-9, _

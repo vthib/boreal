@@ -9,11 +9,12 @@ use nom::{
     sequence::{delimited, tuple},
 };
 
-use super::super::{
-    nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult},
-    number, string,
-};
 use super::{identifier, read_integer, string_expression, Expression, ParsedExpr};
+use crate::parser::{
+    nom_recipes::{rtrim, textual_tag as ttag},
+    number, string,
+    types::{Input, ParseResult},
+};
 
 /// parse | operator
 pub fn primary_expression(input: Input) -> ParseResult<ParsedExpr> {

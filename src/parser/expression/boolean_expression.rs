@@ -11,8 +11,9 @@ use nom::{
 
 use super::{
     super::{
-        nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult},
+        nom_recipes::{rtrim, textual_tag as ttag},
         string::{regex, string_identifier},
+        types::{Input, ParseResult},
     },
     for_expression::for_expression,
 };
