@@ -1,9 +1,12 @@
 //! Some common and useful nom recipes, shared by all other modules.
 
 use nom::{
-    character::complete::multispace0,
+    branch::alt,
+    bytes::complete::{tag, take_until},
+    character::complete::{char, multispace0},
+    combinator::{opt, value},
     error::{Error, ErrorKind, ParseError},
-    sequence::terminated,
+    sequence::{pair, preceded, terminated, tuple},
     IResult,
 };
 
@@ -12,7 +15,27 @@ pub fn rtrim<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, 
 where
     F: FnMut(&'a str) -> IResult<&'a str, O>,
 {
-    terminated(inner, multispace0)
+    terminated(
+        inner,
+        pair(
+            multispace0,
+            opt(alt((multiline_comment, singleline_comment))),
+        ),
+    )
+}
+
+/// Left trim before the given parser.
+pub fn ltrim<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
+where
+    F: FnMut(&'a str) -> IResult<&'a str, O>,
+{
+    preceded(
+        pair(
+            multispace0,
+            opt(alt((multiline_comment, singleline_comment))),
+        ),
+        inner,
+    )
 }
 
 /// Accepts a single character if the passed function returns true on it.
@@ -51,27 +74,75 @@ pub fn textual_tag(tag: &'static str) -> impl Fn(&str) -> IResult<&str, &'static
     }
 }
 
+/// Parse a C-style /* ... */ comment.
+///
+/// Equivalent to the `comment` state in libyara.
+fn multiline_comment(input: &str) -> IResult<&str, ()> {
+    rtrim(value((), tuple((tag("/*"), take_until("*/"), tag("*/")))))(input)
+}
+
+/// Parse single line // ... comments.
+fn singleline_comment(input: &str) -> IResult<&str, ()> {
+    rtrim(value((), tuple((tag("//"), take_until("\n"), char('\n')))))(input)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{parse, parse_err};
+    use super::*;
+    use crate::parser::tests::{parse, parse_err};
 
-    fn dummy_parser(input: &str) -> nom::IResult<&str, char> {
-        nom::character::complete::char('-')(input)
+    fn dummy_parser(input: &str) -> IResult<&str, char> {
+        char('-')(input)
     }
 
     #[test]
     fn test_rtrim() {
-        use super::rtrim;
-
         parse(dummy_parser, "- b", " b", '-');
         parse(rtrim(dummy_parser), "- b", "b", '-');
+        parse(rtrim(dummy_parser), "-/* */ b", "b", '-');
+        parse(rtrim(dummy_parser), "- /* */b", "b", '-');
+        parse(rtrim(dummy_parser), "- /* */ /* */ b", "b", '-');
+        parse(rtrim(dummy_parser), "- // /* foo\n /**/   b", "b", '-');
+    }
+
+    #[test]
+    fn test_ltrim() {
+        parse(ltrim(dummy_parser), " - b", " b", '-');
+        parse(ltrim(dummy_parser), "/* */ - b", " b", '-');
+        parse(ltrim(dummy_parser), " /* */- b", " b", '-');
+        parse(ltrim(dummy_parser), "/* */ /* */  - b", " b", '-');
+        parse(ltrim(dummy_parser), "// /* foo\n /**/   -b", "b", '-');
     }
 
     #[test]
     fn test_take_one() {
-        use super::take_one;
-
         parse(take_one(char::is_lowercase), "bc", "c", 'b');
         parse_err(take_one(char::is_lowercase), "Bc");
+    }
+
+    #[test]
+    fn test_multiline_comment() {
+        parse(multiline_comment, "/**/a", "a", ());
+        parse(multiline_comment, "/* a\n */\n", "", ());
+        parse(multiline_comment, "/*** a\n\n**//* a */c", "c", ());
+        parse(multiline_comment, "/*** a\n//*/\n*/", "*/", ());
+
+        parse_err(multiline_comment, "/");
+        parse_err(multiline_comment, "/*");
+        parse_err(multiline_comment, "/*/");
+        parse_err(multiline_comment, "/*\n/*");
+        parse_err(multiline_comment, "/ * */");
+        parse_err(multiline_comment, "/* * /");
+    }
+
+    #[test]
+    fn test_singleline_comment() {
+        parse(singleline_comment, "//\n", "", ());
+        parse(singleline_comment, "// comment\n// 2", "// 2", ());
+
+        parse_err(singleline_comment, "/");
+        parse_err(singleline_comment, "//");
+        parse_err(singleline_comment, "// comment");
+        parse_err(singleline_comment, "// comment //");
     }
 }

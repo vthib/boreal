@@ -3,12 +3,12 @@
 //! This implements the `hex_lexer/hex_grammar` files from libyara.
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until},
+    bytes::complete::tag,
     character::complete::{char, digit1, multispace0 as sp0},
-    combinator::{cut, map, map_res, opt, value},
+    combinator::{cut, map, map_res, opt},
     error::{Error, ErrorKind, FromExternalError, ParseError},
     multi::many1,
-    sequence::{preceded, separated_pair, terminated, tuple},
+    sequence::{preceded, separated_pair, terminated},
     IResult,
 };
 
@@ -51,18 +51,6 @@ fn masked_byte(input: &str) -> IResult<&str, (u8, Mask)> {
         map(preceded(char('?'), hex_digit), |v| (v, Mask::Left)),
         map(terminated(hex_digit, char('?')), |v| (v, Mask::Right)),
     )))(input)
-}
-
-/// Parse a C-style /* ... */ comment.
-///
-/// Equivalent to the `comment` state in libyara.
-fn multiline_comment(input: &str) -> IResult<&str, ()> {
-    rtrim(value((), tuple((tag("/*"), take_until("*/"), tag("*/")))))(input)
-}
-
-/// Parse single line // ... comments.
-fn singleline_comment(input: &str) -> IResult<&str, ()> {
-    rtrim(value((), tuple((tag("//"), take_until("\n"), char('\n')))))(input)
 }
 
 /// Parse a jump range, which can be expressed in multiple ways:
@@ -238,32 +226,6 @@ mod tests {
         parse_err(masked_byte, " ?");
         parse_err(masked_byte, "G?");
         parse_err(masked_byte, "?G");
-    }
-
-    #[test]
-    fn test_multiline_comment() {
-        parse(multiline_comment, "/**/a", "a", ());
-        parse(multiline_comment, "/* a\n */\n", "", ());
-        parse(multiline_comment, "/*** a\n\n**//* a */c", "/* a */c", ());
-        parse(multiline_comment, "/*** a\n//*/\n*/", "*/", ());
-
-        parse_err(multiline_comment, "/");
-        parse_err(multiline_comment, "/*");
-        parse_err(multiline_comment, "/*/");
-        parse_err(multiline_comment, "/*\n/*");
-        parse_err(multiline_comment, "/ * */");
-        parse_err(multiline_comment, "/* * /");
-    }
-
-    #[test]
-    fn test_singleline_comment() {
-        parse(singleline_comment, "//\n", "", ());
-        parse(singleline_comment, "// comment\n// 2", "// 2", ());
-
-        parse_err(singleline_comment, "/");
-        parse_err(singleline_comment, "//");
-        parse_err(singleline_comment, "// comment");
-        parse_err(singleline_comment, "// comment //");
     }
 
     #[test]

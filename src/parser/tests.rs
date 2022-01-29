@@ -34,13 +34,32 @@ where
 
 #[test]
 fn test_parsing_global() {
-    let glob_str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/parsing/**/*.yara");
+    let assets_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/parsing_all/");
+    let glob1 =
+        glob::glob(&format!("{}/**/*.yara", assets_dir)).expect("Failed to read glob pattern");
+    let glob2 =
+        glob::glob(&format!("{}/**/*.yar", assets_dir)).expect("Failed to read glob pattern");
 
-    for entry in glob::glob(glob_str).expect("Failed to read glob pattern") {
+    let mut nb_ok = 0;
+    let mut nb_failed = 0;
+    for entry in glob1.chain(glob2) {
         let entry = entry.unwrap();
         match super::parse_file(&entry) {
-            Ok(_) => println!("OK   {:?}", &entry),
-            Err(e) => println!("FAIL {:?}\n  {:?}", &entry, e),
+            Ok(_) => {
+                nb_ok += 1;
+                println!("OK   {:?}", &entry);
+            }
+            Err(e) => {
+                nb_failed += 1;
+                println!("FAIL {:?}\n  {:?}", &entry, e);
+            }
         };
     }
+
+    println!(
+        "parsed {}/{} OK ({:.2}%)",
+        nb_ok,
+        (nb_ok + nb_failed),
+        (f64::from(nb_ok) * 100.) / f64::from(nb_ok + nb_failed)
+    );
 }

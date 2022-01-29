@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use nom::{
     branch::alt,
-    character::complete::{char, multispace0},
+    character::complete::char,
     combinator::{cut, map, map_res, opt},
     error::{Error, ErrorKind, FromExternalError},
     multi::{many0, many1},
@@ -13,7 +13,7 @@ use nom::{
 
 use super::{
     expression, hex_string,
-    nom_recipes::{rtrim, textual_tag as ttag},
+    nom_recipes::{ltrim, rtrim, textual_tag as ttag},
     number, string,
 };
 use crate::rule::{
@@ -23,8 +23,7 @@ use crate::{expression::Expression, rule::VariableDeclaration};
 
 /// Parse a full YARA file.
 pub fn parse_yara_file(input: &str) -> IResult<&str, Vec<Rule>> {
-    let (input, _) = multispace0(input)?;
-    many1(rule)(input)
+    ltrim(many1(rule))(input)
 }
 
 /// Parse a rule
