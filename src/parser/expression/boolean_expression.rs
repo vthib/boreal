@@ -172,6 +172,7 @@ fn primary_expression_cmp(input: Input) -> ParseResult<ParsedExpr> {
     while let Ok((i, op)) = rtrim(alt((tag("<="), tag(">="), tag("<"), tag(">"))))(input) {
         let (i2, right_elem) = cut(primary_expression)(i)?;
         input = i2;
+        let op = op.cursor();
         let less_than = op.bytes().next() == Some(b'<');
         let can_be_equal = op.len() == 2;
         res = ParsedExpr {

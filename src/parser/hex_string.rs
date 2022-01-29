@@ -19,13 +19,16 @@ use crate::hex_string::{HexString, HexToken, Jump, Mask};
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
 
 /// Parse an hex-digit, and return its value in [0-15].
-fn hex_digit(input: Input) -> ParseResult<u8> {
-    match input.chars().next().and_then(|c| {
+fn hex_digit(mut input: Input) -> ParseResult<u8> {
+    match input.cursor().chars().next().and_then(|c| {
         // Cannot truncate, so allow lint
         #[allow(clippy::cast_possible_truncation)]
         c.to_digit(16).map(|v| v as u8)
     }) {
-        Some(v) => Ok((&input[1..], v)),
+        Some(v) => {
+            input.advance(1);
+            Ok((input, v))
+        }
         _ => Err(nom::Err::Error(Error::from_error_kind(
             input,
             ErrorKind::HexDigit,
@@ -70,9 +73,9 @@ fn range(input: Input) -> ParseResult<Jump> {
             // Parses [a?-b?]
             map(
                 separated_pair(
-                    opt(map_res(rtrim(digit1), str::parse)),
+                    opt(map_res(rtrim(digit1), |v| str::parse(v.cursor()))),
                     rtrim(char('-')),
-                    opt(map_res(rtrim(digit1), str::parse)),
+                    opt(map_res(rtrim(digit1), |v| str::parse(v.cursor()))),
                 ),
                 |(from, to)| Jump {
                     from: from.unwrap_or(0),
@@ -80,10 +83,13 @@ fn range(input: Input) -> ParseResult<Jump> {
                 },
             ),
             // Parses [a]
-            map(map_res(rtrim(digit1), str::parse), |value| Jump {
-                from: value,
-                to: Some(value),
-            }),
+            map(
+                map_res(rtrim(digit1), |v| str::parse(v.cursor())),
+                |value| Jump {
+                    from: value,
+                    to: Some(value),
+                },
+            ),
         )),
         rtrim(char(']')),
     ))(input)?;

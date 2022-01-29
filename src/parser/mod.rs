@@ -49,12 +49,13 @@ pub fn parse_file<P: AsRef<Path>>(
     path: P,
 ) -> Result<Vec<crate::rule::Rule>, Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(path)?;
+    let input = types::Input::new(&contents);
 
     // FIXME: work on the error reporting...
-    match rule::parse_yara_file(&contents).finish() {
+    match rule::parse_yara_file(input).finish() {
         Err(e) => Err(format!("parsing error: {:?}", e).into()),
-        Ok((input, _)) if !input.is_empty() => {
-            Err(format!("yara files has trailing data: {}", input).into())
+        Ok((input, _)) if !input.cursor().is_empty() => {
+            Err(format!("yara files has trailing data: {}", input.cursor()).into())
         }
         Ok((_, rules)) => Ok(rules),
     }

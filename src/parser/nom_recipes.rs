@@ -44,8 +44,11 @@ pub fn take_one<F>(f: F) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, char>
 where
     F: Fn(char) -> bool,
 {
-    move |input| match input.chars().next().map(|c| (c, f(c))) {
-        Some((c, true)) => Ok((&input[c.len_utf8()..], c)),
+    move |mut input| match input.cursor().chars().next().map(|c| (c, f(c))) {
+        Some((c, true)) => {
+            input.advance(c.len_utf8());
+            Ok((input, c))
+        }
         _ => Err(nom::Err::Error(Error::from_char(input, '0'))),
     }
 }
@@ -59,9 +62,9 @@ where
 pub fn textual_tag(
     tag: &'static str,
 ) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, &'static str> {
-    move |input: &str| {
+    move |input: Input| {
         if let Some(input) = input.strip_prefix(tag) {
-            match input.chars().next() {
+            match input.cursor().chars().next() {
                 Some(c) if c.is_alphanumeric() => Err(nom::Err::Error(Error::from_error_kind(
                     input,
                     ErrorKind::Tag,

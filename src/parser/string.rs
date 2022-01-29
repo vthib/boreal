@@ -6,13 +6,13 @@ use nom::{
     bytes::complete::{escaped_transform, is_not, take_while},
     character::complete::{char, one_of},
     combinator::{cut, map, opt, recognize, value},
-    error::{Error, ErrorKind, FromExternalError, ParseError},
+    error::{Error, ErrorKind, FromExternalError, ParseError as NomParseError},
     multi::fold_many_m_n,
     sequence::{pair, preceded, terminated, tuple},
 };
 
 use super::nom_recipes::{rtrim, take_one};
-use super::types::{Input, ParseResult};
+use super::types::{Input, ParseError, ParseResult};
 use crate::regex::Regex;
 
 /// Returns true if the char is an identifier digit, ie a-z, a-Z, 0-9, _
@@ -28,7 +28,9 @@ fn is_identifier_digit(c: char) -> bool {
 /// This function *does not* right-trim, as it can be followed
 /// by a '*' character that is meaningful in some contexts.
 fn identifier_contents(input: Input) -> ParseResult<String> {
-    map(take_while(is_identifier_digit), ToOwned::to_owned)(input)
+    map(take_while(is_identifier_digit), |input: Input| {
+        input.cursor().to_owned()
+    })(input)
 }
 
 /// Helper for [`string_identifier`] and [`string_identifier_with_wildcard`].
@@ -82,7 +84,7 @@ pub fn identifier(input: Input) -> ParseResult<String> {
             take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
             cut(take_while(is_identifier_digit)),
         ))),
-        ToOwned::to_owned,
+        |input| input.cursor().to_owned(),
     ))(input)
 }
 
@@ -97,7 +99,7 @@ pub fn quoted(input: Input) -> ParseResult<String> {
     // escaped transform does not handle having no content, so
     // handle empty string explicitly.
     // TODO: ticket for nom?
-    if let Ok((next_input, '"')) = char::<&str, Error<&str>>('"')(input) {
+    if let Ok((next_input, '"')) = char::<Input, ParseError>('"')(input) {
         return Ok((next_input, "".to_owned()));
     }
 
@@ -180,27 +182,28 @@ fn regex_contents(mut input: Input) -> ParseResult<String> {
     let mut res = String::new();
     let normal = is_not("/\\\n");
 
-    while !input.is_empty() {
+    while !input.cursor().is_empty() {
         match normal(input) {
             Ok((new_input, o)) => {
-                res.push_str(o);
-                if new_input.is_empty() {
+                res.push_str(o.cursor());
+                if new_input.cursor().is_empty() {
                     return Ok((new_input, res));
-                } else if new_input.len() == input.len() {
+                } else if new_input.cursor().len() == input.cursor().len() {
                     return Ok((input, res));
                 }
                 input = new_input;
             }
             Err(nom::Err::Error(_)) => {
                 // access [0] is safe since input.len() > 0.
-                if input.as_bytes()[0] == b'\\' {
-                    if input.len() <= 1 {
+                if input.cursor().as_bytes()[0] == b'\\' {
+                    if input.cursor().len() <= 1 {
+                        input.advance(1);
                         return Err(nom::Err::Error(Error::from_error_kind(
-                            &input[1..],
+                            input,
                             ErrorKind::EscapedTransform,
                         )));
                     }
-                    match input.as_bytes()[1] {
+                    match input.cursor().as_bytes()[1] {
                         b'/' => {
                             res.push('/');
                         }
@@ -209,7 +212,7 @@ fn regex_contents(mut input: Input) -> ParseResult<String> {
                             res.push(c as char);
                         }
                     }
-                    input = &input[2..];
+                    input.advance(2);
                 } else {
                     return Ok((input, res));
                 }

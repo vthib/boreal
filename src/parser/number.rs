@@ -18,7 +18,7 @@ use super::types::{Input, ParseResult};
 fn decimal_number(input: Input) -> ParseResult<i64> {
     map_res(
         rtrim(pair(
-            map_res(digit1, str::parse::<i64>),
+            map_res(digit1, |v: Input| str::parse::<i64>(v.cursor())),
             opt(alt((ttag("MB"), ttag("KB")))),
         )),
         |(n, suffix)| match suffix {
@@ -35,7 +35,9 @@ fn decimal_number(input: Input) -> ParseResult<i64> {
 fn hexadecimal_number(input: Input) -> ParseResult<i64> {
     let (input, _) = tag("0x")(input)?;
 
-    cut(map_res(rtrim(hex_digit1), |v| i64::from_str_radix(v, 16)))(input)
+    cut(map_res(rtrim(hex_digit1), |v| {
+        i64::from_str_radix(v.cursor(), 16)
+    }))(input)
 }
 
 /// Parse an octal number.
@@ -44,7 +46,9 @@ fn hexadecimal_number(input: Input) -> ParseResult<i64> {
 fn octal_number(input: Input) -> ParseResult<i64> {
     let (input, _) = tag("0o")(input)?;
 
-    cut(map_res(rtrim(oct_digit1), |v| i64::from_str_radix(v, 8)))(input)
+    cut(map_res(rtrim(oct_digit1), |v| {
+        i64::from_str_radix(v.cursor(), 8)
+    }))(input)
 }
 
 /// Parse a number (integer).
@@ -67,7 +71,7 @@ pub fn number(input: Input) -> ParseResult<i64> {
 pub fn double(input: Input) -> ParseResult<f64> {
     let (input, payload) = rtrim(recognize(tuple((digit1, char('.'), digit1))))(input)?;
 
-    cut(map_res(success(payload), str::parse::<f64>))(input)
+    cut(map_res(success(payload), |v| str::parse::<f64>(v.cursor())))(input)
 }
 
 #[cfg(test)]

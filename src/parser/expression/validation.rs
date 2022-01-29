@@ -613,18 +613,21 @@ impl Validator {
 mod tests {
     use super::*;
     use crate::parser::expression::expression;
+    use crate::parser::types::Input;
 
     #[track_caller]
     fn test_validation(expression_str: &str, expected_type: Type) {
+        let input = Input::new(expression_str);
         let validator = Validator {};
-        let (_, expr) = expression(expression_str).unwrap();
+        let (_, expr) = expression(input).unwrap();
         assert_eq!(validator.validate_expr(expr).unwrap().ty, expected_type);
     }
 
     #[track_caller]
     fn test_validation_err(expression_str: &str) {
+        let input = Input::new(expression_str);
         let validator = Validator {};
-        let (_, expr) = expression(expression_str).unwrap();
+        let (_, expr) = expression(input).unwrap();
         assert!(validator.validate_expr(expr).is_err());
     }
 

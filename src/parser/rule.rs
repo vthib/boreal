@@ -14,7 +14,7 @@ use super::{
     expression, hex_string,
     nom_recipes::{ltrim, rtrim, textual_tag as ttag},
     number, string,
-    types::{Input, ParseResult},
+    types::{Input, ParseError, ParseResult},
 };
 use crate::rule::{
     Metadata, MetadataValue, Rule, VariableDeclarationValue, VariableFlags, VariableModifiers,
@@ -392,7 +392,7 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
     ))
 }
 
-fn number_to_u8(input: &str, value: i64) -> Result<u8, nom::Err<Error<&str>>> {
+fn number_to_u8(input: Input, value: i64) -> Result<u8, nom::Err<ParseError>> {
     u8::try_from(value).map_err(|_| {
         nom::Err::Failure(Error::from_external_error(
             input,

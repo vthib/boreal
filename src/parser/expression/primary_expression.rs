@@ -72,7 +72,7 @@ fn primary_expression_shift(input: Input) -> ParseResult<ParsedExpr> {
         let left = Box::new(res);
         let right = Box::new(right_elem);
         res = ParsedExpr {
-            expr: match op {
+            expr: match op.cursor() {
                 "<<" => Expression::ShiftLeft(left, right),
                 ">>" => Expression::ShiftRight(left, right),
                 _ => unreachable!(),
@@ -91,7 +91,7 @@ fn primary_expression_add(input: Input) -> ParseResult<ParsedExpr> {
         input = i2;
 
         res = ParsedExpr {
-            expr: match op {
+            expr: match op.cursor() {
                 "+" => Expression::Add(Box::new(res), Box::new(right_elem)),
                 "-" => Expression::Sub(Box::new(res), Box::new(right_elem)),
                 _ => unreachable!(),
@@ -142,7 +142,7 @@ fn primary_expression_neg(input: Input) -> ParseResult<ParsedExpr> {
         input,
         match op {
             None => expr,
-            Some(op) => match op {
+            Some(op) => match op.cursor() {
                 "~" => ParsedExpr {
                     expr: Expression::BitwiseNot(Box::new(expr)),
                 },
