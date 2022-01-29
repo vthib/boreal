@@ -6,23 +6,27 @@ use nom::{
     character::complete::{char, multispace0},
     combinator::{opt, value},
     error::{Error, ErrorKind, ParseError as NomParseError},
-    sequence::{pair, preceded, terminated, tuple},
+    sequence::{pair, preceded, tuple},
+    Parser,
 };
 
-use super::types::{Input, ParseResult};
+use super::types::{Input, ParseError, ParseResult};
 
 /// Right trim after the given parser.
-pub fn rtrim<'a, F: 'a, O>(inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
+pub fn rtrim<'a, F: 'a, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
-    F: FnMut(Input<'a>) -> ParseResult<'a, O>,
+    F: Parser<Input<'a>, O, ParseError<'a>>,
 {
-    terminated(
-        inner,
-        pair(
+    move |mut input| {
+        input.save_cursor_before_rtrim();
+        let (input, output) = inner.parse(input)?;
+        let (input, _) = pair(
             multispace0,
             opt(alt((multiline_comment, singleline_comment))),
-        ),
-    )
+        )
+        .parse(input)?;
+        Ok((input, output))
+    }
 }
 
 /// Left trim before the given parser.

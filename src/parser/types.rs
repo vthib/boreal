@@ -17,6 +17,9 @@ pub struct Input<'a> {
     /// This is a reference on the same slice as [`input`], updated
     /// as we go through the parsing.
     cursor: &'a str,
+
+    /// Saved position before the last applied rtrim.
+    cursor_before_last_rtrim: &'a str,
 }
 
 pub type ParseError<'a> = Error<Input<'a>>;
@@ -27,6 +30,7 @@ impl<'a> Input<'a> {
         Self {
             input,
             cursor: input,
+            cursor_before_last_rtrim: input,
         }
     }
 
@@ -43,10 +47,13 @@ impl<'a> Input<'a> {
     }
 
     pub fn strip_prefix(&self, prefix: &str) -> Option<Self> {
-        self.cursor.strip_prefix(prefix).map(|cursor| Self {
-            input: self.input,
-            cursor,
-        })
+        self.cursor
+            .strip_prefix(prefix)
+            .map(|cursor| Self { cursor, ..*self })
+    }
+
+    pub fn save_cursor_before_rtrim(&mut self) {
+        self.cursor_before_last_rtrim = self.cursor;
     }
 }
 
@@ -78,8 +85,8 @@ impl<'a> InputIter for Input<'a> {
 impl InputTake for Input<'_> {
     fn take(&self, count: usize) -> Self {
         Self {
-            input: self.input,
             cursor: self.cursor.take(count),
+            ..*self
         }
     }
 
@@ -87,12 +94,12 @@ impl InputTake for Input<'_> {
         let (prefix, suffix) = self.cursor.take_split(count);
         (
             Self {
-                input: self.input,
                 cursor: prefix,
+                ..*self
             },
             Self {
-                input: self.input,
                 cursor: suffix,
+                ..*self
             },
         )
     }
@@ -180,8 +187,8 @@ impl<'a> nom::Compare<&'a str> for Input<'_> {
 impl nom::Slice<RangeFrom<usize>> for Input<'_> {
     fn slice(&self, range: RangeFrom<usize>) -> Self {
         Self {
-            input: self.input,
             cursor: self.cursor.slice(range),
+            ..*self
         }
     }
 }
@@ -189,8 +196,8 @@ impl nom::Slice<RangeFrom<usize>> for Input<'_> {
 impl nom::Slice<RangeTo<usize>> for Input<'_> {
     fn slice(&self, range: RangeTo<usize>) -> Self {
         Self {
-            input: self.input,
             cursor: self.cursor.slice(range),
+            ..*self
         }
     }
 }
