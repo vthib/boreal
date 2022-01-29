@@ -7,12 +7,11 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt},
     sequence::{delimited, preceded},
-    IResult,
 };
 
 use super::{
     super::{
-        nom_recipes::{rtrim, textual_tag as ttag},
+        nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult},
         string::{regex, string_identifier},
     },
     for_expression::for_expression,
@@ -20,7 +19,7 @@ use super::{
 use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
 
 /// parse or operator
-pub fn expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn expression(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = expression_and(input)?;
 
     while let Ok((i, _)) = rtrim(ttag("or"))(input) {
@@ -34,7 +33,7 @@ pub fn expression(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse and operator
-fn expression_and(input: &str) -> IResult<&str, ParsedExpr> {
+fn expression_and(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = expression_not(input)?;
 
     while let Ok((i, _)) = rtrim(ttag("and"))(input) {
@@ -48,7 +47,7 @@ fn expression_and(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse not operator
-fn expression_not(input: &str) -> IResult<&str, ParsedExpr> {
+fn expression_not(input: Input) -> ParseResult<ParsedExpr> {
     let (input, not) = opt(rtrim(ttag("not")))(input)?;
 
     if not.is_some() {
@@ -65,7 +64,7 @@ fn expression_not(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse defined operator
-fn expression_defined(input: &str) -> IResult<&str, ParsedExpr> {
+fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
     let (input, defined) = opt(rtrim(ttag("defined")))(input)?;
 
     if defined.is_some() {
@@ -84,7 +83,7 @@ fn expression_defined(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse rest of boolean expressions
-fn expression_item(input: &str) -> IResult<&str, ParsedExpr> {
+fn expression_item(input: Input) -> ParseResult<ParsedExpr> {
     alt((
         // 'true'
         map(rtrim(ttag("true")), |_| ParsedExpr {
@@ -107,7 +106,7 @@ fn expression_item(input: &str) -> IResult<&str, ParsedExpr> {
 
 /// parse `==`, `!=`, `(i)contains`, `(i)startswith`, `(i)endswith`,
 /// `iequals`, `matches` operators.
-fn primary_expression_eq_all(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_cmp(input)?;
 
     while let Ok((i, op)) = rtrim(alt((
@@ -166,7 +165,7 @@ fn primary_expression_eq_all(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse `<=`, `>=`, `<`, `>`, operators.
-fn primary_expression_cmp(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_cmp(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression(input)?;
 
     while let Ok((i, op)) = rtrim(alt((tag("<="), tag(">="), tag("<"), tag(">"))))(input) {
@@ -187,7 +186,7 @@ fn primary_expression_cmp(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// Parse expressions using variables
-fn variable_expression(input: &str) -> IResult<&str, ParsedExpr> {
+fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
     let (input, variable) = string_identifier(input)?;
 
     // string_identifier 'at' primary_expression

@@ -7,15 +7,14 @@ use nom::{
     character::complete::{char, digit1, hex_digit1, oct_digit1},
     combinator::{cut, map_res, opt, recognize, success},
     sequence::{pair, tuple},
-    IResult,
 };
 
-use super::nom_recipes::{rtrim, textual_tag as ttag};
+use super::nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult};
 
 /// Parse a decimal number.
 ///
 /// This function matches the pattern `/\d+(MB|KB)?`/.
-fn decimal_number(input: &str) -> IResult<&str, i64> {
+fn decimal_number(input: Input) -> ParseResult<i64> {
     map_res(
         rtrim(pair(
             map_res(digit1, str::parse::<i64>),
@@ -32,7 +31,7 @@ fn decimal_number(input: &str) -> IResult<&str, i64> {
 /// Parse an hexadecimal number.
 ///
 /// This function matches the pattern `/0x\d+`/.
-fn hexadecimal_number(input: &str) -> IResult<&str, i64> {
+fn hexadecimal_number(input: Input) -> ParseResult<i64> {
     let (input, _) = tag("0x")(input)?;
 
     cut(map_res(rtrim(hex_digit1), |v| i64::from_str_radix(v, 16)))(input)
@@ -41,7 +40,7 @@ fn hexadecimal_number(input: &str) -> IResult<&str, i64> {
 /// Parse an octal number.
 ///
 /// This function matches the pattern `/0o\d+`/.
-fn octal_number(input: &str) -> IResult<&str, i64> {
+fn octal_number(input: Input) -> ParseResult<i64> {
     let (input, _) = tag("0o")(input)?;
 
     cut(map_res(rtrim(oct_digit1), |v| i64::from_str_radix(v, 8)))(input)
@@ -54,7 +53,7 @@ fn octal_number(input: &str) -> IResult<&str, i64> {
 /// - hexadecimal with 0x prefix,
 /// - octal with 0o prefix,
 /// - decimal with optional KB/MB suffix.
-pub fn number(input: &str) -> IResult<&str, i64> {
+pub fn number(input: Input) -> ParseResult<i64> {
     // XXX: decimal number must be last, otherwise, it would parse the '0'
     // in the '0x'/'0o' prefix.
     alt((hexadecimal_number, octal_number, decimal_number))(input)
@@ -64,7 +63,7 @@ pub fn number(input: &str) -> IResult<&str, i64> {
 ///
 /// Equivalent to the _DOUBLE_ lexical pattern in libyara.
 /// This functions matches the pattern `/\d+\.\d+/`.
-pub fn double(input: &str) -> IResult<&str, f64> {
+pub fn double(input: Input) -> ParseResult<f64> {
     let (input, payload) = rtrim(recognize(tuple((digit1, char('.'), digit1))))(input)?;
 
     cut(map_res(success(payload), str::parse::<f64>))(input)
@@ -123,7 +122,7 @@ mod tests {
     fn test_textual_tags() {
         // Parse two numbers consecutively, to detect
         // invalid acceptance of non textual "tag".
-        fn f(input: &str) -> IResult<&str, (i64, i64)> {
+        fn f(input: Input) -> ParseResult<(i64, i64)> {
             pair(number, number)(input)
         }
 

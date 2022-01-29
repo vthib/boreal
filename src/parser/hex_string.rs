@@ -9,17 +9,16 @@ use nom::{
     error::{Error, ErrorKind, FromExternalError, ParseError},
     multi::many1,
     sequence::{preceded, separated_pair, terminated},
-    IResult,
 };
 
-use super::nom_recipes::rtrim;
+use super::nom_recipes::{rtrim, Input, ParseResult};
 use crate::hex_string::{HexString, HexToken, Jump, Mask};
 
 // TODO: handle this limit in some way
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
 
 /// Parse an hex-digit, and return its value in [0-15].
-fn hex_digit(input: &str) -> IResult<&str, u8> {
+fn hex_digit(input: Input) -> ParseResult<u8> {
     match input.chars().next().and_then(|c| {
         // Cannot truncate, so allow lint
         #[allow(clippy::cast_possible_truncation)]
@@ -36,7 +35,7 @@ fn hex_digit(input: &str) -> IResult<&str, u8> {
 /// Parse a hex byte.
 ///
 /// Equivalent to the _BYTE_ lexical pattern in libyara.
-fn byte(input: &str) -> IResult<&str, u8> {
+fn byte(input: Input) -> ParseResult<u8> {
     let (input, digit0) = hex_digit(input)?;
 
     map(cut(rtrim(hex_digit)), move |digit1| (digit0 << 4) | digit1)(input)
@@ -45,7 +44,7 @@ fn byte(input: &str) -> IResult<&str, u8> {
 /// Parse a masked hex byte, ie X?, ?X or ??.
 ///
 /// Equivalent to the `_MASKED_BYTE_` lexical pattern in libyara.
-fn masked_byte(input: &str) -> IResult<&str, (u8, Mask)> {
+fn masked_byte(input: Input) -> ParseResult<(u8, Mask)> {
     rtrim(alt((
         map(tag("??"), |_| (0, Mask::All)),
         map(preceded(char('?'), hex_digit), |v| (v, Mask::Left)),
@@ -62,7 +61,7 @@ fn masked_byte(input: &str) -> IResult<&str, (u8, Mask)> {
 /// - `[a]` is equivalent to `[a-a]`.
 ///
 /// This is equivalent to the range state in libyara.
-fn range(input: &str) -> IResult<&str, Jump> {
+fn range(input: Input) -> ParseResult<Jump> {
     let (input, _) = rtrim(char('['))(input)?;
 
     let (input, jump) = cut(terminated(
@@ -117,7 +116,7 @@ fn validate_jump(range: &Jump) -> Result<(), String> {
 /// This looks like `( AB .. | CD .. )`.
 ///
 /// This is equivalent to the `alternatives` from `hex_grammar.y` in libyara.
-fn alternatives(input: &str) -> IResult<&str, HexToken> {
+fn alternatives(input: Input) -> ParseResult<HexToken> {
     let (input, _) = rtrim(char('('))(input)?;
 
     cut(terminated(
@@ -156,7 +155,7 @@ fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), String> {
 /// `in_alternatives` flag is needed.
 ///
 /// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
-fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
+fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
     alt((
         // Always have at least one space after a byte or a masked byte
         map(byte, HexToken::Byte),
@@ -190,7 +189,7 @@ fn hex_token(input: &str, in_alternatives: bool) -> IResult<&str, HexToken> {
 /// This looks like `{ AB .. }`.
 ///
 /// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
-pub fn hex_string(input: &str) -> IResult<&str, HexString> {
+pub fn hex_string(input: Input) -> ParseResult<HexString> {
     let (input, _) = rtrim(char('{'))(input)?;
 
     cut(terminated(

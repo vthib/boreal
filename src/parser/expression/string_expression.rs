@@ -7,14 +7,16 @@ use nom::{
     character::complete::char,
     combinator::{cut, opt},
     sequence::{delimited, preceded},
-    IResult,
 };
 
 use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
-use crate::parser::{nom_recipes::rtrim, string};
+use crate::parser::{
+    nom_recipes::{rtrim, Input, ParseResult},
+    string,
+};
 
 /// Parse a `string_count ( 'in' range )` expression
-pub fn string_count_expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn string_count_expression(input: Input) -> ParseResult<ParsedExpr> {
     let (input, identifier) = string::count(input)?;
     let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input)?;
 
@@ -32,7 +34,7 @@ pub fn string_count_expression(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// Parse a `string_offset ( '[' primary_expression ']' )` expression
-pub fn string_offset_expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn string_offset_expression(input: Input) -> ParseResult<ParsedExpr> {
     let (input, identifier) = string::offset(input)?;
     let (input, expr) = opt(delimited(
         rtrim(char('[')),
@@ -53,7 +55,7 @@ pub fn string_offset_expression(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// Parse a `string_length ( '[' primary_expression ']' )` expression
-pub fn string_length_expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> {
     let (input, identifier) = string::length(input)?;
     let (input, expr) = opt(delimited(
         rtrim(char('[')),

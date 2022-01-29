@@ -7,10 +7,10 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt},
     sequence::{delimited, pair, tuple},
-    IResult,
 };
 
-use crate::{expression::ReadIntegerSize, parser::nom_recipes::rtrim};
+use crate::expression::ReadIntegerSize;
+use crate::parser::nom_recipes::{rtrim, Input, ParseResult};
 
 use super::{primary_expression::primary_expression, Expression, ParsedExpr};
 
@@ -23,7 +23,7 @@ use super::{primary_expression::primary_expression, Expression, ParsedExpr};
 /// - a boolean indicating the sign (true if unsigned).
 /// - the size of the integer
 /// - a boolean indicating the endianness (true if big-endian).
-fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
+fn read_integer(input: Input) -> ParseResult<(bool, ReadIntegerSize, bool)> {
     rtrim(tuple((
         map(opt(char('u')), |v| v.is_some()),
         alt((
@@ -35,7 +35,7 @@ fn read_integer(input: &str) -> IResult<&str, (bool, ReadIntegerSize, bool)> {
     )))(input)
 }
 
-pub fn read_integer_expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
     let (input, ((unsigned, size, big_endian), expr)) = pair(
         read_integer,
         cut(delimited(

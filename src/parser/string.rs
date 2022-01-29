@@ -9,10 +9,9 @@ use nom::{
     error::{Error, ErrorKind, FromExternalError, ParseError},
     multi::fold_many_m_n,
     sequence::{pair, preceded, terminated, tuple},
-    IResult,
 };
 
-use super::nom_recipes::{rtrim, take_one};
+use super::nom_recipes::{rtrim, take_one, Input, ParseResult};
 use crate::regex::Regex;
 
 /// Returns true if the char is an identifier digit, ie a-z, a-Z, 0-9, _
@@ -27,12 +26,12 @@ fn is_identifier_digit(c: char) -> bool {
 ///
 /// This function *does not* right-trim, as it can be followed
 /// by a '*' character that is meaningful in some contexts.
-fn identifier_contents(input: &str) -> IResult<&str, String> {
+fn identifier_contents(input: Input) -> ParseResult<String> {
     map(take_while(is_identifier_digit), ToOwned::to_owned)(input)
 }
 
 /// Helper for [`string_identifier`] and [`string_identifier_with_wildcard`].
-fn string_identifier_no_rtrim(input: &str) -> IResult<&str, String> {
+fn string_identifier_no_rtrim(input: Input) -> ParseResult<String> {
     preceded(char('$'), cut(identifier_contents))(input)
 }
 
@@ -42,7 +41,7 @@ fn string_identifier_no_rtrim(input: &str) -> IResult<&str, String> {
 /// libyara.
 /// Roughly equivalent to `$[a-ZA-Z0-9_]*`.
 #[allow(clippy::module_name_repetitions)]
-pub fn string_identifier(input: &str) -> IResult<&str, String> {
+pub fn string_identifier(input: Input) -> ParseResult<String> {
     rtrim(string_identifier_no_rtrim)(input)
 }
 
@@ -51,7 +50,7 @@ pub fn string_identifier(input: &str) -> IResult<&str, String> {
 /// This is equivalent to
 /// `_STRING_IDENTIFIER_ | _STRING_IDENTIFIER_WITH_WILDCARD_` in libyara.
 #[allow(clippy::module_name_repetitions)]
-pub fn string_identifier_with_wildcard(input: &str) -> IResult<&str, (String, bool)> {
+pub fn string_identifier_with_wildcard(input: Input) -> ParseResult<(String, bool)> {
     rtrim(pair(
         string_identifier_no_rtrim,
         map(opt(char('*')), |v| v.is_some()),
@@ -59,24 +58,24 @@ pub fn string_identifier_with_wildcard(input: &str) -> IResult<&str, (String, bo
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
-pub fn count(input: &str) -> IResult<&str, String> {
+pub fn count(input: Input) -> ParseResult<String> {
     rtrim(preceded(char('#'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string offset, roughly equivalent to `@[a-zA-Z0-9_]*`.
-pub fn offset(input: &str) -> IResult<&str, String> {
+pub fn offset(input: Input) -> ParseResult<String> {
     rtrim(preceded(char('@'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string length, roughly equivalent to `![a-zA-Z0-9_]*`.
-pub fn length(input: &str) -> IResult<&str, String> {
+pub fn length(input: Input) -> ParseResult<String> {
     rtrim(preceded(char('!'), cut(identifier_contents)))(input)
 }
 
 /// Parse an identifier.
 ///
 /// This is roughly equivalent to `[a-ZA-Z_][a-zA-Z0-9_]*`.
-pub fn identifier(input: &str) -> IResult<&str, String> {
+pub fn identifier(input: Input) -> ParseResult<String> {
     rtrim(map(
         recognize(tuple((
             take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
@@ -91,7 +90,7 @@ pub fn identifier(input: &str) -> IResult<&str, String> {
 /// Equivalent to the `_TEXT_STRING_` lexical pattern in libyara.
 /// This is roughly equivalent to the pattern `/"[^\n\"]*"/`, with control
 /// patterns `\t`, `\r`, `\n`, `\"`, `\\`, and `\x[0-9a-fA-F]{2}`.
-pub fn quoted(input: &str) -> IResult<&str, String> {
+pub fn quoted(input: Input) -> ParseResult<String> {
     let (input, _) = char('"')(input)?;
 
     // escaped transform does not handle having no content, so
@@ -145,7 +144,7 @@ pub fn quoted(input: &str) -> IResult<&str, String> {
 /// XXX: There is change of behavior from libyara. `\<nul_byte>` was forbidden,
 /// but we do not have an issue about this (we do not save the regular expression
 /// as a C string). See [Issue #576 in Yara](https://github.com/VirusTotal/yara/issues/576).
-pub fn regex(input: &str) -> IResult<&str, Regex> {
+pub fn regex(input: Input) -> ParseResult<Regex> {
     let (input, _) = char('/')(input)?;
 
     // We cannot use escaped_transform, as it is not an error to use
@@ -173,7 +172,7 @@ pub fn regex(input: &str) -> IResult<&str, Regex> {
 
 /// Parsed the contents between the '/' chars delimiting a regex.
 /// See [`regex`] for details.
-fn regex_contents(mut input: &str) -> IResult<&str, String> {
+fn regex_contents(mut input: Input) -> ParseResult<String> {
     // This is mostly inspired by the impl of
     // [`nom::bytes::complete::escaped_transform`].
 

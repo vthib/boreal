@@ -8,12 +8,11 @@ use nom::{
     error::{Error, ErrorKind, FromExternalError},
     multi::{many0, many1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
-    IResult,
 };
 
 use super::{
     expression, hex_string,
-    nom_recipes::{ltrim, rtrim, textual_tag as ttag},
+    nom_recipes::{ltrim, rtrim, textual_tag as ttag, Input, ParseResult},
     number, string,
 };
 use crate::rule::{
@@ -22,14 +21,14 @@ use crate::rule::{
 use crate::{expression::Expression, rule::VariableDeclaration};
 
 /// Parse a full YARA file.
-pub fn parse_yara_file(input: &str) -> IResult<&str, Vec<Rule>> {
+pub fn parse_yara_file(input: Input) -> ParseResult<Vec<Rule>> {
     ltrim(many1(rule))(input)
 }
 
 /// Parse a rule
 ///
 /// Related to the `rule` pattern in `grammar.y` in libyara.
-fn rule(input: &str) -> IResult<&str, Rule> {
+fn rule(input: Input) -> ParseResult<Rule> {
     let mut is_private = false;
     let mut is_global = false;
 
@@ -79,7 +78,7 @@ fn rule(input: &str) -> IResult<&str, Rule> {
 }
 
 /// Parse an import declaration
-fn import(input: &str) -> IResult<&str, String> {
+fn import(input: Input) -> ParseResult<String> {
     preceded(rtrim(ttag("import")), cut(string::quoted))(input)
 }
 
@@ -87,7 +86,7 @@ fn import(input: &str) -> IResult<&str, String> {
 ///
 /// This roughly parses `: identifier1 identifier2 ...`
 /// and returns a list of the identifiers.
-fn tags(input: &str) -> IResult<&str, Vec<String>> {
+fn tags(input: Input) -> ParseResult<Vec<String>> {
     let (input, _) = rtrim(char(':'))(input)?;
 
     cut(many1(string::identifier))(input)
@@ -97,7 +96,7 @@ fn tags(input: &str) -> IResult<&str, Vec<String>> {
 ///
 /// Related to the `meta` and `meta_declarations` patterns
 /// in `grammar.y` in libyara.
-fn meta(input: &str) -> IResult<&str, Vec<Metadata>> {
+fn meta(input: Input) -> ParseResult<Vec<Metadata>> {
     preceded(
         pair(rtrim(ttag("meta")), rtrim(char(':'))),
         cut(many1(meta_declaration)),
@@ -107,7 +106,7 @@ fn meta(input: &str) -> IResult<&str, Vec<Metadata>> {
 /// Parse a single metadata declaration.
 ///
 /// Related to the `meta_declaration` pattern in `grammar.y` in libyara.
-fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
+fn meta_declaration(input: Input) -> ParseResult<Metadata> {
     map(
         separated_pair(
             string::identifier,
@@ -130,7 +129,7 @@ fn meta_declaration(input: &str) -> IResult<&str, Metadata> {
 ///
 /// Related to the `strings` and `strings_declarations` pattern
 /// in `grammar.y` in libyara.
-fn strings(input: &str) -> IResult<&str, Vec<VariableDeclaration>> {
+fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
     let (input, _) = pair(rtrim(ttag("strings")), rtrim(char(':')))(input)?;
     let (mut input, mut var) = cut(string_declaration)(input)?;
 
@@ -163,7 +162,7 @@ fn strings(input: &str) -> IResult<&str, Vec<VariableDeclaration>> {
 /// Parse a single string declaration.
 ///
 /// Related to the `string_declaration` pattern in `grammar.y` in libyara.
-fn string_declaration(input: &str) -> IResult<&str, VariableDeclaration> {
+fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
     map(
         separated_pair(
             string::string_identifier,
@@ -203,9 +202,9 @@ enum Modifier {
     Base64Wide(Option<[u8; 64]>),
 }
 
-fn accumulate_modifiers<F>(parser: F, mut input: &str) -> IResult<&str, VariableModifiers>
+fn accumulate_modifiers<F>(parser: F, mut input: Input) -> ParseResult<VariableModifiers>
 where
-    F: Fn(&str) -> IResult<&str, Modifier>,
+    F: Fn(Input) -> ParseResult<Modifier>,
 {
     let mut modifiers = VariableModifiers::default();
 
@@ -274,19 +273,19 @@ fn validate_flags(flags: VariableFlags) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn string_modifiers(input: &str) -> IResult<&str, VariableModifiers> {
+fn string_modifiers(input: Input) -> ParseResult<VariableModifiers> {
     accumulate_modifiers(string_modifier, input)
 }
 
-fn regex_modifiers(input: &str) -> IResult<&str, VariableModifiers> {
+fn regex_modifiers(input: Input) -> ParseResult<VariableModifiers> {
     accumulate_modifiers(regex_modifier, input)
 }
 
-fn hex_string_modifiers(input: &str) -> IResult<&str, VariableModifiers> {
+fn hex_string_modifiers(input: Input) -> ParseResult<VariableModifiers> {
     accumulate_modifiers(hex_string_modifier, input)
 }
 
-fn string_modifier(input: &str) -> IResult<&str, Modifier> {
+fn string_modifier(input: Input) -> ParseResult<Modifier> {
     rtrim(alt((
         map(ttag("wide"), |_| Modifier::Flag(VariableFlags::WIDE)),
         map(ttag("ascii"), |_| Modifier::Flag(VariableFlags::ASCII)),
@@ -300,7 +299,7 @@ fn string_modifier(input: &str) -> IResult<&str, Modifier> {
     )))(input)
 }
 
-fn regex_modifier(input: &str) -> IResult<&str, Modifier> {
+fn regex_modifier(input: Input) -> ParseResult<Modifier> {
     rtrim(alt((
         map(ttag("wide"), |_| Modifier::Flag(VariableFlags::WIDE)),
         map(ttag("ascii"), |_| Modifier::Flag(VariableFlags::ASCII)),
@@ -312,7 +311,7 @@ fn regex_modifier(input: &str) -> IResult<&str, Modifier> {
     )))(input)
 }
 
-fn hex_string_modifier(input: &str) -> IResult<&str, Modifier> {
+fn hex_string_modifier(input: Input) -> ParseResult<Modifier> {
     map(rtrim(ttag("private")), |_| {
         Modifier::Flag(VariableFlags::PRIVATE)
     })(input)
@@ -322,7 +321,7 @@ fn hex_string_modifier(input: &str) -> IResult<&str, Modifier> {
 /// - `'xor'`
 /// - `'xor' '(' number ')'`
 /// - `'xor' '(' number '-' number ')'`
-fn xor_modifier(input: &str) -> IResult<&str, Modifier> {
+fn xor_modifier(input: Input) -> ParseResult<Modifier> {
     let (input, _) = rtrim(ttag("xor"))(input)?;
 
     let (input, open_paren) = opt(rtrim(char('(')))(input)?;
@@ -358,7 +357,7 @@ fn xor_modifier(input: &str) -> IResult<&str, Modifier> {
 /// Parse a base64 modifier, ie:
 /// - `'base64(wide)'`
 /// - `'base64(wide)' '(' string ')'`
-fn base64_modifier(input: &str) -> IResult<&str, Modifier> {
+fn base64_modifier(input: Input) -> ParseResult<Modifier> {
     let (input, is_wide) = rtrim(alt((
         map(ttag("base64"), |_| false),
         map(ttag("base64wide"), |_| true),
@@ -405,7 +404,7 @@ fn number_to_u8(input: &str, value: i64) -> Result<u8, nom::Err<Error<&str>>> {
 /// Parse a condition
 ///
 /// Related to the `condition` pattern in `grammar.y` in libyara.
-fn condition(input: &str) -> IResult<&str, Expression> {
+fn condition(input: Input) -> ParseResult<Expression> {
     let (input, _) = rtrim(ttag("condition"))(input)?;
 
     map_res(

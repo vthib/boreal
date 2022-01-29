@@ -4,28 +4,28 @@
 //! See the `identifier` rule in `grammar.y` in libyara.
 use nom::{
     character::complete::char, combinator::cut, multi::separated_list0, sequence::terminated,
-    IResult,
 };
 
 use super::{Identifier, ParsedExpr};
-use crate::parser::{nom_recipes::rtrim, string::identifier as raw_identifier};
+use crate::parser::nom_recipes::{rtrim, Input, ParseResult};
+use crate::parser::string::identifier as raw_identifier;
 
 use super::boolean_expression::expression;
 use super::primary_expression::primary_expression;
 
 /// Parse a trailing subfield, ie after the `.` has been parsed
-fn trailing_subfield(input: &str) -> IResult<&str, String> {
+fn trailing_subfield(input: Input) -> ParseResult<String> {
     cut(raw_identifier)(input)
 }
 
 /// Parse a trailing subscript, i.e. after the `[` has been parsed
-fn trailing_subscript(input: &str) -> IResult<&str, ParsedExpr> {
+fn trailing_subscript(input: Input) -> ParseResult<ParsedExpr> {
     cut(terminated(primary_expression, rtrim(char(']'))))(input)
 }
 
 /// Parse a trailing argument specification, i.e. after the `(` has been
 /// parsed.
-fn trailing_arguments(input: &str) -> IResult<&str, Vec<ParsedExpr>> {
+fn trailing_arguments(input: Input) -> ParseResult<Vec<ParsedExpr>> {
     cut(terminated(
         separated_list0(rtrim(char(',')), expression),
         rtrim(char(')')),
@@ -33,7 +33,7 @@ fn trailing_arguments(input: &str) -> IResult<&str, Vec<ParsedExpr>> {
 }
 
 /// Parse an identifier used in expressions.
-pub fn identifier(input: &str) -> IResult<&str, Identifier> {
+pub fn identifier(input: Input) -> ParseResult<Identifier> {
     let (mut input, name) = rtrim(raw_identifier)(input)?;
     let mut identifier = Identifier::Raw(name);
 

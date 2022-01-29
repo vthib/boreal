@@ -5,15 +5,19 @@ use nom::{
     bytes::complete::{tag, take_until},
     character::complete::{char, multispace0},
     combinator::{opt, value},
-    error::{Error, ErrorKind, ParseError},
+    error::{Error, ErrorKind, ParseError as NomParseError},
     sequence::{pair, preceded, terminated, tuple},
     IResult,
 };
 
+pub type Input<'a> = &'a str;
+pub type ParseError<'a> = Error<Input<'a>>;
+pub type ParseResult<'a, O> = IResult<Input<'a>, O, ParseError<'a>>;
+
 /// Right trim after the given parser.
-pub fn rtrim<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
+pub fn rtrim<'a, F: 'a, O>(inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
-    F: FnMut(&'a str) -> IResult<&'a str, O>,
+    F: FnMut(Input<'a>) -> ParseResult<'a, O>,
 {
     terminated(
         inner,
@@ -25,9 +29,9 @@ where
 }
 
 /// Left trim before the given parser.
-pub fn ltrim<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
+pub fn ltrim<'a, F: 'a, O>(inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
-    F: FnMut(&'a str) -> IResult<&'a str, O>,
+    F: FnMut(Input<'a>) -> ParseResult<'a, O>,
 {
     preceded(
         pair(
@@ -39,7 +43,7 @@ where
 }
 
 /// Accepts a single character if the passed function returns true on it.
-pub fn take_one<F>(f: F) -> impl Fn(&str) -> IResult<&str, char>
+pub fn take_one<F>(f: F) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, char>
 where
     F: Fn(char) -> bool,
 {
@@ -55,7 +59,9 @@ where
 /// following character is not alphanumeric.
 /// This avoids recognizing a tag inside a word, for example, recognizing
 /// `foo` in `foobar`.
-pub fn textual_tag(tag: &'static str) -> impl Fn(&str) -> IResult<&str, &'static str> {
+pub fn textual_tag(
+    tag: &'static str,
+) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, &'static str> {
     move |input: &str| {
         if let Some(input) = input.strip_prefix(tag) {
             match input.chars().next() {
@@ -77,12 +83,12 @@ pub fn textual_tag(tag: &'static str) -> impl Fn(&str) -> IResult<&str, &'static
 /// Parse a C-style /* ... */ comment.
 ///
 /// Equivalent to the `comment` state in libyara.
-fn multiline_comment(input: &str) -> IResult<&str, ()> {
+fn multiline_comment(input: Input) -> ParseResult<()> {
     rtrim(value((), tuple((tag("/*"), take_until("*/"), tag("*/")))))(input)
 }
 
 /// Parse single line // ... comments.
-fn singleline_comment(input: &str) -> IResult<&str, ()> {
+fn singleline_comment(input: Input) -> ParseResult<()> {
     rtrim(value((), tuple((tag("//"), take_until("\n"), char('\n')))))(input)
 }
 
@@ -91,7 +97,7 @@ mod tests {
     use super::*;
     use crate::parser::tests::{parse, parse_err};
 
-    fn dummy_parser(input: &str) -> IResult<&str, char> {
+    fn dummy_parser(input: Input) -> ParseResult<char> {
         char('-')(input)
     }
 

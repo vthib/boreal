@@ -4,16 +4,15 @@ use nom::{
     character::complete::char,
     combinator::cut,
     sequence::{separated_pair, terminated},
-    IResult,
 };
 
 use super::{primary_expression::primary_expression, ParsedExpr};
-use crate::parser::nom_recipes::rtrim;
+use crate::parser::nom_recipes::{rtrim, Input, ParseResult};
 
 /// Parse a 'in' range for primary expressions.
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
-pub fn range(input: &str) -> IResult<&str, (Box<ParsedExpr>, Box<ParsedExpr>)> {
+pub fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExpr>)> {
     let (input, _) = rtrim(char('('))(input)?;
 
     let (input, (a, b)) = terminated(

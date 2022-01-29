@@ -10,11 +10,10 @@ use nom::{
     combinator::{cut, map, opt},
     multi::separated_list1,
     sequence::{delimited, pair, preceded, terminated},
-    IResult,
 };
 
 use crate::parser::{
-    nom_recipes::{rtrim, textual_tag as ttag},
+    nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult},
     string::string_identifier_with_wildcard,
 };
 
@@ -24,7 +23,7 @@ use super::{
 };
 
 /// Parse all variantes of for expressions.
-pub fn for_expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn for_expression(input: Input) -> ParseResult<ParsedExpr> {
     alt((for_expression_full, for_expression_abbrev))(input)
 }
 
@@ -33,7 +32,7 @@ pub fn for_expression(input: &str) -> IResult<&str, ParsedExpr> {
 /// This parses:
 /// - `selection 'of' set`
 /// - `selection 'of' set 'in' range`
-fn for_expression_abbrev(input: &str) -> IResult<&str, ParsedExpr> {
+fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
     let (input, selection) = for_selection(input)?;
     let (input, set) = preceded(rtrim(ttag("of")), cut(string_set))(input)?;
     let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
@@ -60,7 +59,7 @@ fn for_expression_abbrev(input: &str) -> IResult<&str, ParsedExpr> {
 /// This parses:
 /// - 'for' selection 'of' set ':' '(' body ')'
 /// - 'for' selection identifier 'of' iterator ':' '(' body ')'
-fn for_expression_full(input: &str) -> IResult<&str, ParsedExpr> {
+fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
     let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection))(input)?;
     let (i2, has_of) = opt(rtrim(ttag("of")))(input)?;
 
@@ -100,7 +99,7 @@ fn for_expression_full(input: &str) -> IResult<&str, ParsedExpr> {
 /// Parse the variable selection for a 'for' expression.
 ///
 /// Equivalent to the `for_expression` pattern in grammar.y in libyara.
-fn for_selection(input: &str) -> IResult<&str, ForSelection> {
+fn for_selection(input: Input) -> ParseResult<ForSelection> {
     alt((
         map(rtrim(ttag("any")), |_| ForSelection::Any),
         map(rtrim(ttag("all")), |_| ForSelection::All),
@@ -118,7 +117,7 @@ fn for_selection(input: &str) -> IResult<&str, ForSelection> {
 /// Parse a set of variables.
 ///
 /// Equivalent to the `string_set` pattern in grammar.y in libyara.
-fn string_set(input: &str) -> IResult<&str, VariableSet> {
+fn string_set(input: Input) -> ParseResult<VariableSet> {
     alt((
         map(rtrim(ttag("them")), |_| VariableSet { elements: vec![] }),
         map(
@@ -135,21 +134,21 @@ fn string_set(input: &str) -> IResult<&str, VariableSet> {
 /// Parse an enumeration of variables.
 ///
 /// Equivalent to the `string_enumeration` pattern in grammar.y in libyara.
-fn string_enumeration(input: &str) -> IResult<&str, Vec<(String, bool)>> {
+fn string_enumeration(input: Input) -> ParseResult<Vec<(String, bool)>> {
     separated_list1(rtrim(char(',')), string_identifier_with_wildcard)(input)
 }
 
 /// Parse a list of identifiers to bind for a for expression.
 ///
 /// Equivalent to the `for_variables` pattern in grammar.y in libyara.
-fn for_variables(input: &str) -> IResult<&str, Vec<String>> {
+fn for_variables(input: Input) -> ParseResult<Vec<String>> {
     separated_list1(rtrim(char(',')), crate::parser::string::identifier)(input)
 }
 
 /// Parse an iterator for a for over an identifier.
 ///
 /// Equivalent to the `iterator` pattern in grammar.y in libyara.
-fn iterator(input: &str) -> IResult<&str, ForIterator> {
+fn iterator(input: Input) -> ParseResult<ForIterator> {
     alt((
         map(identifier, ForIterator::Identifier),
         map(

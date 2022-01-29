@@ -7,17 +7,16 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt, peek},
     sequence::{delimited, tuple},
-    IResult,
 };
 
 use super::super::{
-    nom_recipes::{rtrim, textual_tag as ttag},
+    nom_recipes::{rtrim, textual_tag as ttag, Input, ParseResult},
     number, string,
 };
 use super::{identifier, read_integer, string_expression, Expression, ParsedExpr};
 
 /// parse | operator
-pub fn primary_expression(input: &str) -> IResult<&str, ParsedExpr> {
+pub fn primary_expression(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
     while let Ok((i, _)) = rtrim(char('|'))(input) {
@@ -32,7 +31,7 @@ pub fn primary_expression(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse ^ operator
-fn primary_expression_bitwise_xor(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_bitwise_xor(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_bitwise_and(input)?;
 
     while let Ok((i, _)) = rtrim(char('^'))(input) {
@@ -47,7 +46,7 @@ fn primary_expression_bitwise_xor(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse & operator
-fn primary_expression_bitwise_and(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_bitwise_and(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_shift(input)?;
 
     while let Ok((i, _)) = rtrim(char('&'))(input) {
@@ -62,7 +61,7 @@ fn primary_expression_bitwise_and(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse <<, >> operators
-fn primary_expression_shift(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_shift(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_add(input)?;
 
     while let Ok((i, op)) = rtrim(alt((tag("<<"), tag(">>"))))(input) {
@@ -83,7 +82,7 @@ fn primary_expression_shift(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse +, - operators
-fn primary_expression_add(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_add(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_mul(input)?;
 
     while let Ok((i, op)) = rtrim(alt((tag("+"), tag("-"))))(input) {
@@ -102,7 +101,7 @@ fn primary_expression_add(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse *, \, % operators
-fn primary_expression_mul(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_mul(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_neg(input)?;
 
     while let Ok((i, op)) = rtrim(alt((char('*'), char('\\'), char('%'))))(input) {
@@ -134,7 +133,7 @@ fn primary_expression_mul(input: &str) -> IResult<&str, ParsedExpr> {
 }
 
 /// parse ~, - operators
-fn primary_expression_neg(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_neg(input: Input) -> ParseResult<ParsedExpr> {
     let (input, (op, expr)) =
         tuple((opt(alt((tag("~"), tag("-")))), primary_expression_item))(input)?;
 
@@ -155,7 +154,7 @@ fn primary_expression_neg(input: &str) -> IResult<&str, ParsedExpr> {
     ))
 }
 
-fn primary_expression_item(input: &str) -> IResult<&str, ParsedExpr> {
+fn primary_expression_item(input: Input) -> ParseResult<ParsedExpr> {
     alt((
         // '(' primary_expression ')'
         delimited(

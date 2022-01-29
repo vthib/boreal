@@ -1,9 +1,10 @@
+use super::nom_recipes::{Input, ParseResult};
 use nom::Finish;
 
 #[track_caller]
 pub fn parse<'a, F: 'a, O, O2>(f: F, input: &'a str, expected_rest_input: &str, expected_result: O2)
 where
-    F: FnOnce(&'a str) -> nom::IResult<&'a str, O>,
+    F: FnOnce(Input<'a>) -> ParseResult<'a, O>,
     O: PartialEq + std::fmt::Debug + From<O2>,
 {
     let res = f(input).unwrap();
