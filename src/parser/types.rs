@@ -1,4 +1,4 @@
-use std::ops::{RangeFrom, RangeTo};
+use std::ops::{Range, RangeFrom, RangeTo};
 
 use nom::{
     error::{ErrorKind, ParseError as NomParseError},
@@ -9,11 +9,7 @@ use nom::{
 ///
 /// Those are byte indexes relative to the original input.
 /// Start is inclusive, end is exclusive.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
+pub type Span = Range<usize>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Input<'a> {

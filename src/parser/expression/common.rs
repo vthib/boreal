@@ -55,7 +55,6 @@ mod tests {
     use crate::parser::{
         expression::Expression,
         tests::{parse, parse_err},
-        types::Span,
     };
 
     #[test]
@@ -67,11 +66,11 @@ mod tests {
             (
                 Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    span: Span { start: 1, end: 2 },
+                    span: 1..2,
                 }),
                 Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    span: Span { start: 4, end: 5 },
+                    span: 4..5,
                 }),
             ),
         );
@@ -82,11 +81,11 @@ mod tests {
             (
                 Box::new(ParsedExpr {
                     expr: Expression::Filesize,
-                    span: Span { start: 2, end: 10 },
+                    span: 2..10,
                 }),
                 Box::new(ParsedExpr {
                     expr: Expression::Entrypoint,
-                    span: Span { start: 14, end: 24 },
+                    span: 14..24,
                 }),
             ),
         );

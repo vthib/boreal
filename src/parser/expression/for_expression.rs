@@ -180,7 +180,6 @@ mod tests {
     use crate::parser::{
         expression::{Expression, Identifier},
         tests::{parse, parse_err},
-        types::Span,
     };
 
     #[test]
@@ -195,7 +194,7 @@ mod tests {
             ForSelection::Expr {
                 expr: Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    span: Span { start: 0, end: 1 },
+                    span: 0..1,
                 }),
                 as_percent: false,
             },
@@ -207,7 +206,7 @@ mod tests {
             ForSelection::Expr {
                 expr: Box::new(ParsedExpr {
                     expr: Expression::Number(50),
-                    span: Span { start: 0, end: 2 },
+                    span: 0..2,
                 }),
                 as_percent: true,
             },
@@ -220,7 +219,7 @@ mod tests {
             ForSelection::Expr {
                 expr: Box::new(ParsedExpr {
                     expr: Expression::Identifier(Identifier::Raw("anya".to_owned())),
-                    span: Span { start: 0, end: 4 },
+                    span: 0..4,
                 }),
                 as_percent: false,
             },
@@ -303,7 +302,7 @@ mod tests {
                     set: VariableSet { elements: vec![] },
                     body: None,
                 },
-                span: Span { start: 0, end: 11 },
+                span: 0..11,
             },
         );
         parse(
@@ -315,14 +314,14 @@ mod tests {
                     selection: ForSelection::Expr {
                         expr: Box::new(ParsedExpr {
                             expr: Expression::Number(50),
-                            span: Span { start: 0, end: 2 },
+                            span: 0..2,
                         }),
                         as_percent: true,
                     },
                     set: VariableSet { elements: vec![] },
                     body: None,
                 },
-                span: Span { start: 0, end: 11 },
+                span: 0..11,
             },
         );
         parse(
@@ -334,7 +333,7 @@ mod tests {
                     selection: ForSelection::Expr {
                         expr: Box::new(ParsedExpr {
                             expr: Expression::Number(5),
-                            span: Span { start: 0, end: 1 },
+                            span: 0..1,
                         }),
                         as_percent: false,
                     },
@@ -343,14 +342,14 @@ mod tests {
                     },
                     from: Box::new(ParsedExpr {
                         expr: Expression::Number(100),
-                        span: Span { start: 19, end: 22 },
+                        span: 19..22,
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expression::Entrypoint,
-                        span: Span { start: 24, end: 34 },
+                        span: 24..34,
                     }),
                 },
-                span: Span { start: 0, end: 35 },
+                span: 0..35,
             },
         );
 
@@ -373,7 +372,7 @@ mod tests {
                     selection: ForSelection::Expr {
                         expr: Box::new(ParsedExpr {
                             expr: Expression::Number(25),
-                            span: Span { start: 4, end: 6 },
+                            span: 4..6,
                         }),
                         as_percent: true,
                     },
@@ -382,10 +381,10 @@ mod tests {
                     },
                     body: Some(Box::new(ParsedExpr {
                         expr: Expression::Variable("".to_owned()),
-                        span: Span { start: 22, end: 23 },
+                        span: 22..23,
                     })),
                 },
-                span: Span { start: 0, end: 24 },
+                span: 0..24,
             },
         );
         parse(
@@ -399,19 +398,19 @@ mod tests {
                     iterator: ForIterator::List(vec![
                         ParsedExpr {
                             expr: Expression::Number(1),
-                            span: Span { start: 14, end: 15 },
+                            span: 14..15,
                         },
                         ParsedExpr {
                             expr: Expression::Number(3),
-                            span: Span { start: 17, end: 18 },
+                            span: 17..18,
                         },
                     ]),
                     body: Box::new(ParsedExpr {
                         expr: Expression::Boolean(false),
-                        span: Span { start: 24, end: 29 },
+                        span: 24..29,
                     }),
                 },
-                span: Span { start: 0, end: 31 },
+                span: 0..31,
             },
         );
         parse(
@@ -425,10 +424,10 @@ mod tests {
                     iterator: ForIterator::Identifier(Identifier::Raw("toto".to_owned())),
                     body: Box::new(ParsedExpr {
                         expr: Expression::Boolean(false),
-                        span: Span { start: 23, end: 28 },
+                        span: 23..28,
                     }),
                 },
-                span: Span { start: 0, end: 29 },
+                span: 0..29,
             },
         );
 
@@ -484,7 +483,7 @@ mod tests {
             "b",
             ForIterator::List(vec![ParsedExpr {
                 expr: Expression::Number(1),
-                span: Span { start: 1, end: 2 },
+                span: 1..2,
             }]),
         );
         parse(
@@ -494,15 +493,15 @@ mod tests {
             ForIterator::List(vec![
                 ParsedExpr {
                     expr: Expression::Number(1),
-                    span: Span { start: 1, end: 2 },
+                    span: 1..2,
                 },
                 ParsedExpr {
                     expr: Expression::Number(2),
-                    span: Span { start: 4, end: 5 },
+                    span: 4..5,
                 },
                 ParsedExpr {
                     expr: Expression::Count("a".to_owned()),
-                    span: Span { start: 6, end: 8 },
+                    span: 6..8,
                 },
             ]),
         );
@@ -513,11 +512,11 @@ mod tests {
             ForIterator::Range {
                 from: Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    span: Span { start: 1, end: 2 },
+                    span: 1..2,
                 }),
                 to: Box::new(ParsedExpr {
                     expr: Expression::Count("t".to_owned()),
-                    span: Span { start: 4, end: 6 },
+                    span: 4..6,
                 }),
             },
         );

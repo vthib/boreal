@@ -81,7 +81,6 @@ mod tests {
     use crate::parser::{
         expression::Expression,
         tests::{parse, parse_err},
-        types::Span,
     };
 
     #[test]
@@ -104,7 +103,7 @@ mod tests {
                 identifier: Box::new(Identifier::Raw("a".to_owned())),
                 subscript: Box::new(ParsedExpr {
                     expr: Expression::Number(2),
-                    span: Span { start: 3, end: 4 },
+                    span: 3..4,
                 }),
             },
         );
@@ -126,11 +125,11 @@ mod tests {
                 arguments: vec![
                     ParsedExpr {
                         expr: Expression::Identifier(Identifier::Raw("pe".to_owned())),
-                        span: Span { start: 4, end: 6 },
+                        span: 4..6,
                     },
                     ParsedExpr {
                         expr: Expression::Boolean(true),
-                        span: Span { start: 8, end: 12 },
+                        span: 8..12,
                     },
                 ],
             },
@@ -160,12 +159,12 @@ mod tests {
                             identifier: Box::new(Identifier::Raw("c".to_owned())),
                             subscript: Box::new(ParsedExpr {
                                 expr: Expression::String("d".to_owned()),
-                                span: Span { start: 8, end: 11 },
+                                span: 8..11,
                             }),
                         }),
                         subfield: "e".to_owned(),
                     }),
-                    span: Span { start: 6, end: 14 },
+                    span: 6..14,
                 },
                 ParsedExpr {
                     expr: Expression::Identifier(Identifier::FunctionCall {
@@ -175,10 +174,10 @@ mod tests {
                         }),
                         arguments: vec![ParsedExpr {
                             expr: Expression::Boolean(true),
-                            span: Span { start: 20, end: 24 },
+                            span: 20..24,
                         }],
                     }),
-                    span: Span { start: 16, end: 25 },
+                    span: 16..25,
                 },
             ],
         };
@@ -194,7 +193,7 @@ mod tests {
                             identifier: Box::new(identifier_call),
                             subscript: Box::new(ParsedExpr {
                                 expr: Expression::Number(3),
-                                span: Span { start: 28, end: 29 },
+                                span: 28..29,
                             }),
                         }),
                         subfield: "g".to_owned(),
@@ -203,7 +202,7 @@ mod tests {
                 }),
                 subscript: Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    span: Span { start: 35, end: 36 },
+                    span: 35..36,
                 }),
             },
         );

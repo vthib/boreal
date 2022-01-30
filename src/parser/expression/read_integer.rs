@@ -68,10 +68,7 @@ mod tests {
     use super::{
         read_integer, read_integer_expression, Expression, ParsedExpr, ReadIntegerSize as RIS,
     };
-    use crate::parser::{
-        tests::{parse, parse_err},
-        types::Span,
-    };
+    use crate::parser::tests::{parse, parse_err};
 
     #[test]
     fn test_read_integer() {
@@ -111,10 +108,10 @@ mod tests {
                     big_endian: false,
                     addr: Box::new(ParsedExpr {
                         expr: Expression::Number(3),
-                        span: Span { start: 6, end: 7 },
+                        span: 6..7,
                     }),
                 },
-                span: Span { start: 0, end: 8 },
+                span: 0..8,
             },
         );
 

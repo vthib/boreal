@@ -265,7 +265,7 @@ mod tests {
                 expr: lower_constructor(
                     Box::new(ParsedExpr {
                         expr: Expression::Number(0),
-                        span: Span { start: 0, end: 1 },
+                        span: 0..1,
                     }),
                     Box::new(ParsedExpr {
                         expr: higher_constructor(
@@ -309,10 +309,10 @@ mod tests {
                     "a".to_owned(),
                     Box::new(ParsedExpr {
                         expr: Expression::Number(100),
-                        span: Span { start: 6, end: 9 },
+                        span: 6..9,
                     }),
                 ),
-                span: Span { start: 0, end: 9 },
+                span: 0..9,
             },
         );
         parse(
@@ -324,14 +324,14 @@ mod tests {
                     variable: "_".to_owned(),
                     from: Box::new(ParsedExpr {
                         expr: Expression::Number(0),
-                        span: Span { start: 7, end: 8 },
+                        span: 7..8,
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expression::Number(50),
-                        span: Span { start: 11, end: 13 },
+                        span: 11..13,
                     }),
                 },
-                span: Span { start: 0, end: 14 },
+                span: 0..14,
             },
         );
         parse(
@@ -344,19 +344,19 @@ mod tests {
                     from: Box::new(ParsedExpr {
                         expr: Expression::Neg(Box::new(ParsedExpr {
                             expr: Expression::Number(10),
-                            span: Span { start: 7, end: 9 },
+                            span: 7..9,
                         })),
-                        span: Span { start: 6, end: 9 },
+                        span: 6..9,
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expression::Neg(Box::new(ParsedExpr {
                             expr: Expression::Number(5),
-                            span: Span { start: 12, end: 13 },
+                            span: 12..13,
                         })),
-                        span: Span { start: 11, end: 13 },
+                        span: 11..13,
                     }),
                 },
-                span: Span { start: 0, end: 14 },
+                span: 0..14,
             },
         );
         parse(
@@ -365,7 +365,7 @@ mod tests {
             "in (-10..-5",
             ParsedExpr {
                 expr: Expression::Variable("c".to_owned()),
-                span: Span { start: 0, end: 2 },
+                span: 0..2,
             },
         );
 
@@ -385,14 +385,14 @@ mod tests {
                 expr: Expression::And(
                     Box::new(ParsedExpr {
                         expr: Expression::Boolean(true),
-                        span: Span { start: 0, end: 4 },
+                        span: 0..4,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expression::Boolean(false),
-                        span: Span { start: 9, end: 14 },
+                        span: 9..14,
                     }),
                 ),
-                span: Span { start: 0, end: 14 },
+                span: 0..14,
             },
         );
         parse(
@@ -404,19 +404,19 @@ mod tests {
                     Box::new(ParsedExpr {
                         expr: Expression::Not(Box::new(ParsedExpr {
                             expr: Expression::Boolean(true),
-                            span: Span { start: 4, end: 8 },
+                            span: 4..8,
                         })),
-                        span: Span { start: 0, end: 8 },
+                        span: 0..8,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expression::Defined(Box::new(ParsedExpr {
                             expr: Expression::Variable("b".to_owned()),
-                            span: Span { start: 20, end: 22 },
+                            span: 20..22,
                         })),
-                        span: Span { start: 12, end: 22 },
+                        span: 12..22,
                     }),
                 ),
-                span: Span { start: 0, end: 22 },
+                span: 0..22,
             },
         );
     }
@@ -438,7 +438,7 @@ mod tests {
                     expr: constructor(
                         Box::new(ParsedExpr {
                             expr: Expression::String("a".to_owned()),
-                            span: Span { start: 0, end: 3 },
+                            span: 0..3,
                         }),
                         Box::new(ParsedExpr {
                             expr: Expression::String("b".to_owned()),
@@ -460,7 +460,7 @@ mod tests {
         test_op("!=", |a, b| {
             Expression::Not(Box::new(ParsedExpr {
                 expr: Expression::Eq(a, b),
-                span: Span { start: 0, end: 10 },
+                span: 0..10,
             }))
         });
         test_op("contains", |a, b| Expression::Contains {
@@ -531,7 +531,7 @@ mod tests {
                 expr: Expression::Matches(
                     Box::new(ParsedExpr {
                         expr: Expression::String("a".to_owned()),
-                        span: Span { start: 0, end: 3 },
+                        span: 0..3,
                     }),
                     crate::regex::Regex {
                         expr: "b".to_owned(),
@@ -539,7 +539,7 @@ mod tests {
                         dot_all: false,
                     },
                 ),
-                span: Span { start: 0, end: 16 },
+                span: 0..16,
             },
         );
 
@@ -566,7 +566,7 @@ mod tests {
         test_precedence("<", "!=", build_cmp(true, false), |a, b| {
             Expression::Not(Box::new(ParsedExpr {
                 expr: Expression::Eq(a, b),
-                span: Span { start: 0, end: 10 },
+                span: 0..10,
             }))
         });
         test_precedence("<", "contains", build_cmp(true, false), |a, b| {
@@ -626,25 +626,25 @@ mod tests {
                     Box::new(ParsedExpr {
                         expr: Expression::Not(Box::new(ParsedExpr {
                             expr: Expression::Boolean(true),
-                            span: Span { start: 4, end: 8 },
+                            span: 4..8,
                         })),
-                        span: Span { start: 0, end: 8 },
+                        span: 0..8,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expression::And(
                             Box::new(ParsedExpr {
                                 expr: Expression::Boolean(false),
-                                span: Span { start: 12, end: 17 },
+                                span: 12..17,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expression::Boolean(true),
-                                span: Span { start: 22, end: 26 },
+                                span: 22..26,
                             }),
                         ),
-                        span: Span { start: 12, end: 26 },
+                        span: 12..26,
                     }),
                 ),
-                span: Span { start: 0, end: 26 },
+                span: 0..26,
             },
         );
 
@@ -656,7 +656,7 @@ mod tests {
             |a, b| {
                 Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Eq(a, b),
-                    span: Span { start: 6, end: 12 },
+                    span: 6..12,
                 }))
             },
             Expression::And,
@@ -671,7 +671,7 @@ mod tests {
             "b",
             ParsedExpr {
                 expr: Expression::Boolean(true),
-                span: Span { start: 0, end: 4 },
+                span: 0..4,
             },
         );
         parse(
@@ -680,7 +680,7 @@ mod tests {
             "",
             ParsedExpr {
                 expr: Expression::Boolean(false),
-                span: Span { start: 2, end: 7 },
+                span: 2..7,
             },
         );
         parse(
@@ -690,9 +690,9 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Boolean(true),
-                    span: Span { start: 4, end: 8 },
+                    span: 4..8,
                 })),
-                span: Span { start: 0, end: 8 },
+                span: 0..8,
             },
         );
         parse(
@@ -703,11 +703,11 @@ mod tests {
                 expr: Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Defined(Box::new(ParsedExpr {
                         expr: Expression::Variable("a".to_owned()),
-                        span: Span { start: 12, end: 14 },
+                        span: 12..14,
                     })),
-                    span: Span { start: 4, end: 14 },
+                    span: 4..14,
                 })),
-                span: Span { start: 0, end: 14 },
+                span: 0..14,
             },
         );
 
@@ -718,7 +718,7 @@ mod tests {
             "b",
             ParsedExpr {
                 expr: Expression::Number(5),
-                span: Span { start: 0, end: 1 },
+                span: 0..1,
             },
         );
 
