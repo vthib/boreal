@@ -35,7 +35,7 @@ fn trailing_arguments(input: Input) -> ParseResult<Vec<ParsedExpr>> {
 
 /// Parse an identifier used in expressions.
 pub fn identifier(input: Input) -> ParseResult<Identifier> {
-    let (mut input, name) = rtrim(raw_identifier)(input)?;
+    let (mut input, name) = raw_identifier(input)?;
     let mut identifier = Identifier::Raw(name);
 
     loop {
@@ -78,8 +78,11 @@ pub fn identifier(input: Input) -> ParseResult<Identifier> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::expression::Expression;
-    use crate::parser::tests::{parse, parse_err};
+    use crate::parser::{
+        expression::Expression,
+        tests::{parse, parse_err},
+        types::Span,
+    };
 
     #[test]
     fn test_identifier() {
@@ -101,6 +104,7 @@ mod tests {
                 identifier: Box::new(Identifier::Raw("a".to_owned())),
                 subscript: Box::new(ParsedExpr {
                     expr: Expression::Number(2),
+                    span: Span { start: 3, end: 4 },
                 }),
             },
         );
@@ -122,9 +126,11 @@ mod tests {
                 arguments: vec![
                     ParsedExpr {
                         expr: Expression::Identifier(Identifier::Raw("pe".to_owned())),
+                        span: Span { start: 4, end: 6 },
                     },
                     ParsedExpr {
                         expr: Expression::Boolean(true),
+                        span: Span { start: 8, end: 12 },
                     },
                 ],
             },
@@ -154,10 +160,12 @@ mod tests {
                             identifier: Box::new(Identifier::Raw("c".to_owned())),
                             subscript: Box::new(ParsedExpr {
                                 expr: Expression::String("d".to_owned()),
+                                span: Span { start: 8, end: 11 },
                             }),
                         }),
                         subfield: "e".to_owned(),
                     }),
+                    span: Span { start: 6, end: 14 },
                 },
                 ParsedExpr {
                     expr: Expression::Identifier(Identifier::FunctionCall {
@@ -167,15 +175,17 @@ mod tests {
                         }),
                         arguments: vec![ParsedExpr {
                             expr: Expression::Boolean(true),
+                            span: Span { start: 20, end: 24 },
                         }],
                     }),
+                    span: Span { start: 16, end: 25 },
                 },
             ],
         };
 
         parse(
             identifier,
-            "a.b ( c[\"d\"].e ,f()(true) )[3].g.h[1],",
+            r#"a.b ( c["d"].e ,f()(true) )[3].g.h[1],"#,
             ",",
             Identifier::Subscript {
                 identifier: Box::new(Identifier::Subfield {
@@ -184,6 +194,7 @@ mod tests {
                             identifier: Box::new(identifier_call),
                             subscript: Box::new(ParsedExpr {
                                 expr: Expression::Number(3),
+                                span: Span { start: 28, end: 29 },
                             }),
                         }),
                         subfield: "g".to_owned(),
@@ -192,6 +203,7 @@ mod tests {
                 }),
                 subscript: Box::new(ParsedExpr {
                     expr: Expression::Number(1),
+                    span: Span { start: 35, end: 36 },
                 }),
             },
         );

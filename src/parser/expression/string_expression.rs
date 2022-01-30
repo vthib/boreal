@@ -18,6 +18,7 @@ use crate::parser::{
 
 /// Parse a `string_count ( 'in' range )` expression
 pub fn string_count_expression(input: Input) -> ParseResult<ParsedExpr> {
+    let start = input;
     let (input, identifier) = string::count(input)?;
     let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input)?;
 
@@ -31,11 +32,18 @@ pub fn string_count_expression(input: Input) -> ParseResult<ParsedExpr> {
             to,
         },
     };
-    Ok((input, ParsedExpr { expr }))
+    Ok((
+        input,
+        ParsedExpr {
+            expr,
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 /// Parse a `string_offset ( '[' primary_expression ']' )` expression
 pub fn string_offset_expression(input: Input) -> ParseResult<ParsedExpr> {
+    let start = input;
     let (input, identifier) = string::offset(input)?;
     let (input, expr) = opt(delimited(
         rtrim(char('[')),
@@ -43,20 +51,23 @@ pub fn string_offset_expression(input: Input) -> ParseResult<ParsedExpr> {
         cut(rtrim(char(']'))),
     ))(input)?;
 
+    let span = input.get_span_from(start);
     let expr = Expression::Offset {
         identifier,
         occurence_number: match expr {
             Some(v) => Box::new(v),
             None => Box::new(ParsedExpr {
                 expr: Expression::Number(1),
+                span: span.clone(),
             }),
         },
     };
-    Ok((input, ParsedExpr { expr }))
+    Ok((input, ParsedExpr { expr, span }))
 }
 
 /// Parse a `string_length ( '[' primary_expression ']' )` expression
 pub fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> {
+    let start = input;
     let (input, identifier) = string::length(input)?;
     let (input, expr) = opt(delimited(
         rtrim(char('[')),
@@ -64,22 +75,27 @@ pub fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> {
         cut(rtrim(char(']'))),
     ))(input)?;
 
+    let span = input.get_span_from(start);
     let expr = Expression::Length {
         identifier,
         occurence_number: match expr {
             Some(v) => Box::new(v),
             None => Box::new(ParsedExpr {
                 expr: Expression::Number(1),
+                span: span.clone(),
             }),
         },
     };
-    Ok((input, ParsedExpr { expr }))
+    Ok((input, ParsedExpr { expr, span }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::tests::{parse, parse_err};
+    use crate::parser::{
+        tests::{parse, parse_err},
+        types::Span,
+    };
 
     #[test]
     fn test_string_count_expression() {
@@ -89,6 +105,7 @@ mod tests {
             "bar",
             ParsedExpr {
                 expr: Expression::Count("foo".to_owned()),
+                span: Span { start: 0, end: 4 },
             },
         );
         parse(
@@ -100,11 +117,14 @@ mod tests {
                     identifier: "foo".to_owned(),
                     from: Box::new(ParsedExpr {
                         expr: Expression::Number(0),
+                        span: Span { start: 9, end: 10 },
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expression::Filesize,
+                        span: Span { start: 13, end: 21 },
                     }),
                 },
+                span: Span { start: 0, end: 23 },
             },
         );
 
@@ -123,8 +143,10 @@ mod tests {
                     identifier: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expression::Number(1),
+                        span: Span { start: 0, end: 2 },
                     }),
                 },
+                span: Span { start: 0, end: 2 },
             },
         );
         parse(
@@ -136,8 +158,10 @@ mod tests {
                     identifier: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expression::Number(2),
+                        span: Span { start: 5, end: 6 },
                     }),
                 },
+                span: Span { start: 0, end: 7 },
             },
         );
     }
@@ -153,8 +177,10 @@ mod tests {
                     identifier: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expression::Number(1),
+                        span: Span { start: 0, end: 2 },
                     }),
                 },
+                span: Span { start: 0, end: 2 },
             },
         );
         parse(
@@ -166,8 +192,10 @@ mod tests {
                     identifier: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expression::Number(2),
+                        span: Span { start: 5, end: 6 },
                     }),
                 },
+                span: Span { start: 0, end: 7 },
             },
         );
 

@@ -7,6 +7,8 @@ mod read_integer;
 mod string_expression;
 mod validation;
 
+use super::types::Span;
+
 pub use boolean_expression::expression;
 pub use validation::Validator;
 
@@ -38,6 +40,9 @@ pub enum Identifier {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParsedExpr {
     expr: Expression,
+
+    // Span of the expression.
+    span: Span,
 }
 
 /// An expression parsed in a Rule.

@@ -3,10 +3,11 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
-    character::complete::{char, multispace0},
+    character::complete::{char, multispace1},
     combinator::{opt, value},
     error::{Error, ErrorKind, ParseError as NomParseError},
-    sequence::{pair, preceded, tuple},
+    multi::many0,
+    sequence::{preceded, tuple},
     Parser,
 };
 
@@ -17,13 +18,14 @@ pub fn rtrim<'a, F: 'a, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult
 where
     F: Parser<Input<'a>, O, ParseError<'a>>,
 {
-    move |mut input| {
+    move |input| {
+        let (mut input, output) = inner.parse(input)?;
         input.save_cursor_before_rtrim();
-        let (input, output) = inner.parse(input)?;
-        let (input, _) = pair(
-            multispace0,
-            opt(alt((multiline_comment, singleline_comment))),
-        )
+        let (input, _) = opt(many0(alt((
+            multiline_comment,
+            singleline_comment,
+            value((), multispace1),
+        ))))
         .parse(input)?;
         Ok((input, output))
     }
@@ -35,10 +37,11 @@ where
     F: FnMut(Input<'a>) -> ParseResult<'a, O>,
 {
     preceded(
-        pair(
-            multispace0,
-            opt(alt((multiline_comment, singleline_comment))),
-        ),
+        opt(many0(alt((
+            multiline_comment,
+            singleline_comment,
+            value((), multispace1),
+        )))),
         inner,
     )
 }
@@ -88,12 +91,12 @@ pub fn textual_tag(
 ///
 /// Equivalent to the `comment` state in libyara.
 fn multiline_comment(input: Input) -> ParseResult<()> {
-    rtrim(value((), tuple((tag("/*"), take_until("*/"), tag("*/")))))(input)
+    value((), tuple((tag("/*"), take_until("*/"), tag("*/"))))(input)
 }
 
 /// Parse single line // ... comments.
 fn singleline_comment(input: Input) -> ParseResult<()> {
-    rtrim(value((), tuple((tag("//"), take_until("\n"), char('\n')))))(input)
+    value((), tuple((tag("//"), take_until("\n"), char('\n'))))(input)
 }
 
 #[cfg(test)]
@@ -133,9 +136,9 @@ mod tests {
     #[test]
     fn test_multiline_comment() {
         parse(multiline_comment, "/**/a", "a", ());
-        parse(multiline_comment, "/* a\n */\n", "", ());
-        parse(multiline_comment, "/*** a\n\n**//* a */c", "c", ());
-        parse(multiline_comment, "/*** a\n//*/\n*/", "*/", ());
+        parse(multiline_comment, "/* a\n */\n", "\n", ());
+        parse(multiline_comment, "/*** a\n\n**//* a */c", "/* a */c", ());
+        parse(multiline_comment, "/*** a\n//*/\n*/", "\n*/", ());
 
         parse_err(multiline_comment, "/");
         parse_err(multiline_comment, "/*");

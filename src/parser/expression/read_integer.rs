@@ -39,6 +39,7 @@ fn read_integer(input: Input) -> ParseResult<(bool, ReadIntegerSize, bool)> {
 }
 
 pub fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
+    let start = input;
     let (input, ((unsigned, size, big_endian), expr)) = pair(
         read_integer,
         cut(delimited(
@@ -57,15 +58,19 @@ pub fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
                 big_endian,
                 addr: Box::new(expr),
             },
+            span: input.get_span_from(start),
         },
     ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::tests::{parse, parse_err};
     use super::{
         read_integer, read_integer_expression, Expression, ParsedExpr, ReadIntegerSize as RIS,
+    };
+    use crate::parser::{
+        tests::{parse, parse_err},
+        types::Span,
     };
 
     #[test]
@@ -106,8 +111,10 @@ mod tests {
                     big_endian: false,
                     addr: Box::new(ParsedExpr {
                         expr: Expression::Number(3),
+                        span: Span { start: 6, end: 7 },
                     }),
                 },
+                span: Span { start: 0, end: 8 },
             },
         );
 

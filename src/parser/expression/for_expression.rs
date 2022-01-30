@@ -34,6 +34,7 @@ pub fn for_expression(input: Input) -> ParseResult<ParsedExpr> {
 /// - `selection 'of' set`
 /// - `selection 'of' set 'in' range`
 fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
+    let start = input;
     let (input, selection) = for_selection(input)?;
     let (input, set) = preceded(rtrim(ttag("of")), cut(string_set))(input)?;
     let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
@@ -52,7 +53,13 @@ fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
         },
     };
 
-    Ok((input, ParsedExpr { expr }))
+    Ok((
+        input,
+        ParsedExpr {
+            expr,
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 /// Parse a full fledge for expression:
@@ -61,6 +68,7 @@ fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
 /// - 'for' selection 'of' set ':' '(' body ')'
 /// - 'for' selection identifier 'of' iterator ':' '(' body ')'
 fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
+    let start = input;
     let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection))(input)?;
     let (i2, has_of) = opt(rtrim(ttag("of")))(input)?;
 
@@ -76,6 +84,7 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
                     set,
                     body: Some(Box::new(body)),
                 },
+                span: input.get_span_from(start),
             },
         ))
     } else {
@@ -92,6 +101,7 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
                     iterator,
                     body: Box::new(body),
                 },
+                span: input.get_span_from(start),
             },
         ))
     }
@@ -167,8 +177,11 @@ fn iterator(input: Input) -> ParseResult<ForIterator> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::expression::{Expression, Identifier};
-    use crate::parser::tests::{parse, parse_err};
+    use crate::parser::{
+        expression::{Expression, Identifier},
+        tests::{parse, parse_err},
+        types::Span,
+    };
 
     #[test]
     fn test_for_selection() {
@@ -182,6 +195,7 @@ mod tests {
             ForSelection::Expr {
                 expr: Box::new(ParsedExpr {
                     expr: Expression::Number(1),
+                    span: Span { start: 0, end: 1 },
                 }),
                 as_percent: false,
             },
@@ -193,6 +207,7 @@ mod tests {
             ForSelection::Expr {
                 expr: Box::new(ParsedExpr {
                     expr: Expression::Number(50),
+                    span: Span { start: 0, end: 2 },
                 }),
                 as_percent: true,
             },
@@ -205,6 +220,7 @@ mod tests {
             ForSelection::Expr {
                 expr: Box::new(ParsedExpr {
                     expr: Expression::Identifier(Identifier::Raw("anya".to_owned())),
+                    span: Span { start: 0, end: 4 },
                 }),
                 as_percent: false,
             },
@@ -287,6 +303,7 @@ mod tests {
                     set: VariableSet { elements: vec![] },
                     body: None,
                 },
+                span: Span { start: 0, end: 11 },
             },
         );
         parse(
@@ -298,12 +315,14 @@ mod tests {
                     selection: ForSelection::Expr {
                         expr: Box::new(ParsedExpr {
                             expr: Expression::Number(50),
+                            span: Span { start: 0, end: 2 },
                         }),
                         as_percent: true,
                     },
                     set: VariableSet { elements: vec![] },
                     body: None,
                 },
+                span: Span { start: 0, end: 11 },
             },
         );
         parse(
@@ -315,6 +334,7 @@ mod tests {
                     selection: ForSelection::Expr {
                         expr: Box::new(ParsedExpr {
                             expr: Expression::Number(5),
+                            span: Span { start: 0, end: 1 },
                         }),
                         as_percent: false,
                     },
@@ -323,11 +343,14 @@ mod tests {
                     },
                     from: Box::new(ParsedExpr {
                         expr: Expression::Number(100),
+                        span: Span { start: 19, end: 22 },
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expression::Entrypoint,
+                        span: Span { start: 24, end: 34 },
                     }),
                 },
+                span: Span { start: 0, end: 35 },
             },
         );
 
@@ -350,6 +373,7 @@ mod tests {
                     selection: ForSelection::Expr {
                         expr: Box::new(ParsedExpr {
                             expr: Expression::Number(25),
+                            span: Span { start: 4, end: 6 },
                         }),
                         as_percent: true,
                     },
@@ -358,8 +382,10 @@ mod tests {
                     },
                     body: Some(Box::new(ParsedExpr {
                         expr: Expression::Variable("".to_owned()),
+                        span: Span { start: 22, end: 23 },
                     })),
                 },
+                span: Span { start: 0, end: 24 },
             },
         );
         parse(
@@ -373,15 +399,19 @@ mod tests {
                     iterator: ForIterator::List(vec![
                         ParsedExpr {
                             expr: Expression::Number(1),
+                            span: Span { start: 14, end: 15 },
                         },
                         ParsedExpr {
                             expr: Expression::Number(3),
+                            span: Span { start: 17, end: 18 },
                         },
                     ]),
                     body: Box::new(ParsedExpr {
                         expr: Expression::Boolean(false),
+                        span: Span { start: 24, end: 29 },
                     }),
                 },
+                span: Span { start: 0, end: 31 },
             },
         );
         parse(
@@ -395,8 +425,10 @@ mod tests {
                     iterator: ForIterator::Identifier(Identifier::Raw("toto".to_owned())),
                     body: Box::new(ParsedExpr {
                         expr: Expression::Boolean(false),
+                        span: Span { start: 23, end: 28 },
                     }),
                 },
+                span: Span { start: 0, end: 29 },
             },
         );
 
@@ -452,6 +484,7 @@ mod tests {
             "b",
             ForIterator::List(vec![ParsedExpr {
                 expr: Expression::Number(1),
+                span: Span { start: 1, end: 2 },
             }]),
         );
         parse(
@@ -461,12 +494,15 @@ mod tests {
             ForIterator::List(vec![
                 ParsedExpr {
                     expr: Expression::Number(1),
+                    span: Span { start: 1, end: 2 },
                 },
                 ParsedExpr {
                     expr: Expression::Number(2),
+                    span: Span { start: 4, end: 5 },
                 },
                 ParsedExpr {
                     expr: Expression::Count("a".to_owned()),
+                    span: Span { start: 6, end: 8 },
                 },
             ]),
         );
@@ -477,9 +513,11 @@ mod tests {
             ForIterator::Range {
                 from: Box::new(ParsedExpr {
                     expr: Expression::Number(1),
+                    span: Span { start: 1, end: 2 },
                 }),
                 to: Box::new(ParsedExpr {
                     expr: Expression::Count("t".to_owned()),
+                    span: Span { start: 4, end: 6 },
                 }),
             },
         );

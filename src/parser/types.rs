@@ -5,6 +5,16 @@ use nom::{
     Err, IResult, InputIter, InputLength, InputTake,
 };
 
+/// A span inside the parsed input.
+///
+/// Those are byte indexes relative to the original input.
+/// Start is inclusive, end is exclusive.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Input<'a> {
     /// Whole input being parsed.
@@ -54,6 +64,20 @@ impl<'a> Input<'a> {
 
     pub fn save_cursor_before_rtrim(&mut self) {
         self.cursor_before_last_rtrim = self.cursor;
+    }
+
+    /// Generate a span from a starting position.
+    ///
+    /// The given input is the start of the span.
+    /// The end of the span is the cursor saved before the last rtrim.
+    pub fn get_span_from(&self, start: Self) -> Span {
+        debug_assert!(self.input == start.input);
+        let input = self.input.as_ptr() as usize;
+
+        Span {
+            start: start.cursor().as_ptr() as usize - input,
+            end: self.cursor_before_last_rtrim.as_ptr() as usize - input,
+        }
     }
 }
 

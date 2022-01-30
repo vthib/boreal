@@ -4,11 +4,12 @@ use nom::{
     character::complete::char,
     combinator::cut,
     sequence::{separated_pair, terminated},
+    Parser,
 };
 
-use super::{primary_expression::primary_expression, ParsedExpr};
-use crate::parser::nom_recipes::rtrim;
+use super::{primary_expression::primary_expression, Expression, ParsedExpr};
 use crate::parser::types::{Input, ParseResult};
+use crate::parser::{nom_recipes::rtrim, types::ParseError};
 
 /// Parse a 'in' range for primary expressions.
 ///
@@ -28,11 +29,34 @@ pub fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExpr>)> {
     Ok((input, (Box::new(a), Box::new(b))))
 }
 
+pub(super) fn map_expr<'a, F, C, O>(
+    mut f: F,
+    constructor: C,
+) -> impl FnMut(Input<'a>) -> ParseResult<'a, ParsedExpr>
+where
+    F: Parser<Input<'a>, O, ParseError<'a>>,
+    C: Fn(O) -> Expression,
+{
+    move |input| {
+        let start = input;
+        let (input, output) = f.parse(input)?;
+        Ok((
+            input,
+            ParsedExpr {
+                expr: constructor(output),
+                span: input.get_span_from(start),
+            },
+        ))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::expression::Expression;
-    use crate::parser::tests::{parse, parse_err};
+    use crate::parser::{
+        expression::Expression,
+        tests::{parse, parse_err},
+        types::Span,
+    };
 
     #[test]
     fn test_range() {
@@ -43,9 +67,11 @@ mod tests {
             (
                 Box::new(ParsedExpr {
                     expr: Expression::Number(1),
+                    span: Span { start: 1, end: 2 },
                 }),
                 Box::new(ParsedExpr {
                     expr: Expression::Number(1),
+                    span: Span { start: 4, end: 5 },
                 }),
             ),
         );
@@ -56,9 +82,11 @@ mod tests {
             (
                 Box::new(ParsedExpr {
                     expr: Expression::Filesize,
+                    span: Span { start: 2, end: 10 },
                 }),
                 Box::new(ParsedExpr {
                     expr: Expression::Entrypoint,
+                    span: Span { start: 14, end: 24 },
                 }),
             ),
         );
