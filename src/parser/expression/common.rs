@@ -34,7 +34,7 @@ pub(super) fn map_expr<'a, F, C, O>(
     constructor: C,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, ParsedExpr>
 where
-    F: Parser<Input<'a>, O, ParseError<'a>>,
+    F: Parser<Input<'a>, O, ParseError>,
     C: Fn(O) -> Expression,
 {
     move |input| {

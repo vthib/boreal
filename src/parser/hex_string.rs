@@ -6,13 +6,14 @@ use nom::{
     bytes::complete::tag,
     character::complete::{char, digit1, multispace0 as sp0},
     combinator::{cut, map, map_res, opt},
-    error::{Error, ErrorKind, FromExternalError, ParseError},
+    error::{ErrorKind as NomErrorKind, ParseError as NomParseError},
     multi::many1,
     sequence::{preceded, separated_pair, terminated},
 };
 
+use super::error::{Error, ErrorKind};
 use super::nom_recipes::rtrim;
-use super::types::{Input, ParseResult};
+use super::types::{Input, ParseError, ParseResult};
 use crate::hex_string::{HexString, HexToken, Jump, Mask};
 
 // TODO: handle this limit in some way
@@ -29,9 +30,9 @@ fn hex_digit(mut input: Input) -> ParseResult<u8> {
             input.advance(1);
             Ok((input, v))
         }
-        _ => Err(nom::Err::Error(Error::from_error_kind(
+        _ => Err(nom::Err::Error(ParseError::from_error_kind(
             input,
-            ErrorKind::HexDigit,
+            NomErrorKind::HexDigit,
         ))),
     }
 }
@@ -66,6 +67,7 @@ fn masked_byte(input: Input) -> ParseResult<(u8, Mask)> {
 ///
 /// This is equivalent to the range state in libyara.
 fn range(input: Input) -> ParseResult<Jump> {
+    let start = input;
     let (input, _) = rtrim(char('['))(input)?;
 
     let (input, jump) = cut(terminated(
@@ -73,9 +75,13 @@ fn range(input: Input) -> ParseResult<Jump> {
             // Parses [a?-b?]
             map(
                 separated_pair(
-                    opt(map_res(rtrim(digit1), |v| str::parse(v.cursor()))),
+                    opt(map_res(rtrim(digit1), |v| {
+                        str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
+                    })),
                     rtrim(char('-')),
-                    opt(map_res(rtrim(digit1), |v| str::parse(v.cursor()))),
+                    opt(map_res(rtrim(digit1), |v| {
+                        str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
+                    })),
                 ),
                 |(from, to)| Jump {
                     from: from.unwrap_or(0),
@@ -84,7 +90,9 @@ fn range(input: Input) -> ParseResult<Jump> {
             ),
             // Parses [a]
             map(
-                map_res(rtrim(digit1), |v| str::parse(v.cursor())),
+                map_res(rtrim(digit1), |v| {
+                    str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
+                }),
                 |value| Jump {
                     from: value,
                     to: Some(value),
@@ -94,24 +102,23 @@ fn range(input: Input) -> ParseResult<Jump> {
         rtrim(char(']')),
     ))(input)?;
 
-    if let Err(desc) = validate_jump(&jump) {
-        return Err(nom::Err::Failure(Error::from_external_error(
-            input,
-            ErrorKind::Verify,
-            desc,
-        )));
+    if let Err(kind) = validate_jump(&jump) {
+        return Err(nom::Err::Failure(Error::new(start, kind)));
     }
     Ok((input, jump))
 }
 
 /// Validate that a jump is well-formed.
-fn validate_jump(range: &Jump) -> Result<(), String> {
+fn validate_jump(range: &Jump) -> Result<(), ErrorKind> {
     if let Some(to) = range.to {
         if range.from == 0 && to == 0 {
-            return Err("invalid jump length".to_owned());
+            return Err(ErrorKind::JumpEmpty);
         }
         if range.from > to {
-            return Err("invalid jump range".to_owned());
+            return Err(ErrorKind::JumpRangeInvalid {
+                from: range.from,
+                to,
+            });
         }
     }
 
@@ -139,16 +146,15 @@ fn alternatives(input: Input) -> ParseResult<HexToken> {
     ))(input)
 }
 
-fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), String> {
+fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), ErrorKind> {
     match jump.to {
-        None => Err("unbounded jumps not allowed inside alternation (|)".to_owned()),
+        None => Err(ErrorKind::JumpUnboundedInAlternation),
         Some(to) => {
             // No need to test from, as from <= to, if from is over the limit, to will be.
             if to > JUMP_LIMIT_IN_ALTERNATIVES {
-                Err(format!(
-                    "jumps over {} not allowed inside alternation (|)",
-                    JUMP_LIMIT_IN_ALTERNATIVES
-                ))
+                Err(ErrorKind::JumpTooBigInAlternation {
+                    limit: JUMP_LIMIT_IN_ALTERNATIVES,
+                })
             } else {
                 Ok(())
             }
@@ -170,13 +176,7 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
         map_res(range, |range| {
             // Some jumps are forbidden inside an alternatives
             if in_alternatives {
-                if let Err(desc) = validate_jump_in_alternatives(&range) {
-                    return Err(nom::Err::Failure(Error::from_external_error(
-                        input,
-                        ErrorKind::Verify,
-                        desc,
-                    )));
-                }
+                validate_jump_in_alternatives(&range)?;
             }
 
             // Jump of one is equivalent to ??

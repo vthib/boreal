@@ -6,11 +6,12 @@ use nom::{
     bytes::complete::{escaped_transform, is_not, take_while},
     character::complete::{char, one_of},
     combinator::{cut, map, opt, recognize, value},
-    error::{Error, ErrorKind, FromExternalError, ParseError as NomParseError},
+    error::{ErrorKind as NomErrorKind, ParseError as NomParseError},
     multi::fold_many_m_n,
     sequence::{pair, preceded, terminated, tuple},
 };
 
+use super::error::{Error, ErrorKind};
 use super::nom_recipes::{rtrim, take_one};
 use super::types::{Input, ParseError, ParseResult};
 use crate::regex::Regex;
@@ -148,17 +149,14 @@ pub fn quoted(input: Input) -> ParseResult<String> {
 /// but we do not have an issue about this (we do not save the regular expression
 /// as a C string). See [Issue #576 in Yara](https://github.com/VirusTotal/yara/issues/576).
 pub fn regex(input: Input) -> ParseResult<Regex> {
+    let start = input;
     let (input, _) = char('/')(input)?;
 
     // We cannot use escaped_transform, as it is not an error to use
     // the control character with any char other than `/`.
     let (input, expr) = cut(terminated(regex_contents, char('/')))(input)?;
     if expr.is_empty() {
-        return Err(nom::Err::Error(Error::from_external_error(
-            input,
-            ErrorKind::Verify,
-            "regex expression cannot be empty",
-        )));
+        return Err(nom::Err::Error(Error::new(start, ErrorKind::EmptyRegex)));
     }
 
     let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
@@ -198,9 +196,9 @@ fn regex_contents(mut input: Input) -> ParseResult<String> {
                 if input.cursor().as_bytes()[0] == b'\\' {
                     if input.cursor().len() <= 1 {
                         input.advance(1);
-                        return Err(nom::Err::Error(Error::from_error_kind(
+                        return Err(nom::Err::Error(ParseError::from_error_kind(
                             input,
-                            ErrorKind::EscapedTransform,
+                            NomErrorKind::EscapedTransform,
                         )));
                     }
                     match input.cursor().as_bytes()[1] {

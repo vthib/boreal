@@ -9,6 +9,7 @@ use nom::{
     sequence::{pair, tuple},
 };
 
+use super::error::{Error, ErrorKind};
 use super::nom_recipes::{rtrim, textual_tag as ttag};
 use super::types::{Input, ParseResult};
 
@@ -16,17 +17,31 @@ use super::types::{Input, ParseResult};
 ///
 /// This function matches the pattern `/\d+(MB|KB)?`/.
 fn decimal_number(input: Input) -> ParseResult<i64> {
-    map_res(
-        rtrim(pair(
-            map_res(digit1, |v: Input| str::parse::<i64>(v.cursor())),
-            opt(alt((ttag("MB"), ttag("KB")))),
-        )),
-        |(n, suffix)| match suffix {
-            Some("MB") => n.checked_mul(1024 * 1024).ok_or(()),
-            Some("KB") => n.checked_mul(1024).ok_or(()),
-            _ => Ok(n),
-        },
-    )(input)
+    let start = input;
+    let (input, (n, suffix)) = rtrim(pair(
+        map_res(digit1, |v: Input| {
+            str::parse::<i64>(v.cursor()).map_err(ErrorKind::StrToIntError)
+        }),
+        opt(alt((ttag("MB"), ttag("KB")))),
+    ))(input)?;
+
+    if suffix.is_none() {}
+
+    let coef = match suffix {
+        Some("MB") => 1024 * 1024,
+        Some("KB") => 1024,
+        _ => return Ok((input, n)),
+    };
+    match n.checked_mul(coef) {
+        Some(n) => Ok((input, n)),
+        None => Err(nom::Err::Failure(Error::new(
+            start,
+            ErrorKind::MulOverflow {
+                left: n,
+                right: coef,
+            },
+        ))),
+    }
 }
 
 /// Parse an hexadecimal number.
@@ -36,7 +51,7 @@ fn hexadecimal_number(input: Input) -> ParseResult<i64> {
     let (input, _) = tag("0x")(input)?;
 
     cut(map_res(rtrim(hex_digit1), |v| {
-        i64::from_str_radix(v.cursor(), 16)
+        i64::from_str_radix(v.cursor(), 16).map_err(ErrorKind::StrToHexIntError)
     }))(input)
 }
 
@@ -47,7 +62,7 @@ fn octal_number(input: Input) -> ParseResult<i64> {
     let (input, _) = tag("0o")(input)?;
 
     cut(map_res(rtrim(oct_digit1), |v| {
-        i64::from_str_radix(v.cursor(), 8)
+        i64::from_str_radix(v.cursor(), 8).map_err(ErrorKind::StrToOctIntError)
     }))(input)
 }
 
@@ -71,7 +86,9 @@ pub fn number(input: Input) -> ParseResult<i64> {
 pub fn double(input: Input) -> ParseResult<f64> {
     let (input, payload) = rtrim(recognize(tuple((digit1, char('.'), digit1))))(input)?;
 
-    cut(map_res(success(payload), |v| str::parse::<f64>(v.cursor())))(input)
+    cut(map_res(success(payload), |v| {
+        str::parse::<f64>(v.cursor()).map_err(ErrorKind::StrToFloatError)
+    }))(input)
 }
 
 #[cfg(test)]

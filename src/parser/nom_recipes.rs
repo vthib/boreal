@@ -5,7 +5,7 @@ use nom::{
     bytes::complete::{tag, take_until},
     character::complete::{char, multispace1},
     combinator::{opt, value},
-    error::{Error, ErrorKind, ParseError as NomParseError},
+    error::{ErrorKind, ParseError as NomParseError},
     multi::many0,
     sequence::{preceded, tuple},
     Parser,
@@ -16,7 +16,7 @@ use super::types::{Input, ParseError, ParseResult};
 /// Right trim after the given parser.
 pub fn rtrim<'a, F: 'a, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
-    F: Parser<Input<'a>, O, ParseError<'a>>,
+    F: Parser<Input<'a>, O, ParseError>,
 {
     move |input| {
         let (mut input, output) = inner.parse(input)?;
@@ -56,7 +56,7 @@ where
             input.advance(c.len_utf8());
             Ok((input, c))
         }
-        _ => Err(nom::Err::Error(Error::from_char(input, '0'))),
+        _ => Err(nom::Err::Error(ParseError::from_char(input, '0'))),
     }
 }
 
@@ -72,14 +72,13 @@ pub fn textual_tag(
     move |input: Input| {
         if let Some(input) = input.strip_prefix(tag) {
             match input.cursor().chars().next() {
-                Some(c) if c.is_alphanumeric() => Err(nom::Err::Error(Error::from_error_kind(
-                    input,
-                    ErrorKind::Tag,
-                ))),
+                Some(c) if c.is_alphanumeric() => Err(nom::Err::Error(
+                    ParseError::from_error_kind(input, ErrorKind::Tag),
+                )),
                 _ => Ok((input, tag)),
             }
         } else {
-            Err(nom::Err::Error(Error::from_error_kind(
+            Err(nom::Err::Error(ParseError::from_error_kind(
                 input,
                 ErrorKind::Tag,
             )))

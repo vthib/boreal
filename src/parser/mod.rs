@@ -28,6 +28,7 @@ use std::path::Path;
 
 use nom::Finish;
 
+mod error;
 mod expression;
 mod hex_string;
 mod nom_recipes;

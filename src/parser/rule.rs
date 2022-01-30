@@ -5,16 +5,16 @@ use nom::{
     branch::alt,
     character::complete::char,
     combinator::{cut, map, map_res, opt},
-    error::{Error, ErrorKind, FromExternalError},
     multi::{many0, many1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
 };
 
 use super::{
+    error::{Error, ErrorKind},
     expression, hex_string,
     nom_recipes::{ltrim, rtrim, textual_tag as ttag},
     number, string,
-    types::{Input, ParseError, ParseResult},
+    types::{Input, ParseResult},
 };
 use crate::rule::{
     Metadata, MetadataValue, Rule, VariableDeclarationValue, VariableFlags, VariableModifiers,
@@ -132,6 +132,7 @@ fn meta_declaration(input: Input) -> ParseResult<Metadata> {
 /// in `grammar.y` in libyara.
 fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
     let (input, _) = pair(rtrim(ttag("strings")), rtrim(char(':')))(input)?;
+    let mut start = input;
     let (mut input, mut var) = cut(string_declaration)(input)?;
 
     let mut existing_variables = HashSet::new();
@@ -140,16 +141,16 @@ fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
         // If var.name is empty, this is an anonymous string.
         // This is allowed, do not add it in the hashset.
         if !var.name.is_empty() && !existing_variables.insert(var.name.clone()) {
-            return Err(nom::Err::Failure(Error::from_external_error(
-                input,
-                ErrorKind::Verify,
-                format!("duplicated string ${}", &var.name),
+            return Err(nom::Err::Failure(Error::new(
+                start,
+                ErrorKind::StringDeclarationDuplicated { name: var.name },
             )));
         }
         decls.push(var);
 
         match string_declaration(input) {
             Ok((i, new_var)) => {
+                start = input;
                 input = i;
                 var = new_var;
             }
@@ -209,14 +210,16 @@ where
 {
     let mut modifiers = VariableModifiers::default();
 
+    let start = input;
     while let Ok((i, modifier)) = parser(input) {
         match modifier {
             Modifier::Flag(flag) => {
                 if modifiers.flags.contains(flag) {
-                    return Err(nom::Err::Failure(Error::from_external_error(
-                        input,
-                        ErrorKind::Verify,
-                        format!("flag {:?} duplicated", flag),
+                    return Err(nom::Err::Failure(Error::new(
+                        start,
+                        ErrorKind::ModifiersDuplicated {
+                            modifier_name: format!("{:?}", flag),
+                        },
                     )));
                 }
                 modifiers.flags |= flag;
@@ -237,37 +240,48 @@ where
         input = i;
     }
 
-    if let Err(desc) = validate_flags(modifiers.flags) {
-        return Err(nom::Err::Failure(Error::from_external_error(
-            input,
-            ErrorKind::Verify,
-            desc,
-        )));
+    if let Err(kind) = validate_flags(modifiers.flags) {
+        return Err(nom::Err::Failure(Error::new(start, kind)));
     }
 
     Ok((input, modifiers))
 }
 
-fn validate_flags(flags: VariableFlags) -> Result<(), &'static str> {
+fn validate_flags(flags: VariableFlags) -> Result<(), ErrorKind> {
     if flags.contains(VariableFlags::XOR | VariableFlags::NOCASE) {
-        return Err("incompatible modifiers: xor nocase");
+        return Err(ErrorKind::ModifiersIncompatible {
+            first_modifier_name: "xor".to_owned(),
+            second_modifier_name: "nocase".to_owned(),
+        });
     }
 
     if flags.contains(VariableFlags::NOCASE) {
         if flags.contains(VariableFlags::BASE64) {
-            return Err("incompatible modifiers: nocase base64");
+            return Err(ErrorKind::ModifiersIncompatible {
+                first_modifier_name: "base64".to_owned(),
+                second_modifier_name: "nocase".to_owned(),
+            });
         }
         if flags.contains(VariableFlags::BASE64WIDE) {
-            return Err("incompatible modifiers: nocase base64wide");
+            return Err(ErrorKind::ModifiersIncompatible {
+                first_modifier_name: "base64wide".to_owned(),
+                second_modifier_name: "nocase".to_owned(),
+            });
         }
     }
 
     if flags.contains(VariableFlags::FULLWORD) {
         if flags.contains(VariableFlags::BASE64) {
-            return Err("incompatible modifiers: fullword base64");
+            return Err(ErrorKind::ModifiersIncompatible {
+                first_modifier_name: "base64".to_owned(),
+                second_modifier_name: "fullword".to_owned(),
+            });
         }
         if flags.contains(VariableFlags::BASE64WIDE) {
-            return Err("incompatible modifiers: fullword base64wide");
+            return Err(ErrorKind::ModifiersIncompatible {
+                first_modifier_name: "base64wide".to_owned(),
+                second_modifier_name: "fullword".to_owned(),
+            });
         }
     }
 
@@ -325,27 +339,28 @@ fn hex_string_modifier(input: Input) -> ParseResult<Modifier> {
 fn xor_modifier(input: Input) -> ParseResult<Modifier> {
     let (input, _) = rtrim(ttag("xor"))(input)?;
 
+    let start = input;
     let (input, open_paren) = opt(rtrim(char('(')))(input)?;
     if open_paren.is_none() {
         return Ok((input, Modifier::Xor(0, 255)));
     }
 
-    let (input, from) = cut(number::number)(input)?;
-    let from = number_to_u8(input, from)?;
+    let (input, from) = cut(map_res(number::number, number_to_u8))(input)?;
 
     let (input, to) = cut(terminated(
-        opt(preceded(rtrim(char('-')), number::number)),
+        opt(preceded(
+            rtrim(char('-')),
+            map_res(number::number, number_to_u8),
+        )),
         rtrim(char(')')),
     ))(input)?;
 
     let res = match to {
         Some(to) => {
-            let to = number_to_u8(input, to)?;
             if to < from {
-                return Err(nom::Err::Failure(Error::from_external_error(
-                    input,
-                    ErrorKind::Verify,
-                    format!("invalid xor range, {} > {}", from, to),
+                return Err(nom::Err::Failure(Error::new(
+                    start,
+                    ErrorKind::XorRangeInvalid { from, to },
                 )));
             }
             Modifier::Xor(from, to)
@@ -368,14 +383,16 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
 
     let mut alphabet: Option<[u8; 64]> = None;
     if open_paren.is_some() {
+        let start = input;
         let res = cut(terminated(string::quoted, rtrim(char(')'))))(input)?;
         match res.1.as_bytes().try_into() {
             Ok(v) => alphabet = Some(v),
             Err(_) => {
-                return Err(nom::Err::Failure(Error::from_external_error(
-                    input,
-                    ErrorKind::Verify,
-                    "base64 alphabet must contain 64 characters",
+                return Err(nom::Err::Failure(Error::new(
+                    start,
+                    ErrorKind::Base64AlphabetInvalidLength {
+                        length: res.1.len(),
+                    },
                 )));
             }
         };
@@ -392,14 +409,8 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
     ))
 }
 
-fn number_to_u8(input: Input, value: i64) -> Result<u8, nom::Err<ParseError>> {
-    u8::try_from(value).map_err(|_| {
-        nom::Err::Failure(Error::from_external_error(
-            input,
-            ErrorKind::Verify,
-            format!("invalid value in xor range: {}, must be in [0-255]", value),
-        ))
-    })
+fn number_to_u8(value: i64) -> Result<u8, ErrorKind> {
+    u8::try_from(value).map_err(|_| ErrorKind::XorRangeInvalidValue { value })
 }
 
 /// Parse a condition
@@ -407,14 +418,13 @@ fn number_to_u8(input: Input, value: i64) -> Result<u8, nom::Err<ParseError>> {
 /// Related to the `condition` pattern in `grammar.y` in libyara.
 fn condition(input: Input) -> ParseResult<Expression> {
     let (input, _) = rtrim(ttag("condition"))(input)?;
+    let (input, expr) = cut(preceded(rtrim(char(':')), expression::expression))(input)?;
 
-    map_res(
-        cut(preceded(rtrim(char(':')), expression::expression)),
-        |expr| {
-            let validator = expression::Validator {};
-            validator.validate_boolean_expression(expr)
-        },
-    )(input)
+    let validator = expression::Validator {};
+    let expr = validator
+        .validate_boolean_expression(expr)
+        .map_err(nom::Err::Failure)?;
+    Ok((input, expr))
 }
 
 #[cfg(test)]

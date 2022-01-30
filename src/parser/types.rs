@@ -1,7 +1,7 @@
 use std::ops::{RangeFrom, RangeTo};
 
 use nom::{
-    error::{Error, ErrorKind, ParseError as NomParseError},
+    error::{ErrorKind, ParseError as NomParseError},
     Err, IResult, InputIter, InputLength, InputTake,
 };
 
@@ -32,8 +32,8 @@ pub struct Input<'a> {
     cursor_before_last_rtrim: &'a str,
 }
 
-pub type ParseError<'a> = Error<Input<'a>>;
-pub type ParseResult<'a, O> = IResult<Input<'a>, O, ParseError<'a>>;
+pub type ParseError = super::error::Error;
+pub type ParseResult<'a, O> = IResult<Input<'a>, O, ParseError>;
 
 impl<'a> Input<'a> {
     pub fn new(input: &'a str) -> Self {
@@ -64,6 +64,10 @@ impl<'a> Input<'a> {
 
     pub fn save_cursor_before_rtrim(&mut self) {
         self.cursor_before_last_rtrim = self.cursor;
+    }
+
+    pub fn get_position(&self) -> usize {
+        (self.cursor.as_ptr() as usize) - (self.input.as_ptr() as usize)
     }
 
     /// Generate a span from a starting position.
@@ -250,5 +254,13 @@ impl nom::ExtendInto for Input<'_> {
     #[inline]
     fn extend_into(&self, acc: &mut String) {
         acc.push_str(self.cursor);
+    }
+}
+
+impl std::ops::Deref for Input<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.cursor
     }
 }

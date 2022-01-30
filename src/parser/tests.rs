@@ -38,7 +38,7 @@ where
 
 #[test]
 fn test_parsing_global() {
-    let assets_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/parsing_all/");
+    let assets_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/parsing/");
     let glob1 =
         glob::glob(&format!("{}/**/*.yara", assets_dir)).expect("Failed to read glob pattern");
     let glob2 =
@@ -55,7 +55,7 @@ fn test_parsing_global() {
             }
             Err(e) => {
                 nb_failed += 1;
-                println!("FAIL {:?}\n  {:?}", &entry, e);
+                println!("FAIL {:?}\n  {}", &entry, e);
             }
         };
     }
