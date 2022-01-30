@@ -34,7 +34,7 @@ fn trailing_arguments(input: Input) -> ParseResult<Vec<ParsedExpr>> {
 }
 
 /// Parse an identifier used in expressions.
-pub fn identifier(input: Input) -> ParseResult<Identifier> {
+pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
     let (mut input, name) = raw_identifier(input)?;
     let mut identifier = Identifier::Raw(name);
 

@@ -17,7 +17,7 @@ pub use validation::Validator;
 
 /// Parsed identifier used in expressions.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Identifier {
+enum Identifier {
     /// Raw identifier, i.e. `pe`.
     Raw(String),
     /// Array subscript, i.e. `identifier[subscript]`.
