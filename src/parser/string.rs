@@ -6,14 +6,14 @@ use nom::{
     bytes::complete::{escaped_transform, is_not, take_while},
     character::complete::{char, one_of},
     combinator::{cut, map, opt, recognize, value},
-    error::{ErrorKind as NomErrorKind, ParseError as NomParseError},
+    error::{ErrorKind as NomErrorKind, ParseError},
     multi::fold_many_m_n,
     sequence::{pair, preceded, terminated, tuple},
 };
 
 use super::error::{Error, ErrorKind};
 use super::nom_recipes::{rtrim, take_one};
-use super::types::{Input, ParseError, ParseResult};
+use super::types::{Input, ParseResult};
 use crate::regex::Regex;
 
 /// Returns true if the char is an identifier digit, ie a-z, a-Z, 0-9, _
@@ -100,7 +100,7 @@ pub fn quoted(input: Input) -> ParseResult<String> {
     // escaped transform does not handle having no content, so
     // handle empty string explicitly.
     // TODO: ticket for nom?
-    if let Ok((next_input, '"')) = char::<Input, ParseError>('"')(input) {
+    if let Ok((next_input, '"')) = char::<Input, Error>('"')(input) {
         return Ok((next_input, "".to_owned()));
     }
 
@@ -199,7 +199,7 @@ fn regex_contents(mut input: Input) -> ParseResult<String> {
                 if input.cursor().as_bytes()[0] == b'\\' {
                     if input.cursor().len() <= 1 {
                         input.advance(1);
-                        return Err(nom::Err::Error(ParseError::from_error_kind(
+                        return Err(nom::Err::Error(Error::from_error_kind(
                             input,
                             NomErrorKind::EscapedTransform,
                         )));

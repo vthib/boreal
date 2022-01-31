@@ -9,7 +9,7 @@ use nom::{
 
 use super::{primary_expression::primary_expression, Expression, ParsedExpr};
 use crate::parser::types::{Input, ParseResult};
-use crate::parser::{nom_recipes::rtrim, types::ParseError};
+use crate::parser::{error::Error, nom_recipes::rtrim};
 
 /// Parse a 'in' range for primary expressions.
 ///
@@ -34,7 +34,7 @@ pub(super) fn map_expr<'a, F, C, O>(
     constructor: C,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, ParsedExpr>
 where
-    F: Parser<Input<'a>, O, ParseError>,
+    F: Parser<Input<'a>, O, Error>,
     C: Fn(O) -> Expression,
 {
     move |input| {

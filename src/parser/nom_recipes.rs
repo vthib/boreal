@@ -5,19 +5,19 @@ use nom::{
     bytes::complete::{tag, take_until},
     character::complete::{char, multispace1},
     combinator::{opt, value},
-    error::{ErrorKind as NomErrorKind, ParseError as NomParseError},
+    error::{ErrorKind as NomErrorKind, ParseError},
     multi::many0,
     sequence::{preceded, tuple},
     Parser,
 };
 
 use super::error::{Error, ErrorKind};
-use super::types::{Input, ParseError, ParseResult};
+use super::types::{Input, ParseResult};
 
 /// Right trim after the given parser.
 pub fn rtrim<'a, F: 'a, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
-    F: Parser<Input<'a>, O, ParseError>,
+    F: Parser<Input<'a>, O, Error>,
 {
     move |input| {
         let (mut input, output) = inner.parse(input)?;
@@ -57,7 +57,7 @@ where
             input.advance(c.len_utf8());
             Ok((input, c))
         }
-        _ => Err(nom::Err::Error(ParseError::from_char(input, '0'))),
+        _ => Err(nom::Err::Error(Error::from_char(input, '0'))),
     }
 }
 
@@ -73,13 +73,14 @@ pub fn textual_tag(
     move |input: Input| {
         if let Some(input) = input.strip_prefix(tag) {
             match input.cursor().chars().next() {
-                Some(c) if c.is_alphanumeric() => Err(nom::Err::Error(
-                    ParseError::from_error_kind(input, NomErrorKind::Tag),
-                )),
+                Some(c) if c.is_alphanumeric() => Err(nom::Err::Error(Error::from_error_kind(
+                    input,
+                    NomErrorKind::Tag,
+                ))),
                 _ => Ok((input, tag)),
             }
         } else {
-            Err(nom::Err::Error(ParseError::from_error_kind(
+            Err(nom::Err::Error(Error::from_error_kind(
                 input,
                 NomErrorKind::Tag,
             )))
@@ -109,7 +110,7 @@ pub fn map_res<'a, O1, O2, F, G>(
     mut f: G,
 ) -> impl FnMut(Input<'a>) -> ParseResult<O2>
 where
-    F: Parser<Input<'a>, O1, ParseError>,
+    F: Parser<Input<'a>, O1, Error>,
     G: FnMut(O1) -> Result<O2, ErrorKind>,
 {
     move |input: Input| {

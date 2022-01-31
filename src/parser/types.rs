@@ -1,5 +1,6 @@
 use std::ops::{Range, RangeFrom, RangeTo};
 
+use super::error::Error;
 use nom::{
     error::{ErrorKind, ParseError as NomParseError},
     Err, IResult, InputIter, InputLength, InputTake,
@@ -28,8 +29,7 @@ pub struct Input<'a> {
     cursor_before_last_rtrim: &'a str,
 }
 
-pub type ParseError = super::error::Error;
-pub type ParseResult<'a, O> = IResult<Input<'a>, O, ParseError>;
+pub type ParseResult<'a, O> = IResult<Input<'a>, O, Error>;
 
 impl<'a> Input<'a> {
     pub fn new(input: &'a str) -> Self {

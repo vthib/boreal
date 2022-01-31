@@ -6,14 +6,14 @@ use nom::{
     bytes::complete::tag,
     character::complete::{char, digit1, multispace0 as sp0},
     combinator::{cut, map, opt},
-    error::{ErrorKind as NomErrorKind, ParseError as NomParseError},
+    error::{ErrorKind as NomErrorKind, ParseError},
     multi::many1,
     sequence::{preceded, separated_pair, terminated},
 };
 
 use super::error::{Error, ErrorKind};
 use super::nom_recipes::{map_res, rtrim};
-use super::types::{Input, ParseError, ParseResult};
+use super::types::{Input, ParseResult};
 use crate::hex_string::{HexString, HexToken, Jump, Mask};
 
 // TODO: handle this limit in some way
@@ -30,7 +30,7 @@ fn hex_digit(mut input: Input) -> ParseResult<u8> {
             input.advance(1);
             Ok((input, v))
         }
-        _ => Err(nom::Err::Error(ParseError::from_error_kind(
+        _ => Err(nom::Err::Error(Error::from_error_kind(
             input,
             NomErrorKind::HexDigit,
         ))),
