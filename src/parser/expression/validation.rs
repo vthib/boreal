@@ -43,8 +43,8 @@ struct ValidatedExpression {
 impl ValidatedExpression {
     fn check_type(&self, expected_type: Type) -> Result<(), Error> {
         if self.ty != expected_type {
-            return Err(Error::new_with_pos(
-                self.span.start,
+            return Err(Error::new(
+                self.span.clone(),
                 ErrorKind::ExpressionInvalidType {
                     ty: self.ty.to_string(),
                     expected_type: expected_type.to_string(),
@@ -581,8 +581,8 @@ impl Validator {
             (Type::Float | Type::Integer, Type::Integer | Type::Float) => Type::Float,
             (Type::String, Type::String) if string_allowed => Type::String,
             _ => {
-                return Err(Error::new_with_pos(
-                    span.start,
+                return Err(Error::new(
+                    span,
                     ErrorKind::ExpressionIncompatibleTypes {
                         left_type: a.ty.to_string(),
                         right_type: b.ty.to_string(),
@@ -628,8 +628,8 @@ impl Validator {
         match (a.ty, b.ty) {
             (Type::String, Type::String)
             | (Type::Integer | Type::Float, Type::Integer | Type::Float) => Ok(()),
-            _ => Err(Error::new_with_pos(
-                span.start,
+            _ => Err(Error::new(
+                span.clone(),
                 ErrorKind::ExpressionIncompatibleTypes {
                     left_type: a.ty.to_string(),
                     right_type: b.ty.to_string(),

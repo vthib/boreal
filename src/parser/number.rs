@@ -25,8 +25,6 @@ fn decimal_number(input: Input) -> ParseResult<i64> {
         opt(alt((ttag("MB"), ttag("KB")))),
     ))(input)?;
 
-    if suffix.is_none() {}
-
     let coef = match suffix {
         Some("MB") => 1024 * 1024,
         Some("KB") => 1024,
@@ -35,7 +33,7 @@ fn decimal_number(input: Input) -> ParseResult<i64> {
     match n.checked_mul(coef) {
         Some(n) => Ok((input, n)),
         None => Err(nom::Err::Failure(Error::new(
-            start,
+            input.get_span_from(start),
             ErrorKind::MulOverflow {
                 left: n,
                 right: coef,

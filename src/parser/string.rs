@@ -155,11 +155,14 @@ pub fn regex(input: Input) -> ParseResult<Regex> {
     // We cannot use escaped_transform, as it is not an error to use
     // the control character with any char other than `/`.
     let (input, expr) = cut(terminated(regex_contents, char('/')))(input)?;
-    if expr.is_empty() {
-        return Err(nom::Err::Error(Error::new(start, ErrorKind::EmptyRegex)));
-    }
-
     let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
+
+    if expr.is_empty() {
+        return Err(nom::Err::Error(Error::new(
+            input.get_span_from(start),
+            ErrorKind::EmptyRegex,
+        )));
+    }
 
     Ok((
         input,

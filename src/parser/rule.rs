@@ -142,7 +142,7 @@ fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
         // This is allowed, do not add it in the hashset.
         if !var.name.is_empty() && !existing_variables.insert(var.name.clone()) {
             return Err(nom::Err::Failure(Error::new(
-                start,
+                input.get_span_from(start),
                 ErrorKind::StringDeclarationDuplicated { name: var.name },
             )));
         }
@@ -216,7 +216,7 @@ where
             Modifier::Flag(flag) => {
                 if modifiers.flags.contains(flag) {
                     return Err(nom::Err::Failure(Error::new(
-                        start,
+                        input.get_span_from(start),
                         ErrorKind::ModifiersDuplicated {
                             modifier_name: format!("{:?}", flag),
                         },
@@ -241,7 +241,10 @@ where
     }
 
     if let Err(kind) = validate_flags(modifiers.flags) {
-        return Err(nom::Err::Failure(Error::new(start, kind)));
+        return Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            kind,
+        )));
     }
 
     Ok((input, modifiers))
@@ -359,7 +362,7 @@ fn xor_modifier(input: Input) -> ParseResult<Modifier> {
         Some(to) => {
             if to < from {
                 return Err(nom::Err::Failure(Error::new(
-                    start,
+                    input.get_span_from(start),
                     ErrorKind::XorRangeInvalid { from, to },
                 )));
             }
@@ -384,19 +387,18 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
     let mut alphabet: Option<[u8; 64]> = None;
     if open_paren.is_some() {
         let start = input;
-        let res = cut(terminated(string::quoted, rtrim(char(')'))))(input)?;
-        match res.1.as_bytes().try_into() {
+        let (input2, val) = cut(string::quoted)(input)?;
+        match val.as_bytes().try_into() {
             Ok(v) => alphabet = Some(v),
             Err(_) => {
                 return Err(nom::Err::Failure(Error::new(
-                    start,
-                    ErrorKind::Base64AlphabetInvalidLength {
-                        length: res.1.len(),
-                    },
+                    input2.get_span_from(start),
+                    ErrorKind::Base64AlphabetInvalidLength { length: val.len() },
                 )));
             }
         };
-        input = res.0;
+        let (input2, _) = cut(rtrim(char(')')))(input2)?;
+        input = input2;
     }
 
     Ok((

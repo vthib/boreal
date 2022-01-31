@@ -103,7 +103,10 @@ fn range(input: Input) -> ParseResult<Jump> {
     ))(input)?;
 
     if let Err(kind) = validate_jump(&jump) {
-        return Err(nom::Err::Failure(Error::new(start, kind)));
+        return Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            kind,
+        )));
     }
     Ok((input, jump))
 }

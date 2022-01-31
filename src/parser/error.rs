@@ -2,7 +2,7 @@ use std::num::{ParseFloatError, ParseIntError};
 
 use nom::error::{ErrorKind as NomErrorKind, FromExternalError, ParseError};
 
-use super::types::Input;
+use super::types::{Input, Span};
 
 #[derive(Debug)]
 pub struct Error {
@@ -10,18 +10,9 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(input: Input, kind: ErrorKind) -> Self {
+    pub fn new(span: Span, kind: ErrorKind) -> Self {
         Self {
-            errors: vec![SingleError {
-                position: input.get_position(),
-                kind,
-            }],
-        }
-    }
-
-    pub fn new_with_pos(position: usize, kind: ErrorKind) -> Self {
-        Self {
-            errors: vec![SingleError { position, kind }],
+            errors: vec![SingleError { span, kind }],
         }
     }
 }
@@ -43,9 +34,14 @@ impl ParseError<Input<'_>> for Error {
 
 impl FromExternalError<Input<'_>, ErrorKind> for Error {
     fn from_external_error(input: Input, _: NomErrorKind, kind: ErrorKind) -> Self {
+        let pos = input.get_position();
+
         Self {
             errors: vec![SingleError {
-                position: input.get_position(),
+                span: Span {
+                    start: pos,
+                    end: pos + 1,
+                },
                 kind,
             }],
         }
@@ -54,8 +50,7 @@ impl FromExternalError<Input<'_>, ErrorKind> for Error {
 
 #[derive(Debug)]
 struct SingleError {
-    // position of the error in the original input
-    position: usize,
+    span: Span,
 
     kind: ErrorKind,
 }
@@ -63,7 +58,10 @@ struct SingleError {
 impl SingleError {
     fn from_nom_error_kind(position: usize, kind: NomErrorKind) -> Self {
         Self {
-            position,
+            span: Span {
+                start: position,
+                end: position + 1,
+            },
             kind: ErrorKind::NomError(kind),
         }
     }
