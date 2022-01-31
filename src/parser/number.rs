@@ -5,12 +5,12 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, digit1, hex_digit1, oct_digit1},
-    combinator::{cut, map_res, opt, recognize, success},
+    combinator::{cut, opt, recognize, success},
     sequence::{pair, tuple},
 };
 
 use super::error::{Error, ErrorKind};
-use super::nom_recipes::{rtrim, textual_tag as ttag};
+use super::nom_recipes::{map_res, rtrim, textual_tag as ttag};
 use super::types::{Input, ParseResult};
 
 /// Parse a decimal number.

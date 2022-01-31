@@ -5,14 +5,14 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, digit1, multispace0 as sp0},
-    combinator::{cut, map, map_res, opt},
+    combinator::{cut, map, opt},
     error::{ErrorKind as NomErrorKind, ParseError as NomParseError},
     multi::many1,
     sequence::{preceded, separated_pair, terminated},
 };
 
 use super::error::{Error, ErrorKind};
-use super::nom_recipes::rtrim;
+use super::nom_recipes::{map_res, rtrim};
 use super::types::{Input, ParseError, ParseResult};
 use crate::hex_string::{HexString, HexToken, Jump, Mask};
 

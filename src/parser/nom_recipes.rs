@@ -5,12 +5,13 @@ use nom::{
     bytes::complete::{tag, take_until},
     character::complete::{char, multispace1},
     combinator::{opt, value},
-    error::{ErrorKind, ParseError as NomParseError},
+    error::{ErrorKind as NomErrorKind, ParseError as NomParseError},
     multi::many0,
     sequence::{preceded, tuple},
     Parser,
 };
 
+use super::error::{Error, ErrorKind};
 use super::types::{Input, ParseError, ParseResult};
 
 /// Right trim after the given parser.
@@ -73,14 +74,14 @@ pub fn textual_tag(
         if let Some(input) = input.strip_prefix(tag) {
             match input.cursor().chars().next() {
                 Some(c) if c.is_alphanumeric() => Err(nom::Err::Error(
-                    ParseError::from_error_kind(input, ErrorKind::Tag),
+                    ParseError::from_error_kind(input, NomErrorKind::Tag),
                 )),
                 _ => Ok((input, tag)),
             }
         } else {
             Err(nom::Err::Error(ParseError::from_error_kind(
                 input,
-                ErrorKind::Tag,
+                NomErrorKind::Tag,
             )))
         }
     }
@@ -96,6 +97,32 @@ fn multiline_comment(input: Input) -> ParseResult<()> {
 /// Parse single line // ... comments.
 fn singleline_comment(input: Input) -> ParseResult<()> {
     value((), tuple((tag("//"), take_until("\n"), char('\n'))))(input)
+}
+
+/// Equivalent to [`nom::combinator::map_res`] but expects an
+/// [`super::types::ErrorKind`] type of error.
+///
+/// This allows using the starting input to generate a proper span
+/// for the error.
+pub fn map_res<'a, O1, O2, F, G>(
+    mut parser: F,
+    mut f: G,
+) -> impl FnMut(Input<'a>) -> ParseResult<O2>
+where
+    F: Parser<Input<'a>, O1, ParseError>,
+    G: FnMut(O1) -> Result<O2, ErrorKind>,
+{
+    move |input: Input| {
+        let start = input;
+        let (input, o1) = parser.parse(input)?;
+        match f(o1) {
+            Ok(o2) => Ok((input, o2)),
+            Err(kind) => Err(nom::Err::Error(Error::new(
+                input.get_span_from(start),
+                kind,
+            ))),
+        }
+    }
 }
 
 #[cfg(test)]

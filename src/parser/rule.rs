@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use nom::{
     branch::alt,
     character::complete::char,
-    combinator::{cut, map, map_res, opt},
+    combinator::{cut, map, opt},
     multi::{many0, many1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
 };
@@ -12,7 +12,7 @@ use nom::{
 use super::{
     error::{Error, ErrorKind},
     expression, hex_string,
-    nom_recipes::{ltrim, rtrim, textual_tag as ttag},
+    nom_recipes::{ltrim, map_res, rtrim, textual_tag as ttag},
     number, string,
     types::{Input, ParseResult},
 };

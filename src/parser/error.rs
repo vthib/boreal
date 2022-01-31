@@ -1,6 +1,6 @@
 use std::num::{ParseFloatError, ParseIntError};
 
-use nom::error::{ErrorKind as NomErrorKind, FromExternalError, ParseError};
+use nom::error::{ErrorKind as NomErrorKind, ParseError};
 
 use super::types::{Input, Span};
 
@@ -29,22 +29,6 @@ impl ParseError<Input<'_>> for Error {
             .errors
             .push(SingleError::from_nom_error_kind(input.get_position(), kind));
         other
-    }
-}
-
-impl FromExternalError<Input<'_>, ErrorKind> for Error {
-    fn from_external_error(input: Input, _: NomErrorKind, kind: ErrorKind) -> Self {
-        let pos = input.get_position();
-
-        Self {
-            errors: vec![SingleError {
-                span: Span {
-                    start: pos,
-                    end: pos + 1,
-                },
-                kind,
-            }],
-        }
     }
 }
 
