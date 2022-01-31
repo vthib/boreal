@@ -314,31 +314,25 @@ impl Validator {
                 less_than,
                 can_be_equal,
             } => {
-                let left = self.validate_expr(*left)?;
-                let right = self.validate_expr(*right)?;
-                Validator::validate_comparison(&left, &right, &expr.span)?;
-
-                Ok(ValidatedExpression {
-                    expression: EExpr::Cmp {
-                        left: Box::new(left.expression),
-                        right: Box::new(right.expression),
+                let mut res = self.validate_primary_op(
+                    *left,
+                    *right,
+                    expr.span,
+                    |left, right| EExpr::Cmp {
+                        left,
+                        right,
                         less_than,
                         can_be_equal,
                     },
-                    ty: Type::Boolean,
-                    span: expr.span,
-                })
+                    true,
+                )?;
+                res.ty = Type::Boolean;
+                Ok(res)
             }
             Expression::Eq(a, b) => {
-                let a = self.validate_expr(*a)?;
-                let b = self.validate_expr(*b)?;
-                Validator::validate_comparison(&a, &b, &expr.span)?;
-
-                Ok(ValidatedExpression {
-                    expression: EExpr::Eq(Box::new(a.expression), Box::new(b.expression)),
-                    ty: Type::Boolean,
-                    span: expr.span,
-                })
+                let mut res = self.validate_primary_op(*a, *b, expr.span, EExpr::Eq, true)?;
+                res.ty = Type::Boolean;
+                Ok(res)
             }
             Expression::Contains {
                 haystack,
@@ -620,24 +614,6 @@ impl Validator {
         })
     }
 
-    fn validate_comparison(
-        a: &ValidatedExpression,
-        b: &ValidatedExpression,
-        span: &Span,
-    ) -> Result<(), Error> {
-        match (a.ty, b.ty) {
-            (Type::String, Type::String)
-            | (Type::Integer | Type::Float, Type::Integer | Type::Float) => Ok(()),
-            _ => Err(Error::new(
-                span.clone(),
-                ErrorKind::ExpressionIncompatibleTypes {
-                    left_type: a.ty.to_string(),
-                    right_type: b.ty.to_string(),
-                },
-            )),
-        }
-    }
-
     fn validate_for_selection(
         &self,
         selection: ForSelection,
@@ -823,4 +799,95 @@ mod tests {
     }
 
     // TODO: add tests to check the "ty" field in ValidatedExpression
+    #[test]
+    fn test_validation_types() {
+        fn test_cmp(op: &str) {
+            test_validation(&format!("1 {} 3", op), Type::Boolean);
+            test_validation(&format!("1 {} 3.5", op), Type::Boolean);
+            test_validation(&format!("1.2 {} 3", op), Type::Boolean);
+            test_validation(&format!("1.2 {} 3.5", op), Type::Boolean);
+            test_validation(&format!("\"a\" {} \"b\"", op), Type::Boolean);
+        }
+
+        test_validation("filesize", Type::Integer);
+        test_validation("entrypoint", Type::Integer);
+
+        test_validation("uint16(0)", Type::Integer);
+
+        test_validation("5", Type::Integer);
+        test_validation("5.3", Type::Float);
+        test_validation("-5", Type::Integer);
+        test_validation("-5.3", Type::Float);
+
+        test_validation("#a in (0..10)", Type::Integer);
+        test_validation("#a", Type::Integer);
+
+        test_validation("!a", Type::Integer);
+        test_validation("@a", Type::Integer);
+
+        test_validation("5 + 3", Type::Integer);
+        test_validation("5 + 3.3", Type::Float);
+        test_validation("5.2 + 3", Type::Float);
+        test_validation("5.2 + 3.3", Type::Float);
+
+        test_validation("5 - 3", Type::Integer);
+        test_validation("5 - 3.3", Type::Float);
+        test_validation("5.2 - 3", Type::Float);
+        test_validation("5.2 - 3.3", Type::Float);
+
+        test_validation("5 * 3", Type::Integer);
+        test_validation("5 * 3.3", Type::Float);
+        test_validation("5.2 * 3", Type::Float);
+        test_validation("5.2 * 3.3", Type::Float);
+
+        test_validation("5 \\ 3", Type::Integer);
+        test_validation("5 \\ 3.3", Type::Float);
+        test_validation("5.2 \\ 3", Type::Float);
+        test_validation("5.2 \\ 3.3", Type::Float);
+
+        test_validation("5 % 3", Type::Integer);
+
+        test_validation("5 ^ 3", Type::Integer);
+        test_validation("5 | 3", Type::Integer);
+        test_validation("5 & 3", Type::Integer);
+        test_validation("~5", Type::Integer);
+
+        test_validation("5 << 3", Type::Integer);
+        test_validation("5 >> 3", Type::Integer);
+
+        test_validation("true && false", Type::Boolean);
+        test_validation("true || false", Type::Boolean);
+
+        test_cmp("<");
+        test_cmp("<=");
+        test_cmp("<");
+        test_cmp(">=");
+        test_cmp("==");
+        test_cmp("!=");
+
+        test_validation("\"a\" contains \"b\"", Type::Boolean);
+        test_validation("\"a\" icontains \"b\"", Type::Boolean);
+        test_validation("\"a\" startswith \"b\"", Type::Boolean);
+        test_validation("\"a\" istartswith \"b\"", Type::Boolean);
+        test_validation("\"a\" endswith \"b\"", Type::Boolean);
+        test_validation("\"a\" iequals \"b\"", Type::Boolean);
+
+        test_validation("\"a\" matches /b/", Type::Boolean);
+
+        test_validation("defined b", Type::Boolean);
+        test_validation("not true", Type::Boolean);
+
+        test_validation("$a", Type::Boolean);
+        test_validation("$a at 100", Type::Boolean);
+        test_validation("$a in (0..10)", Type::Boolean);
+
+        test_validation("pe", Type::Boolean);
+
+        test_validation("\"a\"", Type::String);
+        test_validation("/a/", Type::Regex);
+
+        test_validation("any of them", Type::Boolean);
+        test_validation("any of them in (0..10)", Type::Boolean);
+        test_validation("for all i of (1,2): (true)", Type::Boolean);
+    }
 }
