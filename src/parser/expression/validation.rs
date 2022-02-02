@@ -579,7 +579,9 @@ impl Validator {
                     span,
                     ErrorKind::ExpressionIncompatibleTypes {
                         left_type: a.ty.to_string(),
+                        left_span: a.span,
                         right_type: b.ty.to_string(),
+                        right_span: b.span,
                     },
                 ));
             }

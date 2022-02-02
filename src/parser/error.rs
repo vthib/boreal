@@ -76,8 +76,12 @@ pub enum ErrorKind {
     ExpressionIncompatibleTypes {
         /// Type of the left operand
         left_type: String,
+        /// Span of the left operand
+        left_span: Span,
         /// Type of the right operand
         right_type: String,
+        /// Span of the right operand
+        right_span: Span,
     },
 
     /// Jump of an empty size (i.e. `[0]`).
