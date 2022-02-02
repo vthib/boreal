@@ -43,7 +43,7 @@ fn hex_digit(mut input: Input) -> ParseResult<u8> {
 fn byte(input: Input) -> ParseResult<u8> {
     let (input, digit0) = hex_digit(input)?;
 
-    map(cut(rtrim(hex_digit)), move |digit1| (digit0 << 4) | digit1)(input)
+    map(rtrim(hex_digit), move |digit1| (digit0 << 4) | digit1)(input)
 }
 
 /// Parse a masked hex byte, ie X?, ?X or ??.
@@ -173,9 +173,9 @@ fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), ErrorKind> {
 /// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
 fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
     alt((
+        map(masked_byte, |(v, mask)| HexToken::MaskedByte(v, mask)),
         // Always have at least one space after a byte or a masked byte
         map(byte, HexToken::Byte),
-        map(masked_byte, |(v, mask)| HexToken::MaskedByte(v, mask)),
         map_res(range, |range| {
             // Some jumps are forbidden inside an alternatives
             if in_alternatives {
@@ -399,12 +399,13 @@ mod tests {
         );
         parse(
             hex_string,
-            "{ 01 ?2 ?? [1-] ( AF | DC ) }",
+            "{ 01 ?2 ?? 3? [1-] ( AF | DC ) }",
             "",
             vec![
                 HexToken::Byte(1),
                 HexToken::MaskedByte(2, Mask::Left),
                 HexToken::MaskedByte(0, Mask::All),
+                HexToken::MaskedByte(3, Mask::Right),
                 HexToken::Jump(Jump { from: 1, to: None }),
                 HexToken::Alternatives(vec![HexToken::Byte(0xAF)], vec![HexToken::Byte(0xDC)]),
             ],
