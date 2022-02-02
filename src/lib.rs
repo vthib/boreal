@@ -23,6 +23,8 @@
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::unnested_or_patterns)]
+#![allow(clippy::match_same_arms)]
 
 // TODO: To activate before release
 // #![deny(clippy::cargo)]

@@ -16,6 +16,9 @@ enum Type {
     String,
     Regex,
     Boolean,
+    // TODO: afaict, we shouldn't need this type.
+    // It's used for the moment for unknown symbols.
+    Undefined,
 }
 
 impl std::fmt::Display for Type {
@@ -26,6 +29,7 @@ impl std::fmt::Display for Type {
             Self::String => "string",
             Self::Regex => "regex",
             Self::Boolean => "boolean",
+            Self::Undefined => "undefined",
         })
     }
 }
@@ -42,7 +46,7 @@ struct ValidatedExpression {
 
 impl ValidatedExpression {
     fn check_type(&self, expected_type: Type) -> Result<(), Error> {
-        if self.ty != expected_type {
+        if self.ty != expected_type && self.ty != Type::Undefined {
             return Err(Error::new(
                 self.span.clone(),
                 ErrorKind::ExpressionInvalidType {
@@ -457,8 +461,7 @@ impl Validator {
                 let identifier = self.validate_identifier(ident)?;
                 Ok(ValidatedExpression {
                     expression: EExpr::Identifier(identifier),
-                    // TODO: typing identifiers
-                    ty: Type::Boolean,
+                    ty: Type::Undefined,
                     span: expr.span,
                 })
             }
@@ -572,8 +575,14 @@ impl Validator {
 
         let ty = match (a.ty, b.ty) {
             (Type::Integer, Type::Integer) => Type::Integer,
+            (Type::Undefined, Type::Integer) | (Type::Integer, Type::Undefined) => Type::Integer,
             (Type::Float | Type::Integer, Type::Integer | Type::Float) => Type::Float,
+            (Type::Undefined, Type::Float) | (Type::Float, Type::Undefined) => Type::Float,
             (Type::String, Type::String) if string_allowed => Type::String,
+            (Type::Undefined, Type::String) | (Type::String, Type::Undefined) if string_allowed => {
+                Type::String
+            }
+            (Type::Undefined, Type::Undefined) => Type::Undefined,
             _ => {
                 return Err(Error::new(
                     span,
@@ -778,7 +787,7 @@ mod tests {
         test_validation("\"a\" != \"b\"", Type::Boolean);
 
         test_validation_err("\"a\" < 1");
-        test_validation_err("2 == a");
+        test_validation_err("2 == \"b\"");
         test_validation_err("/a/ != 1");
     }
 
@@ -883,7 +892,7 @@ mod tests {
         test_validation("$a at 100", Type::Boolean);
         test_validation("$a in (0..10)", Type::Boolean);
 
-        test_validation("pe", Type::Boolean);
+        test_validation("pe", Type::Undefined);
 
         test_validation("\"a\"", Type::String);
         test_validation("/a/", Type::Regex);
