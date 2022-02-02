@@ -1,5 +1,6 @@
 use std::num::{ParseFloatError, ParseIntError};
 
+use codespan_reporting::diagnostic::{Diagnostic, Label};
 use nom::error::{ErrorKind as NomErrorKind, ParseError};
 
 use super::types::{Input, Span};
@@ -14,6 +15,10 @@ impl Error {
         Self {
             errors: vec![SingleError { span, kind }],
         }
+    }
+
+    pub fn get_diagnostics(&self) -> Vec<Diagnostic<()>> {
+        self.errors.iter().map(SingleError::to_diagnostic).collect()
     }
 }
 
@@ -47,6 +52,123 @@ impl SingleError {
                 end: position + 1,
             },
             kind: ErrorKind::NomError(kind),
+        }
+    }
+
+    fn to_diagnostic(&self) -> Diagnostic<()> {
+        match &self.kind {
+            ErrorKind::Base64AlphabetInvalidLength { length } => Diagnostic::error()
+                .with_message("base64 modifier alphabet must contain exactly 64 characters")
+                .with_labels(vec![Label::primary((), self.span.clone())
+                    .with_message(format!("this contains {} characters", length))]),
+
+            ErrorKind::EmptyRegex => Diagnostic::error()
+                .with_message("regexes cannot be empty")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::ExpressionInvalidType { ty, expected_type } => Diagnostic::error()
+                .with_message("expression has an invalid type")
+                .with_labels(vec![Label::primary((), self.span.clone())
+                    .with_message(format!("expected {}, found {}", expected_type, ty))]),
+
+            ErrorKind::ExpressionIncompatibleTypes {
+                left_type,
+                left_span,
+                right_type,
+                right_span,
+            } => Diagnostic::error()
+                .with_message("expressions have invalid types")
+                .with_labels(vec![
+                    Label::secondary((), left_span.clone())
+                        .with_message(format!("this has type {}", left_type)),
+                    Label::secondary((), right_span.clone())
+                        .with_message(format!("this has type {}", right_type)),
+                ]),
+
+            ErrorKind::HasTrailingData => Diagnostic::error()
+                .with_message("some data could not be parsed")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::JumpEmpty => Diagnostic::error()
+                .with_message("jump cannot have a length of 0")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::JumpRangeInvalid { from, to } => Diagnostic::error()
+                .with_message(format!("invalid range for the jump: {} > {}", from, to))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::JumpTooBigInAlternation { limit } => Diagnostic::error()
+                .with_message(format!(
+                    "jumps over {} not allowed inside alternations (|)",
+                    limit
+                ))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::JumpUnboundedInAlternation => Diagnostic::error()
+                .with_message("unbounded jumps not allowed inside alternations (|)")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::ModifiersDuplicated { modifier_name } => Diagnostic::error()
+                .with_message(format!(
+                    "string modifier {} appears multiple times",
+                    modifier_name
+                ))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::ModifiersIncompatible {
+                first_modifier_name,
+                second_modifier_name,
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "string modifiers {} and {} are incompatible",
+                    first_modifier_name, second_modifier_name,
+                ))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::MulOverflow { left, right } => Diagnostic::error()
+                .with_message(format!("multiplication {} * {} overflows", left, right))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::NomError(nom_kind) => Diagnostic::error()
+                .with_message(format!("parse error: {}", nom_kind.description()))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::StrToFloatError(err) => Diagnostic::error()
+                .with_message(format!("error converting to float: {}", err))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::StrToIntError(err) => Diagnostic::error()
+                .with_message(format!("error converting to integer: {}", err))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::StrToHexIntError(err) => Diagnostic::error()
+                .with_message(format!(
+                    "error converting hexadecimal notation to integer: {}",
+                    err
+                ))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::StrToOctIntError(err) => Diagnostic::error()
+                .with_message(format!(
+                    "error converting octal notation to integer: {}",
+                    err
+                ))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::StringDeclarationDuplicated { name } => Diagnostic::error()
+                .with_message(format!("multiple strings named {} declared", name))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::XorRangeInvalidValue { value } => Diagnostic::error()
+                .with_message(format!(
+                    "xor range value {} invalid, must be in [0-255]",
+                    value
+                ))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::XorRangeInvalid { from, to } => Diagnostic::error()
+                .with_message(format!("xor range invalid: {} > {}", from, to))
+                .with_labels(vec![Label::primary((), self.span.clone())]),
         }
     }
 }

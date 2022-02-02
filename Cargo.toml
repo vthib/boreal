@@ -12,7 +12,7 @@ nom = "7.1"
 bitflags = "1.3"
 
 # Proper error reporting on parsing
-# codespan-reporting = "0.11"
+codespan-reporting = "0.11"
 
 [dev-dependencies]
 # To test all files in a repository

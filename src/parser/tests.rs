@@ -1,4 +1,11 @@
 use super::types::{Input, ParseResult};
+use codespan_reporting::{
+    files::SimpleFile,
+    term::{
+        self,
+        termcolor::{ColorChoice, StandardStream},
+    },
+};
 use nom::Finish;
 
 #[track_caller]
@@ -44,6 +51,9 @@ fn test_parsing_global() {
     let glob2 =
         glob::glob(&format!("{}/**/*.yar", assets_dir)).expect("Failed to read glob pattern");
 
+    let writer = StandardStream::stderr(ColorChoice::Always);
+    let config = codespan_reporting::term::Config::default();
+
     let mut nb_ok = 0;
     let mut nb_failed = 0;
     for entry in glob1.chain(glob2) {
@@ -56,7 +66,13 @@ fn test_parsing_global() {
             }
             Err(e) => {
                 nb_failed += 1;
-                println!("FAIL {:?}\n  {:?}", &entry, e);
+                println!("FAIL {:?}", &entry);
+
+                let filename = entry.display().to_string();
+                let files = SimpleFile::new(&filename, &contents);
+                for diag in e.get_diagnostics() {
+                    term::emit(&mut writer.lock(), &config, &files, &diag).unwrap();
+                }
             }
         };
     }
