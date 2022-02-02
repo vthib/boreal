@@ -48,14 +48,15 @@ fn test_parsing_global() {
     let mut nb_failed = 0;
     for entry in glob1.chain(glob2) {
         let entry = entry.unwrap();
-        match super::parse_file(&entry) {
+        let contents = std::fs::read_to_string(&entry).unwrap();
+        match super::parse_str(&contents) {
             Ok(_) => {
                 nb_ok += 1;
                 println!("OK   {:?}", &entry);
             }
             Err(e) => {
                 nb_failed += 1;
-                println!("FAIL {:?}\n  {}", &entry, e);
+                println!("FAIL {:?}\n  {:?}", &entry, e);
             }
         };
     }

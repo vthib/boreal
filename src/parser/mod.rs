@@ -24,8 +24,6 @@
 //! [ ] check error reporting
 //! [ ] replace `from_external_error` with a custom err: the desc is dropped
 //!     by nom...
-use std::path::Path;
-
 use nom::Finish;
 
 mod error;
@@ -45,21 +43,24 @@ mod types;
 ///
 /// Returns an error if the parsing fails, or if there are
 /// trailing data in the file that has not been parsed.
-// FIXME: do not return a box error
-pub fn parse_file<P: AsRef<Path>>(
-    path: P,
-) -> Result<Vec<crate::rule::Rule>, Box<dyn std::error::Error>> {
-    let contents = std::fs::read_to_string(path)?;
-    let input = types::Input::new(&contents);
+pub fn parse_str(input: &str) -> Result<Vec<crate::rule::Rule>, error::Error> {
+    let input = types::Input::new(input);
 
-    // FIXME: work on the error reporting...
-    match rule::parse_yara_file(input).finish() {
-        Err(e) => Err(format!("parsing error: {:?}", e).into()),
-        Ok((input, _)) if !input.cursor().is_empty() => {
-            Err(format!("yara files has trailing data: {}", input.cursor()).into())
-        }
-        Ok((_, rules)) => Ok(rules),
+    let (input, rules) = rule::parse_yara_file(input).finish()?;
+
+    if !input.cursor().is_empty() {
+        let pos = input.get_position();
+
+        return Err(error::Error::new(
+            types::Span {
+                start: pos,
+                end: pos + 1,
+            },
+            error::ErrorKind::HasTrailingData,
+        ));
     }
+
+    Ok(rules)
 }
 
 #[cfg(test)]

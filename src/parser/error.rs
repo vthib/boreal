@@ -84,6 +84,9 @@ pub enum ErrorKind {
         right_span: Span,
     },
 
+    /// There are trailing data that could not be parsed.
+    HasTrailingData,
+
     /// Jump of an empty size (i.e. `[0]`).
     JumpEmpty,
 
