@@ -797,7 +797,7 @@ mod tests {
         test_validation("all of ($a, $b*)", Type::Boolean);
         test_validation("all of them in (1..3)", Type::Boolean);
         test_validation("for any of them: (true)", Type::Boolean);
-        test_validation("for all i of (1, 2): (true)", Type::Boolean);
+        test_validation("for all i in (1, 2): (true)", Type::Boolean);
 
         test_validation_err("for any of them: (1)");
         test_validation_err("/a/ of them");
@@ -805,11 +805,10 @@ mod tests {
         test_validation_err("1.2% of them");
         test_validation_err("any of them in (1../a/)");
         test_validation_err("any of them in (/a/..2)");
-        test_validation_err("for any i of (1../a/): (true)");
-        test_validation_err("for any i of (/a/..1): (true)");
+        test_validation_err("for any i in (1../a/): (true)");
+        test_validation_err("for any i in (/a/..1): (true)");
     }
 
-    // TODO: add tests to check the "ty" field in ValidatedExpression
     #[test]
     fn test_validation_types() {
         fn test_cmp(op: &str) {
@@ -899,6 +898,6 @@ mod tests {
 
         test_validation("any of them", Type::Boolean);
         test_validation("any of them in (0..10)", Type::Boolean);
-        test_validation("for all i of (1,2): (true)", Type::Boolean);
+        test_validation("for all i in (1,2): (true)", Type::Boolean);
     }
 }

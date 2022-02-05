@@ -66,7 +66,7 @@ fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
 ///
 /// This parses:
 /// - 'for' selection 'of' set ':' '(' body ')'
-/// - 'for' selection identifier 'of' iterator ':' '(' body ')'
+/// - 'for' selection identifier 'in' iterator ':' '(' body ')'
 fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
     let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection))(input)?;
@@ -88,7 +88,7 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
             },
         ))
     } else {
-        let (input, identifiers) = cut(terminated(for_variables, rtrim(ttag("of"))))(input)?;
+        let (input, identifiers) = cut(terminated(for_variables, rtrim(ttag("in"))))(input)?;
         let (input, iterator) = cut(terminated(iterator, rtrim(char(':'))))(input)?;
         let (input, body) = cut(delimited(rtrim(char('(')), expression, rtrim(char(')'))))(input)?;
 
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn test_for_expression_full() {
+    fn test_for_expression_full_of() {
         parse(
             for_expression_full,
             "for 25% of ($foo*) : ($)",
@@ -387,9 +387,25 @@ mod tests {
                 span: 0..24,
             },
         );
+
+        parse_err(for_expression_full, "");
+        parse_err(for_expression_full, "for");
+        parse_err(for_expression_full, "for all");
+        parse_err(for_expression_full, "for all of");
+        parse_err(for_expression_full, "for all of them");
+        parse_err(for_expression_full, "for 5% of them :");
+        parse_err(for_expression_full, "for 5% of them: (");
+        parse_err(for_expression_full, "for 5% of them: (");
+        parse_err(for_expression_full, "for 5% of them: ()");
+        parse_err(for_expression_full, "for 5% of them :)");
+        parse_err(for_expression_full, "for 5% of them :(");
+    }
+
+    #[test]
+    fn test_for_expression_identifier() {
         parse(
             for_expression_full,
-            "for all i of (1 ,3) : ( false )",
+            "for all i in (1 ,3) : ( false )",
             "",
             ParsedExpr {
                 expr: Expression::ForIdentifiers {
@@ -415,7 +431,42 @@ mod tests {
         );
         parse(
             for_expression_full,
-            "for any a,b,c of toto:(false) b",
+            "for any s in (0..5 - 1) : ( false )",
+            "",
+            ParsedExpr {
+                expr: Expression::ForIdentifiers {
+                    selection: ForSelection::Any,
+                    identifiers: vec!["s".to_owned()],
+                    iterator: ForIterator::Range {
+                        from: Box::new(ParsedExpr {
+                            expr: Expression::Number(0),
+                            span: 14..15,
+                        }),
+                        to: Box::new(ParsedExpr {
+                            expr: Expression::Sub(
+                                Box::new(ParsedExpr {
+                                    expr: Expression::Number(5),
+                                    span: 17..18,
+                                }),
+                                Box::new(ParsedExpr {
+                                    expr: Expression::Number(1),
+                                    span: 21..22,
+                                }),
+                            ),
+                            span: 17..22,
+                        }),
+                    },
+                    body: Box::new(ParsedExpr {
+                        expr: Expression::Boolean(false),
+                        span: 28..33,
+                    }),
+                },
+                span: 0..35,
+            },
+        );
+        parse(
+            for_expression_full,
+            "for any a,b,c in toto:(false) b",
             "b",
             ParsedExpr {
                 expr: Expression::ForIdentifiers {
@@ -431,25 +482,13 @@ mod tests {
             },
         );
 
-        parse_err(for_expression_full, "");
-        parse_err(for_expression_full, "for");
-        parse_err(for_expression_full, "for all");
-        parse_err(for_expression_full, "for all of");
-        parse_err(for_expression_full, "for all of them");
-        parse_err(for_expression_full, "for 5% of them :");
-        parse_err(for_expression_full, "for 5% of them: (");
-        parse_err(for_expression_full, "for 5% of them: (");
-        parse_err(for_expression_full, "for 5% of them: ()");
-        parse_err(for_expression_full, "for 5% of them :)");
-        parse_err(for_expression_full, "for 5% of them :(");
-
         parse_err(for_expression_full, "for all i");
-        parse_err(for_expression_full, "for all i of");
-        parse_err(for_expression_full, "for all i of (1)");
-        parse_err(for_expression_full, "for all i of (1) :");
-        parse_err(for_expression_full, "for all i of (1) : (");
-        parse_err(for_expression_full, "for all i of (1) : )");
-        parse_err(for_expression_full, "for all i of (1) : ())");
+        parse_err(for_expression_full, "for all i in");
+        parse_err(for_expression_full, "for all i in (1)");
+        parse_err(for_expression_full, "for all i in (1) :");
+        parse_err(for_expression_full, "for all i in (1) : (");
+        parse_err(for_expression_full, "for all i in (1) : )");
+        parse_err(for_expression_full, "for all i in (1) : ())");
     }
 
     #[test]
