@@ -7,7 +7,7 @@ use nom::{
     combinator::{opt, value},
     error::{ErrorKind as NomErrorKind, ParseError},
     multi::many0,
-    sequence::{preceded, tuple},
+    sequence::tuple,
     Parser,
 };
 
@@ -32,19 +32,20 @@ where
     }
 }
 
-/// Left trim before the given parser.
-pub fn ltrim<'a, F: 'a, O>(inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
-where
-    F: FnMut(Input<'a>) -> ParseResult<'a, O>,
-{
-    preceded(
-        opt(many0(alt((
+/// Left trim the input.
+pub fn ltrim(mut input: Input) -> ParseResult<()> {
+    loop {
+        match alt((
             multiline_comment,
             singleline_comment,
             value((), multispace1),
-        )))),
-        inner,
-    )
+        ))(input)
+        {
+            Ok((i, _)) => input = i,
+            Err(nom::Err::Error(_)) => return Ok((input, ())),
+            err @ Err(_) => return err,
+        }
+    }
 }
 
 /// Accepts a single character if the passed function returns true on it.
@@ -147,11 +148,11 @@ mod tests {
 
     #[test]
     fn test_ltrim() {
-        parse(ltrim(dummy_parser), " - b", " b", '-');
-        parse(ltrim(dummy_parser), "/* */ - b", " b", '-');
-        parse(ltrim(dummy_parser), " /* */- b", " b", '-');
-        parse(ltrim(dummy_parser), "/* */ /* */  - b", " b", '-');
-        parse(ltrim(dummy_parser), "// /* foo\n /**/   -b", "b", '-');
+        parse(ltrim, " - b", "- b", ());
+        parse(ltrim, "/* */ - b", "- b", ());
+        parse(ltrim, " /* */- b", "- b", ());
+        parse(ltrim, "/* */ /* */   b", "b", ());
+        parse(ltrim, "// /* foo\n /**/   ", "", ());
     }
 
     #[test]

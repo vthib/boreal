@@ -23,7 +23,16 @@ use crate::{expression::Expression, rule::VariableDeclaration};
 
 /// Parse a full YARA file.
 pub fn parse_yara_file(input: Input) -> ParseResult<Vec<Rule>> {
-    ltrim(many1(rule))(input)
+    let (mut input, _) = ltrim(input)?;
+
+    let mut rules = Vec::new();
+    while !input.is_empty() {
+        let (i, rule) = rule(input)?;
+        rules.push(rule);
+        input = i;
+    }
+
+    Ok((input, rules))
 }
 
 /// Parse a rule
@@ -499,6 +508,15 @@ mod tests {
                 value: MetadataValue::Boolean(false),
             }],
         );
+        parse(
+            meta,
+            "meta: a = \"\" d",
+            "d",
+            vec![Metadata {
+                name: "a".to_owned(),
+                value: MetadataValue::String(String::new()),
+            }],
+        );
 
         parse_err(meta, "");
         parse_err(meta, "meta");
@@ -875,8 +893,8 @@ mod tests {
                 import "foo"
                 import "quux"
                 rule d { condition: true }
-                a"#,
-            "a",
+                "#,
+            "",
             vec![
                 Rule {
                     name: "c".to_owned(),
@@ -898,8 +916,10 @@ mod tests {
                 },
             ],
         );
+        parse(parse_yara_file, "", "", Vec::new());
+        parse(parse_yara_file, " /* removed */ ", "", Vec::new());
 
-        parse_err(parse_yara_file, "");
         parse_err(parse_yara_file, "rule");
+        parse_err(parse_yara_file, "rule a { condition: true } b");
     }
 }

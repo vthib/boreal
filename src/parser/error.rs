@@ -129,8 +129,11 @@ impl SingleError {
                 .with_message(format!("multiplication {} * {} overflows", left, right))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
-            ErrorKind::NomError(nom_kind) => Diagnostic::error()
-                .with_message(format!("parse error: {}", nom_kind.description()))
+            ErrorKind::NomError(_) => Diagnostic::error()
+                // TODO: improve nom error reporting.
+                // At least, on tag and char errors, it would be great to indicate
+                // which char and tag was expected.
+                .with_message("syntax error")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::StrToFloatError(err) => Diagnostic::error()
