@@ -154,6 +154,7 @@ fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
                 input = i;
                 var = new_var;
             }
+            Err(nom::Err::Failure(e)) => return Err(nom::Err::Failure(e)),
             _ => break,
         }
     }
@@ -168,8 +169,8 @@ fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
     map(
         separated_pair(
             string::string_identifier,
-            rtrim(char('=')),
-            alt((
+            cut(rtrim(char('='))),
+            cut(alt((
                 pair(
                     map(string::quoted, VariableDeclarationValue::String),
                     string_modifiers,
@@ -182,7 +183,7 @@ fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
                     map(hex_string::hex_string, VariableDeclarationValue::HexString),
                     hex_string_modifiers,
                 ),
-            )),
+            ))),
         ),
         |(name, (value, modifiers))| VariableDeclaration {
             name,

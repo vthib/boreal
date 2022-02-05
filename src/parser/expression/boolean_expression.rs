@@ -5,7 +5,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::char,
-    combinator::{cut, opt},
+    combinator::{cut, opt, value},
     sequence::{delimited, preceded},
 };
 
@@ -118,8 +118,8 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
     let (mut input, mut res) = primary_expression_cmp(input)?;
 
     while let Ok((i, op)) = rtrim(alt((
-        ttag("=="),
-        ttag("!="),
+        value("==", tag("==")),
+        value("!=", tag("!=")),
         ttag("contains"),
         ttag("icontains"),
         ttag("startswith"),
@@ -770,5 +770,46 @@ mod tests {
         parse_err(expression, "(a iequalsa)");
 
         parse_err(expression, "($a atb)");
+
+        // However, == and != do not use textual tags:
+        parse(
+            expression,
+            "0==0",
+            "",
+            ParsedExpr {
+                expr: Expression::Eq(
+                    Box::new(ParsedExpr {
+                        expr: Expression::Number(0),
+                        span: 0..1,
+                    }),
+                    Box::new(ParsedExpr {
+                        expr: Expression::Number(0),
+                        span: 3..4,
+                    }),
+                ),
+                span: 0..4,
+            },
+        );
+        parse(
+            expression,
+            "1!=2",
+            "",
+            ParsedExpr {
+                expr: Expression::Not(Box::new(ParsedExpr {
+                    expr: Expression::Eq(
+                        Box::new(ParsedExpr {
+                            expr: Expression::Number(1),
+                            span: 0..1,
+                        }),
+                        Box::new(ParsedExpr {
+                            expr: Expression::Number(2),
+                            span: 3..4,
+                        }),
+                    ),
+                    span: 0..4,
+                })),
+                span: 0..4,
+            },
+        );
     }
 }
