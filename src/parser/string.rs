@@ -100,7 +100,7 @@ pub fn quoted(input: Input) -> ParseResult<String> {
     // escaped transform does not handle having no content, so
     // handle empty string explicitly.
     // TODO: ticket for nom?
-    if let Ok((next_input, '"')) = char::<Input, Error>('"')(input) {
+    if let Ok((next_input, '"')) = rtrim(char::<Input, Error>('"'))(input) {
         return Ok((next_input, "".to_owned()));
     }
 
@@ -232,7 +232,7 @@ mod tests {
     fn test_parse_quoted() {
         use super::quoted;
 
-        parse(quoted, "\"\"", "", "");
+        parse(quoted, "\"\" b", "b", "");
         parse(quoted, "\"1\"b", "b", "1");
         parse(quoted, "\"abc +$\" b", "b", "abc +$");
 
