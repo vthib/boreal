@@ -5,7 +5,7 @@ use nom::{
     branch::alt,
     character::complete::char,
     combinator::{cut, map, opt},
-    multi::{many0, many1},
+    multi::many1,
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
 };
 
@@ -27,9 +27,17 @@ pub fn parse_yara_file(input: Input) -> ParseResult<Vec<Rule>> {
 
     let mut rules = Vec::new();
     while !input.is_empty() {
-        let (i, rule) = rule(input)?;
-        rules.push(rule);
-        input = i;
+        if let Ok((i, _)) = include_file(input) {
+            // TODO: handle includes
+            input = i;
+        } else if let Ok((i, _)) = import(input) {
+            // TODO: handle imports
+            input = i;
+        } else {
+            let (i, rule) = rule(input)?;
+            rules.push(rule);
+            input = i;
+        }
     }
 
     Ok((input, rules))
@@ -38,12 +46,9 @@ pub fn parse_yara_file(input: Input) -> ParseResult<Vec<Rule>> {
 /// Parse a rule
 ///
 /// Related to the `rule` pattern in `grammar.y` in libyara.
-fn rule(input: Input) -> ParseResult<Rule> {
+fn rule(mut input: Input) -> ParseResult<Rule> {
     let mut is_private = false;
     let mut is_global = false;
-
-    // TODO: handle imports
-    let (mut input, _) = opt(many0(import))(input)?;
 
     loop {
         match rtrim(ttag("rule"))(input) {
@@ -85,6 +90,11 @@ fn rule(input: Input) -> ParseResult<Rule> {
             is_global,
         },
     )(input)
+}
+
+/// Parse an include declaration
+fn include_file(input: Input) -> ParseResult<String> {
+    preceded(rtrim(ttag("include")), cut(string::quoted))(input)
 }
 
 /// Parse an import declaration
@@ -918,6 +928,12 @@ mod tests {
         );
         parse(parse_yara_file, "", "", Vec::new());
         parse(parse_yara_file, " /* removed */ ", "", Vec::new());
+        parse(
+            parse_yara_file,
+            "include \"v\"\ninclude\"i\"",
+            "",
+            Vec::new(),
+        );
 
         parse_err(parse_yara_file, "rule");
         parse_err(parse_yara_file, "rule a { condition: true } b");
