@@ -116,8 +116,10 @@ macro_rules! arith_op_num_and_float {
 macro_rules! apply_cmp_op {
     ($left:expr, $right:expr, $op:tt) => {
         match ($left, $right) {
-            (Value::Number(a), Value::Number(b)) => a $op b,
+            (Value::Number(n), Value::Number(m)) => n $op m,
             (Value::Float(a), Value::Float(b)) => a $op b,
+            (Value::Number(n), Value::Float(b)) => (n as f64) $op b,
+            (Value::Float(a), Value::Number(m)) => a $op (m as f64),
             (Value::String(a), Value::String(b)) => a $op b,
             _ => todo!(),
         }
@@ -211,10 +213,11 @@ impl Evaluator<'_> {
                 let left = self.evaluate_expr(left)?;
                 let right = self.evaluate_expr(right)?;
                 let res = match (left, right) {
-                    (Value::Number(a), Value::Number(b)) => a == b,
-                    (Value::Float(a), Value::Float(b)) => {
-                        // TODO: check how yara handles comparison of floats
-                        (a - b).abs() < 1e-5
+                    (Value::Number(n), Value::Number(m)) => n == m,
+                    (Value::Float(a), Value::Float(b)) => (a - b).abs() < f64::EPSILON,
+                    #[allow(clippy::cast_precision_loss)]
+                    (Value::Number(n), Value::Float(a)) | (Value::Float(a), Value::Number(n)) => {
+                        (a - (n as f64)).abs() < f64::EPSILON
                     }
                     (Value::String(a), Value::String(b)) => a == b,
                     (Value::Boolean(a), Value::Boolean(b)) => a == b,

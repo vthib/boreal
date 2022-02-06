@@ -137,7 +137,6 @@ fn test_boolean_operators_with_identifiers() {
 }
 
 #[test]
-#[ignore]
 fn test_comparison_operators() {
     test_exec("rule test { condition: 2 > 1 }", &[], true);
     test_exec("rule test { condition: 1 < 2 }", &[], true);
