@@ -444,7 +444,7 @@ fn condition(input: Input) -> ParseResult<Expression> {
 
     let validator = expression::Validator {};
     let expr = validator
-        .validate_boolean_expression(expr)
+        .validate_expression(expr)
         .map_err(nom::Err::Failure)?;
     Ok((input, expr))
 }

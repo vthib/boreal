@@ -1,16 +1,15 @@
 //! Tests imported from test_rules.c in YARA codebase.
 
 #[track_caller]
-fn test_exec(rule: &str, input: &[u8], expected_match: bool) {
+fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
     let mut scanner = boreal::scanner::Scanner::default();
     let rules = boreal::parser::parse_str(rule).unwrap();
     scanner.add_rules(rules);
     let res = scanner.scan_mem(input);
-    assert_eq!(res.len(), if expected_match { 1 } else { 0 });
+    assert_eq!(res.len() == 1, expected_res);
 }
 
 #[test]
-#[ignore]
 fn test_boolean_operators() {
     test_exec("rule test { condition: not false }", &[], true);
     test_exec("rule test { condition: not true }", &[], false);
@@ -27,6 +26,19 @@ fn test_boolean_operators() {
     test_exec("rule test { condition: true and false }", &[], false);
     test_exec("rule test { condition: false or false }", &[], false);
 
+    // Added tests: test cast to bool
+    test_exec("rule test { condition: 0.0 }", &[], false);
+    test_exec("rule test { condition: 1.3 }", &[], true);
+    test_exec("rule test { condition: \"\" }", &[], false);
+    test_exec("rule test { condition: \"a\" }", &[], true);
+    test_exec("rule test { condition: 0 }", &[], false);
+    test_exec("rule test { condition: 1 }", &[], true);
+    test_exec("rule test { condition: /a/ }", &[], true);
+}
+
+#[test]
+#[ignore]
+fn test_boolean_operators_with_identifiers() {
     test_exec(
         "import \"tests\" rule test { condition: not tests.undefined.i }",
         &[],

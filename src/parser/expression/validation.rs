@@ -124,13 +124,12 @@ impl Validator {
 
     /// Validate a boolean parsed expression.
     ///
-    /// Ensure the expression is well-formed, and returns a boolean.
-    pub fn validate_boolean_expression(
+    /// Ensure the expression is well-formed and properly typed.
+    pub fn validate_expression(
         &self,
         expr: ParsedExpr,
     ) -> Result<crate::expression::Expression, Error> {
         let validated_expr = self.validate_expr(expr)?;
-        validated_expr.check_type(Type::Boolean)?;
         Ok(validated_expr.expression)
     }
 
@@ -307,10 +306,24 @@ impl Validator {
                 EExpr::ShiftRight,
             ),
             Expression::And(a, b) => {
-                self.validate_binary_op(*a, *b, expr.span, Type::Boolean, Type::Boolean, EExpr::And)
+                let a = self.validate_expr(*a)?;
+                let b = self.validate_expr(*b)?;
+
+                Ok(ValidatedExpression {
+                    expression: EExpr::And(Box::new(a.expression), Box::new(b.expression)),
+                    ty: Type::Boolean,
+                    span: expr.span,
+                })
             }
             Expression::Or(a, b) => {
-                self.validate_binary_op(*a, *b, expr.span, Type::Boolean, Type::Boolean, EExpr::Or)
+                let a = self.validate_expr(*a)?;
+                let b = self.validate_expr(*b)?;
+
+                Ok(ValidatedExpression {
+                    expression: EExpr::Or(Box::new(a.expression), Box::new(b.expression)),
+                    ty: Type::Boolean,
+                    span: expr.span,
+                })
             }
             Expression::Cmp {
                 left,
@@ -418,7 +431,7 @@ impl Validator {
             Expression::Not(a) => {
                 let a = self.validate_expr(*a)?;
                 Ok(ValidatedExpression {
-                    expression: EExpr::Not(a.unwrap_expr(Type::Boolean)?),
+                    expression: EExpr::Not(Box::new(a.expression)),
                     ty: Type::Boolean,
                     span: expr.span,
                 })
@@ -486,7 +499,7 @@ impl Validator {
                     Some(body) => {
                         let body = self.validate_expr(*body)?;
 
-                        Some(body.unwrap_expr(Type::Boolean)?)
+                        Some(Box::new(body.expression))
                     }
                 };
                 let selection = self.validate_for_selection(selection)?;
@@ -550,7 +563,7 @@ impl Validator {
                         selection,
                         identifiers,
                         iterator,
-                        condition: body.unwrap_expr(Type::Boolean)?,
+                        condition: Box::new(body.expression),
                     },
                     ty: Type::Boolean,
                     span: expr.span,
@@ -756,14 +769,6 @@ mod tests {
 
         test_validation_err("1 matches /a/");
 
-        test_validation_err("true and 1");
-        test_validation_err("1 and true");
-
-        test_validation_err("true or 1");
-        test_validation_err("1 or true");
-
-        test_validation_err("not 1");
-
         test_validation_err("$a at 1.2");
 
         test_validation_err("$a in (1..\"a\")");
@@ -798,8 +803,8 @@ mod tests {
         test_validation("all of them in (1..3)", Type::Boolean);
         test_validation("for any of them: (true)", Type::Boolean);
         test_validation("for all i in (1, 2): (true)", Type::Boolean);
+        test_validation("for any of them: (1)", Type::Boolean);
 
-        test_validation_err("for any of them: (1)");
         test_validation_err("/a/ of them");
         test_validation_err("1.2% of them");
         test_validation_err("1.2% of them");
@@ -886,6 +891,14 @@ mod tests {
 
         test_validation("defined b", Type::Boolean);
         test_validation("not true", Type::Boolean);
+
+        test_validation("true and 1", Type::Boolean);
+        test_validation("1 and true", Type::Boolean);
+
+        test_validation("true or 1", Type::Boolean);
+        test_validation("1 or true", Type::Boolean);
+
+        test_validation("not 1", Type::Boolean);
 
         test_validation("$a", Type::Boolean);
         test_validation("$a at 100", Type::Boolean);

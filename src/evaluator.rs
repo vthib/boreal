@@ -12,14 +12,13 @@ enum Value<'a> {
 }
 
 impl Value<'_> {
-    // FIXME: this is ugly and should be reworked.
-    fn unwrap_bool(&self) -> Result<bool, String> {
+    fn to_bool(&self) -> bool {
         match self {
-            Self::Boolean(b) => Ok(*b),
-            _ => Err(format!(
-                "expression should be boolean, {:?} returned",
-                &self
-            )),
+            Self::Boolean(b) => *b,
+            Self::String(s) => !s.is_empty(),
+            Self::Float(a) => *a != 0.0,
+            Self::Number(n) => *n != 0,
+            Self::Regex(_) => true,
         }
     }
 
@@ -62,8 +61,7 @@ pub fn evaluate(
         _variables: variables,
         _mem: mem,
     };
-    // TODO: handle other types
-    evaluator.evaluate_expr(expr).and_then(|v| v.unwrap_bool())
+    evaluator.evaluate_expr(expr).map(|v| v.to_bool())
 }
 
 struct Evaluator<'a> {
@@ -184,13 +182,13 @@ impl Evaluator<'_> {
             }
 
             Expression::And(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_bool()?;
-                let right = self.evaluate_expr(right)?.unwrap_bool()?;
+                let left = self.evaluate_expr(left)?.to_bool();
+                let right = self.evaluate_expr(right)?.to_bool();
                 Ok(Value::Boolean(left && right))
             }
             Expression::Or(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_bool()?;
-                let right = self.evaluate_expr(right)?.unwrap_bool()?;
+                let left = self.evaluate_expr(left)?.to_bool();
+                let right = self.evaluate_expr(right)?.to_bool();
                 Ok(Value::Boolean(left || right))
             }
             Expression::Cmp {
@@ -254,7 +252,7 @@ impl Evaluator<'_> {
             Expression::Defined(..) => todo!(),
             Expression::Not(expr) => {
                 // TODO: handle other types?
-                let v = self.evaluate_expr(expr)?.unwrap_bool()?;
+                let v = self.evaluate_expr(expr)?.to_bool();
                 Ok(Value::Boolean(!v))
             }
 
