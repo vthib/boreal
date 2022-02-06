@@ -59,7 +59,7 @@ fn expression_not(input: Input) -> ParseResult<ParsedExpr> {
     let (input, not) = opt(rtrim(ttag("not")))(input)?;
 
     if not.is_some() {
-        let (input, expr) = cut(expression_defined)(input)?;
+        let (input, expr) = cut(expression_not)(input)?;
         Ok((
             input,
             ParsedExpr {
@@ -417,6 +417,21 @@ mod tests {
                     }),
                 ),
                 span: 0..22,
+            },
+        );
+        parse(
+            expression,
+            "not not true",
+            "",
+            ParsedExpr {
+                expr: Expression::Not(Box::new(ParsedExpr {
+                    expr: Expression::Not(Box::new(ParsedExpr {
+                        expr: Expression::Boolean(true),
+                        span: 8..12,
+                    })),
+                    span: 4..12,
+                })),
+                span: 0..12,
             },
         );
     }

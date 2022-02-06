@@ -6,7 +6,7 @@ use nom::{
     bytes::complete::tag,
     character::complete::char,
     combinator::{cut, opt, peek},
-    sequence::{delimited, tuple},
+    sequence::delimited,
 };
 
 use super::{
@@ -150,26 +150,28 @@ fn primary_expression_mul(input: Input) -> ParseResult<ParsedExpr> {
 /// parse ~, - operators
 fn primary_expression_neg(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
-    let (input, (op, expr)) =
-        tuple((opt(alt((tag("~"), tag("-")))), primary_expression_item))(input)?;
+    let (input, op) = opt(alt((tag("~"), tag("-"))))(input)?;
 
-    Ok((
-        input,
-        match op {
-            None => expr,
-            Some(op) => match op.cursor() {
-                "~" => ParsedExpr {
-                    expr: Expression::BitwiseNot(Box::new(expr)),
-                    span: input.get_span_from(start),
+    match op {
+        None => primary_expression_item(input),
+        Some(op) => {
+            let (input, expr) = cut(primary_expression_neg)(input)?;
+            Ok((
+                input,
+                match op.cursor() {
+                    "~" => ParsedExpr {
+                        expr: Expression::BitwiseNot(Box::new(expr)),
+                        span: input.get_span_from(start),
+                    },
+                    "-" => ParsedExpr {
+                        expr: Expression::Neg(Box::new(expr)),
+                        span: input.get_span_from(start),
+                    },
+                    _ => unreachable!(),
                 },
-                "-" => ParsedExpr {
-                    expr: Expression::Neg(Box::new(expr)),
-                    span: input.get_span_from(start),
-                },
-                _ => unreachable!(),
-            },
-        },
-    ))
+            ))
+        }
+    }
 }
 
 fn primary_expression_item(input: Input) -> ParseResult<ParsedExpr> {
@@ -654,6 +656,24 @@ mod tests {
                     }),
                 ),
                 span: 0..5,
+            },
+        );
+        parse(
+            pe,
+            "-~-1",
+            "",
+            ParsedExpr {
+                expr: Expr::Neg(Box::new(ParsedExpr {
+                    expr: Expr::BitwiseNot(Box::new(ParsedExpr {
+                        expr: Expr::Neg(Box::new(ParsedExpr {
+                            expr: Expr::Number(1),
+                            span: 3..4,
+                        })),
+                        span: 2..4,
+                    })),
+                    span: 1..4,
+                })),
+                span: 0..4,
             },
         );
     }
