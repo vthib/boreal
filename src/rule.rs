@@ -103,3 +103,9 @@ pub struct VariableDeclaration {
     /// Modifiers for the string.
     pub modifiers: VariableModifiers,
 }
+
+impl Rule {
+    pub fn matches_mem(&self, mem: &[u8]) -> Result<bool, String> {
+        crate::evaluator::evaluate(&self.condition, &self.variables, mem)
+    }
+}

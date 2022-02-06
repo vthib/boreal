@@ -34,7 +34,9 @@
 #[allow(dead_code)]
 pub mod parser;
 
+mod evaluator;
 mod expression;
 mod hex_string;
 mod regex;
 mod rule;
+pub mod scanner;
