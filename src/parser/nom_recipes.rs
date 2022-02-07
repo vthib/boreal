@@ -48,6 +48,27 @@ pub fn ltrim(mut input: Input) -> ParseResult<()> {
     }
 }
 
+/// Accepts a first parser, only if the second one does not match afterwards
+pub fn not_followed<'a, F: 'a, G: 'a, OF, OG>(
+    mut f: F,
+    mut g: G,
+) -> impl FnMut(Input<'a>) -> ParseResult<'a, OF>
+where
+    F: Parser<Input<'a>, OF, Error>,
+    G: Parser<Input<'a>, OG, Error>,
+{
+    move |input| {
+        let (input, output) = f.parse(input)?;
+        if g.parse(input).is_ok() {
+            return Err(nom::Err::Error(Error::from_error_kind(
+                input,
+                NomErrorKind::IsNot,
+            )));
+        }
+        Ok((input, output))
+    }
+}
+
 /// Accepts a single character if the passed function returns true on it.
 pub fn take_one<F>(f: F) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, char>
 where

@@ -15,7 +15,7 @@ use super::{
         string::{regex, string_identifier},
         types::{Input, ParseResult},
     },
-    common::{map_expr, range},
+    common::range,
     for_expression::for_expression,
     primary_expression::primary_expression,
     Expression, ParsedExpr,
@@ -96,10 +96,6 @@ fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
 /// parse rest of boolean expressions
 fn expression_item(input: Input) -> ParseResult<ParsedExpr> {
     alt((
-        // 'true'
-        map_expr(rtrim(ttag("true")), |_| Expression::Boolean(true)),
-        // 'false'
-        map_expr(rtrim(ttag("false")), |_| Expression::Boolean(false)),
         // '(' expression ')'
         delimited(rtrim(char('(')), expression, rtrim(char(')'))),
         // all variants of for expressions

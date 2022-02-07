@@ -4,12 +4,11 @@ use nom::{
     character::complete::char,
     combinator::cut,
     sequence::{separated_pair, terminated},
-    Parser,
 };
 
-use super::{primary_expression::primary_expression, Expression, ParsedExpr};
+use super::{primary_expression::primary_expression, ParsedExpr};
+use crate::parser::nom_recipes::rtrim;
 use crate::parser::types::{Input, ParseResult};
-use crate::parser::{error::Error, nom_recipes::rtrim};
 
 /// Parse a 'in' range for primary expressions.
 ///
@@ -29,26 +28,6 @@ pub fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExpr>)> {
     Ok((input, (Box::new(a), Box::new(b))))
 }
 
-pub(super) fn map_expr<'a, F, C, O>(
-    mut f: F,
-    constructor: C,
-) -> impl FnMut(Input<'a>) -> ParseResult<'a, ParsedExpr>
-where
-    F: Parser<Input<'a>, O, Error>,
-    C: Fn(O) -> Expression,
-{
-    move |input| {
-        let start = input;
-        let (input, output) = f.parse(input)?;
-        Ok((
-            input,
-            ParsedExpr {
-                expr: constructor(output),
-                span: input.get_span_from(start),
-            },
-        ))
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;

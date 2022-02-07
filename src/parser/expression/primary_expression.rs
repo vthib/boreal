@@ -7,13 +7,12 @@ use nom::{
     character::complete::char,
     combinator::{cut, opt, peek},
     sequence::delimited,
+    Parser,
 };
 
-use super::{
-    common::map_expr, identifier, read_integer, string_expression, Expression, ParsedExpr,
-};
+use super::{identifier, read_integer, string_expression, Expression, ParsedExpr};
 use crate::parser::{
-    nom_recipes::{rtrim, textual_tag as ttag},
+    nom_recipes::{not_followed, rtrim, textual_tag as ttag},
     number, string,
     types::{Input, ParseResult},
 };
@@ -23,7 +22,9 @@ pub fn primary_expression(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
-    while let Ok((i, _)) = rtrim(char('|'))(input) {
+    // Use not_followed to ensure we do not eat the first character of the
+    // || operator
+    while let Ok((i, _)) = rtrim(not_followed(char('|'), char('|')))(input) {
         let (i2, right_elem) = cut(primary_expression_bitwise_xor)(i)?;
         input = i2;
 
@@ -57,7 +58,9 @@ fn primary_expression_bitwise_and(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
     let (mut input, mut res) = primary_expression_shift(input)?;
 
-    while let Ok((i, _)) = rtrim(char('&'))(input) {
+    // Use not_followed to ensure we do not eat the first character of the
+    // && operator
+    while let Ok((i, _)) = rtrim(not_followed(char('&'), char('&')))(input) {
         let (i2, right_elem) = cut(primary_expression_shift)(i)?;
         input = i2;
 
@@ -182,6 +185,10 @@ fn primary_expression_item(input: Input) -> ParseResult<ParsedExpr> {
             cut(primary_expression),
             cut(rtrim(char(')'))),
         ),
+        // 'true'
+        map_expr(rtrim(ttag("true")), |_| Expression::Boolean(true)),
+        // 'false'
+        map_expr(rtrim(ttag("false")), |_| Expression::Boolean(false)),
         // 'filesize'
         map_expr(rtrim(ttag("filesize")), |_| Expression::Filesize),
         // 'entrypoint'
@@ -206,6 +213,27 @@ fn primary_expression_item(input: Input) -> ParseResult<ParsedExpr> {
         // TODO: wrong type
         map_expr(identifier::identifier, Expression::Identifier),
     ))(input)
+}
+
+fn map_expr<'a, F, C, O>(
+    mut f: F,
+    constructor: C,
+) -> impl FnMut(Input<'a>) -> ParseResult<'a, ParsedExpr>
+where
+    F: Parser<Input<'a>, O, crate::parser::Error>,
+    C: Fn(O) -> Expression,
+{
+    move |input| {
+        let start = input;
+        let (input, output) = f.parse(input)?;
+        Ok((
+            input,
+            ParsedExpr {
+                expr: constructor(output),
+                span: input.get_span_from(start),
+            },
+        ))
+    }
 }
 
 #[cfg(test)]
