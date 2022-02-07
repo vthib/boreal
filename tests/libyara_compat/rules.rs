@@ -4,8 +4,10 @@ use boreal::{parser::parse_str, scanner::Scanner};
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
     let mut scanner = Scanner::default();
-    let rules = parse_str(rule)
-        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
+    let rules = match parse_str(rule) {
+        Ok(rules) => rules,
+        Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", rule)),
+    };
     scanner.add_rules(rules);
     let res = scanner.scan_mem(input);
     assert_eq!(res.len() == 1, expected_res);
@@ -215,15 +217,11 @@ fn test_comparison_operators() {
 
 #[test]
 fn test_arithmetic_operators() {
-    // FIXME: issues with parsing of ( expr ) / primary_expr
-    // in boolean_expression's alt
-    //
-    // test_exec(
-    //     "rule test { condition: (1 + 1) * 2 == (9 - 1) \\ 2 }",
-    //     &[],
-    //     true,
-    // );
-
+    test_exec(
+        "rule test { condition: (1 + 1) * 2 == (9 - 1) \\ 2 }",
+        &[],
+        true,
+    );
     test_exec("rule test { condition: 5 % 2 == 1 }", &[], true);
     test_exec("rule test { condition: 1.5 + 1.5 == 3}", &[], true);
     test_exec("rule test { condition: 3 \\ 2 == 1}", &[], true);

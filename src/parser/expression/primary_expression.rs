@@ -10,7 +10,7 @@ use nom::{
     Parser,
 };
 
-use super::{identifier, read_integer, string_expression, Expression, ParsedExpr};
+use super::{expression, identifier, read_integer, string_expression, Expression, ParsedExpr};
 use crate::parser::{
     nom_recipes::{not_followed, rtrim, textual_tag as ttag},
     number, string,
@@ -180,11 +180,7 @@ fn primary_expression_neg(input: Input) -> ParseResult<ParsedExpr> {
 fn primary_expression_item(input: Input) -> ParseResult<ParsedExpr> {
     alt((
         // '(' primary_expression ')'
-        delimited(
-            rtrim(char('(')),
-            cut(primary_expression),
-            cut(rtrim(char(')'))),
-        ),
+        delimited(rtrim(char('(')), cut(expression), cut(rtrim(char(')')))),
         // 'true'
         map_expr(rtrim(ttag("true")), |_| Expression::Boolean(true)),
         // 'false'

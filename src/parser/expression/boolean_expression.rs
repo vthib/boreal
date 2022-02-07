@@ -4,9 +4,8 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::char,
     combinator::{cut, opt, value},
-    sequence::{delimited, preceded},
+    sequence::preceded,
 };
 
 use super::{
@@ -96,8 +95,6 @@ fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
 /// parse rest of boolean expressions
 fn expression_item(input: Input) -> ParseResult<ParsedExpr> {
     alt((
-        // '(' expression ')'
-        delimited(rtrim(char('(')), expression, rtrim(char(')'))),
         // all variants of for expressions
         for_expression,
         // string_identifier ...
