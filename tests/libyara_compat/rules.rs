@@ -327,3 +327,149 @@ fn test_arithmetic_operators_runtime_errors() {
     );
     */
 }
+
+#[test]
+fn test_bitwise_operators() {
+    test_exec("rule test { condition: 0x55 | 0xAA == 0xFF }", &[], true);
+    test_exec(
+        "rule test { condition: ~0xAA ^ 0x5A & 0xFF == (~0xAA) ^ (0x5A & 0xFF) }",
+        &[],
+        true,
+    );
+    test_exec("rule test { condition: ~0x55 & 0xFF == 0xAA }", &[], true);
+    test_exec("rule test { condition: 8 >> 2 == 2 }", &[], true);
+    test_exec("rule test { condition: 1 << 3 == 8 }", &[], true);
+
+    /* FIXME */
+    /*
+    test_exec("rule test { condition: 1 << 64 == 0 }", &[], true);
+    test_exec("rule test { condition: 1 >> 64 == 0 }", &[], true);
+    test_parse_error(
+        "rule test { condition: 1 << -1 == 0 }",
+        "ERROR_INVALID_OPERAND",
+    );
+    test_parse_error(
+        "rule test { condition: 1 >> -1 == 0 }",
+        "ERROR_INVALID_OPERAND",
+    );
+    */
+    test_exec(
+        "rule test { condition: 1 | 3 ^ 3 == 1 | (3 ^ 3) }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: ~0xAA ^ 0x5A & 0xFF == 0x0F }",
+        &[],
+        false,
+    );
+    test_exec(
+        "rule test { condition: 1 | 3 ^ 3 == (1 | 3) ^ 3}",
+        &[],
+        false,
+    );
+}
+
+#[test]
+fn test_string_operators() {
+    test_exec(
+        "rule test { condition: \"foobarbaz\" contains \"bar\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" contains \"foo\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" contains \"baz\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" icontains \"BAR\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" icontains \"BaR\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"FooBarBaz\" icontains \"bar\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"FooBarBaz\" icontains \"baz\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"FooBarBaz\" icontains \"FOO\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" contains \"foo\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" contains \"baz\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" contains \"baq\" }",
+        &[],
+        false,
+    );
+    test_exec(
+        "rule test { condition: \"foo\" contains \"foob\" }",
+        &[],
+        false,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" startswith \"foo\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" istartswith \"Foo\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"FooBarBaz\" istartswith \"fOO\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" startswith \"fob\" }",
+        &[],
+        false,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" endswith \"baz\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" iendswith \"baZ\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" iendswith \"BaZ\" }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: \"foobarbaz\" endswith \"ba\" }",
+        &[],
+        false,
+    );
+}
