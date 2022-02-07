@@ -153,7 +153,7 @@ impl Evaluator<'_> {
                 arith_op_num_and_float!(self, left, right, -)
             }
             Expression::Mul(left, right) => {
-                arith_op_num_and_float!(self, left, right, %)
+                arith_op_num_and_float!(self, left, right, *)
             }
             Expression::Div(left, right) => {
                 // FIXME: handle div by zero

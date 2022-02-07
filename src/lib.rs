@@ -4,7 +4,6 @@
 #![deny(explicit_outlives_requirements)]
 #![deny(keyword_idents)]
 #![deny(macro_use_extern_crate)]
-#![deny(missing_docs)]
 #![deny(non_ascii_idents)]
 #![deny(noop_method_call)]
 #![deny(pointer_structural_match)]
@@ -27,6 +26,7 @@
 #![allow(clippy::match_same_arms)]
 
 // TODO: To activate before release
+// #![deny(missing_docs)]
 // #![deny(clippy::cargo)]
 
 // TODO: parser is WIP. reverse the following lines when done.

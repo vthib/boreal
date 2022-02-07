@@ -1,12 +1,26 @@
 //! Tests imported from test_rules.c in YARA codebase.
+use boreal::{parser::parse_str, scanner::Scanner};
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
-    let mut scanner = boreal::scanner::Scanner::default();
-    let rules = boreal::parser::parse_str(rule).unwrap();
+    let mut scanner = Scanner::default();
+    let rules = parse_str(rule)
+        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
     scanner.add_rules(rules);
     let res = scanner.scan_mem(input);
     assert_eq!(res.len() == 1, expected_res);
+}
+
+#[track_caller]
+fn test_parse_error(rule: &str, expected_prefix: &str) {
+    let err = parse_str(rule).unwrap_err();
+    let desc = err.to_short_description("mem", rule);
+    assert!(
+        desc.starts_with(expected_prefix),
+        "error: {}\nexpected prefix: {}",
+        desc,
+        expected_prefix
+    );
 }
 
 #[test]
@@ -37,6 +51,7 @@ fn test_boolean_operators() {
 }
 
 #[test]
+// TODO: Implement identifiers
 #[ignore]
 fn test_boolean_operators_with_identifiers() {
     test_exec(
@@ -196,4 +211,121 @@ fn test_comparison_operators() {
     test_exec("rule test { condition: \"abc\" != \"abc\"}", &[], false);
     test_exec("rule test { condition: \"abc\" > \"abc\"}", &[], false);
     test_exec("rule test { condition: \"abc\" < \"abc\"}", &[], false);
+}
+
+#[test]
+fn test_arithmetic_operators() {
+    // FIXME: issues with parsing of ( expr ) / primary_expr
+    // in boolean_expression's alt
+    //
+    // test_exec(
+    //     "rule test { condition: (1 + 1) * 2 == (9 - 1) \\ 2 }",
+    //     &[],
+    //     true,
+    // );
+
+    test_exec("rule test { condition: 5 % 2 == 1 }", &[], true);
+    test_exec("rule test { condition: 1.5 + 1.5 == 3}", &[], true);
+    test_exec("rule test { condition: 3 \\ 2 == 1}", &[], true);
+    test_exec("rule test { condition: 3.0 \\ 2 == 1.5}", &[], true);
+    test_exec("rule test { condition: 1 + -1 == 0}", &[], true);
+    test_exec("rule test { condition: -1 + -1 == -2}", &[], true);
+    test_exec("rule test { condition: 4 --2 * 2 == 8}", &[], true);
+    test_exec("rule test { condition: -1.0 * 1 == -1.0}", &[], true);
+    test_exec("rule test { condition: 1-1 == 0}", &[], true);
+    test_exec("rule test { condition: -2.0-3.0 == -5}", &[], true);
+    test_exec("rule test { condition: --1 == 1}", &[], true);
+    test_exec("rule test { condition: 1--1 == 2}", &[], true);
+    test_exec("rule test { condition: 2 * -2 == -4}", &[], true);
+    test_exec("rule test { condition: -4 * 2 == -8}", &[], true);
+    test_exec("rule test { condition: -4 * -4 == 16}", &[], true);
+    test_exec("rule test { condition: -0x01 == -1}", &[], true);
+    test_exec("rule test { condition: 0o10 == 8 }", &[], true);
+    test_exec("rule test { condition: 0o100 == 64 }", &[], true);
+    test_exec("rule test { condition: 0o755 == 493 }", &[], true);
+
+    test_parse_error(
+        "rule test { condition: 9223372036854775808 > 0 }",
+        "mem:1:24: error: syntax error\n",
+    );
+
+    test_parse_error(
+        "rule test { condition: 9007199254740992KB > 0 }",
+        "mem:1:24: error: multiplication 9007199254740992 * 1024 overflows\n",
+    );
+
+    test_parse_error(
+        // integer too long
+        "rule test { condition: 8796093022208MB > 0 }",
+        "mem:1:24: error: multiplication 8796093022208 * 1048576 overflows\n",
+    );
+
+    test_parse_error(
+        // integer too long
+        "rule test { condition: 0x8000000000000000 > 0 }",
+        "mem:1:26: error: error converting hexadecimal notation to integer",
+    );
+
+    test_parse_error(
+        // integer too long
+        "rule test { condition: 0o1000000000000000000000 > 0 }",
+        "mem:1:26: error: error converting octal notation to integer",
+    );
+}
+
+#[test]
+// TODO: ideally, catch those in future simplifying step.
+#[ignore]
+fn test_arithmetic_operators_runtime_errors() {
+    /*
+    test_parse_error(
+        "rule test { condition: 0x7FFFFFFFFFFFFFFF + 1 > 0 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: 9223372036854775807 + 1 > 0 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: -9223372036854775807 - 2 > 0 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: -2 + -9223372036854775807 > 0 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: 1 - -9223372036854775807 > 0 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: 0x4000000000000000 * 2 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: 4611686018427387904 * 2 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: 4611686018427387904 * -2 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: -4611686018427387904 * 2 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+
+    test_parse_error(
+        "rule test { condition: -4611686018427387904 * -2 }",
+        ERROR_INTEGER_OVERFLOW,
+    );
+    */
 }

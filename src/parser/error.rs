@@ -1,6 +1,10 @@
 use std::num::{ParseFloatError, ParseIntError};
 
-use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::{
+    diagnostic::{Diagnostic, Label},
+    files::SimpleFile,
+    term,
+};
 use nom::error::{ErrorKind as NomErrorKind, ParseError};
 
 use super::types::{Input, Span};
@@ -13,10 +17,27 @@ pub struct Error {
 }
 
 impl Error {
+    #[must_use]
     pub fn new(span: Span, kind: ErrorKind) -> Self {
         Self { span, kind }
     }
 
+    #[must_use]
+    pub fn to_short_description(&self, filename: &str, file_contents: &str) -> String {
+        // Generate a small report using codespan_reporting
+        let mut writer = term::termcolor::Buffer::no_color();
+        let config = term::Config {
+            display_style: term::DisplayStyle::Short,
+            ..term::Config::default()
+        };
+
+        let files = SimpleFile::new(&filename, &file_contents);
+        // TODO: handle error better here?
+        let _res = term::emit(&mut writer, &config, &files, &self.to_diagnostic());
+        String::from_utf8_lossy(writer.as_slice()).to_string()
+    }
+
+    #[must_use]
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match &self.kind {
             ErrorKind::Base64AlphabetInvalidLength { length } => Diagnostic::error()
