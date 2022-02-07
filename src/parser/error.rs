@@ -7,55 +7,17 @@ use super::types::{Input, Span};
 
 #[derive(Debug)]
 pub struct Error {
-    errors: Vec<SingleError>,
-}
-
-impl Error {
-    pub fn new(span: Span, kind: ErrorKind) -> Self {
-        Self {
-            errors: vec![SingleError { span, kind }],
-        }
-    }
-
-    pub fn get_diagnostics(&self) -> Vec<Diagnostic<()>> {
-        self.errors.iter().map(SingleError::to_diagnostic).collect()
-    }
-}
-
-impl ParseError<Input<'_>> for Error {
-    fn from_error_kind(input: Input, kind: NomErrorKind) -> Self {
-        Self {
-            errors: vec![SingleError::from_nom_error_kind(input.get_position(), kind)],
-        }
-    }
-
-    fn append(input: Input, kind: NomErrorKind, mut other: Self) -> Self {
-        other
-            .errors
-            .push(SingleError::from_nom_error_kind(input.get_position(), kind));
-        other
-    }
-}
-
-#[derive(Debug)]
-struct SingleError {
     span: Span,
 
     kind: ErrorKind,
 }
 
-impl SingleError {
-    fn from_nom_error_kind(position: usize, kind: NomErrorKind) -> Self {
-        Self {
-            span: Span {
-                start: position,
-                end: position + 1,
-            },
-            kind: ErrorKind::NomError(kind),
-        }
+impl Error {
+    pub fn new(span: Span, kind: ErrorKind) -> Self {
+        Self { span, kind }
     }
 
-    fn to_diagnostic(&self) -> Diagnostic<()> {
+    pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match &self.kind {
             ErrorKind::Base64AlphabetInvalidLength { length } => Diagnostic::error()
                 .with_message("base64 modifier alphabet must contain exactly 64 characters")
@@ -173,6 +135,26 @@ impl SingleError {
                 .with_message(format!("xor range invalid: {} > {}", from, to))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
         }
+    }
+
+    fn from_nom_error_kind(position: usize, kind: NomErrorKind) -> Self {
+        Self {
+            span: Span {
+                start: position,
+                end: position + 1,
+            },
+            kind: ErrorKind::NomError(kind),
+        }
+    }
+}
+
+impl ParseError<Input<'_>> for Error {
+    fn from_error_kind(input: Input, kind: NomErrorKind) -> Self {
+        Self::from_nom_error_kind(input.get_position(), kind)
+    }
+
+    fn append(_: Input, _: NomErrorKind, other: Self) -> Self {
+        other
     }
 }
 

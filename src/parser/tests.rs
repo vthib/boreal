@@ -70,9 +70,7 @@ fn test_parsing_global() {
 
                 let filename = entry.display().to_string();
                 let files = SimpleFile::new(&filename, &contents);
-                for diag in e.get_diagnostics() {
-                    term::emit(&mut writer.lock(), &config, &files, &diag).unwrap();
-                }
+                term::emit(&mut writer.lock(), &config, &files, &e.to_diagnostic()).unwrap();
             }
         };
     }

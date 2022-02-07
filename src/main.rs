@@ -24,10 +24,9 @@ fn main() -> Result<(), std::io::Error> {
             let config = codespan_reporting::term::Config::default();
 
             let files = SimpleFile::new(yara_filepath, &contents);
-            for diag in err.get_diagnostics() {
-                if let Err(e) = term::emit(&mut writer.lock(), &config, &files, &diag) {
-                    eprintln!("cannot emit diagnostics: {}", e);
-                }
+            let diag = err.to_diagnostic();
+            if let Err(e) = term::emit(&mut writer.lock(), &config, &files, &diag) {
+                eprintln!("cannot emit diagnostics: {}", e);
             }
             exit(2);
         }
