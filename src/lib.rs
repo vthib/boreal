@@ -34,6 +34,9 @@
 #[allow(dead_code)]
 pub mod parser;
 
+mod error;
+pub use error::ScanError;
+
 mod evaluator;
 mod expression;
 mod hex_string;

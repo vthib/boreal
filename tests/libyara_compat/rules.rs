@@ -1,5 +1,5 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use boreal::{parser::parse_str, scanner::Scanner};
+use boreal::{parser::parse_str, scanner::Scanner, ScanError};
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
@@ -11,6 +11,15 @@ fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
     scanner.add_rules(rules);
     let res = scanner.scan_mem(input);
     assert_eq!(res.len() == 1, expected_res);
+}
+
+#[track_caller]
+fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
+    let rules = match parse_str(rule) {
+        Ok(rules) => rules,
+        Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", rule)),
+    };
+    assert_eq!(rules[0].matches_mem(input).unwrap_err(), expected_err);
 }
 
 #[track_caller]
@@ -273,59 +282,99 @@ fn test_arithmetic_operators() {
 
 #[test]
 // TODO: ideally, catch those in future simplifying step.
-#[ignore]
 fn test_arithmetic_operators_runtime_errors() {
-    /*
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: 0x7FFFFFFFFFFFFFFF + 1 > 0 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: 0x7FFFFFFFFFFFFFFF,
+            right_value: 1,
+            operator: "+".to_owned(),
+        },
     );
 
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: 9223372036854775807 + 1 > 0 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: 9223372036854775807,
+            right_value: 1,
+            operator: "+".to_owned(),
+        },
     );
 
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: -9223372036854775807 - 2 > 0 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: -9223372036854775807,
+            right_value: 2,
+            operator: "-".to_owned(),
+        },
     );
 
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: -2 + -9223372036854775807 > 0 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: -2,
+            right_value: -9223372036854775807,
+            operator: "+".to_owned(),
+        },
     );
 
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: 1 - -9223372036854775807 > 0 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: 1,
+            right_value: -9223372036854775807,
+            operator: "-".to_owned(),
+        },
     );
 
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: 0x4000000000000000 * 2 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: 0x4000000000000000,
+            right_value: 2,
+            operator: "*".to_owned(),
+        },
     );
 
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: 4611686018427387904 * 2 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: 4611686018427387904,
+            right_value: 2,
+            operator: "*".to_owned(),
+        },
     );
 
-    test_parse_error(
-        "rule test { condition: 4611686018427387904 * -2 }",
-        ERROR_INTEGER_OVERFLOW,
+    // CHANGE: Those two return OVERFLOW on libyara due to how
+    // overflow is detected. However, they do NOT actually overflow.
+    test_exec(
+        "rule test { condition: 4611686018427387904 * -2 < 0 }",
+        &[],
+        true,
+    );
+    test_exec(
+        "rule test { condition: -4611686018427387904 * 2 < 0 }",
+        &[],
+        true,
     );
 
-    test_parse_error(
-        "rule test { condition: -4611686018427387904 * 2 }",
-        ERROR_INTEGER_OVERFLOW,
-    );
-
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: -4611686018427387904 * -2 }",
-        ERROR_INTEGER_OVERFLOW,
+        &[],
+        ScanError::Overflow {
+            left_value: -4611686018427387904,
+            right_value: -2,
+            operator: "*".to_owned(),
+        },
     );
-    */
 }
 
 #[test]
@@ -340,19 +389,26 @@ fn test_bitwise_operators() {
     test_exec("rule test { condition: 8 >> 2 == 2 }", &[], true);
     test_exec("rule test { condition: 1 << 3 == 8 }", &[], true);
 
-    /* FIXME */
-    /*
     test_exec("rule test { condition: 1 << 64 == 0 }", &[], true);
     test_exec("rule test { condition: 1 >> 64 == 0 }", &[], true);
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: 1 << -1 == 0 }",
-        "ERROR_INVALID_OPERAND",
+        &[],
+        ScanError::Overflow {
+            left_value: 1,
+            right_value: -1,
+            operator: "<<".to_owned(),
+        },
     );
-    test_parse_error(
+    test_exec_error(
         "rule test { condition: 1 >> -1 == 0 }",
-        "ERROR_INVALID_OPERAND",
+        &[],
+        ScanError::Overflow {
+            left_value: 1,
+            right_value: -1,
+            operator: ">>".to_owned(),
+        },
     );
-    */
     test_exec(
         "rule test { condition: 1 | 3 ^ 3 == 1 | (3 ^ 3) }",
         &[],

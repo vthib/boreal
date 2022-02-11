@@ -1,5 +1,6 @@
 use bitflags::bitflags;
 
+use crate::error::ScanError;
 use crate::expression::Expression;
 use crate::hex_string::HexString;
 use crate::regex::Regex;
@@ -105,7 +106,7 @@ pub struct VariableDeclaration {
 }
 
 impl Rule {
-    pub fn matches_mem(&self, mem: &[u8]) -> Result<bool, String> {
+    pub fn matches_mem(&self, mem: &[u8]) -> Result<bool, ScanError> {
         crate::evaluator::evaluate(&self.condition, &self.variables, mem)
     }
 }

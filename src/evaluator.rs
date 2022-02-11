@@ -1,6 +1,6 @@
 //! Provides methods to evaluate expressions.
 
-use crate::{expression::Expression, regex::Regex, rule::VariableDeclaration};
+use crate::{error::ScanError, expression::Expression, regex::Regex, rule::VariableDeclaration};
 
 #[derive(Debug)]
 enum Value<'a> {
@@ -9,6 +9,18 @@ enum Value<'a> {
     String(&'a str),
     Regex(&'a Regex),
     Boolean(bool),
+}
+
+impl Value<'_> {
+    fn type_to_string(&self) -> &'static str {
+        match self {
+            Self::Number(_) => "number",
+            Self::Float(_) => "float",
+            Self::String(_) => "string",
+            Self::Regex(_) => "regex",
+            Self::Boolean(_) => "boolean",
+        }
+    }
 }
 
 impl Value<'_> {
@@ -22,23 +34,25 @@ impl Value<'_> {
         }
     }
 
-    fn unwrap_number(&self) -> Result<i64, String> {
+    fn unwrap_number(&self, operator: &str) -> Result<i64, ScanError> {
         match self {
             Self::Number(v) => Ok(*v),
-            _ => Err(format!(
-                "expression should be a number, {:?} returned",
-                &self
-            )),
+            _ => Err(ScanError::InvalidType {
+                typ: self.type_to_string().to_owned(),
+                expected_type: "number".to_owned(),
+                operator: operator.to_owned(),
+            }),
         }
     }
 
-    fn unwrap_string(&self) -> Result<&str, String> {
+    fn unwrap_string(&self, operator: &str) -> Result<&str, ScanError> {
         match self {
             Self::String(v) => Ok(*v),
-            _ => Err(format!(
-                "expression should be a string, {:?} returned",
-                &self
-            )),
+            _ => Err(ScanError::InvalidType {
+                typ: self.type_to_string().to_owned(),
+                expected_type: "string".to_owned(),
+                operator: operator.to_owned(),
+            }),
         }
     }
 }
@@ -56,7 +70,7 @@ pub fn evaluate(
     expr: &Expression,
     variables: &[VariableDeclaration],
     mem: &[u8],
-) -> Result<bool, String> {
+) -> Result<bool, ScanError> {
     let evaluator = Evaluator {
         _variables: variables,
         _mem: mem,
@@ -69,21 +83,12 @@ struct Evaluator<'a> {
     _mem: &'a [u8],
 }
 
-macro_rules! arith_op {
-    ($self:expr, $left:expr, $right:expr, $op:tt) => {
-        Ok(Value::Number(
-            $self.evaluate_expr($left)?.unwrap_number()?
-            $op $self.evaluate_expr($right)?.unwrap_number()?
-        ))
-    }
-}
-
 macro_rules! string_op {
-    ($self:expr, $left:expr, $right:expr, $case_insensitive:expr, $method:ident) => {{
+    ($self:expr, $left:expr, $right:expr, $case_insensitive:expr, $method:ident, $op:ident) => {{
         let left = $self.evaluate_expr($left)?;
-        let left = left.unwrap_string()?;
+        let left = left.unwrap_string($op)?;
         let right = $self.evaluate_expr($right)?;
-        let right = right.unwrap_string()?;
+        let right = right.unwrap_string($op)?;
 
         if $case_insensitive {
             let left = left.to_lowercase();
@@ -96,19 +101,32 @@ macro_rules! string_op {
 }
 
 macro_rules! arith_op_num_and_float {
-    ($self:expr, $left:expr, $right:expr, $op:tt) => {{
+    ($self:expr, $left:expr, $right:expr, $op:tt, $checked_op:ident) => {{
         let left = $self.evaluate_expr($left)?;
         let right = $self.evaluate_expr($right)?;
         match (left, right) {
-            (Value::Number(n), Value::Number(m)) => {
-                // FIXME: handle overflow
-                Ok(Value::Number(n $op m))
-            }
-            (Value::Float(a), Value::Number(n)) | (Value::Number(n), Value::Float(a)) => {
+            (Value::Number(n), Value::Number(m)) => match n.$checked_op(m) {
+                Some(v) => Ok(Value::Number(v)),
+                None => Err(ScanError::Overflow {
+                    left_value: n,
+                    right_value: m,
+                    operator: stringify!($op).to_owned(),
+                }),
+            },
+            (Value::Float(a), Value::Number(n)) => {
+                #[allow(clippy::cast_precision_loss)]
                 Ok(Value::Float(a $op (n as f64)))
-            }
+            },
+            (Value::Number(n), Value::Float(a)) => {
+                #[allow(clippy::cast_precision_loss)]
+                Ok(Value::Float((n as f64) $op a))
+            },
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a $op b)),
-            _ => todo!(),
+            (left, right) => Err(ScanError::IncompatibleTypes {
+                left_type: left.type_to_string().to_owned(),
+                right_type: Some(right.type_to_string().to_owned()),
+                operator: stringify!($op).to_owned(),
+            }),
         }
     }}
 }
@@ -128,7 +146,7 @@ macro_rules! apply_cmp_op {
 
 impl Evaluator<'_> {
     #[allow(clippy::too_many_lines)]
-    fn evaluate_expr<'b>(&self, expr: &'b Expression) -> Result<Value<'b>, String> {
+    fn evaluate_expr<'b>(&self, expr: &'b Expression) -> Result<Value<'b>, ScanError> {
         match expr {
             Expression::Filesize => todo!(),
             Expression::Entrypoint => todo!(),
@@ -147,40 +165,71 @@ impl Evaluator<'_> {
                 }
             }
             Expression::Add(left, right) => {
-                arith_op_num_and_float!(self, left, right, +)
+                arith_op_num_and_float!(self, left, right, +, checked_add)
             }
             Expression::Sub(left, right) => {
-                arith_op_num_and_float!(self, left, right, -)
+                arith_op_num_and_float!(self, left, right, -, checked_sub)
             }
             Expression::Mul(left, right) => {
-                arith_op_num_and_float!(self, left, right, *)
+                arith_op_num_and_float!(self, left, right, *, checked_mul)
             }
             Expression::Div(left, right) => {
-                // FIXME: handle div by zero
-                arith_op_num_and_float!(self, left, right, /)
+                arith_op_num_and_float!(self, left, right, /, checked_div)
             }
             Expression::Mod(left, right) => {
-                arith_op!(self, left, right, %)
+                let left = self.evaluate_expr(left)?.unwrap_number("%")?;
+                let right = self.evaluate_expr(right)?.unwrap_number("%")?;
+                Ok(Value::Number(left % right))
             }
 
             Expression::BitwiseXor(left, right) => {
-                arith_op!(self, left, right, ^)
+                let left = self.evaluate_expr(left)?.unwrap_number("^")?;
+                let right = self.evaluate_expr(right)?.unwrap_number("^")?;
+                Ok(Value::Number(left ^ right))
             }
             Expression::BitwiseAnd(left, right) => {
-                arith_op!(self, left, right, &)
+                let left = self.evaluate_expr(left)?.unwrap_number("&")?;
+                let right = self.evaluate_expr(right)?.unwrap_number("&")?;
+                Ok(Value::Number(left & right))
             }
             Expression::BitwiseOr(left, right) => {
-                arith_op!(self, left, right, |)
+                let left = self.evaluate_expr(left)?.unwrap_number("|")?;
+                let right = self.evaluate_expr(right)?.unwrap_number("|")?;
+                Ok(Value::Number(left | right))
             }
             Expression::BitwiseNot(expr) => {
-                let v = self.evaluate_expr(expr)?.unwrap_number()?;
+                let v = self.evaluate_expr(expr)?.unwrap_number("~")?;
                 Ok(Value::Number(!v))
             }
             Expression::ShiftLeft(left, right) => {
-                arith_op!(self, left, right, <<)
+                let left = self.evaluate_expr(left)?.unwrap_number("<<")?;
+                let right = self.evaluate_expr(right)?.unwrap_number("<<")?;
+                if right < 0 {
+                    Err(ScanError::Overflow {
+                        left_value: left,
+                        right_value: right,
+                        operator: "<<".to_owned(),
+                    })
+                } else if right >= 64 {
+                    Ok(Value::Number(0))
+                } else {
+                    Ok(Value::Number(left << right))
+                }
             }
             Expression::ShiftRight(left, right) => {
-                arith_op!(self, left, right, >>)
+                let left = self.evaluate_expr(left)?.unwrap_number(">>")?;
+                let right = self.evaluate_expr(right)?.unwrap_number(">>")?;
+                if right < 0 {
+                    Err(ScanError::Overflow {
+                        left_value: left,
+                        right_value: right,
+                        operator: ">>".to_owned(),
+                    })
+                } else if right >= 64 {
+                    Ok(Value::Number(0))
+                } else {
+                    Ok(Value::Number(left >> right))
+                }
             }
 
             Expression::And(left, right) => {
@@ -230,25 +279,46 @@ impl Evaluator<'_> {
                 needle,
                 case_insensitive,
             } => {
-                string_op!(self, haystack, needle, *case_insensitive, contains)
+                let op = if *case_insensitive {
+                    "icontains"
+                } else {
+                    "contains"
+                };
+                string_op!(self, haystack, needle, *case_insensitive, contains, op)
             }
             Expression::StartsWith {
                 expr,
                 prefix,
                 case_insensitive,
             } => {
-                string_op!(self, expr, prefix, *case_insensitive, starts_with)
+                let op = if *case_insensitive {
+                    "istartswith"
+                } else {
+                    "startswith"
+                };
+                string_op!(self, expr, prefix, *case_insensitive, starts_with, op)
             }
             Expression::EndsWith {
                 expr,
                 suffix,
                 case_insensitive,
             } => {
-                string_op!(self, expr, suffix, *case_insensitive, ends_with)
+                let op = if *case_insensitive {
+                    "iendswith"
+                } else {
+                    "endswith"
+                };
+                string_op!(self, expr, suffix, *case_insensitive, ends_with, op)
             }
             Expression::IEquals(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_string()?.to_lowercase();
-                let right = self.evaluate_expr(right)?.unwrap_string()?.to_lowercase();
+                let left = self
+                    .evaluate_expr(left)?
+                    .unwrap_string("iequals")?
+                    .to_lowercase();
+                let right = self
+                    .evaluate_expr(right)?
+                    .unwrap_string("iequals")?
+                    .to_lowercase();
                 Ok(Value::Boolean(left == right))
             }
             Expression::Matches(..) => todo!(),
@@ -273,5 +343,175 @@ impl Evaluator<'_> {
             Expression::Regex(v) => Ok(Value::Regex(v)),
             Expression::Boolean(v) => Ok(Value::Boolean(*v)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::parse_str;
+
+    use super::*;
+
+    #[track_caller]
+    #[allow(clippy::needless_pass_by_value)]
+    fn test_eval(cond: &str, input: &[u8], expected_res: Result<bool, ScanError>) {
+        let rule = format!("rule a {{ condition: {} }}", cond);
+        let rules = match parse_str(&rule) {
+            Ok(rules) => rules,
+            Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", &rule)),
+        };
+        assert_eq!(rules[0].matches_mem(input), expected_res);
+    }
+
+    #[test]
+    fn test_eval_add() {
+        test_eval("2 + 6 == 8", &[], Ok(true));
+        test_eval("3 + 4.2 == 7.2", &[], Ok(true));
+        test_eval("2.62 + 3 == 5.62", &[], Ok(true));
+        test_eval("1.3 + 1.5 == 2.8", &[], Ok(true));
+        test_eval(
+            "0x7FFFFFFFFFFFFFFF + 1 > 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: 0x7FFF_FFFF_FFFF_FFFF,
+                right_value: 1,
+                operator: "+".to_owned(),
+            }),
+        );
+        test_eval(
+            "-2 + -0x7FFFFFFFFFFFFFFF < 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: -2,
+                right_value: -0x7FFF_FFFF_FFFF_FFFF,
+                operator: "+".to_owned(),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_eval_sub() {
+        test_eval("2 - 6 == -4", &[], Ok(true));
+        test_eval("3 - 4.5 == -1.5", &[], Ok(true));
+        test_eval("2.62 - 3 == -0.38", &[], Ok(true));
+        test_eval("1.3 - 1.5 == -0.2", &[], Ok(true));
+        test_eval(
+            "-0x7FFFFFFFFFFFFFFF - 2 < 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: -0x7FFF_FFFF_FFFF_FFFF,
+                right_value: 2,
+                operator: "-".to_owned(),
+            }),
+        );
+        test_eval(
+            "0x7FFFFFFFFFFFFFFF - -1 > 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: 0x7FFF_FFFF_FFFF_FFFF,
+                right_value: -1,
+                operator: "-".to_owned(),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_eval_mul() {
+        test_eval("2 * 6 == 12", &[], Ok(true));
+        test_eval("3 * 0.1 == 0.3", &[], Ok(true));
+        test_eval("2.62 * 3 == 7.86", &[], Ok(true));
+        test_eval("1.3 * 0.5 == 0.65", &[], Ok(true));
+        test_eval(
+            "-0x0FFFFFFFFFFFFFFF * 20 < 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: -0x0FFF_FFFF_FFFF_FFFF,
+                right_value: 20,
+                operator: "*".to_owned(),
+            }),
+        );
+        test_eval(
+            "0x1FFFFFFFFFFFFFFF * 10 > 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: 0x1FFF_FFFF_FFFF_FFFF,
+                right_value: 10,
+                operator: "*".to_owned(),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_eval_div() {
+        test_eval("7 \\ 4 == 1", &[], Ok(true));
+        test_eval("-7 \\ 4 == -1", &[], Ok(true));
+        test_eval("7 \\ 4.0 == 1.75", &[], Ok(true));
+        test_eval("7.0 \\ 4 == 1.75", &[], Ok(true));
+        test_eval("2.3 \\ 4.6 == 0.5", &[], Ok(true));
+        test_eval(
+            "1 \\ 0 == 1",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: 1,
+                right_value: 0,
+                operator: "/".to_owned(),
+            }),
+        );
+        test_eval(
+            "-2 \\ -0 > 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: -2,
+                right_value: 0,
+                operator: "/".to_owned(),
+            }),
+        );
+        test_eval(
+            "(-0x7FFFFFFFFFFFFFFF - 1) \\ -1 > 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: i64::MIN,
+                right_value: -1,
+                operator: "/".to_owned(),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_eval_shl() {
+        test_eval("15 << 2 == 60", &[], Ok(true));
+        test_eval("0xDEADCAFE << 16 == 0xDEADCAFE0000", &[], Ok(true));
+        test_eval("-8 << 1 == -16", &[], Ok(true));
+        test_eval("0x7FFFFFFFFFFFFFFF << 4 == -16", &[], Ok(true));
+        test_eval("0x7FFFFFFFFFFFFFFF << 1000 == 0", &[], Ok(true));
+        test_eval("-0x7FFFFFFFFFFFFFFF << 1000 == 0", &[], Ok(true));
+        test_eval(
+            "12 << -2 == 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: 12,
+                right_value: -2,
+                operator: "<<".to_owned(),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_eval_shr() {
+        test_eval("15 >> 2 == 3", &[], Ok(true));
+        test_eval("0xDEADCAFE >> 16 == 0xDEAD", &[], Ok(true));
+        test_eval("-8 >> 1 == -4", &[], Ok(true));
+        test_eval("0x7FFFFFFFFFFFFFFF >> 62 == 0x1", &[], Ok(true));
+        test_eval("0x7FFFFFFFFFFFFFFF >> 1000 == 0", &[], Ok(true));
+        test_eval("-0x7FFFFFFFFFFFFFFF >> 1000 == 0", &[], Ok(true));
+        test_eval(
+            "12 >> -2 == 0",
+            &[],
+            Err(ScanError::Overflow {
+                left_value: 12,
+                right_value: -2,
+                operator: ">>".to_owned(),
+            }),
+        );
     }
 }
