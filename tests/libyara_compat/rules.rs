@@ -529,3 +529,38 @@ fn test_string_operators() {
         false,
     );
 }
+
+#[test]
+fn test_syntax() {
+    test_parse_error(
+        "rule test { strings: $a = \"a\" $a = \"a\" condition: all of them }",
+        "mem:1:31: error: multiple strings named a declared",
+    );
+
+    test_parse_error(
+        "rule test { strings: $a = /a.c/ xor condition: $a }",
+        "mem:1:33: error: syntax error",
+    );
+
+    test_parse_error(
+        "rule test { strings: $a = /abc/ xor condition: $a }",
+        "mem:1:33: error: syntax error",
+    );
+
+    test_parse_error(
+        "rule test { strings: $a = {01 02 ?? 03 04} xor condition: $a }",
+        "mem:1:44: error: syntax error",
+    );
+
+    test_parse_error(
+        "rule test { strings: $a = {01 02 0? 03 04} xor condition: $a }",
+        "mem:1:44: error: syntax error",
+    );
+
+    test_parse_error(
+        "rule test { strings: $a = {01 02 03 04} xor condition: $a }",
+        "mem:1:41: error: syntax error",
+    );
+
+    test_parse_error("rule test rule test", "mem:1:11: error: syntax error");
+}
