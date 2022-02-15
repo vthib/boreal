@@ -236,8 +236,8 @@ where
 mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression as Expr, ParsedExpr};
-    use crate::expression::ReadIntegerSize;
     use crate::parser::{
+        expression::ReadIntegerSize,
         string::Regex,
         tests::{parse, parse_check, parse_err},
         types::Span,

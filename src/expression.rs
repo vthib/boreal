@@ -303,3 +303,13 @@ pub enum ForIterator {
     /// A list of values.
     List(Vec<Expression>),
 }
+
+impl From<crate::parser::expression::ReadIntegerSize> for ReadIntegerSize {
+    fn from(size: crate::parser::expression::ReadIntegerSize) -> Self {
+        match size {
+            crate::parser::expression::ReadIntegerSize::Int8 => Self::Int8,
+            crate::parser::expression::ReadIntegerSize::Int16 => Self::Int16,
+            crate::parser::expression::ReadIntegerSize::Int32 => Self::Int32,
+        }
+    }
+}

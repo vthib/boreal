@@ -161,7 +161,7 @@ impl Validator {
 
                 Ok(ValidatedExpression {
                     expression: EExpr::ReadInteger {
-                        size,
+                        size: size.into(),
                         unsigned,
                         big_endian,
                         addr: addr.unwrap_expr(Type::Integer)?,

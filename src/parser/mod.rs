@@ -28,7 +28,7 @@ use nom::Finish;
 
 mod error;
 pub use error::Error;
-mod expression;
+pub mod expression;
 mod hex_string;
 mod nom_recipes;
 mod number;

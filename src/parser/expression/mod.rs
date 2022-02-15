@@ -9,11 +9,22 @@ mod validation;
 
 use crate::parser::{string::Regex, types::Span};
 
-pub use boolean_expression::expression;
-pub use validation::Validator;
+pub(crate) use boolean_expression::expression;
+pub(crate) use validation::Validator;
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
+
+/// Size of the integer to read, see [`Expression::ReadInteger`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReadIntegerSize {
+    /// 8 bits
+    Int8,
+    /// 16 bits
+    Int16,
+    /// 32 bits
+    Int32,
+}
 
 /// Parsed identifier used in expressions.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,7 +67,7 @@ enum Expression {
     Filesize,
     Entrypoint,
     ReadInteger {
-        size: crate::expression::ReadIntegerSize,
+        size: ReadIntegerSize,
         unsigned: bool,
         big_endian: bool,
         addr: Box<ParsedExpr>,

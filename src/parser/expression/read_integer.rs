@@ -9,13 +9,11 @@ use nom::{
     sequence::{delimited, pair, tuple},
 };
 
-use crate::expression::ReadIntegerSize;
+use super::{primary_expression::primary_expression, Expression, ParsedExpr, ReadIntegerSize};
 use crate::parser::{
     nom_recipes::rtrim,
     types::{Input, ParseResult},
 };
-
-use super::{primary_expression::primary_expression, Expression, ParsedExpr};
 
 /// Parse a read of an integer.
 ///
