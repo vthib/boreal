@@ -7,7 +7,7 @@ mod read_integer;
 mod string_expression;
 mod validation;
 
-use super::types::Span;
+use crate::parser::{string::Regex, types::Span};
 
 pub use boolean_expression::expression;
 pub use validation::Validator;
@@ -115,7 +115,7 @@ enum Expression {
         case_insensitive: bool,
     },
     IEquals(Box<ParsedExpr>, Box<ParsedExpr>),
-    Matches(Box<ParsedExpr>, crate::regex::Regex),
+    Matches(Box<ParsedExpr>, Regex),
     Defined(Box<ParsedExpr>),
     Not(Box<ParsedExpr>),
     Boolean(bool),
@@ -151,7 +151,7 @@ enum Expression {
 
     Identifier(Identifier),
     String(String),
-    Regex(crate::regex::Regex),
+    Regex(Regex),
 }
 
 /// Selection of variables in a 'for' expression.

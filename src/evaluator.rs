@@ -1,6 +1,7 @@
 //! Provides methods to evaluate expressions.
 
-use crate::{error::ScanError, expression::Expression, regex::Regex, rule::VariableDeclaration};
+use crate::parser::Regex;
+use crate::{error::ScanError, expression::Expression, rule::VariableDeclaration};
 
 #[derive(Debug)]
 enum Value<'a> {

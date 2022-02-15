@@ -238,6 +238,7 @@ mod tests {
     use super::{primary_expression as pe, Expression as Expr, ParsedExpr};
     use crate::expression::ReadIntegerSize;
     use crate::parser::{
+        string::Regex,
         tests::{parse, parse_check, parse_err},
         types::Span,
     };
@@ -428,7 +429,7 @@ mod tests {
             "/a*b$/i c",
             "c",
             ParsedExpr {
-                expr: Expr::Regex(crate::regex::Regex {
+                expr: Expr::Regex(Regex {
                     expr: "a*b$".to_owned(),
                     case_insensitive: true,
                     dot_all: false,

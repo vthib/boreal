@@ -1,5 +1,5 @@
 //! Types related to expressions used in conditions of rules.
-use crate::regex::Regex;
+use crate::parser::Regex;
 
 /// Size of the integer to read, see [`Expression::ReadInteger`].
 #[derive(Clone, Debug, PartialEq)]

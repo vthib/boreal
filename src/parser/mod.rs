@@ -34,6 +34,7 @@ mod nom_recipes;
 mod number;
 mod rule;
 mod string;
+pub use string::Regex;
 mod types;
 
 /// Parse a YARA file.

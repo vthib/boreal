@@ -453,7 +453,7 @@ fn condition(input: Input) -> ParseResult<Expression> {
 mod tests {
     use crate::expression::ForSelection;
     use crate::hex_string::{HexToken, Mask};
-    use crate::regex::Regex;
+    use crate::parser::Regex;
 
     use super::super::tests::{parse, parse_err};
     use super::*;

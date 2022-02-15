@@ -234,6 +234,7 @@ mod tests {
     use super::*;
     use crate::parser::{
         expression::Identifier,
+        string::Regex,
         tests::{parse, parse_check, parse_err},
         types::Span,
     };
@@ -541,7 +542,7 @@ mod tests {
                         expr: Expression::String("a".to_owned()),
                         span: 0..3,
                     }),
-                    crate::regex::Regex {
+                    Regex {
                         expr: "b".to_owned(),
                         case_insensitive: true,
                         dot_all: false,

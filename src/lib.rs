@@ -40,6 +40,5 @@ pub use error::ScanError;
 mod evaluator;
 mod expression;
 mod hex_string;
-mod regex;
 mod rule;
 pub mod scanner;
