@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 use crate::error::ScanError;
 use crate::expression::Expression;
-use crate::hex_string::HexString;
+use crate::parser::hex_string::HexString;
 use crate::parser::Regex;
 
 /// A Yara rule.

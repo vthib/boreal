@@ -29,7 +29,7 @@ use nom::Finish;
 mod error;
 pub use error::Error;
 pub mod expression;
-mod hex_string;
+pub mod hex_string;
 mod nom_recipes;
 mod number;
 mod rule;

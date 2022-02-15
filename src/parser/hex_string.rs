@@ -14,7 +14,46 @@ use nom::{
 use super::error::{Error, ErrorKind};
 use super::nom_recipes::{map_res, rtrim};
 use super::types::{Input, ParseResult};
-use crate::hex_string::{HexString, HexToken, Jump, Mask};
+
+/// A token in an hex string.
+#[derive(Debug, PartialEq)]
+pub enum HexToken {
+    /// A fully declared byte, eg `9C`
+    Byte(u8),
+    /// A masked byte, eg `?5`, `C?`, `??`
+    MaskedByte(u8, Mask),
+    /// A jump of unknown bytes, eg `[5-10]`, `[3-]`, ...
+    Jump(Jump),
+    /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
+    Alternatives(Vec<HexToken>, Vec<HexToken>),
+}
+pub type HexString = Vec<HexToken>;
+
+/// Mask on a byte.
+#[derive(Debug, PartialEq)]
+pub enum Mask {
+    /// The left part is masked, ie ?X
+    Left,
+    /// The right part is masked, ie X?
+    Right,
+    /// Both parts are masked, ie ??
+    All,
+}
+
+/// A jump range, which can be expressed in multiple ways:
+///
+/// - `[a-b]` means between `a` and `b`, inclusive.
+/// - `[-b]` is equivalent to `[0-b]`.
+/// - `[a-]` means `a` or more.
+/// - `[-]` is equivalent to `[0-]`.
+/// - `[a]` is equivalent to `[a-a]`.
+#[derive(Debug, PartialEq)]
+pub struct Jump {
+    /// Beginning of the range, included.
+    pub from: u32,
+    /// Optional end of the range, included.
+    pub to: Option<u32>,
+}
 
 // TODO: handle this limit in some way
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
@@ -199,7 +238,7 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
 /// This looks like `{ AB .. }`.
 ///
 /// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
-pub fn hex_string(input: Input) -> ParseResult<HexString> {
+pub(crate) fn hex_string(input: Input) -> ParseResult<HexString> {
     let (input, _) = rtrim(char('{'))(input)?;
 
     cut(terminated(
