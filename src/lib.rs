@@ -38,6 +38,5 @@ mod error;
 pub use error::ScanError;
 
 mod evaluator;
-mod expression;
 mod rule;
 pub mod scanner;
