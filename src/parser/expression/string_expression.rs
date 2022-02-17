@@ -9,7 +9,7 @@ use nom::{
     sequence::{delimited, preceded},
 };
 
-use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
+use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr, Type};
 use crate::parser::{
     nom_recipes::rtrim,
     string,
@@ -28,14 +28,15 @@ pub fn string_count_expression(input: Input) -> ParseResult<ParsedExpr> {
         // string_count 'in' range
         Some((from, to)) => Expression::CountInRange {
             identifier,
-            from,
-            to,
+            from: from.unwrap_expr(Type::Integer)?,
+            to: to.unwrap_expr(Type::Integer)?,
         },
     };
     Ok((
         input,
         ParsedExpr {
             expr,
+            ty: Type::Integer,
             span: input.get_span_from(start),
         },
     ))
@@ -55,14 +56,18 @@ pub fn string_offset_expression(input: Input) -> ParseResult<ParsedExpr> {
     let expr = Expression::Offset {
         identifier,
         occurence_number: match expr {
-            Some(v) => Box::new(v),
-            None => Box::new(ParsedExpr {
-                expr: Expression::Number(1),
-                span: span.clone(),
-            }),
+            Some(v) => v.unwrap_expr(Type::Integer)?,
+            None => Box::new(Expression::Number(1)),
         },
     };
-    Ok((input, ParsedExpr { expr, span }))
+    Ok((
+        input,
+        ParsedExpr {
+            expr,
+            ty: Type::Integer,
+            span,
+        },
+    ))
 }
 
 /// Parse a `string_length ( '[' primary_expression ']' )` expression
@@ -79,14 +84,18 @@ pub fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> {
     let expr = Expression::Length {
         identifier,
         occurence_number: match expr {
-            Some(v) => Box::new(v),
-            None => Box::new(ParsedExpr {
-                expr: Expression::Number(1),
-                span: span.clone(),
-            }),
+            Some(v) => v.unwrap_expr(Type::Integer)?,
+            None => Box::new(Expression::Number(1)),
         },
     };
-    Ok((input, ParsedExpr { expr, span }))
+    Ok((
+        input,
+        ParsedExpr {
+            expr,
+            ty: Type::Integer,
+            span,
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -102,6 +111,7 @@ mod tests {
             "bar",
             ParsedExpr {
                 expr: Expression::Count("foo".to_owned()),
+                ty: Type::Integer,
                 span: 0..4,
             },
         );
@@ -112,15 +122,10 @@ mod tests {
             ParsedExpr {
                 expr: Expression::CountInRange {
                     identifier: "foo".to_owned(),
-                    from: Box::new(ParsedExpr {
-                        expr: Expression::Number(0),
-                        span: 9..10,
-                    }),
-                    to: Box::new(ParsedExpr {
-                        expr: Expression::Filesize,
-                        span: 13..21,
-                    }),
+                    from: Box::new(Expression::Number(0)),
+                    to: Box::new(Expression::Filesize),
                 },
+                ty: Type::Integer,
                 span: 0..23,
             },
         );
@@ -138,11 +143,9 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Offset {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(1),
-                        span: 0..2,
-                    }),
+                    occurence_number: Box::new(Expression::Number(1)),
                 },
+                ty: Type::Integer,
                 span: 0..2,
             },
         );
@@ -153,11 +156,9 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Offset {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(2),
-                        span: 5..6,
-                    }),
+                    occurence_number: Box::new(Expression::Number(2)),
                 },
+                ty: Type::Integer,
                 span: 0..7,
             },
         );
@@ -172,11 +173,9 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Length {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(1),
-                        span: 0..2,
-                    }),
+                    occurence_number: Box::new(Expression::Number(1)),
                 },
+                ty: Type::Integer,
                 span: 0..2,
             },
         );
@@ -187,11 +186,9 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Length {
                     identifier: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(2),
-                        span: 5..6,
-                    }),
+                    occurence_number: Box::new(Expression::Number(2)),
                 },
+                ty: Type::Integer,
                 span: 0..7,
             },
         );

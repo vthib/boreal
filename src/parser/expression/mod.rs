@@ -7,10 +7,13 @@ mod read_integer;
 mod string_expression;
 mod validation;
 
-use crate::parser::{string::Regex, types::Span};
+use crate::parser::{
+    error::{Error, ErrorKind},
+    string::Regex,
+    types::Span,
+};
 
 pub(crate) use boolean_expression::expression;
-pub(crate) use validation::Validator;
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
@@ -28,13 +31,13 @@ pub enum ReadIntegerSize {
 
 /// Parsed identifier used in expressions.
 #[derive(Clone, Debug, PartialEq)]
-enum Identifier {
+pub enum Identifier {
     /// Raw identifier, i.e. `pe`.
     Raw(String),
     /// Array subscript, i.e. `identifier[subscript]`.
     Subscript {
         identifier: Box<Identifier>,
-        subscript: Box<ParsedExpr>,
+        subscript: Box<Expression>,
     },
     /// Object subfield, i.e. `identifier.subfield`.
     Subfield {
@@ -44,16 +47,69 @@ enum Identifier {
     /// Function call, i.e. `identifier(arguments)`.
     FunctionCall {
         identifier: Box<Identifier>,
-        arguments: Vec<ParsedExpr>,
+        arguments: Vec<Expression>,
     },
+}
+
+/// Type of a parsed expression
+///
+/// This is useful to know the type of a parsed expression, and reject
+/// during parsing expressions which are incompatible.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum Type {
+    Integer,
+    Float,
+    String,
+    Regex,
+    Boolean,
+    // TODO: afaict, we shouldn't need this type.
+    // It's used for the moment for unknown symbols.
+    Undefined,
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.write_str(match self {
+            Self::Integer => "integer",
+            Self::Float => "floating-point number",
+            Self::String => "string",
+            Self::Regex => "regex",
+            Self::Boolean => "boolean",
+            Self::Undefined => "undefined",
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParsedExpr {
-    expr: Expression,
+    // The raw expression.
+    pub expr: Expression,
+
+    // Type of the expression.
+    pub ty: Type,
 
     // Span of the expression.
-    span: Span,
+    pub span: Span,
+}
+
+impl ParsedExpr {
+    fn check_type(&self, expected_type: Type) -> Result<(), nom::Err<Error>> {
+        if self.ty != expected_type && self.ty != Type::Undefined {
+            return Err(nom::Err::Failure(Error::new(
+                self.span.clone(),
+                ErrorKind::ExpressionInvalidType {
+                    ty: self.ty.to_string(),
+                    expected_type: expected_type.to_string(),
+                },
+            )));
+        }
+        Ok(())
+    }
+
+    fn unwrap_expr(self, expected_type: Type) -> Result<Box<Expression>, nom::Err<Error>> {
+        self.check_type(expected_type)?;
+        Ok(Box::new(self.expr))
+    }
 }
 
 /// An expression parsed in a Rule.
@@ -63,79 +119,79 @@ pub struct ParsedExpr {
 /// validation. See this aforementioned type for more documentation
 /// on every type.
 #[derive(Clone, Debug, PartialEq)]
-enum Expression {
+pub enum Expression {
     Filesize,
     Entrypoint,
     ReadInteger {
         size: ReadIntegerSize,
         unsigned: bool,
         big_endian: bool,
-        addr: Box<ParsedExpr>,
+        addr: Box<Expression>,
     },
     Number(i64),
     Double(f64),
     CountInRange {
         identifier: String,
-        from: Box<ParsedExpr>,
-        to: Box<ParsedExpr>,
+        from: Box<Expression>,
+        to: Box<Expression>,
     },
     Count(String),
     Offset {
         identifier: String,
-        occurence_number: Box<ParsedExpr>,
+        occurence_number: Box<Expression>,
     },
     Length {
         identifier: String,
-        occurence_number: Box<ParsedExpr>,
+        occurence_number: Box<Expression>,
     },
-    Neg(Box<ParsedExpr>),
-    Add(Box<ParsedExpr>, Box<ParsedExpr>),
-    Sub(Box<ParsedExpr>, Box<ParsedExpr>),
-    Mul(Box<ParsedExpr>, Box<ParsedExpr>),
-    Div(Box<ParsedExpr>, Box<ParsedExpr>),
-    Mod(Box<ParsedExpr>, Box<ParsedExpr>),
-    BitwiseXor(Box<ParsedExpr>, Box<ParsedExpr>),
-    BitwiseAnd(Box<ParsedExpr>, Box<ParsedExpr>),
-    BitwiseOr(Box<ParsedExpr>, Box<ParsedExpr>),
-    BitwiseNot(Box<ParsedExpr>),
-    ShiftLeft(Box<ParsedExpr>, Box<ParsedExpr>),
-    ShiftRight(Box<ParsedExpr>, Box<ParsedExpr>),
+    Neg(Box<Expression>),
+    Add(Box<Expression>, Box<Expression>),
+    Sub(Box<Expression>, Box<Expression>),
+    Mul(Box<Expression>, Box<Expression>),
+    Div(Box<Expression>, Box<Expression>),
+    Mod(Box<Expression>, Box<Expression>),
+    BitwiseXor(Box<Expression>, Box<Expression>),
+    BitwiseAnd(Box<Expression>, Box<Expression>),
+    BitwiseOr(Box<Expression>, Box<Expression>),
+    BitwiseNot(Box<Expression>),
+    ShiftLeft(Box<Expression>, Box<Expression>),
+    ShiftRight(Box<Expression>, Box<Expression>),
 
-    And(Box<ParsedExpr>, Box<ParsedExpr>),
-    Or(Box<ParsedExpr>, Box<ParsedExpr>),
+    And(Box<Expression>, Box<Expression>),
+    Or(Box<Expression>, Box<Expression>),
     Cmp {
-        left: Box<ParsedExpr>,
-        right: Box<ParsedExpr>,
+        left: Box<Expression>,
+        right: Box<Expression>,
         less_than: bool,
         can_be_equal: bool,
     },
-    Eq(Box<ParsedExpr>, Box<ParsedExpr>),
+    Eq(Box<Expression>, Box<Expression>),
     Contains {
-        haystack: Box<ParsedExpr>,
-        needle: Box<ParsedExpr>,
+        haystack: Box<Expression>,
+        needle: Box<Expression>,
         case_insensitive: bool,
     },
     StartsWith {
-        expr: Box<ParsedExpr>,
-        prefix: Box<ParsedExpr>,
+        expr: Box<Expression>,
+        prefix: Box<Expression>,
         case_insensitive: bool,
     },
     EndsWith {
-        expr: Box<ParsedExpr>,
-        suffix: Box<ParsedExpr>,
+        expr: Box<Expression>,
+        suffix: Box<Expression>,
         case_insensitive: bool,
     },
-    IEquals(Box<ParsedExpr>, Box<ParsedExpr>),
-    Matches(Box<ParsedExpr>, Regex),
-    Defined(Box<ParsedExpr>),
-    Not(Box<ParsedExpr>),
+    IEquals(Box<Expression>, Box<Expression>),
+    Matches(Box<Expression>, Regex),
+    Defined(Box<Expression>),
+    Not(Box<Expression>),
     Boolean(bool),
     Variable(String),
-    VariableAt(String, Box<ParsedExpr>),
+    VariableAt(String, Box<Expression>),
     VariableIn {
         variable: String,
-        from: Box<ParsedExpr>,
-        to: Box<ParsedExpr>,
+        from: Box<Expression>,
+        to: Box<Expression>,
     },
 
     // selection 'of' set
@@ -143,21 +199,21 @@ enum Expression {
     For {
         selection: ForSelection,
         set: VariableSet,
-        body: Option<Box<ParsedExpr>>,
+        body: Option<Box<Expression>>,
     },
     // selection 'of' set 'in' '(' from '..' to ')'
     ForIn {
         selection: ForSelection,
         set: VariableSet,
-        from: Box<ParsedExpr>,
-        to: Box<ParsedExpr>,
+        from: Box<Expression>,
+        to: Box<Expression>,
     },
     // 'for' selection identifiers 'of' iterator ':' '(' body ')'
     ForIdentifiers {
         selection: ForSelection,
         identifiers: Vec<String>,
         iterator: ForIterator,
-        body: Box<ParsedExpr>,
+        body: Box<Expression>,
     },
 
     Identifier(Identifier),
@@ -170,7 +226,7 @@ enum Expression {
 /// This indicates how many variables must match the for condition
 /// for it to be considered true.
 #[derive(Clone, Debug, PartialEq)]
-enum ForSelection {
+pub enum ForSelection {
     /// Any variable in the set must match the condition.
     Any,
     /// All of the variables in the set must match the condition.
@@ -186,29 +242,29 @@ enum ForSelection {
     ///
     /// Usually, the expression is a simple number.
     Expr {
-        expr: Box<ParsedExpr>,
+        expr: Box<Expression>,
         as_percent: bool,
     },
 }
 
 /// Iterator for a 'for' expression over an identifier.
 #[derive(Clone, Debug, PartialEq)]
-enum ForIterator {
+pub enum ForIterator {
     Identifier(Identifier),
     Range {
-        from: Box<ParsedExpr>,
-        to: Box<ParsedExpr>,
+        from: Box<Expression>,
+        to: Box<Expression>,
     },
-    List(Vec<ParsedExpr>),
+    List(Vec<Expression>),
 }
 
 /// Set of multiple variables.
 #[derive(Clone, Debug, PartialEq)]
-struct VariableSet {
+pub struct VariableSet {
     /// Names of the variables in the set.
     ///
     /// If empty, the set is considered as containing *all* variables.
     /// The associated boolean indicates if the name has a trailing
     /// wildcard.
-    elements: Vec<(String, bool)>,
+    pub elements: Vec<(String, bool)>,
 }

@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 
 use crate::error::ScanError;
-use crate::expression::Expression;
+use crate::parser::expression::Expression;
 use crate::parser::hex_string::HexString;
 use crate::parser::Regex;
 

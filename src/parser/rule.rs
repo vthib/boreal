@@ -11,15 +11,16 @@ use nom::{
 
 use super::{
     error::{Error, ErrorKind},
-    expression, hex_string,
+    expression::{self, Expression},
+    hex_string,
     nom_recipes::{ltrim, map_res, rtrim, textual_tag as ttag},
     number, string,
     types::{Input, ParseResult},
 };
+use crate::rule::VariableDeclaration;
 use crate::rule::{
     Metadata, MetadataValue, Rule, VariableDeclarationValue, VariableFlags, VariableModifiers,
 };
-use crate::{expression::Expression, rule::VariableDeclaration};
 
 /// Parse a full YARA file.
 pub fn parse_yara_file(input: Input) -> ParseResult<Vec<Rule>> {
@@ -442,16 +443,12 @@ fn condition(input: Input) -> ParseResult<Expression> {
     let (input, _) = rtrim(ttag("condition"))(input)?;
     let (input, expr) = cut(preceded(rtrim(char(':')), expression::expression))(input)?;
 
-    let validator = expression::Validator {};
-    let expr = validator
-        .validate_expression(expr)
-        .map_err(nom::Err::Failure)?;
-    Ok((input, expr))
+    Ok((input, expr.expr))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::ForSelection;
+    use crate::parser::expression::{ForSelection, VariableSet};
     use crate::parser::hex_string::{HexToken, Mask};
     use crate::parser::Regex;
 
@@ -736,8 +733,8 @@ mod tests {
                 ],
                 condition: Expression::For {
                     selection: ForSelection::All,
-                    set: vec![],
-                    condition: None,
+                    set: VariableSet { elements: vec![] },
+                    body: None,
                 },
                 is_private: true,
                 is_global: true,

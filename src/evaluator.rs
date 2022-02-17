@@ -1,7 +1,7 @@
 //! Provides methods to evaluate expressions.
 
 use crate::parser::Regex;
-use crate::{error::ScanError, expression::Expression, rule::VariableDeclaration};
+use crate::{error::ScanError, parser::expression::Expression, rule::VariableDeclaration};
 
 #[derive(Debug)]
 enum Value<'a> {
@@ -334,6 +334,7 @@ impl Evaluator<'_> {
             Expression::VariableAt(..) => todo!(),
             Expression::VariableIn { .. } => todo!(),
             Expression::For { .. } => todo!(),
+            Expression::ForIn { .. } => todo!(),
             Expression::ForIdentifiers { .. } => todo!(),
 
             Expression::Identifier(_) => todo!(),
