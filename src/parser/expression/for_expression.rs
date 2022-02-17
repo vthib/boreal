@@ -23,8 +23,30 @@ use super::{
     Expression, ForIterator, ForSelection, ParsedExpr, Type, VariableSet,
 };
 
-/// Parse all variants of for expressions.
-pub fn for_expression(input: Input) -> ParseResult<ParsedExpr> {
+// There is a very ugly hack in this file.
+//
+// Instead of having a single entrypoint, `for_expression`, there are two:
+// - `for_expression_non_ambiguous`, to parse all variants that can be
+//   recognized on the first token.
+// - `for_expression_with_expr_selection`, to parse the 'expr(%) of ...'
+//   variant.
+//
+// This is done in order to avoid this very inefficient parsing scenario:
+// - as part of boolean_expression parsing, call 'for_expression'
+// - parse a primary_expression
+// - try to parse 'of', this fail, rollback
+// - as part of boolean_expression parsing, then parse
+//   primary_expression again.
+//
+// In addition to inefficient parsing, this prevents properly unwrapping
+// the ParsedExpr with the correct type when generating a ForSelection.
+
+/// Parse all variants of for expressions that are non ambiguous
+///
+/// Those are all the variants but for the 'expr ('%') of ...', which
+/// binds a primary expression as its first element, conflicting
+/// with the "just one primary expression" possibility.
+pub fn for_expression_non_ambiguous(input: Input) -> ParseResult<ParsedExpr> {
     alt((for_expression_full, for_expression_abbrev))(input)
 }
 
@@ -33,9 +55,42 @@ pub fn for_expression(input: Input) -> ParseResult<ParsedExpr> {
 /// This parses:
 /// - `selection 'of' set`
 /// - `selection 'of' set 'in' range`
+///
+/// But with 'selection' not being an expression.
 fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
-    let (input, selection) = for_selection(input)?;
+    let (input, selection) = for_selection_simple(input)?;
+    for_expression_with_selection(selection, start, input)
+}
+
+/// This parses a for expression abbrev version, but as if the first
+/// token was already parsed as a primary expression.
+///
+/// XXX: this is a different function than the other parser. If an
+/// 'of' token is not detected, the expr is returned as is in an Ok
+/// result, so as to return the moved value without needing duplication.
+pub fn for_expression_with_expr_selection<'a>(
+    expr: ParsedExpr,
+    start: Input<'a>,
+    input: Input<'a>,
+) -> ParseResult<'a, ParsedExpr> {
+    let (input, percent) = opt(rtrim(char('%')))(input)?;
+    if ttag("of")(input).is_err() {
+        return Ok((input, expr));
+    }
+
+    let selection = ForSelection::Expr {
+        expr: expr.unwrap_expr(Type::Integer)?,
+        as_percent: percent.is_some(),
+    };
+    for_expression_with_selection(selection, start, input)
+}
+
+fn for_expression_with_selection<'a>(
+    selection: ForSelection,
+    start: Input<'a>,
+    input: Input<'a>,
+) -> ParseResult<'a, ParsedExpr> {
     let (input, set) = preceded(rtrim(ttag("of")), cut(string_set))(input)?;
     let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
 
@@ -70,7 +125,7 @@ fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
 /// - 'for' selection identifier 'in' iterator ':' '(' body ')'
 fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
-    let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection))(input)?;
+    let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection_full))(input)?;
     let (i2, has_of) = opt(rtrim(ttag("of")))(input)?;
 
     if has_of.is_some() {
@@ -113,12 +168,11 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
 /// Parse the variable selection for a 'for' expression.
 ///
 /// Equivalent to the `for_expression` pattern in grammar.y in libyara.
-fn for_selection(input: Input) -> ParseResult<ForSelection> {
+fn for_selection_simple(input: Input) -> ParseResult<ForSelection> {
     alt((
         map(rtrim(ttag("any")), |_| ForSelection::Any),
         map(rtrim(ttag("all")), |_| ForSelection::All),
         map(rtrim(ttag("none")), |_| ForSelection::None),
-        for_selection_expr,
     ))(input)
 }
 
@@ -134,6 +188,11 @@ fn for_selection_expr(input: Input) -> ParseResult<ForSelection> {
         },
     ))
 }
+
+fn for_selection_full(input: Input) -> ParseResult<ForSelection> {
+    alt((for_selection_simple, for_selection_expr))(input)
+}
+
 /// Parse a set of variables.
 ///
 /// Equivalent to the `string_set` pattern in grammar.y in libyara.
@@ -208,11 +267,14 @@ mod tests {
 
     #[test]
     fn test_for_selection() {
-        parse(for_selection, "any a", "a", ForSelection::Any);
-        parse(for_selection, "all a", "a", ForSelection::All);
-        parse(for_selection, "none a", "a", ForSelection::None);
+        parse(for_selection_full, "any a", "a", ForSelection::Any);
+        parse(for_selection_full, "all a", "a", ForSelection::All);
+        parse(for_selection_full, "none a", "a", ForSelection::None);
+        parse(for_selection_simple, "any a", "a", ForSelection::Any);
+        parse(for_selection_simple, "all a", "a", ForSelection::All);
+        parse(for_selection_simple, "none a", "a", ForSelection::None);
         parse(
-            for_selection,
+            for_selection_full,
             "1a",
             "a",
             ForSelection::Expr {
@@ -221,7 +283,7 @@ mod tests {
             },
         );
         parse(
-            for_selection,
+            for_selection_full,
             "50% of",
             "of",
             ForSelection::Expr {
@@ -231,7 +293,7 @@ mod tests {
         );
 
         parse(
-            for_selection,
+            for_selection_full,
             "anya",
             "",
             ForSelection::Expr {
@@ -240,7 +302,10 @@ mod tests {
             },
         );
 
-        parse_err(for_selection, "");
+        parse_err(for_selection_full, "");
+        parse_err(for_selection_simple, "1a");
+        parse_err(for_selection_simple, "50%");
+        parse_err(for_selection_simple, "anya");
     }
 
     #[test]
@@ -306,9 +371,9 @@ mod tests {
     }
 
     #[test]
-    fn test_for_expression_abbrev() {
+    fn test_expression() {
         parse(
-            for_expression_abbrev,
+            expression,
             "any of them a",
             "a",
             ParsedExpr {
@@ -322,7 +387,7 @@ mod tests {
             },
         );
         parse(
-            for_expression_abbrev,
+            expression,
             "50% of them",
             "",
             ParsedExpr {
@@ -339,7 +404,7 @@ mod tests {
             },
         );
         parse(
-            for_expression_abbrev,
+            expression,
             "5 of ($a, $b*) in (100..entrypoint)",
             "",
             ParsedExpr {

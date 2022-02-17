@@ -17,7 +17,7 @@ use super::{
         types::{Input, ParseResult},
     },
     common::range,
-    for_expression::for_expression,
+    for_expression::{for_expression_non_ambiguous, for_expression_with_expr_selection},
     primary_expression::primary_expression,
     Expression, ParsedExpr, Type,
 };
@@ -100,14 +100,27 @@ fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
 
 /// parse rest of boolean expressions
 fn expression_item(input: Input) -> ParseResult<ParsedExpr> {
-    alt((
-        // all variants of for expressions
-        for_expression,
+    match alt((
+        // all variants of for expressions with a non ambiguous first
+        // token
+        for_expression_non_ambiguous,
         // string_identifier ...
         variable_expression,
-        // primary_expression ...
-        primary_expression_eq_all,
     ))(input)
+    {
+        Ok((input, expr)) => return Ok((input, expr)),
+        Err(nom::Err::Failure(e)) => return Err(nom::Err::Failure(e)),
+        Err(_) => (),
+    }
+
+    // primary_expression ...
+    let start = input;
+    let (input, expr) = primary_expression_eq_all(input)?;
+
+    // try to parse it as a for expression with a leading expression
+    // as the first token. If it fails, it will return the given
+    // expression.
+    for_expression_with_expr_selection(expr, start, input)
 }
 
 /// parse `==`, `!=`, `(i)contains`, `(i)startswith`, `(i)endswith`,
