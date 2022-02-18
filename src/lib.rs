@@ -37,6 +37,5 @@ pub mod parser;
 mod error;
 pub use error::ScanError;
 
-mod evaluator;
-mod rule;
+pub mod evaluator;
 pub mod scanner;

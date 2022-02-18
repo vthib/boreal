@@ -1,5 +1,5 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use boreal::{parser::parse_str, scanner::Scanner, ScanError};
+use boreal::{evaluator, parser::parse_str, scanner::Scanner, ScanError};
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
@@ -19,7 +19,11 @@ fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
         Ok(rules) => rules,
         Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", rule)),
     };
-    assert_eq!(rules[0].matches_mem(input).unwrap_err(), expected_err);
+    /* FIXME: should get a way to retrieve scan errors with the Scanner */
+    assert_eq!(
+        evaluator::evaluate_rule(&rules[0], input).unwrap_err(),
+        expected_err
+    );
 }
 
 #[track_caller]

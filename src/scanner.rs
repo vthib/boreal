@@ -1,7 +1,7 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
 
-use crate::rule::Rule;
+use crate::{evaluator, parser::rule::Rule};
 
 /// Holds a list of rules, and provides methods to
 /// run them on files or bytes.
@@ -27,7 +27,7 @@ impl Scanner {
             .iter()
             .filter(|rule| {
                 // TODO: handle errors
-                rule.matches_mem(mem).unwrap_or(false)
+                evaluator::evaluate_rule(rule, mem).unwrap_or(false)
             })
             .collect()
     }

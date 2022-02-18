@@ -32,7 +32,7 @@ pub mod expression;
 pub mod hex_string;
 mod nom_recipes;
 mod number;
-mod rule;
+pub mod rule;
 mod string;
 pub use string::Regex;
 mod types;
@@ -45,7 +45,7 @@ mod types;
 ///
 /// Returns an error if the parsing fails, or if there are
 /// trailing data in the file that has not been parsed.
-pub fn parse_str(input: &str) -> Result<Vec<crate::rule::Rule>, Error> {
+pub fn parse_str(input: &str) -> Result<Vec<rule::Rule>, Error> {
     let input = types::Input::new(input);
 
     let (input, rules) = rule::parse_yara_file(input).finish()?;

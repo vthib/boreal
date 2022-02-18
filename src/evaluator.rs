@@ -1,7 +1,7 @@
 //! Provides methods to evaluate expressions.
 
 use crate::parser::Regex;
-use crate::{error::ScanError, parser::expression::Expression, rule::VariableDeclaration};
+use crate::{error::ScanError, parser::expression::Expression, parser::rule::VariableDeclaration};
 
 #[derive(Debug)]
 enum Value<'a> {
@@ -67,16 +67,14 @@ impl Value<'_> {
 ///
 /// An error is returned if the expression is malformed, and some sub-expressions do not
 /// return the right type of value.
-pub fn evaluate(
-    expr: &Expression,
-    variables: &[VariableDeclaration],
-    mem: &[u8],
-) -> Result<bool, ScanError> {
+pub fn evaluate_rule(rule: &crate::parser::rule::Rule, mem: &[u8]) -> Result<bool, ScanError> {
     let evaluator = Evaluator {
-        _variables: variables,
+        _variables: &rule.variables,
         _mem: mem,
     };
-    evaluator.evaluate_expr(expr).map(|v| v.to_bool())
+    evaluator
+        .evaluate_expr(&rule.condition)
+        .map(|v| v.to_bool())
 }
 
 struct Evaluator<'a> {
@@ -362,7 +360,7 @@ mod tests {
             Ok(rules) => rules,
             Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", &rule)),
         };
-        assert_eq!(rules[0].matches_mem(input), expected_res);
+        assert_eq!(evaluate_rule(&rules[0], input), expected_res);
     }
 
     #[test]
