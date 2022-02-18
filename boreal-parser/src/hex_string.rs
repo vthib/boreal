@@ -250,7 +250,7 @@ pub(crate) fn hex_string(input: Input) -> ParseResult<HexString> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::tests::{parse, parse_err};
+    use crate::tests::{parse, parse_err};
 
     #[test]
     fn test_parse_hex_byte() {

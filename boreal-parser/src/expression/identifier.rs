@@ -8,9 +8,9 @@ use nom::{
 };
 
 use super::{Expression, Identifier};
-use crate::parser::nom_recipes::rtrim;
-use crate::parser::string::identifier as raw_identifier;
-use crate::parser::types::{Input, ParseResult};
+use crate::nom_recipes::rtrim;
+use crate::string::identifier as raw_identifier;
+use crate::types::{Input, ParseResult};
 
 use super::boolean_expression::expression;
 use super::primary_expression::primary_expression;
@@ -82,7 +82,7 @@ pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{
+    use crate::{
         expression::Expression,
         tests::{parse, parse_err},
     };

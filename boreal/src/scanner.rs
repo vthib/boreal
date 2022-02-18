@@ -1,7 +1,8 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
+use boreal_parser::Rule;
 
-use crate::{evaluator, parser::rule::Rule};
+use crate::evaluator;
 
 /// Holds a list of rules, and provides methods to
 /// run them on files or bytes.

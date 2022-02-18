@@ -18,7 +18,7 @@ fn main() -> Result<(), std::io::Error> {
 
     let path = PathBuf::from(&yara_filepath);
     let contents = std::fs::read_to_string(&path)?;
-    match boreal::parser::parse_str(&contents) {
+    match boreal_parser::parse_str(&contents) {
         Err(err) => {
             let writer = StandardStream::stderr(ColorChoice::Always);
             let config = codespan_reporting::term::Config::default();

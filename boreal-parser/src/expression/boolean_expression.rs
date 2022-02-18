@@ -8,7 +8,7 @@ use nom::{
     sequence::preceded,
 };
 
-use crate::parser::{error::ErrorKind, types::Span, Error};
+use crate::{error::ErrorKind, types::Span, Error};
 
 use super::{
     super::{
@@ -298,7 +298,7 @@ fn validate_cmp_operands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{
+    use crate::{
         expression::Identifier,
         string::Regex,
         tests::{parse, parse_check, parse_err},

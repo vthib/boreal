@@ -551,9 +551,9 @@ fn condition(input: Input) -> ParseResult<Expression> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::expression::{ForSelection, VariableSet};
-    use crate::parser::hex_string::{HexToken, Mask};
-    use crate::parser::Regex;
+    use crate::expression::{ForSelection, VariableSet};
+    use crate::hex_string::{HexToken, Mask};
+    use crate::Regex;
 
     use super::super::tests::{parse, parse_err};
     use super::*;

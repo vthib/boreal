@@ -10,7 +10,7 @@ use nom::{
 };
 
 use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr, Type};
-use crate::parser::{
+use crate::{
     nom_recipes::rtrim,
     string,
     types::{Input, ParseResult},
@@ -101,7 +101,7 @@ pub fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::tests::{parse, parse_err};
+    use crate::tests::{parse, parse_err};
 
     #[test]
     fn test_string_count_expression() {

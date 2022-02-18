@@ -1,5 +1,6 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use boreal::{evaluator, parser::parse_str, scanner::Scanner, ScanError};
+use boreal::{evaluator, scanner::Scanner, ScanError};
+use boreal_parser::parse_str;
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {

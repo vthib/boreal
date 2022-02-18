@@ -12,7 +12,7 @@ use nom::{
 use super::{
     primary_expression::primary_expression, Expression, ParsedExpr, ReadIntegerSize, Type,
 };
-use crate::parser::{
+use crate::{
     nom_recipes::rtrim,
     types::{Input, ParseResult},
 };
@@ -69,7 +69,7 @@ mod tests {
     use super::{
         read_integer, read_integer_expression, Expression, ParsedExpr, ReadIntegerSize as RIS,
     };
-    use crate::parser::{
+    use crate::{
         expression::Type,
         tests::{parse, parse_err},
     };

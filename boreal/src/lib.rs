@@ -29,10 +29,8 @@
 // #![deny(missing_docs)]
 // #![deny(clippy::cargo)]
 
-// TODO: parser is WIP. reverse the following lines when done.
-// #![deny(unreachable_pub)]
-#[allow(dead_code)]
-pub mod parser;
+// Used by binary
+use codespan_reporting as _;
 
 mod error;
 pub use error::ScanError;

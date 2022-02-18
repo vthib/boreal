@@ -1,19 +1,5 @@
-[package]
-name = "boreal"
-version = "0.0.1"
-repository = "https://github.com/vthib/boreal"
-edition = "2021"
-
-[dependencies]
-# Parsing .yar files
-nom = "7.1"
-
-# packing multiple flags together
-bitflags = "1.3"
-
-# Proper error reporting on parsing
-codespan-reporting = "0.11"
-
-[dev-dependencies]
-# To test all files in a repository
-glob = "0.3"
+[workspace]
+members = [
+    "boreal-parser",
+    "boreal",
+]

@@ -13,7 +13,7 @@ use nom::{
 use super::{
     expression, identifier, read_integer, string_expression, Expression, ParsedExpr, Type,
 };
-use crate::parser::{
+use crate::{
     error::{Error, ErrorKind},
     nom_recipes::{not_followed, rtrim, textual_tag as ttag},
     number, string,
@@ -342,8 +342,8 @@ where
 mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression as Expr, ParsedExpr};
-    use crate::parser::expression::Type;
-    use crate::parser::{
+    use crate::expression::Type;
+    use crate::{
         expression::ReadIntegerSize,
         string::Regex,
         tests::{parse, parse_check, parse_err},

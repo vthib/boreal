@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::parser::expression::{expression, Type};
-    use crate::parser::types::Input;
+    use crate::expression::{expression, Type};
+    use crate::types::Input;
 
     #[track_caller]
     fn test_validation(expression_str: &str, expected_type: Type) {

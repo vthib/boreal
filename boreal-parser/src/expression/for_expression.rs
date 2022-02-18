@@ -12,7 +12,7 @@ use nom::{
     sequence::{delimited, preceded, terminated},
 };
 
-use crate::parser::{
+use crate::{
     nom_recipes::{rtrim, textual_tag as ttag},
     string::string_identifier_with_wildcard,
     types::{Input, ParseResult},
@@ -221,7 +221,7 @@ fn string_enumeration(input: Input) -> ParseResult<Vec<(String, bool)>> {
 ///
 /// Equivalent to the `for_variables` pattern in grammar.y in libyara.
 fn for_variables(input: Input) -> ParseResult<Vec<String>> {
-    separated_list1(rtrim(char(',')), crate::parser::string::identifier)(input)
+    separated_list1(rtrim(char(',')), crate::string::identifier)(input)
 }
 
 /// Parse an iterator for a for over an identifier.
@@ -260,7 +260,7 @@ fn iterator_range(input: Input) -> ParseResult<ForIterator> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{
+    use crate::{
         expression::{Expression, Identifier},
         tests::{parse, parse_err},
     };

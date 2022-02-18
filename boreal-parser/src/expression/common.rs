@@ -7,8 +7,8 @@ use nom::{
 };
 
 use super::{primary_expression::primary_expression, ParsedExpr};
-use crate::parser::nom_recipes::rtrim;
-use crate::parser::types::{Input, ParseResult};
+use crate::nom_recipes::rtrim;
+use crate::types::{Input, ParseResult};
 
 /// Parse a 'in' range for primary expressions.
 ///
@@ -31,7 +31,7 @@ pub fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExpr>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{
+    use crate::{
         expression::{Expression, Type},
         tests::{parse, parse_err},
     };

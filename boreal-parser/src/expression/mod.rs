@@ -7,7 +7,7 @@ mod read_integer;
 mod string_expression;
 mod validation;
 
-use crate::parser::{
+use crate::{
     error::{Error, ErrorKind},
     string::Regex,
     types::Span,

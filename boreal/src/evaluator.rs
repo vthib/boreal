@@ -1,7 +1,7 @@
 //! Provides methods to evaluate expressions.
+use boreal_parser::{expression::Expression, Regex, Rule, VariableDeclaration};
 
-use crate::parser::Regex;
-use crate::{error::ScanError, parser::expression::Expression, parser::rule::VariableDeclaration};
+use crate::error::ScanError;
 
 #[derive(Debug)]
 enum Value<'a> {
@@ -67,7 +67,7 @@ impl Value<'_> {
 ///
 /// An error is returned if the expression is malformed, and some sub-expressions do not
 /// return the right type of value.
-pub fn evaluate_rule(rule: &crate::parser::rule::Rule, mem: &[u8]) -> Result<bool, ScanError> {
+pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
     let evaluator = Evaluator {
         _variables: &rule.variables,
         _mem: mem,
@@ -348,15 +348,13 @@ impl Evaluator<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::parse_str;
-
     use super::*;
 
     #[track_caller]
     #[allow(clippy::needless_pass_by_value)]
     fn test_eval(cond: &str, input: &[u8], expected_res: Result<bool, ScanError>) {
         let rule = format!("rule a {{ condition: {} }}", cond);
-        let rules = match parse_str(&rule) {
+        let rules = match boreal_parser::parse_str(&rule) {
             Ok(rules) => rules,
             Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", &rule)),
         };
