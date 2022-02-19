@@ -11,4 +11,5 @@ boreal-parser = { path = "../boreal-parser" }
 codespan-reporting = "0.11"
 
 # Scanning for bytes
-grep = "0.2"
+grep-regex = "0.1"
+grep-searcher = "0.1"

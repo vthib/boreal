@@ -1,7 +1,8 @@
 //! Implement scanning for variables
+use grep_regex::{RegexMatcher, RegexMatcherBuilder};
+use grep_searcher::{Searcher, SearcherBuilder, Sink, SinkMatch};
+
 use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
-use grep::regex::{RegexMatcher, RegexMatcherBuilder};
-use grep::searcher::{Searcher, SearcherBuilder, Sink, SinkMatch};
 
 pub(crate) struct Variable {
     pub name: String,
