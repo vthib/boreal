@@ -23,7 +23,7 @@ use super::{
 };
 
 /// parse or operator
-pub fn expression(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn boolean_expression(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
     let (mut input, mut res) = expression_and(input)?;
 
@@ -245,7 +245,7 @@ fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
             input,
             ParsedExpr {
                 expr: Expression::VariableIn {
-                    variable,
+                    variable_name: variable,
                     from: from.unwrap_expr(Type::Integer)?,
                     to: to.unwrap_expr(Type::Integer)?,
                 },
@@ -318,7 +318,7 @@ mod tests {
         let input = format!("0 {} 1 {} 2", lower_op, higher_op);
 
         parse(
-            expression,
+            boolean_expression,
             &input,
             "",
             ParsedExpr {
@@ -356,7 +356,7 @@ mod tests {
             "b",
             ParsedExpr {
                 expr: Expression::VariableIn {
-                    variable: "_".to_owned(),
+                    variable_name: "_".to_owned(),
                     from: Box::new(Expression::Number(0)),
                     to: Box::new(Expression::Number(50)),
                 },
@@ -370,7 +370,7 @@ mod tests {
             "",
             ParsedExpr {
                 expr: Expression::VariableIn {
-                    variable: "".to_owned(),
+                    variable_name: "".to_owned(),
                     from: Box::new(Expression::Neg(Box::new(Expression::Number(10)))),
                     to: Box::new(Expression::Neg(Box::new(Expression::Number(5)))),
                 },
@@ -398,7 +398,7 @@ mod tests {
     #[test]
     fn test_bool_operators() {
         parse(
-            expression,
+            boolean_expression,
             "true and false b",
             "b",
             ParsedExpr {
@@ -411,7 +411,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "not true or defined $b",
             "",
             ParsedExpr {
@@ -426,7 +426,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "not not true",
             "",
             ParsedExpr {
@@ -449,7 +449,7 @@ mod tests {
             let input = format!("\"a\" {} \"b\" b", op);
 
             parse(
-                expression,
+                boolean_expression,
                 &input,
                 "b",
                 ParsedExpr {
@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn test_matches() {
         parse(
-            expression,
+            boolean_expression,
             "\"a\" matches /b/i b",
             "b",
             ParsedExpr {
@@ -546,15 +546,15 @@ mod tests {
             },
         );
 
-        parse_err(expression, "\"a\" matches");
-        parse_err(expression, "\"a\" matches 1");
+        parse_err(boolean_expression, "\"a\" matches");
+        parse_err(boolean_expression, "\"a\" matches 1");
     }
 
     #[test]
     fn test_expression_precedence_eq_and_or() {
         // Test precedence of and over or
         parse(
-            expression,
+            boolean_expression,
             "not true or false and true",
             "",
             ParsedExpr {
@@ -583,7 +583,7 @@ mod tests {
     #[test]
     fn test_expression() {
         parse(
-            expression,
+            boolean_expression,
             "true b",
             "b",
             ParsedExpr {
@@ -593,7 +593,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "((false))",
             "",
             ParsedExpr {
@@ -603,7 +603,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "not true b",
             "b",
             ParsedExpr {
@@ -613,7 +613,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "not defined $a  c",
             "c",
             ParsedExpr {
@@ -627,7 +627,7 @@ mod tests {
 
         // primary expression is also an expression
         parse(
-            expression,
+            boolean_expression,
             "5 b",
             "b",
             ParsedExpr {
@@ -637,58 +637,58 @@ mod tests {
             },
         );
 
-        parse_err(expression, " ");
-        parse_err(expression, "(");
-        parse_err(expression, "()");
-        parse_err(expression, "not");
-        parse_err(expression, "defined");
-        parse_err(expression, "1 == ");
+        parse_err(boolean_expression, " ");
+        parse_err(boolean_expression, "(");
+        parse_err(boolean_expression, "()");
+        parse_err(boolean_expression, "not");
+        parse_err(boolean_expression, "defined");
+        parse_err(boolean_expression, "1 == ");
     }
 
     #[test]
     fn test_textual_tag() {
         // Not parsed as "1 or a", but as "1" with trailing "ora", which
         // makes the parsing of ( expr ) fail.
-        parse_err(expression, "(1ora)");
-        parse_err(expression, "(1anda)");
-        parse_check(expression, "nota", |e| {
+        parse_err(boolean_expression, "(1ora)");
+        parse_err(boolean_expression, "(1anda)");
+        parse_check(boolean_expression, "nota", |e| {
             assert_eq!(
                 e.expr,
                 Expression::Identifier(Identifier::Raw("nota".to_owned()))
             );
         });
-        parse_check(expression, "defineda", |e| {
+        parse_check(boolean_expression, "defineda", |e| {
             assert_eq!(
                 e.expr,
                 Expression::Identifier(Identifier::Raw("defineda".to_owned()))
             );
         });
-        parse_check(expression, "truea", |e| {
+        parse_check(boolean_expression, "truea", |e| {
             assert_eq!(
                 e.expr,
                 Expression::Identifier(Identifier::Raw("truea".to_owned()))
             );
         });
-        parse_check(expression, "falsea", |e| {
+        parse_check(boolean_expression, "falsea", |e| {
             assert_eq!(
                 e.expr,
                 Expression::Identifier(Identifier::Raw("falsea".to_owned()))
             );
         });
 
-        parse_err(expression, "(a containsb)");
-        parse_err(expression, "(a icontainsb)");
-        parse_err(expression, "(a startswitha)");
-        parse_err(expression, "(a istartswitha)");
-        parse_err(expression, "(a endswitha)");
-        parse_err(expression, "(a iendswitha)");
-        parse_err(expression, "(a iequalsa)");
+        parse_err(boolean_expression, "(a containsb)");
+        parse_err(boolean_expression, "(a icontainsb)");
+        parse_err(boolean_expression, "(a startswitha)");
+        parse_err(boolean_expression, "(a istartswitha)");
+        parse_err(boolean_expression, "(a endswitha)");
+        parse_err(boolean_expression, "(a iendswitha)");
+        parse_err(boolean_expression, "(a iequalsa)");
 
-        parse_err(expression, "($a atb)");
+        parse_err(boolean_expression, "($a atb)");
 
         // However, == and != do not use textual tags:
         parse(
-            expression,
+            boolean_expression,
             "0==0",
             "",
             ParsedExpr {
@@ -701,7 +701,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "1!=2",
             "",
             ParsedExpr {

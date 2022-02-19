@@ -45,9 +45,9 @@ pub struct Rule {
     /// Condition of the rule.
     pub condition: Expression,
 
-    // Is the rule private.
+    /// Is the rule private.
     pub is_private: bool,
-    // Is the rule global.
+    /// Is the rule global.
     pub is_global: bool,
 }
 
@@ -544,9 +544,7 @@ fn number_to_u8(value: i64) -> Result<u8, ErrorKind> {
 /// Related to the `condition` pattern in `grammar.y` in libyara.
 fn condition(input: Input) -> ParseResult<Expression> {
     let (input, _) = rtrim(ttag("condition"))(input)?;
-    let (input, expr) = cut(preceded(rtrim(char(':')), expression::expression))(input)?;
-
-    Ok((input, expr.expr))
+    cut(preceded(rtrim(char(':')), expression::expression))(input)
 }
 
 #[cfg(test)]

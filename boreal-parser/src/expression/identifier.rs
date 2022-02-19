@@ -12,7 +12,7 @@ use crate::nom_recipes::rtrim;
 use crate::string::identifier as raw_identifier;
 use crate::types::{Input, ParseResult};
 
-use super::boolean_expression::expression;
+use super::boolean_expression::boolean_expression;
 use super::primary_expression::primary_expression;
 
 /// Parse a trailing subfield, ie after the `.` has been parsed
@@ -32,7 +32,7 @@ fn trailing_subscript(input: Input) -> ParseResult<Expression> {
 /// parsed.
 fn trailing_arguments(input: Input) -> ParseResult<Vec<Expression>> {
     cut(terminated(
-        separated_list0(rtrim(char(',')), map(expression, |e| e.expr)),
+        separated_list0(rtrim(char(',')), map(boolean_expression, |e| e.expr)),
         rtrim(char(')')),
     ))(input)
 }

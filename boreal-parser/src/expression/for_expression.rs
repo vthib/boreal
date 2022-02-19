@@ -19,8 +19,9 @@ use crate::{
 };
 
 use super::{
-    common::range, expression, identifier::identifier, primary_expression::primary_expression,
-    Expression, ForIterator, ForSelection, ParsedExpr, Type, VariableSet,
+    boolean_expression::boolean_expression, common::range, identifier::identifier,
+    primary_expression::primary_expression, Expression, ForIterator, ForSelection, ParsedExpr,
+    Type, VariableSet,
 };
 
 // There is a very ugly hack in this file.
@@ -46,7 +47,7 @@ use super::{
 /// Those are all the variants but for the 'expr ('%') of ...', which
 /// binds a primary expression as its first element, conflicting
 /// with the "just one primary expression" possibility.
-pub fn for_expression_non_ambiguous(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn for_expression_non_ambiguous(input: Input) -> ParseResult<ParsedExpr> {
     alt((for_expression_full, for_expression_abbrev))(input)
 }
 
@@ -69,7 +70,7 @@ fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
 /// XXX: this is a different function than the other parser. If an
 /// 'of' token is not detected, the expr is returned as is in an Ok
 /// result, so as to return the moved value without needing duplication.
-pub fn for_expression_with_expr_selection<'a>(
+pub(super) fn for_expression_with_expr_selection<'a>(
     expr: ParsedExpr,
     start: Input<'a>,
     input: Input<'a>,
@@ -130,7 +131,11 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
 
     if has_of.is_some() {
         let (input, set) = cut(terminated(string_set, rtrim(char(':'))))(i2)?;
-        let (input, body) = cut(delimited(rtrim(char('(')), expression, rtrim(char(')'))))(input)?;
+        let (input, body) = cut(delimited(
+            rtrim(char('(')),
+            boolean_expression,
+            rtrim(char(')')),
+        ))(input)?;
 
         Ok((
             input,
@@ -147,7 +152,11 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
     } else {
         let (input, identifiers) = cut(terminated(for_variables, rtrim(ttag("in"))))(input)?;
         let (input, iterator) = cut(terminated(iterator, rtrim(char(':'))))(input)?;
-        let (input, body) = cut(delimited(rtrim(char('(')), expression, rtrim(char(')'))))(input)?;
+        let (input, body) = cut(delimited(
+            rtrim(char('(')),
+            boolean_expression,
+            rtrim(char(')')),
+        ))(input)?;
 
         Ok((
             input,
@@ -373,7 +382,7 @@ mod tests {
     #[test]
     fn test_expression() {
         parse(
-            expression,
+            boolean_expression,
             "any of them a",
             "a",
             ParsedExpr {
@@ -387,7 +396,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "50% of them",
             "",
             ParsedExpr {
@@ -404,7 +413,7 @@ mod tests {
             },
         );
         parse(
-            expression,
+            boolean_expression,
             "5 of ($a, $b*) in (100..entrypoint)",
             "",
             ParsedExpr {

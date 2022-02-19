@@ -9,21 +9,34 @@ use nom::error::{ErrorKind as NomErrorKind, ParseError};
 
 use super::types::{Input, Span};
 
+/// Parsing error.
 #[derive(Debug)]
 pub struct Error {
+    /// Span of the error in the input.
+    ///
+    /// This is a range of offset, in chars, from the beginning
+    /// of the input given to [`parse_str`].
     span: Span,
 
+    /// Kind of the error.
     kind: ErrorKind,
 }
 
 impl Error {
     #[must_use]
-    pub fn new(span: Span, kind: ErrorKind) -> Self {
+    pub(crate) fn new(span: Span, kind: ErrorKind) -> Self {
         Self { span, kind }
     }
 
+    /// Convert to a displayable, single-lined description.
+    ///
+    /// # Arguments
+    ///
+    /// * `input_name`: a name for the input, used at the beginning of the
+    ///   description: `<filename>:<line>:<column>: <description>`.
+    /// * `input`: the input given to [`parse_str`] that generated the error.
     #[must_use]
-    pub fn to_short_description(&self, filename: &str, file_contents: &str) -> String {
+    pub fn to_short_description(&self, input_name: &str, input: &str) -> String {
         // Generate a small report using codespan_reporting
         let mut writer = term::termcolor::Buffer::no_color();
         let config = term::Config {
@@ -31,12 +44,18 @@ impl Error {
             ..term::Config::default()
         };
 
-        let files = SimpleFile::new(&filename, &file_contents);
+        let files = SimpleFile::new(&input_name, &input);
         // TODO: handle error better here?
         let _res = term::emit(&mut writer, &config, &files, &self.to_diagnostic());
         String::from_utf8_lossy(writer.as_slice()).to_string()
     }
 
+    /// Convert to a [`Diagnostic`].
+    ///
+    /// This can be used to display the error in a more user-friendly manner
+    /// than the simple `to_short_description`. It does require depending
+    /// on the `codespan_reporting` crate to make use of this diagnostic
+    /// however.
     #[must_use]
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match &self.kind {

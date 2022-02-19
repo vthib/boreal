@@ -11,7 +11,8 @@ use nom::{
 };
 
 use super::{
-    expression, identifier, read_integer, string_expression, Expression, ParsedExpr, Type,
+    boolean_expression::boolean_expression, identifier, read_integer, string_expression,
+    Expression, ParsedExpr, Type,
 };
 use crate::{
     error::{Error, ErrorKind},
@@ -21,7 +22,7 @@ use crate::{
 };
 
 /// parse | operator
-pub fn primary_expression(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn primary_expression(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
@@ -264,7 +265,11 @@ fn primary_expression_neg(input: Input) -> ParseResult<ParsedExpr> {
 fn primary_expression_item(input: Input) -> ParseResult<ParsedExpr> {
     alt((
         // '(' primary_expression ')'
-        delimited(rtrim(char('(')), cut(expression), cut(rtrim(char(')')))),
+        delimited(
+            rtrim(char('(')),
+            cut(boolean_expression),
+            cut(rtrim(char(')'))),
+        ),
         // 'true'
         map_expr(
             rtrim(ttag("true")),
@@ -444,7 +449,7 @@ mod tests {
             "c",
             ParsedExpr {
                 expr: Expr::CountInRange {
-                    identifier: "foo".to_owned(),
+                    variable_name: "foo".to_owned(),
                     from: Box::new(Expr::Number(0)),
                     to: Box::new(Expr::Filesize),
                 },
@@ -458,7 +463,7 @@ mod tests {
             "c",
             ParsedExpr {
                 expr: Expr::Offset {
-                    identifier: "a".to_owned(),
+                    variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expr::Number(1)),
                 },
                 ty: Type::Integer,
@@ -471,7 +476,7 @@ mod tests {
             "c",
             ParsedExpr {
                 expr: Expr::Offset {
-                    identifier: "a".to_owned(),
+                    variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expr::Number(2)),
                 },
                 ty: Type::Integer,
@@ -484,7 +489,7 @@ mod tests {
             "c",
             ParsedExpr {
                 expr: Expr::Length {
-                    identifier: "a".to_owned(),
+                    variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expr::Number(1)),
                 },
                 ty: Type::Integer,
@@ -497,7 +502,7 @@ mod tests {
             "c",
             ParsedExpr {
                 expr: Expr::Length {
-                    identifier: "a".to_owned(),
+                    variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expr::Number(2)),
                 },
                 ty: Type::Integer,

@@ -1,19 +1,20 @@
 #[cfg(test)]
 mod tests {
-    use crate::expression::{expression, Type};
+    use crate::expression::boolean_expression::boolean_expression;
+    use crate::expression::Type;
     use crate::types::Input;
 
     #[track_caller]
     fn test_validation(expression_str: &str, expected_type: Type) {
         let input = Input::new(expression_str);
-        let (_, expr) = expression(input).unwrap();
+        let (_, expr) = boolean_expression(input).unwrap();
         assert_eq!(expr.ty, expected_type);
     }
 
     #[track_caller]
     fn test_validation_err(expression_str: &str) {
         let input = Input::new(expression_str);
-        let _err = expression(input).unwrap_err();
+        let _err = boolean_expression(input).unwrap_err();
     }
 
     #[test]

@@ -38,7 +38,7 @@ fn read_integer(input: Input) -> ParseResult<(bool, ReadIntegerSize, bool)> {
     )))(input)
 }
 
-pub fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
     let start = input;
     let (input, ((unsigned, size, big_endian), expr)) = pair(
         read_integer,

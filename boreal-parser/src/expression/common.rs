@@ -13,7 +13,7 @@ use crate::types::{Input, ParseResult};
 /// Parse a 'in' range for primary expressions.
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
-pub fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExpr>)> {
+pub(super) fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExpr>)> {
     let (input, _) = rtrim(char('('))(input)?;
 
     let (input, (a, b)) = terminated(
