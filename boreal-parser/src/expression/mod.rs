@@ -5,7 +5,9 @@ mod identifier;
 mod primary_expression;
 mod read_integer;
 mod string_expression;
-mod validation;
+
+#[cfg(test)]
+mod tests;
 
 use crate::{
     error::{Error, ErrorKind},
