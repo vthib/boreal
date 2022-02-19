@@ -54,7 +54,6 @@ fn string_identifier_no_rtrim(input: Input) -> ParseResult<String> {
 /// This is equivalent to the `_STRING_IDENTIFIER_` lexical patterns in
 /// libyara.
 /// Roughly equivalent to `$[a-ZA-Z0-9_]*`.
-#[allow(clippy::module_name_repetitions)]
 pub fn string_identifier(input: Input) -> ParseResult<String> {
     rtrim(string_identifier_no_rtrim)(input)
 }
@@ -63,7 +62,6 @@ pub fn string_identifier(input: Input) -> ParseResult<String> {
 ///
 /// This is equivalent to
 /// `_STRING_IDENTIFIER_ | _STRING_IDENTIFIER_WITH_WILDCARD_` in libyara.
-#[allow(clippy::module_name_repetitions)]
 pub fn string_identifier_with_wildcard(input: Input) -> ParseResult<(String, bool)> {
     rtrim(pair(
         string_identifier_no_rtrim,
