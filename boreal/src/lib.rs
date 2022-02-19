@@ -35,5 +35,5 @@ use codespan_reporting as _;
 mod error;
 pub use error::ScanError;
 
-pub mod evaluator;
+mod evaluator;
 pub mod scanner;

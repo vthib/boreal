@@ -1,17 +1,17 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use boreal::{evaluator, scanner::Scanner, ScanError};
+use boreal::{scanner::Scanner, ScanError};
 use boreal_parser::parse_str;
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
-    let mut scanner = Scanner::default();
     let rules = match parse_str(rule) {
         Ok(rules) => rules,
         Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", rule)),
     };
+    let mut scanner = Scanner::default();
     scanner.add_rules(rules);
     let res = scanner.scan_mem(input);
-    assert_eq!(res.len() == 1, expected_res);
+    assert_eq!(res.matching_rules.len() == 1, expected_res);
 }
 
 #[track_caller]
@@ -20,11 +20,15 @@ fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
         Ok(rules) => rules,
         Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", rule)),
     };
-    /* FIXME: should get a way to retrieve scan errors with the Scanner */
-    assert_eq!(
-        evaluator::evaluate_rule(&rules[0], input).unwrap_err(),
-        expected_err
-    );
+    let rule_name = rules[0].name.clone();
+
+    let mut scanner = Scanner::default();
+    scanner.add_rules(rules);
+    let res = scanner.scan_mem(input);
+    assert!(res.matching_rules.is_empty());
+    assert_eq!(res.scan_errors.len(), 1);
+    assert_eq!(res.scan_errors[0].rule.name, rule_name);
+    assert_eq!(res.scan_errors[0].error, expected_err);
 }
 
 #[track_caller]
