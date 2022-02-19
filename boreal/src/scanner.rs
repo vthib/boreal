@@ -1,20 +1,52 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
-use boreal_parser::Rule;
+use boreal_parser::{Expression, Metadata};
 
+use crate::variable::Variable;
 use crate::{evaluator, ScanError};
 
 /// Holds a list of rules, and provides methods to
 /// run them on files or bytes.
 #[derive(Default)]
 pub struct Scanner {
-    rules: Vec<Rule>,
+    pub(crate) rules: Vec<Rule>,
+}
+
+/// A scanning rule.
+///
+pub struct Rule {
+    /// Name of the rule.
+    pub name: String,
+
+    /// Tags associated with the rule.
+    pub tags: Vec<String>,
+
+    /// Metadata associated with the rule.
+    pub metadatas: Vec<Metadata>,
+
+    /// Variable associated with the rule
+    pub(crate) variables: Vec<Variable>,
+
+    /// Condition of the rule.
+    pub(crate) condition: Expression,
+}
+
+impl From<boreal_parser::Rule> for Rule {
+    fn from(rule: boreal_parser::Rule) -> Self {
+        Self {
+            name: rule.name,
+            tags: rule.tags,
+            metadatas: rule.metadatas,
+            variables: rule.variables.into_iter().map(Variable::from).collect(),
+            condition: rule.condition,
+        }
+    }
 }
 
 impl Scanner {
     /// Add rules in the scanner.
-    pub fn add_rules(&mut self, mut rules: Vec<Rule>) {
-        self.rules.append(&mut rules);
+    pub fn add_rules(&mut self, rules: Vec<boreal_parser::Rule>) {
+        self.rules.extend(rules.into_iter().map(Rule::from));
     }
 
     /// Scan a byte slice.

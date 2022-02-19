@@ -1,7 +1,9 @@
 //! Provides methods to evaluate expressions.
-use boreal_parser::{Expression, Regex, Rule, VariableDeclaration};
+use boreal_parser::{Expression, Regex};
 
 use crate::error::ScanError;
+use crate::scanner::Rule;
+use crate::variable::Variable;
 
 #[derive(Debug)]
 enum Value<'a> {
@@ -69,8 +71,8 @@ impl Value<'_> {
 /// return the right type of value.
 pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
     let evaluator = Evaluator {
-        _variables: &rule.variables,
-        _mem: mem,
+        variables: &rule.variables,
+        mem,
     };
     evaluator
         .evaluate_expr(&rule.condition)
@@ -78,8 +80,8 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
 }
 
 struct Evaluator<'a> {
-    _variables: &'a [VariableDeclaration],
-    _mem: &'a [u8],
+    variables: &'a [Variable],
+    mem: &'a [u8],
 }
 
 macro_rules! string_op {
@@ -328,7 +330,16 @@ impl Evaluator<'_> {
                 Ok(Value::Boolean(!v))
             }
 
-            Expression::Variable(..) => todo!(),
+            Expression::Variable(variable_name) => {
+                // TODO: improve variable name matching
+                let var = self
+                    .variables
+                    .iter()
+                    .find(|v| &v.name == variable_name)
+                    .unwrap();
+                // TODO: handle io error
+                Ok(Value::Boolean(var.find(self.mem).unwrap()))
+            }
             Expression::VariableAt(..) => todo!(),
             Expression::VariableIn { .. } => todo!(),
             Expression::For { .. } => todo!(),
@@ -348,6 +359,8 @@ impl Evaluator<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::scanner::Scanner;
+
     use super::*;
 
     #[track_caller]
@@ -358,7 +371,9 @@ mod tests {
             Ok(rules) => rules,
             Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", &rule)),
         };
-        assert_eq!(evaluate_rule(&rules[0], input), expected_res);
+        let mut scanner = Scanner::default();
+        scanner.add_rules(rules);
+        assert_eq!(evaluate_rule(&scanner.rules[0], input), expected_res);
     }
 
     #[test]

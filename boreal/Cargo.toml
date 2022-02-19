@@ -9,3 +9,6 @@ boreal-parser = { path = "../boreal-parser" }
 
 # Proper error reporting on parsing
 codespan-reporting = "0.11"
+
+# Scanning for bytes
+grep = "0.2"

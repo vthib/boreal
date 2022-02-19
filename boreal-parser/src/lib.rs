@@ -61,7 +61,7 @@ mod hex_string;
 mod nom_recipes;
 mod number;
 mod rule;
-pub use rule::{Rule, VariableDeclaration};
+pub use rule::{Metadata, Rule, VariableDeclaration, VariableDeclarationValue, VariableModifiers};
 mod string;
 pub use string::Regex;
 mod types;

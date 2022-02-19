@@ -37,3 +37,4 @@ pub use error::ScanError;
 
 mod evaluator;
 pub mod scanner;
+mod variable;
