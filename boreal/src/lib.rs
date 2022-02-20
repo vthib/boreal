@@ -38,5 +38,5 @@ pub use error::ScanError;
 mod compiler;
 mod evaluator;
 mod scanner;
-pub use scanner::Scanner;
+pub use scanner::{AddRuleError, Scanner};
 mod variable;

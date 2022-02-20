@@ -23,9 +23,10 @@ impl Scanner {
     /// # Errors
     ///
     /// If parsing of the rules fails, an error is returned.
-    pub fn add_rules_from_str(&mut self, s: &str) -> Result<(), boreal_parser::Error> {
-        let rules = parse_str(s)?;
-        self.add_rules(rules).unwrap();
+    pub fn add_rules_from_str(&mut self, s: &str) -> Result<(), AddRuleError> {
+        let rules = parse_str(s).map_err(AddRuleError::ParseError)?;
+        self.add_rules(rules)
+            .map_err(AddRuleError::CompilationError)?;
         Ok(())
     }
 
@@ -69,4 +70,12 @@ pub struct ScanResults<'a> {
 pub struct RuleScanError<'a> {
     pub rule: &'a Rule,
     pub error: ScanError,
+}
+
+#[derive(Debug)]
+pub enum AddRuleError {
+    /// Error while parsing a rule.
+    ParseError(boreal_parser::Error),
+    /// Error while compiling a rule.
+    CompilationError(CompilationError),
 }

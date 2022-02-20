@@ -396,9 +396,9 @@ mod tests {
     fn test_eval(cond: &str, input: &[u8], expected_res: Result<bool, ScanError>) {
         let rule = format!("rule a {{ condition: {} }}", cond);
         let mut scanner = Scanner::new();
-        scanner.add_rules_from_str(&rule).unwrap_or_else(|err| {
-            panic!("parsing failed: {}", err.to_short_description("mem", &rule))
-        });
+        scanner
+            .add_rules_from_str(&rule)
+            .unwrap_or_else(|err| panic!("parsing failed: {:?}", err));
         assert_eq!(evaluate_rule(&scanner.rules[0], input), expected_res);
     }
 

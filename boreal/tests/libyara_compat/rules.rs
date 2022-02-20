@@ -7,7 +7,7 @@ fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
     let mut scanner = Scanner::new();
     scanner
         .add_rules_from_str(&rule)
-        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
+        .unwrap_or_else(|err| panic!("parsing failed: {:?}", err));
     let res = scanner.scan_mem(input);
     assert_eq!(res.matching_rules.len() == 1, expected_res);
 }
@@ -17,7 +17,7 @@ fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
     let mut scanner = Scanner::new();
     scanner
         .add_rules_from_str(&rule)
-        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
+        .unwrap_or_else(|err| panic!("parsing failed: {:?}", err));
     let res = scanner.scan_mem(input);
     assert!(res.matching_rules.is_empty());
     assert_eq!(res.scan_errors.len(), 1);
