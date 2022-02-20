@@ -1,6 +1,6 @@
 use boreal_parser as parser;
 
-use super::{CompilationError, Compiler, Expression};
+use super::{expression::compile_expression, CompilationError, Compiler, Expression};
 use crate::variable::Variable;
 
 /// A compiled scanning rule.
@@ -27,6 +27,6 @@ pub fn compile(compiler: &Compiler, rule: parser::Rule) -> Result<Rule, Compilat
         tags: rule.tags,
         metadatas: rule.metadatas,
         variables: rule.variables.into_iter().map(Variable::from).collect(),
-        condition: compiler.compile_expression(rule.condition)?,
+        condition: compile_expression(compiler, rule.condition)?,
     })
 }
