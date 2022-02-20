@@ -1,0 +1,11 @@
+[package]
+name = "boreal-cli"
+version = "0.0.1"
+repository = "https://github.com/vthib/boreal"
+edition = "2021"
+
+[dependencies]
+boreal = { path = "../boreal" }
+
+# Proper error reporting on parsing
+codespan-reporting = "0.11"

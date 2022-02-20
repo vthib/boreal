@@ -395,12 +395,10 @@ mod tests {
     #[allow(clippy::needless_pass_by_value)]
     fn test_eval(cond: &str, input: &[u8], expected_res: Result<bool, ScanError>) {
         let rule = format!("rule a {{ condition: {} }}", cond);
-        let rules = match boreal_parser::parse_str(&rule) {
-            Ok(rules) => rules,
-            Err(err) => panic!("parsing failed: {}", err.to_short_description("mem", &rule)),
-        };
-        let mut scanner = Scanner::default();
-        scanner.add_rules(rules);
+        let mut scanner = Scanner::new();
+        scanner.add_rules_from_str(&rule).unwrap_or_else(|err| {
+            panic!("parsing failed: {}", err.to_short_description("mem", &rule))
+        });
         assert_eq!(evaluate_rule(&scanner.rules[0], input), expected_res);
     }
 

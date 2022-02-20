@@ -2,4 +2,5 @@
 members = [
     "boreal-parser",
     "boreal",
+    "boreal-cli",
 ]

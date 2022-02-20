@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process::exit;
 
+use boreal::Scanner;
 use codespan_reporting::{
     files::SimpleFile,
     term::{
@@ -18,7 +19,9 @@ fn main() -> Result<(), std::io::Error> {
 
     let path = PathBuf::from(&yara_filepath);
     let contents = std::fs::read_to_string(&path)?;
-    match boreal_parser::parse_str(&contents) {
+
+    let mut scanner = Scanner::new();
+    match scanner.add_rules_from_str(&contents) {
         Err(err) => {
             let writer = StandardStream::stderr(ColorChoice::Always);
             let config = codespan_reporting::term::Config::default();
@@ -30,12 +33,8 @@ fn main() -> Result<(), std::io::Error> {
             }
             exit(2);
         }
-        Ok(rules) => {
-            println!(
-                "successfully parsed {} rules from {}",
-                rules.len(),
-                path.display()
-            );
+        Ok(_) => {
+            println!("successfully added rules from {}", path.display());
         }
     }
     Ok(())
