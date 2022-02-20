@@ -1,7 +1,8 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
-use boreal_parser::{parse_str, Expression, Metadata};
+use boreal_parser::{parse_str, Metadata};
 
+use crate::expression::{Compiler, Expression};
 use crate::variable::Variable;
 use crate::{evaluator, ScanError};
 
@@ -75,12 +76,14 @@ pub struct Rule {
 
 impl From<boreal_parser::Rule> for Rule {
     fn from(rule: boreal_parser::Rule) -> Self {
+        let compiler = Compiler {};
+
         Self {
             name: rule.name,
             tags: rule.tags,
             metadatas: rule.metadatas,
             variables: rule.variables.into_iter().map(Variable::from).collect(),
-            condition: rule.condition,
+            condition: compiler.compile_expression(rule.condition).unwrap(),
         }
     }
 }

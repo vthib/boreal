@@ -42,17 +42,23 @@ pub enum Identifier {
     Raw(String),
     /// Array subscript, i.e. `identifier[subscript]`.
     Subscript {
+        /// Object being subscripted
         identifier: Box<Identifier>,
+        /// Value used as the index
         subscript: Box<Expression>,
     },
     /// Object subfield, i.e. `identifier.subfield`.
     Subfield {
+        /// Object take a subfield of
         identifier: Box<Identifier>,
+        /// Name of the subfield
         subfield: String,
     },
     /// Function call, i.e. `identifier(arguments)`.
     FunctionCall {
+        /// Function being called
         identifier: Box<Identifier>,
+        /// List of arguments to pass to the function
         arguments: Vec<Expression>,
     },
 }
@@ -332,7 +338,9 @@ pub enum ForSelection {
     ///
     /// Usually, the expression is a simple number.
     Expr {
+        /// Number of variables selected
         expr: Box<Expression>,
+        /// Should the number be a percentage.
         as_percent: bool,
     },
 }
@@ -340,11 +348,17 @@ pub enum ForSelection {
 /// Iterator for a 'for' expression over an identifier.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ForIterator {
+    /// Identifier to pick values from.
+    // TODO: document which type of objects are accepted here
     Identifier(Identifier),
+    /// Every value between two numbers
     Range {
+        /// Start of the range, included
         from: Box<Expression>,
+        /// End of the range, included
         to: Box<Expression>,
     },
+    /// List of values
     List(Vec<Expression>),
 }
 

@@ -1,7 +1,8 @@
 //! Provides methods to evaluate expressions.
-use boreal_parser::{Expression, Regex};
+use boreal_parser::Regex;
 
 use crate::error::ScanError;
+use crate::expression::Expression;
 use crate::scanner::Rule;
 use crate::variable::Variable;
 

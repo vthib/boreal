@@ -36,6 +36,7 @@ mod error;
 pub use error::ScanError;
 
 mod evaluator;
+mod expression;
 mod scanner;
 pub use scanner::Scanner;
 mod variable;
