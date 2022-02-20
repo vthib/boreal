@@ -1,11 +1,16 @@
 //! Compilation of a parsed expression into an optimized one.
-use super::{parser, Expression, ForIterator, ForSelection, Identifier};
+use regex::Regex;
+
+use super::{parser, CompilationError, Expression, ForIterator, ForSelection, Identifier};
 
 pub struct Compiler;
 
 impl Compiler {
     #[allow(clippy::too_many_lines)]
-    pub fn compile_expression(&self, expression: parser::Expression) -> Result<Expression, ()> {
+    pub fn compile_expression(
+        &self,
+        expression: parser::Expression,
+    ) -> Result<Expression, CompilationError> {
         match expression {
             parser::Expression::Filesize => Ok(Expression::Filesize),
             parser::Expression::Entrypoint => Ok(Expression::Entrypoint),
@@ -172,7 +177,7 @@ impl Compiler {
 
             parser::Expression::Matches(expr, regex) => Ok(Expression::Matches(
                 Box::new(self.compile_expression(*expr)?),
-                regex,
+                compile_regex(regex)?,
             )),
 
             parser::Expression::Defined(expr) => Ok(Expression::Defined(Box::new(
@@ -244,11 +249,14 @@ impl Compiler {
                 Ok(Expression::Identifier(self.compile_identifier(identifier)?))
             }
             parser::Expression::String(s) => Ok(Expression::String(s)),
-            parser::Expression::Regex(regex) => Ok(Expression::Regex(regex)),
+            parser::Expression::Regex(regex) => Ok(Expression::Regex(compile_regex(regex)?)),
         }
     }
 
-    fn compile_identifier(&self, identifier: parser::Identifier) -> Result<Identifier, ()> {
+    fn compile_identifier(
+        &self,
+        identifier: parser::Identifier,
+    ) -> Result<Identifier, CompilationError> {
         match identifier {
             parser::Identifier::Raw(s) => Ok(Identifier::Raw(s)),
             parser::Identifier::Subscript {
@@ -281,7 +289,10 @@ impl Compiler {
         }
     }
 
-    fn compile_for_selection(&self, selection: parser::ForSelection) -> Result<ForSelection, ()> {
+    fn compile_for_selection(
+        &self,
+        selection: parser::ForSelection,
+    ) -> Result<ForSelection, CompilationError> {
         match selection {
             parser::ForSelection::Any => Ok(ForSelection::Any),
             parser::ForSelection::All => Ok(ForSelection::All),
@@ -293,7 +304,10 @@ impl Compiler {
         }
     }
 
-    fn compile_for_iterator(&self, selection: parser::ForIterator) -> Result<ForIterator, ()> {
+    fn compile_for_iterator(
+        &self,
+        selection: parser::ForIterator,
+    ) -> Result<ForIterator, CompilationError> {
         match selection {
             parser::ForIterator::Identifier(identifier) => Ok(ForIterator::Identifier(
                 self.compile_identifier(identifier)?,
@@ -310,4 +324,24 @@ impl Compiler {
             )),
         }
     }
+}
+
+fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
+    let parser::Regex {
+        mut expr,
+        case_insensitive,
+        dot_all,
+    } = regex;
+
+    let flags = match (case_insensitive, dot_all) {
+        (false, false) => "",
+        (true, false) => "i",
+        (false, true) => "s",
+        (true, true) => "is",
+    };
+    if !flags.is_empty() {
+        expr = format!("(?{}){}", flags, expr);
+    }
+
+    Regex::new(&expr).map_err(CompilationError::RegexError)
 }

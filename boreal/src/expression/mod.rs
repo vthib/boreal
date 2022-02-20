@@ -1,13 +1,17 @@
 //! Compiled expression used in a rule.
 //!
 //! This module contains all types describing a rule condition, built from the parsed AST.
+use regex::Regex;
+
 use boreal_parser as parser;
 
 mod compiler;
 pub use compiler::Compiler;
+mod error;
+pub use error::CompilationError;
 
 /// Parsed identifier used in expressions.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Identifier {
     /// Raw identifier, i.e. `pe`.
     Raw(String),
@@ -28,7 +32,7 @@ pub enum Identifier {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Expression {
     /// Size of the file being scanned.
     Filesize,
@@ -183,7 +187,7 @@ pub enum Expression {
     IEquals(Box<Expression>, Box<Expression>),
 
     /// Does a string matches a regex.
-    Matches(Box<Expression>, parser::Regex),
+    Matches(Box<Expression>, Regex),
 
     /// Is a given value defined.
     ///
@@ -278,14 +282,14 @@ pub enum Expression {
     /// A string.
     String(String),
     /// A regex.
-    Regex(parser::Regex),
+    Regex(Regex),
 }
 
 /// Selection of variables in a 'for' expression.
 ///
 /// This indicates how many variables must match the for condition
 /// for it to be considered true.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 pub enum ForSelection {
     /// Any variable in the set must match the condition.
     Any,
@@ -308,7 +312,7 @@ pub enum ForSelection {
 }
 
 /// Iterator for a 'for' expression over an identifier.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 pub enum ForIterator {
     Identifier(Identifier),
     Range {
