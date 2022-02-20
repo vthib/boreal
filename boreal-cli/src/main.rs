@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::exit;
 
-use boreal::{AddRuleError, Scanner};
+use boreal::Scanner;
 use codespan_reporting::{
     files::SimpleFile,
     term::{
@@ -22,7 +22,7 @@ fn main() -> Result<(), std::io::Error> {
 
     let mut scanner = Scanner::new();
     match scanner.add_rules_from_str(&contents) {
-        Err(AddRuleError::ParseError(err)) => {
+        Err(err) => {
             let writer = StandardStream::stderr(ColorChoice::Always);
             let config = codespan_reporting::term::Config::default();
 
@@ -33,7 +33,6 @@ fn main() -> Result<(), std::io::Error> {
             }
             exit(2);
         }
-        Err(_) => todo!(),
         Ok(_) => {
             println!("successfully added rules from {}", path.display());
         }

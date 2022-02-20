@@ -1,5 +1,9 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
+use codespan_reporting::diagnostic::Diagnostic;
+use codespan_reporting::files::SimpleFile;
+use codespan_reporting::term;
+
 use boreal_parser::parse_str;
 
 use crate::compiler::{CompilationError, Compiler, Rule};
@@ -78,4 +82,42 @@ pub enum AddRuleError {
     ParseError(boreal_parser::Error),
     /// Error while compiling a rule.
     CompilationError(CompilationError),
+}
+
+impl AddRuleError {
+    /// Convert to a displayable, single-lined description.
+    ///
+    /// # Arguments
+    ///
+    /// * `input_name`: a name for the input, used at the beginning of the
+    ///   description: `<filename>:<line>:<column>: <description>`.
+    /// * `input`: the input given to [`parse_str`] that generated the error.
+    #[must_use]
+    pub fn to_short_description(&self, input_name: &str, input: &str) -> String {
+        // Generate a small report using codespan_reporting
+        let mut writer = term::termcolor::Buffer::no_color();
+        let config = term::Config {
+            display_style: term::DisplayStyle::Short,
+            ..term::Config::default()
+        };
+
+        let files = SimpleFile::new(&input_name, &input);
+        // TODO: handle error better here?
+        let _res = term::emit(&mut writer, &config, &files, &self.to_diagnostic());
+        String::from_utf8_lossy(writer.as_slice()).to_string()
+    }
+
+    /// Convert to a [`Diagnostic`].
+    ///
+    /// This can be used to display the error in a more user-friendly manner
+    /// than the simple `to_short_description`. It does require depending
+    /// on the `codespan_reporting` crate to make use of this diagnostic
+    /// however.
+    #[must_use]
+    pub fn to_diagnostic(&self) -> Diagnostic<()> {
+        match self {
+            Self::ParseError(err) => err.to_diagnostic(),
+            Self::CompilationError(err) => err.to_diagnostic(),
+        }
+    }
 }

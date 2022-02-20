@@ -653,5 +653,5 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         expr = format!("(?{}){}", flags, expr);
     }
 
-    Regex::new(&expr).map_err(CompilationError::RegexError)
+    Regex::new(&expr).map_err(|error| CompilationError::RegexError { expr, error })
 }

@@ -1,13 +1,12 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use boreal::{ScanError, Scanner};
-use boreal_parser::parse_str;
+use boreal::{AddRuleError, ScanError, Scanner};
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
     let mut scanner = Scanner::new();
     scanner
         .add_rules_from_str(&rule)
-        .unwrap_or_else(|err| panic!("parsing failed: {:?}", err));
+        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
     let res = scanner.scan_mem(input);
     assert_eq!(res.matching_rules.len() == 1, expected_res);
 }
@@ -17,7 +16,7 @@ fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
     let mut scanner = Scanner::new();
     scanner
         .add_rules_from_str(&rule)
-        .unwrap_or_else(|err| panic!("parsing failed: {:?}", err));
+        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
     let res = scanner.scan_mem(input);
     assert!(res.matching_rules.is_empty());
     assert_eq!(res.scan_errors.len(), 1);
@@ -26,7 +25,9 @@ fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
 
 #[track_caller]
 fn test_parse_error(rule: &str, expected_prefix: &str) {
-    let err = parse_str(rule).unwrap_err();
+    let mut scanner = Scanner::new();
+    let err = scanner.add_rules_from_str(&rule).unwrap_err();
+    assert!(matches!(err, AddRuleError::ParseError(_)));
     let desc = err.to_short_description("mem", rule);
     assert!(
         desc.starts_with(expected_prefix),

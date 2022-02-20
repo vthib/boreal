@@ -1,10 +1,6 @@
 use std::num::{ParseFloatError, ParseIntError};
 
-use codespan_reporting::{
-    diagnostic::{Diagnostic, Label},
-    files::SimpleFile,
-    term,
-};
+use codespan_reporting::diagnostic::{Diagnostic, Label};
 use nom::error::{ErrorKind as NomErrorKind, ParseError};
 
 use super::types::{Input, Span};
@@ -26,28 +22,6 @@ impl Error {
     #[must_use]
     pub(crate) fn new(span: Span, kind: ErrorKind) -> Self {
         Self { span, kind }
-    }
-
-    /// Convert to a displayable, single-lined description.
-    ///
-    /// # Arguments
-    ///
-    /// * `input_name`: a name for the input, used at the beginning of the
-    ///   description: `<filename>:<line>:<column>: <description>`.
-    /// * `input`: the input given to [`parse_str`] that generated the error.
-    #[must_use]
-    pub fn to_short_description(&self, input_name: &str, input: &str) -> String {
-        // Generate a small report using codespan_reporting
-        let mut writer = term::termcolor::Buffer::no_color();
-        let config = term::Config {
-            display_style: term::DisplayStyle::Short,
-            ..term::Config::default()
-        };
-
-        let files = SimpleFile::new(&input_name, &input);
-        // TODO: handle error better here?
-        let _res = term::emit(&mut writer, &config, &files, &self.to_diagnostic());
-        String::from_utf8_lossy(writer.as_slice()).to_string()
     }
 
     /// Convert to a [`Diagnostic`].
