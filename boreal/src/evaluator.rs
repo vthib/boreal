@@ -331,17 +331,37 @@ impl Evaluator<'_> {
             }
 
             Expression::Variable(variable_name) => {
-                // TODO: improve variable name matching
-                let var = self
-                    .variables
-                    .iter()
-                    .find(|v| &v.name == variable_name)
-                    .unwrap();
+                let var = self.get_var(variable_name);
                 // TODO: handle io error
                 Ok(Value::Boolean(var.find(self.mem).unwrap()))
             }
-            Expression::VariableAt(..) => todo!(),
-            Expression::VariableIn { .. } => todo!(),
+            Expression::VariableAt(variable_name, offset_expr) => {
+                let var = self.get_var(variable_name);
+                let offset = self
+                    .evaluate_expr(offset_expr)?
+                    .unwrap_number("variable at")?;
+                match usize::try_from(offset) {
+                    Ok(offset) => Ok(Value::Boolean(var.find_at(self.mem, offset).unwrap())),
+                    // TODO: return error?
+                    Err(_) => Ok(Value::Boolean(false)),
+                }
+            }
+            Expression::VariableIn {
+                variable_name,
+                from,
+                to,
+            } => {
+                let var = self.get_var(variable_name);
+                let from = self.evaluate_expr(from)?.unwrap_number("variable in")?;
+                let to = self.evaluate_expr(to)?.unwrap_number("variable in")?;
+                match (usize::try_from(from), usize::try_from(to)) {
+                    (Ok(from), Ok(to)) if from <= to => {
+                        Ok(Value::Boolean(var.find_in(self.mem, from, to).unwrap()))
+                    }
+                    // TODO: return error?
+                    _ => Ok(Value::Boolean(false)),
+                }
+            }
             Expression::For { .. } => todo!(),
             Expression::ForIn { .. } => todo!(),
             Expression::ForIdentifiers { .. } => todo!(),
@@ -354,6 +374,14 @@ impl Evaluator<'_> {
             Expression::Regex(v) => Ok(Value::Regex(v)),
             Expression::Boolean(v) => Ok(Value::Boolean(*v)),
         }
+    }
+
+    fn get_var(&self, variable_name: &str) -> &Variable {
+        // TODO: improve variable name matching
+        self.variables
+            .iter()
+            .find(|v| v.name == variable_name)
+            .unwrap()
     }
 }
 

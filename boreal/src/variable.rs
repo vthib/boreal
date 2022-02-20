@@ -1,6 +1,6 @@
 //! Implement scanning for variables
+use grep_matcher::Matcher;
 use grep_regex::{RegexMatcher, RegexMatcherBuilder};
-use grep_searcher::{Searcher, SearcherBuilder, Sink, SinkMatch};
 
 use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
 
@@ -11,27 +11,31 @@ pub(crate) struct Variable {
 
 impl From<VariableDeclaration> for Variable {
     fn from(decl: VariableDeclaration) -> Self {
-        let mut builder = RegexMatcherBuilder::new();
-        let builder = builder.unicode(false).octal(false);
+        // TODO: handle modifiers
+        let name = decl.name;
 
-        let matcher = match decl.value {
-            VariableDeclarationValue::String(s) => builder.build_literals(&[s]).unwrap(),
+        let mut matcher = RegexMatcherBuilder::new();
+        let matcher = matcher.unicode(false).octal(false);
+
+        match decl.value {
+            VariableDeclarationValue::String(s) => Self {
+                name,
+                matcher: matcher.build_literals(&[s]).unwrap(),
+            },
             VariableDeclarationValue::Regex(Regex {
                 expr,
                 case_insensitive,
                 dot_all,
-            }) => builder
-                .case_insensitive(case_insensitive)
-                .multi_line(dot_all)
-                .dot_matches_new_line(dot_all)
-                .build(&expr)
-                .unwrap(),
+            }) => Self {
+                name,
+                matcher: matcher
+                    .case_insensitive(case_insensitive)
+                    .multi_line(dot_all)
+                    .dot_matches_new_line(dot_all)
+                    .build(&expr)
+                    .unwrap(),
+            },
             VariableDeclarationValue::HexString(_) => todo!(),
-        };
-        // TODO: handle modifiers
-        Self {
-            name: decl.name,
-            matcher,
         }
     }
 }
@@ -39,44 +43,32 @@ impl From<VariableDeclaration> for Variable {
 impl Variable {
     /// Search occurrence of a variable in bytes
     pub fn find(&self, mem: &[u8]) -> Result<bool, std::io::Error> {
-        let mut searcher = SearcherBuilder::new()
-            .line_number(false)
-            .multi_line(true)
-            .bom_sniffing(false)
-            .build();
-
-        let mut found = false;
-        searcher.search_slice(
-            &self.matcher,
-            mem,
-            VariableSink(|_| {
-                found = true;
-                false
-            }),
-        )?;
-        Ok(found)
+        Ok(self.matcher.find(mem)?.is_some())
     }
-}
 
-/// A custom [`Sink`] implementation.
-/// TODO: improve doc
-#[derive(Clone, Debug)]
-pub struct VariableSink<F>(pub F)
-where
-    F: FnMut(&SinkMatch) -> bool;
+    /// Search occurrence of a variable at a given
+    pub fn find_at(&self, mem: &[u8], offset: usize) -> Result<bool, std::io::Error> {
+        if offset < mem.len() {
+            Ok(self.matcher.find_at(mem, offset)?.is_some())
+        } else {
+            Ok(false)
+        }
+    }
 
-impl<F> Sink for VariableSink<F>
-where
-    F: FnMut(&SinkMatch) -> bool,
-{
-    type Error = std::io::Error;
-
-    fn matched(
-        &mut self,
-        _searcher: &Searcher,
-        mat: &SinkMatch<'_>,
-    ) -> Result<bool, std::io::Error> {
-        Ok((self.0)(mat))
+    /// Search occurrence of a variable in between given offset
+    pub fn find_in(&self, mem: &[u8], from: usize, to: usize) -> Result<bool, std::io::Error> {
+        if from < mem.len() {
+            // TODO: would be great to give a subslice of mem, so that the matcher does not run
+            // over the whole mem well past the "to" offset.
+            // How to make it work with regexes is not trivial though, may need a PR on
+            // grep-matcher for this.
+            match self.matcher.find_at(mem, from)? {
+                Some(mat) => Ok(mat.start() <= to),
+                None => Ok(false),
+            }
+        } else {
+            Ok(false)
+        }
     }
 }
 
@@ -134,5 +126,33 @@ mod tests {
         assert!(v.find(b"ba\n\n  ba").unwrap());
         assert!(!v.find(b"AB").unwrap());
         assert!(!v.find(b"ec").unwrap());
+    }
+
+    #[test]
+    fn test_variable_find_at() {
+        let v = build_var_string("34");
+        assert!(v.find_at(b"01234567", 3).unwrap());
+        assert!(v.find_at(b"342342", 3).unwrap());
+        assert!(v.find_at(b"34", 0).unwrap());
+        assert!(!v.find_at(b"234", 2).unwrap());
+        assert!(!v.find_at(b"01234", 15).unwrap());
+
+        let v = build_var_regex("[a-z]{2}", false, false);
+        assert!(v.find_at(b"abc", 0).unwrap());
+        assert!(v.find_at(b"abc", 1).unwrap());
+        assert!(!v.find_at(b"abc", 2).unwrap());
+    }
+
+    #[test]
+    fn test_variable_find_in() {
+        let v = build_var_string("345");
+        assert!(v.find_in(b"01234567", 0, 20).unwrap());
+        assert!(v.find_in(b"01234567", 2, 6).unwrap());
+        assert!(v.find_in(b"01234567", 3, 5).unwrap());
+        assert!(v.find_in(b"01234567", 3, 4).unwrap());
+        assert!(v.find_in(b"01234567", 3, 3).unwrap());
+        assert!(v.find_in(b"01234567", 2, 3).unwrap());
+        assert!(!v.find_in(b"01234567", 1, 2).unwrap());
+        assert!(!v.find_in(b"34353435", 1, 6).unwrap());
     }
 }
