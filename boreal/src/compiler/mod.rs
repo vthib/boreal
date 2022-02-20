@@ -7,10 +7,16 @@ mod expression;
 pub use expression::*;
 mod error;
 pub use error::CompilationError;
+mod rule;
+pub use rule::Rule;
 
 pub struct Compiler;
 
 impl Compiler {
+    pub fn compile_rule(&self, rule: parser::Rule) -> Result<Rule, CompilationError> {
+        rule::compile(self, rule)
+    }
+
     #[allow(clippy::too_many_lines)]
     pub fn compile_expression(
         &self,
