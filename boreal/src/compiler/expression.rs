@@ -263,9 +263,9 @@ pub enum Expression {
 #[allow(clippy::too_many_lines)]
 pub fn compile_expression(
     compiler: &Compiler,
-    expression: parser::Expression,
+    expression: parser::ParsedExpr,
 ) -> Result<Expression, CompilationError> {
-    match expression {
+    match expression.expr {
         parser::Expression::Filesize => Ok(Expression::Filesize),
         parser::Expression::Entrypoint => Ok(Expression::Entrypoint),
         parser::Expression::ReadInteger {

@@ -57,7 +57,11 @@ pub(super) fn string_offset_expression(input: Input) -> ParseResult<ParsedExpr> 
         variable_name,
         occurence_number: match expr {
             Some(v) => v.unwrap_expr(Type::Integer)?,
-            None => Box::new(Expression::Number(1)),
+            None => Box::new(ParsedExpr {
+                expr: Expression::Number(1),
+                ty: Type::Integer,
+                span: span.clone(),
+            }),
         },
     };
     Ok((
@@ -85,7 +89,11 @@ pub(super) fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> 
         variable_name,
         occurence_number: match expr {
             Some(v) => v.unwrap_expr(Type::Integer)?,
-            None => Box::new(Expression::Number(1)),
+            None => Box::new(ParsedExpr {
+                expr: Expression::Number(1),
+                ty: Type::Integer,
+                span: span.clone(),
+            }),
         },
     };
     Ok((
@@ -122,8 +130,16 @@ mod tests {
             ParsedExpr {
                 expr: Expression::CountInRange {
                     variable_name: "foo".to_owned(),
-                    from: Box::new(Expression::Number(0)),
-                    to: Box::new(Expression::Filesize),
+                    from: Box::new(ParsedExpr {
+                        expr: Expression::Number(0),
+                        ty: Type::Integer,
+                        span: 9..10,
+                    }),
+                    to: Box::new(ParsedExpr {
+                        expr: Expression::Filesize,
+                        ty: Type::Integer,
+                        span: 13..21,
+                    }),
                 },
                 ty: Type::Integer,
                 span: 0..23,
@@ -143,7 +159,11 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Offset {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(1)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(1),
+                        ty: Type::Integer,
+                        span: 0..2,
+                    }),
                 },
                 ty: Type::Integer,
                 span: 0..2,
@@ -156,7 +176,11 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Offset {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(2)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(2),
+                        ty: Type::Integer,
+                        span: 5..6,
+                    }),
                 },
                 ty: Type::Integer,
                 span: 0..7,
@@ -173,7 +197,11 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Length {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(1)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(2),
+                        ty: Type::Integer,
+                        span: 0..2,
+                    }),
                 },
                 ty: Type::Integer,
                 span: 0..2,
@@ -186,7 +214,11 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Length {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(Expression::Number(2)),
+                    occurence_number: Box::new(ParsedExpr {
+                        expr: Expression::Number(2),
+                        ty: Type::Integer,
+                        span: 0..2,
+                    }),
                 },
                 ty: Type::Integer,
                 span: 0..7,

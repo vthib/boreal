@@ -12,7 +12,7 @@ use nom::{
 
 use super::{
     error::{Error, ErrorKind},
-    expression::{self, Expression},
+    expression::{self, ParsedExpr},
     hex_string,
     nom_recipes::{ltrim, map_res, rtrim, textual_tag as ttag},
     number, string,
@@ -43,7 +43,7 @@ pub struct Rule {
     pub variables: Vec<VariableDeclaration>,
 
     /// Condition of the rule.
-    pub condition: Expression,
+    pub condition: ParsedExpr,
 
     /// Is the rule private.
     pub is_private: bool,
@@ -542,14 +542,14 @@ fn number_to_u8(value: i64) -> Result<u8, ErrorKind> {
 /// Parse a condition
 ///
 /// Related to the `condition` pattern in `grammar.y` in libyara.
-fn condition(input: Input) -> ParseResult<Expression> {
+fn condition(input: Input) -> ParseResult<ParsedExpr> {
     let (input, _) = rtrim(ttag("condition"))(input)?;
     cut(preceded(rtrim(char(':')), expression::expression))(input)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::{ForSelection, VariableSet};
+    use crate::expression::{Expression, ForSelection, ParsedExpr, Type, VariableSet};
     use crate::hex_string::{HexToken, Mask};
     use crate::Regex;
 
@@ -804,7 +804,11 @@ mod tests {
             "",
             Rule {
                 name: "a".to_owned(),
-                condition: Expression::Boolean(false),
+                condition: ParsedExpr {
+                    expr: Expression::Boolean(false),
+                    ty: Type::Integer,
+                    span: 20..25,
+                },
                 tags: Vec::new(),
                 metadatas: Vec::new(),
                 variables: Vec::new(),
@@ -832,11 +836,11 @@ mod tests {
                         }
                     }
                 ],
-                condition: Expression::For {
+                condition: ParsedExpr { expr: Expression::For {
                     selection: ForSelection::All,
                     set: VariableSet { elements: vec![] },
                     body: None,
-                },
+                }, ty: Type::Boolean, span: 80..91 },
                 is_private: true,
                 is_global: true,
             },
@@ -848,7 +852,11 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: Expression::Boolean(false),
+                condition: ParsedExpr {
+                    expr: Expression::Boolean(false),
+                    ty: Type::Integer,
+                    span: 35..40,
+                },
                 tags: Vec::new(),
                 metadatas: Vec::new(),
                 variables: Vec::new(),
@@ -862,7 +870,11 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: Expression::Boolean(false),
+                condition: ParsedExpr {
+                    expr: Expression::Boolean(false),
+                    ty: Type::Integer,
+                    span: 28..33,
+                },
                 tags: Vec::new(),
                 metadatas: Vec::new(),
                 variables: Vec::new(),
@@ -876,7 +888,11 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: Expression::Boolean(false),
+                condition: ParsedExpr {
+                    expr: Expression::Boolean(false),
+                    ty: Type::Integer,
+                    span: 27..32,
+                },
                 tags: Vec::new(),
                 metadatas: Vec::new(),
                 variables: Vec::new(),
@@ -985,7 +1001,11 @@ mod tests {
             "",
             vec![Rule {
                 name: "c".to_owned(),
-                condition: Expression::Boolean(false),
+                condition: ParsedExpr {
+                    expr: Expression::Boolean(false),
+                    ty: Type::Integer,
+                    span: 29..34,
+                },
                 tags: Vec::new(),
                 metadatas: Vec::new(),
                 variables: Vec::new(),
@@ -1006,7 +1026,11 @@ mod tests {
             vec![
                 Rule {
                     name: "c".to_owned(),
-                    condition: Expression::Boolean(false),
+                    condition: ParsedExpr {
+                        expr: Expression::Boolean(false),
+                        ty: Type::Integer,
+                        span: 56..61,
+                    },
                     tags: Vec::new(),
                     metadatas: Vec::new(),
                     variables: Vec::new(),
@@ -1015,7 +1039,11 @@ mod tests {
                 },
                 Rule {
                     name: "d".to_owned(),
-                    condition: Expression::Boolean(true),
+                    condition: ParsedExpr {
+                        expr: Expression::Boolean(true),
+                        ty: Type::Integer,
+                        span: 159..163,
+                    },
                     tags: Vec::new(),
                     metadatas: Vec::new(),
                     variables: Vec::new(),

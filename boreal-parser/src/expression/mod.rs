@@ -1,4 +1,5 @@
 mod boolean_expression;
+pub(super) use boolean_expression::boolean_expression as expression;
 mod common;
 mod for_expression;
 mod identifier;
@@ -15,16 +16,10 @@ use crate::{
     types::Span,
 };
 
-pub(super) fn expression(input: crate::types::Input) -> crate::types::ParseResult<Expression> {
-    let (input, parsed_expr) = boolean_expression::boolean_expression(input)?;
-    // All types are convertible to bool, so just return the inner expr.
-    Ok((input, parsed_expr.expr))
-}
-
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
 
-/// Size of the integer to read, see [`Expression::ReadInteger`].
+/// Size of the integer to read, see [`ParsedExpr::ReadInteger`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum ReadIntegerSize {
     /// 8 bits
@@ -45,7 +40,7 @@ pub enum Identifier {
         /// Object being subscripted
         identifier: Box<Identifier>,
         /// Value used as the index
-        subscript: Box<Expression>,
+        subscript: Box<ParsedExpr>,
     },
     /// Object subfield, i.e. `identifier.subfield`.
     Subfield {
@@ -59,7 +54,7 @@ pub enum Identifier {
         /// Function being called
         identifier: Box<Identifier>,
         /// List of arguments to pass to the function
-        arguments: Vec<Expression>,
+        arguments: Vec<ParsedExpr>,
     },
 }
 
@@ -85,7 +80,7 @@ pub enum Expression {
         /// If true, read in big-endian, otherwise little-endian.
         big_endian: bool,
         /// Address/Offset of the input where to read.
-        addr: Box<Expression>,
+        addr: Box<ParsedExpr>,
     },
 
     /// A i64 value.
@@ -102,9 +97,9 @@ pub enum Expression {
         /// Name of the variable being counted
         variable_name: String,
         /// Starting offset, included.
-        from: Box<Expression>,
+        from: Box<ParsedExpr>,
         /// Ending offset, included.
-        to: Box<Expression>,
+        to: Box<ParsedExpr>,
     },
 
     /// Offset of a variable match
@@ -115,7 +110,7 @@ pub enum Expression {
         /// Occurrence number.
         ///
         /// `1` is the first match on the variable, `2` is the next one, etc.
-        occurence_number: Box<Expression>,
+        occurence_number: Box<ParsedExpr>,
     },
 
     /// Length of a variable match
@@ -126,46 +121,46 @@ pub enum Expression {
         /// Occurrence number.
         ///
         /// `1` is the first match on the variable, `2` is the next one, etc.
-        occurence_number: Box<Expression>,
+        occurence_number: Box<ParsedExpr>,
     },
 
     /// Opposite value, for integers and floats.
-    Neg(Box<Expression>),
+    Neg(Box<ParsedExpr>),
 
     /// Addition, for integers and floats.
-    Add(Box<Expression>, Box<Expression>),
+    Add(Box<ParsedExpr>, Box<ParsedExpr>),
     /// Substraction, for integers and floats.
-    Sub(Box<Expression>, Box<Expression>),
+    Sub(Box<ParsedExpr>, Box<ParsedExpr>),
     /// Multiplication, for integers and floats.
-    Mul(Box<Expression>, Box<Expression>),
+    Mul(Box<ParsedExpr>, Box<ParsedExpr>),
     /// Division, for integers and floats.
-    Div(Box<Expression>, Box<Expression>),
+    Div(Box<ParsedExpr>, Box<ParsedExpr>),
 
     /// Modulo, for integers.
-    Mod(Box<Expression>, Box<Expression>),
+    Mod(Box<ParsedExpr>, Box<ParsedExpr>),
 
     /// Bitwise xor, for integers.
-    BitwiseXor(Box<Expression>, Box<Expression>),
+    BitwiseXor(Box<ParsedExpr>, Box<ParsedExpr>),
     /// Bitwise and, for integers.
-    BitwiseAnd(Box<Expression>, Box<Expression>),
+    BitwiseAnd(Box<ParsedExpr>, Box<ParsedExpr>),
     /// Bitwise or, for integers.
-    BitwiseOr(Box<Expression>, Box<Expression>),
+    BitwiseOr(Box<ParsedExpr>, Box<ParsedExpr>),
 
     /// Bitwise negation, for integers.
-    BitwiseNot(Box<Expression>),
+    BitwiseNot(Box<ParsedExpr>),
 
     /// Shift left, both elements must be integers.
-    ShiftLeft(Box<Expression>, Box<Expression>),
+    ShiftLeft(Box<ParsedExpr>, Box<ParsedExpr>),
     /// Shift right, both elements must be integers.
-    ShiftRight(Box<Expression>, Box<Expression>),
+    ShiftRight(Box<ParsedExpr>, Box<ParsedExpr>),
 
     /// Boolean and operation.
-    And(Box<Expression>, Box<Expression>),
+    And(Box<ParsedExpr>, Box<ParsedExpr>),
     /// Boolean or operation.
-    Or(Box<Expression>, Box<Expression>),
+    Or(Box<ParsedExpr>, Box<ParsedExpr>),
 
     /// Boolean negation.
-    Not(Box<Expression>),
+    Not(Box<ParsedExpr>),
 
     /// Comparison.
     ///
@@ -173,9 +168,9 @@ pub enum Expression {
     /// Strings can be compared to strings.
     Cmp {
         /// Left operand.
-        left: Box<Expression>,
+        left: Box<ParsedExpr>,
         /// Right operand.
-        right: Box<Expression>,
+        right: Box<ParsedExpr>,
         /// If true this is '<', otherwise '>'
         less_than: bool,
         /// If true, left == right returns true.
@@ -183,14 +178,14 @@ pub enum Expression {
     },
 
     /// Equality test
-    Eq(Box<Expression>, Box<Expression>),
+    Eq(Box<ParsedExpr>, Box<ParsedExpr>),
 
     /// Does a string contains another string
     Contains {
         /// String to search in
-        haystack: Box<Expression>,
+        haystack: Box<ParsedExpr>,
         /// String to search
-        needle: Box<Expression>,
+        needle: Box<ParsedExpr>,
         /// If true, the search is case insensitive.
         case_insensitive: bool,
     },
@@ -198,9 +193,9 @@ pub enum Expression {
     /// Does a string starts with another string
     StartsWith {
         /// String to search in
-        expr: Box<Expression>,
+        expr: Box<ParsedExpr>,
         /// Prefix to search
-        prefix: Box<Expression>,
+        prefix: Box<ParsedExpr>,
         /// If true, the search is case insensitive.
         case_insensitive: bool,
     },
@@ -208,24 +203,24 @@ pub enum Expression {
     /// Does a string ends with another string
     EndsWith {
         /// String to search in
-        expr: Box<Expression>,
+        expr: Box<ParsedExpr>,
         /// Prefix to search
-        suffix: Box<Expression>,
+        suffix: Box<ParsedExpr>,
         /// If true, the search is case insensitive.
         case_insensitive: bool,
     },
 
     /// Case insensitive equality test. Both elements must be strings.
-    IEquals(Box<Expression>, Box<Expression>),
+    IEquals(Box<ParsedExpr>, Box<ParsedExpr>),
 
     /// Does a string matches a regex.
-    Matches(Box<Expression>, Regex),
+    Matches(Box<ParsedExpr>, Regex),
 
     /// Is a given value defined.
     ///
     /// For example, `defined filesize` will be true when scanning a file,
     /// false otherwise.
-    Defined(Box<Expression>),
+    Defined(Box<ParsedExpr>),
 
     /// A boolean value.
     Boolean(bool),
@@ -234,16 +229,16 @@ pub enum Expression {
     Variable(String),
 
     /// Does a variable matches at a given offset.
-    VariableAt(String, Box<Expression>),
+    VariableAt(String, Box<ParsedExpr>),
 
     /// Does a variable matches in a given offset range.
     VariableIn {
         /// Name of the variable.
         variable_name: String,
         /// Starting offset, included.
-        from: Box<Expression>,
+        from: Box<ParsedExpr>,
         /// Ending offset, included.
-        to: Box<Expression>,
+        to: Box<ParsedExpr>,
     },
 
     /// Evaluate multiple variables on a given expression.
@@ -258,14 +253,14 @@ pub enum Expression {
         /// Which variables to select.
         set: VariableSet,
 
-        /// Expression to evaluate for each variable.
+        /// ParsedExpr to evaluate for each variable.
         ///
         /// The body can contain `$`, `#`, `@` or `!` to refer to the
         /// currently selected variable.
         ///
         /// If unset, this is equivalent to `$`, i.e. true if the selected
         /// variable matches.
-        body: Option<Box<Expression>>,
+        body: Option<Box<ParsedExpr>>,
     },
 
     /// Evaluate multiple variables on a given range.
@@ -279,9 +274,9 @@ pub enum Expression {
         /// Which variables to select.
         set: VariableSet,
         /// Starting offset, included.
-        from: Box<Expression>,
+        from: Box<ParsedExpr>,
         /// Ending offset, included.
-        to: Box<Expression>,
+        to: Box<ParsedExpr>,
     },
 
     /// Evaluate an identifier with multiple values on a given expression.
@@ -306,7 +301,7 @@ pub enum Expression {
         iterator: ForIterator,
 
         /// Body to evaluate for each binding.
-        body: Box<Expression>,
+        body: Box<ParsedExpr>,
     },
 
     /// An identifier.
@@ -329,7 +324,7 @@ pub enum ForSelection {
     All,
     /// None of the variables in the set must match the condition.
     None,
-    /// Expression that should evaluate to a number, indicating:
+    /// ParsedExpr that should evaluate to a number, indicating:
     /// - if as_percent is false, how many variables in the set must match
     ///   the condition.
     /// - if as_percent is true, which percentage of variables in the set
@@ -339,7 +334,7 @@ pub enum ForSelection {
     /// Usually, the expression is a simple number.
     Expr {
         /// Number of variables selected
-        expr: Box<Expression>,
+        expr: Box<ParsedExpr>,
         /// Should the number be a percentage.
         as_percent: bool,
     },
@@ -354,12 +349,12 @@ pub enum ForIterator {
     /// Every value between two numbers
     Range {
         /// Start of the range, included
-        from: Box<Expression>,
+        from: Box<ParsedExpr>,
         /// End of the range, included
-        to: Box<Expression>,
+        to: Box<ParsedExpr>,
     },
     /// List of values
-    List(Vec<Expression>),
+    List(Vec<ParsedExpr>),
 }
 
 /// Set of multiple variables.
@@ -378,7 +373,7 @@ pub struct VariableSet {
 /// This is useful to know the type of a parsed expression, and reject
 /// during parsing expressions which are incompatible.
 #[derive(Copy, Clone, PartialEq, Debug)]
-enum Type {
+pub enum Type {
     Integer,
     Float,
     String,
@@ -402,15 +397,16 @@ impl std::fmt::Display for Type {
     }
 }
 
+/// A parsed expression with associated span
 #[derive(Clone, Debug, PartialEq)]
-struct ParsedExpr {
-    // The raw expression.
+pub struct ParsedExpr {
+    /// The raw expression.
     pub expr: Expression,
 
-    // Type of the expression.
+    /// Type of the expression.
     pub ty: Type,
 
-    // Span of the expression.
+    /// Span of the expression.
     pub span: Span,
 }
 
@@ -428,8 +424,8 @@ impl ParsedExpr {
         Ok(())
     }
 
-    fn unwrap_expr(self, expected_type: Type) -> Result<Box<Expression>, nom::Err<Error>> {
+    fn unwrap_expr(self, expected_type: Type) -> Result<Box<ParsedExpr>, nom::Err<Error>> {
         self.check_type(expected_type)?;
-        Ok(Box::new(self.expr))
+        Ok(Box::new(self))
     }
 }

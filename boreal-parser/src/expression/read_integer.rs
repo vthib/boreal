@@ -110,7 +110,11 @@ mod tests {
                     unsigned: true,
                     size: RIS::Int8,
                     big_endian: false,
-                    addr: Box::new(Expression::Number(3)),
+                    addr: Box::new(ParsedExpr {
+                        expr: Expression::Number(3),
+                        ty: Type::Integer,
+                        span: 6..7,
+                    }),
                 },
                 ty: Type::Integer,
                 span: 0..8,

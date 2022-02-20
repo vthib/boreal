@@ -143,7 +143,7 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
                 expr: Expression::For {
                     selection,
                     set,
-                    body: Some(Box::new(body.expr)),
+                    body: Some(Box::new(body)),
                 },
                 ty: Type::Boolean,
                 span: input.get_span_from(start),
@@ -165,7 +165,7 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
                     selection,
                     identifiers,
                     iterator,
-                    body: Box::new(body.expr),
+                    body: Box::new(body),
                 },
                 ty: Type::Boolean,
                 span: input.get_span_from(start),
@@ -251,7 +251,6 @@ fn iterator_list(input: Input) -> ParseResult<ForIterator> {
         rtrim(char(')')),
     )(input)?;
 
-    let exprs = exprs.into_iter().map(|v| v.expr).collect();
     Ok((input, ForIterator::List(exprs)))
 }
 
@@ -287,7 +286,11 @@ mod tests {
             "1a",
             "a",
             ForSelection::Expr {
-                expr: Box::new(Expression::Number(1)),
+                expr: Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                    ty: Type::Integer,
+                    span: 0..1,
+                }),
                 as_percent: false,
             },
         );
@@ -296,7 +299,11 @@ mod tests {
             "50% of",
             "of",
             ForSelection::Expr {
-                expr: Box::new(Expression::Number(50)),
+                expr: Box::new(ParsedExpr {
+                    expr: Expression::Number(50),
+                    ty: Type::Integer,
+                    span: 0..2,
+                }),
                 as_percent: true,
             },
         );
@@ -306,7 +313,11 @@ mod tests {
             "anya",
             "",
             ForSelection::Expr {
-                expr: Box::new(Expression::Identifier(Identifier::Raw("anya".to_owned()))),
+                expr: Box::new(ParsedExpr {
+                    expr: Expression::Identifier(Identifier::Raw("anya".to_owned())),
+                    ty: Type::Undefined,
+                    span: 0..4,
+                }),
                 as_percent: false,
             },
         );
@@ -402,7 +413,11 @@ mod tests {
             ParsedExpr {
                 expr: Expression::For {
                     selection: ForSelection::Expr {
-                        expr: Box::new(Expression::Number(50)),
+                        expr: Box::new(ParsedExpr {
+                            expr: Expression::Number(50),
+                            ty: Type::Boolean,
+                            span: 0..2,
+                        }),
                         as_percent: true,
                     },
                     set: VariableSet { elements: vec![] },
@@ -419,14 +434,26 @@ mod tests {
             ParsedExpr {
                 expr: Expression::ForIn {
                     selection: ForSelection::Expr {
-                        expr: Box::new(Expression::Number(5)),
+                        expr: Box::new(ParsedExpr {
+                            expr: Expression::Number(5),
+                            ty: Type::Boolean,
+                            span: 0..1,
+                        }),
                         as_percent: false,
                     },
                     set: VariableSet {
                         elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
                     },
-                    from: Box::new(Expression::Number(100)),
-                    to: Box::new(Expression::Entrypoint),
+                    from: Box::new(ParsedExpr {
+                        expr: Expression::Number(100),
+                        ty: Type::Boolean,
+                        span: 19..22,
+                    }),
+                    to: Box::new(ParsedExpr {
+                        expr: Expression::Entrypoint,
+                        ty: Type::Boolean,
+                        span: 24..34,
+                    }),
                 },
                 ty: Type::Boolean,
                 span: 0..35,
@@ -450,13 +477,21 @@ mod tests {
             ParsedExpr {
                 expr: Expression::For {
                     selection: ForSelection::Expr {
-                        expr: Box::new(Expression::Number(25)),
+                        expr: Box::new(ParsedExpr {
+                            expr: Expression::Number(25),
+                            ty: Type::Integer,
+                            span: 4..6,
+                        }),
                         as_percent: true,
                     },
                     set: VariableSet {
                         elements: vec![("foo".to_owned(), true)],
                     },
-                    body: Some(Box::new(Expression::Variable("".to_owned()))),
+                    body: Some(Box::new(ParsedExpr {
+                        expr: Expression::Variable("".to_owned()),
+                        ty: Type::Boolean,
+                        span: 22..23,
+                    })),
                 },
                 ty: Type::Boolean,
                 span: 0..24,
@@ -486,8 +521,23 @@ mod tests {
                 expr: Expression::ForIdentifiers {
                     selection: ForSelection::All,
                     identifiers: vec!["i".to_owned()],
-                    iterator: ForIterator::List(vec![Expression::Number(1), Expression::Number(3)]),
-                    body: Box::new(Expression::Boolean(false)),
+                    iterator: ForIterator::List(vec![
+                        ParsedExpr {
+                            expr: Expression::Number(1),
+                            ty: Type::Integer,
+                            span: 14..15,
+                        },
+                        ParsedExpr {
+                            expr: Expression::Number(3),
+                            ty: Type::Integer,
+                            span: 17..18,
+                        },
+                    ]),
+                    body: Box::new(ParsedExpr {
+                        expr: Expression::Boolean(false),
+                        ty: Type::Boolean,
+                        span: 0..1,
+                    }),
                 },
                 ty: Type::Boolean,
                 span: 0..31,
@@ -502,13 +552,33 @@ mod tests {
                     selection: ForSelection::Any,
                     identifiers: vec!["s".to_owned()],
                     iterator: ForIterator::Range {
-                        from: Box::new(Expression::Number(0)),
-                        to: Box::new(Expression::Sub(
-                            Box::new(Expression::Number(5)),
-                            Box::new(Expression::Number(1)),
-                        )),
+                        from: Box::new(ParsedExpr {
+                            expr: Expression::Number(0),
+                            ty: Type::Integer,
+                            span: 14..15,
+                        }),
+                        to: Box::new(ParsedExpr {
+                            expr: Expression::Sub(
+                                Box::new(ParsedExpr {
+                                    expr: Expression::Number(5),
+                                    ty: Type::Integer,
+                                    span: 17..18,
+                                }),
+                                Box::new(ParsedExpr {
+                                    expr: Expression::Number(1),
+                                    ty: Type::Integer,
+                                    span: 21..22,
+                                }),
+                            ),
+                            ty: Type::Integer,
+                            span: 17..22,
+                        }),
                     },
-                    body: Box::new(Expression::Boolean(false)),
+                    body: Box::new(ParsedExpr {
+                        expr: Expression::Boolean(false),
+                        ty: Type::Boolean,
+                        span: 28..33,
+                    }),
                 },
                 ty: Type::Boolean,
                 span: 0..35,
@@ -523,7 +593,11 @@ mod tests {
                     selection: ForSelection::Any,
                     identifiers: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
                     iterator: ForIterator::Identifier(Identifier::Raw("toto".to_owned())),
-                    body: Box::new(Expression::Boolean(false)),
+                    body: Box::new(ParsedExpr {
+                        expr: Expression::Boolean(false),
+                        ty: Type::Boolean,
+                        span: 0..1,
+                    }),
                 },
                 ty: Type::Boolean,
                 span: 0..29,
@@ -568,16 +642,32 @@ mod tests {
             iterator,
             "(1)b",
             "b",
-            ForIterator::List(vec![Expression::Number(1)]),
+            ForIterator::List(vec![ParsedExpr {
+                expr: Expression::Number(1),
+                ty: Type::Integer,
+                span: 1..2,
+            }]),
         );
         parse(
             iterator,
             "(1, 2,#a)b",
             "b",
             ForIterator::List(vec![
-                Expression::Number(1),
-                Expression::Number(2),
-                Expression::Count("a".to_owned()),
+                ParsedExpr {
+                    expr: Expression::Number(1),
+                    ty: Type::Integer,
+                    span: 1..2,
+                },
+                ParsedExpr {
+                    expr: Expression::Number(2),
+                    ty: Type::Integer,
+                    span: 4..5,
+                },
+                ParsedExpr {
+                    expr: Expression::Count("a".to_owned()),
+                    ty: Type::Integer,
+                    span: 6..8,
+                },
             ]),
         );
         parse(
@@ -585,8 +675,16 @@ mod tests {
             "(1..#t) b",
             "b",
             ForIterator::Range {
-                from: Box::new(Expression::Number(1)),
-                to: Box::new(Expression::Count("t".to_owned())),
+                from: Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                    ty: Type::Integer,
+                    span: 1..2,
+                }),
+                to: Box::new(ParsedExpr {
+                    expr: Expression::Count("t".to_owned()),
+                    ty: Type::Integer,
+                    span: 4..6,
+                }),
             },
         );
 

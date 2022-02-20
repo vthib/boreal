@@ -2,12 +2,11 @@
 //!
 //! This parses the [`crate::expression::Identifier`] object.
 //! See the `identifier` rule in `grammar.y` in libyara.
-use nom::combinator::map;
 use nom::{
     character::complete::char, combinator::cut, multi::separated_list0, sequence::terminated,
 };
 
-use super::{Expression, Identifier};
+use super::{Identifier, ParsedExpr};
 use crate::nom_recipes::rtrim;
 use crate::string::identifier as raw_identifier;
 use crate::types::{Input, ParseResult};
@@ -21,18 +20,15 @@ fn trailing_subfield(input: Input) -> ParseResult<String> {
 }
 
 /// Parse a trailing subscript, i.e. after the `[` has been parsed
-fn trailing_subscript(input: Input) -> ParseResult<Expression> {
-    cut(terminated(
-        map(primary_expression, |v| v.expr),
-        rtrim(char(']')),
-    ))(input)
+fn trailing_subscript(input: Input) -> ParseResult<ParsedExpr> {
+    cut(terminated(primary_expression, rtrim(char(']'))))(input)
 }
 
 /// Parse a trailing argument specification, i.e. after the `(` has been
 /// parsed.
-fn trailing_arguments(input: Input) -> ParseResult<Vec<Expression>> {
+fn trailing_arguments(input: Input) -> ParseResult<Vec<ParsedExpr>> {
     cut(terminated(
-        separated_list0(rtrim(char(',')), map(boolean_expression, |e| e.expr)),
+        separated_list0(rtrim(char(',')), boolean_expression),
         rtrim(char(')')),
     ))(input)
 }
@@ -83,7 +79,7 @@ pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
 mod tests {
     use super::*;
     use crate::{
-        expression::Expression,
+        expression::{Expression, Type},
         tests::{parse, parse_err},
     };
 
@@ -105,7 +101,11 @@ mod tests {
             "",
             Identifier::Subscript {
                 identifier: Box::new(Identifier::Raw("a".to_owned())),
-                subscript: Box::new(Expression::Number(2)),
+                subscript: Box::new(ParsedExpr {
+                    expr: Expression::Number(2),
+                    ty: Type::Integer,
+                    span: 3..4,
+                }),
             },
         );
         parse(
@@ -124,8 +124,16 @@ mod tests {
             Identifier::FunctionCall {
                 identifier: Box::new(Identifier::Raw("foo".to_owned())),
                 arguments: vec![
-                    Expression::Identifier(Identifier::Raw("pe".to_owned())),
-                    Expression::Boolean(true),
+                    ParsedExpr {
+                        expr: Expression::Identifier(Identifier::Raw("pe".to_owned())),
+                        ty: Type::Undefined,
+                        span: 4..6,
+                    },
+                    ParsedExpr {
+                        expr: Expression::Boolean(true),
+                        ty: Type::Undefined,
+                        span: 8..12,
+                    },
                 ],
             },
         );
@@ -148,20 +156,36 @@ mod tests {
                 subfield: "b".to_owned(),
             }),
             arguments: vec![
-                Expression::Identifier(Identifier::Subfield {
-                    identifier: Box::new(Identifier::Subscript {
-                        identifier: Box::new(Identifier::Raw("c".to_owned())),
-                        subscript: Box::new(Expression::String("d".to_owned())),
+                ParsedExpr {
+                    expr: Expression::Identifier(Identifier::Subfield {
+                        identifier: Box::new(Identifier::Subscript {
+                            identifier: Box::new(Identifier::Raw("c".to_owned())),
+                            subscript: Box::new(ParsedExpr {
+                                expr: Expression::String("d".to_owned()),
+                                ty: Type::Undefined,
+                                span: 8..11,
+                            }),
+                        }),
+                        subfield: "e".to_owned(),
                     }),
-                    subfield: "e".to_owned(),
-                }),
-                Expression::Identifier(Identifier::FunctionCall {
-                    identifier: Box::new(Identifier::FunctionCall {
-                        identifier: Box::new(Identifier::Raw("f".to_owned())),
-                        arguments: vec![],
+                    ty: Type::Undefined,
+                    span: 6..14,
+                },
+                ParsedExpr {
+                    expr: Expression::Identifier(Identifier::FunctionCall {
+                        identifier: Box::new(Identifier::FunctionCall {
+                            identifier: Box::new(Identifier::Raw("f".to_owned())),
+                            arguments: vec![],
+                        }),
+                        arguments: vec![ParsedExpr {
+                            expr: Expression::Boolean(true),
+                            ty: Type::Undefined,
+                            span: 4..6,
+                        }],
                     }),
-                    arguments: vec![Expression::Boolean(true)],
-                }),
+                    ty: Type::Undefined,
+                    span: 4..6,
+                },
             ],
         };
 
@@ -174,13 +198,21 @@ mod tests {
                     identifier: Box::new(Identifier::Subfield {
                         identifier: Box::new(Identifier::Subscript {
                             identifier: Box::new(identifier_call),
-                            subscript: Box::new(Expression::Number(3)),
+                            subscript: Box::new(ParsedExpr {
+                                expr: Expression::Number(3),
+                                ty: Type::Integer,
+                                span: 28..29,
+                            }),
                         }),
                         subfield: "g".to_owned(),
                     }),
                     subfield: "h".to_owned(),
                 }),
-                subscript: Box::new(Expression::Number(1)),
+                subscript: Box::new(ParsedExpr {
+                    expr: Expression::Number(1),
+                    ty: Type::Integer,
+                    span: 35..36,
+                }),
             },
         );
     }
