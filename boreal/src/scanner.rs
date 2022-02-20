@@ -2,7 +2,7 @@
 //! files or memory on a set of rules.
 use boreal_parser::{parse_str, Metadata};
 
-use crate::expression::{Compiler, Expression};
+use crate::compiler::{Compiler, Expression};
 use crate::variable::Variable;
 use crate::{evaluator, ScanError};
 

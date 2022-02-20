@@ -1,8 +1,8 @@
 //! Provides methods to evaluate expressions.
 use regex::Regex;
 
+use crate::compiler::Expression;
 use crate::error::ScanError;
-use crate::expression::Expression;
 use crate::scanner::Rule;
 use crate::variable::Variable;
 

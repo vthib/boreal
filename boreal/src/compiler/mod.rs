@@ -1,7 +1,12 @@
 //! Compilation of a parsed expression into an optimized one.
 use regex::Regex;
 
-use super::{parser, CompilationError, Expression, ForIterator, ForSelection, Identifier};
+use boreal_parser as parser;
+
+mod expression;
+pub use expression::*;
+mod error;
+pub use error::CompilationError;
 
 pub struct Compiler;
 

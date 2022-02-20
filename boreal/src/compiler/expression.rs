@@ -5,11 +5,6 @@ use regex::Regex;
 
 use boreal_parser as parser;
 
-mod compiler;
-pub use compiler::Compiler;
-mod error;
-pub use error::CompilationError;
-
 /// Parsed identifier used in expressions.
 #[derive(Debug)]
 pub enum Identifier {
