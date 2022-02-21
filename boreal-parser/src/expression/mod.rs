@@ -12,15 +12,29 @@ use crate::string::Regex;
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
 
-/// Size of the integer to read, see [`ExpressionKind::ReadInteger`].
+/// Integer read type, see [`ExpressionKind::ReadInteger`].
 #[derive(Clone, Debug, PartialEq)]
-pub enum ReadIntegerSize {
-    /// 8 bits
+pub enum ReadIntegerType {
+    /// 8 bits, signed
     Int8,
-    /// 16 bits
+    /// 8 bits, unsigned
+    Uint8,
+    /// 16 bits, signed
     Int16,
-    /// 32 bits
+    /// 16 bits, signed, big-endian
+    Int16BE,
+    /// 16 bits, unsigned
+    Uint16,
+    /// 16 bits, unsigned, big-endian
+    Uint16BE,
+    /// 32 bits, signed
     Int32,
+    /// 32 bits, signed, big-endian
+    Int32BE,
+    /// 32 bits, unsigned
+    Uint32,
+    /// 32 bits, unsigned, big-endian
+    Uint32BE,
 }
 
 /// Parsed identifier used in expressions.
@@ -66,12 +80,8 @@ pub enum ExpressionKind {
     ///
     /// See the yara documentation on `int8`, `uint16be` etc.
     ReadInteger {
-        /// Size of the integer to read.
-        size: ReadIntegerSize,
-        /// If true, read an unsigned integer, otherwise signed.
-        unsigned: bool,
-        /// If true, read in big-endian, otherwise little-endian.
-        big_endian: bool,
+        /// Which size and endianness to read.
+        ty: ReadIntegerType,
         /// Address/Offset of the input where to read.
         addr: Box<Expression>,
     },

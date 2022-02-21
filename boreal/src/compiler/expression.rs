@@ -84,12 +84,8 @@ pub enum Expression {
     ///
     /// See the yara documentation on `int8`, `uint16be` etc.
     ReadInteger {
-        /// Size of the integer to read.
-        size: parser::ReadIntegerSize,
-        /// If true, read an unsigned integer, otherwise signed.
-        unsigned: bool,
-        /// If true, read in big-endian, otherwise little-endian.
-        big_endian: bool,
+        /// Which size and endianness to read.
+        ty: parser::ReadIntegerType,
         /// Address/Offset of the input where to read.
         addr: Box<Expression>,
     },
@@ -341,19 +337,12 @@ pub fn compile_expression(
             ty: Type::Integer,
             span,
         }),
-        parser::ExpressionKind::ReadInteger {
-            size,
-            unsigned,
-            big_endian,
-            addr,
-        } => {
+        parser::ExpressionKind::ReadInteger { ty, addr } => {
             let addr = compile_expression(compiler, *addr)?;
 
             Ok(Expr {
                 expr: Expression::ReadInteger {
-                    size,
-                    unsigned,
-                    big_endian,
+                    ty,
                     addr: addr.unwrap_expr(Type::Integer)?,
                 },
                 ty: Type::Integer,

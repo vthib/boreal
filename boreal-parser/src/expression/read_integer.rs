@@ -3,15 +3,14 @@
 //! This implements the `integer_function` element in grammar.y in libyara.
 use nom::{
     branch::alt,
-    bytes::complete::tag,
     character::complete::char,
-    combinator::{cut, map, opt},
-    sequence::{delimited, pair, tuple},
+    combinator::{cut, map},
+    sequence::{delimited, pair},
 };
 
-use super::{primary_expression::primary_expression, Expression, ExpressionKind, ReadIntegerSize};
+use super::{primary_expression::primary_expression, Expression, ExpressionKind, ReadIntegerType};
 use crate::{
-    nom_recipes::rtrim,
+    nom_recipes::{rtrim, textual_tag as ttag},
     types::{Input, ParseResult},
 };
 
@@ -24,22 +23,25 @@ use crate::{
 /// - a boolean indicating the sign (true if unsigned).
 /// - the size of the integer
 /// - a boolean indicating the endianness (true if big-endian).
-fn read_integer(input: Input) -> ParseResult<(bool, ReadIntegerSize, bool)> {
-    rtrim(tuple((
-        map(opt(char('u')), |v| v.is_some()),
-        alt((
-            map(tag("int8"), |_| ReadIntegerSize::Int8),
-            map(tag("int16"), |_| ReadIntegerSize::Int16),
-            map(tag("int32"), |_| ReadIntegerSize::Int32),
-        )),
-        map(opt(tag("be")), |v| v.is_some()),
+fn read_integer_type(input: Input) -> ParseResult<ReadIntegerType> {
+    rtrim(alt((
+        map(ttag("uint32be"), |_| ReadIntegerType::Uint32BE),
+        map(ttag("uint32"), |_| ReadIntegerType::Uint32),
+        map(ttag("int32be"), |_| ReadIntegerType::Int32BE),
+        map(ttag("int32"), |_| ReadIntegerType::Int32),
+        map(ttag("uint16be"), |_| ReadIntegerType::Uint16BE),
+        map(ttag("uint16"), |_| ReadIntegerType::Uint16),
+        map(ttag("int16be"), |_| ReadIntegerType::Int16BE),
+        map(ttag("int16"), |_| ReadIntegerType::Int16),
+        map(ttag("uint8"), |_| ReadIntegerType::Uint8),
+        map(ttag("int8"), |_| ReadIntegerType::Int8),
     )))(input)
 }
 
 pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
-    let (input, ((unsigned, size, big_endian), expr)) = pair(
-        read_integer,
+    let (input, (ty, expr)) = pair(
+        read_integer_type,
         cut(delimited(
             rtrim(char('(')),
             primary_expression,
@@ -51,9 +53,7 @@ pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
         input,
         Expression {
             expr: ExpressionKind::ReadInteger {
-                unsigned,
-                size,
-                big_endian,
+                ty,
                 addr: Box::new(expr),
             },
             span: input.get_span_from(start),
@@ -64,33 +64,56 @@ pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
 #[cfg(test)]
 mod tests {
     use super::{
-        read_integer, read_integer_expression, Expression, ExpressionKind, ReadIntegerSize as RIS,
+        read_integer_expression, read_integer_type, Expression, ExpressionKind, ReadIntegerType,
     };
     use crate::tests::{parse, parse_err};
 
     #[test]
     fn test_read_integer() {
-        parse(read_integer, "int8b", "b", (false, RIS::Int8, false));
-        parse(read_integer, "uint8 be", "be", (true, RIS::Int8, false));
-        parse(read_integer, "int8bet", "t", (false, RIS::Int8, true));
-        parse(read_integer, "uint8be", "", (true, RIS::Int8, true));
+        parse(read_integer_type, "int8", "", ReadIntegerType::Int8);
+        parse(read_integer_type, "uint8 be", "be", ReadIntegerType::Uint8);
+        parse(read_integer_type, "uint8 a", "a", ReadIntegerType::Uint8);
 
-        parse(read_integer, "int16b", "b", (false, RIS::Int16, false));
-        parse(read_integer, "uint16 be", "be", (true, RIS::Int16, false));
-        parse(read_integer, "int16bet", "t", (false, RIS::Int16, true));
-        parse(read_integer, "uint16be", "", (true, RIS::Int16, true));
+        parse(read_integer_type, "int16 a", "a", ReadIntegerType::Int16);
+        parse(
+            read_integer_type,
+            "uint16 be",
+            "be",
+            ReadIntegerType::Uint16,
+        );
+        parse(
+            read_integer_type,
+            "int16be a",
+            "a",
+            ReadIntegerType::Int16BE,
+        );
+        parse(read_integer_type, "uint16be", "", ReadIntegerType::Uint16BE);
 
-        parse(read_integer, "int32b", "b", (false, RIS::Int32, false));
-        parse(read_integer, "uint32 be", "be", (true, RIS::Int32, false));
-        parse(read_integer, "int32bet", "t", (false, RIS::Int32, true));
-        parse(read_integer, "uint32be", "", (true, RIS::Int32, true));
+        parse(read_integer_type, "int32 b", "b", ReadIntegerType::Int32);
+        parse(
+            read_integer_type,
+            "uint32 be",
+            "be",
+            ReadIntegerType::Uint32,
+        );
+        parse(
+            read_integer_type,
+            "int32be a",
+            "a",
+            ReadIntegerType::Int32BE,
+        );
+        parse(read_integer_type, "uint32be", "", ReadIntegerType::Uint32BE);
 
-        parse_err(read_integer, "");
-        parse_err(read_integer, "u");
-        parse_err(read_integer, "uint");
-        parse_err(read_integer, "int");
-        parse_err(read_integer, "int9");
-        parse_err(read_integer, "uint1");
+        parse_err(read_integer_type, "");
+        parse_err(read_integer_type, "u");
+        parse_err(read_integer_type, "uint");
+        parse_err(read_integer_type, "int");
+        parse_err(read_integer_type, "int8b");
+        parse_err(read_integer_type, "int8be");
+        parse_err(read_integer_type, "int8bet");
+        parse_err(read_integer_type, "int16bet");
+        parse_err(read_integer_type, "int9");
+        parse_err(read_integer_type, "uint1");
     }
 
     #[test]
@@ -101,9 +124,7 @@ mod tests {
             "",
             Expression {
                 expr: ExpressionKind::ReadInteger {
-                    unsigned: true,
-                    size: RIS::Int8,
-                    big_endian: false,
+                    ty: ReadIntegerType::Uint8,
                     addr: Box::new(Expression {
                         expr: ExpressionKind::Number(3),
                         span: 6..7,

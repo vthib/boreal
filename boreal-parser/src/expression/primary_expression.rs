@@ -237,7 +237,7 @@ mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression, ExpressionKind as Expr};
     use crate::{
-        expression::ReadIntegerSize,
+        expression::ReadIntegerType,
         string::Regex,
         tests::{parse, parse_check, parse_err},
     };
@@ -279,9 +279,7 @@ mod tests {
             "",
             Expression {
                 expr: Expr::ReadInteger {
-                    unsigned: true,
-                    size: ReadIntegerSize::Int8,
-                    big_endian: false,
+                    ty: ReadIntegerType::Uint8,
                     addr: Box::new(Expression {
                         expr: Expr::Number(3),
                         span: 6..7,
