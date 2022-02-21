@@ -81,3 +81,6 @@ pub fn compile_rule(rule: parser::Rule) -> Result<Rule, CompilationError> {
         condition: condition.expr,
     })
 }
+
+#[cfg(test)]
+mod tests;
