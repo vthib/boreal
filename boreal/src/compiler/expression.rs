@@ -326,22 +326,22 @@ pub enum Expression {
 #[allow(clippy::too_many_lines)]
 pub fn compile_expression(
     compiler: &Compiler,
-    expression: parser::ParsedExpr,
+    expression: parser::Expression,
 ) -> Result<Expr, CompilationError> {
     let span = expression.span;
 
     match expression.expr {
-        parser::Expression::Filesize => Ok(Expr {
+        parser::ExpressionKind::Filesize => Ok(Expr {
             expr: Expression::Filesize,
             ty: Type::Integer,
             span,
         }),
-        parser::Expression::Entrypoint => Ok(Expr {
+        parser::ExpressionKind::Entrypoint => Ok(Expr {
             expr: Expression::Entrypoint,
             ty: Type::Integer,
             span,
         }),
-        parser::Expression::ReadInteger {
+        parser::ExpressionKind::ReadInteger {
             size,
             unsigned,
             big_endian,
@@ -361,25 +361,25 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Number(v) => Ok(Expr {
+        parser::ExpressionKind::Number(v) => Ok(Expr {
             expr: Expression::Number(v),
             ty: Type::Integer,
             span,
         }),
 
-        parser::Expression::Double(v) => Ok(Expr {
+        parser::ExpressionKind::Double(v) => Ok(Expr {
             expr: Expression::Double(v),
             ty: Type::Float,
             span,
         }),
 
-        parser::Expression::Count(variable_name) => Ok(Expr {
+        parser::ExpressionKind::Count(variable_name) => Ok(Expr {
             expr: Expression::Count(variable_name),
             ty: Type::Integer,
             span,
         }),
 
-        parser::Expression::CountInRange {
+        parser::ExpressionKind::CountInRange {
             variable_name,
             from,
             to,
@@ -398,7 +398,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Offset {
+        parser::ExpressionKind::Offset {
             variable_name,
             occurence_number,
         } => {
@@ -414,7 +414,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Length {
+        parser::ExpressionKind::Length {
             variable_name,
             occurence_number,
         } => {
@@ -430,7 +430,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Neg(expr) => {
+        parser::ExpressionKind::Neg(expr) => {
             let expr = compile_expression(compiler, *expr)?;
 
             if expr.ty == Type::Float {
@@ -448,34 +448,34 @@ pub fn compile_expression(
             }
         }
 
-        parser::Expression::Add(left, right) => {
+        parser::ExpressionKind::Add(left, right) => {
             compile_primary_op(compiler, *left, *right, span, Expression::Add, false)
         }
-        parser::Expression::Sub(left, right) => {
+        parser::ExpressionKind::Sub(left, right) => {
             compile_primary_op(compiler, *left, *right, span, Expression::Sub, false)
         }
-        parser::Expression::Mul(left, right) => {
+        parser::ExpressionKind::Mul(left, right) => {
             compile_primary_op(compiler, *left, *right, span, Expression::Mul, false)
         }
-        parser::Expression::Div(left, right) => {
+        parser::ExpressionKind::Div(left, right) => {
             compile_primary_op(compiler, *left, *right, span, Expression::Div, false)
         }
 
-        parser::Expression::Mod(left, right) => {
+        parser::ExpressionKind::Mod(left, right) => {
             compile_arith_binary_op(compiler, *left, *right, span, Expression::Mod)
         }
 
-        parser::Expression::BitwiseXor(left, right) => {
+        parser::ExpressionKind::BitwiseXor(left, right) => {
             compile_arith_binary_op(compiler, *left, *right, span, Expression::BitwiseXor)
         }
-        parser::Expression::BitwiseAnd(left, right) => {
+        parser::ExpressionKind::BitwiseAnd(left, right) => {
             compile_arith_binary_op(compiler, *left, *right, span, Expression::BitwiseAnd)
         }
-        parser::Expression::BitwiseOr(left, right) => {
+        parser::ExpressionKind::BitwiseOr(left, right) => {
             compile_arith_binary_op(compiler, *left, *right, span, Expression::BitwiseOr)
         }
 
-        parser::Expression::BitwiseNot(expr) => {
+        parser::ExpressionKind::BitwiseNot(expr) => {
             let expr = compile_expression(compiler, *expr)?;
 
             Ok(Expr {
@@ -485,14 +485,14 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::ShiftLeft(left, right) => {
+        parser::ExpressionKind::ShiftLeft(left, right) => {
             compile_arith_binary_op(compiler, *left, *right, span, Expression::ShiftLeft)
         }
-        parser::Expression::ShiftRight(left, right) => {
+        parser::ExpressionKind::ShiftRight(left, right) => {
             compile_arith_binary_op(compiler, *left, *right, span, Expression::ShiftRight)
         }
 
-        parser::Expression::And(left, right) => {
+        parser::ExpressionKind::And(left, right) => {
             let left = compile_expression(compiler, *left)?;
             let right = compile_expression(compiler, *right)?;
 
@@ -502,7 +502,7 @@ pub fn compile_expression(
                 span,
             })
         }
-        parser::Expression::Or(left, right) => {
+        parser::ExpressionKind::Or(left, right) => {
             let left = compile_expression(compiler, *left)?;
             let right = compile_expression(compiler, *right)?;
 
@@ -513,7 +513,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Not(expr) => {
+        parser::ExpressionKind::Not(expr) => {
             let expr = compile_expression(compiler, *expr)?;
 
             Ok(Expr {
@@ -523,7 +523,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Cmp {
+        parser::ExpressionKind::Cmp {
             left,
             right,
             less_than,
@@ -546,13 +546,13 @@ pub fn compile_expression(
             Ok(res)
         }
 
-        parser::Expression::Eq(left, right) => {
+        parser::ExpressionKind::Eq(left, right) => {
             let mut res = compile_primary_op(compiler, *left, *right, span, Expression::Eq, true)?;
             res.ty = Type::Boolean;
             Ok(res)
         }
 
-        parser::Expression::Contains {
+        parser::ExpressionKind::Contains {
             haystack,
             needle,
             case_insensitive,
@@ -571,7 +571,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::StartsWith {
+        parser::ExpressionKind::StartsWith {
             expr,
             prefix,
             case_insensitive,
@@ -590,7 +590,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::EndsWith {
+        parser::ExpressionKind::EndsWith {
             expr,
             suffix,
             case_insensitive,
@@ -609,7 +609,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::IEquals(left, right) => {
+        parser::ExpressionKind::IEquals(left, right) => {
             let left = compile_expression(compiler, *left)?;
             let right = compile_expression(compiler, *right)?;
 
@@ -623,7 +623,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Matches(expr, regex) => {
+        parser::ExpressionKind::Matches(expr, regex) => {
             let expr = compile_expression(compiler, *expr)?;
 
             Ok(Expr {
@@ -633,7 +633,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Defined(expr) => {
+        parser::ExpressionKind::Defined(expr) => {
             let expr = compile_expression(compiler, *expr)?;
 
             Ok(Expr {
@@ -643,19 +643,19 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Boolean(b) => Ok(Expr {
+        parser::ExpressionKind::Boolean(b) => Ok(Expr {
             expr: Expression::Boolean(b),
             ty: Type::Boolean,
             span,
         }),
 
-        parser::Expression::Variable(variable_name) => Ok(Expr {
+        parser::ExpressionKind::Variable(variable_name) => Ok(Expr {
             expr: Expression::Variable(variable_name),
             ty: Type::Boolean,
             span,
         }),
 
-        parser::Expression::VariableAt(variable_name, expr_offset) => {
+        parser::ExpressionKind::VariableAt(variable_name, expr_offset) => {
             let expr_offset = compile_expression(compiler, *expr_offset)?;
 
             Ok(Expr {
@@ -668,7 +668,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::VariableIn {
+        parser::ExpressionKind::VariableIn {
             variable_name,
             from,
             to,
@@ -687,7 +687,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::For {
+        parser::ExpressionKind::For {
             selection,
             set,
             body,
@@ -707,7 +707,7 @@ pub fn compile_expression(
             span,
         }),
 
-        parser::Expression::ForIn {
+        parser::ExpressionKind::ForIn {
             selection,
             set,
             from,
@@ -728,7 +728,7 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::ForIdentifiers {
+        parser::ExpressionKind::ForIdentifiers {
             selection,
 
             identifiers,
@@ -751,17 +751,17 @@ pub fn compile_expression(
             })
         }
 
-        parser::Expression::Identifier(identifier) => Ok(Expr {
+        parser::ExpressionKind::Identifier(identifier) => Ok(Expr {
             expr: Expression::Identifier(compile_identifier(compiler, identifier)?),
             ty: Type::Undefined,
             span,
         }),
-        parser::Expression::String(s) => Ok(Expr {
+        parser::ExpressionKind::String(s) => Ok(Expr {
             expr: Expression::String(s),
             ty: Type::String,
             span,
         }),
-        parser::Expression::Regex(regex) => Ok(Expr {
+        parser::ExpressionKind::Regex(regex) => Ok(Expr {
             expr: Expression::Regex(compile_regex(regex)?),
             ty: Type::Regex,
             span,
@@ -771,8 +771,8 @@ pub fn compile_expression(
 
 fn compile_primary_op<F>(
     compiler: &Compiler,
-    a: parser::ParsedExpr,
-    b: parser::ParsedExpr,
+    a: parser::Expression,
+    b: parser::Expression,
     span: Range<usize>,
     constructor: F,
     string_allowed: bool,
@@ -815,8 +815,8 @@ where
 
 fn compile_arith_binary_op<F>(
     compiler: &Compiler,
-    a: parser::ParsedExpr,
-    b: parser::ParsedExpr,
+    a: parser::Expression,
+    b: parser::Expression,
     span: Range<usize>,
     constructor: F,
 ) -> Result<Expr, CompilationError>

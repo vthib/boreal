@@ -6,14 +6,14 @@ use nom::{
     sequence::{separated_pair, terminated},
 };
 
-use super::{primary_expression::primary_expression, ParsedExpr};
+use super::{primary_expression::primary_expression, Expression};
 use crate::nom_recipes::rtrim;
 use crate::types::{Input, ParseResult};
 
 /// Parse a 'in' range for primary expressions.
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
-pub(super) fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExpr>)> {
+pub(super) fn range(input: Input) -> ParseResult<(Box<Expression>, Box<Expression>)> {
     let (input, _) = rtrim(char('('))(input)?;
 
     let (input, (a, b)) = terminated(
@@ -32,7 +32,7 @@ pub(super) fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExp
 mod tests {
     use super::*;
     use crate::{
-        expression::Expression,
+        expression::ExpressionKind,
         tests::{parse, parse_err},
     };
 
@@ -43,12 +43,12 @@ mod tests {
             "(1..1) b",
             "b",
             (
-                Box::new(ParsedExpr {
-                    expr: Expression::Number(1),
+                Box::new(Expression {
+                    expr: ExpressionKind::Number(1),
                     span: 1..2,
                 }),
-                Box::new(ParsedExpr {
-                    expr: Expression::Number(1),
+                Box::new(Expression {
+                    expr: ExpressionKind::Number(1),
                     span: 4..5,
                 }),
             ),
@@ -58,12 +58,12 @@ mod tests {
             "( filesize .. entrypoint )",
             "",
             (
-                Box::new(ParsedExpr {
-                    expr: Expression::Filesize,
+                Box::new(Expression {
+                    expr: ExpressionKind::Filesize,
                     span: 2..10,
                 }),
-                Box::new(ParsedExpr {
-                    expr: Expression::Entrypoint,
+                Box::new(Expression {
+                    expr: ExpressionKind::Entrypoint,
                     span: 14..24,
                 }),
             ),

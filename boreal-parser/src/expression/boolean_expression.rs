@@ -17,19 +17,19 @@ use super::{
     common::range,
     for_expression::{for_expression_non_ambiguous, for_expression_with_expr_selection},
     primary_expression::primary_expression,
-    Expression, ParsedExpr,
+    Expression, ExpressionKind,
 };
 
 /// parse or operator
-pub fn boolean_expression(input: Input) -> ParseResult<ParsedExpr> {
+pub fn boolean_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = expression_and(input)?;
 
     while let Ok((i, _)) = rtrim(ttag("or"))(input) {
         let (i2, right_elem) = cut(expression_and)(i)?;
         input = i2;
-        res = ParsedExpr {
-            expr: Expression::Or(Box::new(res), Box::new(right_elem)),
+        res = Expression {
+            expr: ExpressionKind::Or(Box::new(res), Box::new(right_elem)),
             span: input.get_span_from(start),
         }
     }
@@ -37,15 +37,15 @@ pub fn boolean_expression(input: Input) -> ParseResult<ParsedExpr> {
 }
 
 /// parse and operator
-fn expression_and(input: Input) -> ParseResult<ParsedExpr> {
+fn expression_and(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = expression_not(input)?;
 
     while let Ok((i, _)) = rtrim(ttag("and"))(input) {
         let (i2, right_elem) = cut(expression_not)(i)?;
         input = i2;
-        res = ParsedExpr {
-            expr: Expression::And(Box::new(res), Box::new(right_elem)),
+        res = Expression {
+            expr: ExpressionKind::And(Box::new(res), Box::new(right_elem)),
             span: input.get_span_from(start),
         }
     }
@@ -53,7 +53,7 @@ fn expression_and(input: Input) -> ParseResult<ParsedExpr> {
 }
 
 /// parse not operator
-fn expression_not(input: Input) -> ParseResult<ParsedExpr> {
+fn expression_not(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, not) = opt(rtrim(ttag("not")))(input)?;
 
@@ -61,8 +61,8 @@ fn expression_not(input: Input) -> ParseResult<ParsedExpr> {
         let (input, expr) = cut(expression_not)(input)?;
         Ok((
             input,
-            ParsedExpr {
-                expr: Expression::Not(Box::new(expr)),
+            Expression {
+                expr: ExpressionKind::Not(Box::new(expr)),
                 span: input.get_span_from(start),
             },
         ))
@@ -72,7 +72,7 @@ fn expression_not(input: Input) -> ParseResult<ParsedExpr> {
 }
 
 /// parse defined operator
-fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
+fn expression_defined(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, defined) = opt(rtrim(ttag("defined")))(input)?;
 
@@ -80,10 +80,10 @@ fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
         let (input, expr) = cut(expression_item)(input)?;
         Ok((
             input,
-            ParsedExpr {
+            Expression {
                 // FIXME: in libyara, _DEFINED_ takes a boolean expression. That
                 // does not look correct though, to investigate.
-                expr: Expression::Defined(Box::new(expr)),
+                expr: ExpressionKind::Defined(Box::new(expr)),
                 span: input.get_span_from(start),
             },
         ))
@@ -93,7 +93,7 @@ fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
 }
 
 /// parse rest of boolean expressions
-fn expression_item(input: Input) -> ParseResult<ParsedExpr> {
+fn expression_item(input: Input) -> ParseResult<Expression> {
     match alt((
         // all variants of for expressions with a non ambiguous first token
         for_expression_non_ambiguous,
@@ -118,7 +118,7 @@ fn expression_item(input: Input) -> ParseResult<ParsedExpr> {
 
 /// parse `==`, `!=`, `(i)contains`, `(i)startswith`, `(i)endswith`,
 /// `iequals`, `matches` operators.
-fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
+fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = primary_expression_cmp(input)?;
 
@@ -138,8 +138,8 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
         if op == "matches" {
             let (i2, regexp) = cut(regex)(i)?;
             input = i2;
-            res = ParsedExpr {
-                expr: Expression::Matches(Box::new(res), regexp),
+            res = Expression {
+                expr: ExpressionKind::Matches(Box::new(res), regexp),
                 span: input.get_span_from(start),
             };
             continue;
@@ -148,33 +148,33 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
         let (i2, right_elem) = cut(primary_expression_cmp)(i)?;
         input = i2;
         let expr = match op {
-            "==" => Expression::Eq(Box::new(res), Box::new(right_elem)),
+            "==" => ExpressionKind::Eq(Box::new(res), Box::new(right_elem)),
             "!=" => {
                 // TODO: improve this generation
-                Expression::Not(Box::new(ParsedExpr {
-                    expr: Expression::Eq(Box::new(res), Box::new(right_elem)),
+                ExpressionKind::Not(Box::new(Expression {
+                    expr: ExpressionKind::Eq(Box::new(res), Box::new(right_elem)),
                     span: input.get_span_from(start),
                 }))
             }
-            "contains" | "icontains" => Expression::Contains {
+            "contains" | "icontains" => ExpressionKind::Contains {
                 haystack: Box::new(res),
                 needle: Box::new(right_elem),
                 case_insensitive: op.bytes().next() == Some(b'i'),
             },
-            "startswith" | "istartswith" => Expression::StartsWith {
+            "startswith" | "istartswith" => ExpressionKind::StartsWith {
                 expr: Box::new(res),
                 prefix: Box::new(right_elem),
                 case_insensitive: op.bytes().next() == Some(b'i'),
             },
-            "endswith" | "iendswith" => Expression::EndsWith {
+            "endswith" | "iendswith" => ExpressionKind::EndsWith {
                 expr: Box::new(res),
                 suffix: Box::new(right_elem),
                 case_insensitive: op.bytes().next() == Some(b'i'),
             },
-            "iequals" => Expression::IEquals(Box::new(res), Box::new(right_elem)),
+            "iequals" => ExpressionKind::IEquals(Box::new(res), Box::new(right_elem)),
             _ => unreachable!(),
         };
-        res = ParsedExpr {
+        res = Expression {
             expr,
             span: input.get_span_from(start),
         };
@@ -183,7 +183,7 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
 }
 
 /// parse `<=`, `>=`, `<`, `>`, operators.
-fn primary_expression_cmp(input: Input) -> ParseResult<ParsedExpr> {
+fn primary_expression_cmp(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = primary_expression(input)?;
 
@@ -193,8 +193,8 @@ fn primary_expression_cmp(input: Input) -> ParseResult<ParsedExpr> {
         let op = op.cursor();
         let less_than = op.bytes().next() == Some(b'<');
         let can_be_equal = op.len() == 2;
-        res = ParsedExpr {
-            expr: Expression::Cmp {
+        res = Expression {
+            expr: ExpressionKind::Cmp {
                 left: Box::new(res),
                 right: Box::new(right_elem),
                 less_than,
@@ -207,7 +207,7 @@ fn primary_expression_cmp(input: Input) -> ParseResult<ParsedExpr> {
 }
 
 /// Parse expressions using variables
-fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
+fn variable_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, variable_name) = string_identifier(input)?;
 
@@ -215,8 +215,8 @@ fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
     if let Ok((input, expr)) = preceded(rtrim(ttag("at")), primary_expression)(input) {
         Ok((
             input,
-            ParsedExpr {
-                expr: Expression::VariableAt(variable_name, Box::new(expr)),
+            Expression {
+                expr: ExpressionKind::VariableAt(variable_name, Box::new(expr)),
                 span: input.get_span_from(start),
             },
         ))
@@ -224,8 +224,8 @@ fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
     } else if let Ok((input, (from, to))) = preceded(rtrim(tag("in")), range)(input) {
         Ok((
             input,
-            ParsedExpr {
-                expr: Expression::VariableIn {
+            Expression {
+                expr: ExpressionKind::VariableIn {
                     variable_name,
                     from,
                     to,
@@ -237,8 +237,8 @@ fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
     } else {
         Ok((
             input,
-            ParsedExpr {
-                expr: Expression::Variable(variable_name),
+            Expression {
+                expr: ExpressionKind::Variable(variable_name),
                 span: input.get_span_from(start),
             },
         ))
@@ -262,8 +262,8 @@ mod tests {
         higher_constructor: F,
         lower_constructor: F2,
     ) where
-        F: FnOnce(Box<ParsedExpr>, Box<ParsedExpr>) -> Expression,
-        F2: FnOnce(Box<ParsedExpr>, Box<ParsedExpr>) -> Expression,
+        F: FnOnce(Box<Expression>, Box<Expression>) -> ExpressionKind,
+        F2: FnOnce(Box<Expression>, Box<Expression>) -> ExpressionKind,
     {
         let input = format!("0 {} 1 {} 2", lower_op, higher_op);
 
@@ -271,23 +271,23 @@ mod tests {
             boolean_expression,
             &input,
             "",
-            ParsedExpr {
+            Expression {
                 expr: lower_constructor(
-                    Box::new(ParsedExpr {
-                        expr: Expression::Number(0),
+                    Box::new(Expression {
+                        expr: ExpressionKind::Number(0),
                         span: 0..1,
                     }),
-                    Box::new(ParsedExpr {
+                    Box::new(Expression {
                         expr: higher_constructor(
-                            Box::new(ParsedExpr {
-                                expr: Expression::Number(1),
+                            Box::new(Expression {
+                                expr: ExpressionKind::Number(1),
                                 span: Span {
                                     start: 3 + lower_op.len(),
                                     end: 4 + lower_op.len(),
                                 },
                             }),
-                            Box::new(ParsedExpr {
-                                expr: Expression::Number(2),
+                            Box::new(Expression {
+                                expr: ExpressionKind::Number(2),
                                 span: Span {
                                     start: 6 + lower_op.len() + higher_op.len(),
                                     end: 7 + lower_op.len() + higher_op.len(),
@@ -314,11 +314,11 @@ mod tests {
             variable_expression,
             "$a at 100 b",
             "b",
-            ParsedExpr {
-                expr: Expression::VariableAt(
+            Expression {
+                expr: ExpressionKind::VariableAt(
                     "a".to_owned(),
-                    Box::new(ParsedExpr {
-                        expr: Expression::Number(100),
+                    Box::new(Expression {
+                        expr: ExpressionKind::Number(100),
                         span: 6..9,
                     }),
                 ),
@@ -329,15 +329,15 @@ mod tests {
             variable_expression,
             "$_ in (0.. 50) b",
             "b",
-            ParsedExpr {
-                expr: Expression::VariableIn {
+            Expression {
+                expr: ExpressionKind::VariableIn {
                     variable_name: "_".to_owned(),
-                    from: Box::new(ParsedExpr {
-                        expr: Expression::Number(0),
+                    from: Box::new(Expression {
+                        expr: ExpressionKind::Number(0),
                         span: 7..8,
                     }),
-                    to: Box::new(ParsedExpr {
-                        expr: Expression::Number(50),
+                    to: Box::new(Expression {
+                        expr: ExpressionKind::Number(50),
                         span: 11..13,
                     }),
                 },
@@ -348,19 +348,19 @@ mod tests {
             variable_expression,
             "$ in (-10..-5)",
             "",
-            ParsedExpr {
-                expr: Expression::VariableIn {
+            Expression {
+                expr: ExpressionKind::VariableIn {
                     variable_name: "".to_owned(),
-                    from: Box::new(ParsedExpr {
-                        expr: Expression::Neg(Box::new(ParsedExpr {
-                            expr: Expression::Number(10),
+                    from: Box::new(Expression {
+                        expr: ExpressionKind::Neg(Box::new(Expression {
+                            expr: ExpressionKind::Number(10),
                             span: 7..9,
                         })),
                         span: 6..9,
                     }),
-                    to: Box::new(ParsedExpr {
-                        expr: Expression::Neg(Box::new(ParsedExpr {
-                            expr: Expression::Number(5),
+                    to: Box::new(Expression {
+                        expr: ExpressionKind::Neg(Box::new(Expression {
+                            expr: ExpressionKind::Number(5),
                             span: 12..13,
                         })),
                         span: 11..13,
@@ -373,8 +373,8 @@ mod tests {
             variable_expression,
             "$c in (-10..-5",
             "in (-10..-5",
-            ParsedExpr {
-                expr: Expression::Variable("c".to_owned()),
+            Expression {
+                expr: ExpressionKind::Variable("c".to_owned()),
                 span: 0..2,
             },
         );
@@ -391,14 +391,14 @@ mod tests {
             boolean_expression,
             "true and false b",
             "b",
-            ParsedExpr {
-                expr: Expression::And(
-                    Box::new(ParsedExpr {
-                        expr: Expression::Boolean(true),
+            Expression {
+                expr: ExpressionKind::And(
+                    Box::new(Expression {
+                        expr: ExpressionKind::Boolean(true),
                         span: 0..4,
                     }),
-                    Box::new(ParsedExpr {
-                        expr: Expression::Boolean(false),
+                    Box::new(Expression {
+                        expr: ExpressionKind::Boolean(false),
                         span: 9..14,
                     }),
                 ),
@@ -409,18 +409,18 @@ mod tests {
             boolean_expression,
             "not true or defined $b",
             "",
-            ParsedExpr {
-                expr: Expression::Or(
-                    Box::new(ParsedExpr {
-                        expr: Expression::Not(Box::new(ParsedExpr {
-                            expr: Expression::Boolean(true),
+            Expression {
+                expr: ExpressionKind::Or(
+                    Box::new(Expression {
+                        expr: ExpressionKind::Not(Box::new(Expression {
+                            expr: ExpressionKind::Boolean(true),
                             span: 4..8,
                         })),
                         span: 0..8,
                     }),
-                    Box::new(ParsedExpr {
-                        expr: Expression::Defined(Box::new(ParsedExpr {
-                            expr: Expression::Variable("b".to_owned()),
+                    Box::new(Expression {
+                        expr: ExpressionKind::Defined(Box::new(Expression {
+                            expr: ExpressionKind::Variable("b".to_owned()),
                             span: 20..22,
                         })),
                         span: 12..22,
@@ -433,10 +433,10 @@ mod tests {
             boolean_expression,
             "not not true",
             "",
-            ParsedExpr {
-                expr: Expression::Not(Box::new(ParsedExpr {
-                    expr: Expression::Not(Box::new(ParsedExpr {
-                        expr: Expression::Boolean(true),
+            Expression {
+                expr: ExpressionKind::Not(Box::new(Expression {
+                    expr: ExpressionKind::Not(Box::new(Expression {
+                        expr: ExpressionKind::Boolean(true),
                         span: 8..12,
                     })),
                     span: 4..12,
@@ -451,7 +451,7 @@ mod tests {
         #[track_caller]
         fn test_op<F>(op: &str, constructor: F)
         where
-            F: FnOnce(Box<ParsedExpr>, Box<ParsedExpr>) -> Expression,
+            F: FnOnce(Box<Expression>, Box<Expression>) -> ExpressionKind,
         {
             let input = format!("\"a\" {} \"b\" b", op);
 
@@ -459,14 +459,14 @@ mod tests {
                 boolean_expression,
                 &input,
                 "b",
-                ParsedExpr {
+                Expression {
                     expr: constructor(
-                        Box::new(ParsedExpr {
-                            expr: Expression::String("a".to_owned()),
+                        Box::new(Expression {
+                            expr: ExpressionKind::String("a".to_owned()),
                             span: 0..3,
                         }),
-                        Box::new(ParsedExpr {
-                            expr: Expression::String("b".to_owned()),
+                        Box::new(Expression {
+                            expr: ExpressionKind::String("b".to_owned()),
                             span: Span {
                                 start: 5 + op.len(),
                                 end: 8 + op.len(),
@@ -481,64 +481,64 @@ mod tests {
             );
         }
 
-        test_op("==", Expression::Eq);
+        test_op("==", ExpressionKind::Eq);
         test_op("!=", |a, b| {
-            Expression::Not(Box::new(ParsedExpr {
-                expr: Expression::Eq(a, b),
+            ExpressionKind::Not(Box::new(Expression {
+                expr: ExpressionKind::Eq(a, b),
                 span: 0..10,
             }))
         });
-        test_op("contains", |a, b| Expression::Contains {
+        test_op("contains", |a, b| ExpressionKind::Contains {
             haystack: a,
             needle: b,
             case_insensitive: false,
         });
-        test_op("icontains", |a, b| Expression::Contains {
+        test_op("icontains", |a, b| ExpressionKind::Contains {
             haystack: a,
             needle: b,
             case_insensitive: true,
         });
-        test_op("startswith", |a, b| Expression::StartsWith {
+        test_op("startswith", |a, b| ExpressionKind::StartsWith {
             expr: a,
             prefix: b,
             case_insensitive: false,
         });
-        test_op("istartswith", |a, b| Expression::StartsWith {
+        test_op("istartswith", |a, b| ExpressionKind::StartsWith {
             expr: a,
             prefix: b,
             case_insensitive: true,
         });
-        test_op("endswith", |a, b| Expression::EndsWith {
+        test_op("endswith", |a, b| ExpressionKind::EndsWith {
             expr: a,
             suffix: b,
             case_insensitive: false,
         });
-        test_op("iendswith", |a, b| Expression::EndsWith {
+        test_op("iendswith", |a, b| ExpressionKind::EndsWith {
             expr: a,
             suffix: b,
             case_insensitive: true,
         });
-        test_op("iequals", Expression::IEquals);
+        test_op("iequals", ExpressionKind::IEquals);
 
-        test_op("<", |a, b| Expression::Cmp {
+        test_op("<", |a, b| ExpressionKind::Cmp {
             left: a,
             right: b,
             less_than: true,
             can_be_equal: false,
         });
-        test_op("<=", |a, b| Expression::Cmp {
+        test_op("<=", |a, b| ExpressionKind::Cmp {
             left: a,
             right: b,
             less_than: true,
             can_be_equal: true,
         });
-        test_op(">", |a, b| Expression::Cmp {
+        test_op(">", |a, b| ExpressionKind::Cmp {
             left: a,
             right: b,
             less_than: false,
             can_be_equal: false,
         });
-        test_op(">=", |a, b| Expression::Cmp {
+        test_op(">=", |a, b| ExpressionKind::Cmp {
             left: a,
             right: b,
             less_than: false,
@@ -552,10 +552,10 @@ mod tests {
             boolean_expression,
             "\"a\" matches /b/i b",
             "b",
-            ParsedExpr {
-                expr: Expression::Matches(
-                    Box::new(ParsedExpr {
-                        expr: Expression::String("a".to_owned()),
+            Expression {
+                expr: ExpressionKind::Matches(
+                    Box::new(Expression {
+                        expr: ExpressionKind::String("a".to_owned()),
                         span: 0..3,
                     }),
                     Regex {
@@ -575,7 +575,7 @@ mod tests {
     #[test]
     fn test_expression_precedence_cmp_eq() {
         let build_cmp = |less_than, can_be_equal| {
-            move |a, b| Expression::Cmp {
+            move |a, b| ExpressionKind::Cmp {
                 left: a,
                 right: b,
                 less_than,
@@ -584,59 +584,64 @@ mod tests {
         };
 
         // Test precedence of <, <=, >=, > over eq, etc
-        test_precedence("<", "==", build_cmp(true, false), Expression::Eq);
-        test_precedence("<=", "==", build_cmp(true, true), Expression::Eq);
-        test_precedence(">", "==", build_cmp(false, false), Expression::Eq);
-        test_precedence(">=", "==", build_cmp(false, true), Expression::Eq);
+        test_precedence("<", "==", build_cmp(true, false), ExpressionKind::Eq);
+        test_precedence("<=", "==", build_cmp(true, true), ExpressionKind::Eq);
+        test_precedence(">", "==", build_cmp(false, false), ExpressionKind::Eq);
+        test_precedence(">=", "==", build_cmp(false, true), ExpressionKind::Eq);
         test_precedence("<", "!=", build_cmp(true, false), |a, b| {
-            Expression::Not(Box::new(ParsedExpr {
-                expr: Expression::Eq(a, b),
+            ExpressionKind::Not(Box::new(Expression {
+                expr: ExpressionKind::Eq(a, b),
                 span: 0..10,
             }))
         });
         test_precedence("<", "contains", build_cmp(true, false), |a, b| {
-            Expression::Contains {
+            ExpressionKind::Contains {
                 haystack: a,
                 needle: b,
                 case_insensitive: false,
             }
         });
         test_precedence("<", "icontains", build_cmp(true, false), |a, b| {
-            Expression::Contains {
+            ExpressionKind::Contains {
                 haystack: a,
                 needle: b,
                 case_insensitive: true,
             }
         });
         test_precedence("<", "startswith", build_cmp(true, false), |a, b| {
-            Expression::StartsWith {
+            ExpressionKind::StartsWith {
                 expr: a,
                 prefix: b,
                 case_insensitive: false,
             }
         });
         test_precedence("<", "istartswith", build_cmp(true, false), |a, b| {
-            Expression::StartsWith {
+            ExpressionKind::StartsWith {
                 expr: a,
                 prefix: b,
                 case_insensitive: true,
             }
         });
         test_precedence("<", "endswith", build_cmp(true, false), |a, b| {
-            Expression::EndsWith {
+            ExpressionKind::EndsWith {
                 expr: a,
                 suffix: b,
                 case_insensitive: false,
             }
         });
         test_precedence("<", "iendswith", build_cmp(true, false), |a, b| {
-            Expression::EndsWith {
+            ExpressionKind::EndsWith {
                 expr: a,
                 suffix: b,
                 case_insensitive: true,
             }
         });
-        test_precedence("<", "iequals", build_cmp(true, false), Expression::IEquals);
+        test_precedence(
+            "<",
+            "iequals",
+            build_cmp(true, false),
+            ExpressionKind::IEquals,
+        );
     }
 
     #[test]
@@ -646,23 +651,23 @@ mod tests {
             boolean_expression,
             "not true or false and true",
             "",
-            ParsedExpr {
-                expr: Expression::Or(
-                    Box::new(ParsedExpr {
-                        expr: Expression::Not(Box::new(ParsedExpr {
-                            expr: Expression::Boolean(true),
+            Expression {
+                expr: ExpressionKind::Or(
+                    Box::new(Expression {
+                        expr: ExpressionKind::Not(Box::new(Expression {
+                            expr: ExpressionKind::Boolean(true),
                             span: 4..8,
                         })),
                         span: 0..8,
                     }),
-                    Box::new(ParsedExpr {
-                        expr: Expression::And(
-                            Box::new(ParsedExpr {
-                                expr: Expression::Boolean(false),
+                    Box::new(Expression {
+                        expr: ExpressionKind::And(
+                            Box::new(Expression {
+                                expr: ExpressionKind::Boolean(false),
                                 span: 12..17,
                             }),
-                            Box::new(ParsedExpr {
-                                expr: Expression::Boolean(true),
+                            Box::new(Expression {
+                                expr: ExpressionKind::Boolean(true),
                                 span: 22..26,
                             }),
                         ),
@@ -674,17 +679,17 @@ mod tests {
         );
 
         // Test precedence of over eq, etc over and
-        test_precedence("==", "and", Expression::Eq, Expression::And);
+        test_precedence("==", "and", ExpressionKind::Eq, ExpressionKind::And);
         test_precedence(
             "!=",
             "and",
             |a, b| {
-                Expression::Not(Box::new(ParsedExpr {
-                    expr: Expression::Eq(a, b),
+                ExpressionKind::Not(Box::new(Expression {
+                    expr: ExpressionKind::Eq(a, b),
                     span: 6..12,
                 }))
             },
-            Expression::And,
+            ExpressionKind::And,
         );
     }
 
@@ -694,8 +699,8 @@ mod tests {
             boolean_expression,
             "true b",
             "b",
-            ParsedExpr {
-                expr: Expression::Boolean(true),
+            Expression {
+                expr: ExpressionKind::Boolean(true),
                 span: 0..4,
             },
         );
@@ -703,8 +708,8 @@ mod tests {
             boolean_expression,
             "((false))",
             "",
-            ParsedExpr {
-                expr: Expression::Boolean(false),
+            Expression {
+                expr: ExpressionKind::Boolean(false),
                 span: 2..7,
             },
         );
@@ -712,9 +717,9 @@ mod tests {
             boolean_expression,
             "not true b",
             "b",
-            ParsedExpr {
-                expr: Expression::Not(Box::new(ParsedExpr {
-                    expr: Expression::Boolean(true),
+            Expression {
+                expr: ExpressionKind::Not(Box::new(Expression {
+                    expr: ExpressionKind::Boolean(true),
                     span: 4..8,
                 })),
                 span: 0..8,
@@ -724,10 +729,10 @@ mod tests {
             boolean_expression,
             "not defined $a  c",
             "c",
-            ParsedExpr {
-                expr: Expression::Not(Box::new(ParsedExpr {
-                    expr: Expression::Defined(Box::new(ParsedExpr {
-                        expr: Expression::Variable("a".to_owned()),
+            Expression {
+                expr: ExpressionKind::Not(Box::new(Expression {
+                    expr: ExpressionKind::Defined(Box::new(Expression {
+                        expr: ExpressionKind::Variable("a".to_owned()),
                         span: 12..14,
                     })),
                     span: 4..14,
@@ -741,8 +746,8 @@ mod tests {
             boolean_expression,
             "5 b",
             "b",
-            ParsedExpr {
-                expr: Expression::Number(5),
+            Expression {
+                expr: ExpressionKind::Number(5),
                 span: 0..1,
             },
         );
@@ -764,25 +769,25 @@ mod tests {
         parse_check(boolean_expression, "nota", |e| {
             assert_eq!(
                 e.expr,
-                Expression::Identifier(Identifier::Raw("nota".to_owned()))
+                ExpressionKind::Identifier(Identifier::Raw("nota".to_owned()))
             );
         });
         parse_check(boolean_expression, "defineda", |e| {
             assert_eq!(
                 e.expr,
-                Expression::Identifier(Identifier::Raw("defineda".to_owned()))
+                ExpressionKind::Identifier(Identifier::Raw("defineda".to_owned()))
             );
         });
         parse_check(boolean_expression, "truea", |e| {
             assert_eq!(
                 e.expr,
-                Expression::Identifier(Identifier::Raw("truea".to_owned()))
+                ExpressionKind::Identifier(Identifier::Raw("truea".to_owned()))
             );
         });
         parse_check(boolean_expression, "falsea", |e| {
             assert_eq!(
                 e.expr,
-                Expression::Identifier(Identifier::Raw("falsea".to_owned()))
+                ExpressionKind::Identifier(Identifier::Raw("falsea".to_owned()))
             );
         });
 
@@ -801,14 +806,14 @@ mod tests {
             boolean_expression,
             "0==0",
             "",
-            ParsedExpr {
-                expr: Expression::Eq(
-                    Box::new(ParsedExpr {
-                        expr: Expression::Number(0),
+            Expression {
+                expr: ExpressionKind::Eq(
+                    Box::new(Expression {
+                        expr: ExpressionKind::Number(0),
                         span: 0..1,
                     }),
-                    Box::new(ParsedExpr {
-                        expr: Expression::Number(0),
+                    Box::new(Expression {
+                        expr: ExpressionKind::Number(0),
                         span: 3..4,
                     }),
                 ),
@@ -819,15 +824,15 @@ mod tests {
             boolean_expression,
             "1!=2",
             "",
-            ParsedExpr {
-                expr: Expression::Not(Box::new(ParsedExpr {
-                    expr: Expression::Eq(
-                        Box::new(ParsedExpr {
-                            expr: Expression::Number(1),
+            Expression {
+                expr: ExpressionKind::Not(Box::new(Expression {
+                    expr: ExpressionKind::Eq(
+                        Box::new(Expression {
+                            expr: ExpressionKind::Number(1),
                             span: 0..1,
                         }),
-                        Box::new(ParsedExpr {
-                            expr: Expression::Number(2),
+                        Box::new(Expression {
+                            expr: ExpressionKind::Number(2),
                             span: 3..4,
                         }),
                     ),

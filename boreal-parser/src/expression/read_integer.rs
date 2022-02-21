@@ -9,7 +9,7 @@ use nom::{
     sequence::{delimited, pair, tuple},
 };
 
-use super::{primary_expression::primary_expression, Expression, ParsedExpr, ReadIntegerSize};
+use super::{primary_expression::primary_expression, Expression, ExpressionKind, ReadIntegerSize};
 use crate::{
     nom_recipes::rtrim,
     types::{Input, ParseResult},
@@ -36,7 +36,7 @@ fn read_integer(input: Input) -> ParseResult<(bool, ReadIntegerSize, bool)> {
     )))(input)
 }
 
-pub(super) fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, ((unsigned, size, big_endian), expr)) = pair(
         read_integer,
@@ -49,8 +49,8 @@ pub(super) fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
 
     Ok((
         input,
-        ParsedExpr {
-            expr: Expression::ReadInteger {
+        Expression {
+            expr: ExpressionKind::ReadInteger {
                 unsigned,
                 size,
                 big_endian,
@@ -64,7 +64,7 @@ pub(super) fn read_integer_expression(input: Input) -> ParseResult<ParsedExpr> {
 #[cfg(test)]
 mod tests {
     use super::{
-        read_integer, read_integer_expression, Expression, ParsedExpr, ReadIntegerSize as RIS,
+        read_integer, read_integer_expression, Expression, ExpressionKind, ReadIntegerSize as RIS,
     };
     use crate::tests::{parse, parse_err};
 
@@ -99,13 +99,13 @@ mod tests {
             read_integer_expression,
             "uint8(3)",
             "",
-            ParsedExpr {
-                expr: Expression::ReadInteger {
+            Expression {
+                expr: ExpressionKind::ReadInteger {
                     unsigned: true,
                     size: RIS::Int8,
                     big_endian: false,
-                    addr: Box::new(ParsedExpr {
-                        expr: Expression::Number(3),
+                    addr: Box::new(Expression {
+                        expr: ExpressionKind::Number(3),
                         span: 6..7,
                     }),
                 },

@@ -57,7 +57,7 @@ mod error;
 pub use error::Error;
 mod expression;
 pub use expression::{
-    Expression, ForIterator, ForSelection, Identifier, ParsedExpr, ReadIntegerSize, VariableSet,
+    Expression, ExpressionKind, ForIterator, ForSelection, Identifier, ReadIntegerSize, VariableSet,
 };
 mod hex_string;
 mod nom_recipes;

@@ -20,7 +20,7 @@ use crate::{
 
 use super::{
     boolean_expression::boolean_expression, common::range, identifier::identifier,
-    primary_expression::primary_expression, Expression, ForIterator, ForSelection, ParsedExpr,
+    primary_expression::primary_expression, Expression, ExpressionKind, ForIterator, ForSelection,
     VariableSet,
 };
 
@@ -47,7 +47,7 @@ use super::{
 /// Those are all the variants but for the 'expr ('%') of ...', which
 /// binds a primary expression as its first element, conflicting
 /// with the "just one primary expression" possibility.
-pub(super) fn for_expression_non_ambiguous(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn for_expression_non_ambiguous(input: Input) -> ParseResult<Expression> {
     alt((for_expression_full, for_expression_abbrev))(input)
 }
 
@@ -58,7 +58,7 @@ pub(super) fn for_expression_non_ambiguous(input: Input) -> ParseResult<ParsedEx
 /// - `selection 'of' set 'in' range`
 ///
 /// But with 'selection' not being an expression.
-fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
+fn for_expression_abbrev(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, selection) = for_selection_simple(input)?;
     for_expression_with_selection(selection, start, input)
@@ -71,10 +71,10 @@ fn for_expression_abbrev(input: Input) -> ParseResult<ParsedExpr> {
 /// 'of' token is not detected, the expr is returned as is in an Ok
 /// result, so as to return the moved value without needing duplication.
 pub(super) fn for_expression_with_expr_selection<'a>(
-    expr: ParsedExpr,
+    expr: Expression,
     start: Input<'a>,
     input: Input<'a>,
-) -> ParseResult<'a, ParsedExpr> {
+) -> ParseResult<'a, Expression> {
     let (input, percent) = opt(rtrim(char('%')))(input)?;
     if ttag("of")(input).is_err() {
         return Ok((input, expr));
@@ -91,17 +91,17 @@ fn for_expression_with_selection<'a>(
     selection: ForSelection,
     start: Input<'a>,
     input: Input<'a>,
-) -> ParseResult<'a, ParsedExpr> {
+) -> ParseResult<'a, Expression> {
     let (input, set) = preceded(rtrim(ttag("of")), cut(string_set))(input)?;
     let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
 
     let expr = match range {
-        None => Expression::For {
+        None => ExpressionKind::For {
             selection,
             set,
             body: None,
         },
-        Some((from, to)) => Expression::ForIn {
+        Some((from, to)) => ExpressionKind::ForIn {
             selection,
             set,
             from,
@@ -111,7 +111,7 @@ fn for_expression_with_selection<'a>(
 
     Ok((
         input,
-        ParsedExpr {
+        Expression {
             expr,
             span: input.get_span_from(start),
         },
@@ -123,7 +123,7 @@ fn for_expression_with_selection<'a>(
 /// This parses:
 /// - 'for' selection 'of' set ':' '(' body ')'
 /// - 'for' selection identifier 'in' iterator ':' '(' body ')'
-fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
+fn for_expression_full(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection_full))(input)?;
     let (i2, has_of) = opt(rtrim(ttag("of")))(input)?;
@@ -138,8 +138,8 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
 
         Ok((
             input,
-            ParsedExpr {
-                expr: Expression::For {
+            Expression {
+                expr: ExpressionKind::For {
                     selection,
                     set,
                     body: Some(Box::new(body)),
@@ -158,8 +158,8 @@ fn for_expression_full(input: Input) -> ParseResult<ParsedExpr> {
 
         Ok((
             input,
-            ParsedExpr {
-                expr: Expression::ForIdentifiers {
+            Expression {
+                expr: ExpressionKind::ForIdentifiers {
                     selection,
                     identifiers,
                     iterator,
@@ -260,7 +260,7 @@ fn iterator_range(input: Input) -> ParseResult<ForIterator> {
 mod tests {
     use super::*;
     use crate::{
-        expression::{Expression, Identifier},
+        expression::{ExpressionKind, Identifier},
         tests::{parse, parse_err},
     };
 
@@ -277,8 +277,8 @@ mod tests {
             "1a",
             "a",
             ForSelection::Expr {
-                expr: Box::new(ParsedExpr {
-                    expr: Expression::Number(1),
+                expr: Box::new(Expression {
+                    expr: ExpressionKind::Number(1),
                     span: 0..1,
                 }),
                 as_percent: false,
@@ -289,8 +289,8 @@ mod tests {
             "50% of",
             "of",
             ForSelection::Expr {
-                expr: Box::new(ParsedExpr {
-                    expr: Expression::Number(50),
+                expr: Box::new(Expression {
+                    expr: ExpressionKind::Number(50),
                     span: 0..2,
                 }),
                 as_percent: true,
@@ -302,8 +302,8 @@ mod tests {
             "anya",
             "",
             ForSelection::Expr {
-                expr: Box::new(ParsedExpr {
-                    expr: Expression::Identifier(Identifier::Raw("anya".to_owned())),
+                expr: Box::new(Expression {
+                    expr: ExpressionKind::Identifier(Identifier::Raw("anya".to_owned())),
                     span: 0..4,
                 }),
                 as_percent: false,
@@ -384,8 +384,8 @@ mod tests {
             boolean_expression,
             "any of them a",
             "a",
-            ParsedExpr {
-                expr: Expression::For {
+            Expression {
+                expr: ExpressionKind::For {
                     selection: ForSelection::Any,
                     set: VariableSet { elements: vec![] },
                     body: None,
@@ -397,11 +397,11 @@ mod tests {
             boolean_expression,
             "50% of them",
             "",
-            ParsedExpr {
-                expr: Expression::For {
+            Expression {
+                expr: ExpressionKind::For {
                     selection: ForSelection::Expr {
-                        expr: Box::new(ParsedExpr {
-                            expr: Expression::Number(50),
+                        expr: Box::new(Expression {
+                            expr: ExpressionKind::Number(50),
                             span: 0..2,
                         }),
                         as_percent: true,
@@ -416,11 +416,11 @@ mod tests {
             boolean_expression,
             "5 of ($a, $b*) in (100..entrypoint)",
             "",
-            ParsedExpr {
-                expr: Expression::ForIn {
+            Expression {
+                expr: ExpressionKind::ForIn {
                     selection: ForSelection::Expr {
-                        expr: Box::new(ParsedExpr {
-                            expr: Expression::Number(5),
+                        expr: Box::new(Expression {
+                            expr: ExpressionKind::Number(5),
                             span: 0..1,
                         }),
                         as_percent: false,
@@ -428,12 +428,12 @@ mod tests {
                     set: VariableSet {
                         elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
                     },
-                    from: Box::new(ParsedExpr {
-                        expr: Expression::Number(100),
+                    from: Box::new(Expression {
+                        expr: ExpressionKind::Number(100),
                         span: 19..22,
                     }),
-                    to: Box::new(ParsedExpr {
-                        expr: Expression::Entrypoint,
+                    to: Box::new(Expression {
+                        expr: ExpressionKind::Entrypoint,
                         span: 24..34,
                     }),
                 },
@@ -455,11 +455,11 @@ mod tests {
             for_expression_full,
             "for 25% of ($foo*) : ($)",
             "",
-            ParsedExpr {
-                expr: Expression::For {
+            Expression {
+                expr: ExpressionKind::For {
                     selection: ForSelection::Expr {
-                        expr: Box::new(ParsedExpr {
-                            expr: Expression::Number(25),
+                        expr: Box::new(Expression {
+                            expr: ExpressionKind::Number(25),
                             span: 4..6,
                         }),
                         as_percent: true,
@@ -467,8 +467,8 @@ mod tests {
                     set: VariableSet {
                         elements: vec![("foo".to_owned(), true)],
                     },
-                    body: Some(Box::new(ParsedExpr {
-                        expr: Expression::Variable("".to_owned()),
+                    body: Some(Box::new(Expression {
+                        expr: ExpressionKind::Variable("".to_owned()),
                         span: 22..23,
                     })),
                 },
@@ -495,22 +495,22 @@ mod tests {
             for_expression_full,
             "for all i in (1 ,3) : ( false )",
             "",
-            ParsedExpr {
-                expr: Expression::ForIdentifiers {
+            Expression {
+                expr: ExpressionKind::ForIdentifiers {
                     selection: ForSelection::All,
                     identifiers: vec!["i".to_owned()],
                     iterator: ForIterator::List(vec![
-                        ParsedExpr {
-                            expr: Expression::Number(1),
+                        Expression {
+                            expr: ExpressionKind::Number(1),
                             span: 14..15,
                         },
-                        ParsedExpr {
-                            expr: Expression::Number(3),
+                        Expression {
+                            expr: ExpressionKind::Number(3),
                             span: 17..18,
                         },
                     ]),
-                    body: Box::new(ParsedExpr {
-                        expr: Expression::Boolean(false),
+                    body: Box::new(Expression {
+                        expr: ExpressionKind::Boolean(false),
                         span: 24..29,
                     }),
                 },
@@ -521,31 +521,31 @@ mod tests {
             for_expression_full,
             "for any s in (0..5 - 1) : ( false )",
             "",
-            ParsedExpr {
-                expr: Expression::ForIdentifiers {
+            Expression {
+                expr: ExpressionKind::ForIdentifiers {
                     selection: ForSelection::Any,
                     identifiers: vec!["s".to_owned()],
                     iterator: ForIterator::Range {
-                        from: Box::new(ParsedExpr {
-                            expr: Expression::Number(0),
+                        from: Box::new(Expression {
+                            expr: ExpressionKind::Number(0),
                             span: 14..15,
                         }),
-                        to: Box::new(ParsedExpr {
-                            expr: Expression::Sub(
-                                Box::new(ParsedExpr {
-                                    expr: Expression::Number(5),
+                        to: Box::new(Expression {
+                            expr: ExpressionKind::Sub(
+                                Box::new(Expression {
+                                    expr: ExpressionKind::Number(5),
                                     span: 17..18,
                                 }),
-                                Box::new(ParsedExpr {
-                                    expr: Expression::Number(1),
+                                Box::new(Expression {
+                                    expr: ExpressionKind::Number(1),
                                     span: 21..22,
                                 }),
                             ),
                             span: 17..22,
                         }),
                     },
-                    body: Box::new(ParsedExpr {
-                        expr: Expression::Boolean(false),
+                    body: Box::new(Expression {
+                        expr: ExpressionKind::Boolean(false),
                         span: 28..33,
                     }),
                 },
@@ -556,13 +556,13 @@ mod tests {
             for_expression_full,
             "for any a,b,c in toto:(false) b",
             "b",
-            ParsedExpr {
-                expr: Expression::ForIdentifiers {
+            Expression {
+                expr: ExpressionKind::ForIdentifiers {
                     selection: ForSelection::Any,
                     identifiers: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
                     iterator: ForIterator::Identifier(Identifier::Raw("toto".to_owned())),
-                    body: Box::new(ParsedExpr {
-                        expr: Expression::Boolean(false),
+                    body: Box::new(Expression {
+                        expr: ExpressionKind::Boolean(false),
                         span: 23..28,
                     }),
                 },
@@ -608,8 +608,8 @@ mod tests {
             iterator,
             "(1)b",
             "b",
-            ForIterator::List(vec![ParsedExpr {
-                expr: Expression::Number(1),
+            ForIterator::List(vec![Expression {
+                expr: ExpressionKind::Number(1),
                 span: 1..2,
             }]),
         );
@@ -618,16 +618,16 @@ mod tests {
             "(1, 2,#a)b",
             "b",
             ForIterator::List(vec![
-                ParsedExpr {
-                    expr: Expression::Number(1),
+                Expression {
+                    expr: ExpressionKind::Number(1),
                     span: 1..2,
                 },
-                ParsedExpr {
-                    expr: Expression::Number(2),
+                Expression {
+                    expr: ExpressionKind::Number(2),
                     span: 4..5,
                 },
-                ParsedExpr {
-                    expr: Expression::Count("a".to_owned()),
+                Expression {
+                    expr: ExpressionKind::Count("a".to_owned()),
                     span: 6..8,
                 },
             ]),
@@ -637,12 +637,12 @@ mod tests {
             "(1..#t) b",
             "b",
             ForIterator::Range {
-                from: Box::new(ParsedExpr {
-                    expr: Expression::Number(1),
+                from: Box::new(Expression {
+                    expr: ExpressionKind::Number(1),
                     span: 1..2,
                 }),
-                to: Box::new(ParsedExpr {
-                    expr: Expression::Count("t".to_owned()),
+                to: Box::new(Expression {
+                    expr: ExpressionKind::Count("t".to_owned()),
                     span: 4..6,
                 }),
             },

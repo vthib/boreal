@@ -9,7 +9,7 @@ use nom::{
     sequence::{delimited, preceded},
 };
 
-use super::{common::range, primary_expression::primary_expression, Expression, ParsedExpr};
+use super::{common::range, primary_expression::primary_expression, Expression, ExpressionKind};
 use crate::{
     nom_recipes::rtrim,
     string,
@@ -17,16 +17,16 @@ use crate::{
 };
 
 /// Parse a `string_count ( 'in' range )` expression
-pub(super) fn string_count_expression(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn string_count_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, variable_name) = string::count(input)?;
     let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input)?;
 
     let expr = match range {
         // string_count
-        None => Expression::Count(variable_name),
+        None => ExpressionKind::Count(variable_name),
         // string_count 'in' range
-        Some((from, to)) => Expression::CountInRange {
+        Some((from, to)) => ExpressionKind::CountInRange {
             variable_name,
             from,
             to,
@@ -34,7 +34,7 @@ pub(super) fn string_count_expression(input: Input) -> ParseResult<ParsedExpr> {
     };
     Ok((
         input,
-        ParsedExpr {
+        Expression {
             expr,
             span: input.get_span_from(start),
         },
@@ -42,7 +42,7 @@ pub(super) fn string_count_expression(input: Input) -> ParseResult<ParsedExpr> {
 }
 
 /// Parse a `string_offset ( '[' primary_expression ']' )` expression
-pub(super) fn string_offset_expression(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn string_offset_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, variable_name) = string::offset(input)?;
     let (input, expr) = opt(delimited(
@@ -52,21 +52,21 @@ pub(super) fn string_offset_expression(input: Input) -> ParseResult<ParsedExpr> 
     ))(input)?;
 
     let span = input.get_span_from(start);
-    let expr = Expression::Offset {
+    let expr = ExpressionKind::Offset {
         variable_name,
         occurence_number: match expr {
             Some(v) => Box::new(v),
-            None => Box::new(ParsedExpr {
-                expr: Expression::Number(1),
+            None => Box::new(Expression {
+                expr: ExpressionKind::Number(1),
                 span: span.clone(),
             }),
         },
     };
-    Ok((input, ParsedExpr { expr, span }))
+    Ok((input, Expression { expr, span }))
 }
 
 /// Parse a `string_length ( '[' primary_expression ']' )` expression
-pub(super) fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> {
+pub(super) fn string_length_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (input, variable_name) = string::length(input)?;
     let (input, expr) = opt(delimited(
@@ -76,17 +76,17 @@ pub(super) fn string_length_expression(input: Input) -> ParseResult<ParsedExpr> 
     ))(input)?;
 
     let span = input.get_span_from(start);
-    let expr = Expression::Length {
+    let expr = ExpressionKind::Length {
         variable_name,
         occurence_number: match expr {
             Some(v) => Box::new(v),
-            None => Box::new(ParsedExpr {
-                expr: Expression::Number(1),
+            None => Box::new(Expression {
+                expr: ExpressionKind::Number(1),
                 span: span.clone(),
             }),
         },
     };
-    Ok((input, ParsedExpr { expr, span }))
+    Ok((input, Expression { expr, span }))
 }
 
 #[cfg(test)]
@@ -100,8 +100,8 @@ mod tests {
             string_count_expression,
             "#foo bar",
             "bar",
-            ParsedExpr {
-                expr: Expression::Count("foo".to_owned()),
+            Expression {
+                expr: ExpressionKind::Count("foo".to_owned()),
                 span: 0..4,
             },
         );
@@ -109,15 +109,15 @@ mod tests {
             string_count_expression,
             "#foo in (0 ..filesize ) c",
             "c",
-            ParsedExpr {
-                expr: Expression::CountInRange {
+            Expression {
+                expr: ExpressionKind::CountInRange {
                     variable_name: "foo".to_owned(),
-                    from: Box::new(ParsedExpr {
-                        expr: Expression::Number(0),
+                    from: Box::new(Expression {
+                        expr: ExpressionKind::Number(0),
                         span: 9..10,
                     }),
-                    to: Box::new(ParsedExpr {
-                        expr: Expression::Filesize,
+                    to: Box::new(Expression {
+                        expr: ExpressionKind::Filesize,
                         span: 13..21,
                     }),
                 },
@@ -135,11 +135,11 @@ mod tests {
             string_offset_expression,
             "@a c",
             "c",
-            ParsedExpr {
-                expr: Expression::Offset {
+            Expression {
+                expr: ExpressionKind::Offset {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(1),
+                    occurence_number: Box::new(Expression {
+                        expr: ExpressionKind::Number(1),
                         span: 0..2,
                     }),
                 },
@@ -150,11 +150,11 @@ mod tests {
             string_offset_expression,
             "@a [ 2] c",
             "c",
-            ParsedExpr {
-                expr: Expression::Offset {
+            Expression {
+                expr: ExpressionKind::Offset {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(2),
+                    occurence_number: Box::new(Expression {
+                        expr: ExpressionKind::Number(2),
                         span: 5..6,
                     }),
                 },
@@ -169,11 +169,11 @@ mod tests {
             string_length_expression,
             "!a c",
             "c",
-            ParsedExpr {
-                expr: Expression::Length {
+            Expression {
+                expr: ExpressionKind::Length {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(1),
+                    occurence_number: Box::new(Expression {
+                        expr: ExpressionKind::Number(1),
                         span: 0..2,
                     }),
                 },
@@ -184,11 +184,11 @@ mod tests {
             string_length_expression,
             "!a [ 2] c",
             "c",
-            ParsedExpr {
-                expr: Expression::Length {
+            Expression {
+                expr: ExpressionKind::Length {
                     variable_name: "a".to_owned(),
-                    occurence_number: Box::new(ParsedExpr {
-                        expr: Expression::Number(2),
+                    occurence_number: Box::new(Expression {
+                        expr: ExpressionKind::Number(2),
                         span: 5..6,
                     }),
                 },

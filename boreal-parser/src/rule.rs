@@ -12,7 +12,7 @@ use nom::{
 
 use super::{
     error::{Error, ErrorKind},
-    expression::{self, ParsedExpr},
+    expression::{self, Expression},
     hex_string,
     nom_recipes::{ltrim, map_res, rtrim, textual_tag as ttag},
     number, string,
@@ -43,7 +43,7 @@ pub struct Rule {
     pub variables: Vec<VariableDeclaration>,
 
     /// Condition of the rule.
-    pub condition: ParsedExpr,
+    pub condition: Expression,
 
     /// Is the rule private.
     pub is_private: bool,
@@ -542,14 +542,14 @@ fn number_to_u8(value: i64) -> Result<u8, ErrorKind> {
 /// Parse a condition
 ///
 /// Related to the `condition` pattern in `grammar.y` in libyara.
-fn condition(input: Input) -> ParseResult<ParsedExpr> {
+fn condition(input: Input) -> ParseResult<Expression> {
     let (input, _) = rtrim(ttag("condition"))(input)?;
     cut(preceded(rtrim(char(':')), expression::expression))(input)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::{Expression, ForSelection, ParsedExpr, VariableSet};
+    use crate::expression::{Expression, ExpressionKind, ForSelection, VariableSet};
     use crate::hex_string::{HexToken, Mask};
     use crate::Regex;
 
@@ -804,8 +804,8 @@ mod tests {
             "",
             Rule {
                 name: "a".to_owned(),
-                condition: ParsedExpr {
-                    expr: Expression::Boolean(false),
+                condition: Expression {
+                    expr: ExpressionKind::Boolean(false),
                     span: 20..25,
                 },
                 tags: Vec::new(),
@@ -835,8 +835,8 @@ mod tests {
                         }
                     }
                 ],
-                condition: ParsedExpr {
-                    expr: Expression::For {
+                condition: Expression {
+                    expr: ExpressionKind::For {
                         selection: ForSelection::All,
                         set: VariableSet { elements: vec![] },
                         body: None,
@@ -854,8 +854,8 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: ParsedExpr {
-                    expr: Expression::Boolean(false),
+                condition: Expression {
+                    expr: ExpressionKind::Boolean(false),
                     span: 35..40,
                 },
                 tags: Vec::new(),
@@ -871,8 +871,8 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: ParsedExpr {
-                    expr: Expression::Boolean(false),
+                condition: Expression {
+                    expr: ExpressionKind::Boolean(false),
                     span: 28..33,
                 },
                 tags: Vec::new(),
@@ -888,8 +888,8 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
-                condition: ParsedExpr {
-                    expr: Expression::Boolean(false),
+                condition: Expression {
+                    expr: ExpressionKind::Boolean(false),
                     span: 27..32,
                 },
                 tags: Vec::new(),
@@ -1000,8 +1000,8 @@ mod tests {
             "",
             vec![Rule {
                 name: "c".to_owned(),
-                condition: ParsedExpr {
-                    expr: Expression::Boolean(false),
+                condition: Expression {
+                    expr: ExpressionKind::Boolean(false),
                     span: 29..34,
                 },
                 tags: Vec::new(),
@@ -1024,8 +1024,8 @@ mod tests {
             vec![
                 Rule {
                     name: "c".to_owned(),
-                    condition: ParsedExpr {
-                        expr: Expression::Boolean(false),
+                    condition: Expression {
+                        expr: ExpressionKind::Boolean(false),
                         span: 56..61,
                     },
                     tags: Vec::new(),
@@ -1036,8 +1036,8 @@ mod tests {
                 },
                 Rule {
                     name: "d".to_owned(),
-                    condition: ParsedExpr {
-                        expr: Expression::Boolean(true),
+                    condition: Expression {
+                        expr: ExpressionKind::Boolean(true),
                         span: 159..163,
                     },
                     tags: Vec::new(),

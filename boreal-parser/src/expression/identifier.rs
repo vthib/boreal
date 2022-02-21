@@ -6,7 +6,7 @@ use nom::{
     character::complete::char, combinator::cut, multi::separated_list0, sequence::terminated,
 };
 
-use super::{Identifier, ParsedExpr};
+use super::{Expression, Identifier};
 use crate::nom_recipes::rtrim;
 use crate::string::identifier as raw_identifier;
 use crate::types::{Input, ParseResult};
@@ -20,13 +20,13 @@ fn trailing_subfield(input: Input) -> ParseResult<String> {
 }
 
 /// Parse a trailing subscript, i.e. after the `[` has been parsed
-fn trailing_subscript(input: Input) -> ParseResult<ParsedExpr> {
+fn trailing_subscript(input: Input) -> ParseResult<Expression> {
     cut(terminated(primary_expression, rtrim(char(']'))))(input)
 }
 
 /// Parse a trailing argument specification, i.e. after the `(` has been
 /// parsed.
-fn trailing_arguments(input: Input) -> ParseResult<Vec<ParsedExpr>> {
+fn trailing_arguments(input: Input) -> ParseResult<Vec<Expression>> {
     cut(terminated(
         separated_list0(rtrim(char(',')), boolean_expression),
         rtrim(char(')')),
@@ -79,7 +79,7 @@ pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
 mod tests {
     use super::*;
     use crate::{
-        expression::Expression,
+        expression::ExpressionKind,
         tests::{parse, parse_err},
     };
 
@@ -101,8 +101,8 @@ mod tests {
             "",
             Identifier::Subscript {
                 identifier: Box::new(Identifier::Raw("a".to_owned())),
-                subscript: Box::new(ParsedExpr {
-                    expr: Expression::Number(2),
+                subscript: Box::new(Expression {
+                    expr: ExpressionKind::Number(2),
                     span: 3..4,
                 }),
             },
@@ -123,12 +123,12 @@ mod tests {
             Identifier::FunctionCall {
                 identifier: Box::new(Identifier::Raw("foo".to_owned())),
                 arguments: vec![
-                    ParsedExpr {
-                        expr: Expression::Identifier(Identifier::Raw("pe".to_owned())),
+                    Expression {
+                        expr: ExpressionKind::Identifier(Identifier::Raw("pe".to_owned())),
                         span: 4..6,
                     },
-                    ParsedExpr {
-                        expr: Expression::Boolean(true),
+                    Expression {
+                        expr: ExpressionKind::Boolean(true),
                         span: 8..12,
                     },
                 ],
@@ -153,12 +153,12 @@ mod tests {
                 subfield: "b".to_owned(),
             }),
             arguments: vec![
-                ParsedExpr {
-                    expr: Expression::Identifier(Identifier::Subfield {
+                Expression {
+                    expr: ExpressionKind::Identifier(Identifier::Subfield {
                         identifier: Box::new(Identifier::Subscript {
                             identifier: Box::new(Identifier::Raw("c".to_owned())),
-                            subscript: Box::new(ParsedExpr {
-                                expr: Expression::String("d".to_owned()),
+                            subscript: Box::new(Expression {
+                                expr: ExpressionKind::String("d".to_owned()),
                                 span: 8..11,
                             }),
                         }),
@@ -166,14 +166,14 @@ mod tests {
                     }),
                     span: 6..14,
                 },
-                ParsedExpr {
-                    expr: Expression::Identifier(Identifier::FunctionCall {
+                Expression {
+                    expr: ExpressionKind::Identifier(Identifier::FunctionCall {
                         identifier: Box::new(Identifier::FunctionCall {
                             identifier: Box::new(Identifier::Raw("f".to_owned())),
                             arguments: vec![],
                         }),
-                        arguments: vec![ParsedExpr {
-                            expr: Expression::Boolean(true),
+                        arguments: vec![Expression {
+                            expr: ExpressionKind::Boolean(true),
                             span: 20..24,
                         }],
                     }),
@@ -191,8 +191,8 @@ mod tests {
                     identifier: Box::new(Identifier::Subfield {
                         identifier: Box::new(Identifier::Subscript {
                             identifier: Box::new(identifier_call),
-                            subscript: Box::new(ParsedExpr {
-                                expr: Expression::Number(3),
+                            subscript: Box::new(Expression {
+                                expr: ExpressionKind::Number(3),
                                 span: 28..29,
                             }),
                         }),
@@ -200,8 +200,8 @@ mod tests {
                     }),
                     subfield: "h".to_owned(),
                 }),
-                subscript: Box::new(ParsedExpr {
-                    expr: Expression::Number(1),
+                subscript: Box::new(Expression {
+                    expr: ExpressionKind::Number(1),
                     span: 35..36,
                 }),
             },
