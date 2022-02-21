@@ -116,10 +116,6 @@ impl Error {
                 ))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
-            ErrorKind::StringDeclarationDuplicated { name } => Diagnostic::error()
-                .with_message(format!("multiple strings named {} declared", name))
-                .with_labels(vec![Label::primary((), self.span.clone())]),
-
             ErrorKind::XorRangeInvalidValue { value } => Diagnostic::error()
                 .with_message(format!(
                     "xor range value {} invalid, must be in [0-255]",
@@ -210,9 +206,6 @@ pub enum ErrorKind {
 
     /// Error converting a string to an integer in base 16
     StrToOctIntError(ParseIntError),
-
-    /// Multiple string declarations with the same name
-    StringDeclarationDuplicated { name: String },
 
     /// A value used in a xor modifier range is outside the [0-255] range.
     XorRangeInvalidValue { value: i64 },

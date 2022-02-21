@@ -1,6 +1,4 @@
 //! Parse yara rules.
-use std::collections::HashSet;
-
 use bitflags::bitflags;
 use nom::{
     branch::alt,
@@ -264,34 +262,7 @@ fn meta_declaration(input: Input) -> ParseResult<Metadata> {
 /// in `grammar.y` in libyara.
 fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
     let (input, _) = pair(rtrim(ttag("strings")), rtrim(char(':')))(input)?;
-    let mut start = input;
-    let (mut input, mut var) = cut(string_declaration)(input)?;
-
-    let mut existing_variables = HashSet::new();
-    let mut decls = Vec::new();
-    loop {
-        // If var.name is empty, this is an anonymous string.
-        // This is allowed, do not add it in the hashset.
-        if !var.name.is_empty() && !existing_variables.insert(var.name.clone()) {
-            return Err(nom::Err::Failure(Error::new(
-                input.get_span_from(start),
-                ErrorKind::StringDeclarationDuplicated { name: var.name },
-            )));
-        }
-        decls.push(var);
-
-        match string_declaration(input) {
-            Ok((i, new_var)) => {
-                start = input;
-                input = i;
-                var = new_var;
-            }
-            Err(nom::Err::Failure(e)) => return Err(nom::Err::Failure(e)),
-            _ => break,
-        }
-    }
-
-    Ok((input, decls))
+    cut(many1(string_declaration))(input)
 }
 
 /// Parse a single string declaration.
@@ -801,8 +772,6 @@ mod tests {
         parse_err(strings, "");
         parse_err(strings, "strings");
         parse_err(strings, "strings:");
-
-        parse_err(strings, "strings: $a = /a/ $b = /b/ $a = /c/");
     }
 
     #[test]

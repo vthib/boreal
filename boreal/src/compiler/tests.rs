@@ -32,6 +32,15 @@ fn compile_expr_err(expression_str: &str) {
     assert!(res.is_err());
 }
 
+#[track_caller]
+fn compile_rule_err(rule_str: &str) {
+    let mut rules = parse_str(&rule_str).unwrap();
+    let rule = rules.pop().unwrap();
+
+    let res = compile_rule(rule);
+    assert!(res.is_err());
+}
+
 #[test]
 fn test_primary_expression_types() {
     compile_expr_err("uint8(/a/)");
@@ -233,4 +242,10 @@ fn test_compilation_types() {
     compile_expr("any of them", Type::Boolean);
     compile_expr("any of them in (0..10)", Type::Boolean);
     compile_expr("for all i in (1,2): (true)", Type::Boolean);
+}
+
+#[test]
+fn test_compilation_variables() {
+    compile_rule_err("rule a { strings: $a=/a/ $a=/b/ condition: all of them }");
+    compile_rule_err("rule a { condition: $a }");
 }

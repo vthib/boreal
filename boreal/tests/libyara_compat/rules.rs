@@ -1,5 +1,5 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use boreal::{AddRuleError, ScanError, Scanner};
+use boreal::{ScanError, Scanner};
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
@@ -27,7 +27,6 @@ fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
 fn test_parse_error(rule: &str, expected_prefix: &str) {
     let mut scanner = Scanner::new();
     let err = scanner.add_rules_from_str(&rule).unwrap_err();
-    assert!(matches!(err, AddRuleError::ParseError(_)));
     let desc = err.to_short_description("mem", rule);
     assert!(
         desc.starts_with(expected_prefix),
@@ -537,7 +536,7 @@ fn test_string_operators() {
 fn test_syntax() {
     test_parse_error(
         "rule test { strings: $a = \"a\" $a = \"a\" condition: all of them }",
-        "mem:1:31: error: multiple strings named a declared",
+        "error: variable $a is declared more than once",
     );
 
     test_parse_error(
