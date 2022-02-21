@@ -38,6 +38,20 @@ pub enum CompilationError {
         /// Span of the right operand
         right_span: Range<usize>,
     },
+
+    /// Duplicated variable names in a rule.
+    ///
+    /// The value is the name of the variable that appears more than once
+    /// in the declarations.
+    DuplicatedVariable(String),
+
+    /// Unknown variable used in a rule.
+    UnknownVariable {
+        /// Name of the variable
+        variable_name: String,
+        /// Span of the variable use in the condition
+        span: Range<usize>,
+    },
 }
 
 impl CompilationError {
@@ -68,6 +82,16 @@ impl CompilationError {
                     Label::secondary((), right_span.clone())
                         .with_message(format!("this has type {}", right_type)),
                 ]),
+
+            Self::DuplicatedVariable(name) => Diagnostic::error()
+                .with_message(format!("variable ${} is declared more than once", name)),
+
+            Self::UnknownVariable {
+                variable_name,
+                span,
+            } => Diagnostic::error()
+                .with_message(format!("unknown variable ${}", variable_name))
+                .with_labels(vec![Label::primary((), span.clone())]),
         }
     }
 }

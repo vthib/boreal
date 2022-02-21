@@ -6,7 +6,7 @@ use codespan_reporting::term;
 
 use boreal_parser::parse_str;
 
-use crate::compiler::{CompilationError, Compiler, Rule};
+use crate::compiler::{compile_rule, CompilationError, Rule};
 use crate::{evaluator, ScanError};
 
 /// Holds a list of rules, and provides methods to
@@ -36,10 +36,8 @@ impl Scanner {
 
     /// Add rules in the scanner.
     fn add_rules(&mut self, rules: Vec<boreal_parser::Rule>) -> Result<(), CompilationError> {
-        let compiler = Compiler {};
-
         for rule in rules {
-            self.rules.push(compiler.compile_rule(rule)?);
+            self.rules.push(compile_rule(rule)?);
         }
         Ok(())
     }

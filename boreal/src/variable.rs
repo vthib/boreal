@@ -5,21 +5,17 @@ use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
 
 pub(crate) struct Variable {
-    pub name: String,
     matcher: RegexMatcher,
 }
 
 impl From<VariableDeclaration> for Variable {
     fn from(decl: VariableDeclaration) -> Self {
         // TODO: handle modifiers
-        let name = decl.name;
-
         let mut matcher = RegexMatcherBuilder::new();
         let matcher = matcher.unicode(false).octal(false);
 
         match decl.value {
             VariableDeclarationValue::String(s) => Self {
-                name,
                 matcher: matcher.build_literals(&[s]).unwrap(),
             },
             VariableDeclarationValue::Regex(Regex {
@@ -27,7 +23,6 @@ impl From<VariableDeclaration> for Variable {
                 case_insensitive,
                 dot_all,
             }) => Self {
-                name,
                 matcher: matcher
                     .case_insensitive(case_insensitive)
                     .multi_line(dot_all)

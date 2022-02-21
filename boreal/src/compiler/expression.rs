@@ -231,15 +231,21 @@ pub enum Expression {
     Boolean(bool),
 
     /// Does a variable matches
-    Variable(String),
+    ///
+    /// The value is the index of the variable in the variable array in
+    /// the compiled rule.
+    Variable(usize),
 
     /// Does a variable matches at a given offset.
-    VariableAt(String, Box<Expression>),
+    ///
+    /// The first value is the index of the variable in the variable array in
+    /// the compiled rule.
+    VariableAt(usize, Box<Expression>),
 
     /// Does a variable matches in a given offset range.
     VariableIn {
-        /// Name of the variable.
-        variable_name: String,
+        /// Index of the variable in the variable array in the compiled rule.
+        variable_index: usize,
         /// Starting offset, included.
         from: Box<Expression>,
         /// Ending offset, included.
@@ -318,7 +324,7 @@ pub enum Expression {
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn compile_expression(
+pub(super) fn compile_expression(
     compiler: &Compiler,
     expression: parser::Expression,
 ) -> Result<Expr, CompilationError> {
@@ -636,18 +642,25 @@ pub fn compile_expression(
             span,
         }),
 
-        parser::ExpressionKind::Variable(variable_name) => Ok(Expr {
-            expr: Expression::Variable(variable_name),
-            ty: Type::Boolean,
-            span,
-        }),
+        parser::ExpressionKind::Variable(variable_name) => {
+            // TODO: handle anonymous var
+            let variable_index = compiler.find_variable(&variable_name, &span)?;
+
+            Ok(Expr {
+                expr: Expression::Variable(variable_index),
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::ExpressionKind::VariableAt(variable_name, expr_offset) => {
+            // TODO: handle anonymous var
+            let variable_index = compiler.find_variable(&variable_name, &span)?;
             let expr_offset = compile_expression(compiler, *expr_offset)?;
 
             Ok(Expr {
                 expr: Expression::VariableAt(
-                    variable_name,
+                    variable_index,
                     expr_offset.unwrap_expr(Type::Integer)?,
                 ),
                 ty: Type::Boolean,
@@ -660,12 +673,14 @@ pub fn compile_expression(
             from,
             to,
         } => {
+            // TODO: handle anonymous var
+            let variable_index = compiler.find_variable(&variable_name, &span)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
 
             Ok(Expr {
                 expr: Expression::VariableIn {
-                    variable_name,
+                    variable_index,
                     from: from.unwrap_expr(Type::Integer)?,
                     to: to.unwrap_expr(Type::Integer)?,
                 },
@@ -985,12 +1000,18 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
 #[cfg(test)]
 mod tests {
     use super::{Compiler, Type};
+    use crate::compiler::compile_rule;
     use crate::AddRuleError;
     use boreal_parser::parse_str;
 
     #[track_caller]
     fn test_compilation(expression_str: &str, expected_type: Type) {
         let rule_str = format!("rule a {{ condition: {} }}", expression_str);
+        test_compilation_rule(&rule_str, expected_type);
+    }
+
+    #[track_caller]
+    fn test_compilation_rule(rule_str: &str, expected_type: Type) {
         let mut rules = parse_str(&rule_str).unwrap_or_else(|err| {
             panic!(
                 "failed parsing: {}",
@@ -999,7 +1020,7 @@ mod tests {
         });
         let rule = rules.pop().unwrap();
 
-        let compiler = Compiler {};
+        let compiler = Compiler::from_rule(&rule).unwrap();
         let res = super::compile_expression(&compiler, rule.condition).unwrap();
         assert_eq!(res.ty, expected_type);
     }
@@ -1010,8 +1031,7 @@ mod tests {
         let mut rules = parse_str(&rule_str).unwrap();
         let rule = rules.pop().unwrap();
 
-        let compiler = Compiler {};
-        let res = super::compile_expression(&compiler, rule.condition);
+        let res = compile_rule(rule);
         assert!(res.is_err());
     }
 
@@ -1204,9 +1224,15 @@ mod tests {
 
         test_compilation("not 1", Type::Boolean);
 
-        test_compilation("$a", Type::Boolean);
-        test_compilation("$a at 100", Type::Boolean);
-        test_compilation("$a in (0..10)", Type::Boolean);
+        test_compilation_rule("rule a { strings: $a = /1/ condition: $a }", Type::Boolean);
+        test_compilation_rule(
+            "rule a { strings: $a = /1/ condition: $a at 100 }",
+            Type::Boolean,
+        );
+        test_compilation_rule(
+            "rule a { strings: $a = /1/ condition: $a in (0..10) }",
+            Type::Boolean,
+        );
 
         test_compilation("pe", Type::Undefined);
 
