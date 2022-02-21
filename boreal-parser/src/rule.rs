@@ -549,7 +549,7 @@ fn condition(input: Input) -> ParseResult<ParsedExpr> {
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::{Expression, ForSelection, ParsedExpr, Type, VariableSet};
+    use crate::expression::{Expression, ForSelection, ParsedExpr, VariableSet};
     use crate::hex_string::{HexToken, Mask};
     use crate::Regex;
 
@@ -806,7 +806,6 @@ mod tests {
                 name: "a".to_owned(),
                 condition: ParsedExpr {
                     expr: Expression::Boolean(false),
-                    ty: Type::Integer,
                     span: 20..25,
                 },
                 tags: Vec::new(),
@@ -836,11 +835,14 @@ mod tests {
                         }
                     }
                 ],
-                condition: ParsedExpr { expr: Expression::For {
-                    selection: ForSelection::All,
-                    set: VariableSet { elements: vec![] },
-                    body: None,
-                }, ty: Type::Boolean, span: 80..91 },
+                condition: ParsedExpr {
+                    expr: Expression::For {
+                        selection: ForSelection::All,
+                        set: VariableSet { elements: vec![] },
+                        body: None,
+                    },
+                    span: 80..91
+                },
                 is_private: true,
                 is_global: true,
             },
@@ -854,7 +856,6 @@ mod tests {
                 name: "c".to_owned(),
                 condition: ParsedExpr {
                     expr: Expression::Boolean(false),
-                    ty: Type::Integer,
                     span: 35..40,
                 },
                 tags: Vec::new(),
@@ -872,7 +873,6 @@ mod tests {
                 name: "c".to_owned(),
                 condition: ParsedExpr {
                     expr: Expression::Boolean(false),
-                    ty: Type::Integer,
                     span: 28..33,
                 },
                 tags: Vec::new(),
@@ -890,7 +890,6 @@ mod tests {
                 name: "c".to_owned(),
                 condition: ParsedExpr {
                     expr: Expression::Boolean(false),
-                    ty: Type::Integer,
                     span: 27..32,
                 },
                 tags: Vec::new(),
@@ -1003,7 +1002,6 @@ mod tests {
                 name: "c".to_owned(),
                 condition: ParsedExpr {
                     expr: Expression::Boolean(false),
-                    ty: Type::Integer,
                     span: 29..34,
                 },
                 tags: Vec::new(),
@@ -1028,7 +1026,6 @@ mod tests {
                     name: "c".to_owned(),
                     condition: ParsedExpr {
                         expr: Expression::Boolean(false),
-                        ty: Type::Integer,
                         span: 56..61,
                     },
                     tags: Vec::new(),
@@ -1041,7 +1038,6 @@ mod tests {
                     name: "d".to_owned(),
                     condition: ParsedExpr {
                         expr: Expression::Boolean(true),
-                        ty: Type::Integer,
                         span: 159..163,
                     },
                     tags: Vec::new(),

@@ -17,7 +17,7 @@ use super::{
     common::range,
     for_expression::{for_expression_non_ambiguous, for_expression_with_expr_selection},
     primary_expression::primary_expression,
-    Expression, ParsedExpr, Type,
+    Expression, ParsedExpr,
 };
 
 /// parse or operator
@@ -30,7 +30,6 @@ pub fn boolean_expression(input: Input) -> ParseResult<ParsedExpr> {
         input = i2;
         res = ParsedExpr {
             expr: Expression::Or(Box::new(res), Box::new(right_elem)),
-            ty: Type::Integer,
             span: input.get_span_from(start),
         }
     }
@@ -47,7 +46,6 @@ fn expression_and(input: Input) -> ParseResult<ParsedExpr> {
         input = i2;
         res = ParsedExpr {
             expr: Expression::And(Box::new(res), Box::new(right_elem)),
-            ty: Type::Integer,
             span: input.get_span_from(start),
         }
     }
@@ -65,7 +63,6 @@ fn expression_not(input: Input) -> ParseResult<ParsedExpr> {
             input,
             ParsedExpr {
                 expr: Expression::Not(Box::new(expr)),
-                ty: Type::Integer,
                 span: input.get_span_from(start),
             },
         ))
@@ -87,7 +84,6 @@ fn expression_defined(input: Input) -> ParseResult<ParsedExpr> {
                 // FIXME: in libyara, _DEFINED_ takes a boolean expression. That
                 // does not look correct though, to investigate.
                 expr: Expression::Defined(Box::new(expr)),
-                ty: Type::Integer,
                 span: input.get_span_from(start),
             },
         ))
@@ -144,7 +140,6 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
             input = i2;
             res = ParsedExpr {
                 expr: Expression::Matches(Box::new(res), regexp),
-                ty: Type::Integer,
                 span: input.get_span_from(start),
             };
             continue;
@@ -158,7 +153,6 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
                 // TODO: improve this generation
                 Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Eq(Box::new(res), Box::new(right_elem)),
-                    ty: Type::Integer,
                     span: input.get_span_from(start),
                 }))
             }
@@ -182,7 +176,6 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<ParsedExpr> {
         };
         res = ParsedExpr {
             expr,
-            ty: Type::Integer,
             span: input.get_span_from(start),
         };
     }
@@ -207,7 +200,6 @@ fn primary_expression_cmp(input: Input) -> ParseResult<ParsedExpr> {
                 less_than,
                 can_be_equal,
             },
-            ty: Type::Integer,
             span: input.get_span_from(start),
         };
     }
@@ -225,7 +217,6 @@ fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
             input,
             ParsedExpr {
                 expr: Expression::VariableAt(variable_name, Box::new(expr)),
-                ty: Type::Integer,
                 span: input.get_span_from(start),
             },
         ))
@@ -239,7 +230,6 @@ fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
                     from,
                     to,
                 },
-                ty: Type::Integer,
                 span: input.get_span_from(start),
             },
         ))
@@ -249,7 +239,6 @@ fn variable_expression(input: Input) -> ParseResult<ParsedExpr> {
             input,
             ParsedExpr {
                 expr: Expression::Variable(variable_name),
-                ty: Type::Integer,
                 span: input.get_span_from(start),
             },
         ))
@@ -286,14 +275,12 @@ mod tests {
                 expr: lower_constructor(
                     Box::new(ParsedExpr {
                         expr: Expression::Number(0),
-                        ty: Type::Integer,
                         span: 0..1,
                     }),
                     Box::new(ParsedExpr {
                         expr: higher_constructor(
                             Box::new(ParsedExpr {
                                 expr: Expression::Number(1),
-                                ty: Type::Integer,
                                 span: Span {
                                     start: 3 + lower_op.len(),
                                     end: 4 + lower_op.len(),
@@ -301,21 +288,18 @@ mod tests {
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expression::Number(2),
-                                ty: Type::Integer,
                                 span: Span {
                                     start: 6 + lower_op.len() + higher_op.len(),
                                     end: 7 + lower_op.len() + higher_op.len(),
                                 },
                             }),
                         ),
-                        ty: Type::Integer,
                         span: Span {
                             start: 3 + lower_op.len(),
                             end: 7 + lower_op.len() + higher_op.len(),
                         },
                     }),
                 ),
-                ty: Type::Integer,
                 span: Span {
                     start: 0,
                     end: 7 + lower_op.len() + higher_op.len(),
@@ -335,11 +319,9 @@ mod tests {
                     "a".to_owned(),
                     Box::new(ParsedExpr {
                         expr: Expression::Number(100),
-                        ty: Type::Integer,
                         span: 6..9,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..9,
             },
         );
@@ -352,16 +334,13 @@ mod tests {
                     variable_name: "_".to_owned(),
                     from: Box::new(ParsedExpr {
                         expr: Expression::Number(0),
-                        ty: Type::Integer,
                         span: 7..8,
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expression::Number(50),
-                        ty: Type::Integer,
                         span: 11..13,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..14,
             },
         );
@@ -375,23 +354,18 @@ mod tests {
                     from: Box::new(ParsedExpr {
                         expr: Expression::Neg(Box::new(ParsedExpr {
                             expr: Expression::Number(10),
-                            ty: Type::Integer,
                             span: 7..9,
                         })),
-                        ty: Type::Integer,
                         span: 6..9,
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expression::Neg(Box::new(ParsedExpr {
                             expr: Expression::Number(5),
-                            ty: Type::Integer,
                             span: 12..13,
                         })),
-                        ty: Type::Integer,
                         span: 11..13,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..14,
             },
         );
@@ -401,7 +375,6 @@ mod tests {
             "in (-10..-5",
             ParsedExpr {
                 expr: Expression::Variable("c".to_owned()),
-                ty: Type::Integer,
                 span: 0..2,
             },
         );
@@ -422,16 +395,13 @@ mod tests {
                 expr: Expression::And(
                     Box::new(ParsedExpr {
                         expr: Expression::Boolean(true),
-                        ty: Type::Integer,
                         span: 0..4,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expression::Boolean(false),
-                        ty: Type::Integer,
                         span: 9..14,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..14,
             },
         );
@@ -444,23 +414,18 @@ mod tests {
                     Box::new(ParsedExpr {
                         expr: Expression::Not(Box::new(ParsedExpr {
                             expr: Expression::Boolean(true),
-                            ty: Type::Integer,
                             span: 4..8,
                         })),
-                        ty: Type::Integer,
                         span: 0..8,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expression::Defined(Box::new(ParsedExpr {
                             expr: Expression::Variable("b".to_owned()),
-                            ty: Type::Integer,
                             span: 20..22,
                         })),
-                        ty: Type::Integer,
                         span: 12..22,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..22,
             },
         );
@@ -472,13 +437,10 @@ mod tests {
                 expr: Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Not(Box::new(ParsedExpr {
                         expr: Expression::Boolean(true),
-                        ty: Type::Integer,
                         span: 8..12,
                     })),
-                    ty: Type::Integer,
                     span: 4..12,
                 })),
-                ty: Type::Integer,
                 span: 0..12,
             },
         );
@@ -501,19 +463,16 @@ mod tests {
                     expr: constructor(
                         Box::new(ParsedExpr {
                             expr: Expression::String("a".to_owned()),
-                            ty: Type::Integer,
                             span: 0..3,
                         }),
                         Box::new(ParsedExpr {
                             expr: Expression::String("b".to_owned()),
-                            ty: Type::Integer,
                             span: Span {
                                 start: 5 + op.len(),
                                 end: 8 + op.len(),
                             },
                         }),
                     ),
-                    ty: Type::Integer,
                     span: Span {
                         start: 0,
                         end: 8 + op.len(),
@@ -526,7 +485,6 @@ mod tests {
         test_op("!=", |a, b| {
             Expression::Not(Box::new(ParsedExpr {
                 expr: Expression::Eq(a, b),
-                ty: Type::Integer,
                 span: 0..10,
             }))
         });
@@ -598,7 +556,6 @@ mod tests {
                 expr: Expression::Matches(
                     Box::new(ParsedExpr {
                         expr: Expression::String("a".to_owned()),
-                        ty: Type::Integer,
                         span: 0..3,
                     }),
                     Regex {
@@ -607,7 +564,6 @@ mod tests {
                         dot_all: false,
                     },
                 ),
-                ty: Type::Integer,
                 span: 0..16,
             },
         );
@@ -635,7 +591,6 @@ mod tests {
         test_precedence("<", "!=", build_cmp(true, false), |a, b| {
             Expression::Not(Box::new(ParsedExpr {
                 expr: Expression::Eq(a, b),
-                ty: Type::Integer,
                 span: 0..10,
             }))
         });
@@ -696,30 +651,24 @@ mod tests {
                     Box::new(ParsedExpr {
                         expr: Expression::Not(Box::new(ParsedExpr {
                             expr: Expression::Boolean(true),
-                            ty: Type::Integer,
                             span: 4..8,
                         })),
-                        ty: Type::Integer,
                         span: 0..8,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expression::And(
                             Box::new(ParsedExpr {
                                 expr: Expression::Boolean(false),
-                                ty: Type::Integer,
                                 span: 12..17,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expression::Boolean(true),
-                                ty: Type::Integer,
                                 span: 22..26,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 12..26,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..26,
             },
         );
@@ -732,7 +681,6 @@ mod tests {
             |a, b| {
                 Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Eq(a, b),
-                    ty: Type::Integer,
                     span: 6..12,
                 }))
             },
@@ -748,7 +696,6 @@ mod tests {
             "b",
             ParsedExpr {
                 expr: Expression::Boolean(true),
-                ty: Type::Integer,
                 span: 0..4,
             },
         );
@@ -758,7 +705,6 @@ mod tests {
             "",
             ParsedExpr {
                 expr: Expression::Boolean(false),
-                ty: Type::Integer,
                 span: 2..7,
             },
         );
@@ -769,10 +715,8 @@ mod tests {
             ParsedExpr {
                 expr: Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Boolean(true),
-                    ty: Type::Integer,
                     span: 4..8,
                 })),
-                ty: Type::Integer,
                 span: 0..8,
             },
         );
@@ -784,13 +728,10 @@ mod tests {
                 expr: Expression::Not(Box::new(ParsedExpr {
                     expr: Expression::Defined(Box::new(ParsedExpr {
                         expr: Expression::Variable("a".to_owned()),
-                        ty: Type::Integer,
                         span: 12..14,
                     })),
-                    ty: Type::Integer,
                     span: 4..14,
                 })),
-                ty: Type::Integer,
                 span: 0..14,
             },
         );
@@ -802,7 +743,6 @@ mod tests {
             "b",
             ParsedExpr {
                 expr: Expression::Number(5),
-                ty: Type::Integer,
                 span: 0..1,
             },
         );
@@ -865,16 +805,13 @@ mod tests {
                 expr: Expression::Eq(
                     Box::new(ParsedExpr {
                         expr: Expression::Number(0),
-                        ty: Type::Integer,
                         span: 0..1,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expression::Number(0),
-                        ty: Type::Integer,
                         span: 3..4,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..4,
             },
         );
@@ -887,19 +824,15 @@ mod tests {
                     expr: Expression::Eq(
                         Box::new(ParsedExpr {
                             expr: Expression::Number(1),
-                            ty: Type::Integer,
                             span: 0..1,
                         }),
                         Box::new(ParsedExpr {
                             expr: Expression::Number(2),
-                            ty: Type::Integer,
                             span: 3..4,
                         }),
                     ),
-                    ty: Type::Integer,
                     span: 0..4,
                 })),
-                ty: Type::Integer,
                 span: 0..4,
             },
         );

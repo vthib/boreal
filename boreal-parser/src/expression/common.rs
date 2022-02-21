@@ -32,7 +32,7 @@ pub(super) fn range(input: Input) -> ParseResult<(Box<ParsedExpr>, Box<ParsedExp
 mod tests {
     use super::*;
     use crate::{
-        expression::{Expression, Type},
+        expression::Expression,
         tests::{parse, parse_err},
     };
 
@@ -45,12 +45,10 @@ mod tests {
             (
                 Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    ty: Type::Integer,
                     span: 1..2,
                 }),
                 Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    ty: Type::Integer,
                     span: 4..5,
                 }),
             ),
@@ -62,12 +60,10 @@ mod tests {
             (
                 Box::new(ParsedExpr {
                     expr: Expression::Filesize,
-                    ty: Type::Integer,
                     span: 2..10,
                 }),
                 Box::new(ParsedExpr {
                     expr: Expression::Entrypoint,
-                    ty: Type::Integer,
                     span: 14..24,
                 }),
             ),

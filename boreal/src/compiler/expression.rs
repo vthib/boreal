@@ -480,7 +480,7 @@ pub fn compile_expression(
 
             Ok(Expr {
                 expr: Expression::BitwiseNot(expr.unwrap_expr(Type::Integer)?),
-                ty: Type::Boolean,
+                ty: Type::Integer,
                 span,
             })
         }
@@ -871,7 +871,7 @@ fn compile_for_selection(
             let expr = compile_expression(compiler, *expr)?;
 
             Ok(ForSelection::Expr {
-                expr: Box::new(expr.expr),
+                expr: expr.unwrap_expr(Type::Integer)?,
                 as_percent,
             })
         }
@@ -902,8 +902,8 @@ fn compile_for_iterator(
             let to = compile_expression(compiler, *to)?;
 
             Ok(ForIterator::Range {
-                from: Box::new(from.expr),
-                to: Box::new(to.expr),
+                from: from.unwrap_expr(Type::Integer)?,
+                to: to.unwrap_expr(Type::Integer)?,
             })
         }
         parser::ForIterator::List(exprs) => Ok(ForIterator::List(
@@ -999,4 +999,241 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         span: 0..1,
         kind: CompilationErrorKind::RegexError { expr, error },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Compiler, Type};
+    use crate::AddRuleError;
+    use boreal_parser::parse_str;
+
+    #[track_caller]
+    fn test_compilation(expression_str: &str, expected_type: Type) {
+        let rule_str = format!("rule a {{ condition: {} }}", expression_str);
+        let mut rules = parse_str(&rule_str).unwrap_or_else(|err| {
+            panic!(
+                "failed parsing: {}",
+                AddRuleError::ParseError(err).to_short_description("mem", &rule_str)
+            )
+        });
+        let rule = rules.pop().unwrap();
+
+        let compiler = Compiler {};
+        let res = super::compile_expression(&compiler, rule.condition).unwrap();
+        assert_eq!(res.ty, expected_type);
+    }
+
+    #[track_caller]
+    fn test_compilation_err(expression_str: &str) {
+        let rule_str = format!("rule a {{ condition: {} }}", expression_str);
+        let mut rules = parse_str(&rule_str).unwrap();
+        let rule = rules.pop().unwrap();
+
+        let compiler = Compiler {};
+        let res = super::compile_expression(&compiler, rule.condition);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_primary_expression_types() {
+        test_compilation_err("uint8(/a/)");
+
+        test_compilation_err("1 | /a/");
+        test_compilation_err("/a/ | 1");
+        test_compilation_err("1 ^ /a/");
+        test_compilation_err("/a/ ^ 1");
+        test_compilation_err("1 & /a/");
+        test_compilation_err("/a/ & 1");
+        test_compilation_err("1.2 << 1");
+        test_compilation_err("1 << 1.2");
+        test_compilation_err("1.2 >> 1");
+        test_compilation_err("1 >> 1.2");
+
+        test_compilation_err("1 + /a/");
+        test_compilation_err("\"a\" + 1");
+        test_compilation_err("1 - /a/");
+        test_compilation_err("\"a\" - 1");
+
+        test_compilation_err("1 * /a/");
+        test_compilation_err("\"a\" * 1");
+
+        test_compilation_err("1 \\ /a/");
+        test_compilation_err("\"a\" \\ 1");
+
+        test_compilation_err("1 % 1.2");
+        test_compilation_err("1.2 % 1");
+
+        test_compilation_err("~1.2");
+        test_compilation_err("-/a/");
+    }
+
+    #[test]
+    fn test_expression_types() {
+        test_compilation_err("1 contains \"a\"");
+        test_compilation_err("\"a\" contains 1");
+
+        test_compilation_err("1 icontains \"a\"");
+        test_compilation_err("\"a\" icontains 1");
+
+        test_compilation_err("1 startswith \"a\"");
+        test_compilation_err("\"a\" startswith 1");
+
+        test_compilation_err("1 istartswith \"a\"");
+        test_compilation_err("\"a\" istartswith 1");
+
+        test_compilation_err("1 endswith \"a\"");
+        test_compilation_err("\"a\" endswith 1");
+
+        test_compilation_err("1 iendswith \"a\"");
+        test_compilation_err("\"a\" iendswith 1");
+
+        test_compilation_err("1 iequals \"a\"");
+        test_compilation_err("\"a\" iequals 1");
+
+        test_compilation_err("1 matches /a/");
+
+        test_compilation_err("$a at 1.2");
+
+        test_compilation_err("$a in (1..\"a\")");
+        test_compilation_err("$a in (/a/ .. 1)");
+
+        test_compilation_err("!foo [ 1.2 ]");
+        test_compilation_err("!foo[/a/]");
+        test_compilation_err("#foo in (0../a/)");
+        test_compilation_err("#foo in (1.2 .. 3)");
+    }
+
+    #[test]
+    fn test_compilation_cmp() {
+        test_compilation("1 < 2", Type::Boolean);
+        test_compilation("1 <= 2.2", Type::Boolean);
+        test_compilation("1.1 > 2", Type::Boolean);
+        test_compilation("1.1 >= 2.2", Type::Boolean);
+
+        test_compilation("\"a\" > \"b\"", Type::Boolean);
+        test_compilation("\"a\" == \"b\"", Type::Boolean);
+        test_compilation("\"a\" != \"b\"", Type::Boolean);
+
+        test_compilation_err("\"a\" < 1");
+        test_compilation_err("2 == \"b\"");
+        test_compilation_err("/a/ != 1");
+    }
+
+    #[test]
+    fn test_compilation_for_expression() {
+        test_compilation("any of them", Type::Boolean);
+        test_compilation("all of ($a, $b*)", Type::Boolean);
+        test_compilation("all of them in (1..3)", Type::Boolean);
+        test_compilation("for any of them: (true)", Type::Boolean);
+        test_compilation("for all i in (1, 2): (true)", Type::Boolean);
+        test_compilation("for any of them: (1)", Type::Boolean);
+
+        test_compilation_err("/a/ of them");
+        test_compilation_err("1.2% of them");
+        test_compilation_err("1.2% of them");
+        test_compilation_err("any of them in (1../a/)");
+        test_compilation_err("any of them in (/a/..2)");
+        test_compilation_err("for any i in (1../a/): (true)");
+        test_compilation_err("for any i in (/a/..1): (true)");
+    }
+
+    #[test]
+    fn test_compilation_types() {
+        fn test_cmp(op: &str) {
+            test_compilation(&format!("1 {} 3", op), Type::Boolean);
+            test_compilation(&format!("1 {} 3.5", op), Type::Boolean);
+            test_compilation(&format!("1.2 {} 3", op), Type::Boolean);
+            test_compilation(&format!("1.2 {} 3.5", op), Type::Boolean);
+            test_compilation(&format!("\"a\" {} \"b\"", op), Type::Boolean);
+        }
+
+        test_compilation("filesize", Type::Integer);
+        test_compilation("entrypoint", Type::Integer);
+
+        test_compilation("uint16(0)", Type::Integer);
+
+        test_compilation("5", Type::Integer);
+        test_compilation("5.3", Type::Float);
+        test_compilation("-5", Type::Integer);
+        test_compilation("-5.3", Type::Float);
+
+        test_compilation("#a in (0..10)", Type::Integer);
+        test_compilation("#a", Type::Integer);
+
+        test_compilation("!a", Type::Integer);
+        test_compilation("@a", Type::Integer);
+
+        test_compilation("5 + 3", Type::Integer);
+        test_compilation("5 + 3.3", Type::Float);
+        test_compilation("5.2 + 3", Type::Float);
+        test_compilation("5.2 + 3.3", Type::Float);
+
+        test_compilation("5 - 3", Type::Integer);
+        test_compilation("5 - 3.3", Type::Float);
+        test_compilation("5.2 - 3", Type::Float);
+        test_compilation("5.2 - 3.3", Type::Float);
+
+        test_compilation("5 * 3", Type::Integer);
+        test_compilation("5 * 3.3", Type::Float);
+        test_compilation("5.2 * 3", Type::Float);
+        test_compilation("5.2 * 3.3", Type::Float);
+
+        test_compilation("5 \\ 3", Type::Integer);
+        test_compilation("5 \\ 3.3", Type::Float);
+        test_compilation("5.2 \\ 3", Type::Float);
+        test_compilation("5.2 \\ 3.3", Type::Float);
+
+        test_compilation("5 % 3", Type::Integer);
+
+        test_compilation("5 ^ 3", Type::Integer);
+        test_compilation("5 | 3", Type::Integer);
+        test_compilation("5 & 3", Type::Integer);
+        test_compilation("~5", Type::Integer);
+
+        test_compilation("5 << 3", Type::Integer);
+        test_compilation("5 >> 3", Type::Integer);
+
+        test_compilation("true and false", Type::Boolean);
+        test_compilation("true or false", Type::Boolean);
+
+        test_cmp("<");
+        test_cmp("<=");
+        test_cmp("<");
+        test_cmp(">=");
+        test_cmp("==");
+        test_cmp("!=");
+
+        test_compilation("\"a\" contains \"b\"", Type::Boolean);
+        test_compilation("\"a\" icontains \"b\"", Type::Boolean);
+        test_compilation("\"a\" startswith \"b\"", Type::Boolean);
+        test_compilation("\"a\" istartswith \"b\"", Type::Boolean);
+        test_compilation("\"a\" endswith \"b\"", Type::Boolean);
+        test_compilation("\"a\" iequals \"b\"", Type::Boolean);
+
+        test_compilation("\"a\" matches /b/", Type::Boolean);
+
+        test_compilation("defined b", Type::Boolean);
+        test_compilation("not true", Type::Boolean);
+
+        test_compilation("true and 1", Type::Boolean);
+        test_compilation("1 and true", Type::Boolean);
+
+        test_compilation("true or 1", Type::Boolean);
+        test_compilation("1 or true", Type::Boolean);
+
+        test_compilation("not 1", Type::Boolean);
+
+        test_compilation("$a", Type::Boolean);
+        test_compilation("$a at 100", Type::Boolean);
+        test_compilation("$a in (0..10)", Type::Boolean);
+
+        test_compilation("pe", Type::Undefined);
+
+        test_compilation("\"a\"", Type::String);
+        test_compilation("/a/", Type::Regex);
+
+        test_compilation("any of them", Type::Boolean);
+        test_compilation("any of them in (0..10)", Type::Boolean);
+        test_compilation("for all i in (1,2): (true)", Type::Boolean);
+    }
 }

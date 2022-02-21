@@ -79,7 +79,7 @@ pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
 mod tests {
     use super::*;
     use crate::{
-        expression::{Expression, Type},
+        expression::Expression,
         tests::{parse, parse_err},
     };
 
@@ -103,7 +103,6 @@ mod tests {
                 identifier: Box::new(Identifier::Raw("a".to_owned())),
                 subscript: Box::new(ParsedExpr {
                     expr: Expression::Number(2),
-                    ty: Type::Integer,
                     span: 3..4,
                 }),
             },
@@ -126,12 +125,10 @@ mod tests {
                 arguments: vec![
                     ParsedExpr {
                         expr: Expression::Identifier(Identifier::Raw("pe".to_owned())),
-                        ty: Type::Undefined,
                         span: 4..6,
                     },
                     ParsedExpr {
                         expr: Expression::Boolean(true),
-                        ty: Type::Undefined,
                         span: 8..12,
                     },
                 ],
@@ -162,13 +159,11 @@ mod tests {
                             identifier: Box::new(Identifier::Raw("c".to_owned())),
                             subscript: Box::new(ParsedExpr {
                                 expr: Expression::String("d".to_owned()),
-                                ty: Type::Undefined,
                                 span: 8..11,
                             }),
                         }),
                         subfield: "e".to_owned(),
                     }),
-                    ty: Type::Undefined,
                     span: 6..14,
                 },
                 ParsedExpr {
@@ -179,12 +174,10 @@ mod tests {
                         }),
                         arguments: vec![ParsedExpr {
                             expr: Expression::Boolean(true),
-                            ty: Type::Undefined,
-                            span: 4..6,
+                            span: 20..24,
                         }],
                     }),
-                    ty: Type::Undefined,
-                    span: 4..6,
+                    span: 16..25,
                 },
             ],
         };
@@ -200,7 +193,6 @@ mod tests {
                             identifier: Box::new(identifier_call),
                             subscript: Box::new(ParsedExpr {
                                 expr: Expression::Number(3),
-                                ty: Type::Integer,
                                 span: 28..29,
                             }),
                         }),
@@ -210,7 +202,6 @@ mod tests {
                 }),
                 subscript: Box::new(ParsedExpr {
                     expr: Expression::Number(1),
-                    ty: Type::Integer,
                     span: 35..36,
                 }),
             },

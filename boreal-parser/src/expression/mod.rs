@@ -7,14 +7,7 @@ mod primary_expression;
 mod read_integer;
 mod string_expression;
 
-#[cfg(test)]
-mod tests;
-
-use crate::{
-    error::{Error, ErrorKind},
-    string::Regex,
-    types::Span,
-};
+use crate::{string::Regex, types::Span};
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
@@ -368,64 +361,12 @@ pub struct VariableSet {
     pub elements: Vec<(String, bool)>,
 }
 
-/// Type of a parsed expression
-///
-/// This is useful to know the type of a parsed expression, and reject
-/// during parsing expressions which are incompatible.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum Type {
-    Integer,
-    Float,
-    String,
-    Regex,
-    Boolean,
-    // TODO: afaict, we shouldn't need this type.
-    // It's used for the moment for unknown symbols.
-    Undefined,
-}
-
-impl std::fmt::Display for Type {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.write_str(match self {
-            Self::Integer => "integer",
-            Self::Float => "floating-point number",
-            Self::String => "string",
-            Self::Regex => "regex",
-            Self::Boolean => "boolean",
-            Self::Undefined => "undefined",
-        })
-    }
-}
-
 /// A parsed expression with associated span
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParsedExpr {
     /// The raw expression.
     pub expr: Expression,
 
-    /// Type of the expression.
-    pub ty: Type,
-
     /// Span of the expression.
     pub span: Span,
-}
-
-impl ParsedExpr {
-    fn check_type(&self, expected_type: Type) -> Result<(), nom::Err<Error>> {
-        if self.ty != expected_type && self.ty != Type::Undefined {
-            return Err(nom::Err::Failure(Error::new(
-                self.span.clone(),
-                ErrorKind::ExpressionInvalidType {
-                    ty: self.ty.to_string(),
-                    expected_type: expected_type.to_string(),
-                },
-            )));
-        }
-        Ok(())
-    }
-
-    fn unwrap_expr(self, expected_type: Type) -> Result<Box<ParsedExpr>, nom::Err<Error>> {
-        self.check_type(expected_type)?;
-        Ok(Box::new(self))
-    }
 }

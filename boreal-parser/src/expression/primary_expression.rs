@@ -10,9 +10,7 @@ use nom::{
     Parser,
 };
 
-use super::{
-    expression, identifier, read_integer, string_expression, Expression, ParsedExpr, Type,
-};
+use super::{expression, identifier, read_integer, string_expression, Expression, ParsedExpr};
 use crate::{
     nom_recipes::{not_followed, rtrim, textual_tag as ttag},
     number, string,
@@ -32,7 +30,6 @@ pub fn primary_expression(input: Input) -> ParseResult<ParsedExpr> {
 
         res = ParsedExpr {
             expr: Expression::BitwiseOr(Box::new(res), Box::new(right_elem)),
-            ty: Type::Integer,
             span: input.get_span_from(start),
         }
     }
@@ -50,7 +47,6 @@ fn primary_expression_bitwise_xor(input: Input) -> ParseResult<ParsedExpr> {
 
         res = ParsedExpr {
             expr: Expression::BitwiseXor(Box::new(res), Box::new(right_elem)),
-            ty: Type::Integer,
             span: input.get_span_from(start),
         };
     }
@@ -70,7 +66,6 @@ fn primary_expression_bitwise_and(input: Input) -> ParseResult<ParsedExpr> {
 
         res = ParsedExpr {
             expr: Expression::BitwiseAnd(Box::new(res), Box::new(right_elem)),
-            ty: Type::Integer,
             span: input.get_span_from(start),
         }
     }
@@ -94,7 +89,6 @@ fn primary_expression_shift(input: Input) -> ParseResult<ParsedExpr> {
                 ">>" => Expression::ShiftRight(left, right),
                 _ => unreachable!(),
             },
-            ty: Type::Integer,
             span: input.get_span_from(start),
         }
     }
@@ -116,7 +110,6 @@ fn primary_expression_add(input: Input) -> ParseResult<ParsedExpr> {
                 "-" => Expression::Sub(Box::new(res), Box::new(right_elem)),
                 _ => unreachable!(),
             },
-            ty: Type::Integer,
             span: input.get_span_from(start),
         }
     }
@@ -151,7 +144,6 @@ fn primary_expression_mul(input: Input) -> ParseResult<ParsedExpr> {
                 '%' => Expression::Mod(Box::new(res), Box::new(right_elem)),
                 _ => unreachable!(),
             },
-            ty: Type::Integer,
             span: input.get_span_from(start),
         }
     }
@@ -172,12 +164,10 @@ fn primary_expression_neg(input: Input) -> ParseResult<ParsedExpr> {
                 match op.cursor() {
                     "~" => ParsedExpr {
                         expr: Expression::BitwiseNot(Box::new(expr)),
-                        ty: Type::Integer,
                         span: input.get_span_from(start),
                     },
                     "-" => ParsedExpr {
                         expr: Expression::Neg(Box::new(expr)),
-                        ty: Type::Integer,
                         span: input.get_span_from(start),
                     },
                     _ => unreachable!(),
@@ -236,7 +226,6 @@ where
             input,
             ParsedExpr {
                 expr: constructor(output),
-                ty: Type::Integer,
                 span: input.get_span_from(start),
             },
         ))
@@ -245,7 +234,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Identifier, Type};
+    use super::super::Identifier;
     use super::{primary_expression as pe, Expression as Expr, ParsedExpr};
     use crate::{
         expression::ReadIntegerSize,
@@ -263,7 +252,6 @@ mod tests {
             "a",
             ParsedExpr {
                 expr: Expr::Filesize,
-                ty: Type::Integer,
                 span: 0..8,
             },
         );
@@ -273,7 +261,6 @@ mod tests {
             "a",
             ParsedExpr {
                 expr: Expr::Filesize,
-                ty: Type::Integer,
                 span: 2..10,
             },
         );
@@ -283,7 +270,6 @@ mod tests {
             "a",
             ParsedExpr {
                 expr: Expr::Entrypoint,
-                ty: Type::Integer,
                 span: 0..10,
             },
         );
@@ -298,11 +284,9 @@ mod tests {
                     big_endian: false,
                     addr: Box::new(ParsedExpr {
                         expr: Expr::Number(3),
-                        ty: Type::Integer,
                         span: 6..7,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..8,
             },
         );
@@ -312,7 +296,6 @@ mod tests {
             "2",
             ParsedExpr {
                 expr: Expr::Number(15),
-                ty: Type::Integer,
                 span: 0..2,
             },
         );
@@ -322,7 +305,6 @@ mod tests {
             "c",
             ParsedExpr {
                 expr: Expr::Double(0.25),
-                ty: Type::Integer,
                 span: 0..4,
             },
         );
@@ -332,7 +314,6 @@ mod tests {
             "b",
             ParsedExpr {
                 expr: Expr::String("a\nb ".to_owned()),
-                ty: Type::Integer,
                 span: 0..7,
             },
         );
@@ -342,7 +323,6 @@ mod tests {
             "bar",
             ParsedExpr {
                 expr: Expr::Count("foo".to_owned()),
-                ty: Type::Integer,
                 span: 0..4,
             },
         );
@@ -355,16 +335,13 @@ mod tests {
                     variable_name: "foo".to_owned(),
                     from: Box::new(ParsedExpr {
                         expr: Expr::Number(0),
-                        ty: Type::Integer,
                         span: 9..10,
                     }),
                     to: Box::new(ParsedExpr {
                         expr: Expr::Filesize,
-                        ty: Type::Integer,
                         span: 13..21,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..23,
             },
         );
@@ -377,11 +354,9 @@ mod tests {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expr::Number(1),
-                        ty: Type::Integer,
                         span: 0..2,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..2,
             },
         );
@@ -394,11 +369,9 @@ mod tests {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expr::Number(2),
-                        ty: Type::Integer,
                         span: 5..6,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..7,
             },
         );
@@ -411,11 +384,9 @@ mod tests {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expr::Number(1),
-                        ty: Type::Integer,
                         span: 0..2,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..2,
             },
         );
@@ -428,11 +399,9 @@ mod tests {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(ParsedExpr {
                         expr: Expr::Number(2),
-                        ty: Type::Integer,
                         span: 5..6,
                     }),
                 },
-                ty: Type::Integer,
                 span: 0..7,
             },
         );
@@ -443,7 +412,6 @@ mod tests {
             "c",
             ParsedExpr {
                 expr: Expr::Identifier(Identifier::Raw("a".to_owned())),
-                ty: Type::Integer,
                 span: 0..1,
             },
         );
@@ -453,7 +421,6 @@ mod tests {
             "",
             ParsedExpr {
                 expr: Expr::Identifier(Identifier::Raw("aze".to_owned())),
-                ty: Type::Integer,
                 span: 0..3,
             },
         );
@@ -467,7 +434,6 @@ mod tests {
                     case_insensitive: true,
                     dot_all: false,
                 }),
-                ty: Type::Integer,
                 span: 0..7,
             },
         );
@@ -497,25 +463,20 @@ mod tests {
                         expr: Expr::Add(
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(1),
-                                ty: Type::Integer,
                                 span: 0..1,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(2),
-                                ty: Type::Integer,
                                 span: 4..5,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 0..5,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(3),
-                        ty: Type::Integer,
                         span: 8..9,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..9,
             },
         );
@@ -531,34 +492,27 @@ mod tests {
                                 expr: Expr::Div(
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(1),
-                                        ty: Type::Integer,
                                         span: 0..1,
                                     }),
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(2),
-                                        ty: Type::Integer,
                                         span: 4..5,
                                     }),
                                 ),
-                                ty: Type::Integer,
                                 span: 0..5,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(3),
-                                ty: Type::Integer,
                                 span: 8..9,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 0..9,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(4),
-                        ty: Type::Integer,
                         span: 12..13,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..13,
             },
         );
@@ -574,34 +528,27 @@ mod tests {
                                 expr: Expr::ShiftLeft(
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(1),
-                                        ty: Type::Integer,
                                         span: 0..1,
                                     }),
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(2),
-                                        ty: Type::Integer,
                                         span: 5..6,
                                     }),
                                 ),
-                                ty: Type::Integer,
                                 span: 0..6,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(3),
-                                ty: Type::Integer,
                                 span: 10..11,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 0..11,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(4),
-                        ty: Type::Integer,
                         span: 15..16,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..16,
             },
         );
@@ -615,25 +562,20 @@ mod tests {
                         expr: Expr::BitwiseAnd(
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(1),
-                                ty: Type::Integer,
                                 span: 0..1,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(2),
-                                ty: Type::Integer,
                                 span: 4..5,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 0..5,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(3),
-                        ty: Type::Integer,
                         span: 8..9,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..9,
             },
         );
@@ -647,25 +589,20 @@ mod tests {
                         expr: Expr::BitwiseXor(
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(1),
-                                ty: Type::Integer,
                                 span: 0..1,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(2),
-                                ty: Type::Integer,
                                 span: 4..5,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 0..5,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(3),
-                        ty: Type::Integer,
                         span: 8..9,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..9,
             },
         );
@@ -679,25 +616,20 @@ mod tests {
                         expr: Expr::BitwiseOr(
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(1),
-                                ty: Type::Integer,
                                 span: 0..1,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(2),
-                                ty: Type::Integer,
                                 span: 4..5,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 0..5,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(3),
-                        ty: Type::Integer,
                         span: 8..9,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..9,
             },
         );
@@ -712,23 +644,18 @@ mod tests {
                     Box::new(ParsedExpr {
                         expr: Expr::Neg(Box::new(ParsedExpr {
                             expr: Expr::Number(1),
-                            ty: Type::Integer,
                             span: 1..2,
                         })),
-                        ty: Type::Integer,
                         span: 0..2,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Neg(Box::new(ParsedExpr {
                             expr: Expr::Number(2),
-                            ty: Type::Integer,
                             span: 4..5,
                         })),
-                        ty: Type::Integer,
                         span: 3..5,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..5,
             },
         );
@@ -741,23 +668,18 @@ mod tests {
                     Box::new(ParsedExpr {
                         expr: Expr::BitwiseNot(Box::new(ParsedExpr {
                             expr: Expr::Number(1),
-                            ty: Type::Integer,
                             span: 1..2,
                         })),
-                        ty: Type::Integer,
                         span: 0..2,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::BitwiseNot(Box::new(ParsedExpr {
                             expr: Expr::Number(2),
-                            ty: Type::Integer,
                             span: 4..5,
                         })),
-                        ty: Type::Integer,
                         span: 3..5,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..5,
             },
         );
@@ -770,16 +692,12 @@ mod tests {
                     expr: Expr::BitwiseNot(Box::new(ParsedExpr {
                         expr: Expr::Neg(Box::new(ParsedExpr {
                             expr: Expr::Number(1),
-                            ty: Type::Integer,
                             span: 3..4,
                         })),
-                        ty: Type::Integer,
                         span: 2..4,
                     })),
-                    ty: Type::Integer,
                     span: 1..4,
                 })),
-                ty: Type::Integer,
                 span: 0..4,
             },
         );
@@ -807,14 +725,12 @@ mod tests {
                     expr: lower_constructor(
                         Box::new(ParsedExpr {
                             expr: Expr::Number(1),
-                            ty: Type::Integer,
                             span: 0..1,
                         }),
                         Box::new(ParsedExpr {
                             expr: higher_constructor(
                                 Box::new(ParsedExpr {
                                     expr: Expr::Number(2),
-                                    ty: Type::Integer,
                                     span: Span {
                                         start: 3 + lower_op.len(),
                                         end: 4 + lower_op.len(),
@@ -822,21 +738,18 @@ mod tests {
                                 }),
                                 Box::new(ParsedExpr {
                                     expr: Expr::Number(3),
-                                    ty: Type::Integer,
                                     span: Span {
                                         start: 6 + lower_op.len() + higher_op.len(),
                                         end: 7 + lower_op.len() + higher_op.len(),
                                     },
                                 }),
                             ),
-                            ty: Type::Integer,
                             span: Span {
                                 start: 3 + lower_op.len(),
                                 end: 7 + lower_op.len() + higher_op.len(),
                             },
                         }),
                     ),
-                    ty: Type::Integer,
                     span: Span {
                         start: 0,
                         end: 7 + lower_op.len() + higher_op.len(),
@@ -908,27 +821,22 @@ mod tests {
                         expr: Expr::Add(
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(1),
-                                ty: Type::Integer,
                                 span: 0..1,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Mul(
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(2),
-                                        ty: Type::Integer,
                                         span: 4..5,
                                     }),
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(3),
-                                        ty: Type::Integer,
                                         span: 8..9,
                                     }),
                                 ),
-                                ty: Type::Integer,
                                 span: 4..9,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 0..9,
                     }),
                     Box::new(ParsedExpr {
@@ -937,29 +845,23 @@ mod tests {
                                 expr: Expr::Mod(
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(4),
-                                        ty: Type::Integer,
                                         span: 12..13,
                                     }),
                                     Box::new(ParsedExpr {
                                         expr: Expr::Number(5),
-                                        ty: Type::Integer,
                                         span: 16..17,
                                     }),
                                 ),
-                                ty: Type::Integer,
                                 span: 12..17,
                             }),
                             Box::new(ParsedExpr {
                                 expr: Expr::Number(6),
-                                ty: Type::Integer,
                                 span: 20..21,
                             }),
                         ),
-                        ty: Type::Integer,
                         span: 12..21,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..21,
             },
         );
@@ -975,16 +877,13 @@ mod tests {
                 expr: Expr::Add(
                     Box::new(ParsedExpr {
                         expr: Expr::Number(1),
-                        ty: Type::Integer,
                         span: 0..1,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(1),
-                        ty: Type::Integer,
                         span: 4..5,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..5,
             },
         );
@@ -996,16 +895,13 @@ mod tests {
                 expr: Expr::Add(
                     Box::new(ParsedExpr {
                         expr: Expr::Number(1),
-                        ty: Type::Integer,
                         span: 0..1,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Double(1.2),
-                        ty: Type::Integer,
                         span: 4..7,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..7,
             },
         );
@@ -1017,16 +913,13 @@ mod tests {
                 expr: Expr::Add(
                     Box::new(ParsedExpr {
                         expr: Expr::Double(1.2),
-                        ty: Type::Integer,
                         span: 0..3,
                     }),
                     Box::new(ParsedExpr {
                         expr: Expr::Number(1),
-                        ty: Type::Integer,
                         span: 6..7,
                     }),
                 ),
-                ty: Type::Integer,
                 span: 0..7,
             },
         );
@@ -1038,10 +931,8 @@ mod tests {
             ParsedExpr {
                 expr: Expr::Neg(Box::new(ParsedExpr {
                     expr: Expr::Number(1),
-                    ty: Type::Integer,
                     span: 1..2,
                 })),
-                ty: Type::Integer,
                 span: 0..2,
             },
         );
@@ -1052,10 +943,8 @@ mod tests {
             ParsedExpr {
                 expr: Expr::Neg(Box::new(ParsedExpr {
                     expr: Expr::Double(1.2),
-                    ty: Type::Integer,
                     span: 1..4,
                 })),
-                ty: Type::Integer,
                 span: 0..4,
             },
         );

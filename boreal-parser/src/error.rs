@@ -42,25 +42,6 @@ impl Error {
                 .with_message("regexes cannot be empty")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
-            ErrorKind::ExpressionInvalidType { ty, expected_type } => Diagnostic::error()
-                .with_message("expression has an invalid type")
-                .with_labels(vec![Label::primary((), self.span.clone())
-                    .with_message(format!("expected {}, found {}", expected_type, ty))]),
-
-            ErrorKind::ExpressionIncompatibleTypes {
-                left_type,
-                left_span,
-                right_type,
-                right_span,
-            } => Diagnostic::error()
-                .with_message("expressions have invalid types")
-                .with_labels(vec![
-                    Label::secondary((), left_span.clone())
-                        .with_message(format!("this has type {}", left_type)),
-                    Label::secondary((), right_span.clone())
-                        .with_message(format!("this has type {}", right_type)),
-                ]),
-
             ErrorKind::HasTrailingData => Diagnostic::error()
                 .with_message("some data could not be parsed")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
@@ -181,29 +162,6 @@ pub enum ErrorKind {
 
     /// Empty regex declaration, forbidden
     EmptyRegex,
-
-    /// Expression with an invalid type
-    ExpressionInvalidType {
-        /// Type of the expression
-        ty: String,
-        /// Expected type
-        expected_type: String,
-    },
-
-    /// Operands of an expression have incompatible types.
-    ///
-    /// The incompatibility is either between the two operands (e.g. integer
-    /// and string) or with the operator (e.g. division between regexes).
-    ExpressionIncompatibleTypes {
-        /// Type of the left operand
-        left_type: String,
-        /// Span of the left operand
-        left_span: Span,
-        /// Type of the right operand
-        right_type: String,
-        /// Span of the right operand
-        right_span: Span,
-    },
 
     /// There are trailing data that could not be parsed.
     HasTrailingData,
