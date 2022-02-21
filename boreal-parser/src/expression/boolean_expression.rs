@@ -216,7 +216,10 @@ fn variable_expression(input: Input) -> ParseResult<Expression> {
         Ok((
             input,
             Expression {
-                expr: ExpressionKind::VariableAt(variable_name, Box::new(expr)),
+                expr: ExpressionKind::VariableAt {
+                    variable_name,
+                    offset: Box::new(expr),
+                },
                 span: input.get_span_from(start),
             },
         ))
@@ -315,13 +318,13 @@ mod tests {
             "$a at 100 b",
             "b",
             Expression {
-                expr: ExpressionKind::VariableAt(
-                    "a".to_owned(),
-                    Box::new(Expression {
+                expr: ExpressionKind::VariableAt {
+                    variable_name: "a".to_owned(),
+                    offset: Box::new(Expression {
                         expr: ExpressionKind::Number(100),
                         span: 6..9,
                     }),
-                ),
+                },
                 span: 0..9,
             },
         );

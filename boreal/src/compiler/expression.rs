@@ -240,7 +240,12 @@ pub enum Expression {
     ///
     /// The first value is the index of the variable in the variable array in
     /// the compiled rule.
-    VariableAt(usize, Box<Expression>),
+    VariableAt {
+        /// Index of the variable in the variable array in the compiled rule.
+        variable_index: usize,
+        /// Offset where the variable should be searched.
+        offset: Box<Expression>,
+    },
 
     /// Does a variable matches in a given offset range.
     VariableIn {
@@ -653,16 +658,19 @@ pub(super) fn compile_expression(
             })
         }
 
-        parser::ExpressionKind::VariableAt(variable_name, expr_offset) => {
+        parser::ExpressionKind::VariableAt {
+            variable_name,
+            offset,
+        } => {
             // TODO: handle anonymous var
             let variable_index = compiler.find_variable(&variable_name, &span)?;
-            let expr_offset = compile_expression(compiler, *expr_offset)?;
+            let offset = compile_expression(compiler, *offset)?;
 
             Ok(Expr {
-                expr: Expression::VariableAt(
+                expr: Expression::VariableAt {
                     variable_index,
-                    expr_offset.unwrap_expr(Type::Integer)?,
-                ),
+                    offset: offset.unwrap_expr(Type::Integer)?,
+                },
                 ty: Type::Boolean,
                 span,
             })

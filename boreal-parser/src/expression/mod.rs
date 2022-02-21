@@ -232,7 +232,12 @@ pub enum ExpressionKind {
     Variable(String),
 
     /// Does a variable matches at a given offset.
-    VariableAt(String, Box<Expression>),
+    VariableAt {
+        /// Name of the variable
+        variable_name: String,
+        /// Offset
+        offset: Box<Expression>,
+    },
 
     /// Does a variable matches in a given offset range.
     VariableIn {

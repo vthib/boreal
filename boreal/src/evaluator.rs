@@ -337,13 +337,15 @@ impl Evaluator<'_> {
                 // TODO: handle io error
                 Ok(Value::Boolean(var.find(self.mem).unwrap()))
             }
-            Expression::VariableAt(variable_index, offset_expr) => {
+
+            Expression::VariableAt {
+                variable_index,
+                offset,
+            } => {
                 // Safety: index has been generated during compilation and is valid.
                 let var = &self.variables[*variable_index];
 
-                let offset = self
-                    .evaluate_expr(offset_expr)?
-                    .unwrap_number("variable at")?;
+                let offset = self.evaluate_expr(offset)?.unwrap_number("variable at")?;
 
                 match usize::try_from(offset) {
                     Ok(offset) => Ok(Value::Boolean(var.find_at(self.mem, offset).unwrap())),
@@ -351,6 +353,7 @@ impl Evaluator<'_> {
                     Err(_) => Ok(Value::Boolean(false)),
                 }
             }
+
             Expression::VariableIn {
                 variable_index,
                 from,
@@ -369,6 +372,7 @@ impl Evaluator<'_> {
                     _ => Ok(Value::Boolean(false)),
                 }
             }
+
             Expression::For { .. } => todo!(),
             Expression::ForIn { .. } => todo!(),
             Expression::ForIdentifiers { .. } => todo!(),
