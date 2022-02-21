@@ -2,28 +2,9 @@
 //!
 //! This module mainly intends to match the lexical patterns used in libyara.
 //!
-//! All of the parsing functions, unless otherwise indicated, depends on the
-//! following invariants:
-//! - The received input has already been left-trimmed
-//! - The returned input is right-trimmed
-//! The [`nom_recipes::rtrim`] function is provided to make this easier.
-//!
-//! Progress:
-//! [x] hex strings initial impl is complete, need integration testing.
-//! [ ] re strings needs to be investigated.
-//! [ ] yar files are in progress.
-//!   lexer:
-//!     [x] identifiers
-//!     [x] strings
-//!     [x] regexes
-//!     [ ] includes
-//!   parser:
-//!     [ ] all
-//!
-//! TODO:
-//! [ ] check error reporting
-//! [ ] replace `from_external_error` with a custom err: the desc is dropped
-//!     by nom...
+//! Missing features:
+//! - imports
+//! - includes
 
 // Deny most of allowed by default lints from rustc.
 #![deny(explicit_outlives_requirements)]
@@ -54,6 +35,14 @@
 // TODO: To activate before release
 // #![deny(clippy::cargo)]
 
+// Parsing uses the [`nom`] crate, adapted for textual parsing.
+//
+// All of the parsing functions, unless otherwise indicated, depends on the
+// following invariants:
+// - The received input has already been left-trimmed
+// - The returned input is right-trimmed
+// The [`nom_recipes::rtrim`] function is provided to make this easier.
+
 mod error;
 pub use error::Error;
 mod expression;
@@ -64,7 +53,9 @@ mod hex_string;
 mod nom_recipes;
 mod number;
 mod rule;
-pub use rule::{Metadata, Rule, VariableDeclaration, VariableDeclarationValue, VariableModifiers};
+pub use rule::{
+    Metadata, Rule, VariableDeclaration, VariableDeclarationValue, VariableFlags, VariableModifiers,
+};
 mod string;
 pub use string::Regex;
 mod types;

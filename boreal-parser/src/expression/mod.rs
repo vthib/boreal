@@ -12,7 +12,7 @@ use crate::string::Regex;
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
 
-/// Size of the integer to read, see [`ParsedExpr::ReadInteger`].
+/// Size of the integer to read, see [`ExpressionKind::ReadInteger`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum ReadIntegerSize {
     /// 8 bits

@@ -69,15 +69,24 @@ pub struct Metadata {
 }
 
 bitflags! {
+    /// Modifier flags, see [`VariableModifiers`].
     #[derive(Default)]
     pub struct VariableFlags: u32 {
+        /// Wide modifier
         const WIDE = 0b0000_0001;
+        /// Ascii modifier
         const ASCII = 0b000_0010;
+        /// Nocase modifier
         const NOCASE = 0b0000_0100;
+        /// Fullword modifier
         const FULLWORD = 0b0000_1000;
+        /// Private modifier
         const PRIVATE = 0b0001_0000;
+        /// Xor modifier, related to [`VariableModifiers::xor_range`]
         const XOR = 0b0010_0000;
+        /// base64 modifier, related to [`VariableModifiers::base64_alphabet`]
         const BASE64 = 0b0100_0000;
+        /// base64wide modifier, related to [`VariableModifiers::base64_alphabet`]
         const BASE64WIDE = 0b1000_0000;
     }
 }
@@ -100,12 +109,12 @@ pub struct VariableModifiers {
     pub flags: VariableFlags,
     /// Xor range.
     ///
-    /// This is only applicable if `flags` contains [`StringFlags::Xor`].
+    /// This is only applicable if `flags` contains [`VariableFlags::XOR`].
     pub xor_range: (u8, u8),
     /// Base64 alphabet.
     ///
-    /// This is only applicable if `flags` contains [`StringFlags::Base64`]
-    /// or [`StringFlags::Base64Wide`].
+    /// This is only applicable if `flags` contains [`VariableFlags::BASE64`]
+    /// or [`VariableFlags::BASE64WIDE`].
     pub base64_alphabet: Option<[u8; 64]>,
 }
 
