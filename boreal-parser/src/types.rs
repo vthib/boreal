@@ -6,12 +6,6 @@ use nom::{
     Err, IResult, InputIter, InputLength, InputTake,
 };
 
-/// A span inside the parsed input.
-///
-/// Those are byte indexes relative to the original input.
-/// Start is inclusive, end is exclusive.
-pub type Span = Range<usize>;
-
 #[derive(Clone, Copy, Debug)]
 pub struct Input<'a> {
     /// Whole input being parsed.
@@ -70,11 +64,11 @@ impl<'a> Input<'a> {
     ///
     /// The given input is the start of the span.
     /// The end of the span is the cursor saved before the last rtrim.
-    pub fn get_span_from(&self, start: Self) -> Span {
+    pub fn get_span_from(&self, start: Self) -> Range<usize> {
         debug_assert!(self.input == start.input);
         let input = self.input.as_ptr() as usize;
 
-        Span {
+        Range {
             start: start.cursor().as_ptr() as usize - input,
             end: self.cursor_before_last_rtrim.as_ptr() as usize - input,
         }

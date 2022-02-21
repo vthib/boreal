@@ -7,7 +7,7 @@ mod primary_expression;
 mod read_integer;
 mod string_expression;
 
-use crate::{string::Regex, types::Span};
+use crate::string::Regex;
 
 // TODO: not quite happy about how operator precedence has been implemented.
 // Maybe implementing Shunting-Yard would be better, to bench and test.
@@ -368,5 +368,5 @@ pub struct Expression {
     pub expr: ExpressionKind,
 
     /// Span of the whole expression in the input.
-    pub span: Span,
+    pub span: std::ops::Range<usize>,
 }

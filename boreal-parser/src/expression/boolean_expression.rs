@@ -252,8 +252,8 @@ mod tests {
         expression::Identifier,
         string::Regex,
         tests::{parse, parse_check, parse_err},
-        types::Span,
     };
+    use std::ops::Range;
 
     #[track_caller]
     fn test_precedence<F, F2>(
@@ -281,26 +281,26 @@ mod tests {
                         expr: higher_constructor(
                             Box::new(Expression {
                                 expr: ExpressionKind::Number(1),
-                                span: Span {
+                                span: Range {
                                     start: 3 + lower_op.len(),
                                     end: 4 + lower_op.len(),
                                 },
                             }),
                             Box::new(Expression {
                                 expr: ExpressionKind::Number(2),
-                                span: Span {
+                                span: Range {
                                     start: 6 + lower_op.len() + higher_op.len(),
                                     end: 7 + lower_op.len() + higher_op.len(),
                                 },
                             }),
                         ),
-                        span: Span {
+                        span: Range {
                             start: 3 + lower_op.len(),
                             end: 7 + lower_op.len() + higher_op.len(),
                         },
                     }),
                 ),
-                span: Span {
+                span: Range {
                     start: 0,
                     end: 7 + lower_op.len() + higher_op.len(),
                 },
@@ -467,13 +467,13 @@ mod tests {
                         }),
                         Box::new(Expression {
                             expr: ExpressionKind::String("b".to_owned()),
-                            span: Span {
+                            span: Range {
                                 start: 5 + op.len(),
                                 end: 8 + op.len(),
                             },
                         }),
                     ),
-                    span: Span {
+                    span: Range {
                         start: 0,
                         end: 8 + op.len(),
                     },

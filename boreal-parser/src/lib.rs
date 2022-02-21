@@ -49,6 +49,7 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::match_same_arms)]
+#![allow(clippy::range_plus_one)]
 
 // TODO: To activate before release
 // #![deny(clippy::cargo)]
@@ -86,10 +87,7 @@ pub fn parse_str(input: &str) -> Result<Vec<Rule>, Error> {
         let pos = input.get_position();
 
         return Err(error::Error::new(
-            types::Span {
-                start: pos,
-                end: pos + 1,
-            },
+            pos..(pos + 1),
             error::ErrorKind::HasTrailingData,
         ));
     }

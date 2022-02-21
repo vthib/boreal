@@ -1,9 +1,10 @@
 use std::num::{ParseFloatError, ParseIntError};
+use std::ops::Range;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use nom::error::{ErrorKind as NomErrorKind, ParseError};
 
-use super::types::{Input, Span};
+use super::types::Input;
 
 /// Parsing error.
 #[derive(Debug)]
@@ -12,7 +13,7 @@ pub struct Error {
     ///
     /// This is a range of offset, in chars, from the beginning
     /// of the input given to [`parse_str`].
-    span: Span,
+    span: Range<usize>,
 
     /// Kind of the error.
     kind: ErrorKind,
@@ -20,7 +21,7 @@ pub struct Error {
 
 impl Error {
     #[must_use]
-    pub(crate) fn new(span: Span, kind: ErrorKind) -> Self {
+    pub(crate) fn new(span: Range<usize>, kind: ErrorKind) -> Self {
         Self { span, kind }
     }
 
@@ -134,10 +135,7 @@ impl Error {
 
     fn from_nom_error_kind(position: usize, kind: NomErrorKind) -> Self {
         Self {
-            span: Span {
-                start: position,
-                end: position + 1,
-            },
+            span: position..(position + 1),
             kind: ErrorKind::NomError(kind),
         }
     }

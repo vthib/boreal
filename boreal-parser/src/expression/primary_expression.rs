@@ -240,8 +240,8 @@ mod tests {
         expression::ReadIntegerSize,
         string::Regex,
         tests::{parse, parse_check, parse_err},
-        types::Span,
     };
+    use std::ops::Range;
 
     #[test]
     #[allow(clippy::too_many_lines)]
@@ -731,26 +731,26 @@ mod tests {
                             expr: higher_constructor(
                                 Box::new(Expression {
                                     expr: Expr::Number(2),
-                                    span: Span {
+                                    span: Range {
                                         start: 3 + lower_op.len(),
                                         end: 4 + lower_op.len(),
                                     },
                                 }),
                                 Box::new(Expression {
                                     expr: Expr::Number(3),
-                                    span: Span {
+                                    span: Range {
                                         start: 6 + lower_op.len() + higher_op.len(),
                                         end: 7 + lower_op.len() + higher_op.len(),
                                     },
                                 }),
                             ),
-                            span: Span {
+                            span: Range {
                                 start: 3 + lower_op.len(),
                                 end: 7 + lower_op.len() + higher_op.len(),
                             },
                         }),
                     ),
-                    span: Span {
+                    span: Range {
                         start: 0,
                         end: 7 + lower_op.len() + higher_op.len(),
                     },
