@@ -7,7 +7,7 @@ use regex::Regex;
 
 use boreal_parser as parser;
 
-use super::{CompilationError, CompilationErrorKind, Compiler};
+use super::{CompilationError, Compiler};
 
 /// Type of a parsed expression
 ///
@@ -53,11 +53,9 @@ pub struct Expr {
 impl Expr {
     fn check_type(&self, expected_type: Type) -> Result<(), CompilationError> {
         if self.ty != expected_type && self.ty != Type::Undefined {
-            return Err(CompilationError {
-                kind: CompilationErrorKind::ExpressionInvalidType {
-                    ty: self.ty.to_string(),
-                    expected_type: expected_type.to_string(),
-                },
+            return Err(CompilationError::ExpressionInvalidType {
+                ty: self.ty.to_string(),
+                expected_type: expected_type.to_string(),
                 span: self.span.clone(),
             });
         }
@@ -783,14 +781,11 @@ where
         }
         (Type::Undefined, Type::Undefined) => Type::Undefined,
         _ => {
-            return Err(CompilationError {
-                span,
-                kind: CompilationErrorKind::ExpressionIncompatibleTypes {
-                    left_type: a.ty.to_string(),
-                    left_span: a.span,
-                    right_type: b.ty.to_string(),
-                    right_span: b.span,
-                },
+            return Err(CompilationError::ExpressionIncompatibleTypes {
+                left_type: a.ty.to_string(),
+                left_span: a.span,
+                right_type: b.ty.to_string(),
+                right_span: b.span,
             });
         }
     };
@@ -983,11 +978,8 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         expr = format!("(?{}){}", flags, expr);
     }
 
-    Regex::new(&expr).map_err(|error| CompilationError {
-        // FIXME: get span
-        span: 0..1,
-        kind: CompilationErrorKind::RegexError { expr, error },
-    })
+    // FIXME: get a span for the regex
+    Regex::new(&expr).map_err(|error| CompilationError::RegexError { expr, error })
 }
 
 #[cfg(test)]

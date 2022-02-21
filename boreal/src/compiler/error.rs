@@ -3,18 +3,9 @@ use std::ops::Range;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
-/// Error while compiling a rule.
-#[derive(Debug)]
-pub struct CompilationError {
-    /// Kind of the error
-    pub kind: CompilationErrorKind,
-    /// Span of the parsed string comprising the error
-    pub span: Range<usize>,
-}
-
 /// Type of error while compiling a rule.
 #[derive(Debug)]
-pub enum CompilationErrorKind {
+pub enum CompilationError {
     /// Error compiling a regex
     RegexError {
         /// Expression used as a regex, that failed to build
@@ -29,6 +20,8 @@ pub enum CompilationErrorKind {
         ty: String,
         /// Expected type
         expected_type: String,
+        /// Span of the expression
+        span: Range<usize>,
     },
 
     /// Operands of an expression have incompatible types.
@@ -50,17 +43,19 @@ pub enum CompilationErrorKind {
 impl CompilationError {
     #[must_use]
     pub(crate) fn to_diagnostic(&self) -> Diagnostic<()> {
-        match &self.kind {
+        match &self {
             // TODO: get span from parser
-            CompilationErrorKind::RegexError { expr, error } => Diagnostic::error()
+            Self::RegexError { expr, error } => Diagnostic::error()
                 .with_message(format!("regex `{}` failed to build: {:?}", expr, error)),
-            CompilationErrorKind::ExpressionInvalidType { ty, expected_type } => {
-                Diagnostic::error()
-                    .with_message("expression has an invalid type")
-                    .with_labels(vec![Label::primary((), self.span.clone())
-                        .with_message(format!("expected {}, found {}", expected_type, ty))])
-            }
-            CompilationErrorKind::ExpressionIncompatibleTypes {
+            Self::ExpressionInvalidType {
+                ty,
+                expected_type,
+                span,
+            } => Diagnostic::error()
+                .with_message("expression has an invalid type")
+                .with_labels(vec![Label::primary((), span.clone())
+                    .with_message(format!("expected {}, found {}", expected_type, ty))]),
+            Self::ExpressionIncompatibleTypes {
                 left_type,
                 left_span,
                 right_type,
