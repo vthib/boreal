@@ -2,7 +2,7 @@
 use boreal_parser as parser;
 
 mod error;
-pub use error::CompilationError;
+pub use error::{CompilationError, CompilationErrorKind};
 mod expression;
 pub use expression::*;
 mod rule;

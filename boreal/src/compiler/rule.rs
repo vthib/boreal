@@ -27,6 +27,6 @@ pub fn compile(compiler: &Compiler, rule: parser::Rule) -> Result<Rule, Compilat
         tags: rule.tags,
         metadatas: rule.metadatas,
         variables: rule.variables.into_iter().map(Variable::from).collect(),
-        condition: compile_expression(compiler, rule.condition)?,
+        condition: compile_expression(compiler, rule.condition)?.expr,
     })
 }

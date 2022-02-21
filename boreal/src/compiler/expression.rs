@@ -1,11 +1,74 @@
 //! Compiled expression used in a rule.
 //!
 //! This module contains all types describing a rule condition, built from the parsed AST.
+use std::ops::Range;
+
 use regex::Regex;
 
 use boreal_parser as parser;
 
-use super::{CompilationError, Compiler};
+use super::{CompilationError, CompilationErrorKind, Compiler};
+
+/// Type of a parsed expression
+///
+/// This is useful to know the type of a parsed expression, and reject
+/// during parsing expressions which are incompatible.
+#[derive(Copy, Clone, PartialEq, Debug)]
+enum Type {
+    Integer,
+    Float,
+    String,
+    Regex,
+    Boolean,
+    // TODO: afaict, we shouldn't need this type.
+    // It's used for the moment for unknown symbols.
+    Undefined,
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.write_str(match self {
+            Self::Integer => "integer",
+            Self::Float => "floating-point number",
+            Self::String => "string",
+            Self::Regex => "regex",
+            Self::Boolean => "boolean",
+            Self::Undefined => "undefined",
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct Expr {
+    // The raw expression.
+    pub expr: Expression,
+
+    // Type of the expression.
+    ty: Type,
+
+    // Span of the expression.
+    span: Range<usize>,
+}
+
+impl Expr {
+    fn check_type(&self, expected_type: Type) -> Result<(), CompilationError> {
+        if self.ty != expected_type && self.ty != Type::Undefined {
+            return Err(CompilationError {
+                kind: CompilationErrorKind::ExpressionInvalidType {
+                    ty: self.ty.to_string(),
+                    expected_type: expected_type.to_string(),
+                },
+                span: self.span.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    fn unwrap_expr(self, expected_type: Type) -> Result<Box<Expression>, CompilationError> {
+        self.check_type(expected_type)?;
+        Ok(Box::new(self.expr))
+    }
+}
 
 #[derive(Debug)]
 pub enum Expression {
@@ -264,210 +327,384 @@ pub enum Expression {
 pub fn compile_expression(
     compiler: &Compiler,
     expression: parser::ParsedExpr,
-) -> Result<Expression, CompilationError> {
+) -> Result<Expr, CompilationError> {
+    let span = expression.span;
+
     match expression.expr {
-        parser::Expression::Filesize => Ok(Expression::Filesize),
-        parser::Expression::Entrypoint => Ok(Expression::Entrypoint),
+        parser::Expression::Filesize => Ok(Expr {
+            expr: Expression::Filesize,
+            ty: Type::Integer,
+            span,
+        }),
+        parser::Expression::Entrypoint => Ok(Expr {
+            expr: Expression::Entrypoint,
+            ty: Type::Integer,
+            span,
+        }),
         parser::Expression::ReadInteger {
             size,
             unsigned,
             big_endian,
             addr,
-        } => Ok(Expression::ReadInteger {
-            size,
-            unsigned,
-            big_endian,
-            addr: Box::new(compile_expression(compiler, *addr)?),
+        } => {
+            let addr = compile_expression(compiler, *addr)?;
+
+            Ok(Expr {
+                expr: Expression::ReadInteger {
+                    size,
+                    unsigned,
+                    big_endian,
+                    addr: addr.unwrap_expr(Type::Integer)?,
+                },
+                ty: Type::Integer,
+                span,
+            })
+        }
+
+        parser::Expression::Number(v) => Ok(Expr {
+            expr: Expression::Number(v),
+            ty: Type::Integer,
+            span,
         }),
 
-        parser::Expression::Number(v) => Ok(Expression::Number(v)),
+        parser::Expression::Double(v) => Ok(Expr {
+            expr: Expression::Double(v),
+            ty: Type::Float,
+            span,
+        }),
 
-        parser::Expression::Double(v) => Ok(Expression::Double(v)),
-
-        parser::Expression::Count(variable_name) => Ok(Expression::Count(variable_name)),
+        parser::Expression::Count(variable_name) => Ok(Expr {
+            expr: Expression::Count(variable_name),
+            ty: Type::Integer,
+            span,
+        }),
 
         parser::Expression::CountInRange {
             variable_name,
             from,
             to,
-        } => Ok(Expression::CountInRange {
-            variable_name,
-            from: Box::new(compile_expression(compiler, *from)?),
-            to: Box::new(compile_expression(compiler, *to)?),
-        }),
+        } => {
+            let from = compile_expression(compiler, *from)?;
+            let to = compile_expression(compiler, *to)?;
+
+            Ok(Expr {
+                expr: Expression::CountInRange {
+                    variable_name,
+                    from: from.unwrap_expr(Type::Integer)?,
+                    to: to.unwrap_expr(Type::Integer)?,
+                },
+                ty: Type::Integer,
+                span,
+            })
+        }
 
         parser::Expression::Offset {
             variable_name,
             occurence_number,
-        } => Ok(Expression::Offset {
-            variable_name,
-            occurence_number: Box::new(compile_expression(compiler, *occurence_number)?),
-        }),
+        } => {
+            let occurence_number = compile_expression(compiler, *occurence_number)?;
+
+            Ok(Expr {
+                expr: Expression::Offset {
+                    variable_name,
+                    occurence_number: occurence_number.unwrap_expr(Type::Integer)?,
+                },
+                ty: Type::Integer,
+                span,
+            })
+        }
 
         parser::Expression::Length {
             variable_name,
             occurence_number,
-        } => Ok(Expression::Length {
-            variable_name,
-            occurence_number: Box::new(compile_expression(compiler, *occurence_number)?),
-        }),
+        } => {
+            let occurence_number = compile_expression(compiler, *occurence_number)?;
 
-        parser::Expression::Neg(expr) => Ok(Expression::Neg(Box::new(compile_expression(
-            compiler, *expr,
-        )?))),
+            Ok(Expr {
+                expr: Expression::Length {
+                    variable_name,
+                    occurence_number: occurence_number.unwrap_expr(Type::Integer)?,
+                },
+                ty: Type::Integer,
+                span,
+            })
+        }
 
-        parser::Expression::Add(left, right) => Ok(Expression::Add(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
-        parser::Expression::Sub(left, right) => Ok(Expression::Sub(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
-        parser::Expression::Mul(left, right) => Ok(Expression::Mul(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
-        parser::Expression::Div(left, right) => Ok(Expression::Div(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
+        parser::Expression::Neg(expr) => {
+            let expr = compile_expression(compiler, *expr)?;
 
-        parser::Expression::Mod(left, right) => Ok(Expression::Mod(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
+            if expr.ty == Type::Float {
+                Ok(Expr {
+                    expr: Expression::Neg(Box::new(expr.expr)),
+                    ty: Type::Float,
+                    span,
+                })
+            } else {
+                Ok(Expr {
+                    expr: Expression::Neg(expr.unwrap_expr(Type::Integer)?),
+                    ty: Type::Integer,
+                    span,
+                })
+            }
+        }
 
-        parser::Expression::BitwiseXor(left, right) => Ok(Expression::BitwiseXor(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
-        parser::Expression::BitwiseAnd(left, right) => Ok(Expression::BitwiseAnd(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
-        parser::Expression::BitwiseOr(left, right) => Ok(Expression::BitwiseOr(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
+        parser::Expression::Add(left, right) => {
+            compile_primary_op(compiler, *left, *right, span, Expression::Add, false)
+        }
+        parser::Expression::Sub(left, right) => {
+            compile_primary_op(compiler, *left, *right, span, Expression::Sub, false)
+        }
+        parser::Expression::Mul(left, right) => {
+            compile_primary_op(compiler, *left, *right, span, Expression::Mul, false)
+        }
+        parser::Expression::Div(left, right) => {
+            compile_primary_op(compiler, *left, *right, span, Expression::Div, false)
+        }
 
-        parser::Expression::BitwiseNot(expr) => Ok(Expression::BitwiseNot(Box::new(
-            compile_expression(compiler, *expr)?,
-        ))),
+        parser::Expression::Mod(left, right) => {
+            compile_arith_binary_op(compiler, *left, *right, span, Expression::Mod)
+        }
 
-        parser::Expression::ShiftLeft(left, right) => Ok(Expression::ShiftLeft(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
-        parser::Expression::ShiftRight(left, right) => Ok(Expression::ShiftRight(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
+        parser::Expression::BitwiseXor(left, right) => {
+            compile_arith_binary_op(compiler, *left, *right, span, Expression::BitwiseXor)
+        }
+        parser::Expression::BitwiseAnd(left, right) => {
+            compile_arith_binary_op(compiler, *left, *right, span, Expression::BitwiseAnd)
+        }
+        parser::Expression::BitwiseOr(left, right) => {
+            compile_arith_binary_op(compiler, *left, *right, span, Expression::BitwiseOr)
+        }
 
-        parser::Expression::And(left, right) => Ok(Expression::And(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
-        parser::Expression::Or(left, right) => Ok(Expression::Or(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
+        parser::Expression::BitwiseNot(expr) => {
+            let expr = compile_expression(compiler, *expr)?;
 
-        parser::Expression::Not(expr) => Ok(Expression::Not(Box::new(compile_expression(
-            compiler, *expr,
-        )?))),
+            Ok(Expr {
+                expr: Expression::BitwiseNot(expr.unwrap_expr(Type::Integer)?),
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
+        parser::Expression::ShiftLeft(left, right) => {
+            compile_arith_binary_op(compiler, *left, *right, span, Expression::ShiftLeft)
+        }
+        parser::Expression::ShiftRight(left, right) => {
+            compile_arith_binary_op(compiler, *left, *right, span, Expression::ShiftRight)
+        }
+
+        parser::Expression::And(left, right) => {
+            let left = compile_expression(compiler, *left)?;
+            let right = compile_expression(compiler, *right)?;
+
+            Ok(Expr {
+                expr: Expression::And(Box::new(left.expr), Box::new(right.expr)),
+                ty: Type::Boolean,
+                span,
+            })
+        }
+        parser::Expression::Or(left, right) => {
+            let left = compile_expression(compiler, *left)?;
+            let right = compile_expression(compiler, *right)?;
+
+            Ok(Expr {
+                expr: Expression::Or(Box::new(left.expr), Box::new(right.expr)),
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
+        parser::Expression::Not(expr) => {
+            let expr = compile_expression(compiler, *expr)?;
+
+            Ok(Expr {
+                expr: Expression::Not(Box::new(expr.expr)),
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::Expression::Cmp {
             left,
             right,
             less_than,
             can_be_equal,
-        } => Ok(Expression::Cmp {
-            left: Box::new(compile_expression(compiler, *left)?),
-            right: Box::new(compile_expression(compiler, *right)?),
-            less_than,
-            can_be_equal,
-        }),
+        } => {
+            let mut res = compile_primary_op(
+                compiler,
+                *left,
+                *right,
+                span,
+                |left, right| Expression::Cmp {
+                    left,
+                    right,
+                    less_than,
+                    can_be_equal,
+                },
+                true,
+            )?;
+            res.ty = Type::Boolean;
+            Ok(res)
+        }
 
-        parser::Expression::Eq(left, right) => Ok(Expression::Eq(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
+        parser::Expression::Eq(left, right) => {
+            let mut res = compile_primary_op(compiler, *left, *right, span, Expression::Eq, true)?;
+            res.ty = Type::Boolean;
+            Ok(res)
+        }
 
         parser::Expression::Contains {
             haystack,
             needle,
             case_insensitive,
-        } => Ok(Expression::Contains {
-            haystack: Box::new(compile_expression(compiler, *haystack)?),
-            needle: Box::new(compile_expression(compiler, *needle)?),
-            case_insensitive,
-        }),
+        } => {
+            let haystack = compile_expression(compiler, *haystack)?;
+            let needle = compile_expression(compiler, *needle)?;
+
+            Ok(Expr {
+                expr: Expression::Contains {
+                    haystack: haystack.unwrap_expr(Type::String)?,
+                    needle: needle.unwrap_expr(Type::String)?,
+                    case_insensitive,
+                },
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::Expression::StartsWith {
             expr,
             prefix,
             case_insensitive,
-        } => Ok(Expression::StartsWith {
-            expr: Box::new(compile_expression(compiler, *expr)?),
-            prefix: Box::new(compile_expression(compiler, *prefix)?),
-            case_insensitive,
-        }),
+        } => {
+            let expr = compile_expression(compiler, *expr)?;
+            let prefix = compile_expression(compiler, *prefix)?;
+
+            Ok(Expr {
+                expr: Expression::StartsWith {
+                    expr: expr.unwrap_expr(Type::String)?,
+                    prefix: prefix.unwrap_expr(Type::String)?,
+                    case_insensitive,
+                },
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::Expression::EndsWith {
             expr,
             suffix,
             case_insensitive,
-        } => Ok(Expression::EndsWith {
-            expr: Box::new(compile_expression(compiler, *expr)?),
-            suffix: Box::new(compile_expression(compiler, *suffix)?),
-            case_insensitive,
+        } => {
+            let expr = compile_expression(compiler, *expr)?;
+            let suffix = compile_expression(compiler, *suffix)?;
+
+            Ok(Expr {
+                expr: Expression::EndsWith {
+                    expr: expr.unwrap_expr(Type::String)?,
+                    suffix: suffix.unwrap_expr(Type::String)?,
+                    case_insensitive,
+                },
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
+        parser::Expression::IEquals(left, right) => {
+            let left = compile_expression(compiler, *left)?;
+            let right = compile_expression(compiler, *right)?;
+
+            Ok(Expr {
+                expr: Expression::IEquals(
+                    left.unwrap_expr(Type::String)?,
+                    right.unwrap_expr(Type::String)?,
+                ),
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
+        parser::Expression::Matches(expr, regex) => {
+            let expr = compile_expression(compiler, *expr)?;
+
+            Ok(Expr {
+                expr: Expression::Matches(expr.unwrap_expr(Type::String)?, compile_regex(regex)?),
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
+        parser::Expression::Defined(expr) => {
+            let expr = compile_expression(compiler, *expr)?;
+
+            Ok(Expr {
+                expr: Expression::Defined(Box::new(expr.expr)),
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
+        parser::Expression::Boolean(b) => Ok(Expr {
+            expr: Expression::Boolean(b),
+            ty: Type::Boolean,
+            span,
         }),
 
-        parser::Expression::IEquals(left, right) => Ok(Expression::IEquals(
-            Box::new(compile_expression(compiler, *left)?),
-            Box::new(compile_expression(compiler, *right)?),
-        )),
+        parser::Expression::Variable(variable_name) => Ok(Expr {
+            expr: Expression::Variable(variable_name),
+            ty: Type::Boolean,
+            span,
+        }),
 
-        parser::Expression::Matches(expr, regex) => Ok(Expression::Matches(
-            Box::new(compile_expression(compiler, *expr)?),
-            compile_regex(regex)?,
-        )),
+        parser::Expression::VariableAt(variable_name, expr_offset) => {
+            let expr_offset = compile_expression(compiler, *expr_offset)?;
 
-        parser::Expression::Defined(expr) => Ok(Expression::Defined(Box::new(compile_expression(
-            compiler, *expr,
-        )?))),
-
-        parser::Expression::Boolean(b) => Ok(Expression::Boolean(b)),
-
-        parser::Expression::Variable(variable_name) => Ok(Expression::Variable(variable_name)),
-
-        parser::Expression::VariableAt(variable_name, expr_offset) => Ok(Expression::VariableAt(
-            variable_name,
-            Box::new(compile_expression(compiler, *expr_offset)?),
-        )),
+            Ok(Expr {
+                expr: Expression::VariableAt(
+                    variable_name,
+                    expr_offset.unwrap_expr(Type::Integer)?,
+                ),
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::Expression::VariableIn {
             variable_name,
             from,
             to,
-        } => Ok(Expression::VariableIn {
-            variable_name,
-            from: Box::new(compile_expression(compiler, *from)?),
-            to: Box::new(compile_expression(compiler, *to)?),
-        }),
+        } => {
+            let from = compile_expression(compiler, *from)?;
+            let to = compile_expression(compiler, *to)?;
+
+            Ok(Expr {
+                expr: Expression::VariableIn {
+                    variable_name,
+                    from: from.unwrap_expr(Type::Integer)?,
+                    to: to.unwrap_expr(Type::Integer)?,
+                },
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::Expression::For {
             selection,
             set,
             body,
-        } => Ok(Expression::For {
-            selection: compile_for_selection(compiler, selection)?,
-            set,
-            body: match body {
-                Some(body) => Some(Box::new(compile_expression(compiler, *body)?)),
-                None => None,
+        } => Ok(Expr {
+            expr: Expression::For {
+                selection: compile_for_selection(compiler, selection)?,
+                set,
+                body: match body {
+                    Some(body) => {
+                        let body = compile_expression(compiler, *body)?;
+                        Some(Box::new(body.expr))
+                    }
+                    None => None,
+                },
             },
+            ty: Type::Boolean,
+            span,
         }),
 
         parser::Expression::ForIn {
@@ -475,12 +712,21 @@ pub fn compile_expression(
             set,
             from,
             to,
-        } => Ok(Expression::ForIn {
-            selection: compile_for_selection(compiler, selection)?,
-            set,
-            from: Box::new(compile_expression(compiler, *from)?),
-            to: Box::new(compile_expression(compiler, *to)?),
-        }),
+        } => {
+            let from = compile_expression(compiler, *from)?;
+            let to = compile_expression(compiler, *to)?;
+
+            Ok(Expr {
+                expr: Expression::ForIn {
+                    selection: compile_for_selection(compiler, selection)?,
+                    set,
+                    from: from.unwrap_expr(Type::Integer)?,
+                    to: to.unwrap_expr(Type::Integer)?,
+                },
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::Expression::ForIdentifiers {
             selection,
@@ -490,19 +736,101 @@ pub fn compile_expression(
             iterator,
 
             body,
-        } => Ok(Expression::ForIdentifiers {
-            selection: compile_for_selection(compiler, selection)?,
-            identifiers,
-            iterator: compile_for_iterator(compiler, iterator)?,
-            body: Box::new(compile_expression(compiler, *body)?),
-        }),
+        } => {
+            let body = compile_expression(compiler, *body)?;
 
-        parser::Expression::Identifier(identifier) => Ok(Expression::Identifier(
-            compile_identifier(compiler, identifier)?,
-        )),
-        parser::Expression::String(s) => Ok(Expression::String(s)),
-        parser::Expression::Regex(regex) => Ok(Expression::Regex(compile_regex(regex)?)),
+            Ok(Expr {
+                expr: Expression::ForIdentifiers {
+                    selection: compile_for_selection(compiler, selection)?,
+                    identifiers,
+                    iterator: compile_for_iterator(compiler, iterator)?,
+                    body: Box::new(body.expr),
+                },
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
+        parser::Expression::Identifier(identifier) => Ok(Expr {
+            expr: Expression::Identifier(compile_identifier(compiler, identifier)?),
+            ty: Type::Undefined,
+            span,
+        }),
+        parser::Expression::String(s) => Ok(Expr {
+            expr: Expression::String(s),
+            ty: Type::String,
+            span,
+        }),
+        parser::Expression::Regex(regex) => Ok(Expr {
+            expr: Expression::Regex(compile_regex(regex)?),
+            ty: Type::Regex,
+            span,
+        }),
     }
+}
+
+fn compile_primary_op<F>(
+    compiler: &Compiler,
+    a: parser::ParsedExpr,
+    b: parser::ParsedExpr,
+    span: Range<usize>,
+    constructor: F,
+    string_allowed: bool,
+) -> Result<Expr, CompilationError>
+where
+    F: Fn(Box<Expression>, Box<Expression>) -> Expression,
+{
+    let a = compile_expression(compiler, a)?;
+    let b = compile_expression(compiler, b)?;
+
+    let ty = match (a.ty, b.ty) {
+        (Type::Integer, Type::Integer) => Type::Integer,
+        (Type::Undefined, Type::Integer) | (Type::Integer, Type::Undefined) => Type::Integer,
+        (Type::Float | Type::Integer, Type::Integer | Type::Float) => Type::Float,
+        (Type::Undefined, Type::Float) | (Type::Float, Type::Undefined) => Type::Float,
+        (Type::String, Type::String) if string_allowed => Type::String,
+        (Type::Undefined, Type::String) | (Type::String, Type::Undefined) if string_allowed => {
+            Type::String
+        }
+        (Type::Undefined, Type::Undefined) => Type::Undefined,
+        _ => {
+            return Err(CompilationError {
+                span,
+                kind: CompilationErrorKind::ExpressionIncompatibleTypes {
+                    left_type: a.ty.to_string(),
+                    left_span: a.span,
+                    right_type: b.ty.to_string(),
+                    right_span: b.span,
+                },
+            });
+        }
+    };
+
+    Ok(Expr {
+        expr: constructor(Box::new(a.expr), Box::new(b.expr)),
+        ty,
+        span,
+    })
+}
+
+fn compile_arith_binary_op<F>(
+    compiler: &Compiler,
+    a: parser::ParsedExpr,
+    b: parser::ParsedExpr,
+    span: Range<usize>,
+    constructor: F,
+) -> Result<Expr, CompilationError>
+where
+    F: Fn(Box<Expression>, Box<Expression>) -> Expression,
+{
+    let a = compile_expression(compiler, a)?;
+    let b = compile_expression(compiler, b)?;
+
+    Ok(Expr {
+        expr: constructor(a.unwrap_expr(Type::Integer)?, b.unwrap_expr(Type::Integer)?),
+        ty: Type::Integer,
+        span,
+    })
 }
 
 /// Selection of variables in a 'for' expression.
@@ -539,10 +867,14 @@ fn compile_for_selection(
         parser::ForSelection::Any => Ok(ForSelection::Any),
         parser::ForSelection::All => Ok(ForSelection::All),
         parser::ForSelection::None => Ok(ForSelection::None),
-        parser::ForSelection::Expr { expr, as_percent } => Ok(ForSelection::Expr {
-            expr: Box::new(compile_expression(compiler, *expr)?),
-            as_percent,
-        }),
+        parser::ForSelection::Expr { expr, as_percent } => {
+            let expr = compile_expression(compiler, *expr)?;
+
+            Ok(ForSelection::Expr {
+                expr: Box::new(expr.expr),
+                as_percent,
+            })
+        }
     }
 }
 
@@ -565,14 +897,19 @@ fn compile_for_iterator(
         parser::ForIterator::Identifier(identifier) => Ok(ForIterator::Identifier(
             compile_identifier(compiler, identifier)?,
         )),
-        parser::ForIterator::Range { from, to } => Ok(ForIterator::Range {
-            from: Box::new(compile_expression(compiler, *from)?),
-            to: Box::new(compile_expression(compiler, *to)?),
-        }),
+        parser::ForIterator::Range { from, to } => {
+            let from = compile_expression(compiler, *from)?;
+            let to = compile_expression(compiler, *to)?;
+
+            Ok(ForIterator::Range {
+                from: Box::new(from.expr),
+                to: Box::new(to.expr),
+            })
+        }
         parser::ForIterator::List(exprs) => Ok(ForIterator::List(
             exprs
                 .into_iter()
-                .map(|expr| compile_expression(compiler, expr))
+                .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))
                 .collect::<Result<Vec<_>, _>>()?,
         )),
     }
@@ -609,10 +946,14 @@ fn compile_identifier(
         parser::Identifier::Subscript {
             identifier,
             subscript,
-        } => Ok(Identifier::Subscript {
-            identifier: Box::new(compile_identifier(compiler, *identifier)?),
-            subscript: Box::new(compile_expression(compiler, *subscript)?),
-        }),
+        } => {
+            let subscript = compile_expression(compiler, *subscript)?;
+
+            Ok(Identifier::Subscript {
+                identifier: Box::new(compile_identifier(compiler, *identifier)?),
+                subscript: Box::new(subscript.expr),
+            })
+        }
         parser::Identifier::Subfield {
             identifier,
             subfield,
@@ -626,7 +967,7 @@ fn compile_identifier(
         } => {
             let arguments: Result<Vec<_>, _> = arguments
                 .into_iter()
-                .map(|expr| compile_expression(compiler, expr))
+                .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))
                 .collect();
             Ok(Identifier::FunctionCall {
                 identifier: Box::new(compile_identifier(compiler, *identifier)?),
@@ -653,5 +994,9 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         expr = format!("(?{}){}", flags, expr);
     }
 
-    Regex::new(&expr).map_err(|error| CompilationError::RegexError { expr, error })
+    Regex::new(&expr).map_err(|error| CompilationError {
+        // FIXME: get span
+        span: 0..1,
+        kind: CompilationErrorKind::RegexError { expr, error },
+    })
 }
