@@ -3,7 +3,9 @@ use regex::Regex;
 
 use crate::compiler::{Expression, Rule};
 use crate::error::ScanError;
-use crate::variable::VariableEvaluation;
+
+mod variable;
+use variable::VariableEvaluation;
 
 #[derive(Debug)]
 enum Value<'a> {

@@ -39,4 +39,3 @@ mod compiler;
 mod evaluator;
 mod scanner;
 pub use scanner::{AddRuleError, Scanner};
-mod variable;
