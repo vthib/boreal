@@ -29,9 +29,6 @@
 // #![deny(missing_docs)]
 // #![deny(clippy::cargo)]
 
-// Used by binary
-use codespan_reporting as _;
-
 mod error;
 pub use error::ScanError;
 
