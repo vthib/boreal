@@ -3,7 +3,7 @@ use regex::Regex;
 
 use crate::compiler::{Expression, Rule};
 use crate::error::ScanError;
-use crate::variable::Variable;
+use crate::variable::VariableEvaluation;
 
 #[derive(Debug)]
 enum Value<'a> {
@@ -71,7 +71,7 @@ impl Value<'_> {
 /// return the right type of value.
 pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
     let evaluator = Evaluator {
-        variables: &rule.variables,
+        variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
         mem,
     };
     evaluator
@@ -80,7 +80,7 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
 }
 
 struct Evaluator<'a> {
-    variables: &'a [Variable],
+    variables: Vec<VariableEvaluation<'a>>,
     mem: &'a [u8],
 }
 

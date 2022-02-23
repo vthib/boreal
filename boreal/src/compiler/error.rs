@@ -52,6 +52,17 @@ pub enum CompilationError {
         /// Span of the variable use in the condition
         span: Range<usize>,
     },
+
+    /// Error while compiling a variable, indicating an issue with
+    /// its expression.
+    VariableCompilationError {
+        /// Name of the variable
+        variable_name: String,
+
+        /// Error returned by [`grep_regex`] when compiling the contents
+        /// of the variable.
+        error: grep_regex::Error,
+    },
 }
 
 impl CompilationError {
@@ -92,6 +103,15 @@ impl CompilationError {
             } => Diagnostic::error()
                 .with_message(format!("unknown variable ${}", variable_name))
                 .with_labels(vec![Label::primary((), span.clone())]),
+
+            // TODO: need span for variable
+            Self::VariableCompilationError {
+                variable_name,
+                error,
+            } => Diagnostic::error().with_message(format!(
+                "variable ${} cannot be compiled: {:?}",
+                variable_name, error
+            )),
         }
     }
 }

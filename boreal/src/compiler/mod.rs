@@ -4,12 +4,12 @@ use std::ops::Range;
 
 use boreal_parser as parser;
 
-use crate::variable::Variable;
-
 mod error;
 pub use error::CompilationError;
 mod expression;
 pub use expression::*;
+mod variable;
+pub use variable::*;
 
 /// A compiled scanning rule.
 pub struct Rule {
@@ -77,7 +77,11 @@ pub fn compile_rule(rule: parser::Rule) -> Result<Rule, CompilationError> {
         name: rule.name,
         tags: rule.tags,
         metadatas: rule.metadatas,
-        variables: rule.variables.into_iter().map(Variable::from).collect(),
+        variables: rule
+            .variables
+            .into_iter()
+            .map(compile_variable)
+            .collect::<Result<Vec<_>, _>>()?,
         condition: condition.expr,
     })
 }
