@@ -72,7 +72,7 @@ impl Value<'_> {
 /// An error is returned if the expression is malformed, and some sub-expressions do not
 /// return the right type of value.
 pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
-    let evaluator = Evaluator {
+    let mut evaluator = Evaluator {
         variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
         mem,
     };
@@ -149,7 +149,7 @@ macro_rules! apply_cmp_op {
 
 impl Evaluator<'_> {
     #[allow(clippy::too_many_lines)]
-    fn evaluate_expr<'b>(&self, expr: &'b Expression) -> Result<Value<'b>, ScanError> {
+    fn evaluate_expr<'b>(&mut self, expr: &'b Expression) -> Result<Value<'b>, ScanError> {
         match expr {
             Expression::Filesize => todo!(),
             Expression::Entrypoint => todo!(),
@@ -334,10 +334,9 @@ impl Evaluator<'_> {
 
             Expression::Variable(variable_index) => {
                 // Safety: index has been generated during compilation and is valid.
-                let var = &self.variables[*variable_index];
+                let var = &mut self.variables[*variable_index];
 
-                // TODO: handle io error
-                Ok(Value::Boolean(var.find(self.mem).unwrap()))
+                Ok(Value::Boolean(var.find(self.mem)))
             }
 
             Expression::VariableAt {
@@ -345,12 +344,11 @@ impl Evaluator<'_> {
                 offset,
             } => {
                 // Safety: index has been generated during compilation and is valid.
-                let var = &self.variables[*variable_index];
-
                 let offset = self.evaluate_expr(offset)?.unwrap_number("variable at")?;
+                let var = &mut self.variables[*variable_index];
 
                 match usize::try_from(offset) {
-                    Ok(offset) => Ok(Value::Boolean(var.find_at(self.mem, offset).unwrap())),
+                    Ok(offset) => Ok(Value::Boolean(var.find_at(self.mem, offset))),
                     // TODO: return error?
                     Err(_) => Ok(Value::Boolean(false)),
                 }
@@ -362,13 +360,13 @@ impl Evaluator<'_> {
                 to,
             } => {
                 // Safety: index has been generated during compilation and is valid.
-                let var = &self.variables[*variable_index];
                 let from = self.evaluate_expr(from)?.unwrap_number("variable in")?;
                 let to = self.evaluate_expr(to)?.unwrap_number("variable in")?;
+                let var = &mut self.variables[*variable_index];
 
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
-                        Ok(Value::Boolean(var.find_in(self.mem, from, to).unwrap()))
+                        Ok(Value::Boolean(var.find_in(self.mem, from, to)))
                     }
                     // TODO: return error?
                     _ => Ok(Value::Boolean(false)),
