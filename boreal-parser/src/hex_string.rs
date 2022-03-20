@@ -27,7 +27,6 @@ pub enum HexToken {
     /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
     Alternatives(Vec<HexToken>, Vec<HexToken>),
 }
-pub type HexString = Vec<HexToken>;
 
 /// Mask on a byte.
 #[derive(Debug, PartialEq)]
@@ -238,7 +237,7 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
 /// This looks like `{ AB .. }`.
 ///
 /// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
-pub(crate) fn hex_string(input: Input) -> ParseResult<HexString> {
+pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<HexToken>> {
     let (input, _) = rtrim(char('{'))(input)?;
 
     cut(terminated(

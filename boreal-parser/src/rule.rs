@@ -97,7 +97,7 @@ pub enum VariableDeclarationValue {
     /// A regular expression.
     Regex(Regex),
     /// A hex string.
-    HexString(hex_string::HexString),
+    HexString(Vec<hex_string::HexToken>),
 }
 
 /// Modifiers applicable on a string.

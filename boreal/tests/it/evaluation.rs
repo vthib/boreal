@@ -23,8 +23,9 @@ rule a {
         $b = "foo"
         $c = /re+xv?/
         $d = /^bav/
+        $e = { FF ( ?A | B? [1-3] ?? ) FF }
     condition:
-        $a or $b or $c or $d
+        $a or $b or $c or $d or $e
 }"#;
     check(rule, b"nothing", false);
     check(rule, b"i Xm", true);
@@ -33,4 +34,8 @@ rule a {
     check(rule, b"bZv", false);
     check(rule, b"bavaoze", true);
     check(rule, b"abavaoze", false);
+    check(rule, b"a\xFF\xDC\xFFp", false);
+    check(rule, b"dbaz\xFF\xDA\xFFeaz", true);
+    check(rule, b"dbaz\xFF\xBFer\xFFeaz", true);
+    check(rule, b"dbaz\xFF\xBFerdf\xFFeaz", true);
 }

@@ -50,6 +50,7 @@ pub use expression::{
     Expression, ExpressionKind, ForIterator, ForSelection, Identifier, ReadIntegerType, VariableSet,
 };
 mod hex_string;
+pub use hex_string::{HexToken, Jump as HexJump, Mask as HexMask};
 mod nom_recipes;
 mod number;
 mod rule;
