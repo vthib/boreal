@@ -58,14 +58,22 @@ impl Compiler {
     ///
     /// The provided span is the one of the expression using the variable, and is
     /// used for the error if the find fails.
-    fn find_variable(&self, name: &str, span: &Range<usize>) -> Result<usize, CompilationError> {
-        self.variables_map
-            .get(name)
-            .copied()
-            .ok_or_else(|| CompilationError::UnknownVariable {
-                variable_name: name.to_owned(),
-                span: span.clone(),
-            })
+    fn find_variable(
+        &self,
+        name: &str,
+        span: &Range<usize>,
+    ) -> Result<VariableIndex, CompilationError> {
+        if name.is_empty() {
+            Ok(VariableIndex(None))
+        } else {
+            match self.variables_map.get(name) {
+                Some(index) => Ok(VariableIndex(Some(*index))),
+                None => Err(CompilationError::UnknownVariable {
+                    variable_name: name.to_owned(),
+                    span: span.clone(),
+                }),
+            }
+        }
     }
 }
 

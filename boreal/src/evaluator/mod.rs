@@ -1,7 +1,7 @@
 //! Provides methods to evaluate expressions.
 use regex::Regex;
 
-use crate::compiler::{Expression, Rule};
+use crate::compiler::{Expression, Rule, VariableIndex};
 use crate::error::ScanError;
 
 mod variable;
@@ -75,6 +75,7 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
     let mut evaluator = Evaluator {
         variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
         mem,
+        currently_selected_variable_index: None,
     };
     evaluator
         .evaluate_expr(&rule.condition)
@@ -84,6 +85,11 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
 struct Evaluator<'a> {
     variables: Vec<VariableEvaluation<'a>>,
     mem: &'a [u8],
+
+    // Index of the currently selected variable.
+    //
+    // This is only set when in a for expression.
+    currently_selected_variable_index: Option<usize>,
 }
 
 macro_rules! string_op {
@@ -148,6 +154,13 @@ macro_rules! apply_cmp_op {
 }
 
 impl Evaluator<'_> {
+    fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, ScanError> {
+        var_index
+            .0
+            .or(self.currently_selected_variable_index)
+            .ok_or(ScanError::UnnamedVariableUsed)
+    }
+
     #[allow(clippy::too_many_lines)]
     fn evaluate_expr<'b>(&mut self, expr: &'b Expression) -> Result<Value<'b>, ScanError> {
         match expr {
@@ -333,8 +346,11 @@ impl Evaluator<'_> {
             }
 
             Expression::Variable(variable_index) => {
-                // Safety: index has been generated during compilation and is valid.
-                let var = &mut self.variables[*variable_index];
+                let index = self.get_variable_index(*variable_index)?;
+                // Safety: index has been either:
+                // - generated during compilation and is thus valid.
+                // - retrieve from the currently selected variable, and thus valid.
+                let var = &mut self.variables[index];
 
                 Ok(Value::Boolean(var.find(self.mem)))
             }
@@ -345,7 +361,11 @@ impl Evaluator<'_> {
             } => {
                 // Safety: index has been generated during compilation and is valid.
                 let offset = self.evaluate_expr(offset)?.unwrap_number("variable at")?;
-                let var = &mut self.variables[*variable_index];
+                let index = self.get_variable_index(*variable_index)?;
+                // Safety: index has been either:
+                // - generated during compilation and is thus valid.
+                // - retrieve from the currently selected variable, and thus valid.
+                let var = &mut self.variables[index];
 
                 match usize::try_from(offset) {
                     Ok(offset) => Ok(Value::Boolean(var.find_at(self.mem, offset))),
@@ -362,7 +382,11 @@ impl Evaluator<'_> {
                 // Safety: index has been generated during compilation and is valid.
                 let from = self.evaluate_expr(from)?.unwrap_number("variable in")?;
                 let to = self.evaluate_expr(to)?.unwrap_number("variable in")?;
-                let var = &mut self.variables[*variable_index];
+                let index = self.get_variable_index(*variable_index)?;
+                // Safety: index has been either:
+                // - generated during compilation and is thus valid.
+                // - retrieve from the currently selected variable, and thus valid.
+                let var = &mut self.variables[index];
 
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {

@@ -31,4 +31,10 @@ pub enum ScanError {
         /// Operator that raised the error
         operator: String,
     },
+
+    /// An unnamed variable was used outside of a for context.
+    ///
+    /// This indicates the use of `$` or equivalents, outside the body of a for expression.
+    // FIXME: this should be caught during compilation.
+    UnnamedVariableUsed,
 }

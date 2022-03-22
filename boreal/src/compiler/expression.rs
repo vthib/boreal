@@ -68,6 +68,13 @@ impl Expr {
     }
 }
 
+/// Index of a variable in the array of compiled variables stored in the evaluator.
+///
+/// If None, this indicates an unnamed variable, and the one selected in a for expression must be
+/// used (e.g. '$').
+#[derive(Copy, Clone, Debug)]
+pub struct VariableIndex(pub Option<usize>);
+
 #[derive(Debug)]
 pub enum Expression {
     /// Size of the file being scanned.
@@ -234,7 +241,7 @@ pub enum Expression {
     ///
     /// The value is the index of the variable in the variable array in
     /// the compiled rule.
-    Variable(usize),
+    Variable(VariableIndex),
 
     /// Does a variable matches at a given offset.
     ///
@@ -242,7 +249,7 @@ pub enum Expression {
     /// the compiled rule.
     VariableAt {
         /// Index of the variable in the variable array in the compiled rule.
-        variable_index: usize,
+        variable_index: VariableIndex,
         /// Offset where the variable should be searched.
         offset: Box<Expression>,
     },
@@ -250,7 +257,7 @@ pub enum Expression {
     /// Does a variable matches in a given offset range.
     VariableIn {
         /// Index of the variable in the variable array in the compiled rule.
-        variable_index: usize,
+        variable_index: VariableIndex,
         /// Starting offset, included.
         from: Box<Expression>,
         /// Ending offset, included.
