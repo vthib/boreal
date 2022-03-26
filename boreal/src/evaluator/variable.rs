@@ -9,6 +9,7 @@ use crate::compiler::Variable;
 ///
 /// This is used to cache scan results for a single variable,
 /// on a single input.
+#[derive(Debug)]
 pub(crate) struct VariableEvaluation<'a> {
     var: &'a Variable,
 

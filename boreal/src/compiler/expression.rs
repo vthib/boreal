@@ -1,6 +1,7 @@
 //! Compiled expression used in a rule.
 //!
 //! This module contains all types describing a rule condition, built from the parsed AST.
+use std::collections::HashSet;
 use std::ops::Range;
 
 use regex::Regex;
@@ -74,6 +75,16 @@ impl Expr {
 /// used (e.g. '$').
 #[derive(Copy, Clone, Debug)]
 pub struct VariableIndex(pub Option<usize>);
+
+/// Set of multiple variables.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VariableSet {
+    /// Indexes of the variables selected in the set.
+    ///
+    /// The indexes are relative to the array of compiled variable stored in the compiled rule.
+    /// If empty, all variables are selected.
+    pub elements: Vec<usize>,
+}
 
 #[derive(Debug)]
 pub enum Expression {
@@ -274,32 +285,13 @@ pub enum Expression {
         selection: ForSelection,
 
         /// Which variables to select.
-        set: parser::VariableSet,
+        set: VariableSet,
 
         /// Expression to evaluate for each variable.
         ///
         /// The body can contain `$`, `#`, `@` or `!` to refer to the
         /// currently selected variable.
-        ///
-        /// If unset, this is equivalent to `$`, i.e. true if the selected
-        /// variable matches.
-        body: Option<Box<Expression>>,
-    },
-
-    /// Evaluate multiple variables on a given range.
-    ///
-    /// This is equivalent to a [`Self::For`] value, with a body
-    /// set to `$ in (from..to)`.
-    // TODO: remove this to use `For` directly?
-    ForIn {
-        /// How many variables must match for this expresion to be true.
-        selection: ForSelection,
-        /// Which variables to select.
-        set: parser::VariableSet,
-        /// Starting offset, included.
-        from: Box<Expression>,
-        /// Ending offset, included.
-        to: Box<Expression>,
+        body: Box<Expression>,
     },
 
     /// Evaluate an identifier with multiple values on a given expression.
@@ -655,7 +647,6 @@ pub(super) fn compile_expression(
         }),
 
         parser::ExpressionKind::Variable(variable_name) => {
-            // TODO: handle anonymous var
             let variable_index = compiler.find_variable(&variable_name, &span)?;
 
             Ok(Expr {
@@ -669,7 +660,6 @@ pub(super) fn compile_expression(
             variable_name,
             offset,
         } => {
-            // TODO: handle anonymous var
             let variable_index = compiler.find_variable(&variable_name, &span)?;
             let offset = compile_expression(compiler, *offset)?;
 
@@ -688,7 +678,6 @@ pub(super) fn compile_expression(
             from,
             to,
         } => {
-            // TODO: handle anonymous var
             let variable_index = compiler.find_variable(&variable_name, &span)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
@@ -711,13 +700,13 @@ pub(super) fn compile_expression(
         } => Ok(Expr {
             expr: Expression::For {
                 selection: compile_for_selection(compiler, selection)?,
-                set,
+                set: compile_variable_set(compiler, set, span.clone())?,
                 body: match body {
                     Some(body) => {
                         let body = compile_expression(compiler, *body)?;
-                        Some(Box::new(body.expr))
+                        Box::new(body.expr)
                     }
-                    None => None,
+                    None => Box::new(Expression::Variable(VariableIndex(None))),
                 },
             },
             ty: Type::Boolean,
@@ -734,11 +723,14 @@ pub(super) fn compile_expression(
             let to = compile_expression(compiler, *to)?;
 
             Ok(Expr {
-                expr: Expression::ForIn {
+                expr: Expression::For {
                     selection: compile_for_selection(compiler, selection)?,
-                    set,
-                    from: from.unwrap_expr(Type::Integer)?,
-                    to: to.unwrap_expr(Type::Integer)?,
+                    set: compile_variable_set(compiler, set, span.clone())?,
+                    body: Box::new(Expression::VariableIn {
+                        variable_index: VariableIndex(None),
+                        from: from.unwrap_expr(Type::Integer)?,
+                        to: to.unwrap_expr(Type::Integer)?,
+                    }),
                 },
                 ty: Type::Boolean,
                 span,
@@ -863,7 +855,7 @@ pub enum ForSelection {
     /// - if as_percent is false, how many variables in the set must match
     ///   the condition.
     /// - if as_percent is true, which percentage of variables in the set
-    ///   msut match the condition.
+    ///   must match the condition.
     ///   the condition.
     ///
     /// Usually, the expression is a simple number.
@@ -890,6 +882,47 @@ fn compile_for_selection(
             })
         }
     }
+}
+
+fn compile_variable_set(
+    compiler: &Compiler,
+    set: parser::VariableSet,
+    span: Range<usize>,
+) -> Result<VariableSet, CompilationError> {
+    // selected indexes.
+    let mut indexes = Vec::new();
+    // hashset of already selected indexes.
+    let mut indexes_set = HashSet::new();
+
+    for elem in set.elements {
+        if elem.1 {
+            let mut found = false;
+
+            for (name, index) in &compiler.variables_map {
+                if name.starts_with(&elem.0) {
+                    found = true;
+                    if indexes_set.insert(*index) {
+                        indexes.push(*index);
+                    }
+                }
+            }
+            if !found {
+                // TODO: get better span
+                return Err(CompilationError::UnknownVariable {
+                    variable_name: elem.0.to_owned(),
+                    span: span.clone(),
+                });
+            }
+        } else {
+            // TODO: get better span
+            let index = compiler.find_named_variable(&elem.0, &span)?;
+            if indexes_set.insert(index) {
+                indexes.push(index);
+            }
+        }
+    }
+
+    Ok(VariableSet { elements: indexes })
 }
 
 /// Iterator for a 'for' expression over an identifier.

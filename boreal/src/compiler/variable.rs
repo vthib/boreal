@@ -5,6 +5,7 @@ use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
 
 use super::CompilationError;
 
+#[derive(Debug)]
 pub struct Variable {
     pub matcher: RegexMatcher,
 }
@@ -29,7 +30,6 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             let mut regex = String::new();
             hex_string_to_regex(hex_string, &mut regex);
 
-            dbg!(&regex);
             matcher.build(&regex)
         }
     };

@@ -129,7 +129,7 @@ fn test_compilation_cmp() {
 #[test]
 fn test_compilation_for_expression() {
     compile_expr("any of them", Type::Boolean);
-    compile_expr("all of ($a, $b*)", Type::Boolean);
+    compile_expr("all of ($a, $*)", Type::Boolean);
     compile_expr("all of them in (1..3)", Type::Boolean);
     compile_expr("for any of them: (true)", Type::Boolean);
     compile_expr("for all i in (1, 2): (true)", Type::Boolean);

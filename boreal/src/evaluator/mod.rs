@@ -1,7 +1,7 @@
 //! Provides methods to evaluate expressions.
 use regex::Regex;
 
-use crate::compiler::{Expression, Rule, VariableIndex};
+use crate::compiler::{Expression, ForSelection, Rule, VariableIndex};
 use crate::error::ScanError;
 
 mod variable;
@@ -397,8 +397,27 @@ impl Evaluator<'_> {
                 }
             }
 
-            Expression::For { .. } => todo!(),
-            Expression::ForIn { .. } => todo!(),
+            Expression::For {
+                selection,
+                set,
+                body,
+            } => {
+                let selection = match self.evaluate_for_selection(selection)? {
+                    ForSelectionEvaluation::Evaluator(e) => e,
+                    ForSelectionEvaluation::Value(v) => return Ok(v),
+                };
+
+                let prev_selected_var_index = self.currently_selected_variable_index;
+
+                let result = if set.elements.is_empty() {
+                    self.evaluate_for_iterator(selection, body, 0..self.variables.len())
+                } else {
+                    self.evaluate_for_iterator(selection, body, set.elements.iter().copied())
+                };
+
+                self.currently_selected_variable_index = prev_selected_var_index;
+                return result;
+            }
             Expression::ForIdentifiers { .. } => todo!(),
 
             Expression::Identifier(_) => todo!(),
@@ -408,6 +427,120 @@ impl Evaluator<'_> {
             Expression::String(v) => Ok(Value::String(v)),
             Expression::Regex(v) => Ok(Value::Regex(v)),
             Expression::Boolean(v) => Ok(Value::Boolean(*v)),
+        }
+    }
+
+    fn evaluate_for_selection<'b>(
+        &mut self,
+        selection: &'b ForSelection,
+    ) -> Result<ForSelectionEvaluation<'b>, ScanError> {
+        use ForSelectionEvaluation as FSEvaluation;
+        use ForSelectionEvaluator as FSEvaluator;
+
+        match selection {
+            ForSelection::Any => Ok(FSEvaluation::Evaluator(FSEvaluator::Number(1))),
+            ForSelection::All => Ok(FSEvaluation::Evaluator(FSEvaluator::All)),
+            ForSelection::None => Ok(FSEvaluation::Evaluator(FSEvaluator::None)),
+            ForSelection::Expr { expr, as_percent } => {
+                let mut value = self
+                    .evaluate_expr(&expr)?
+                    .unwrap_number("for expression selection")?;
+                if *as_percent {
+                    let nb_variables = self.variables.len() as f64;
+
+                    let v = value as f64 / 100. * nb_variables;
+                    value = v.ceil() as i64
+                }
+
+                if value <= 0 {
+                    Ok(FSEvaluation::Value(Value::Boolean(true)))
+                } else if value as usize > self.variables.len() {
+                    Ok(FSEvaluation::Value(Value::Boolean(false)))
+                } else {
+                    Ok(FSEvaluation::Evaluator(FSEvaluator::Number(value as u64)))
+                }
+            }
+        }
+    }
+
+    fn evaluate_for_iterator<'b, I>(
+        &mut self,
+        mut selection: ForSelectionEvaluator,
+        body: &'b Expression,
+        iter: I,
+    ) -> Result<Value<'b>, ScanError>
+    where
+        I: IntoIterator<Item = usize>,
+    {
+        for index in iter.into_iter() {
+            self.currently_selected_variable_index = Some(index);
+            let v = self.evaluate_expr(body)?;
+            if let Some(result) = selection.add_result_and_check(v.to_bool()) {
+                return Ok(Value::Boolean(result));
+            }
+        }
+        Ok(Value::Boolean(selection.end()))
+    }
+}
+
+/// Result of the evaluation of a for selection.
+enum ForSelectionEvaluation<'a> {
+    /// An evaluator that accumulates evaluations of each variable, and return a result as early
+    /// as possible.
+    Evaluator(ForSelectionEvaluator),
+
+    /// Result of the for selection if available immediately, without needing any evaluation.
+    Value(Value<'a>),
+}
+
+/// Evaluator of a for selection
+enum ForSelectionEvaluator {
+    /// All variables must match
+    All,
+    /// No variables must match
+    None,
+    /// A minimum number of variables must match
+    Number(u64),
+}
+
+impl ForSelectionEvaluator {
+    /// Add the result of the evaluation of the for expression body for a variable.
+    ///
+    /// Return Some(v) if the selection has a result, and no further matches are needed.
+    /// Return None otherwise.
+    fn add_result_and_check(&mut self, matched: bool) -> Option<bool> {
+        match self {
+            Self::All => {
+                if !matched {
+                    Some(false)
+                } else {
+                    None
+                }
+            }
+            Self::None => {
+                if matched {
+                    Some(false)
+                } else {
+                    None
+                }
+            }
+            Self::Number(v) if matched => {
+                *v = v.saturating_sub(1);
+                if *v == 0 {
+                    Some(true)
+                } else {
+                    None
+                }
+            }
+            Self::Number(_) => None,
+        }
+    }
+
+    /// Return final value, no other matches can happen.
+    fn end(self) -> bool {
+        match self {
+            Self::All | Self::None => true,
+            Self::Number(_) => false,
         }
     }
 }

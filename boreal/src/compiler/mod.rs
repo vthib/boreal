@@ -58,6 +58,9 @@ impl Compiler {
     ///
     /// The provided span is the one of the expression using the variable, and is
     /// used for the error if the find fails.
+    ///
+    /// This function allows anonymous variables. To only allow named variable, use
+    /// [`self.find_named_variable`] instead.
     fn find_variable(
         &self,
         name: &str,
@@ -66,13 +69,22 @@ impl Compiler {
         if name.is_empty() {
             Ok(VariableIndex(None))
         } else {
-            match self.variables_map.get(name) {
-                Some(index) => Ok(VariableIndex(Some(*index))),
-                None => Err(CompilationError::UnknownVariable {
-                    variable_name: name.to_owned(),
-                    span: span.clone(),
-                }),
-            }
+            Ok(VariableIndex(Some(self.find_named_variable(name, span)?)))
+        }
+    }
+
+    /// Find a variable used in a rule by name, without accepting anonymous variables.
+    fn find_named_variable(
+        &self,
+        name: &str,
+        span: &Range<usize>,
+    ) -> Result<usize, CompilationError> {
+        match self.variables_map.get(name) {
+            Some(index) => Ok(*index),
+            None => Err(CompilationError::UnknownVariable {
+                variable_name: name.to_owned(),
+                span: span.clone(),
+            }),
         }
     }
 }
@@ -92,6 +104,8 @@ pub fn compile_rule(rule: parser::Rule) -> Result<Rule, CompilationError> {
             .collect::<Result<Vec<_>, _>>()?,
         condition: condition.expr,
     })
+
+    // TODO: check for unused variables
 }
 
 #[cfg(test)]
