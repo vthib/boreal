@@ -55,7 +55,7 @@ pub enum CompilationError {
 
     /// Error while compiling a variable, indicating an issue with
     /// its expression.
-    VariableCompilationError {
+    VariableCompilation {
         /// Name of the variable
         variable_name: String,
 
@@ -105,7 +105,7 @@ impl CompilationError {
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             // TODO: need span for variable
-            Self::VariableCompilationError {
+            Self::VariableCompilation {
                 variable_name,
                 error,
             } => Diagnostic::error().with_message(format!(

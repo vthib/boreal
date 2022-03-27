@@ -63,8 +63,7 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> bool {
     };
     evaluator
         .evaluate_expr(&rule.condition)
-        .map(|v| v.to_bool())
-        .unwrap_or(false)
+        .map_or(false, |v| v.to_bool())
 }
 
 struct Evaluator<'a> {
@@ -237,28 +236,16 @@ impl Evaluator<'_> {
                 // Do not rethrow None result for left & right => None is the "undefined" value,
                 // and the AND and OR operations are the only one not propagating this poisoned
                 // value, but forcing it to false.
-                let left = self
-                    .evaluate_expr(left)
-                    .map(|v| v.to_bool())
-                    .unwrap_or(false);
-                let right = self
-                    .evaluate_expr(right)
-                    .map(|v| v.to_bool())
-                    .unwrap_or(false);
+                let left = self.evaluate_expr(left).map_or(false, |v| v.to_bool());
+                let right = self.evaluate_expr(right).map_or(false, |v| v.to_bool());
                 Some(Value::Boolean(left && right))
             }
             Expression::Or(left, right) => {
                 // Do not rethrow None result for left & right => None is the "undefined" value,
                 // and the AND and OR operations are the only one not propagating this poisoned
                 // value, but forcing it to false.
-                let left = self
-                    .evaluate_expr(left)
-                    .map(|v| v.to_bool())
-                    .unwrap_or(false);
-                let right = self
-                    .evaluate_expr(right)
-                    .map(|v| v.to_bool())
-                    .unwrap_or(false);
+                let left = self.evaluate_expr(left).map_or(false, |v| v.to_bool());
+                let right = self.evaluate_expr(right).map_or(false, |v| v.to_bool());
                 Some(Value::Boolean(left || right))
             }
             Expression::Cmp {
@@ -396,7 +383,7 @@ impl Evaluator<'_> {
                 };
 
                 self.currently_selected_variable_index = prev_selected_var_index;
-                return result;
+                Some(result)
             }
             Expression::ForIdentifiers { .. } => todo!(),
 
@@ -422,20 +409,29 @@ impl Evaluator<'_> {
             ForSelection::All => Some(FSEvaluation::Evaluator(FSEvaluator::All)),
             ForSelection::None => Some(FSEvaluation::Evaluator(FSEvaluator::None)),
             ForSelection::Expr { expr, as_percent } => {
-                let mut value = self.evaluate_expr(&expr)?.unwrap_number()?;
+                let mut value = self.evaluate_expr(expr)?.unwrap_number()?;
+                #[allow(clippy::cast_precision_loss)]
                 if *as_percent {
                     let nb_variables = self.variables.len() as f64;
 
                     let v = value as f64 / 100. * nb_variables;
-                    value = v.ceil() as i64
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        value = v.ceil() as i64;
+                    }
                 }
 
                 if value <= 0 {
                     Some(FSEvaluation::Value(Value::Boolean(true)))
-                } else if value as usize > self.variables.len() {
-                    Some(FSEvaluation::Value(Value::Boolean(false)))
                 } else {
-                    Some(FSEvaluation::Evaluator(FSEvaluator::Number(value as u64)))
+                    #[allow(clippy::cast_sign_loss)]
+                    let value = { value as u64 };
+
+                    if value > self.variables.len() as u64 {
+                        Some(FSEvaluation::Value(Value::Boolean(false)))
+                    } else {
+                        Some(FSEvaluation::Evaluator(FSEvaluator::Number(value)))
+                    }
                 }
             }
         }
@@ -446,22 +442,19 @@ impl Evaluator<'_> {
         mut selection: ForSelectionEvaluator,
         body: &'b Expression,
         iter: I,
-    ) -> Option<Value<'b>>
+    ) -> Value<'b>
     where
         I: IntoIterator<Item = usize>,
     {
-        for index in iter.into_iter() {
+        for index in iter {
             self.currently_selected_variable_index = Some(index);
-            // TODO: make sure this operation forces the undefined value to false.
-            let v = self
-                .evaluate_expr(body)
-                .map(|v| v.to_bool())
-                .unwrap_or(false);
+            // TODO: check with libyara that this operation forces the undefined value to false.
+            let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
             if let Some(result) = selection.add_result_and_check(v) {
-                return Some(Value::Boolean(result));
+                return Value::Boolean(result);
             }
         }
-        Some(Value::Boolean(selection.end()))
+        Value::Boolean(selection.end())
     }
 }
 
@@ -493,10 +486,10 @@ impl ForSelectionEvaluator {
     fn add_result_and_check(&mut self, matched: bool) -> Option<bool> {
         match self {
             Self::All => {
-                if !matched {
-                    Some(false)
-                } else {
+                if matched {
                     None
+                } else {
+                    Some(false)
                 }
             }
             Self::None => {

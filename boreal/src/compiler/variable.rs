@@ -35,7 +35,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     };
 
     Ok(Variable {
-        matcher: res.map_err(|error| CompilationError::VariableCompilationError {
+        matcher: res.map_err(|error| CompilationError::VariableCompilation {
             variable_name: decl.name,
             error,
         })?,
@@ -68,9 +68,9 @@ fn hex_token_to_regex(token: HexToken, regex: &mut String) {
             (from, None) => write!(regex, ".{{{},}}", from).unwrap(),
             (from, Some(to)) => {
                 if from == to {
-                    write!(regex, ".{{{}}}", from).unwrap()
+                    write!(regex, ".{{{}}}", from).unwrap();
                 } else {
-                    write!(regex, ".{{{},{}}}", from, to).unwrap()
+                    write!(regex, ".{{{},{}}}", from, to).unwrap();
                 }
             }
         },

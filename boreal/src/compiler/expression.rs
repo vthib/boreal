@@ -909,8 +909,8 @@ fn compile_variable_set(
             if !found {
                 // TODO: get better span
                 return Err(CompilationError::UnknownVariable {
-                    variable_name: elem.0.to_owned(),
-                    span: span.clone(),
+                    variable_name: elem.0,
+                    span,
                 });
             }
         } else {

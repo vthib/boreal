@@ -33,10 +33,10 @@ impl<'a> VariableEvaluation<'a> {
 
     /// Search occurrence of a variable in bytes
     pub fn find(&mut self, mem: &[u8]) -> bool {
-        if self.matches.len() > 0 {
-            true
-        } else {
+        if self.matches.is_empty() {
             self.get_next_match(mem).is_some()
+        } else {
+            true
         }
     }
 
