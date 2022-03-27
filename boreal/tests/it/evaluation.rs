@@ -27,6 +27,35 @@ fn check_err(rule: &str, expected_prefix: &str) {
     );
 }
 
+fn build_empty_rule(condition: &str) -> String {
+    format!(
+        r#"
+rule a {{
+    condition:
+        {}
+}}"#,
+        condition
+    )
+}
+
+fn build_rule(condition: &str) -> String {
+    format!(
+        r#"
+rule a {{
+    strings:
+        $a0 = "a0"
+        $a1 = "a1"
+        $a2 = "a2"
+        $b0 = "b0"
+        $b1 = "b1"
+        $c  = "c"
+    condition:
+        {}
+}}"#,
+        condition
+    )
+}
+
 #[test]
 fn test_variable() {
     let rule = r#"
@@ -51,24 +80,6 @@ rule a {
     check(rule, b"dbaz\xFF\xDA\xFFeaz", true);
     check(rule, b"dbaz\xFF\xBFer\xFFeaz", true);
     check(rule, b"dbaz\xFF\xBFerdf\xFFeaz", true);
-}
-
-fn build_rule(condition: &str) -> String {
-    format!(
-        r#"
-rule a {{
-    strings:
-        $a0 = "a0"
-        $a1 = "a1"
-        $a2 = "a2"
-        $b0 = "b0"
-        $b1 = "b1"
-        $c  = "c"
-    condition:
-        {}
-}}"#,
-        condition
-    )
 }
 
 #[test]
@@ -309,4 +320,108 @@ fn test_for_expression_err() {
         &build_rule("all of ($d*)"),
         "mem:11:9: error: unknown variable $d",
     );
+}
+
+#[test]
+fn test_eval_add() {
+    check(&build_empty_rule("2 + 6 == 8"), &[], true);
+    check(&build_empty_rule("3 + 4.2 == 7.2"), &[], true);
+    check(&build_empty_rule("2.62 + 3 == 5.62"), &[], true);
+    check(&build_empty_rule("1.3 + 1.5 == 2.8"), &[], true);
+    check(&build_empty_rule("0x7FFFFFFFFFFFFFFF + 1 > 0"), &[], false);
+    check(
+        &build_empty_rule("-2 + -0x7FFFFFFFFFFFFFFF < 0"),
+        &[],
+        false,
+    );
+}
+
+#[test]
+fn test_eval_sub() {
+    check(&build_empty_rule("2 - 6 == -4"), &[], true);
+    check(&build_empty_rule("3 - 4.5 == -1.5"), &[], true);
+    check(&build_empty_rule("2.62 - 3 == -0.38"), &[], true);
+    check(&build_empty_rule("1.3 - 1.5 == -0.2"), &[], true);
+    check(&build_empty_rule("-0x7FFFFFFFFFFFFFFF - 2 < 0"), &[], false);
+    check(&build_empty_rule("0x7FFFFFFFFFFFFFFF - -1 > 0"), &[], false);
+}
+
+#[test]
+fn test_eval_mul() {
+    check(&build_empty_rule("2 * 6 == 12"), &[], true);
+    check(&build_empty_rule("3 * 0.1 == 0.3"), &[], true);
+    check(&build_empty_rule("2.62 * 3 == 7.86"), &[], true);
+    check(&build_empty_rule("1.3 * 0.5 == 0.65"), &[], true);
+    check(
+        &build_empty_rule("-0x0FFFFFFFFFFFFFFF * 10 < 0"),
+        &[],
+        false,
+    );
+    check(&build_empty_rule("0x1FFFFFFFFFFFFFFF * 5 > 0"), &[], false);
+}
+
+#[test]
+fn test_eval_div() {
+    check(&build_empty_rule("7 \\ 4 == 1"), &[], true);
+    check(&build_empty_rule("-7 \\ 4 == -1"), &[], true);
+    check(&build_empty_rule("7 \\ 4.0 == 1.75"), &[], true);
+    check(&build_empty_rule("7.0 \\ 4 == 1.75"), &[], true);
+    check(&build_empty_rule("2.3 \\ 4.6 == 0.5"), &[], true);
+    check(&build_empty_rule("1 \\ 0 == 1"), &[], false);
+    check(&build_empty_rule("-2 \\ -0 > 0"), &[], false);
+    check(
+        &build_empty_rule("(-0x7FFFFFFFFFFFFFFF - 1) \\ -1 > 0"),
+        &[],
+        false,
+    );
+}
+
+#[test]
+fn test_eval_shl() {
+    check(&build_empty_rule("15 << 2 == 60"), &[], true);
+    check(
+        &build_empty_rule("0xDEADCAFE << 16 == 0xDEADCAFE0000"),
+        &[],
+        true,
+    );
+    check(&build_empty_rule("-8 << 1 == -16"), &[], true);
+    check(
+        &build_empty_rule("0x7FFFFFFFFFFFFFFF << 4 == -16"),
+        &[],
+        true,
+    );
+    check(
+        &build_empty_rule("0x7FFFFFFFFFFFFFFF << 1000 == 0"),
+        &[],
+        true,
+    );
+    check(
+        &build_empty_rule("-0x7FFFFFFFFFFFFFFF << 1000 == 0"),
+        &[],
+        true,
+    );
+    check(&build_empty_rule("12 << -2 == 0"), &[], false);
+}
+
+#[test]
+fn test_eval_shr() {
+    check(&build_empty_rule("15 >> 2 == 3"), &[], true);
+    check(&build_empty_rule("0xDEADCAFE >> 16 == 0xDEAD"), &[], true);
+    check(&build_empty_rule("-8 >> 1 == -4"), &[], true);
+    check(
+        &build_empty_rule("0x7FFFFFFFFFFFFFFF >> 62 == 0x1"),
+        &[],
+        true,
+    );
+    check(
+        &build_empty_rule("0x7FFFFFFFFFFFFFFF >> 1000 == 0"),
+        &[],
+        true,
+    );
+    check(
+        &build_empty_rule("-0x7FFFFFFFFFFFFFFF >> 1000 == 0"),
+        &[],
+        true,
+    );
+    check(&build_empty_rule("12 >> -2 == 0"), &[], false);
 }
