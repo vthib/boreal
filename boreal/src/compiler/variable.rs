@@ -65,12 +65,12 @@ fn hex_token_to_regex(token: HexToken, regex: &mut String) {
             HexMask::All => regex.push('.'),
         },
         HexToken::Jump(jump) => match (jump.from, jump.to) {
-            (from, None) => write!(regex, ".{{{},}}", from).unwrap(),
+            (from, None) => write!(regex, ".{{{},}}?", from).unwrap(),
             (from, Some(to)) => {
                 if from == to {
-                    write!(regex, ".{{{}}}", from).unwrap();
+                    write!(regex, ".{{{}}}?", from).unwrap();
                 } else {
-                    write!(regex, ".{{{},{}}}", from, to).unwrap();
+                    write!(regex, ".{{{},{}}}?", from, to).unwrap();
                 }
             }
         },
@@ -111,9 +111,11 @@ mod tests {
             "{ AB ?D 01 }",
             r"\xAB[\x0D\x1D\x2D\x3D\x4D\x5D\x6D\x7D\x8D\x9D\xAD\xBD\xCD\xDD\xED\xFD]\x01",
         );
+        test("{ C7 [-] ?? }", r"\xC7.{0,}?.");
+        // TODO: replacing [2-4] by [-] leads to a failed nom parsing? to investigate
         test(
-            "{ C7 [3] 5? 03 [6] C7 ( FF 15 | E8 ) [4] 6A ( FF D? | E8 [3] ??) }",
-            r"\xC7.{3}[\x50-\x5F]\x03.{6}\xC7((\xFF\x15)|(\xE8)).{4}\x6A((\xFF[\xD0-\xDF])|(\xE8.{3}.))",
+            "{ C7 [3-] 5? 03 [-6] C7 ( FF 15 | E8 ) [4] 6A ( FF D? | E8 [2-4] ??) }",
+            r"\xC7.{3,}?[\x50-\x5F]\x03.{0,6}?\xC7((\xFF\x15)|(\xE8)).{4}?\x6A((\xFF[\xD0-\xDF])|(\xE8.{2,4}?.))",
         );
     }
 }

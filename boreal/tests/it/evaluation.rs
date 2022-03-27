@@ -6,9 +6,9 @@ use boreal::Scanner;
 #[track_caller]
 fn check(rule: &str, mem: &[u8], expected_res: bool) {
     let mut scanner = Scanner::new();
-    scanner
-        .add_rules_from_str(&rule)
-        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
+    if let Err(err) = scanner.add_rules_from_str(&rule) {
+        panic!("parsing failed: {}", err.to_short_description("mem", rule));
+    }
     let res = scanner.scan_mem(mem);
     let res = res.matching_rules.len() > 0;
     assert_eq!(res, expected_res);
@@ -425,3 +425,306 @@ fn test_eval_shr() {
     );
     check(&build_empty_rule("12 >> -2 == 0"), &[], false);
 }
+
+#[test]
+fn test_eval_var_count_string() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        #a == 3
+}"#;
+    check(rule, b"", false);
+    check(rule, b"abcabc", false);
+    check(rule, b"abcabcaabcb", true);
+    check(rule, b"abcabcaabcb abc", false);
+
+    check(
+        r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        #a == 0
+}"#,
+        b"",
+        true,
+    );
+
+    // Matches can overlap
+    let rule = r#"
+rule a {
+    strings:
+        $a = "aa"
+    condition:
+        #a == 3
+}"#;
+    check(rule, b"aa", false);
+    check(rule, b"aaa", false);
+    check(rule, b"aaaa", true);
+}
+
+#[test]
+fn test_eval_var_length_string() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        !a == 3
+}"#;
+    check(rule, b"", false);
+    check(rule, b"abc", true);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        !a[2] == 3
+}"#;
+    check(rule, b"", false);
+    check(rule, b"abc", false);
+    check(rule, b"abc abcc", true);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        !a != 3
+}"#;
+    check(rule, b"", false);
+    check(rule, b"abc", false);
+    check(rule, b"abcabc", false);
+}
+
+#[test]
+fn test_eval_var_offset_string() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = "ab"
+    condition:
+        @a == 2
+}"#;
+    check(rule, b"", false);
+    check(rule, b"ab", false);
+    check(rule, b" ab", false);
+    check(rule, b"  ab", true);
+    check(rule, b"   ab", false);
+    check(rule, b"abab", false);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = "abc"
+        $y = "y"
+        $z = "z"
+    condition:
+        @a[#y + 1] == #z
+}"#;
+    check(rule, b"", false);
+    check(rule, b"abc", true);
+    check(rule, b"abc z", false);
+    check(rule, b"abc abc y zzz", false);
+    check(rule, b"abc abc y zzzz", true);
+    check(rule, b"abc abc yy zzzz", false);
+    check(rule, b"abcabcabc yy zzzzzz", true);
+    check(rule, b"abcabcabc yy zzzzzzz", false);
+}
+
+#[test]
+fn test_eval_var_count_regex() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = /a.*b/
+    condition:
+        #a == 3
+}"#;
+    check(rule, b"", false);
+    check(rule, b"aaab", true);
+    check(rule, b"abab", false);
+    check(rule, b"ab aaabb acb", false);
+    check(rule, b"ab abb acb", true);
+    check(rule, b"aaabbb", true);
+    check(rule, b"aaaabbb", false);
+
+    check(
+        r#"
+rule a {
+    strings:
+        $a = /a/
+    condition:
+        #a == 0
+}"#,
+        b"",
+        true,
+    );
+}
+
+#[test]
+fn test_eval_var_length_regex() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = /a.*b/
+    condition:
+        !a == 3
+}"#;
+    check(rule, b"", false);
+    check(rule, b"ab", false);
+    check(rule, b"azb", true);
+    // Regexes are greedy
+    check(rule, b"aabb", false);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = "a.*b+"
+        $y = "y"
+        $z = "z"
+    condition:
+        !a[#y + 1] == #z
+}"#;
+    check(rule, b"aaabb", false);
+    check(rule, b"aaabbcb z zzz zzz", true);
+    check(rule, b"aaabb y zzzz", true);
+    check(rule, b"aaabb yy zzz", true);
+}
+
+#[test]
+fn test_eval_var_offset_regex() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = /a+b/
+    condition:
+        @a == 2
+}"#;
+    check(rule, b"", false);
+    check(rule, b"ab", false);
+    check(rule, b" ab", false);
+    check(rule, b"  ab", true);
+    check(rule, b"  aab", true);
+    check(rule, b"   ab", false);
+    check(rule, b"abab", false);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = /a.*c/
+        $y = "y"
+        $z = "z"
+    condition:
+        @a[#y + 1] == #z
+}"#;
+    check(rule, b"", false);
+    check(rule, b"abc", true);
+    check(rule, b"abc z", false);
+    check(rule, b"abc abc y zzz", false);
+    check(rule, b"abc abc y zzzz", true);
+    check(rule, b"abc abc yy zzzz", false);
+    check(rule, b"abcabcabc yy zzzzzz", true);
+    check(rule, b"abcabcabc yy zzzzzzz", false);
+}
+
+#[test]
+fn test_eval_var_count_hex_string() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = { AB [1-3] CD }
+    condition:
+        #a == 2
+}"#;
+    check(rule, b"\xab\xcd \xab_\xcd", false);
+    check(rule, b"\xabpad\xcd \xab_\xcd", true);
+    check(rule, b"\xab\xab_\xcd", true);
+    check(rule, b"\xab\xab\xab_\xcd", false);
+    check(rule, b"\xabpa\xcd\xcd", false);
+
+    check(
+        r#"
+rule a {
+    strings:
+        $a = { AB [1-3] CD }
+    condition:
+        #a == 0
+}"#,
+        b"",
+        true,
+    );
+}
+
+#[test]
+fn test_eval_var_length_hex_string() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = { AB [1-3] CD }
+    condition:
+        !a == 3
+}"#;
+    check(rule, b"\xab_\xcd", true);
+    // hex strings are NOT greedy
+    check(rule, b"\xab_\xcd\xcd", true);
+    check(rule, b"\xab_\xcd\xcd\xcd", true);
+    check(rule, b"\xabpad\xcd", false);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = { 61 [1-] 62 }
+        $y = "y"
+        $z = "z"
+    condition:
+        !a[#y + 1] == #z
+}"#;
+    check(rule, b"a_b", false);
+    check(rule, b"a_b zzz", true);
+    check(rule, b"a1234b zzz zzz", true);
+
+    check(rule, b"a_b aa999b y zzz zzz", true);
+    check(rule, b"a_b aa999b yy zz zzz", true);
+
+    // This alternation will always resolve to the shortest one.
+    // FIXME: fix this, test more complex alternations / masked bytes
+    if false {
+        let rule = r#"
+    rule a {
+        strings:
+            $a = { AB ( ?F | FF [1-3] CD ) }
+            $b = { AB ( FF [1-3] CD | ?F ) }
+        condition:
+            !a == 2 and !b == 2
+    }"#;
+        check(rule, b"\xab\xff", true);
+        check(rule, b"zz \xab\xff_\xcd", true);
+        check(rule, b"zz \xab\xffpad\xcd", true);
+    }
+}
+
+#[test]
+fn test_eval_var_offset_hex_string() {
+    let rule = r#"
+rule a {
+    strings:
+        $a = { 61 [1-3] 62 }
+        $y = "y"
+        $z = "z"
+    condition:
+        @a[#y + 1] == #z
+}"#;
+    check(rule, b"a_b zz", false);
+    check(rule, b" a__b zz", false);
+    check(rule, b"  a___b zz", true);
+    check(rule, b" aa_b zz", false);
+    check(rule, b" aa_b y zz", true);
+    check(rule, b"a_b aa__b y zzzz", true);
+    check(rule, b"a_b aa__b yy zzzzz", true);
+}
+
+// TODO: test count, offset, length with selected for variable

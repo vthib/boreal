@@ -32,15 +32,64 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable in bytes
-    pub fn find(&mut self, mem: &[u8]) -> bool {
-        if self.matches.is_empty() {
-            self.get_next_match(mem).is_some()
-        } else {
-            true
-        }
+    pub fn find(&mut self, mem: &[u8]) -> Option<Match> {
+        self.matches
+            .get(0)
+            .copied()
+            .or_else(|| self.get_next_match(mem))
     }
 
-    /// Search occurrence of a variable at a given
+    /// Get a specific match occurrence for the variable.
+    ///
+    /// This starts at 0, and not at 1 as in the yara file.
+    pub fn find_match_occurence(&mut self, mem: &[u8], occurence_number: usize) -> Option<Match> {
+        while self.matches.len() <= occurence_number {
+            if self.get_next_match(mem).is_none() {
+                return None;
+            }
+        }
+
+        self.matches.get(occurence_number).copied()
+    }
+
+    /// Count number of matches.
+    pub fn count_matches(&mut self, mem: &[u8]) -> u64 {
+        loop {
+            if self.get_next_match(mem).is_none() {
+                break;
+            }
+        }
+
+        self.matches.len() as u64
+    }
+
+    /// Count number of matches in between two bounds.
+    pub fn count_matches_in(&mut self, mem: &[u8], from: usize, to: usize) -> u64 {
+        if from >= mem.len() {
+            return 0;
+        }
+
+        let mut count = 0;
+        for mat in &self.matches {
+            if mat.start() > to {
+                return count;
+            } else if mat.start() >= from {
+                count += 1;
+            }
+        }
+
+        while let Some(mat) = self.get_next_match(mem) {
+            if mat.start() > to {
+                return count;
+            } else if mat.start() >= from {
+                count += 1;
+            }
+        }
+
+        count
+    }
+
+    /// Search occurrence of a variable at a given offset
     pub fn find_at(&mut self, mem: &[u8], offset: usize) -> bool {
         if offset >= mem.len() {
             return false;
@@ -160,32 +209,32 @@ mod tests {
         };
 
         let v = build_var_string("45");
-        assert!(find(&v, b"12345678"));
-        assert!(find(&v, b"45678"));
-        assert!(find(&v, b"45"));
-        assert!(find(&v, b"345"));
-        assert!(!find(&v, b"1234678"));
-        assert!(!find(&v, b"465"));
+        assert!(find(&v, b"12345678").is_some());
+        assert!(find(&v, b"45678").is_some());
+        assert!(find(&v, b"45").is_some());
+        assert!(find(&v, b"345").is_some());
+        assert!(!find(&v, b"1234678").is_some());
+        assert!(!find(&v, b"465").is_some());
 
         let v = build_var_regex("4.5+", false, false);
-        assert!(find(&v, b"445"));
-        assert!(find(&v, b"34\x3D555"));
-        assert!(!find(&v, b"123"));
-        assert!(!find(&v, b"44"));
-        assert!(!find(&v, "4\n5".as_bytes()));
+        assert!(find(&v, b"445").is_some());
+        assert!(find(&v, b"34\x3D555").is_some());
+        assert!(!find(&v, b"123").is_some());
+        assert!(!find(&v, b"44").is_some());
+        assert!(!find(&v, "4\n5".as_bytes()).is_some());
 
         let v = build_var_regex("fo{2,}", true, false);
-        assert!(find(&v, b"foo"));
-        assert!(find(&v, b"FoOoOoO"));
-        assert!(find(&v, b"barFOOObaz"));
-        assert!(!find(&v, b"fo"));
-        assert!(!find(&v, b"FO"));
+        assert!(find(&v, b"foo").is_some());
+        assert!(find(&v, b"FoOoOoO").is_some());
+        assert!(find(&v, b"barFOOObaz").is_some());
+        assert!(!find(&v, b"fo").is_some());
+        assert!(!find(&v, b"FO").is_some());
 
         let v = build_var_regex("a.*b", false, true);
-        assert!(find(&v, b"ab"));
-        assert!(find(&v, b"ba\n\n  ba"));
-        assert!(!find(&v, b"AB"));
-        assert!(!find(&v, b"ec"));
+        assert!(find(&v, b"ab").is_some());
+        assert!(find(&v, b"ba\n\n  ba").is_some());
+        assert!(!find(&v, b"AB").is_some());
+        assert!(!find(&v, b"ec").is_some());
     }
 
     #[test]

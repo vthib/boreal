@@ -137,10 +137,69 @@ impl Evaluator<'_> {
             Expression::Filesize => todo!(),
             Expression::Entrypoint => todo!(),
             Expression::ReadInteger { .. } => todo!(),
-            Expression::CountInRange { .. } => todo!(),
-            Expression::Count(..) => todo!(),
-            Expression::Offset { .. } => todo!(),
-            Expression::Length { .. } => todo!(),
+
+            Expression::CountInRange {
+                variable_index,
+                from,
+                to,
+            } => {
+                let from = self.evaluate_expr(from)?.unwrap_number()?;
+                let to = self.evaluate_expr(to)?.unwrap_number()?;
+                let index = self.get_variable_index(*variable_index)?;
+                let var = &mut self.variables[index];
+
+                match (usize::try_from(from), usize::try_from(to)) {
+                    (Ok(from), Ok(to)) if from <= to => {
+                        let count = var.count_matches_in(self.mem, from, to);
+
+                        Some(Value::Number(count as i64))
+                    }
+                    _ => todo!(),
+                }
+            }
+            Expression::Count(variable_index) => {
+                let index = self.get_variable_index(*variable_index)?;
+                let var = &mut self.variables[index];
+
+                Some(Value::Number(var.count_matches(self.mem) as i64))
+            }
+            Expression::Offset {
+                variable_index,
+                occurence_number,
+            } => {
+                let occurence_number = self.evaluate_expr(occurence_number)?.unwrap_number()?;
+                let index = self.get_variable_index(*variable_index)?;
+                // Safety: index has been either:
+                // - generated during compilation and is thus valid.
+                // - retrieve from the currently selected variable, and thus valid.
+                let var = &mut self.variables[index];
+
+                match usize::try_from(occurence_number) {
+                    Ok(v) if v != 0 => var
+                        .find_match_occurence(self.mem, v - 1)
+                        .map(|mat| Value::Number(mat.start() as i64)),
+                    Ok(_) | Err(_) => None,
+                }
+            }
+            Expression::Length {
+                variable_index,
+                occurence_number,
+            } => {
+                let occurence_number = self.evaluate_expr(occurence_number)?.unwrap_number()?;
+                let index = self.get_variable_index(*variable_index)?;
+                // Safety: index has been either:
+                // - generated during compilation and is thus valid.
+                // - retrieve from the currently selected variable, and thus valid.
+                let var = &mut self.variables[index];
+
+                match usize::try_from(occurence_number) {
+                    Ok(v) if v != 0 => var
+                        .find_match_occurence(self.mem, v - 1)
+                        .map(|mat| Value::Number(mat.len() as i64)),
+                    Ok(_) | Err(_) => None,
+                }
+            }
+
             Expression::Neg(expr) => {
                 let v = self.evaluate_expr(expr)?;
 
@@ -321,7 +380,7 @@ impl Evaluator<'_> {
                 // - retrieve from the currently selected variable, and thus valid.
                 let var = &mut self.variables[index];
 
-                Some(Value::Boolean(var.find(self.mem)))
+                Some(Value::Boolean(var.find(self.mem).is_some()))
             }
 
             Expression::VariableAt {

@@ -113,12 +113,12 @@ pub enum Expression {
     Double(f64),
 
     /// Count number of matches on a given variable.
-    Count(String),
+    Count(VariableIndex),
 
     /// Count number of matches on a given variable in a specific range of the input.
     CountInRange {
-        /// Name of the variable being counted
-        variable_name: String,
+        /// Index of the variable in the variable array of the compiled rule.
+        variable_index: VariableIndex,
         /// Starting offset, included.
         from: Box<Expression>,
         /// Ending offset, included.
@@ -127,8 +127,8 @@ pub enum Expression {
 
     /// Offset of a variable match
     Offset {
-        /// Name of the variable
-        variable_name: String,
+        /// Index of the variable in the variable array of the compiled rule.
+        variable_index: VariableIndex,
 
         /// Occurrence number.
         ///
@@ -138,8 +138,8 @@ pub enum Expression {
 
     /// Length of a variable match
     Length {
-        /// Name of the variable
-        variable_name: String,
+        /// Index of the variable in the variable array of the compiled rule.
+        variable_index: VariableIndex,
 
         /// Occurrence number.
         ///
@@ -370,23 +370,28 @@ pub(super) fn compile_expression(
             span,
         }),
 
-        parser::ExpressionKind::Count(variable_name) => Ok(Expr {
-            expr: Expression::Count(variable_name),
-            ty: Type::Integer,
-            span,
-        }),
+        parser::ExpressionKind::Count(variable_name) => {
+            let variable_index = compiler.find_variable(&variable_name, &span)?;
+
+            Ok(Expr {
+                expr: Expression::Count(variable_index),
+                ty: Type::Integer,
+                span,
+            })
+        }
 
         parser::ExpressionKind::CountInRange {
             variable_name,
             from,
             to,
         } => {
+            let variable_index = compiler.find_variable(&variable_name, &span)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
 
             Ok(Expr {
                 expr: Expression::CountInRange {
-                    variable_name,
+                    variable_index,
                     from: from.unwrap_expr(Type::Integer)?,
                     to: to.unwrap_expr(Type::Integer)?,
                 },
@@ -399,11 +404,12 @@ pub(super) fn compile_expression(
             variable_name,
             occurence_number,
         } => {
+            let variable_index = compiler.find_variable(&variable_name, &span)?;
             let occurence_number = compile_expression(compiler, *occurence_number)?;
 
             Ok(Expr {
                 expr: Expression::Offset {
-                    variable_name,
+                    variable_index,
                     occurence_number: occurence_number.unwrap_expr(Type::Integer)?,
                 },
                 ty: Type::Integer,
@@ -415,11 +421,12 @@ pub(super) fn compile_expression(
             variable_name,
             occurence_number,
         } => {
+            let variable_index = compiler.find_variable(&variable_name, &span)?;
             let occurence_number = compile_expression(compiler, *occurence_number)?;
 
             Ok(Expr {
                 expr: Expression::Length {
-                    variable_name,
+                    variable_index,
                     occurence_number: occurence_number.unwrap_expr(Type::Integer)?,
                 },
                 ty: Type::Integer,
