@@ -29,9 +29,6 @@
 // #![deny(missing_docs)]
 // #![deny(clippy::cargo)]
 
-mod error;
-pub use error::ScanError;
-
 mod compiler;
 mod evaluator;
 mod scanner;

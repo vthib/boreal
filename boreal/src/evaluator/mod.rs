@@ -1,8 +1,17 @@
 //! Provides methods to evaluate expressions.
+//!
+//! Most evaluating methods return an `Option<Value>`. The `None` corresponds to the `Undefined`
+//! value, as described in yara: this is used for all operations that cannot be evaluated:
+//!
+//! - Symbols that do not make sense, eg `pe.entrypoint` on a non PE scan.
+//! - Occurences numbers not found, eg `#a[100]`.
+//! - Arithmetic operations that do not make sense, eg `1 << -5`
+//! - etc
+//!
+//! The use of an `Option` is useful to propagate this poison value easily.
 use regex::Regex;
 
 use crate::compiler::{Expression, ForSelection, Rule, VariableIndex};
-use crate::error::ScanError;
 
 mod variable;
 use variable::VariableEvaluation;
@@ -17,18 +26,6 @@ enum Value<'a> {
 }
 
 impl Value<'_> {
-    fn type_to_string(&self) -> &'static str {
-        match self {
-            Self::Number(_) => "number",
-            Self::Float(_) => "float",
-            Self::String(_) => "string",
-            Self::Regex(_) => "regex",
-            Self::Boolean(_) => "boolean",
-        }
-    }
-}
-
-impl Value<'_> {
     fn to_bool(&self) -> bool {
         match self {
             Self::Boolean(b) => *b,
@@ -39,25 +36,17 @@ impl Value<'_> {
         }
     }
 
-    fn unwrap_number(&self, operator: &str) -> Result<i64, ScanError> {
+    fn unwrap_number(&self) -> Option<i64> {
         match self {
-            Self::Number(v) => Ok(*v),
-            _ => Err(ScanError::InvalidType {
-                typ: self.type_to_string().to_owned(),
-                expected_type: "number".to_owned(),
-                operator: operator.to_owned(),
-            }),
+            Self::Number(v) => Some(*v),
+            _ => None,
         }
     }
 
-    fn unwrap_string(&self, operator: &str) -> Result<&str, ScanError> {
+    fn unwrap_string(&self) -> Option<&str> {
         match self {
-            Self::String(v) => Ok(*v),
-            _ => Err(ScanError::InvalidType {
-                typ: self.type_to_string().to_owned(),
-                expected_type: "string".to_owned(),
-                operator: operator.to_owned(),
-            }),
+            Self::String(v) => Some(*v),
+            _ => None,
         }
     }
 }
@@ -66,12 +55,7 @@ impl Value<'_> {
 ///
 /// Returns true if the expression (with the associated variables) matches on the given
 /// byte slice, false otherwise.
-///
-/// # Errors
-///
-/// An error is returned if the expression is malformed, and some sub-expressions do not
-/// return the right type of value.
-pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
+pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> bool {
     let mut evaluator = Evaluator {
         variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
         mem,
@@ -80,6 +64,7 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> Result<bool, ScanError> {
     evaluator
         .evaluate_expr(&rule.condition)
         .map(|v| v.to_bool())
+        .unwrap_or(false)
 }
 
 struct Evaluator<'a> {
@@ -93,49 +78,38 @@ struct Evaluator<'a> {
 }
 
 macro_rules! string_op {
-    ($self:expr, $left:expr, $right:expr, $case_insensitive:expr, $method:ident, $op:ident) => {{
+    ($self:expr, $left:expr, $right:expr, $case_insensitive:expr, $method:ident) => {{
         let left = $self.evaluate_expr($left)?;
-        let left = left.unwrap_string($op)?;
+        let left = left.unwrap_string()?;
         let right = $self.evaluate_expr($right)?;
-        let right = right.unwrap_string($op)?;
+        let right = right.unwrap_string()?;
 
         if $case_insensitive {
             let left = left.to_lowercase();
             let right = right.to_lowercase();
-            Ok(Value::Boolean(left.$method(&right)))
+            Some(Value::Boolean(left.$method(&right)))
         } else {
-            Ok(Value::Boolean(left.$method(right)))
+            Some(Value::Boolean(left.$method(right)))
         }
     }};
 }
 
 macro_rules! arith_op_num_and_float {
-    ($self:expr, $left:expr, $right:expr, $op:tt, $checked_op:ident) => {{
+    ($self:expr, $left:expr, $right:expr, $op:tt, $wrapping_op:ident) => {{
         let left = $self.evaluate_expr($left)?;
         let right = $self.evaluate_expr($right)?;
         match (left, right) {
-            (Value::Number(n), Value::Number(m)) => match n.$checked_op(m) {
-                Some(v) => Ok(Value::Number(v)),
-                None => Err(ScanError::Overflow {
-                    left_value: n,
-                    right_value: m,
-                    operator: stringify!($op).to_owned(),
-                }),
-            },
+            (Value::Number(n), Value::Number(m)) => Some(Value::Number(n.$wrapping_op(m))),
             (Value::Float(a), Value::Number(n)) => {
                 #[allow(clippy::cast_precision_loss)]
-                Ok(Value::Float(a $op (n as f64)))
+                Some(Value::Float(a $op (n as f64)))
             },
             (Value::Number(n), Value::Float(a)) => {
                 #[allow(clippy::cast_precision_loss)]
-                Ok(Value::Float((n as f64) $op a))
+                Some(Value::Float((n as f64) $op a))
             },
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a $op b)),
-            (left, right) => Err(ScanError::IncompatibleTypes {
-                left_type: left.type_to_string().to_owned(),
-                right_type: Some(right.type_to_string().to_owned()),
-                operator: stringify!($op).to_owned(),
-            }),
+            (Value::Float(a), Value::Float(b)) => Some(Value::Float(a $op b)),
+            (_, _) => None,
         }
     }}
 }
@@ -154,15 +128,12 @@ macro_rules! apply_cmp_op {
 }
 
 impl Evaluator<'_> {
-    fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, ScanError> {
-        var_index
-            .0
-            .or(self.currently_selected_variable_index)
-            .ok_or(ScanError::UnnamedVariableUsed)
+    fn get_variable_index(&self, var_index: VariableIndex) -> Option<usize> {
+        var_index.0.or(self.currently_selected_variable_index)
     }
 
     #[allow(clippy::too_many_lines)]
-    fn evaluate_expr<'b>(&mut self, expr: &'b Expression) -> Result<Value<'b>, ScanError> {
+    fn evaluate_expr<'b>(&mut self, expr: &'b Expression) -> Option<Value<'b>> {
         match expr {
             Expression::Filesize => todo!(),
             Expression::Entrypoint => todo!(),
@@ -175,88 +146,120 @@ impl Evaluator<'_> {
                 let v = self.evaluate_expr(expr)?;
 
                 match v {
-                    Value::Number(n) => Ok(Value::Number(-n)),
-                    Value::Float(a) => Ok(Value::Float(-a)),
+                    Value::Number(n) => Some(Value::Number(-n)),
+                    Value::Float(a) => Some(Value::Float(-a)),
                     _ => todo!(),
                 }
             }
             Expression::Add(left, right) => {
-                arith_op_num_and_float!(self, left, right, +, checked_add)
+                arith_op_num_and_float!(self, left, right, +, wrapping_add)
             }
             Expression::Sub(left, right) => {
-                arith_op_num_and_float!(self, left, right, -, checked_sub)
+                arith_op_num_and_float!(self, left, right, -, wrapping_sub)
             }
             Expression::Mul(left, right) => {
-                arith_op_num_and_float!(self, left, right, *, checked_mul)
+                arith_op_num_and_float!(self, left, right, *, wrapping_mul)
             }
             Expression::Div(left, right) => {
-                arith_op_num_and_float!(self, left, right, /, checked_div)
+                let left = self.evaluate_expr(left)?;
+                let right = self.evaluate_expr(right)?;
+                match (left, right) {
+                    (Value::Number(n), Value::Number(m)) => {
+                        if m == 0 {
+                            None
+                        } else {
+                            Some(Value::Number(n.wrapping_div(m)))
+                        }
+                    }
+                    (Value::Float(a), Value::Number(n)) =>
+                    {
+                        #[allow(clippy::cast_precision_loss)]
+                        Some(Value::Float(a / (n as f64)))
+                    }
+                    (Value::Number(n), Value::Float(a)) =>
+                    {
+                        #[allow(clippy::cast_precision_loss)]
+                        Some(Value::Float((n as f64) / a))
+                    }
+                    (Value::Float(a), Value::Float(b)) => Some(Value::Float(a / b)),
+                    (_, _) => None,
+                }
             }
             Expression::Mod(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_number("%")?;
-                let right = self.evaluate_expr(right)?.unwrap_number("%")?;
-                Ok(Value::Number(left % right))
+                let left = self.evaluate_expr(left)?.unwrap_number()?;
+                let right = self.evaluate_expr(right)?.unwrap_number()?;
+                Some(Value::Number(left % right))
             }
 
             Expression::BitwiseXor(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_number("^")?;
-                let right = self.evaluate_expr(right)?.unwrap_number("^")?;
-                Ok(Value::Number(left ^ right))
+                let left = self.evaluate_expr(left)?.unwrap_number()?;
+                let right = self.evaluate_expr(right)?.unwrap_number()?;
+                Some(Value::Number(left ^ right))
             }
             Expression::BitwiseAnd(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_number("&")?;
-                let right = self.evaluate_expr(right)?.unwrap_number("&")?;
-                Ok(Value::Number(left & right))
+                let left = self.evaluate_expr(left)?.unwrap_number()?;
+                let right = self.evaluate_expr(right)?.unwrap_number()?;
+                Some(Value::Number(left & right))
             }
             Expression::BitwiseOr(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_number("|")?;
-                let right = self.evaluate_expr(right)?.unwrap_number("|")?;
-                Ok(Value::Number(left | right))
+                let left = self.evaluate_expr(left)?.unwrap_number()?;
+                let right = self.evaluate_expr(right)?.unwrap_number()?;
+                Some(Value::Number(left | right))
             }
             Expression::BitwiseNot(expr) => {
-                let v = self.evaluate_expr(expr)?.unwrap_number("~")?;
-                Ok(Value::Number(!v))
+                let v = self.evaluate_expr(expr)?.unwrap_number()?;
+                Some(Value::Number(!v))
             }
             Expression::ShiftLeft(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_number("<<")?;
-                let right = self.evaluate_expr(right)?.unwrap_number("<<")?;
+                let left = self.evaluate_expr(left)?.unwrap_number()?;
+                let right = self.evaluate_expr(right)?.unwrap_number()?;
                 if right < 0 {
-                    Err(ScanError::Overflow {
-                        left_value: left,
-                        right_value: right,
-                        operator: "<<".to_owned(),
-                    })
+                    None
                 } else if right >= 64 {
-                    Ok(Value::Number(0))
+                    Some(Value::Number(0))
                 } else {
-                    Ok(Value::Number(left << right))
+                    Some(Value::Number(left << right))
                 }
             }
             Expression::ShiftRight(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_number(">>")?;
-                let right = self.evaluate_expr(right)?.unwrap_number(">>")?;
+                let left = self.evaluate_expr(left)?.unwrap_number()?;
+                let right = self.evaluate_expr(right)?.unwrap_number()?;
                 if right < 0 {
-                    Err(ScanError::Overflow {
-                        left_value: left,
-                        right_value: right,
-                        operator: ">>".to_owned(),
-                    })
+                    None
                 } else if right >= 64 {
-                    Ok(Value::Number(0))
+                    Some(Value::Number(0))
                 } else {
-                    Ok(Value::Number(left >> right))
+                    Some(Value::Number(left >> right))
                 }
             }
 
             Expression::And(left, right) => {
-                let left = self.evaluate_expr(left)?.to_bool();
-                let right = self.evaluate_expr(right)?.to_bool();
-                Ok(Value::Boolean(left && right))
+                // Do not rethrow None result for left & right => None is the "undefined" value,
+                // and the AND and OR operations are the only one not propagating this poisoned
+                // value, but forcing it to false.
+                let left = self
+                    .evaluate_expr(left)
+                    .map(|v| v.to_bool())
+                    .unwrap_or(false);
+                let right = self
+                    .evaluate_expr(right)
+                    .map(|v| v.to_bool())
+                    .unwrap_or(false);
+                Some(Value::Boolean(left && right))
             }
             Expression::Or(left, right) => {
-                let left = self.evaluate_expr(left)?.to_bool();
-                let right = self.evaluate_expr(right)?.to_bool();
-                Ok(Value::Boolean(left || right))
+                // Do not rethrow None result for left & right => None is the "undefined" value,
+                // and the AND and OR operations are the only one not propagating this poisoned
+                // value, but forcing it to false.
+                let left = self
+                    .evaluate_expr(left)
+                    .map(|v| v.to_bool())
+                    .unwrap_or(false);
+                let right = self
+                    .evaluate_expr(right)
+                    .map(|v| v.to_bool())
+                    .unwrap_or(false);
+                Some(Value::Boolean(left || right))
             }
             Expression::Cmp {
                 left,
@@ -272,7 +275,7 @@ impl Evaluator<'_> {
                     (true, false) => apply_cmp_op!(left, right, <),
                     (true, true) => apply_cmp_op!(left, right, <=),
                 };
-                Ok(Value::Boolean(res))
+                Some(Value::Boolean(res))
             }
             Expression::Eq(left, right) => {
                 let left = self.evaluate_expr(left)?;
@@ -288,61 +291,40 @@ impl Evaluator<'_> {
                     (Value::Boolean(a), Value::Boolean(b)) => a == b,
                     _ => todo!(),
                 };
-                Ok(Value::Boolean(res))
+                Some(Value::Boolean(res))
             }
             Expression::Contains {
                 haystack,
                 needle,
                 case_insensitive,
             } => {
-                let op = if *case_insensitive {
-                    "icontains"
-                } else {
-                    "contains"
-                };
-                string_op!(self, haystack, needle, *case_insensitive, contains, op)
+                string_op!(self, haystack, needle, *case_insensitive, contains)
             }
             Expression::StartsWith {
                 expr,
                 prefix,
                 case_insensitive,
             } => {
-                let op = if *case_insensitive {
-                    "istartswith"
-                } else {
-                    "startswith"
-                };
-                string_op!(self, expr, prefix, *case_insensitive, starts_with, op)
+                string_op!(self, expr, prefix, *case_insensitive, starts_with)
             }
             Expression::EndsWith {
                 expr,
                 suffix,
                 case_insensitive,
             } => {
-                let op = if *case_insensitive {
-                    "iendswith"
-                } else {
-                    "endswith"
-                };
-                string_op!(self, expr, suffix, *case_insensitive, ends_with, op)
+                string_op!(self, expr, suffix, *case_insensitive, ends_with)
             }
             Expression::IEquals(left, right) => {
-                let left = self
-                    .evaluate_expr(left)?
-                    .unwrap_string("iequals")?
-                    .to_lowercase();
-                let right = self
-                    .evaluate_expr(right)?
-                    .unwrap_string("iequals")?
-                    .to_lowercase();
-                Ok(Value::Boolean(left == right))
+                let left = self.evaluate_expr(left)?.unwrap_string()?.to_lowercase();
+                let right = self.evaluate_expr(right)?.unwrap_string()?.to_lowercase();
+                Some(Value::Boolean(left == right))
             }
             Expression::Matches(..) => todo!(),
             Expression::Defined(..) => todo!(),
             Expression::Not(expr) => {
                 // TODO: handle other types?
                 let v = self.evaluate_expr(expr)?.to_bool();
-                Ok(Value::Boolean(!v))
+                Some(Value::Boolean(!v))
             }
 
             Expression::Variable(variable_index) => {
@@ -352,7 +334,7 @@ impl Evaluator<'_> {
                 // - retrieve from the currently selected variable, and thus valid.
                 let var = &mut self.variables[index];
 
-                Ok(Value::Boolean(var.find(self.mem)))
+                Some(Value::Boolean(var.find(self.mem)))
             }
 
             Expression::VariableAt {
@@ -360,7 +342,7 @@ impl Evaluator<'_> {
                 offset,
             } => {
                 // Safety: index has been generated during compilation and is valid.
-                let offset = self.evaluate_expr(offset)?.unwrap_number("variable at")?;
+                let offset = self.evaluate_expr(offset)?.unwrap_number()?;
                 let index = self.get_variable_index(*variable_index)?;
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
@@ -368,9 +350,8 @@ impl Evaluator<'_> {
                 let var = &mut self.variables[index];
 
                 match usize::try_from(offset) {
-                    Ok(offset) => Ok(Value::Boolean(var.find_at(self.mem, offset))),
-                    // TODO: return error?
-                    Err(_) => Ok(Value::Boolean(false)),
+                    Ok(offset) => Some(Value::Boolean(var.find_at(self.mem, offset))),
+                    Err(_) => todo!(),
                 }
             }
 
@@ -380,8 +361,8 @@ impl Evaluator<'_> {
                 to,
             } => {
                 // Safety: index has been generated during compilation and is valid.
-                let from = self.evaluate_expr(from)?.unwrap_number("variable in")?;
-                let to = self.evaluate_expr(to)?.unwrap_number("variable in")?;
+                let from = self.evaluate_expr(from)?.unwrap_number()?;
+                let to = self.evaluate_expr(to)?.unwrap_number()?;
                 let index = self.get_variable_index(*variable_index)?;
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
@@ -390,10 +371,9 @@ impl Evaluator<'_> {
 
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
-                        Ok(Value::Boolean(var.find_in(self.mem, from, to)))
+                        Some(Value::Boolean(var.find_in(self.mem, from, to)))
                     }
-                    // TODO: return error?
-                    _ => Ok(Value::Boolean(false)),
+                    _ => todo!(),
                 }
             }
 
@@ -404,7 +384,7 @@ impl Evaluator<'_> {
             } => {
                 let selection = match self.evaluate_for_selection(selection)? {
                     ForSelectionEvaluation::Evaluator(e) => e,
-                    ForSelectionEvaluation::Value(v) => return Ok(v),
+                    ForSelectionEvaluation::Value(v) => return Some(v),
                 };
 
                 let prev_selected_var_index = self.currently_selected_variable_index;
@@ -422,29 +402,27 @@ impl Evaluator<'_> {
 
             Expression::Identifier(_) => todo!(),
 
-            Expression::Number(v) => Ok(Value::Number(*v)),
-            Expression::Double(v) => Ok(Value::Float(*v)),
-            Expression::String(v) => Ok(Value::String(v)),
-            Expression::Regex(v) => Ok(Value::Regex(v)),
-            Expression::Boolean(v) => Ok(Value::Boolean(*v)),
+            Expression::Number(v) => Some(Value::Number(*v)),
+            Expression::Double(v) => Some(Value::Float(*v)),
+            Expression::String(v) => Some(Value::String(v)),
+            Expression::Regex(v) => Some(Value::Regex(v)),
+            Expression::Boolean(v) => Some(Value::Boolean(*v)),
         }
     }
 
     fn evaluate_for_selection<'b>(
         &mut self,
         selection: &'b ForSelection,
-    ) -> Result<ForSelectionEvaluation<'b>, ScanError> {
+    ) -> Option<ForSelectionEvaluation<'b>> {
         use ForSelectionEvaluation as FSEvaluation;
         use ForSelectionEvaluator as FSEvaluator;
 
         match selection {
-            ForSelection::Any => Ok(FSEvaluation::Evaluator(FSEvaluator::Number(1))),
-            ForSelection::All => Ok(FSEvaluation::Evaluator(FSEvaluator::All)),
-            ForSelection::None => Ok(FSEvaluation::Evaluator(FSEvaluator::None)),
+            ForSelection::Any => Some(FSEvaluation::Evaluator(FSEvaluator::Number(1))),
+            ForSelection::All => Some(FSEvaluation::Evaluator(FSEvaluator::All)),
+            ForSelection::None => Some(FSEvaluation::Evaluator(FSEvaluator::None)),
             ForSelection::Expr { expr, as_percent } => {
-                let mut value = self
-                    .evaluate_expr(&expr)?
-                    .unwrap_number("for expression selection")?;
+                let mut value = self.evaluate_expr(&expr)?.unwrap_number()?;
                 if *as_percent {
                     let nb_variables = self.variables.len() as f64;
 
@@ -453,11 +431,11 @@ impl Evaluator<'_> {
                 }
 
                 if value <= 0 {
-                    Ok(FSEvaluation::Value(Value::Boolean(true)))
+                    Some(FSEvaluation::Value(Value::Boolean(true)))
                 } else if value as usize > self.variables.len() {
-                    Ok(FSEvaluation::Value(Value::Boolean(false)))
+                    Some(FSEvaluation::Value(Value::Boolean(false)))
                 } else {
-                    Ok(FSEvaluation::Evaluator(FSEvaluator::Number(value as u64)))
+                    Some(FSEvaluation::Evaluator(FSEvaluator::Number(value as u64)))
                 }
             }
         }
@@ -468,18 +446,22 @@ impl Evaluator<'_> {
         mut selection: ForSelectionEvaluator,
         body: &'b Expression,
         iter: I,
-    ) -> Result<Value<'b>, ScanError>
+    ) -> Option<Value<'b>>
     where
         I: IntoIterator<Item = usize>,
     {
         for index in iter.into_iter() {
             self.currently_selected_variable_index = Some(index);
-            let v = self.evaluate_expr(body)?;
-            if let Some(result) = selection.add_result_and_check(v.to_bool()) {
-                return Ok(Value::Boolean(result));
+            // TODO: make sure this operation forces the undefined value to false.
+            let v = self
+                .evaluate_expr(body)
+                .map(|v| v.to_bool())
+                .unwrap_or(false);
+            if let Some(result) = selection.add_result_and_check(v) {
+                return Some(Value::Boolean(result));
             }
         }
-        Ok(Value::Boolean(selection.end()))
+        Some(Value::Boolean(selection.end()))
     }
 }
 
@@ -553,7 +535,7 @@ mod tests {
 
     #[track_caller]
     #[allow(clippy::needless_pass_by_value)]
-    fn test_eval(cond: &str, input: &[u8], expected_res: Result<bool, ScanError>) {
+    fn test_eval(cond: &str, input: &[u8], expected_res: bool) {
         let rule = format!("rule a {{ condition: {} }}", cond);
         let mut scanner = Scanner::new();
         scanner.add_rules_from_str(&rule).unwrap_or_else(|err| {
@@ -564,153 +546,65 @@ mod tests {
 
     #[test]
     fn test_eval_add() {
-        test_eval("2 + 6 == 8", &[], Ok(true));
-        test_eval("3 + 4.2 == 7.2", &[], Ok(true));
-        test_eval("2.62 + 3 == 5.62", &[], Ok(true));
-        test_eval("1.3 + 1.5 == 2.8", &[], Ok(true));
-        test_eval(
-            "0x7FFFFFFFFFFFFFFF + 1 > 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: 0x7FFF_FFFF_FFFF_FFFF,
-                right_value: 1,
-                operator: "+".to_owned(),
-            }),
-        );
-        test_eval(
-            "-2 + -0x7FFFFFFFFFFFFFFF < 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: -2,
-                right_value: -0x7FFF_FFFF_FFFF_FFFF,
-                operator: "+".to_owned(),
-            }),
-        );
+        test_eval("2 + 6 == 8", &[], true);
+        test_eval("3 + 4.2 == 7.2", &[], true);
+        test_eval("2.62 + 3 == 5.62", &[], true);
+        test_eval("1.3 + 1.5 == 2.8", &[], true);
+        test_eval("0x7FFFFFFFFFFFFFFF + 1 > 0", &[], false);
+        test_eval("-2 + -0x7FFFFFFFFFFFFFFF < 0", &[], false);
     }
 
     #[test]
     fn test_eval_sub() {
-        test_eval("2 - 6 == -4", &[], Ok(true));
-        test_eval("3 - 4.5 == -1.5", &[], Ok(true));
-        test_eval("2.62 - 3 == -0.38", &[], Ok(true));
-        test_eval("1.3 - 1.5 == -0.2", &[], Ok(true));
-        test_eval(
-            "-0x7FFFFFFFFFFFFFFF - 2 < 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: -0x7FFF_FFFF_FFFF_FFFF,
-                right_value: 2,
-                operator: "-".to_owned(),
-            }),
-        );
-        test_eval(
-            "0x7FFFFFFFFFFFFFFF - -1 > 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: 0x7FFF_FFFF_FFFF_FFFF,
-                right_value: -1,
-                operator: "-".to_owned(),
-            }),
-        );
+        test_eval("2 - 6 == -4", &[], true);
+        test_eval("3 - 4.5 == -1.5", &[], true);
+        test_eval("2.62 - 3 == -0.38", &[], true);
+        test_eval("1.3 - 1.5 == -0.2", &[], true);
+        test_eval("-0x7FFFFFFFFFFFFFFF - 2 < 0", &[], false);
+        test_eval("0x7FFFFFFFFFFFFFFF - -1 > 0", &[], false);
     }
 
     #[test]
     fn test_eval_mul() {
-        test_eval("2 * 6 == 12", &[], Ok(true));
-        test_eval("3 * 0.1 == 0.3", &[], Ok(true));
-        test_eval("2.62 * 3 == 7.86", &[], Ok(true));
-        test_eval("1.3 * 0.5 == 0.65", &[], Ok(true));
-        test_eval(
-            "-0x0FFFFFFFFFFFFFFF * 20 < 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: -0x0FFF_FFFF_FFFF_FFFF,
-                right_value: 20,
-                operator: "*".to_owned(),
-            }),
-        );
-        test_eval(
-            "0x1FFFFFFFFFFFFFFF * 10 > 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: 0x1FFF_FFFF_FFFF_FFFF,
-                right_value: 10,
-                operator: "*".to_owned(),
-            }),
-        );
+        test_eval("2 * 6 == 12", &[], true);
+        test_eval("3 * 0.1 == 0.3", &[], true);
+        test_eval("2.62 * 3 == 7.86", &[], true);
+        test_eval("1.3 * 0.5 == 0.65", &[], true);
+        test_eval("-0x0FFFFFFFFFFFFFFF * 10 < 0", &[], false);
+        test_eval("0x1FFFFFFFFFFFFFFF * 5 > 0", &[], false);
     }
 
     #[test]
     fn test_eval_div() {
-        test_eval("7 \\ 4 == 1", &[], Ok(true));
-        test_eval("-7 \\ 4 == -1", &[], Ok(true));
-        test_eval("7 \\ 4.0 == 1.75", &[], Ok(true));
-        test_eval("7.0 \\ 4 == 1.75", &[], Ok(true));
-        test_eval("2.3 \\ 4.6 == 0.5", &[], Ok(true));
-        test_eval(
-            "1 \\ 0 == 1",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: 1,
-                right_value: 0,
-                operator: "/".to_owned(),
-            }),
-        );
-        test_eval(
-            "-2 \\ -0 > 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: -2,
-                right_value: 0,
-                operator: "/".to_owned(),
-            }),
-        );
-        test_eval(
-            "(-0x7FFFFFFFFFFFFFFF - 1) \\ -1 > 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: i64::MIN,
-                right_value: -1,
-                operator: "/".to_owned(),
-            }),
-        );
+        test_eval("7 \\ 4 == 1", &[], true);
+        test_eval("-7 \\ 4 == -1", &[], true);
+        test_eval("7 \\ 4.0 == 1.75", &[], true);
+        test_eval("7.0 \\ 4 == 1.75", &[], true);
+        test_eval("2.3 \\ 4.6 == 0.5", &[], true);
+        test_eval("1 \\ 0 == 1", &[], false);
+        test_eval("-2 \\ -0 > 0", &[], false);
+        test_eval("(-0x7FFFFFFFFFFFFFFF - 1) \\ -1 > 0", &[], false);
     }
 
     #[test]
     fn test_eval_shl() {
-        test_eval("15 << 2 == 60", &[], Ok(true));
-        test_eval("0xDEADCAFE << 16 == 0xDEADCAFE0000", &[], Ok(true));
-        test_eval("-8 << 1 == -16", &[], Ok(true));
-        test_eval("0x7FFFFFFFFFFFFFFF << 4 == -16", &[], Ok(true));
-        test_eval("0x7FFFFFFFFFFFFFFF << 1000 == 0", &[], Ok(true));
-        test_eval("-0x7FFFFFFFFFFFFFFF << 1000 == 0", &[], Ok(true));
-        test_eval(
-            "12 << -2 == 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: 12,
-                right_value: -2,
-                operator: "<<".to_owned(),
-            }),
-        );
+        test_eval("15 << 2 == 60", &[], true);
+        test_eval("0xDEADCAFE << 16 == 0xDEADCAFE0000", &[], true);
+        test_eval("-8 << 1 == -16", &[], true);
+        test_eval("0x7FFFFFFFFFFFFFFF << 4 == -16", &[], true);
+        test_eval("0x7FFFFFFFFFFFFFFF << 1000 == 0", &[], true);
+        test_eval("-0x7FFFFFFFFFFFFFFF << 1000 == 0", &[], true);
+        test_eval("12 << -2 == 0", &[], false);
     }
 
     #[test]
     fn test_eval_shr() {
-        test_eval("15 >> 2 == 3", &[], Ok(true));
-        test_eval("0xDEADCAFE >> 16 == 0xDEAD", &[], Ok(true));
-        test_eval("-8 >> 1 == -4", &[], Ok(true));
-        test_eval("0x7FFFFFFFFFFFFFFF >> 62 == 0x1", &[], Ok(true));
-        test_eval("0x7FFFFFFFFFFFFFFF >> 1000 == 0", &[], Ok(true));
-        test_eval("-0x7FFFFFFFFFFFFFFF >> 1000 == 0", &[], Ok(true));
-        test_eval(
-            "12 >> -2 == 0",
-            &[],
-            Err(ScanError::Overflow {
-                left_value: 12,
-                right_value: -2,
-                operator: ">>".to_owned(),
-            }),
-        );
+        test_eval("15 >> 2 == 3", &[], true);
+        test_eval("0xDEADCAFE >> 16 == 0xDEAD", &[], true);
+        test_eval("-8 >> 1 == -4", &[], true);
+        test_eval("0x7FFFFFFFFFFFFFFF >> 62 == 0x1", &[], true);
+        test_eval("0x7FFFFFFFFFFFFFFF >> 1000 == 0", &[], true);
+        test_eval("-0x7FFFFFFFFFFFFFFF >> 1000 == 0", &[], true);
+        test_eval("12 >> -2 == 0", &[], false);
     }
 }

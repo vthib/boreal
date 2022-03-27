@@ -7,7 +7,7 @@ use codespan_reporting::term;
 use boreal_parser::parse_str;
 
 use crate::compiler::{compile_rule, CompilationError, Rule};
-use crate::{evaluator, ScanError};
+use crate::evaluator;
 
 /// Holds a list of rules, and provides methods to
 /// run them on files or bytes.
@@ -51,11 +51,8 @@ impl Scanner {
         // FIXME: this is pretty bad performance wise
         let mut results = ScanResults::default();
         for rule in &self.rules {
-            // TODO: handle errors
-            match evaluator::evaluate_rule(rule, mem) {
-                Ok(true) => results.matching_rules.push(rule),
-                Ok(false) => (),
-                Err(error) => results.scan_errors.push(RuleScanError { rule, error }),
+            if evaluator::evaluate_rule(rule, mem) {
+                results.matching_rules.push(rule);
             }
         }
         results
@@ -65,13 +62,6 @@ impl Scanner {
 #[derive(Default)]
 pub struct ScanResults<'a> {
     pub matching_rules: Vec<&'a Rule>,
-
-    pub scan_errors: Vec<RuleScanError<'a>>,
-}
-
-pub struct RuleScanError<'a> {
-    pub rule: &'a Rule,
-    pub error: ScanError,
 }
 
 #[derive(Debug)]

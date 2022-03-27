@@ -1,5 +1,5 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use boreal::{ScanError, Scanner};
+use boreal::Scanner;
 
 #[track_caller]
 fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
@@ -9,18 +9,6 @@ fn test_exec(rule: &str, input: &[u8], expected_res: bool) {
         .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
     let res = scanner.scan_mem(input);
     assert_eq!(res.matching_rules.len() == 1, expected_res);
-}
-
-#[track_caller]
-fn test_exec_error(rule: &str, input: &[u8], expected_err: ScanError) {
-    let mut scanner = Scanner::new();
-    scanner
-        .add_rules_from_str(&rule)
-        .unwrap_or_else(|err| panic!("parsing failed: {}", err.to_short_description("mem", rule)));
-    let res = scanner.scan_mem(input);
-    assert!(res.matching_rules.is_empty());
-    assert_eq!(res.scan_errors.len(), 1);
-    assert_eq!(res.scan_errors[0].error, expected_err);
 }
 
 #[track_caller]
@@ -284,75 +272,48 @@ fn test_arithmetic_operators() {
 
 #[test]
 // TODO: ideally, catch those in future simplifying step.
-fn test_arithmetic_operators_runtime_errors() {
-    test_exec_error(
+#[ignore]
+fn test_arithmetic_operators_runtimes() {
+    test_exec(
         "rule test { condition: 0x7FFFFFFFFFFFFFFF + 1 > 0 }",
         &[],
-        ScanError::Overflow {
-            left_value: 0x7FFFFFFFFFFFFFFF,
-            right_value: 1,
-            operator: "+".to_owned(),
-        },
+        false,
     );
 
-    test_exec_error(
+    test_exec(
         "rule test { condition: 9223372036854775807 + 1 > 0 }",
         &[],
-        ScanError::Overflow {
-            left_value: 9223372036854775807,
-            right_value: 1,
-            operator: "+".to_owned(),
-        },
+        false,
     );
 
-    test_exec_error(
+    test_exec(
         "rule test { condition: -9223372036854775807 - 2 > 0 }",
         &[],
-        ScanError::Overflow {
-            left_value: -9223372036854775807,
-            right_value: 2,
-            operator: "-".to_owned(),
-        },
+        false,
     );
 
-    test_exec_error(
+    test_exec(
         "rule test { condition: -2 + -9223372036854775807 > 0 }",
         &[],
-        ScanError::Overflow {
-            left_value: -2,
-            right_value: -9223372036854775807,
-            operator: "+".to_owned(),
-        },
+        false,
     );
 
-    test_exec_error(
+    test_exec(
         "rule test { condition: 1 - -9223372036854775807 > 0 }",
         &[],
-        ScanError::Overflow {
-            left_value: 1,
-            right_value: -9223372036854775807,
-            operator: "-".to_owned(),
-        },
+        false,
     );
 
-    test_exec_error(
+    test_exec(
         "rule test { condition: 0x4000000000000000 * 2 }",
         &[],
-        ScanError::Overflow {
-            left_value: 0x4000000000000000,
-            right_value: 2,
-            operator: "*".to_owned(),
-        },
+        false,
     );
 
-    test_exec_error(
+    test_exec(
         "rule test { condition: 4611686018427387904 * 2 }",
         &[],
-        ScanError::Overflow {
-            left_value: 4611686018427387904,
-            right_value: 2,
-            operator: "*".to_owned(),
-        },
+        false,
     );
 
     // CHANGE: Those two return OVERFLOW on libyara due to how
@@ -368,14 +329,10 @@ fn test_arithmetic_operators_runtime_errors() {
         true,
     );
 
-    test_exec_error(
+    test_exec(
         "rule test { condition: -4611686018427387904 * -2 }",
         &[],
-        ScanError::Overflow {
-            left_value: -4611686018427387904,
-            right_value: -2,
-            operator: "*".to_owned(),
-        },
+        false,
     );
 }
 
@@ -393,24 +350,8 @@ fn test_bitwise_operators() {
 
     test_exec("rule test { condition: 1 << 64 == 0 }", &[], true);
     test_exec("rule test { condition: 1 >> 64 == 0 }", &[], true);
-    test_exec_error(
-        "rule test { condition: 1 << -1 == 0 }",
-        &[],
-        ScanError::Overflow {
-            left_value: 1,
-            right_value: -1,
-            operator: "<<".to_owned(),
-        },
-    );
-    test_exec_error(
-        "rule test { condition: 1 >> -1 == 0 }",
-        &[],
-        ScanError::Overflow {
-            left_value: 1,
-            right_value: -1,
-            operator: ">>".to_owned(),
-        },
-    );
+    test_exec("rule test { condition: 1 << -1 == 0 }", &[], false);
+    test_exec("rule test { condition: 1 >> -1 == 0 }", &[], false);
     test_exec(
         "rule test { condition: 1 | 3 ^ 3 == 1 | (3 ^ 3) }",
         &[],
