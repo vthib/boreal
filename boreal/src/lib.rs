@@ -29,6 +29,12 @@
 // #![deny(missing_docs)]
 // #![deny(clippy::cargo)]
 
+// Used in integration tests, not in the library.
+// This is to remove the "unused_crate_dependencies" warning, maybe a better solution
+// could be found.
+#[cfg(test)]
+use yara as _;
+
 mod compiler;
 mod evaluator;
 mod scanner;
