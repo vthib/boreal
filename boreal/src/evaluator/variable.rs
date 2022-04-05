@@ -44,6 +44,8 @@ impl<'a> VariableEvaluation<'a> {
     /// This starts at 0, and not at 1 as in the yara file.
     pub fn find_match_occurence(&mut self, mem: &[u8], occurence_number: usize) -> Option<Match> {
         while self.matches.len() <= occurence_number {
+            // False positive, doing the suggest transformation brings a compilation error.
+            #[allow(clippy::question_mark)]
             if self.get_next_match(mem).is_none() {
                 return None;
             }

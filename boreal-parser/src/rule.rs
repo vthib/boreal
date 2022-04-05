@@ -193,9 +193,9 @@ fn rule(mut input: Input) -> ParseResult<Rule> {
         )),
         move |(name, tags, (meta, strings, condition))| Rule {
             name,
-            tags: tags.unwrap_or_else(Vec::new),
-            metadatas: meta.unwrap_or_else(Vec::new),
-            variables: strings.unwrap_or_else(Vec::new),
+            tags: tags.unwrap_or_default(),
+            metadatas: meta.unwrap_or_default(),
+            variables: strings.unwrap_or_default(),
             condition,
             is_private,
             is_global,

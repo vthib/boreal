@@ -152,7 +152,7 @@ impl Evaluator<'_> {
                     (Ok(from), Ok(to)) if from <= to => {
                         let count = var.count_matches_in(self.mem, from, to);
 
-                        Some(Value::Number(count as i64))
+                        i64::try_from(count).ok().map(Value::Number)
                     }
                     _ => todo!(),
                 }
@@ -161,7 +161,8 @@ impl Evaluator<'_> {
                 let index = self.get_variable_index(*variable_index)?;
                 let var = &mut self.variables[index];
 
-                Some(Value::Number(var.count_matches(self.mem) as i64))
+                let count = var.count_matches(self.mem);
+                i64::try_from(count).ok().map(Value::Number)
             }
             Expression::Offset {
                 variable_index,
