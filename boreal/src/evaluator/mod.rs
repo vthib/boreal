@@ -178,7 +178,7 @@ impl Evaluator<'_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => var
                         .find_match_occurence(self.mem, v - 1)
-                        .map(|mat| Value::Number(mat.start() as i64)),
+                        .map(|mat| Value::Number(mat.start as i64)),
                     Ok(_) | Err(_) => None,
                 }
             }

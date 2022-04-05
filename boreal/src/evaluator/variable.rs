@@ -1,7 +1,7 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use grep_matcher::{Match, Matcher};
+use grep_matcher::Matcher;
 
 use crate::compiler::Variable;
 
@@ -21,6 +21,8 @@ pub(crate) struct VariableEvaluation<'a> {
     next_offset: Option<usize>,
 }
 
+type Match = std::ops::Range<usize>;
+
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.
     pub fn new(var: &'a Variable) -> Self {
@@ -35,7 +37,7 @@ impl<'a> VariableEvaluation<'a> {
     pub fn find(&mut self, mem: &[u8]) -> Option<Match> {
         self.matches
             .get(0)
-            .copied()
+            .cloned()
             .or_else(|| self.get_next_match(mem))
     }
 
@@ -51,7 +53,7 @@ impl<'a> VariableEvaluation<'a> {
             }
         }
 
-        self.matches.get(occurence_number).copied()
+        self.matches.get(occurence_number).cloned()
     }
 
     /// Count number of matches.
@@ -73,17 +75,17 @@ impl<'a> VariableEvaluation<'a> {
 
         let mut count = 0;
         for mat in &self.matches {
-            if mat.start() > to {
+            if mat.start > to {
                 return count;
-            } else if mat.start() >= from {
+            } else if mat.start >= from {
                 count += 1;
             }
         }
 
         while let Some(mat) = self.get_next_match(mem) {
-            if mat.start() > to {
+            if mat.start > to {
                 return count;
-            } else if mat.start() >= from {
+            } else if mat.start >= from {
                 count += 1;
             }
         }
@@ -98,7 +100,7 @@ impl<'a> VariableEvaluation<'a> {
         }
 
         for mat in &self.matches {
-            match mat.start().cmp(&offset) {
+            match mat.start.cmp(&offset) {
                 Ordering::Less => (),
                 Ordering::Equal => return true,
                 Ordering::Greater => return false,
@@ -106,7 +108,7 @@ impl<'a> VariableEvaluation<'a> {
         }
 
         while let Some(mat) = self.get_next_match(mem) {
-            match mat.start().cmp(&offset) {
+            match mat.start.cmp(&offset) {
                 Ordering::Less => (),
                 Ordering::Equal => return true,
                 Ordering::Greater => return false,
@@ -122,9 +124,9 @@ impl<'a> VariableEvaluation<'a> {
         }
 
         for mat in &self.matches {
-            if mat.start() > to {
+            if mat.start > to {
                 return false;
-            } else if mat.start() >= from {
+            } else if mat.start >= from {
                 return true;
             }
         }
@@ -133,9 +135,9 @@ impl<'a> VariableEvaluation<'a> {
         // from and to, or even to search with find_at(from), instead of searching from
         // the start of the mem.
         while let Some(mat) = self.get_next_match(mem) {
-            if mat.start() > to {
+            if mat.start > to {
                 return false;
-            } else if mat.start() >= from {
+            } else if mat.start >= from {
                 return true;
             }
         }
@@ -153,19 +155,27 @@ impl<'a> VariableEvaluation<'a> {
 
         // The assignement is simply to typecheck that the error is "NoError",
         // so we can unwrap it.
-        let res: Result<_, grep_matcher::NoError> = self.var.matcher.find_at(mem, offset);
-        let mat = res.unwrap();
+        let mat = match self.var {
+            Variable::RegexMatcher(matcher) => {
+                let res: Result<_, grep_matcher::NoError> = matcher.find_at(mem, offset);
+                res.unwrap().map(|m| m.start()..m.end())
+            }
+            Variable::AhoCorasick(matcher) => matcher.find(&mem[offset..]).map(|m| Match {
+                start: offset + m.start(),
+                end: offset + m.end(),
+            }),
+        };
 
-        match mat {
+        match &mat {
             None => {
                 // No match, nothing to scan anymore
                 self.next_offset = None;
             }
             Some(mat) => {
                 // Save the mat, and save the next offset
-                self.matches.push(mat);
-                if mat.start() + 1 < mem.len() {
-                    self.next_offset = Some(mat.start() + 1);
+                self.matches.push(mat.clone());
+                if mat.start + 1 < mem.len() {
+                    self.next_offset = Some(mat.start + 1);
                 } else {
                     self.next_offset = None;
                 }

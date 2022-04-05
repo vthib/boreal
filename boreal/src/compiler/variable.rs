@@ -1,3 +1,4 @@
+use aho_corasick::AhoCorasick;
 use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 
 use boreal_parser::{HexMask, HexToken};
@@ -6,40 +7,50 @@ use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
 use super::CompilationError;
 
 #[derive(Debug)]
-pub struct Variable {
-    pub matcher: RegexMatcher,
+pub enum Variable {
+    RegexMatcher(RegexMatcher),
+    AhoCorasick(AhoCorasick),
 }
 
 pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, CompilationError> {
     // TODO: handle modifiers
-    let mut matcher = RegexMatcherBuilder::new();
-    let matcher = matcher.unicode(false).octal(false);
-
-    let res = match decl.value {
-        VariableDeclarationValue::String(s) => matcher.build_literals(&[s]),
+    match decl.value {
+        VariableDeclarationValue::String(s) => Ok(Variable::AhoCorasick(AhoCorasick::new(&[s]))),
         VariableDeclarationValue::Regex(Regex {
             expr,
             case_insensitive,
             dot_all,
-        }) => matcher
-            .case_insensitive(case_insensitive)
-            .multi_line(dot_all)
-            .dot_matches_new_line(dot_all)
-            .build(&expr),
+        }) => {
+            let mut matcher = RegexMatcherBuilder::new();
+            let matcher = matcher
+                .unicode(false)
+                .octal(false)
+                .case_insensitive(case_insensitive)
+                .multi_line(dot_all)
+                .dot_matches_new_line(dot_all)
+                .build(&expr);
+            Ok(Variable::RegexMatcher(matcher.map_err(|error| {
+                CompilationError::VariableCompilation {
+                    variable_name: decl.name,
+                    error,
+                }
+            })?))
+        }
+
         VariableDeclarationValue::HexString(hex_string) => {
             let mut regex = String::new();
             hex_string_to_regex(hex_string, &mut regex);
 
-            matcher.build(&regex)
+            let mut matcher = RegexMatcherBuilder::new();
+            let matcher = matcher.unicode(false).octal(false).build(&regex);
+            Ok(Variable::RegexMatcher(matcher.map_err(|error| {
+                CompilationError::VariableCompilation {
+                    variable_name: decl.name,
+                    error,
+                }
+            })?))
         }
-    };
-
-    Ok(Variable {
-        matcher: res.map_err(|error| CompilationError::VariableCompilation {
-            variable_name: decl.name,
-            error,
-        })?,
-    })
+    }
 }
 
 fn hex_string_to_regex(hex_string: Vec<HexToken>, regex: &mut String) {

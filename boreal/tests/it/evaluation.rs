@@ -614,12 +614,8 @@ rule a {
         $a
 }"#;
 
-    // FIXME: This breaks! we might need to force use aho-corasick ourselves
-    // in this case and avoid the regex matcher, its handling of literals is
-    // not as expected.
-    if false {
-        check(rule, b"aaabb", false);
-    }
+    check(rule, b"aaabb", false);
+    check(rule, b"aa.*b+", true);
 
     let rule = r#"
 rule a {
