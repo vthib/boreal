@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 
 use grep_matcher::Matcher;
 
-use crate::compiler::Variable;
+use crate::compiler::{Variable, VariableMatcher};
 
 /// Variable evaluation context.
 ///
@@ -153,19 +153,7 @@ impl<'a> VariableEvaluation<'a> {
             Some(v) => v,
         };
 
-        // The assignement is simply to typecheck that the error is "NoError",
-        // so we can unwrap it.
-        let mat = match self.var {
-            Variable::RegexMatcher(matcher) => {
-                let res: Result<_, grep_matcher::NoError> = matcher.find_at(mem, offset);
-                res.unwrap().map(|m| m.start()..m.end())
-            }
-            Variable::AhoCorasick(matcher) => matcher.find(&mem[offset..]).map(|m| Match {
-                start: offset + m.start(),
-                end: offset + m.end(),
-            }),
-        };
-
+        let mat = self.find_next_match_at(mem, offset);
         match &mat {
             None => {
                 // No match, nothing to scan anymore
@@ -183,6 +171,45 @@ impl<'a> VariableEvaluation<'a> {
         }
         mat
     }
+
+    /// Run the variable matcher at the given offset until a match is found.
+    fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Match> {
+        while offset < mem.len() {
+            let mat = match &self.var.matcher {
+                VariableMatcher::Regex(matcher) => {
+                    // The assignement is simply to typecheck that the error is "NoError",
+                    // so we can unwrap it.
+                    let res: Result<_, grep_matcher::NoError> = matcher.find_at(mem, offset);
+                    res.unwrap().map(|m| m.start()..m.end())
+                }
+                VariableMatcher::AhoCorasick(matcher) => {
+                    matcher.find(&mem[offset..]).map(|m| Match {
+                        start: offset + m.start(),
+                        end: offset + m.end(),
+                    })
+                }
+            }?;
+
+            // TODO: this works, but is probably not ideal performance-wise. benchmark/improve
+            // this.
+            if self.var.is_fullword {
+                if mat.start > 0 && is_ascii_alnum(mem[mat.start - 1]) {
+                    offset = mat.start + 1;
+                    continue;
+                }
+                if mat.end < mem.len() && is_ascii_alnum(mem[mat.end]) {
+                    offset = mat.start + 1;
+                    continue;
+                }
+            }
+            return Some(mat);
+        }
+        None
+    }
+}
+
+fn is_ascii_alnum(c: u8) -> bool {
+    (b'0'..=b'9').contains(&c) || (b'A'..=b'Z').contains(&c) || (b'a'..=b'z').contains(&c)
 }
 
 #[cfg(test)]

@@ -29,6 +29,18 @@ pub fn check(rule: &str, mem: &[u8], expected_res: bool) {
 }
 
 #[track_caller]
+pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
+    use std::io::Read;
+
+    println!("cwd: {:?}", std::env::current_dir().unwrap());
+    let mut f = std::fs::File::open(filepath).unwrap();
+    let mut buffer = Vec::new();
+    f.read_to_end(&mut buffer).unwrap();
+
+    check(rule, &buffer, expected_res);
+}
+
+#[track_caller]
 pub fn check_err(rule: &str, expected_prefix: &str) {
     let mut scanner = Scanner::new();
     let err = scanner.add_rules_from_str(&rule).unwrap_err();

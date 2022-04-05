@@ -1,56 +1,157 @@
-use aho_corasick::AhoCorasick;
+use std::fmt::Write;
+
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 
-use boreal_parser::{HexMask, HexToken};
+use boreal_parser::{HexMask, HexToken, VariableFlags, VariableModifiers};
 use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
 
 use super::CompilationError;
 
 #[derive(Debug)]
-pub enum Variable {
-    RegexMatcher(RegexMatcher),
+pub struct Variable {
+    pub matcher: VariableMatcher,
+
+    pub is_fullword: bool,
+}
+
+#[derive(Debug)]
+pub enum VariableMatcher {
+    Regex(RegexMatcher),
     AhoCorasick(AhoCorasick),
 }
 
 pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, CompilationError> {
-    // TODO: handle modifiers
-    match decl.value {
-        VariableDeclarationValue::String(s) => Ok(Variable::AhoCorasick(AhoCorasick::new(&[s]))),
-        VariableDeclarationValue::Regex(Regex {
-            expr,
-            case_insensitive,
-            dot_all,
-        }) => {
-            let mut matcher = RegexMatcherBuilder::new();
-            let matcher = matcher
-                .unicode(false)
-                .octal(false)
-                .case_insensitive(case_insensitive)
-                .multi_line(dot_all)
-                .dot_matches_new_line(dot_all)
-                .build(&expr);
-            Ok(Variable::RegexMatcher(matcher.map_err(|error| {
-                CompilationError::VariableCompilation {
-                    variable_name: decl.name,
-                    error,
-                }
-            })?))
-        }
+    let VariableDeclaration {
+        name,
+        value,
+        modifiers,
+    } = decl;
+    let mut is_fullword = modifiers.flags.contains(VariableFlags::FULLWORD);
 
+    // TODO: handle private flag
+    //
+    let matcher = match value {
+        VariableDeclarationValue::String(s) => build_string_matcher(s, &modifiers),
+        VariableDeclarationValue::Regex(regex) => {
+            let matcher = build_regex_matcher(regex, &modifiers);
+            matcher.map_err(|error| CompilationError::VariableCompilation {
+                variable_name: name,
+                error,
+            })?
+        }
         VariableDeclarationValue::HexString(hex_string) => {
             let mut regex = String::new();
             hex_string_to_regex(hex_string, &mut regex);
 
+            // Fullword is not compatible with hex strings
+            is_fullword = false;
+
             let mut matcher = RegexMatcherBuilder::new();
             let matcher = matcher.unicode(false).octal(false).build(&regex);
-            Ok(Variable::RegexMatcher(matcher.map_err(|error| {
+            VariableMatcher::Regex(matcher.map_err(|error| {
                 CompilationError::VariableCompilation {
-                    variable_name: decl.name,
+                    variable_name: name,
                     error,
                 }
-            })?))
+            })?)
         }
+    };
+
+    Ok(Variable {
+        matcher,
+        is_fullword,
+    })
+}
+
+fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> VariableMatcher {
+    let mut builder = AhoCorasickBuilder::new();
+    let mut literals = Vec::with_capacity(2);
+
+    let case_insensitive = modifiers.flags.contains(VariableFlags::NOCASE);
+
+    if modifiers.flags.contains(VariableFlags::WIDE) {
+        if modifiers.flags.contains(VariableFlags::ASCII) {
+            literals.push(string_to_wide(&value));
+            literals.push(value);
+        } else {
+            literals.push(string_to_wide(&value));
+        }
+    } else {
+        literals.push(value);
     }
+
+    if modifiers.flags.contains(VariableFlags::XOR) {
+        // For each literal, for each byte in the xor range, build a new literal
+        let xor_range = modifiers.xor_range.0..=modifiers.xor_range.1;
+        let xor_range_len = xor_range.len(); // modifiers.xor_range.1.saturating_sub(modifiers.xor_range.0) + 1;
+        let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
+        for lit in literals {
+            for xor_byte in xor_range.clone() {
+                new_literals.push(lit.bytes().map(|c| c ^ xor_byte).collect());
+            }
+        }
+        let literals = new_literals;
+        return VariableMatcher::AhoCorasick(builder.auto_configure(&literals).build(&literals));
+    }
+
+    if modifiers
+        .flags
+        .contains(VariableFlags::BASE64 | VariableFlags::BASE64WIDE)
+    {
+        todo!()
+    }
+
+    VariableMatcher::AhoCorasick(
+        builder
+            .ascii_case_insensitive(case_insensitive)
+            .auto_configure(&literals)
+            .build(&literals),
+    )
+}
+
+/// Convert an ascii string to a wide string
+fn string_to_wide(s: &str) -> String {
+    // FIXME: check the string is ASCII. In parser?
+    let mut res = Vec::with_capacity(s.len() * 2);
+    for b in s.bytes() {
+        res.push(b);
+        res.push(b'\0');
+    }
+    String::from_utf8(res).unwrap()
+}
+
+fn build_regex_matcher(
+    regex: Regex,
+    modifiers: &VariableModifiers,
+) -> Result<VariableMatcher, grep_regex::Error> {
+    let mut matcher = RegexMatcherBuilder::new();
+    let Regex {
+        expr,
+        mut case_insensitive,
+        dot_all,
+    } = regex;
+
+    if modifiers.flags.contains(VariableFlags::NOCASE) {
+        case_insensitive = true;
+    }
+
+    if modifiers.flags.contains(VariableFlags::WIDE) {
+        // TODO: hmmmmm this is gonna be fun
+        if modifiers.flags.contains(VariableFlags::ASCII) {
+            todo!();
+        }
+        todo!();
+    }
+
+    matcher
+        .unicode(false)
+        .octal(false)
+        .case_insensitive(case_insensitive)
+        .multi_line(dot_all)
+        .dot_matches_new_line(dot_all)
+        .build(&expr)
+        .map(VariableMatcher::Regex)
 }
 
 fn hex_string_to_regex(hex_string: Vec<HexToken>, regex: &mut String) {
@@ -60,8 +161,6 @@ fn hex_string_to_regex(hex_string: Vec<HexToken>, regex: &mut String) {
 }
 
 fn hex_token_to_regex(token: HexToken, regex: &mut String) {
-    use std::fmt::Write;
-
     match token {
         HexToken::Byte(b) => write!(regex, "\\x{:02X}", b).unwrap(),
         HexToken::MaskedByte(b, mask) => match mask {

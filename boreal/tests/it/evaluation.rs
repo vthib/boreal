@@ -57,6 +57,212 @@ rule a {
 }
 
 #[test]
+fn test_variable_regex_modifiers() {
+    // \x76 is 'v'
+    //
+    // FIXME: {,2} is OK for yara, not for us...
+    let rule = r#"
+rule a {
+    strings:
+        $a = /f[aF]T[d-g]\x76/ nocase
+        $b = /foo/ fullword
+        $c = /bar.{0,3}/ fullword nocase
+        $d = /.{0,2}quu/ nocase fullword
+    condition:
+        any of them
+}"#;
+
+    // Nocase: work on literals, ranges, and explicit hexa char
+    check(rule, b"faTgv", true);
+    check(rule, b"faTgx", false);
+    check(rule, b"FATGV", true);
+    check(rule, b"fftDV", true);
+    check(rule, b"fftEV", true);
+    check(rule, b"fftE", false);
+    check(rule, b"ftEV", false);
+
+    // Fullword
+    check(rule, b"foo", true);
+    check(rule, b" foo ", true);
+    check(rule, b"-foo_", true);
+    check(rule, b"-fooa", false);
+    check(rule, b"-fooA", false);
+    check(rule, b"-foo0", false);
+    check(rule, b"afoo:", false);
+    check(rule, b"Zfoo:", false);
+    check(rule, b"0foo:", false);
+
+    check(rule, b"bar-", true);
+    check(rule, b"bara-", true);
+    check(rule, b"baraa-", true);
+    check(rule, b"baraaa-", true);
+    check(rule, b"baraaaa-", false);
+    check(rule, b"abaraaa-", false);
+    check(rule, b"|baraaa-", true);
+    check(rule, b"|bar", true);
+
+    check(rule, b"quu", true);
+    check(rule, b"QUU", true);
+    check(rule, b"quux", false);
+    check(rule, b"aQuu", true);
+    check(rule, b"aqUU", true);
+    check(rule, b"aaqUu", true);
+    check(rule, b"aAaQUu", false);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = /.{0,2}yay.{0,2}/ fullword
+    condition:
+        $a
+}"#;
+
+    check(rule, b"yay", true);
+    // This is an example of something that would match with a smart regex, but does not with the
+    // yara implem: find a match, check fullword, find next match, etc.
+    check(rule, b"| yay |a", false);
+    // But this works. Why? because we advance by one byte after every match.
+    // First match: `| yay |` => not fullword
+    // second match: ` yay |` => fullword, match
+    check(rule, b"a| yay |", true);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = /.{0,2}yay.{0,2}/
+    condition:
+        #a == 3
+}"#;
+    // Confirmation, we have three matches here, for the 3 possibles captures on the left. However,
+    // the right capture is always greedy.
+    check(rule, b"a| yay |a", true);
+}
+
+#[test]
+fn test_variable_string_modifiers() {
+    // \x76 is 'v'
+    let rule = r#"
+rule a {
+    strings:
+        $a = "c\to\x76" nocase
+        $b = "foo" fullword
+        $c = "bar" fullword nocase
+    condition:
+        any of them
+}"#;
+
+    // Nocase
+    check(rule, b"c\tov", true);
+    check(rule, b"C\tOV", true);
+    check(rule, b"C\tOx", false);
+    check(rule, b"C\tov", true);
+
+    // Fullword
+    check(rule, b"foo", true);
+    check(rule, b" foo ", true);
+    check(rule, b"-foo_", true);
+    check(rule, b"-fooa", false);
+    check(rule, b"-fooA", false);
+    check(rule, b"-foo0", false);
+    check(rule, b"afoo:", false);
+    check(rule, b"Zfoo:", false);
+    check(rule, b"0foo:", false);
+
+    check(rule, b"bar", true);
+    check(rule, b" BAR ", true);
+    check(rule, b"-baR_", true);
+    check(rule, b"-baRa", false);
+    check(rule, b"-barA", false);
+    check(rule, b"-bAr0", false);
+    check(rule, b"aBAr:", false);
+    check(rule, b"Zbar:", false);
+    check(rule, b"0bAR:", false);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = "margit" wide
+        $b = "morgott" ascii wide
+        $c = "mohg" ascii
+    condition:
+        any of them
+}"#;
+
+    // Wide
+    check(rule, b"amargita", false);
+    check(rule, b"a\0m\0a\0r\0g\0i\0t\0a\0", true);
+    check(rule, b"\0m\0a\0r\0g\0i\0t\0a\0", true);
+    check(rule, b"m\0a\0r\0g\0i\0t\0a\0", true);
+    check(rule, b"m\0a\0r\0g\0i\0ta\0", false);
+
+    // Wide + ascii
+    check(rule, b"morgott", true);
+    check(rule, b"amorgotta", true);
+    check(rule, b"a\0m\0o\0r\0g\0o\0t\0t\0a\0", true);
+    check(rule, b"\0m\0o\0r\0g\0o\0t\0t\0a\0", true);
+    check(rule, b"m\0o\0r\0g\0o\0t\0t\0a\0", true);
+    check(rule, b"m\0o\0r\0g\0o\0t\0ta\0", false);
+
+    // Ascii
+    check(rule, b"amohgus", true);
+    check(rule, b"a\0m\0o\0g\0h\0u\0s\0", false);
+
+    let rule = r#"
+rule a {
+    strings:
+        $a = "rykard" xor
+        $b = "rennala" xor(20-30)
+        $c = "radagon" wide xor(10)
+        $d = "radahn" wide ascii xor
+    condition:
+        any of them
+}"#;
+
+    let check_xor = |mem: &[u8], xor_byte: u8, expected_res: bool| {
+        let mut out = Vec::new();
+        out.extend(b"abc");
+        out.extend(mem.iter().map(|c| c ^ xor_byte));
+        out.extend(b"xyz");
+
+        check(rule, &out, expected_res);
+        check(rule, &out[1..], expected_res);
+    };
+
+    // Xor
+    let rykard = b"rykard";
+    let rybard = b"rybard";
+    // FIXME: this takes way too long, because we are recompiling the same rule 512 times.
+    for x in 0..=255 {
+        check_xor(rykard, x, true);
+        check_xor(rybard, x, false);
+    }
+
+    // Xor range specified
+    let rennala = b"rennala";
+    let wide_rennala = b"r\0e\0n\0n\0a\0l\0a\0";
+    for x in 0..=255 {
+        check_xor(rennala, x, x >= 20 && x <= 30);
+        check_xor(wide_rennala, x, false);
+    }
+
+    // Xor single value + wide
+    let radagon = b"radagon";
+    let wide_radagon = b"r\0a\0d\0a\0g\0o\0n\0";
+    for x in 0..=255 {
+        check_xor(radagon, x, false);
+        check_xor(wide_radagon, x, x == 10);
+    }
+
+    // Xor + wide + ascii
+    let radahn = b"radahn";
+    let wide_radahn = b"r\0a\0d\0a\0h\0n\0";
+    for x in 0..=255 {
+        check_xor(radahn, x, true);
+        check_xor(wide_radahn, x, true);
+    }
+}
+
+#[test]
 fn test_for_expression_all() {
     check(&build_rule("all of them"), b"", false);
     check(&build_rule("all of them"), b"a0", false);
