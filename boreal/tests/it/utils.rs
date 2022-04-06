@@ -39,4 +39,8 @@ pub fn check_err(rule: &str, expected_prefix: &str) {
         desc,
         expected_prefix
     );
+
+    // Check libyara also rejects it
+    let compiler = yara::Compiler::new().unwrap();
+    assert!(compiler.add_rules_str(rule).is_err());
 }
