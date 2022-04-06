@@ -3,3 +3,5 @@ mod libyara_compat;
 
 /* Test evaluation of conditions */
 mod evaluation;
+
+mod utils;
