@@ -1,4 +1,4 @@
-use crate::utils::{check, check_boreal, check_err};
+use crate::utils::{check, check_boreal, check_err, Checker};
 
 fn build_empty_rule(condition: &str) -> String {
     format!(
@@ -217,6 +217,7 @@ rule a {
     condition:
         any of them
 }"#;
+    let checker = Checker::new(rule);
 
     let check_xor = |mem: &[u8], xor_byte: u8, expected_res: bool| {
         let mut out = Vec::new();
@@ -224,14 +225,13 @@ rule a {
         out.extend(mem.iter().map(|c| c ^ xor_byte));
         out.extend(b"xyz");
 
-        check(rule, &out, expected_res);
-        check(rule, &out[1..], expected_res);
+        checker.check(&out, expected_res);
+        checker.check(&out[1..], expected_res);
     };
 
     // Xor
     let rykard = b"rykard";
     let rybard = b"rybard";
-    // FIXME: this takes way too long, because we are recompiling the same rule 512 times.
     for x in 0..=255 {
         check_xor(rykard, x, true);
         check_xor(rybard, x, false);
