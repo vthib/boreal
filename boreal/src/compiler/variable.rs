@@ -12,7 +12,10 @@ use super::CompilationError;
 pub struct Variable {
     pub matcher: VariableMatcher,
 
+    // Those three modifiers are used to handle fullword check on matches.
     pub is_fullword: bool,
+    pub is_wide: bool,
+    pub is_ascii: bool,
 }
 
 #[derive(Debug)]
@@ -28,6 +31,8 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         modifiers,
     } = decl;
     let mut is_fullword = modifiers.flags.contains(VariableFlags::FULLWORD);
+    let mut is_wide = modifiers.flags.contains(VariableFlags::WIDE);
+    let is_ascii = !is_wide || modifiers.flags.contains(VariableFlags::ASCII);
 
     // TODO: handle private flag
     //
@@ -44,8 +49,9 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             let mut regex = String::new();
             hex_string_to_regex(hex_string, &mut regex);
 
-            // Fullword is not compatible with hex strings
+            // Fullword and wide is not compatible with hex strings
             is_fullword = false;
+            is_wide = false;
 
             let mut matcher = RegexMatcherBuilder::new();
             let matcher = matcher.unicode(false).octal(false).build(&regex);
@@ -61,6 +67,8 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     Ok(Variable {
         matcher,
         is_fullword,
+        is_wide,
+        is_ascii,
     })
 }
 

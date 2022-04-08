@@ -141,7 +141,8 @@ rule a {
 #[test]
 fn test_variable_string_modifiers() {
     // \x76 is 'v'
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "c\to\x76" nocase
@@ -149,63 +150,98 @@ rule a {
         $c = "bar" fullword nocase
     condition:
         any of them
-}"#;
+}"#,
+    );
 
     // Nocase
-    check(rule, b"c\tov", true);
-    check(rule, b"C\tOV", true);
-    check(rule, b"C\tOx", false);
-    check(rule, b"C\tov", true);
+    checker.check(b"c\tov", true);
+    checker.check(b"C\tOV", true);
+    checker.check(b"C\tOx", false);
+    checker.check(b"C\tov", true);
 
     // Fullword
-    check(rule, b"foo", true);
-    check(rule, b" foo ", true);
-    check(rule, b"-foo_", true);
-    check(rule, b"-fooa", false);
-    check(rule, b"-fooA", false);
-    check(rule, b"-foo0", false);
-    check(rule, b"afoo:", false);
-    check(rule, b"Zfoo:", false);
-    check(rule, b"0foo:", false);
+    checker.check(b"foo", true);
+    checker.check(b" foo ", true);
+    checker.check(b"-foo_", true);
+    checker.check(b"-fooa", false);
+    checker.check(b"-fooA", false);
+    checker.check(b"-foo0", false);
+    checker.check(b"afoo:", false);
+    checker.check(b"Zfoo:", false);
+    checker.check(b"0foo:", false);
 
-    check(rule, b"bar", true);
-    check(rule, b" BAR ", true);
-    check(rule, b"-baR_", true);
-    check(rule, b"-baRa", false);
-    check(rule, b"-barA", false);
-    check(rule, b"-bAr0", false);
-    check(rule, b"aBAr:", false);
-    check(rule, b"Zbar:", false);
-    check(rule, b"0bAR:", false);
+    checker.check(b"bar", true);
+    checker.check(b" BAR ", true);
+    checker.check(b"-baR_", true);
+    checker.check(b"-baRa", false);
+    checker.check(b"-barA", false);
+    checker.check(b"-bAr0", false);
+    checker.check(b"aBAr:", false);
+    checker.check(b"Zbar:", false);
+    checker.check(b"0bAR:", false);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "margit" wide
         $b = "morgott" ascii wide
         $c = "mohg" ascii
+        $d = "maliketh" wide fullword
+        $e = "malenia" wide ascii fullword
     condition:
         any of them
-}"#;
+}"#,
+    );
 
     // Wide
-    check(rule, b"amargita", false);
-    check(rule, b"a\0m\0a\0r\0g\0i\0t\0a\0", true);
-    check(rule, b"\0m\0a\0r\0g\0i\0t\0a\0", true);
-    check(rule, b"m\0a\0r\0g\0i\0t\0a\0", true);
-    check(rule, b"m\0a\0r\0g\0i\0ta\0", false);
+    checker.check(b"amargita", false);
+    checker.check(b"a\0m\0a\0r\0g\0i\0t\0a\0", true);
+    checker.check(b"\0m\0a\0r\0g\0i\0t\0a\0", true);
+    checker.check(b"m\0a\0r\0g\0i\0t\0a\0", true);
+    checker.check(b"m\0a\0r\0g\0i\0ta\0", false);
 
     // Wide + ascii
-    check(rule, b"morgott", true);
-    check(rule, b"amorgotta", true);
-    check(rule, b"a\0m\0o\0r\0g\0o\0t\0t\0a\0", true);
-    check(rule, b"\0m\0o\0r\0g\0o\0t\0t\0a\0", true);
-    check(rule, b"m\0o\0r\0g\0o\0t\0t\0a\0", true);
-    check(rule, b"m\0o\0r\0g\0o\0t\0ta\0", false);
+    checker.check(b"morgott", true);
+    checker.check(b"amorgotta", true);
+    checker.check(b"a\0m\0o\0r\0g\0o\0t\0t\0a\0", true);
+    checker.check(b"\0m\0o\0r\0g\0o\0t\0t\0a\0", true);
+    checker.check(b"m\0o\0r\0g\0o\0t\0t\0a\0", true);
+    checker.check(b"m\0o\0r\0g\0o\0t\0ta\0", false);
 
     // Ascii
-    check(rule, b"amohgus", true);
-    check(rule, b"a\0m\0o\0g\0h\0u\0s\0", false);
+    checker.check(b"amohgus", true);
+    checker.check(b"a\0m\0o\0g\0h\0u\0s\0", false);
+
+    // Wide fullword
+    checker.check(b"<<<maliketh>>>", false);
+    checker.check(b"<\0<\0<\0m\0a\0l\0i\0k\0e\0t\0h\0>\0>\0>\0", true);
+    checker.check(b"<\0<\0a\0m\0a\0l\0i\0k\0e\0t\0h\0>\0>\0>\0", false);
+    checker.check(b"a\0m\0a\0l\0i\0k\0e\0t\0h\0b\0", false);
+    checker.check(b"a\0m\0a\0l\0i\0k\0e\0t\0h\0>\0", false);
+    checker.check(b"<\0m\0a\0l\0i\0k\0e\0t\0h\0b\0", false);
+    checker.check(b"<\0m\0a\0l\0i\0k\0e\0t\0h\0>\0", true);
+    checker.check(b"\0m\0a\0l\0i\0k\0e\0t\0h\0>\0", true);
+    checker.check(b"<\0m\0a\0l\0i\0k\0e\0t\0h\0>", true);
+    checker.check(b"<\0m\0a\0l\0i\0k\0e\0t\0h\0", true);
+    checker.check(b"\0m\0a\0l\0i\0k\0e\0t\0h\0", true);
+    checker.check(b"m\0a\0l\0i\0k\0e\0t\0h\0", true);
+    checker.check(b"<\0maliketh\0>\0", false);
+
+    // Wide ascii fullword
+    checker.check(b"<malenia>", true);
+    checker.check(b"<\0m\0a\0l\0e\0n\0i\0a\0>\0", true);
+    checker.check(b"amalenia>", false);
+    checker.check(b"<maleniab", false);
+    checker.check(b"malenia", true);
+    checker.check(b"a\0m\0a\0l\0e\0n\0i\0a\0>\0", false);
+    checker.check(b"<\0m\0a\0l\0e\0n\0i\0a\0b\0", false);
+    checker.check(b"am\0a\0l\0e\0n\0i\0a\0b\0", false);
+    checker.check(b"m\0a\0l\0e\0n\0i\0a\0b\0", false);
+
+    // For those, we need to know if the match is wide or ascii to do the proper fullword check.
+    checker.check(b"am\0a\0l\0e\0n\0i\0a\0b", true);
+    checker.check(b"a\0malenia<\0", true);
 
     let rule = r#"
 rule a {
