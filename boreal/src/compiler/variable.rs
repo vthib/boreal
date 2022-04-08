@@ -103,9 +103,8 @@ fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> Variabl
         return VariableMatcher::AhoCorasick(builder.auto_configure(&literals).build(&literals));
     }
 
-    if modifiers
-        .flags
-        .contains(VariableFlags::BASE64 | VariableFlags::BASE64WIDE)
+    if modifiers.flags.contains(VariableFlags::BASE64)
+        || modifiers.flags.contains(VariableFlags::BASE64WIDE)
     {
         todo!()
     }

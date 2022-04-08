@@ -313,31 +313,53 @@ where
     F: Fn(Input) -> ParseResult<Modifier>,
 {
     let mut modifiers = VariableModifiers::default();
-
     let start = input;
-    while let Ok((i, modifier)) = parser(input) {
+
+    let add_flag = |modifiers: &mut VariableModifiers, input: Input, flag: VariableFlags| {
+        if modifiers.flags.contains(flag) {
+            return Err(nom::Err::Failure(Error::new(
+                input.get_span_from(start),
+                ErrorKind::ModifiersDuplicated {
+                    modifier_name: format!("{:?}", flag),
+                },
+            )));
+        }
+        modifiers.flags |= flag;
+        Ok(())
+    };
+
+    let mut parser = opt(parser);
+    while let (i, Some(modifier)) = parser(input)? {
         match modifier {
             Modifier::Flag(flag) => {
-                if modifiers.flags.contains(flag) {
-                    return Err(nom::Err::Failure(Error::new(
-                        input.get_span_from(start),
-                        ErrorKind::ModifiersDuplicated {
-                            modifier_name: format!("{:?}", flag),
-                        },
-                    )));
-                }
-                modifiers.flags |= flag;
+                add_flag(&mut modifiers, input, flag)?;
             }
             Modifier::Xor(from, to) => {
-                modifiers.flags |= VariableFlags::XOR;
+                add_flag(&mut modifiers, input, VariableFlags::XOR)?;
                 modifiers.xor_range = (from, to);
             }
             Modifier::Base64(alphabet) => {
-                modifiers.flags |= VariableFlags::BASE64;
+                if modifiers.flags.contains(VariableFlags::BASE64WIDE)
+                    && modifiers.base64_alphabet != alphabet
+                {
+                    return Err(nom::Err::Failure(Error::new(
+                        input.get_span_from(start),
+                        ErrorKind::Base64AlphabetIncompatible,
+                    )));
+                }
+                add_flag(&mut modifiers, input, VariableFlags::BASE64)?;
                 modifiers.base64_alphabet = alphabet;
             }
             Modifier::Base64Wide(alphabet) => {
-                modifiers.flags |= VariableFlags::BASE64WIDE;
+                if modifiers.flags.contains(VariableFlags::BASE64)
+                    && modifiers.base64_alphabet != alphabet
+                {
+                    return Err(nom::Err::Failure(Error::new(
+                        input.get_span_from(start),
+                        ErrorKind::Base64AlphabetIncompatible,
+                    )));
+                }
+                add_flag(&mut modifiers, input, VariableFlags::BASE64WIDE)?;
                 modifiers.base64_alphabet = alphabet;
             }
         }
@@ -355,13 +377,26 @@ where
 }
 
 fn validate_flags(flags: VariableFlags) -> Result<(), ErrorKind> {
-    if flags.contains(VariableFlags::XOR | VariableFlags::NOCASE) {
-        return Err(ErrorKind::ModifiersIncompatible {
-            first_modifier_name: "xor".to_owned(),
-            second_modifier_name: "nocase".to_owned(),
-        });
+    if flags.contains(VariableFlags::XOR) {
+        if flags.contains(VariableFlags::NOCASE) {
+            return Err(ErrorKind::ModifiersIncompatible {
+                first_modifier_name: "xor".to_owned(),
+                second_modifier_name: "nocase".to_owned(),
+            });
+        }
+        if flags.contains(VariableFlags::BASE64) {
+            return Err(ErrorKind::ModifiersIncompatible {
+                first_modifier_name: "base64".to_owned(),
+                second_modifier_name: "xor".to_owned(),
+            });
+        }
+        if flags.contains(VariableFlags::BASE64WIDE) {
+            return Err(ErrorKind::ModifiersIncompatible {
+                first_modifier_name: "base64wide".to_owned(),
+                second_modifier_name: "xor".to_owned(),
+            });
+        }
     }
-
     if flags.contains(VariableFlags::NOCASE) {
         if flags.contains(VariableFlags::BASE64) {
             return Err(ErrorKind::ModifiersIncompatible {
@@ -615,14 +650,13 @@ mod tests {
     fn parse_modifiers() {
         parse(
             string_modifiers,
-            "private wide ascii xor base64wide Xor",
+            "private wide ascii xor Xor",
             "Xor",
             VariableModifiers {
                 flags: VariableFlags::PRIVATE
                     | VariableFlags::WIDE
                     | VariableFlags::ASCII
-                    | VariableFlags::XOR
-                    | VariableFlags::BASE64WIDE,
+                    | VariableFlags::XOR,
                 xor_range: (0, 255),
                 base64_alphabet: None,
             },
@@ -648,28 +682,56 @@ mod tests {
             },
         );
 
+        parse(
+            string_modifiers,
+            "xor ( 15 )",
+            "",
+            VariableModifiers {
+                flags: VariableFlags::XOR,
+                xor_range: (15, 15),
+                base64_alphabet: None,
+            },
+        );
+        parse(
+            string_modifiers,
+            "xor (50 - 120) private",
+            "",
+            VariableModifiers {
+                flags: VariableFlags::XOR | VariableFlags::PRIVATE,
+                xor_range: (50, 120),
+                base64_alphabet: None,
+            },
+        );
+
         let alphabet = "!@#$%^&*(){}[].,|ABCDEFGHIJ\x09LMNOPQRSTUVWXYZabcdefghijklmnopqrstu";
         let alphabet_array: [u8; 64] = alphabet.as_bytes().try_into().unwrap();
         parse(
             string_modifiers,
-            &format!("xor ( 15 ) base64( \"{}\" )", alphabet),
+            &format!("base64( \"{}\" )", alphabet),
             "",
             VariableModifiers {
-                flags: VariableFlags::XOR | VariableFlags::BASE64,
-                xor_range: (15, 15),
+                flags: VariableFlags::BASE64,
+                xor_range: (0, 0),
                 base64_alphabet: Some(alphabet_array),
             },
         );
         parse(
             string_modifiers,
-            &format!(
-                "base64wide ( \"{}\" ) xor(15 ) xor (50 - 120) private",
-                alphabet
-            ),
+            &format!("base64wide ( \"{}\" ) private", alphabet),
             "",
             VariableModifiers {
-                flags: VariableFlags::XOR | VariableFlags::BASE64WIDE | VariableFlags::PRIVATE,
-                xor_range: (50, 120),
+                flags: VariableFlags::BASE64WIDE | VariableFlags::PRIVATE,
+                xor_range: (0, 0),
+                base64_alphabet: Some(alphabet_array),
+            },
+        );
+        parse(
+            string_modifiers,
+            &format!("base64wide ( \"{}\" ) base64 (\"{}\")", alphabet, alphabet),
+            "",
+            VariableModifiers {
+                flags: VariableFlags::BASE64WIDE | VariableFlags::BASE64,
+                xor_range: (0, 0),
                 base64_alphabet: Some(alphabet_array),
             },
         );
@@ -725,6 +787,50 @@ mod tests {
         parse_err(string_modifiers, "nocase base64wide");
         parse_err(string_modifiers, "fullword base64");
         parse_err(string_modifiers, "base64wide fullword");
+        parse_err(string_modifiers, "xor xor");
+        parse_err(string_modifiers, "xor(300)");
+        parse_err(string_modifiers, "xor base64");
+        parse_err(string_modifiers, "xor base64wide");
+    }
+
+    #[test]
+    fn test_err_accumulate_modifiers() {
+        let alphabet = "!@#$%^&*(){}[].,|ABCDEFGHIJ\x09LMNOPQRSTUVWXYZabcdefghijklmnopqrstu";
+        let alphabet2 = "!@#$%^&*(){}[].,|BADCFEHGJI\x09LMNOPQRSTUVWXYZabcdefghijklmnopqrstu";
+
+        parse_err(string_modifiers, "xor xor");
+        parse_err(string_modifiers, "base64 base64");
+        parse_err(string_modifiers, "base64wide base64wide");
+        parse_err(string_modifiers, "fullword fullword");
+        parse_err(string_modifiers, "private private");
+        parse_err(string_modifiers, "wide wide");
+        parse_err(string_modifiers, "ascii ascii");
+        parse_err(string_modifiers, "nocase nocase");
+
+        parse_err(regex_modifiers, "fullword fullword");
+        parse_err(regex_modifiers, "private private");
+        parse_err(regex_modifiers, "wide wide");
+        parse_err(regex_modifiers, "ascii ascii");
+        parse_err(regex_modifiers, "nocase nocase");
+
+        parse_err(hex_string_modifiers, "private private");
+
+        parse_err(
+            string_modifiers,
+            &format!(r#"base64 base64wide("{}")"#, alphabet),
+        );
+        parse_err(
+            string_modifiers,
+            &format!(r#"base64("{}") base64wide"#, alphabet),
+        );
+        parse_err(
+            string_modifiers,
+            &format!(r#"base64("{}") base64wide"#, alphabet),
+        );
+        parse_err(
+            string_modifiers,
+            &format!(r#"base64("{}") base64wide("{}")"#, alphabet, alphabet2),
+        );
     }
 
     #[test]

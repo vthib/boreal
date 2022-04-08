@@ -39,6 +39,10 @@ impl Error {
                 .with_labels(vec![Label::primary((), self.span.clone())
                     .with_message(format!("this contains {} characters", length))]),
 
+            ErrorKind::Base64AlphabetIncompatible => Diagnostic::error()
+                .with_message("alphabets used for base64 and base64wide must be identical")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
             ErrorKind::EmptyRegex => Diagnostic::error()
                 .with_message("regexes cannot be empty")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
@@ -153,6 +157,9 @@ pub enum ErrorKind {
     ///
     /// The length must be 64.
     Base64AlphabetInvalidLength { length: usize },
+
+    /// Alphabets used for base64 and base64wide for the same string are not identical.
+    Base64AlphabetIncompatible,
 
     /// Empty regex declaration, forbidden
     EmptyRegex,
