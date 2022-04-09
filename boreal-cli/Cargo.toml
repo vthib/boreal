@@ -3,6 +3,7 @@ name = "boreal-cli"
 version = "0.0.1"
 repository = "https://github.com/vthib/boreal"
 edition = "2021"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 boreal = { path = "../boreal" }
