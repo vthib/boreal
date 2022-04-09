@@ -51,6 +51,10 @@ impl Error {
                 .with_message("some data could not be parsed")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
+            ErrorKind::JumpAtBound => Diagnostic::error()
+                .with_message("a list of tokens cannot start or end with a jump")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
             ErrorKind::JumpEmpty => Diagnostic::error()
                 .with_message("jump cannot have a length of 0")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
@@ -166,6 +170,9 @@ pub enum ErrorKind {
 
     /// There are trailing data that could not be parsed.
     HasTrailingData,
+
+    /// A jump is not allowed at the beginning or end of hex tokens
+    JumpAtBound,
 
     /// Jump of an empty size (i.e. `[0]`).
     JumpEmpty,

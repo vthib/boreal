@@ -4,7 +4,7 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{char, digit1, multispace0 as sp0},
+    character::complete::{char, digit1},
     combinator::{cut, map, opt},
     error::{ErrorKind as NomErrorKind, ParseError},
     multi::many1,
@@ -177,14 +177,37 @@ fn alternatives(input: Input) -> ParseResult<HexToken> {
     cut(terminated(
         map(
             separated_pair(
-                many1(|input| hex_token(input, true)),
-                terminated(char('|'), sp0),
-                many1(|input| hex_token(input, true)),
+                |input| tokens(input, true),
+                rtrim(char('|')),
+                |input| tokens(input, true),
             ),
             |(left, right)| HexToken::Alternatives(left, right),
         ),
         rtrim(char(')')),
     ))(input)
+}
+
+fn range_as_hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
+    let start = input;
+    let (input, range) = range(input)?;
+
+    // Some jumps are forbidden inside an alternatives
+    if in_alternatives {
+        if let Err(kind) = validate_jump_in_alternatives(&range) {
+            return Err(nom::Err::Failure(Error::new(
+                input.get_span_from(start),
+                kind,
+            )));
+        }
+    }
+
+    // Jump of one is equivalent to ??
+    if let Some(to) = &range.to {
+        if range.from == *to && range.from == 1 {
+            return Ok((input, HexToken::MaskedByte(0, Mask::All)));
+        }
+    }
+    Ok((input, HexToken::Jump(range)))
 }
 
 fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), ErrorKind> {
@@ -208,28 +231,36 @@ fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), ErrorKind> {
 /// Some token are not allowed inside an alternatives, which is why a
 /// `in_alternatives` flag is needed.
 ///
-/// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
+/// This is equivalent to the `token_or_range` rule in `hex_grammar.y` in libyara.
 fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
     alt((
         map(masked_byte, |(v, mask)| HexToken::MaskedByte(v, mask)),
         // Always have at least one space after a byte or a masked byte
         map(byte, HexToken::Byte),
-        map_res(range, |range| {
-            // Some jumps are forbidden inside an alternatives
-            if in_alternatives {
-                validate_jump_in_alternatives(&range)?;
-            }
-
-            // Jump of one is equivalent to ??
-            if let Some(to) = &range.to {
-                if range.from == *to && range.from == 1 {
-                    return Ok(HexToken::MaskedByte(0, Mask::All));
-                }
-            }
-            Ok(HexToken::Jump(range))
-        }),
+        |input| range_as_hex_token(input, in_alternatives),
         alternatives,
     ))(input)
+}
+
+/// Parse a list of token
+///
+/// A jump is not allowed at the beginning or at the end of the list.
+///
+/// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
+fn tokens(input: Input, in_alternatives: bool) -> ParseResult<Vec<HexToken>> {
+    let start = input;
+    let (input, tokens) = many1(|input| hex_token(input, in_alternatives))(input)?;
+
+    if matches!(tokens[0], HexToken::Jump(_))
+        || (tokens.len() > 1 && matches!(tokens[tokens.len() - 1], HexToken::Jump(_)))
+    {
+        Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            ErrorKind::JumpAtBound,
+        )))
+    } else {
+        Ok((input, tokens))
+    }
 }
 
 /// Parse an hex string.
@@ -240,10 +271,7 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
 pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<HexToken>> {
     let (input, _) = rtrim(char('{'))(input)?;
 
-    cut(terminated(
-        many1(|input| hex_token(input, false)),
-        rtrim(char('}')),
-    ))(input)
+    cut(terminated(|input| tokens(input, false), rtrim(char('}'))))(input)
 }
 
 #[cfg(test)]
@@ -373,7 +401,7 @@ mod tests {
         );
         parse(
             alternatives,
-            "(12[1-3]|[3-5])",
+            "(12[1-3]C?|??[3-5]33)",
             "",
             HexToken::Alternatives(
                 vec![
@@ -382,23 +410,25 @@ mod tests {
                         from: 1,
                         to: Some(3),
                     }),
+                    HexToken::MaskedByte(0x0C, Mask::Right),
                 ],
-                vec![HexToken::Jump(Jump {
-                    from: 3,
-                    to: Some(5),
-                })],
+                vec![
+                    HexToken::MaskedByte(0x00, Mask::All),
+                    HexToken::Jump(Jump {
+                        from: 3,
+                        to: Some(5),
+                    }),
+                    HexToken::Byte(0x33),
+                ],
             ),
         );
         parse(
             alternatives,
-            "( ( [1-5] | 23)| 15) ",
+            "( ( ?D | 23)| 15) ",
             "",
             HexToken::Alternatives(
                 vec![HexToken::Alternatives(
-                    vec![HexToken::Jump(Jump {
-                        from: 1,
-                        to: Some(5),
-                    })],
+                    vec![HexToken::MaskedByte(0x0D, Mask::Left)],
                     vec![HexToken::Byte(0x23)],
                 )],
                 vec![HexToken::Byte(0x15)],
@@ -418,6 +448,11 @@ mod tests {
         parse_err(alternatives, "(AB|)");
         parse_err(alternatives, "(|12)");
         parse_err(alternatives, "(|123)");
+
+        parse_err(alternatives, "( [-] AB | CD )");
+        parse_err(alternatives, "( AB [1-2] | CD )");
+        parse_err(alternatives, "( AB | [3-] CD )");
+        parse_err(alternatives, "( AB | CD EF [-5] )");
     }
 
     #[test]
@@ -448,6 +483,10 @@ mod tests {
                 HexToken::Alternatives(vec![HexToken::Byte(0xAF)], vec![HexToken::Byte(0xDC)]),
             ],
         );
+
+        parse_err(hex_string, "{ [-] }");
+        parse_err(hex_string, "{ [-] AB }");
+        parse_err(hex_string, "{ AB CD [-] }");
 
         parse_err(hex_string, "AB");
         parse_err(hex_string, "{");
