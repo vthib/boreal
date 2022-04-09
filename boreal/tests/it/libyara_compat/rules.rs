@@ -1,5 +1,12 @@
 //! Tests imported from test_rules.c in YARA codebase.
-use crate::utils::{check, check_err};
+//!
+//! Those tests are directly copied from the yara codebase, and adapted to test them using boreal
+//! as well. Do not modify those tests in any way. Custom tests should go in the other integration
+//! tests, outside of the `libyara` directory.
+use const_format::concatcp;
+
+use super::util::TEXT_1024_BYTES;
+use crate::utils::{check, check_boreal, check_err, check_file};
 
 #[test]
 fn test_boolean_operators() {
@@ -487,4 +494,798 @@ fn test_syntax() {
     );
 
     check_err("rule test rule test", "mem:1:11: error: syntax error");
+}
+
+#[test]
+fn test_anonymous_strings() {
+    check(
+        "rule test { strings: $ = \"a\" $ = \"b\" condition: all of them }",
+        b"ab",
+        true,
+    );
+}
+
+#[test]
+fn test_strings() {
+    let s = concatcp!(TEXT_1024_BYTES, "---- abc ---- xyz").as_bytes();
+    let blob = concatcp!(TEXT_1024_BYTES, "---- a\0b\0c\0 -\0-\0-\0-\0x\0y\0z\0").as_bytes();
+
+    check("rule test { strings: $a = \"a\" condition: $a }", s, true);
+
+    check("rule test { strings: $a = \"ab\" condition: $a }", s, true);
+
+    check("rule test { strings: $a = \"abc\" condition: $a }", s, true);
+
+    check("rule test { strings: $a = \"xyz\" condition: $a }", s, true);
+
+    check(
+        "rule test { strings: $a = \"abc\" nocase fullword condition: $a }",
+        s,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"aBc\" nocase  condition: $a }",
+        s,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" fullword condition: $a }",
+        s,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"a\" fullword condition: $a }",
+        s,
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"ab\" fullword condition: $a }",
+        s,
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
+        s,
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"a\" wide condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"a\" wide ascii condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ab\" wide condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ab\" wide ascii condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide nocase fullword condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"aBc\" wide nocase condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"aBc\" wide ascii nocase condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"---xyz\" wide nocase condition: $a }",
+        blob,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abc").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "xabcx").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "xabc").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcx").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\x01b\0c\0d\0e\0f\0").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abcdef\" wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0d\0e\0f\x01").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" ascii wide fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcx").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" ascii wide fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0abc").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0x\0").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"ab\" wide fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "x\x01a\0b\0c\0").as_bytes(),
+        true,
+    );
+
+    check(
+        r#"rule test { strings: $a = "\t\r\n\"\\" condition: $a }"#,
+        concatcp!(TEXT_1024_BYTES, "\t\r\n\"\\").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+         strings:
+             $a = \"abcdef\"
+             $b = \"cdef\"
+             $c = \"ef\"
+         condition:
+             all of them
+       }",
+        concatcp!(TEXT_1024_BYTES, "abcdef").as_bytes(),
+        true,
+    );
+
+    // TODO: test with libyara when yara-rust is update to 4.2.0
+    check_boreal(
+        "rule test {
+         strings:
+             $a = \"foo\"
+             $b = \"bar\"
+             $c = \"baz\"
+         condition:
+             all of them in (0..10)
+       }",
+        concatcp!("foobarbaz", TEXT_1024_BYTES).as_bytes(),
+        true,
+    );
+
+    // TODO: test with libyara when yara-rust is update to 4.2.0
+    check_boreal(
+        "rule test {
+         strings:
+             $a = \"foo\"
+         condition:
+             #a == 3 and #a in (0..10) == 2
+       }",
+        concatcp!("foofoo", TEXT_1024_BYTES, "foo").as_bytes(),
+        true,
+    );
+
+    // xor by itself will match the plaintext version of the string too.
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor
+      condition:
+        #a == 256
+    }",
+        "assets/libyara/data/xor.out",
+        true,
+    );
+
+    // Make sure the combination of xor and ascii behaves the same as just xor.
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor ascii
+      condition:
+        #a == 256
+    }",
+        "assets/libyara/data/xor.out",
+        true,
+    );
+
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor(1-0x10)
+      condition:
+        #a == 16
+    }",
+        "assets/libyara/data/xor.out",
+        true,
+    );
+
+    // We should have no matches here because we are not generating the ascii
+    // string, just the wide one, and the test data contains no wide strings.
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor wide
+      condition:
+        #a == 0
+    }",
+        "assets/libyara/data/xor.out",
+        true,
+    );
+
+    // xor by itself is equivalent to xor(0-255).
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor wide
+      condition:
+        #a == 256
+    }",
+        "assets/libyara/data/xorwide.out",
+        true,
+    );
+
+    // This DOES NOT look for the plaintext wide version by itself.
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor(1-16) wide
+      condition:
+        #a == 16
+    }",
+        "assets/libyara/data/xorwide.out",
+        true,
+    );
+
+    // Check the location of the match to make sure we match on the correct one.
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor(1) wide
+      condition:
+        #a == 1 and @a == 0x2f
+    }",
+        "assets/libyara/data/xorwide.out",
+        true,
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor(300)
+      condition:
+        $a
+    }",
+        "mem:3:40: error: xor range value 300 invalid, must be in [0-255]",
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor(200-10)
+      condition:
+        $a
+    }",
+        "mem:3:39: error: xor range invalid: 200 > 10",
+    );
+
+    // ERROR_SYNTAX_ERROR
+    check_err(
+        "rule test {
+      strings:
+        $a = {00 11 22 33} xor
+      condition:
+        $a
+    }",
+        "mem:3:28: error: syntax error",
+    );
+
+    // ERROR_SYNTAX_ERROR
+    check_err(
+        "rule test {
+      strings:
+        $a = /foo(bar|baz)/ xor
+      condition:
+        $a
+    }",
+        "mem:3:29: error: syntax error",
+    );
+
+    // ERROR_DUPLICATED_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"ab\" xor xor
+      condition:
+        $a
+    }",
+        "mem:3:19: error: string modifier XOR appears multiple times",
+    );
+
+    // We should have no matches here because we are not generating the wide
+    // string, just the ascii one, and the test data contains no ascii strings.
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor ascii
+      condition:
+        #a == 0
+    }",
+        "assets/libyara/data/xorwide.out",
+        true,
+    );
+
+    // This should match 512 times because we are looking for the wide and ascii
+    // versions in plaintext and doing xor(0-255) (implicitly)
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" xor wide ascii
+      condition:
+        #a == 512
+    }",
+        "assets/libyara/data/xorwideandascii.out",
+        true,
+    );
+
+    check_file(
+        "rule test {
+      strings:
+        $a = \"This program cannot\" wide ascii
+      condition:
+        #a == 2
+    }",
+        "assets/libyara/data/xorwideandascii.out",
+        true,
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"ab\" xor nocase
+      condition:
+        true
+    }",
+        "mem:3:19: error: string modifiers xor and nocase are incompatible",
+    );
+
+    check(
+        "rule test {
+        strings:
+          $a = \"AXS\" private
+      condition:
+        all of them
+      }",
+        concatcp!(TEXT_1024_BYTES, "AXS").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { 
+        strings:
+          $a = { 45 52 53 } private
+      condition:
+        all of them
+      }",
+        concatcp!(TEXT_1024_BYTES, "ERS").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { 
+        strings:
+          $a = /AXS[0-9]{4}ERS[0-9]{4}/ private
+      condition:
+        all of them
+      }",
+        concatcp!(TEXT_1024_BYTES, "AXS1111ERS2222").as_bytes(),
+        true,
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"ab\" base64 nocase
+      condition:
+        true
+    }",
+        "mem:3:19: error: string modifiers base64 and nocase are incompatible",
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"ab\" base64 xor
+      condition:
+        true
+    }",
+        "mem:3:19: error: string modifiers base64 and xor are incompatible",
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"ab\" base64 fullword
+      condition:
+        true
+    }",
+        "mem:3:19: error: string modifiers base64 and fullword are incompatible",
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"ab\" base64(\"AXS\")
+      condition:
+        true
+    }",
+        "mem:3:26: error: base64 modifier alphabet must contain exactly 64 characters",
+    );
+
+    // ERROR_INVALID_MODIFIER
+    check_err(
+        "rule test {
+      strings:
+        $a = \"ab\" base64wide(\"ERS\")
+      condition:
+        true
+    }",
+        "mem:3:30: error: base64 modifier alphabet must contain exactly 64 characters",
+    );
+
+    // Specifying different alphabets is an error.
+    // ERROR_INVALID_MODIFIER
+    check_err(
+      "rule test {
+      strings:
+        $a = \"ab\" base64 base64wide(\"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ,.\")
+      condition:
+        true
+    }", "mem:3:19: error: alphabets used for base64 and base64wide must be identical");
+
+    // Be specific about the offsets in these tests to make sure we are matching
+    // the correct strings. Also be specific about the length because we want to
+    // make sure the match is not the entire base64 string, but just the
+    // substrings which are not dependent upon leading or trailing bytes.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64
+        condition:
+          #a == 6 and
+          @a[1] == 0x53 and
+          !a[1] == 25 and
+          @a[2] == 0x70 and
+          !a[2] == 25 and
+          @a[3] == 0xa2 and
+          !a[3] == 24 and
+          @a[4] == 0xbd and
+          !a[4] == 24 and
+          @a[5] == 0xef and
+          !a[5] == 25 and
+          @a[6] == 0x109 and
+          !a[6] == 25
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // This is identical to "base64" alone, but test it to make sure we don't
+    // accidentally include the plaintext in the base64 search.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64 ascii
+        condition:
+          #a == 6 and
+          @a[1] == 0x53 and
+          !a[1] == 25 and
+          @a[2] == 0x70 and
+          !a[2] == 25 and
+          @a[3] == 0xa2 and
+          !a[3] == 24 and
+          @a[4] == 0xbd and
+          !a[4] == 24 and
+          @a[5] == 0xef and
+          !a[5] == 25 and
+          @a[6] == 0x109 and
+          !a[6] == 25
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Make sure the wide modifier is applied BEFORE the base64 and we do NOT
+    // include the wide plaintext string.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64 wide
+        condition:
+          #a == 6 and
+          @a[1] == 0x1b5 and
+          !a[1] == 50 and
+          @a[2] == 0x1ea and
+          !a[2] == 50 and
+          @a[3] == 0x248 and
+          !a[3] == 50 and
+          @a[4] == 0x27b and
+          !a[4] == 50 and
+          @a[5] == 0x2db and
+          !a[5] == 50 and
+          @a[6] == 0x311 and
+          !a[6] == 50
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Make sure that both wide and ascii are base64 encoded. We can skip the
+    // verbose length and offset check_files, since the previous tests cover that.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64 wide ascii
+        condition:
+          #a == 12
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Make sure that the two strings are generated when one ascii byte is
+    // base64 encoded. When stripped, third base64 encoded is null.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"a\" base64
+          $b = \"a\" base64wide
+        condition:
+          @a[58] == 0x6ac and
+          @a[59] == 0x6b9 and
+          @b[15] == 0x6f7 and
+          @b[16] == 0x711
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // In the future, assert false if character classes are generated instead
+    // of stripping the leading and trailing characters
+    check_file(
+        "rule test {
+        strings:
+          $a = \"Dhis program cannow\" base64
+        condition:
+          #a == 2 and
+          @a[1] == 0xa2 and
+          @a[2] == 0xbd
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // This check_files for the ascii string in base64 form then widened.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64wide
+        condition:
+          #a == 3 and
+          @a[1] == 0x379 and
+          !a[1] == 50 and
+          @a[2] == 0x3b6 and
+          !a[2] == 48 and
+          @a[3] == 0x3f1 and
+          !a[3] == 50
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Logically identical to the test above but include it to make sure we don't
+    // accidentally include the plaintext in the future.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64wide ascii
+        condition:
+          #a == 3 and
+          @a[1] == 0x379 and
+          !a[1] == 50 and
+          @a[2] == 0x3b6 and
+          !a[2] == 48 and
+          @a[3] == 0x3f1 and
+          !a[3] == 50
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Make sure the wide string is base64wide encoded.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64wide wide
+        condition:
+          #a == 3 and
+          @a[1] == 0x458 and
+          !a[1] == 100 and
+          @a[2] == 0x4c5 and
+          !a[2] == 100 and
+          @a[3] == 0x530 and
+          !a[3] == 100
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Make sure both ascii and wide strings are base64wide encoded properly.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64wide wide ascii
+        condition:
+          #a == 6 and
+          @a[1] == 0x379 and
+          !a[1] == 50 and
+          @a[2] == 0x3b6 and
+          !a[2] == 48 and
+          @a[3] == 0x3f1 and
+          !a[3] == 50 and
+          @a[4] == 0x458 and
+          !a[4] == 100 and
+          @a[5] == 0x4c5 and
+          !a[5] == 100 and
+          @a[6] == 0x530 and
+          !a[6] == 100
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Make sure base64 and base64wide together work.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64 base64wide
+        condition:
+          #a == 9 and
+          @a[1] == 0x53 and
+          !a[1] == 25 and
+          @a[2] == 0x70 and
+          !a[2] == 25 and
+          @a[3] == 0xa2 and
+          !a[3] == 24 and
+          @a[4] == 0xbd and
+          !a[4] == 24 and
+          @a[5] == 0xef and
+          !a[5] == 25 and
+          @a[6] == 0x109 and
+          !a[6] == 25 and
+          @a[7] == 0x379 and
+          !a[7] == 50 and
+          @a[8] == 0x3b6 and
+          !a[8] == 48 and
+          @a[9] == 0x3f1 and
+          !a[9] == 50
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Identical to the test above but useful to make sure we don't accidentally
+    // include the ascii plaintext in the future.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64 base64wide ascii
+        condition:
+          #a == 9
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    // Making sure we don't accidentally include the wide plaintext in the future.
+    check_file(
+        "rule test {
+        strings:
+          $a = \"This program cannot\" base64 base64wide wide
+        condition:
+          #a == 9
+      }",
+        "assets/libyara/data/base64",
+        true,
+    );
+
+    check_file(
+        r#"rule test {
+        strings:
+          $a = "This program cannot" base64("!@#$%^&*(){}[].,|ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu")
+        condition:
+          #a == 3 and
+          @a[1] == 0x619 and
+          !a[1] == 25 and
+          @a[2] == 0x638 and
+          !a[2] == 24 and
+          @a[3] == 0x656 and
+          !a[3] == 25
+      }"#,
+        "assets/libyara/data/base64",
+        true,
+    );
 }

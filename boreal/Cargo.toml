@@ -18,5 +18,6 @@ grep-regex = "0.1"
 aho-corasick = "0.7"
 
 [dev-dependencies]
+const_format = "0.2"
 yara = { version = "0.13", features = ["vendored"] }
 base64 = "0.13"

@@ -66,7 +66,6 @@ pub fn check(rule: &str, mem: &[u8], expected_res: bool) {
 pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
     use std::io::Read;
 
-    println!("cwd: {:?}", std::env::current_dir().unwrap());
     let mut f = std::fs::File::open(filepath).unwrap();
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer).unwrap();
