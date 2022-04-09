@@ -5,7 +5,7 @@
 //! tests, outside of the `libyara` directory.
 use const_format::concatcp;
 
-use super::util::TEXT_1024_BYTES;
+use super::util::{PE32_FILE, TEXT_1024_BYTES};
 use crate::utils::{check, check_boreal, check_err, check_file};
 
 #[test]
@@ -76,60 +76,60 @@ fn test_boolean_operators_with_identifiers() {
     );
 
     check(
-        "import \"tests\" \
-    rule test { \
-        condition: \
-        not (tests.undefined.i and true) \
+        "import \"tests\"
+    rule test {
+        condition:
+        not (tests.undefined.i and true)
     }",
         &[],
         true,
     );
 
     check(
-        "import \"tests\" \
-    rule test { \
-        condition: \
-        not (true and tests.undefined.i) \
+        "import \"tests\"
+    rule test {
+        condition:
+        not (true and tests.undefined.i)
     }",
         &[],
         true,
     );
 
     check(
-        "import \"tests\" \
-    rule test { \
-        condition: \
-        not tests.string_array[4] contains \"foo\" \
+        "import \"tests\"
+    rule test {
+        condition:
+        not tests.string_array[4] contains \"foo\"
     }",
         &[],
         false,
     );
 
     check(
-        "import \"tests\" \
-    rule test { \
-        condition: \
-        not tests.string_dict[\"undefined\"] matches /foo/ \
+        "import \"tests\"
+    rule test {
+        condition:
+        not tests.string_dict[\"undefined\"] matches /foo/
     }",
         &[],
         false,
     );
 
     check(
-        "import \"tests\" \
-    rule test { \
-        condition: \
-        not tests.undefined.i \
+        "import \"tests\"
+    rule test {
+        condition:
+        not tests.undefined.i
     }",
         &[],
         false,
     );
 
     check(
-        "import \"tests\" \
-    rule test { \
-        condition: \
-        not (tests.undefined.i) \
+        "import \"tests\"
+    rule test {
+        condition:
+        not (tests.undefined.i)
     }",
         &[],
         false,
@@ -930,7 +930,7 @@ fn test_strings() {
     );
 
     check(
-        "rule test { 
+        "rule test {
         strings:
           $a = { 45 52 53 } private
       condition:
@@ -941,7 +941,7 @@ fn test_strings() {
     );
 
     check(
-        "rule test { 
+        "rule test {
         strings:
           $a = /AXS[0-9]{4}ERS[0-9]{4}/ private
       condition:
@@ -1287,5 +1287,358 @@ fn test_strings() {
       }"#,
         "assets/libyara/data/base64",
         true,
+    );
+}
+
+#[test]
+fn test_wildcard_strings() {
+    check(
+        "rule test {
+         strings:
+             $s1 = \"abc\"
+             $s2 = \"xyz\"
+         condition:
+             for all of ($*) : ($)
+      }",
+        concatcp!(TEXT_1024_BYTES, "---- abc ---- A\x00B\x00C\x00 ---- xyz").as_bytes(),
+        true,
+    );
+}
+
+#[test]
+fn test_hex_strings() {
+    check(
+        "rule test {
+        strings: $a = { 64 01 00 00 60 01 }
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 64 0? 00 00 ?0 01 }
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 6? 01 00 00 60 0? }
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 64 01 [1-3] 60 01 }
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 64 01 [1-3] (60|61) 01 }
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 4D 5A [-] 6A 2A [-] 58 C3}
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 4D 5A [300-] 6A 2A [-] 58 C3}
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 2e 7? (65 | ?? ) 78 }
+        condition: $a }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 4D 5A [0-300] 6A 2A }
+        condition: $a }",
+        PE32_FILE,
+        false,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 4D 5A [0-128] 45 [0-128] 01 [0-128]  C3 }
+        condition: $a }",
+        PE32_FILE,
+        false,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [-] 38 39 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = {\n 31 32 [-] 38 39 \n\r}
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [-] 33 34 [-] 38 39 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [-] 33 34 [-] 38 39 } private
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [1] 34 35 [2] 38 39 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+         strings: $a = { 31 32 [1-] 34 35 [1-] 38 39 }
+         condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-3] 34 35 [1-] 38 39 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-2] 35 [1-] 37 38 39 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-1] 33 }
+        condition: !a == 3}",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-1] 34 }
+        condition: !a == 4}",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-2] 34 }
+        condition: !a == 4 }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [-] 38 39 }
+        condition: all of them }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [-] 32 33 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 35 36 [-] 31 32 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [2-] 34 35 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-1] 33 34 [0-2] 36 37 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-1] 34 35 [0-2] 36 37 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-3] 37 38 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [1] 33 34 }
+        condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "12\n34").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = {31 32 [3-6] 32}
+        condition: !a == 6 }",
+        concatcp!(TEXT_1024_BYTES, "12111222").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = {31 [0-3] (32|33)}
+        condition: !a == 2 }",
+        concatcp!("122222222", TEXT_1024_BYTES).as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 30 31 32 [0-5] 38 39 }
+        condition: $a }",
+        b"0123456789",
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-5] 38 39 30 }
+        condition: $a }",
+        b"1234567890",
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-2] 34 [0-2] 34 }
+        condition: $a }",
+        b"1244",
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-2] 34 [0-2] 34 }
+        condition: $a }",
+        b"12344",
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [0-2] 34 [0-2] 34 [2-3] 34 }
+        condition: $a }",
+        b"123440004",
+        true,
+    );
+
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 [0] 02 }
+        condition: $a }",
+        "mem:2:28: error: jump cannot have a length of 0",
+    );
+
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { [-] 01 02 } condition: $a }",
+        "mem:2:25: error: a list of tokens cannot start or end with a jump",
+    );
+
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 02 [-] }
+        condition: $a }",
+        "mem:2:25: error: a list of tokens cannot start or end with a jump",
+    );
+
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 02 ([-] 03 | 04) }
+        condition: $a }",
+        "mem:2:32: error: unbounded jumps not allowed inside alternations (|)",
+    );
+
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 02 (03 [-] | 04) }
+        condition: $a }",
+        "mem:2:35: error: unbounded jumps not allowed inside alternations (|)",
+    );
+
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 02 (03 | 04 [-]) }
+        condition: $a ",
+        "mem:2:40: error: unbounded jumps not allowed inside alternations (|)",
     );
 }

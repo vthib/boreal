@@ -55,7 +55,11 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             is_wide = false;
 
             let mut matcher = RegexMatcherBuilder::new();
-            let matcher = matcher.unicode(false).octal(false).build(&regex);
+            let matcher = matcher
+                .unicode(false)
+                .octal(false)
+                .dot_matches_new_line(true)
+                .build(&regex);
             VariableMatcher::Regex(matcher.map_err(|error| {
                 CompilationError::VariableCompilation {
                     variable_name: name,
