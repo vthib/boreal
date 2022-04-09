@@ -1642,3 +1642,170 @@ fn test_hex_strings() {
         "mem:2:40: error: unbounded jumps not allowed inside alternations (|)",
     );
 }
+
+#[test]
+fn test_count() {
+    check(
+        "rule test { strings: $a = \"ssi\" condition: #a == 2 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ssi\" private condition: #a == 2 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+}
+
+#[test]
+fn test_at() {
+    check(
+        "rule test {
+        strings: $a = \"ssi\"
+        condition: $a at (1024+2) and $a at (1024+5) }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = \"ssi\" private
+        condition: $a at (1024+2) and $a at (1024+5) }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = \"mis\"
+        condition: $a at (1024+(~0xFF & 0xFF)) }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 00 00 00 00 ?? 74 65 78 74 }
+        condition: $a at 308}",
+        PE32_FILE,
+        true,
+    );
+}
+
+// FIXME: implement entrypoint
+#[ignore]
+#[test]
+fn test_in() {
+    check(
+        "rule test {
+        strings: $a = { 6a 2a 58 c3 }
+        condition: $a in (entrypoint .. entrypoint + 1) }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 6a 2a 58 c3 } private
+        condition: $a in (entrypoint .. entrypoint + 1) }",
+        PE32_FILE,
+        true,
+    );
+}
+
+#[test]
+fn test_offset() {
+    check(
+        "rule test { strings: $a = \"ssi\" condition: @a == (1024+2) }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ssi\" private condition: @a == (1024+2) }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ssi\" condition: @a == @a[1] }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ssi\" condition: @a[2] == (1024+5) }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+}
+
+#[test]
+fn test_length() {
+    check(
+        "rule test { strings: $a = /m.*?ssi/ condition: !a == 5 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /m.*?ssi/ private condition: !a == 5 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /m.*?ssi/ condition: !a[1] == 5 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /m.*ssi/ condition: !a == 8 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /m.*ssi/ condition: !a[1] == 8 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /ssi.*ppi/ condition: !a[1] == 9 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /ssi.*ppi/ condition: !a[2] == 6 }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = { 6D [1-3] 73 73 69 } condition: !a == 5}",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = { 6D [-] 73 73 69 } condition: !a == 5}",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = { 6D [-] 70 70 69 } condition: !a == 11}",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = { 6D 69 73 73 [-] 70 69 } condition: !a == 11}",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+}
