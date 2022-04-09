@@ -4,6 +4,7 @@ use std::ops::Range;
 
 use boreal_parser as parser;
 
+mod base64;
 mod error;
 pub use error::CompilationError;
 mod expression;

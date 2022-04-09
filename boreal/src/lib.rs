@@ -33,6 +33,8 @@
 // This is to remove the "unused_crate_dependencies" warning, maybe a better solution
 // could be found.
 #[cfg(test)]
+use base64 as _;
+#[cfg(test)]
 use yara as _;
 
 mod compiler;

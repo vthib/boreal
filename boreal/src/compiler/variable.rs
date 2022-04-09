@@ -6,6 +6,7 @@ use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 use boreal_parser::{HexMask, HexToken, VariableFlags, VariableModifiers};
 use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
 
+use super::base64::encode_base64;
 use super::CompilationError;
 
 #[derive(Debug)]
@@ -78,6 +79,7 @@ fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> Variabl
 
     let case_insensitive = modifiers.flags.contains(VariableFlags::NOCASE);
 
+    let value = value.into_bytes();
     if modifiers.flags.contains(VariableFlags::WIDE) {
         if modifiers.flags.contains(VariableFlags::ASCII) {
             literals.push(string_to_wide(&value));
@@ -96,7 +98,7 @@ fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> Variabl
         let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
         for lit in literals {
             for xor_byte in xor_range.clone() {
-                new_literals.push(lit.bytes().map(|c| c ^ xor_byte).collect());
+                new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
         let literals = new_literals;
@@ -106,7 +108,29 @@ fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> Variabl
     if modifiers.flags.contains(VariableFlags::BASE64)
         || modifiers.flags.contains(VariableFlags::BASE64WIDE)
     {
-        todo!()
+        let mut old_literals = Vec::with_capacity(literals.len() * 3);
+        std::mem::swap(&mut old_literals, &mut literals);
+
+        if modifiers.flags.contains(VariableFlags::BASE64) {
+            for lit in &old_literals {
+                for offset in 0..=2 {
+                    if let Some(lit) = encode_base64(&lit, &modifiers.base64_alphabet, offset) {
+                        if modifiers.flags.contains(VariableFlags::BASE64WIDE) {
+                            literals.push(string_to_wide(&lit));
+                        }
+                        literals.push(lit);
+                    }
+                }
+            }
+        } else if modifiers.flags.contains(VariableFlags::BASE64WIDE) {
+            for lit in &old_literals {
+                for offset in 0..=2 {
+                    if let Some(lit) = encode_base64(&lit, &modifiers.base64_alphabet, offset) {
+                        literals.push(string_to_wide(&lit));
+                    }
+                }
+            }
+        }
     }
 
     VariableMatcher::AhoCorasick(
@@ -118,14 +142,13 @@ fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> Variabl
 }
 
 /// Convert an ascii string to a wide string
-fn string_to_wide(s: &str) -> String {
-    // FIXME: check the string is ASCII. In parser?
+fn string_to_wide(s: &[u8]) -> Vec<u8> {
     let mut res = Vec::with_capacity(s.len() * 2);
-    for b in s.bytes() {
-        res.push(b);
+    for b in s {
+        res.push(*b);
         res.push(b'\0');
     }
-    String::from_utf8(res).unwrap()
+    res
 }
 
 fn build_regex_matcher(

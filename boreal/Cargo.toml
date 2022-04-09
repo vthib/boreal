@@ -19,3 +19,4 @@ aho-corasick = "0.7"
 
 [dev-dependencies]
 yara = { version = "0.13", features = ["vendored"] }
+base64 = "0.13"
