@@ -6,7 +6,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-boreal-parser = { path = "../boreal-parser" }
+boreal-parser = { path = "../boreal-parser", version = "0.0.1" }
 
 regex = "1.5"
 
