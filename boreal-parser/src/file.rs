@@ -15,6 +15,12 @@ use super::{
 pub struct YaraFile {
     /// List of rules contained in the file.
     pub rules: Vec<Rule>,
+
+    /// List of imports in the file.
+    pub imports: Vec<String>,
+
+    /// List of includes in the file.
+    pub includes: Vec<String>,
 }
 
 /// Parse a full YARA file.
@@ -26,22 +32,26 @@ pub struct YaraFile {
 pub fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
     let (mut input, _) = ltrim(input)?;
 
-    let mut rules = Vec::new();
+    let mut file = YaraFile {
+        rules: Vec::new(),
+        imports: Vec::new(),
+        includes: Vec::new(),
+    };
     while !input.is_empty() {
-        if let Ok((i, _)) = include_file(input) {
-            // TODO: handle includes
+        if let Ok((i, v)) = include_file(input) {
+            file.includes.push(v);
             input = i;
-        } else if let Ok((i, _)) = import(input) {
-            // TODO: handle imports
+        } else if let Ok((i, v)) = import(input) {
+            file.imports.push(v);
             input = i;
         } else {
             let (i, rule) = rule(input)?;
-            rules.push(rule);
+            file.rules.push(rule);
             input = i;
         }
     }
 
-    Ok((input, YaraFile { rules }))
+    Ok((input, file))
 }
 
 /// Parse an include declaration
@@ -81,6 +91,8 @@ mod tests {
                     is_private: false,
                     is_global: true,
                 }],
+                imports: vec![],
+                includes: vec![],
             },
         );
 
@@ -120,20 +132,39 @@ mod tests {
                         is_global: false,
                     },
                 ],
+                imports: vec!["pe".to_owned(), "foo".to_owned(), "quux".to_owned()],
+                includes: vec![],
             },
         );
-        parse(parse_yara_file, "", "", YaraFile { rules: Vec::new() });
+        parse(
+            parse_yara_file,
+            "",
+            "",
+            YaraFile {
+                rules: Vec::new(),
+                imports: Vec::new(),
+                includes: vec![],
+            },
+        );
         parse(
             parse_yara_file,
             " /* removed */ ",
             "",
-            YaraFile { rules: Vec::new() },
+            YaraFile {
+                rules: Vec::new(),
+                imports: Vec::new(),
+                includes: vec![],
+            },
         );
         parse(
             parse_yara_file,
             "include \"v\"\ninclude\"i\"",
             "",
-            YaraFile { rules: Vec::new() },
+            YaraFile {
+                rules: Vec::new(),
+                imports: Vec::new(),
+                includes: vec!["v".to_owned(), "i".to_owned()],
+            },
         );
 
         parse_err(parse_yara_file, "rule");
