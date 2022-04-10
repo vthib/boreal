@@ -9,13 +9,13 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         "rule a {{ strings: $a = /a/ condition: {} }}",
         expression_str
     );
-    let mut rules = parse_str(&rule_str).unwrap_or_else(|err| {
+    let mut file = parse_str(&rule_str).unwrap_or_else(|err| {
         panic!(
             "failed parsing: {}",
             AddRuleError::ParseError(err).to_short_description("mem", &rule_str)
         )
     });
-    let rule = rules.pop().unwrap();
+    let rule = file.rules.pop().unwrap();
 
     let compiler = Compiler::from_rule(&rule).unwrap();
     let res = super::compile_expression(&compiler, rule.condition).unwrap();
@@ -25,8 +25,8 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
 #[track_caller]
 fn compile_expr_err(expression_str: &str) {
     let rule_str = format!("rule a {{ condition: {} }}", expression_str);
-    let mut rules = parse_str(&rule_str).unwrap();
-    let rule = rules.pop().unwrap();
+    let mut file = parse_str(&rule_str).unwrap();
+    let rule = file.rules.pop().unwrap();
 
     let res = compile_rule(rule);
     assert!(res.is_err());
@@ -34,8 +34,8 @@ fn compile_expr_err(expression_str: &str) {
 
 #[track_caller]
 fn compile_rule_err(rule_str: &str) {
-    let mut rules = parse_str(&rule_str).unwrap();
-    let rule = rules.pop().unwrap();
+    let mut file = parse_str(&rule_str).unwrap();
+    let rule = file.rules.pop().unwrap();
 
     let res = compile_rule(rule);
     assert!(res.is_err());

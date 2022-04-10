@@ -28,8 +28,8 @@ impl Scanner {
     ///
     /// If parsing of the rules fails, an error is returned.
     pub fn add_rules_from_str(&mut self, s: &str) -> Result<(), AddRuleError> {
-        let rules = parse_str(s).map_err(AddRuleError::ParseError)?;
-        self.add_rules(rules)
+        let file = parse_str(s).map_err(AddRuleError::ParseError)?;
+        self.add_rules(file.rules)
             .map_err(AddRuleError::CompilationError)?;
         Ok(())
     }

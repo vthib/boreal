@@ -12,7 +12,7 @@ use super::{
     error::{Error, ErrorKind},
     expression::{self, Expression},
     hex_string,
-    nom_recipes::{ltrim, map_res, rtrim, textual_tag as ttag},
+    nom_recipes::{map_res, rtrim, textual_tag as ttag},
     number, string,
     types::{Input, ParseResult},
     Regex,
@@ -127,37 +127,10 @@ pub struct VariableDeclaration {
     pub modifiers: VariableModifiers,
 }
 
-/// Parse a full YARA file.
-///
-/// # Errors
-///
-/// If the input cannot be parsed properly and entirely as a list
-/// of yara rules, an error is returned.
-pub fn parse_yara_file(input: Input) -> ParseResult<Vec<Rule>> {
-    let (mut input, _) = ltrim(input)?;
-
-    let mut rules = Vec::new();
-    while !input.is_empty() {
-        if let Ok((i, _)) = include_file(input) {
-            // TODO: handle includes
-            input = i;
-        } else if let Ok((i, _)) = import(input) {
-            // TODO: handle imports
-            input = i;
-        } else {
-            let (i, rule) = rule(input)?;
-            rules.push(rule);
-            input = i;
-        }
-    }
-
-    Ok((input, rules))
-}
-
 /// Parse a rule
 ///
 /// Related to the `rule` pattern in `grammar.y` in libyara.
-fn rule(mut input: Input) -> ParseResult<Rule> {
+pub fn rule(mut input: Input) -> ParseResult<Rule> {
     let mut is_private = false;
     let mut is_global = false;
 
@@ -201,16 +174,6 @@ fn rule(mut input: Input) -> ParseResult<Rule> {
             is_global,
         },
     )(input)
-}
-
-/// Parse an include declaration
-fn include_file(input: Input) -> ParseResult<String> {
-    preceded(rtrim(ttag("include")), cut(string::quoted))(input)
-}
-
-/// Parse an import declaration
-fn import(input: Input) -> ParseResult<String> {
-    preceded(rtrim(ttag("import")), cut(string::quoted))(input)
 }
 
 /// Parse a list of tags
@@ -1074,74 +1037,5 @@ mod tests {
         parse_err(base64_modifier, &format!(r#"base64("{}""#, alphabet));
         parse_err(base64_modifier, "base64(\"123\")");
         parse_err(base64_modifier, "base64wide(15)");
-    }
-
-    #[test]
-    fn test_parse_yara_file() {
-        parse(
-            parse_yara_file,
-            "  global rule c { condition: false }",
-            "",
-            vec![Rule {
-                name: "c".to_owned(),
-                condition: Expression {
-                    expr: ExpressionKind::Boolean(false),
-                    span: 29..34,
-                },
-                tags: Vec::new(),
-                metadatas: Vec::new(),
-                variables: Vec::new(),
-                is_private: false,
-                is_global: true,
-            }],
-        );
-
-        parse(
-            parse_yara_file,
-            r#" import "pe"
-                global rule c { condition: false }
-                import "foo"
-                import "quux"
-                rule d { condition: true }
-                "#,
-            "",
-            vec![
-                Rule {
-                    name: "c".to_owned(),
-                    condition: Expression {
-                        expr: ExpressionKind::Boolean(false),
-                        span: 56..61,
-                    },
-                    tags: Vec::new(),
-                    metadatas: Vec::new(),
-                    variables: Vec::new(),
-                    is_private: false,
-                    is_global: true,
-                },
-                Rule {
-                    name: "d".to_owned(),
-                    condition: Expression {
-                        expr: ExpressionKind::Boolean(true),
-                        span: 159..163,
-                    },
-                    tags: Vec::new(),
-                    metadatas: Vec::new(),
-                    variables: Vec::new(),
-                    is_private: false,
-                    is_global: false,
-                },
-            ],
-        );
-        parse(parse_yara_file, "", "", Vec::new());
-        parse(parse_yara_file, " /* removed */ ", "", Vec::new());
-        parse(
-            parse_yara_file,
-            "include \"v\"\ninclude\"i\"",
-            "",
-            Vec::new(),
-        );
-
-        parse_err(parse_yara_file, "rule");
-        parse_err(parse_yara_file, "rule a { condition: true } b");
     }
 }

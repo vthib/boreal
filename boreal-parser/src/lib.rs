@@ -49,6 +49,8 @@ mod expression;
 pub use expression::{
     Expression, ExpressionKind, ForIterator, ForSelection, Identifier, ReadIntegerType, VariableSet,
 };
+mod file;
+pub use file::YaraFile;
 mod hex_string;
 pub use hex_string::{HexToken, Jump as HexJump, Mask as HexMask};
 mod nom_recipes;
@@ -69,11 +71,11 @@ mod types;
 ///
 /// Returns an error if the parsing fails, or if there are
 /// trailing data in the file that has not been parsed.
-pub fn parse_str(input: &str) -> Result<Vec<Rule>, Error> {
+pub fn parse_str(input: &str) -> Result<YaraFile, Error> {
     use nom::Finish;
 
     let input = types::Input::new(input);
-    let (input, rules) = rule::parse_yara_file(input).finish()?;
+    let (input, rules) = file::parse_yara_file(input).finish()?;
 
     if !input.cursor().is_empty() {
         let pos = input.get_position();

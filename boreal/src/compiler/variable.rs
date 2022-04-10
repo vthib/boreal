@@ -236,8 +236,8 @@ mod tests {
     #[track_caller]
     fn test(hex_string: &str, expected_regex: &str) {
         let rule_str = format!("rule a {{ strings: $a = {} condition: $a }}", hex_string);
-        let mut rules = parse_str(&rule_str).unwrap();
-        let mut rule = rules.pop().unwrap();
+        let mut file = parse_str(&rule_str).unwrap();
+        let mut rule = file.rules.pop().unwrap();
         let var = rule.variables.pop().unwrap();
         let hex_string = match var.value {
             VariableDeclarationValue::HexString(s) => s,
