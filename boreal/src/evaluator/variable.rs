@@ -192,7 +192,7 @@ impl<'a> VariableEvaluation<'a> {
 
             // TODO: this works, but is probably not ideal performance-wise. benchmark/improve
             // this.
-            if !check_fullword(&mat, mem, &self.var) {
+            if !check_fullword(&mat, mem, self.var) {
                 offset = mat.start + 1;
                 continue;
             }
@@ -243,11 +243,10 @@ fn is_match_wide(mat: &Match, mem: &[u8]) -> bool {
         return false;
     }
 
-    mem[(mat.start + 1)..mat.end]
+    !mem[(mat.start + 1)..mat.end]
         .iter()
         .step_by(2)
-        .find(|c| **c != b'\0')
-        .is_none()
+        .any(|c| *c != b'\0')
 }
 
 fn is_ascii_alnum(c: u8) -> bool {

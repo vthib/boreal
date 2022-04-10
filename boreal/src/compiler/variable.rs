@@ -118,7 +118,7 @@ fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> Variabl
         if modifiers.flags.contains(VariableFlags::BASE64) {
             for lit in &old_literals {
                 for offset in 0..=2 {
-                    if let Some(lit) = encode_base64(&lit, &modifiers.base64_alphabet, offset) {
+                    if let Some(lit) = encode_base64(lit, &modifiers.base64_alphabet, offset) {
                         if modifiers.flags.contains(VariableFlags::BASE64WIDE) {
                             literals.push(string_to_wide(&lit));
                         }
@@ -129,7 +129,7 @@ fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> Variabl
         } else if modifiers.flags.contains(VariableFlags::BASE64WIDE) {
             for lit in &old_literals {
                 for offset in 0..=2 {
-                    if let Some(lit) = encode_base64(&lit, &modifiers.base64_alphabet, offset) {
+                    if let Some(lit) = encode_base64(lit, &modifiers.base64_alphabet, offset) {
                         literals.push(string_to_wide(&lit));
                     }
                 }

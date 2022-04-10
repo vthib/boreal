@@ -10,7 +10,7 @@
 //!
 //! In addition, we only encode those strings once, when compiling the rule. Therefore, performance
 //! of this encoding is negligible and doing it by hand with naive functions is good enough.
-const DEFAULT_ALPHABET: &'static [u8; 64] =
+const DEFAULT_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /// Encode a given byte string in base64, ignoring padding.
@@ -32,7 +32,7 @@ pub fn encode_base64(s: &[u8], alphabet: &Option<[u8; 64]>, offset: usize) -> Op
             if s.len() < 2 {
                 return None;
             }
-            let v: u32 = ((s[0] as u32) << 8) | (s[1] as u32);
+            let v: u32 = (u32::from(s[0]) << 8) | u32::from(s[1]);
             res.push(alphabet[((v >> 6) & 0x3F) as usize]);
             res.push(alphabet[(v & 0x3F) as usize]);
             // Continue encoding the string normally, starting from s[2]
@@ -41,7 +41,7 @@ pub fn encode_base64(s: &[u8], alphabet: &Option<[u8; 64]>, offset: usize) -> Op
         2 => {
             // We want to encode [0, 0, s[0], ...].
             // This only gives 1 valid encoded byte out of the 4.
-            if s.len() < 1 {
+            if s.is_empty() {
                 return None;
             }
             res.push(alphabet[(s[0] & 0x3F) as usize]);
@@ -53,7 +53,7 @@ pub fn encode_base64(s: &[u8], alphabet: &Option<[u8; 64]>, offset: usize) -> Op
 
     let mut iter = s[chunks_offset..].chunks_exact(3);
     for chunk in &mut iter {
-        let v: u32 = ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32);
+        let v: u32 = (u32::from(chunk[0]) << 16) | (u32::from(chunk[1]) << 8) | u32::from(chunk[2]);
 
         res.push(alphabet[((v >> 18) & 0x3F) as usize]);
         res.push(alphabet[((v >> 12) & 0x3F) as usize]);
@@ -62,13 +62,13 @@ pub fn encode_base64(s: &[u8], alphabet: &Option<[u8; 64]>, offset: usize) -> Op
     }
 
     match iter.remainder() {
-        &[a] => {
+        [a] => {
             // We have to encode [a, 0, 0]. This only gives 1 valid encoded byte out of the 4.
-            res.push(alphabet[((a >> 2) & 0x3F) as usize]);
+            res.push(alphabet[((*a >> 2) & 0x3F) as usize]);
         }
-        &[a, b] => {
+        [a, b] => {
             // We have to encode [a, b, 0]. This only gives 2 valid encoded byte out of the 4.
-            let v: u32 = ((a as u32) << 8) | (b as u32);
+            let v: u32 = (u32::from(*a) << 8) | u32::from(*b);
             res.push(alphabet[((v >> 10) & 0x3F) as usize]);
             res.push(alphabet[((v >> 4) & 0x3F) as usize]);
         }
