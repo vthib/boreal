@@ -15,7 +15,7 @@ impl Checker {
     }
 
     fn new_inner(rule: &str, with_yara: bool) -> Self {
-        let mut scanner = Scanner::new();
+        let mut scanner = new_scanner();
         if let Err(err) = scanner.add_rules_from_str(&rule) {
             panic!("parsing failed: {}", err.to_short_description("mem", rule));
         }
@@ -47,6 +47,13 @@ impl Checker {
     }
 }
 
+fn new_scanner() -> Scanner {
+    let mut scanner = Scanner::new();
+    // TODO move this test module in the integration tests code
+    scanner.add_module(boreal::module::tests::Tests);
+    scanner
+}
+
 // Parse and compile `rule`, then for each test,
 // check that when running the rule on the given byte string, the
 // result is the given bool value.
@@ -75,7 +82,7 @@ pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
 
 #[track_caller]
 pub fn check_err(rule: &str, expected_prefix: &str) {
-    let mut scanner = Scanner::new();
+    let mut scanner = new_scanner();
     let err = scanner.add_rules_from_str(&rule).unwrap_err();
     let desc = err.to_short_description("mem", rule);
     assert!(

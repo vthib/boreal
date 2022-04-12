@@ -1,19 +1,23 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
+use std::collections::HashMap;
+
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
 
-use boreal_parser::parse_str;
+use boreal_parser as parser;
 
-use crate::compiler::{compile_rule, CompilationError, Rule};
+use crate::compiler::{compile_file, compile_module, CompilationError, Module, Rule};
 use crate::evaluator;
 
 /// Holds a list of rules, and provides methods to
 /// run them on files or bytes.
 #[derive(Default)]
 pub struct Scanner {
-    pub(crate) rules: Vec<Rule>,
+    rules: Vec<Rule>,
+
+    modules: HashMap<String, Module>,
 }
 
 impl Scanner {
@@ -22,23 +26,28 @@ impl Scanner {
         Self::default()
     }
 
+    /// Add a module
+    pub fn add_module<M: crate::module::Module>(&mut self, module: M) {
+        let m = compile_module(module);
+        let _ = self.modules.insert(m.name.clone(), m);
+    }
+
     /// Add rules to the scanner from a string.
     ///
     /// # Errors
     ///
     /// If parsing of the rules fails, an error is returned.
     pub fn add_rules_from_str(&mut self, s: &str) -> Result<(), AddRuleError> {
-        let file = parse_str(s).map_err(AddRuleError::ParseError)?;
-        self.add_rules(file.rules)
+        let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
+        self.add_file(file)
             .map_err(AddRuleError::CompilationError)?;
         Ok(())
     }
 
     /// Add rules in the scanner.
-    fn add_rules(&mut self, rules: Vec<boreal_parser::Rule>) -> Result<(), CompilationError> {
-        for rule in rules {
-            self.rules.push(compile_rule(rule)?);
-        }
+    fn add_file(&mut self, file: parser::YaraFile) -> Result<(), CompilationError> {
+        let rules = compile_file(file, &self.modules)?;
+        self.rules.extend(rules);
         Ok(())
     }
 

@@ -11,6 +11,8 @@ mod expression;
 pub use expression::*;
 mod variable;
 pub use variable::*;
+mod module;
+pub use module::*;
 
 /// A compiled scanning rule.
 pub struct Rule {
@@ -30,18 +32,56 @@ pub struct Rule {
     pub(crate) condition: Expression,
 }
 
-struct RuleCompiler {
+/// Context linked to compilation of a yara file.
+struct FileContext<'a> {
+    /// Symbols available to use in the file.
+    ///
+    /// Those symbols come from two sources:
+    /// - imported modules in the file
+    /// - rules included, or rules declared earlier in the file.
+    symbols: HashMap<String, &'a Module>,
+}
+
+impl<'a> FileContext<'a> {
+    fn new(
+        file: &parser::YaraFile,
+        available_modules: &'a HashMap<String, Module>,
+    ) -> Result<Self, CompilationError> {
+        let mut symbols = HashMap::with_capacity(file.imports.len());
+
+        for import in &file.imports {
+            match available_modules.get(import) {
+                Some(module) => {
+                    // Ignore result: if the import was already done, it's fine.
+                    let _r = symbols.insert(import.clone(), module);
+                }
+                None => return Err(CompilationError::UnknownImport(import.clone())),
+            };
+        }
+
+        Ok(Self { symbols })
+    }
+}
+
+/// Object used to compile a rule.
+struct RuleCompiler<'a> {
+    /// Context linked to the file containing the rule.
+    file: &'a FileContext<'a>,
+
     /// Map of variable name to index in the compiled rule variables vec.
     ///
     /// This only stores named variables. Anonymous ones are still stored
     /// (and thus have an index), but cannot be referred by name.
-    variables_map: HashMap<String, usize>,
     // TODO: hashset of used variables per index, to indicate which ones
     // are unused.
+    variables_map: HashMap<String, usize>,
 }
 
-impl RuleCompiler {
-    fn new(rule: &parser::Rule) -> Result<Self, CompilationError> {
+impl<'a> RuleCompiler<'a> {
+    fn new(
+        rule: &parser::Rule,
+        file_context: &'a FileContext<'a>,
+    ) -> Result<Self, CompilationError> {
         let mut variables_map = HashMap::new();
         for (idx, var) in rule.variables.iter().enumerate() {
             if var.name.is_empty() {
@@ -52,7 +92,10 @@ impl RuleCompiler {
             }
         }
 
-        Ok(Self { variables_map })
+        Ok(Self {
+            file: file_context,
+            variables_map,
+        })
     }
 
     /// Find a variable used in a rule by name.
@@ -90,8 +133,25 @@ impl RuleCompiler {
     }
 }
 
-pub fn compile_rule(rule: parser::Rule) -> Result<Rule, CompilationError> {
-    let compiler = RuleCompiler::new(&rule)?;
+pub fn compile_file(
+    file: parser::YaraFile,
+    available_modules: &HashMap<String, Module>,
+) -> Result<Vec<Rule>, CompilationError> {
+    let file_context = FileContext::new(&file, available_modules)?;
+
+    let mut compiled_rules = Vec::with_capacity(file.rules.len());
+    for rule in file.rules {
+        compiled_rules.push(compile_rule(rule, &file_context)?);
+    }
+
+    Ok(compiled_rules)
+}
+
+fn compile_rule(
+    rule: parser::Rule,
+    file_context: &FileContext<'_>,
+) -> Result<Rule, CompilationError> {
+    let compiler = RuleCompiler::new(&rule, file_context)?;
     let condition = compile_expression(&compiler, rule.condition)?;
 
     Ok(Rule {

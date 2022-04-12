@@ -41,5 +41,6 @@ use yara as _;
 
 mod compiler;
 mod evaluator;
+pub mod module;
 mod scanner;
 pub use scanner::{AddRuleError, Scanner};

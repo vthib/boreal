@@ -1,5 +1,7 @@
-use super::{expression::Type, RuleCompiler};
-use crate::compiler::compile_rule;
+use std::collections::HashMap;
+
+use super::{expression::Type, FileContext, RuleCompiler};
+use crate::compiler::compile_file;
 use crate::AddRuleError;
 use boreal_parser::parse_str;
 
@@ -9,35 +11,32 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         "rule a {{ strings: $a = /a/ condition: {} }}",
         expression_str
     );
-    let mut file = parse_str(&rule_str).unwrap_or_else(|err| {
+    let file = parse_str(&rule_str).unwrap_or_else(|err| {
         panic!(
             "failed parsing: {}",
             AddRuleError::ParseError(err).to_short_description("mem", &rule_str)
         )
     });
-    let rule = file.rules.pop().unwrap();
 
-    let compiler = RuleCompiler::new(&rule).unwrap();
+    let modules = HashMap::new();
+    let file_context = FileContext::new(&file, &modules).unwrap();
+    let rule = file.rules.into_iter().next().unwrap();
+    let compiler = RuleCompiler::new(&rule, &file_context).unwrap();
     let res = super::compile_expression(&compiler, rule.condition).unwrap();
     assert_eq!(res.ty, expected_type);
 }
 
 #[track_caller]
 fn compile_expr_err(expression_str: &str) {
-    let rule_str = format!("rule a {{ condition: {} }}", expression_str);
-    let mut file = parse_str(&rule_str).unwrap();
-    let rule = file.rules.pop().unwrap();
-
-    let res = compile_rule(rule);
-    assert!(res.is_err());
+    compile_rule_err(&format!("rule a {{ condition: {} }}", expression_str));
 }
 
 #[track_caller]
 fn compile_rule_err(rule_str: &str) {
-    let mut file = parse_str(&rule_str).unwrap();
-    let rule = file.rules.pop().unwrap();
+    let file = parse_str(&rule_str).unwrap();
 
-    let res = compile_rule(rule);
+    let modules = HashMap::new();
+    let res = compile_file(file, &modules);
     assert!(res.is_err());
 }
 

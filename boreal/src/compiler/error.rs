@@ -45,6 +45,12 @@ pub enum CompilationError {
     /// in the declarations.
     DuplicatedVariable(String),
 
+    /// Unknown import used in a file.
+    ///
+    /// The value is the name of the import that did not match any known module.
+    // TODO: add span
+    UnknownImport(String),
+
     /// Unknown variable used in a rule.
     UnknownVariable {
         /// Name of the variable
@@ -96,6 +102,10 @@ impl CompilationError {
 
             Self::DuplicatedVariable(name) => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name)),
+
+            Self::UnknownImport(name) => {
+                Diagnostic::error().with_message(format!("unknown import {}", name))
+            }
 
             Self::UnknownVariable {
                 variable_name,
