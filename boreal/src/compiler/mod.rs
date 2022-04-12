@@ -30,7 +30,7 @@ pub struct Rule {
     pub(crate) condition: Expression,
 }
 
-struct Compiler {
+struct RuleCompiler {
     /// Map of variable name to index in the compiled rule variables vec.
     ///
     /// This only stores named variables. Anonymous ones are still stored
@@ -40,8 +40,8 @@ struct Compiler {
     // are unused.
 }
 
-impl Compiler {
-    fn from_rule(rule: &parser::Rule) -> Result<Self, CompilationError> {
+impl RuleCompiler {
+    fn new(rule: &parser::Rule) -> Result<Self, CompilationError> {
         let mut variables_map = HashMap::new();
         for (idx, var) in rule.variables.iter().enumerate() {
             if var.name.is_empty() {
@@ -91,7 +91,7 @@ impl Compiler {
 }
 
 pub fn compile_rule(rule: parser::Rule) -> Result<Rule, CompilationError> {
-    let compiler = Compiler::from_rule(&rule)?;
+    let compiler = RuleCompiler::new(&rule)?;
     let condition = compile_expression(&compiler, rule.condition)?;
 
     Ok(Rule {

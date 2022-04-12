@@ -1,4 +1,4 @@
-use super::{expression::Type, Compiler};
+use super::{expression::Type, RuleCompiler};
 use crate::compiler::compile_rule;
 use crate::AddRuleError;
 use boreal_parser::parse_str;
@@ -17,7 +17,7 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
     });
     let rule = file.rules.pop().unwrap();
 
-    let compiler = Compiler::from_rule(&rule).unwrap();
+    let compiler = RuleCompiler::new(&rule).unwrap();
     let res = super::compile_expression(&compiler, rule.condition).unwrap();
     assert_eq!(res.ty, expected_type);
 }

@@ -8,7 +8,7 @@ use regex::Regex;
 
 use boreal_parser as parser;
 
-use super::{CompilationError, Compiler};
+use super::{CompilationError, RuleCompiler};
 
 /// Type of a parsed expression
 ///
@@ -329,7 +329,7 @@ pub enum Expression {
 
 #[allow(clippy::too_many_lines)]
 pub(super) fn compile_expression(
-    compiler: &Compiler,
+    compiler: &RuleCompiler,
     expression: parser::Expression,
 ) -> Result<Expr, CompilationError> {
     let span = expression.span;
@@ -786,7 +786,7 @@ pub(super) fn compile_expression(
 }
 
 fn compile_primary_op<F>(
-    compiler: &Compiler,
+    compiler: &RuleCompiler,
     a: parser::Expression,
     b: parser::Expression,
     span: Range<usize>,
@@ -827,7 +827,7 @@ where
 }
 
 fn compile_arith_binary_op<F>(
-    compiler: &Compiler,
+    compiler: &RuleCompiler,
     a: parser::Expression,
     b: parser::Expression,
     span: Range<usize>,
@@ -873,7 +873,7 @@ pub enum ForSelection {
 }
 
 fn compile_for_selection(
-    compiler: &Compiler,
+    compiler: &RuleCompiler,
     selection: parser::ForSelection,
 ) -> Result<ForSelection, CompilationError> {
     match selection {
@@ -892,7 +892,7 @@ fn compile_for_selection(
 }
 
 fn compile_variable_set(
-    compiler: &Compiler,
+    compiler: &RuleCompiler,
     set: parser::VariableSet,
     span: Range<usize>,
 ) -> Result<VariableSet, CompilationError> {
@@ -944,7 +944,7 @@ pub enum ForIterator {
 }
 
 fn compile_for_iterator(
-    compiler: &Compiler,
+    compiler: &RuleCompiler,
     selection: parser::ForIterator,
 ) -> Result<ForIterator, CompilationError> {
     match selection {
@@ -992,7 +992,7 @@ pub enum Identifier {
 }
 
 fn compile_identifier(
-    compiler: &Compiler,
+    compiler: &RuleCompiler,
     identifier: parser::Identifier,
 ) -> Result<Identifier, CompilationError> {
     match identifier {
