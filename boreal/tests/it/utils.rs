@@ -49,8 +49,7 @@ impl Checker {
 
 fn new_scanner() -> Scanner {
     let mut scanner = Scanner::new();
-    // TODO move this test module in the integration tests code
-    scanner.add_module(boreal::module::tests::Tests);
+    scanner.add_module(super::module_tests::Tests);
     scanner
 }
 

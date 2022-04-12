@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use super::{Module, Symbol, Value};
+use boreal::module::{Module, Symbol, Value};
 
 #[derive(Debug)]
 pub struct Tests;

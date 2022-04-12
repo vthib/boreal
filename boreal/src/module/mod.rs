@@ -1,8 +1,6 @@
 use regex::Regex;
 use std::collections::HashMap;
 
-pub mod tests;
-
 /// A module allows providing custom values and functions in rules.
 ///
 /// The trait in itself only requires static values and methods, which are used
@@ -51,23 +49,23 @@ impl<V: Into<Value>> From<V> for Symbol {
 }
 
 impl Symbol {
-    fn integer(v: i64) -> Self {
+    pub fn integer(v: i64) -> Self {
         Symbol::Value(Value::Number(v))
     }
 
-    fn float(v: f64) -> Self {
+    pub fn float(v: f64) -> Self {
         Symbol::Value(Value::Float(v))
     }
 
-    fn string<T: Into<String>>(v: T) -> Self {
+    pub fn string<T: Into<String>>(v: T) -> Self {
         Symbol::Value(Value::String(v.into()))
     }
 
-    fn dictionary<const N: usize>(v: [(&'static str, Symbol); N]) -> Self {
+    pub fn dictionary<const N: usize>(v: [(&'static str, Symbol); N]) -> Self {
         Symbol::Dictionary(v.into())
     }
 
-    fn function(
+    pub fn function(
         fun: fn(Vec<Value>) -> Option<Value>,
         arguments_description: &str,
         result_type: char,
