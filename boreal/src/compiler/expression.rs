@@ -971,64 +971,60 @@ fn compile_for_iterator(
 
 /// Parsed identifier used in expressions.
 #[derive(Debug)]
-pub enum Identifier {
-    /// Raw identifier, i.e. `pe`.
-    Raw(String),
+pub struct Identifier {
+    /// Name of the identifier
+    name: String,
+
+    /// Operations on the identifier, stored in the order of operations.
+    ///
+    /// For example, `pe.sections[2].name` would give `pe` for the name, and
+    /// `[Subfield("sections"), Subscript(Expr::Number(2)), Subfield("name")]` for the operations.
+    operations: Vec<IdentifierOperation>,
+}
+
+/// Operations on identifiers.
+#[derive(Debug)]
+pub enum IdentifierOperation {
     /// Array subscript, i.e. `identifier[subscript]`.
-    Subscript {
-        identifier: Box<Identifier>,
-        subscript: Box<Expression>,
-    },
+    Subscript(Box<Expression>),
     /// Object subfield, i.e. `identifier.subfield`.
-    Subfield {
-        identifier: Box<Identifier>,
-        subfield: String,
-    },
+    Subfield(String),
     /// Function call, i.e. `identifier(arguments)`.
-    FunctionCall {
-        identifier: Box<Identifier>,
-        arguments: Vec<Expression>,
-    },
+    FunctionCall(Vec<Expression>),
 }
 
 fn compile_identifier(
     compiler: &RuleCompiler<'_>,
     identifier: parser::Identifier,
 ) -> Result<Identifier, CompilationError> {
-    match identifier {
-        parser::Identifier::Raw(s) => Ok(Identifier::Raw(s)),
-        parser::Identifier::Subscript {
-            identifier,
-            subscript,
-        } => {
-            let subscript = compile_expression(compiler, *subscript)?;
+    let name = identifier.name;
 
-            Ok(Identifier::Subscript {
-                identifier: Box::new(compile_identifier(compiler, *identifier)?),
-                subscript: Box::new(subscript.expr),
+    let operations: Result<Vec<_>, _> = identifier
+        .operations
+        .into_iter()
+        .map(|op| {
+            Ok(match op {
+                parser::IdentifierOperation::Subscript(subscript) => {
+                    let subscript = compile_expression(compiler, *subscript)?;
+
+                    IdentifierOperation::Subscript(Box::new(subscript.expr))
+                }
+                parser::IdentifierOperation::Subfield(s) => IdentifierOperation::Subfield(s),
+                parser::IdentifierOperation::FunctionCall(arguments) => {
+                    let arguments: Result<Vec<_>, _> = arguments
+                        .into_iter()
+                        .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))
+                        .collect();
+                    IdentifierOperation::FunctionCall(arguments?)
+                }
             })
-        }
-        parser::Identifier::Subfield {
-            identifier,
-            subfield,
-        } => Ok(Identifier::Subfield {
-            identifier: Box::new(compile_identifier(compiler, *identifier)?),
-            subfield,
-        }),
-        parser::Identifier::FunctionCall {
-            identifier,
-            arguments,
-        } => {
-            let arguments: Result<Vec<_>, _> = arguments
-                .into_iter()
-                .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))
-                .collect();
-            Ok(Identifier::FunctionCall {
-                identifier: Box::new(compile_identifier(compiler, *identifier)?),
-                arguments: arguments?,
-            })
-        }
-    }
+        })
+        .collect();
+
+    Ok(Identifier {
+        name,
+        operations: operations?,
+    })
 }
 
 fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {

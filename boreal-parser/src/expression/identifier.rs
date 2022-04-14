@@ -6,7 +6,7 @@ use nom::{
     character::complete::char, combinator::cut, multi::separated_list0, sequence::terminated,
 };
 
-use super::{Expression, Identifier};
+use super::{Expression, Identifier, IdentifierOperation};
 use crate::nom_recipes::rtrim;
 use crate::string::identifier as raw_identifier;
 use crate::types::{Input, ParseResult};
@@ -36,43 +36,34 @@ fn trailing_arguments(input: Input) -> ParseResult<Vec<Expression>> {
 /// Parse an identifier used in expressions.
 pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
     let (mut input, name) = raw_identifier(input)?;
-    let mut identifier = Identifier::Raw(name);
+    let mut operations = Vec::new();
 
     loop {
         if let Ok((i, _)) = rtrim(char('.'))(input) {
             let (i2, subfield) = trailing_subfield(i)?;
             input = i2;
-            identifier = Identifier::Subfield {
-                identifier: Box::new(identifier),
-                subfield,
-            };
+            operations.push(IdentifierOperation::Subfield(subfield));
             continue;
         }
 
         if let Ok((i, _)) = rtrim(char('['))(input) {
             let (i2, expr) = trailing_subscript(i)?;
             input = i2;
-            identifier = Identifier::Subscript {
-                identifier: Box::new(identifier),
-                subscript: Box::new(expr),
-            };
+            operations.push(IdentifierOperation::Subscript(Box::new(expr)));
             continue;
         }
 
         if let Ok((i, _)) = rtrim(char('('))(input) {
             let (i2, arguments) = trailing_arguments(i)?;
             input = i2;
-            identifier = Identifier::FunctionCall {
-                identifier: Box::new(identifier),
-                arguments,
-            };
+            operations.push(IdentifierOperation::FunctionCall(arguments));
             continue;
         }
 
         break;
     }
 
-    Ok((input, identifier))
+    Ok((input, Identifier { name, operations }))
 }
 
 #[cfg(test)]
@@ -85,53 +76,64 @@ mod tests {
 
     #[test]
     fn test_identifier() {
-        parse(identifier, "pe a", "a", Identifier::Raw("pe".to_owned()));
+        parse(
+            identifier,
+            "pe a",
+            "a",
+            Identifier {
+                name: "pe".to_owned(),
+                operations: vec![],
+            },
+        );
         parse(
             identifier,
             "a.b]",
             "]",
-            Identifier::Subfield {
-                identifier: Box::new(Identifier::Raw("a".to_owned())),
-                subfield: "b".to_owned(),
+            Identifier {
+                name: "a".to_owned(),
+                operations: vec![IdentifierOperation::Subfield("b".to_owned())],
             },
         );
         parse(
             identifier,
             "a [2 ]",
             "",
-            Identifier::Subscript {
-                identifier: Box::new(Identifier::Raw("a".to_owned())),
-                subscript: Box::new(Expression {
+            Identifier {
+                name: "a".to_owned(),
+                operations: vec![IdentifierOperation::Subscript(Box::new(Expression {
                     expr: ExpressionKind::Number(2),
                     span: 3..4,
-                }),
+                }))],
             },
         );
         parse(
             identifier,
             "foo()",
             "",
-            Identifier::FunctionCall {
-                identifier: Box::new(Identifier::Raw("foo".to_owned())),
-                arguments: Vec::new(),
+            Identifier {
+                name: "foo".to_owned(),
+                operations: vec![IdentifierOperation::FunctionCall(vec![])],
             },
         );
         parse(
             identifier,
             "foo(pe, true)",
             "",
-            Identifier::FunctionCall {
-                identifier: Box::new(Identifier::Raw("foo".to_owned())),
-                arguments: vec![
+            Identifier {
+                name: "foo".to_owned(),
+                operations: vec![IdentifierOperation::FunctionCall(vec![
                     Expression {
-                        expr: ExpressionKind::Identifier(Identifier::Raw("pe".to_owned())),
+                        expr: ExpressionKind::Identifier(Identifier {
+                            name: "pe".to_owned(),
+                            operations: vec![],
+                        }),
                         span: 4..6,
                     },
                     Expression {
                         expr: ExpressionKind::Boolean(true),
                         span: 8..12,
                     },
-                ],
+                ])],
             },
         );
 
@@ -147,63 +149,53 @@ mod tests {
     // Test the loop when parsing identifier options works correctly
     #[test]
     fn test_identifier_loop() {
-        let identifier_call = Identifier::FunctionCall {
-            identifier: Box::new(Identifier::Subfield {
-                identifier: Box::new(Identifier::Raw("a".to_owned())),
-                subfield: "b".to_owned(),
+        let arg1 = Expression {
+            expr: ExpressionKind::Identifier(Identifier {
+                name: "c".to_owned(),
+                operations: vec![
+                    IdentifierOperation::Subscript(Box::new(Expression {
+                        expr: ExpressionKind::String("d".to_owned()),
+                        span: 8..11,
+                    })),
+                    IdentifierOperation::Subfield("e".to_owned()),
+                ],
             }),
-            arguments: vec![
-                Expression {
-                    expr: ExpressionKind::Identifier(Identifier::Subfield {
-                        identifier: Box::new(Identifier::Subscript {
-                            identifier: Box::new(Identifier::Raw("c".to_owned())),
-                            subscript: Box::new(Expression {
-                                expr: ExpressionKind::String("d".to_owned()),
-                                span: 8..11,
-                            }),
-                        }),
-                        subfield: "e".to_owned(),
-                    }),
-                    span: 6..14,
-                },
-                Expression {
-                    expr: ExpressionKind::Identifier(Identifier::FunctionCall {
-                        identifier: Box::new(Identifier::FunctionCall {
-                            identifier: Box::new(Identifier::Raw("f".to_owned())),
-                            arguments: vec![],
-                        }),
-                        arguments: vec![Expression {
-                            expr: ExpressionKind::Boolean(true),
-                            span: 20..24,
-                        }],
-                    }),
-                    span: 16..25,
-                },
-            ],
+            span: 6..14,
+        };
+        let arg2 = Expression {
+            expr: ExpressionKind::Identifier(Identifier {
+                name: "f".to_owned(),
+                operations: vec![
+                    IdentifierOperation::FunctionCall(vec![]),
+                    IdentifierOperation::FunctionCall(vec![Expression {
+                        expr: ExpressionKind::Boolean(true),
+                        span: 20..24,
+                    }]),
+                ],
+            }),
+            span: 16..25,
         };
 
         parse(
             identifier,
             r#"a.b ( c["d"].e ,f()(true) )[3].g.h[1],"#,
             ",",
-            Identifier::Subscript {
-                identifier: Box::new(Identifier::Subfield {
-                    identifier: Box::new(Identifier::Subfield {
-                        identifier: Box::new(Identifier::Subscript {
-                            identifier: Box::new(identifier_call),
-                            subscript: Box::new(Expression {
-                                expr: ExpressionKind::Number(3),
-                                span: 28..29,
-                            }),
-                        }),
-                        subfield: "g".to_owned(),
-                    }),
-                    subfield: "h".to_owned(),
-                }),
-                subscript: Box::new(Expression {
-                    expr: ExpressionKind::Number(1),
-                    span: 35..36,
-                }),
+            Identifier {
+                name: "a".to_owned(),
+                operations: vec![
+                    IdentifierOperation::Subfield("b".to_owned()),
+                    IdentifierOperation::FunctionCall(vec![arg1, arg2]),
+                    IdentifierOperation::Subscript(Box::new(Expression {
+                        expr: ExpressionKind::Number(3),
+                        span: 28..29,
+                    })),
+                    IdentifierOperation::Subfield("g".to_owned()),
+                    IdentifierOperation::Subfield("h".to_owned()),
+                    IdentifierOperation::Subscript(Box::new(Expression {
+                        expr: ExpressionKind::Number(1),
+                        span: 35..36,
+                    })),
+                ],
             },
         );
     }

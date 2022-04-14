@@ -39,30 +39,26 @@ pub enum ReadIntegerType {
 
 /// Parsed identifier used in expressions.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Identifier {
-    /// Raw identifier, i.e. `pe`.
-    Raw(String),
+pub struct Identifier {
+    /// Name of the identifier
+    pub name: String,
+
+    /// Operations on the identifier, stored in the order of operations.
+    ///
+    /// For example, `pe.sections[2].name` would give `pe` for the name, and
+    /// `[Subfield("sections"), Subscript(Expr::Number(2)), Subfield("name")]` for the operations.
+    pub operations: Vec<IdentifierOperation>,
+}
+
+/// Operation applied on an identifier.
+#[derive(Clone, Debug, PartialEq)]
+pub enum IdentifierOperation {
     /// Array subscript, i.e. `identifier[subscript]`.
-    Subscript {
-        /// Object being subscripted
-        identifier: Box<Identifier>,
-        /// Value used as the index
-        subscript: Box<Expression>,
-    },
+    Subscript(Box<Expression>),
     /// Object subfield, i.e. `identifier.subfield`.
-    Subfield {
-        /// Object take a subfield of
-        identifier: Box<Identifier>,
-        /// Name of the subfield
-        subfield: String,
-    },
+    Subfield(String),
     /// Function call, i.e. `identifier(arguments)`.
-    FunctionCall {
-        /// Function being called
-        identifier: Box<Identifier>,
-        /// List of arguments to pass to the function
-        arguments: Vec<Expression>,
-    },
+    FunctionCall(Vec<Expression>),
 }
 
 /// An expression parsed in a Rule.

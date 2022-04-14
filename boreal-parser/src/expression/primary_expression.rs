@@ -409,7 +409,10 @@ mod tests {
             "a c",
             "c",
             Expression {
-                expr: Expr::Identifier(Identifier::Raw("a".to_owned())),
+                expr: Expr::Identifier(Identifier {
+                    name: "a".to_owned(),
+                    operations: vec![],
+                }),
                 span: 0..1,
             },
         );
@@ -418,7 +421,10 @@ mod tests {
             "aze",
             "",
             Expression {
-                expr: Expr::Identifier(Identifier::Raw("aze".to_owned())),
+                expr: Expr::Identifier(Identifier {
+                    name: "aze".to_owned(),
+                    operations: vec![],
+                }),
                 span: 0..3,
             },
         );
@@ -953,13 +959,19 @@ mod tests {
         parse_check(pe, "filesizea", |e| {
             assert_eq!(
                 e.expr,
-                Expr::Identifier(Identifier::Raw("filesizea".to_owned()))
+                Expr::Identifier(Identifier {
+                    name: "filesizea".to_owned(),
+                    operations: vec![],
+                }),
             );
         });
         parse_check(pe, "entrypointa", |e| {
             assert_eq!(
                 e.expr,
-                Expr::Identifier(Identifier::Raw("entrypointa".to_owned()))
+                Expr::Identifier(Identifier {
+                    name: "entrypointa".to_owned(),
+                    operations: vec![],
+                }),
             );
         });
     }

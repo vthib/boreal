@@ -260,7 +260,7 @@ fn iterator_range(input: Input) -> ParseResult<ForIterator> {
 mod tests {
     use super::*;
     use crate::{
-        expression::{ExpressionKind, Identifier},
+        expression::{ExpressionKind, Identifier, IdentifierOperation},
         tests::{parse, parse_err},
     };
 
@@ -303,7 +303,10 @@ mod tests {
             "",
             ForSelection::Expr {
                 expr: Box::new(Expression {
-                    expr: ExpressionKind::Identifier(Identifier::Raw("anya".to_owned())),
+                    expr: ExpressionKind::Identifier(Identifier {
+                        name: "anya".to_owned(),
+                        operations: vec![],
+                    }),
                     span: 0..4,
                 }),
                 as_percent: false,
@@ -560,7 +563,10 @@ mod tests {
                 expr: ExpressionKind::ForIdentifiers {
                     selection: ForSelection::Any,
                     identifiers: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
-                    iterator: ForIterator::Identifier(Identifier::Raw("toto".to_owned())),
+                    iterator: ForIterator::Identifier(Identifier {
+                        name: "toto".to_owned(),
+                        operations: vec![],
+                    }),
                     body: Box::new(Expression {
                         expr: ExpressionKind::Boolean(false),
                         span: 23..28,
@@ -599,9 +605,9 @@ mod tests {
             iterator,
             "i.b a",
             "a",
-            ForIterator::Identifier(Identifier::Subfield {
-                identifier: Box::new(Identifier::Raw("i".to_owned())),
-                subfield: "b".to_owned(),
+            ForIterator::Identifier(Identifier {
+                name: "i".to_owned(),
+                operations: vec![IdentifierOperation::Subfield("b".to_owned())],
             }),
         );
         parse(

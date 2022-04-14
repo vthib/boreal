@@ -772,25 +772,37 @@ mod tests {
         parse_check(boolean_expression, "nota", |e| {
             assert_eq!(
                 e.expr,
-                ExpressionKind::Identifier(Identifier::Raw("nota".to_owned()))
+                ExpressionKind::Identifier(Identifier {
+                    name: "nota".to_owned(),
+                    operations: vec![]
+                }),
             );
         });
         parse_check(boolean_expression, "defineda", |e| {
             assert_eq!(
                 e.expr,
-                ExpressionKind::Identifier(Identifier::Raw("defineda".to_owned()))
+                ExpressionKind::Identifier(Identifier {
+                    name: "defineda".to_owned(),
+                    operations: vec![]
+                }),
             );
         });
         parse_check(boolean_expression, "truea", |e| {
             assert_eq!(
                 e.expr,
-                ExpressionKind::Identifier(Identifier::Raw("truea".to_owned()))
+                ExpressionKind::Identifier(Identifier {
+                    name: "truea".to_owned(),
+                    operations: vec![]
+                }),
             );
         });
         parse_check(boolean_expression, "falsea", |e| {
             assert_eq!(
                 e.expr,
-                ExpressionKind::Identifier(Identifier::Raw("falsea".to_owned()))
+                ExpressionKind::Identifier(Identifier {
+                    name: "falsea".to_owned(),
+                    operations: vec![]
+                }),
             );
         });
 
