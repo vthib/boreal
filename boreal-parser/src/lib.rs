@@ -48,7 +48,7 @@ pub use error::Error;
 mod expression;
 pub use expression::{
     Expression, ExpressionKind, ForIterator, ForSelection, Identifier, IdentifierOperation,
-    ReadIntegerType, VariableSet,
+    IdentifierOperationType, ReadIntegerType, VariableSet,
 };
 mod file;
 pub use file::YaraFile;

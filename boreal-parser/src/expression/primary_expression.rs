@@ -411,6 +411,7 @@ mod tests {
             Expression {
                 expr: Expr::Identifier(Identifier {
                     name: "a".to_owned(),
+                    name_span: 0..1,
                     operations: vec![],
                 }),
                 span: 0..1,
@@ -423,6 +424,7 @@ mod tests {
             Expression {
                 expr: Expr::Identifier(Identifier {
                     name: "aze".to_owned(),
+                    name_span: 0..3,
                     operations: vec![],
                 }),
                 span: 0..3,
@@ -961,6 +963,7 @@ mod tests {
                 e.expr,
                 Expr::Identifier(Identifier {
                     name: "filesizea".to_owned(),
+                    name_span: 0..9,
                     operations: vec![],
                 }),
             );
@@ -970,6 +973,7 @@ mod tests {
                 e.expr,
                 Expr::Identifier(Identifier {
                     name: "entrypointa".to_owned(),
+                    name_span: 0..11,
                     operations: vec![],
                 }),
             );

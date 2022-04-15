@@ -262,6 +262,7 @@ mod tests {
     use crate::{
         expression::{ExpressionKind, Identifier, IdentifierOperation},
         tests::{parse, parse_err},
+        IdentifierOperationType,
     };
 
     #[test]
@@ -305,6 +306,7 @@ mod tests {
                 expr: Box::new(Expression {
                     expr: ExpressionKind::Identifier(Identifier {
                         name: "anya".to_owned(),
+                        name_span: 0..4,
                         operations: vec![],
                     }),
                     span: 0..4,
@@ -565,6 +567,7 @@ mod tests {
                     identifiers: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
                     iterator: ForIterator::Identifier(Identifier {
                         name: "toto".to_owned(),
+                        name_span: 17..21,
                         operations: vec![],
                     }),
                     body: Box::new(Expression {
@@ -607,7 +610,11 @@ mod tests {
             "a",
             ForIterator::Identifier(Identifier {
                 name: "i".to_owned(),
-                operations: vec![IdentifierOperation::Subfield("b".to_owned())],
+                name_span: 0..1,
+                operations: vec![IdentifierOperation {
+                    op: IdentifierOperationType::Subfield("b".to_owned()),
+                    span: 1..3,
+                }],
             }),
         );
         parse(

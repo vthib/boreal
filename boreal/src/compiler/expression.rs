@@ -1003,14 +1003,14 @@ fn compile_identifier(
         .operations
         .into_iter()
         .map(|op| {
-            Ok(match op {
-                parser::IdentifierOperation::Subscript(subscript) => {
+            Ok(match op.op {
+                parser::IdentifierOperationType::Subscript(subscript) => {
                     let subscript = compile_expression(compiler, *subscript)?;
 
                     IdentifierOperation::Subscript(Box::new(subscript.expr))
                 }
-                parser::IdentifierOperation::Subfield(s) => IdentifierOperation::Subfield(s),
-                parser::IdentifierOperation::FunctionCall(arguments) => {
+                parser::IdentifierOperationType::Subfield(s) => IdentifierOperation::Subfield(s),
+                parser::IdentifierOperationType::FunctionCall(arguments) => {
                     let arguments: Result<Vec<_>, _> = arguments
                         .into_iter()
                         .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))

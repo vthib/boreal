@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 mod boolean_expression;
 pub(super) use boolean_expression::boolean_expression as expression;
 mod common;
@@ -43,6 +45,9 @@ pub struct Identifier {
     /// Name of the identifier
     pub name: String,
 
+    /// Span covering the name of the identifier.
+    pub name_span: Range<usize>,
+
     /// Operations on the identifier, stored in the order of operations.
     ///
     /// For example, `pe.sections[2].name` would give `pe` for the name, and
@@ -52,7 +57,17 @@ pub struct Identifier {
 
 /// Operation applied on an identifier.
 #[derive(Clone, Debug, PartialEq)]
-pub enum IdentifierOperation {
+pub struct IdentifierOperation {
+    /// Type of the operation
+    pub op: IdentifierOperationType,
+
+    /// Span covering the operation
+    pub span: Range<usize>,
+}
+
+/// Type of operation applied on an identifier.
+#[derive(Clone, Debug, PartialEq)]
+pub enum IdentifierOperationType {
     /// Array subscript, i.e. `identifier[subscript]`.
     Subscript(Box<Expression>),
     /// Object subfield, i.e. `identifier.subfield`.
@@ -379,5 +394,5 @@ pub struct Expression {
     pub expr: ExpressionKind,
 
     /// Span of the whole expression in the input.
-    pub span: std::ops::Range<usize>,
+    pub span: Range<usize>,
 }

@@ -774,6 +774,7 @@ mod tests {
                 e.expr,
                 ExpressionKind::Identifier(Identifier {
                     name: "nota".to_owned(),
+                    name_span: 0..4,
                     operations: vec![]
                 }),
             );
@@ -783,6 +784,7 @@ mod tests {
                 e.expr,
                 ExpressionKind::Identifier(Identifier {
                     name: "defineda".to_owned(),
+                    name_span: 0..8,
                     operations: vec![]
                 }),
             );
@@ -792,6 +794,7 @@ mod tests {
                 e.expr,
                 ExpressionKind::Identifier(Identifier {
                     name: "truea".to_owned(),
+                    name_span: 0..5,
                     operations: vec![]
                 }),
             );
@@ -801,6 +804,7 @@ mod tests {
                 e.expr,
                 ExpressionKind::Identifier(Identifier {
                     name: "falsea".to_owned(),
+                    name_span: 0..6,
                     operations: vec![]
                 }),
             );
