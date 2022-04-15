@@ -6,7 +6,7 @@ mod module_tests;
 
 // Test evaluation of conditions
 mod evaluation;
-// Test related to imports
-mod imports;
+// Test related to modules
+mod modules;
 
 mod utils;

@@ -447,7 +447,7 @@ impl Evaluator<'_> {
             }
             Expression::ForIdentifiers { .. } => todo!(),
 
-            Expression::Identifier(_) => todo!(),
+            Expression::ModuleValue { .. } => todo!(),
 
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),

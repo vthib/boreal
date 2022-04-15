@@ -16,10 +16,35 @@ impl Module for Tests {
                 "constants",
                 Value::dictionary([
                     ("one", Value::Integer(1)),
-                    ("two", Value::Integer(2)),
-                    ("foo", Value::string("foo")),
-                    ("empty", Value::string("")),
+                    ("one_half", Value::Float(0.5)),
+                    ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
+                    ("str", Value::string("str")),
+                    ("true", Value::Boolean(true)),
                 ]),
+            ),
+            (
+                "lazy",
+                Value::function(
+                    Self::lazy,
+                    Type::dictionary([
+                        ("one", Type::Integer),
+                        ("one_half", Type::Float),
+                        ("regex", Type::Regex),
+                        ("str", Type::String),
+                        ("true", Type::Boolean),
+                        (
+                            "dict",
+                            Type::dictionary([("i", Type::Integer), ("s", Type::String)]),
+                        ),
+                        ("bool_array", Type::Array(Box::new(Type::String))),
+                        (
+                            "isum",
+                            Type::Function {
+                                return_type: Box::new(Type::Integer),
+                            },
+                        ),
+                    ]),
+                ),
             ),
             ("undefined", Value::function(Self::undefined, Type::Boolean)),
             (
@@ -137,5 +162,21 @@ impl Tests {
         } else {
             None
         }
+    }
+
+    fn lazy(_: Vec<Value>) -> Option<Value> {
+        Some(Value::dictionary([
+            ("one", Value::Integer(1)),
+            ("one_half", Value::Float(0.5)),
+            ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
+            ("str", Value::string("str")),
+            ("true", Value::Boolean(true)),
+            (
+                "dict",
+                Value::dictionary([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
+            ),
+            ("bool_array", Value::array(Self::string_array, Type::String)),
+            ("isum", Value::function(Self::isum, Type::Integer)),
+        ]))
     }
 }

@@ -8,7 +8,7 @@ use regex::Regex;
 
 use boreal_parser as parser;
 
-use super::{CompilationError, RuleCompiler};
+use super::{compile_identifier, CompilationError, RuleCompiler, ValueOperation};
 
 /// Type of a parsed expression
 ///
@@ -319,8 +319,13 @@ pub enum Expression {
         body: Box<Expression>,
     },
 
-    /// An identifier.
-    Identifier(Identifier),
+    /// A value coming from a module.
+    ModuleValue {
+        /// The value exported from the module
+        value: crate::module::Value,
+        /// List of operations to apply on the value, which the scanning context.
+        operations: Vec<ValueOperation>,
+    },
     /// A string.
     String(String),
     /// A regex.
@@ -746,11 +751,8 @@ pub(super) fn compile_expression(
 
         parser::ExpressionKind::ForIdentifiers {
             selection,
-
             identifiers,
-
             iterator,
-
             body,
         } => {
             let body = compile_expression(compiler, *body)?;
@@ -767,11 +769,11 @@ pub(super) fn compile_expression(
             })
         }
 
-        parser::ExpressionKind::Identifier(identifier) => Ok(Expr {
-            expr: Expression::Identifier(compile_identifier(compiler, identifier)?),
-            ty: Type::Undefined,
-            span,
-        }),
+        parser::ExpressionKind::Identifier(identifier) => {
+            let (expr, ty) = compile_identifier(compiler, identifier, &span)?;
+
+            Ok(Expr { expr, ty, span })
+        }
         parser::ExpressionKind::String(s) => Ok(Expr {
             expr: Expression::String(s),
             ty: Type::String,
@@ -935,7 +937,7 @@ fn compile_variable_set(
 /// Iterator for a 'for' expression over an identifier.
 #[derive(Debug)]
 pub enum ForIterator {
-    Identifier(Identifier),
+    Identifier(()),
     Range {
         from: Box<Expression>,
         to: Box<Expression>,
@@ -948,9 +950,11 @@ fn compile_for_iterator(
     selection: parser::ForIterator,
 ) -> Result<ForIterator, CompilationError> {
     match selection {
-        parser::ForIterator::Identifier(identifier) => Ok(ForIterator::Identifier(
-            compile_identifier(compiler, identifier)?,
-        )),
+        parser::ForIterator::Identifier(_) => {
+            // FIXME: handle this identifier
+            // let _ = compile_identifier(compiler, identifier)?,
+            Ok(ForIterator::Identifier(()))
+        }
         parser::ForIterator::Range { from, to } => {
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
@@ -967,64 +971,6 @@ fn compile_for_iterator(
                 .collect::<Result<Vec<_>, _>>()?,
         )),
     }
-}
-
-/// Parsed identifier used in expressions.
-#[derive(Debug)]
-pub struct Identifier {
-    /// Name of the identifier
-    name: String,
-
-    /// Operations on the identifier, stored in the order of operations.
-    ///
-    /// For example, `pe.sections[2].name` would give `pe` for the name, and
-    /// `[Subfield("sections"), Subscript(Expr::Number(2)), Subfield("name")]` for the operations.
-    operations: Vec<IdentifierOperation>,
-}
-
-/// Operations on identifiers.
-#[derive(Debug)]
-pub enum IdentifierOperation {
-    /// Array subscript, i.e. `identifier[subscript]`.
-    Subscript(Box<Expression>),
-    /// Object subfield, i.e. `identifier.subfield`.
-    Subfield(String),
-    /// Function call, i.e. `identifier(arguments)`.
-    FunctionCall(Vec<Expression>),
-}
-
-fn compile_identifier(
-    compiler: &RuleCompiler<'_>,
-    identifier: parser::Identifier,
-) -> Result<Identifier, CompilationError> {
-    let name = identifier.name;
-
-    let operations: Result<Vec<_>, _> = identifier
-        .operations
-        .into_iter()
-        .map(|op| {
-            Ok(match op.op {
-                parser::IdentifierOperationType::Subscript(subscript) => {
-                    let subscript = compile_expression(compiler, *subscript)?;
-
-                    IdentifierOperation::Subscript(Box::new(subscript.expr))
-                }
-                parser::IdentifierOperationType::Subfield(s) => IdentifierOperation::Subfield(s),
-                parser::IdentifierOperationType::FunctionCall(arguments) => {
-                    let arguments: Result<Vec<_>, _> = arguments
-                        .into_iter()
-                        .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))
-                        .collect();
-                    IdentifierOperation::FunctionCall(arguments?)
-                }
-            })
-        })
-        .collect();
-
-    Ok(Identifier {
-        name,
-        operations: operations?,
-    })
 }
 
 fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {

@@ -218,7 +218,7 @@ fn test_compilation_types() {
 
     compile_expr("\"a\" matches /b/", Type::Boolean);
 
-    compile_expr("defined b", Type::Boolean);
+    compile_expr("defined 5", Type::Boolean);
     compile_expr("not true", Type::Boolean);
 
     compile_expr("true and 1", Type::Boolean);
@@ -233,7 +233,8 @@ fn test_compilation_types() {
     compile_expr("$a at 100", Type::Boolean);
     compile_expr("$a in (0..10)", Type::Boolean);
 
-    compile_expr("pe", Type::Undefined);
+    // FIXME: remove undefined type
+    // compile_expr("pe", Type::Undefined);
 
     compile_expr("\"a\"", Type::String);
     compile_expr("/a/", Type::Regex);

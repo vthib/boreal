@@ -45,11 +45,48 @@ pub enum CompilationError {
     /// in the declarations.
     DuplicatedVariable(String),
 
+    /// Invalid type for an identifier
+    InvalidIdentifierType {
+        /// Type of the identifier
+        actual_type: String,
+        /// The expected type
+        expected_type: String,
+        /// The span of the identifier with the wrong type.
+        span: Range<usize>,
+    },
+
+    /// Invalid use of an identifier.
+    ///
+    /// This indicates that an identifier with a compound type was used as a value in an
+    /// expression.
+    ///
+    /// For example, `pe.foo > 0`, where `pe.foo` is an array, a dictionary or a function.
+    InvalidIdentifierUse {
+        /// The span of the identifier that is not used correctly.
+        span: Range<usize>,
+    },
+
+    /// Unknown identifier used in a rule.
+    UnknownIdentifier {
+        /// The name of the identifier that is not bound.
+        name: String,
+        /// Span of the identifier name
+        span: Range<usize>,
+    },
+
     /// Unknown import used in a file.
     ///
     /// The value is the name of the import that did not match any known module.
     // TODO: add span
     UnknownImport(String),
+
+    /// Unknown field used in a identifier.
+    UnknownIdentifierField {
+        /// The name of the field that is unknown.
+        field_name: String,
+        /// Span of the field access
+        span: Range<usize>,
+    },
 
     /// Unknown variable used in a rule.
     UnknownVariable {
@@ -74,7 +111,7 @@ pub enum CompilationError {
 impl CompilationError {
     #[must_use]
     pub(crate) fn to_diagnostic(&self) -> Diagnostic<()> {
-        match &self {
+        match self {
             // TODO: get span from parser
             Self::RegexError { expr, error } => Diagnostic::error()
                 .with_message(format!("regex `{}` failed to build: {:?}", expr, error)),
@@ -103,9 +140,31 @@ impl CompilationError {
             Self::DuplicatedVariable(name) => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name)),
 
+            Self::InvalidIdentifierType {
+                actual_type,
+                expected_type,
+                span,
+            } => Diagnostic::error()
+                .with_message("invalid identifier type")
+                .with_labels(vec![Label::primary((), span.clone()).with_message(
+                    format!("expected {}, found {}", expected_type, actual_type),
+                )]),
+
+            Self::InvalidIdentifierUse { span } => Diagnostic::error()
+                .with_message("wrong use of identifier")
+                .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::UnknownIdentifier { name, span } => Diagnostic::error()
+                .with_message(format!("unknown identifier \"{}\"", name))
+                .with_labels(vec![Label::primary((), span.clone())]),
+
             Self::UnknownImport(name) => {
                 Diagnostic::error().with_message(format!("unknown import {}", name))
             }
+
+            Self::UnknownIdentifierField { field_name, span } => Diagnostic::error()
+                .with_message(format!("unknown field \"{}\"", field_name))
+                .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnknownVariable {
                 variable_name,
