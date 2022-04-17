@@ -1,8 +1,8 @@
 //! Compiled expression used in a rule.
 //!
 //! This module contains all types describing a rule condition, built from the parsed AST.
+use std::collections::HashSet;
 use std::ops::Range;
-use std::{collections::HashSet, sync::Arc};
 
 use regex::Regex;
 
@@ -319,13 +319,24 @@ pub enum Expression {
         body: Box<Expression>,
     },
 
-    /// A value coming from a module.
-    ModuleValue {
-        /// The value exported from the module
-        value: Arc<crate::module::Value>,
-        /// List of operations to apply on the value, which the scanning context.
+    /// A value coming from an array exposed by a module.
+    // TODO: move the subscript operation outside of the vec and into this object
+    ModuleArray {
+        /// The function to call with the computed index
+        fun: fn(u64) -> Option<crate::module::Value>,
+        /// List of operations to apply.
         operations: Vec<ValueOperation>,
     },
+
+    /// A value coming from a function exposed by a module.
+    // TODO: move the function operation outside of the vec and into this object
+    ModuleFunction {
+        /// The function to call with the computed index
+        fun: fn(Vec<crate::module::Value>) -> Option<crate::module::Value>,
+        /// List of operations to apply.
+        operations: Vec<ValueOperation>,
+    },
+
     /// A string.
     String(String),
     /// A regex.

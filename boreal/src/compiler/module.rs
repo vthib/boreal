@@ -44,29 +44,61 @@ pub(super) fn compile_identifier(
         }
     };
 
-    let mut previous_span = identifier.name_span.clone();
-    let mut checker = TypeChecker::new(&module_value);
+    let mut module_use = ModuleUse {
+        compiler,
+        last_immediate_value: &module_value,
+        current_value: ValueOrType::Value(&module_value),
+        operations: Vec::with_capacity(identifier.operations.len()),
+        current_span: identifier.name_span.clone(),
+    };
 
-    let mut operations = Vec::with_capacity(identifier.operations.len());
     for op in identifier.operations.into_iter() {
+        module_use.add_operation(op)?;
+    }
+
+    module_use
+        .into_expression()
+        .ok_or_else(|| CompilationError::InvalidIdentifierUse {
+            span: identifier_span.clone(),
+        })
+}
+
+struct ModuleUse<'a> {
+    compiler: &'a RuleCompiler<'a>,
+    last_immediate_value: &'a Value,
+    current_value: ValueOrType<'a>,
+    operations: Vec<ValueOperation>,
+    current_span: Range<usize>,
+}
+
+impl ModuleUse<'_> {
+    fn add_operation(&mut self, op: parser::IdentifierOperation) -> Result<(), CompilationError> {
         let res = match op.op {
             parser::IdentifierOperationType::Subfield(subfield) => {
-                let res = checker.subfield(&subfield);
-                operations.push(ValueOperation::Subfield(subfield.to_string()));
+                let res = self.current_value.subfield(&subfield);
+                match self.current_value {
+                    ValueOrType::Value(v) => self.last_immediate_value = v,
+                    ValueOrType::Type(_) => {
+                        self.operations
+                            .push(ValueOperation::Subfield(subfield.to_string()));
+                    }
+                };
                 res
             }
             parser::IdentifierOperationType::Subscript(subscript) => {
-                let subscript = compile_expression(compiler, *subscript)?;
-                operations.push(ValueOperation::Subscript(Box::new(subscript.expr)));
-                checker.subscript()
+                let subscript = compile_expression(self.compiler, *subscript)?;
+                self.operations
+                    .push(ValueOperation::Subscript(Box::new(subscript.expr)));
+                self.current_value.subscript()
             }
             parser::IdentifierOperationType::FunctionCall(arguments) => {
                 let arguments: Result<Vec<_>, _> = arguments
                     .into_iter()
-                    .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))
+                    .map(|expr| compile_expression(self.compiler, expr).map(|v| v.expr))
                     .collect();
-                operations.push(ValueOperation::FunctionCall(arguments?));
-                checker.function_call()
+                self.operations
+                    .push(ValueOperation::FunctionCall(arguments?));
+                self.current_value.function_call()
             }
         };
 
@@ -84,35 +116,43 @@ pub(super) fn compile_identifier(
                 return Err(CompilationError::InvalidIdentifierType {
                     actual_type,
                     expected_type,
-                    span: Range {
-                        start: identifier.name_span.start,
-                        end: previous_span.end,
-                    },
+                    span: self.current_span.clone(),
                 });
             }
             Ok(()) => (),
         };
-        previous_span = op.span.clone();
+        self.current_span.end = op.span.end;
+        Ok(())
     }
 
-    // TODO: if we resolved up to a primitive, returning directly the right expression would be
-    // better.
-    let expr_type = match checker.into_expression_type() {
-        Some(ty) => ty,
-        None => {
-            return Err(CompilationError::InvalidIdentifierUse {
-                span: identifier_span.clone(),
-            })
-        }
-    };
+    fn into_expression(self) -> Option<(Expression, Type)> {
+        let ty = self.current_value.into_expression_type()?;
 
-    Ok((
-        Expression::ModuleValue {
-            value: module_value,
-            operations,
-        },
-        expr_type,
-    ))
+        let expr = match self.last_immediate_value {
+            // Those are all primitive values. This means there are no operations applied, and
+            // we can directly generate a primitive expression.
+            Value::Integer(v) => Expression::Number(*v),
+            Value::Float(v) => Expression::Double(*v),
+            Value::String(v) => Expression::String(v.to_owned()),
+            Value::Regex(v) => Expression::Regex(v.to_owned()),
+            Value::Boolean(v) => Expression::Boolean(*v),
+
+            // There is no legitimate situation where we can end up with a dictionary
+            // as the last immediate value.
+            Value::Dictionary(_) => return None,
+
+            Value::Array { on_scan, .. } => Expression::ModuleArray {
+                fun: *on_scan,
+                operations: self.operations,
+            },
+            Value::Function { fun, .. } => Expression::ModuleFunction {
+                fun: *fun,
+                operations: self.operations,
+            },
+        };
+
+        Some((expr, ty))
+    }
 }
 
 /// Used to type-check use of a module in a rule.
@@ -120,7 +160,7 @@ pub(super) fn compile_identifier(
 /// Tries to keep a proper [`Value`] for as long as possible, so that the compiled expression
 /// can be optimized if possible (if the end value is a primitive of a function returning a
 /// primitive for example).
-enum TypeChecker<'a> {
+enum ValueOrType<'a> {
     /// Currently value, if available.
     Value(&'a Value),
     /// Otherwise, type the expression will have when evaluated.
@@ -135,11 +175,7 @@ enum TypeError {
     },
 }
 
-impl<'a> TypeChecker<'a> {
-    fn new(value: &'a Value) -> Self {
-        Self::Value(value)
-    }
-
+impl ValueOrType<'_> {
     fn subfield(&mut self, subfield: &str) -> Result<(), TypeError> {
         match self {
             Self::Value(value) => match value {
