@@ -34,13 +34,38 @@ impl Module for Tests {
                         ("true", Type::Boolean),
                         (
                             "dict",
-                            Type::dictionary([("i", Type::Integer), ("s", Type::String)]),
+                            Type::dictionary([
+                                ("i", Type::Integer),
+                                ("s", Type::String),
+                                // Declared here, but not exposed on evaluation
+                                ("oops", Type::Boolean),
+                            ]),
                         ),
-                        ("bool_array", Type::Array(Box::new(Type::String))),
+                        ("str_array", Type::Array(Box::new(Type::String))),
                         (
                             "isum",
                             Type::Function {
                                 return_type: Box::new(Type::Integer),
+                            },
+                        ),
+                        // Declared as a bool, but exposes an array
+                        ("fake_bool_to_array", Type::Boolean),
+                        // Declared as a bool, but exposes a dict
+                        ("fake_bool_to_dict", Type::Boolean),
+                        // Declared as a bool, but exposes a function
+                        ("fake_bool_to_fun", Type::Boolean),
+                        // Declare as a dict, but exposes a bool
+                        (
+                            "fake_dict_to_bool",
+                            Type::dictionary([("i", Type::Integer)]),
+                        ),
+                        // Declare as an array, but exposes a bool
+                        ("fake_array_to_bool", Type::Array(Box::new(Type::String))),
+                        // Declare as a function, but exposes a bool
+                        (
+                            "fake_fun_to_bool",
+                            Type::Function {
+                                return_type: Box::new(Type::Boolean),
                             },
                         ),
                     ]),
@@ -175,8 +200,20 @@ impl Tests {
                 "dict",
                 Value::dictionary([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
             ),
-            ("bool_array", Value::array(Self::string_array, Type::String)),
+            ("str_array", Value::array(Self::string_array, Type::String)),
             ("isum", Value::function(Self::isum, Type::Integer)),
+            (
+                "fake_bool_to_array",
+                Value::array(Self::integer_array, Type::Integer),
+            ),
+            ("fake_bool_to_dict", Value::dictionary([])),
+            (
+                "fake_bool_to_fun",
+                Value::function(Self::empty, Type::Boolean),
+            ),
+            ("fake_dict_to_bool", Value::Boolean(false)),
+            ("fake_array_to_bool", Value::Boolean(false)),
+            ("fake_fun_to_bool", Value::Boolean(false)),
         ]))
     }
 }

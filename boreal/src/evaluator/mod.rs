@@ -13,6 +13,8 @@ use regex::Regex;
 
 use crate::compiler::{Expression, ForSelection, Rule, VariableIndex};
 
+mod module;
+use module::{evaluate_module_array, evaluate_module_function};
 mod variable;
 use variable::VariableEvaluation;
 
@@ -453,8 +455,16 @@ impl Evaluator<'_> {
             }
             Expression::ForIdentifiers { .. } => todo!(),
 
-            Expression::ModuleArray { .. } => todo!(),
-            Expression::ModuleFunction { .. } => todo!(),
+            Expression::ModuleArray {
+                fun,
+                subscript,
+                operations,
+            } => evaluate_module_array(self, *fun, subscript, operations),
+            Expression::ModuleFunction {
+                fun,
+                arguments,
+                operations,
+            } => evaluate_module_function(self, *fun, arguments, operations),
 
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
