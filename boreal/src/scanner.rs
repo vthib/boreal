@@ -29,7 +29,9 @@ impl Scanner {
     /// Add a module
     pub fn add_module<M: crate::module::Module>(&mut self, module: M) {
         let m = compile_module(module);
-        let _ = self.modules.insert(m.name.clone(), m);
+        // Ignore the result: that would mean the same module is already registered.
+        // FIXME: this is done to allow the double "import" in a rule, but this can be improved.
+        let _res = self.modules.insert(m.name.clone(), m);
     }
 
     /// Add rules to the scanner from a string.

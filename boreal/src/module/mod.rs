@@ -147,6 +147,7 @@ impl Value {
         Value::String(v.into())
     }
 
+    #[must_use]
     pub fn dictionary<const N: usize>(v: [(&'static str, Value); N]) -> Self {
         Value::Dictionary(v.into())
     }
@@ -177,6 +178,7 @@ pub enum Type {
 }
 
 impl Type {
+    #[must_use]
     pub fn dictionary<const N: usize>(v: [(&'static str, Type); N]) -> Self {
         Type::Dictionary(v.into())
     }

@@ -22,6 +22,8 @@ pub enum ValueOperation {
     FunctionCall(Vec<Expression>),
 }
 
+// XXX: I want to pass by value, as in the future, we might want to keep the owned module around.
+#[allow(clippy::needless_pass_by_value)]
 pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
     Module {
         name: module.get_name(),
@@ -52,7 +54,7 @@ pub(super) fn compile_identifier(
         current_span: identifier.name_span.clone(),
     };
 
-    for op in identifier.operations.into_iter() {
+    for op in identifier.operations {
         module_use.add_operation(op)?;
     }
 
@@ -116,7 +118,7 @@ impl ModuleUse<'_> {
         match res {
             Err(TypeError::UnknownSubfield(subfield)) => {
                 return Err(CompilationError::UnknownIdentifierField {
-                    field_name: subfield.to_string(),
+                    field_name: subfield,
                     span: op.span,
                 });
             }
@@ -144,8 +146,8 @@ impl ModuleUse<'_> {
             // we can directly generate a primitive expression.
             Value::Integer(v) => Expression::Number(*v),
             Value::Float(v) => Expression::Double(*v),
-            Value::String(v) => Expression::String(v.to_owned()),
-            Value::Regex(v) => Expression::Regex(v.to_owned()),
+            Value::String(v) => Expression::String(v.clone()),
+            Value::Regex(v) => Expression::Regex(v.clone()),
             Value::Boolean(v) => Expression::Boolean(*v),
 
             // There is no legitimate situation where we can end up with a dictionary
@@ -154,14 +156,13 @@ impl ModuleUse<'_> {
 
             Value::Array { on_scan, .. } => {
                 let mut ops = self.operations.into_iter();
-                let subscript = match ops.next() {
-                    Some(ValueOperation::Subscript(v)) => v,
-                    _ => {
-                        // This is unreachable code, but avoid a call to unreachable!() to prevent
-                        // panic code.
-                        debug_assert!(false);
-                        return None;
-                    }
+                let subscript = if let Some(ValueOperation::Subscript(v)) = ops.next() {
+                    v
+                } else {
+                    // This is unreachable code, but avoid a call to unreachable!() to prevent
+                    // panic code.
+                    debug_assert!(false);
+                    return None;
                 };
                 Expression::ModuleArray {
                     fun: *on_scan,
@@ -171,14 +172,13 @@ impl ModuleUse<'_> {
             }
             Value::Function { fun, .. } => {
                 let mut ops = self.operations.into_iter();
-                let arguments = match ops.next() {
-                    Some(ValueOperation::FunctionCall(v)) => v,
-                    _ => {
-                        // This is unreachable code, but avoid a call to unreachable!() to prevent
-                        // panic code.
-                        debug_assert!(false);
-                        return None;
-                    }
+                let arguments = if let Some(ValueOperation::FunctionCall(v)) = ops.next() {
+                    v
+                } else {
+                    // This is unreachable code, but avoid a call to unreachable!() to prevent
+                    // panic code.
+                    debug_assert!(false);
+                    return None;
                 };
                 Expression::ModuleFunction {
                     fun: *fun,
@@ -215,26 +215,28 @@ enum TypeError {
 impl ValueOrType<'_> {
     fn subfield(&mut self, subfield: &str) -> Result<(), TypeError> {
         match self {
-            Self::Value(value) => match value {
-                Value::Dictionary(map) => match map.get(&*subfield) {
-                    Some(v) => {
-                        *self = Self::Value(v);
-                        return Ok(());
+            Self::Value(value) => {
+                if let Value::Dictionary(map) = value {
+                    match map.get(&*subfield) {
+                        Some(v) => {
+                            *self = Self::Value(v);
+                            return Ok(());
+                        }
+                        None => return Err(TypeError::UnknownSubfield(subfield.to_string())),
                     }
-                    None => return Err(TypeError::UnknownSubfield(subfield.to_string())),
-                },
-                _ => (),
-            },
-            Self::Type(ty) => match ty {
-                ValueType::Dictionary(map) => match map.get(&*subfield) {
-                    Some(v) => {
-                        *self = Self::Type(v);
-                        return Ok(());
+                }
+            }
+            Self::Type(ty) => {
+                if let ValueType::Dictionary(map) = ty {
+                    match map.get(&*subfield) {
+                        Some(v) => {
+                            *self = Self::Type(v);
+                            return Ok(());
+                        }
+                        None => return Err(TypeError::UnknownSubfield(subfield.to_string())),
                     }
-                    None => return Err(TypeError::UnknownSubfield(subfield.to_string())),
-                },
-                _ => (),
-            },
+                }
+            }
         };
 
         Err(TypeError::WrongType {
@@ -245,20 +247,18 @@ impl ValueOrType<'_> {
 
     fn subscript(&mut self) -> Result<(), TypeError> {
         match self {
-            Self::Value(value) => match value {
-                Value::Array { value_type, .. } => {
+            Self::Value(value) => {
+                if let Value::Array { value_type, .. } = value {
                     *self = Self::Type(value_type);
                     return Ok(());
                 }
-                _ => (),
-            },
-            Self::Type(ty) => match ty {
-                ValueType::Array(value_type) => {
+            }
+            Self::Type(ty) => {
+                if let ValueType::Array(value_type) = ty {
                     *self = Self::Type(value_type);
                     return Ok(());
                 }
-                _ => (),
-            },
+            }
         }
 
         Err(TypeError::WrongType {
@@ -269,20 +269,18 @@ impl ValueOrType<'_> {
 
     fn function_call(&mut self) -> Result<(), TypeError> {
         match self {
-            Self::Value(value) => match value {
-                Value::Function { return_type, .. } => {
+            Self::Value(value) => {
+                if let Value::Function { return_type, .. } = value {
                     *self = Self::Type(return_type);
                     return Ok(());
                 }
-                _ => (),
-            },
-            Self::Type(ty) => match ty {
-                ValueType::Function { return_type } => {
+            }
+            Self::Type(ty) => {
+                if let ValueType::Function { return_type } = ty {
                     *self = Self::Type(return_type);
                     return Ok(());
                 }
-                _ => (),
-            },
+            }
         }
 
         Err(TypeError::WrongType {
