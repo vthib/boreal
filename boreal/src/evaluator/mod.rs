@@ -17,15 +17,15 @@ mod variable;
 use variable::VariableEvaluation;
 
 #[derive(Debug)]
-enum Value<'a> {
+enum Value {
     Number(i64),
     Float(f64),
-    String(&'a str),
-    Regex(&'a Regex),
+    String(String),
+    Regex(Regex),
     Boolean(bool),
 }
 
-impl Value<'_> {
+impl Value {
     fn to_bool(&self) -> bool {
         match self {
             Self::Boolean(b) => *b,
@@ -36,16 +36,16 @@ impl Value<'_> {
         }
     }
 
-    fn unwrap_number(&self) -> Option<i64> {
+    fn unwrap_number(self) -> Option<i64> {
         match self {
-            Self::Number(v) => Some(*v),
+            Self::Number(v) => Some(v),
             _ => None,
         }
     }
 
-    fn unwrap_string(&self) -> Option<&str> {
+    fn unwrap_string(self) -> Option<String> {
         match self {
-            Self::String(v) => Some(*v),
+            Self::String(v) => Some(v),
             _ => None,
         }
     }
@@ -88,7 +88,7 @@ macro_rules! string_op {
             let right = right.to_lowercase();
             Some(Value::Boolean(left.$method(&right)))
         } else {
-            Some(Value::Boolean(left.$method(right)))
+            Some(Value::Boolean(left.$method(&right)))
         }
     }};
 }
@@ -132,7 +132,7 @@ impl Evaluator<'_> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn evaluate_expr<'b>(&mut self, expr: &'b Expression) -> Option<Value<'b>> {
+    fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
         match expr {
             Expression::Filesize => todo!(),
             Expression::Entrypoint => todo!(),
@@ -452,16 +452,16 @@ impl Evaluator<'_> {
 
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
-            Expression::String(v) => Some(Value::String(v)),
-            Expression::Regex(v) => Some(Value::Regex(v)),
+            Expression::String(v) => Some(Value::String(v.clone())),
+            Expression::Regex(v) => Some(Value::Regex(v.clone())),
             Expression::Boolean(v) => Some(Value::Boolean(*v)),
         }
     }
 
-    fn evaluate_for_selection<'b>(
+    fn evaluate_for_selection(
         &mut self,
-        selection: &'b ForSelection,
-    ) -> Option<ForSelectionEvaluation<'b>> {
+        selection: &ForSelection,
+    ) -> Option<ForSelectionEvaluation> {
         use ForSelectionEvaluation as FSEvaluation;
         use ForSelectionEvaluator as FSEvaluator;
 
@@ -498,12 +498,12 @@ impl Evaluator<'_> {
         }
     }
 
-    fn evaluate_for_iterator<'b, I>(
+    fn evaluate_for_iterator<I>(
         &mut self,
         mut selection: ForSelectionEvaluator,
-        body: &'b Expression,
+        body: &Expression,
         iter: I,
-    ) -> Value<'b>
+    ) -> Value
     where
         I: IntoIterator<Item = usize>,
     {
@@ -520,13 +520,13 @@ impl Evaluator<'_> {
 }
 
 /// Result of the evaluation of a for selection.
-enum ForSelectionEvaluation<'a> {
+enum ForSelectionEvaluation {
     /// An evaluator that accumulates evaluations of each variable, and return a result as early
     /// as possible.
     Evaluator(ForSelectionEvaluator),
 
     /// Result of the for selection if available immediately, without needing any evaluation.
-    Value(Value<'a>),
+    Value(Value),
 }
 
 /// Evaluator of a for selection
