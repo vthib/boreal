@@ -320,20 +320,22 @@ pub enum Expression {
     },
 
     /// A value coming from an array exposed by a module.
-    // TODO: move the subscript operation outside of the vec and into this object
     ModuleArray {
         /// The function to call with the computed index
         fun: fn(u64) -> Option<crate::module::Value>,
-        /// List of operations to apply.
+        /// The expression giving the index to use with the function.
+        subscript: Box<Expression>,
+        /// List of operations to apply on the value returned by the function.
         operations: Vec<ValueOperation>,
     },
 
     /// A value coming from a function exposed by a module.
-    // TODO: move the function operation outside of the vec and into this object
     ModuleFunction {
         /// The function to call with the computed index
         fun: fn(Vec<crate::module::Value>) -> Option<crate::module::Value>,
-        /// List of operations to apply.
+        /// The expressions that provides the arguments of the function.
+        arguments: Vec<Expression>,
+        /// List of operations to apply on the value returned by the function.
         operations: Vec<ValueOperation>,
     },
 

@@ -65,9 +65,18 @@ pub(super) fn compile_identifier(
 
 struct ModuleUse<'a> {
     compiler: &'a RuleCompiler<'a>,
+
+    // Last value to can be computed immediately (does not depend on a function to be called during
+    // scanning).
     last_immediate_value: &'a Value,
+
+    // Current value (or type).
     current_value: ValueOrType<'a>,
+
+    // Operations that will need to be evaluated at scanning time.
     operations: Vec<ValueOperation>,
+
+    // Current span of the module + added operations.
     current_span: Range<usize>,
 }
 
@@ -86,12 +95,14 @@ impl ModuleUse<'_> {
                 res
             }
             parser::IdentifierOperationType::Subscript(subscript) => {
+                // TODO: type check this expr
                 let subscript = compile_expression(self.compiler, *subscript)?;
                 self.operations
                     .push(ValueOperation::Subscript(Box::new(subscript.expr)));
                 self.current_value.subscript()
             }
             parser::IdentifierOperationType::FunctionCall(arguments) => {
+                // TODO: type check those expr
                 let arguments: Result<Vec<_>, _> = arguments
                     .into_iter()
                     .map(|expr| compile_expression(self.compiler, expr).map(|v| v.expr))
@@ -141,14 +152,40 @@ impl ModuleUse<'_> {
             // as the last immediate value.
             Value::Dictionary(_) => return None,
 
-            Value::Array { on_scan, .. } => Expression::ModuleArray {
-                fun: *on_scan,
-                operations: self.operations,
-            },
-            Value::Function { fun, .. } => Expression::ModuleFunction {
-                fun: *fun,
-                operations: self.operations,
-            },
+            Value::Array { on_scan, .. } => {
+                let mut ops = self.operations.into_iter();
+                let subscript = match ops.next() {
+                    Some(ValueOperation::Subscript(v)) => v,
+                    _ => {
+                        // This is unreachable code, but avoid a call to unreachable!() to prevent
+                        // panic code.
+                        debug_assert!(false);
+                        return None;
+                    }
+                };
+                Expression::ModuleArray {
+                    fun: *on_scan,
+                    subscript,
+                    operations: ops.collect(),
+                }
+            }
+            Value::Function { fun, .. } => {
+                let mut ops = self.operations.into_iter();
+                let arguments = match ops.next() {
+                    Some(ValueOperation::FunctionCall(v)) => v,
+                    _ => {
+                        // This is unreachable code, but avoid a call to unreachable!() to prevent
+                        // panic code.
+                        debug_assert!(false);
+                        return None;
+                    }
+                };
+                Expression::ModuleFunction {
+                    fun: *fun,
+                    arguments,
+                    operations: ops.collect(),
+                }
+            }
         };
 
         Some((expr, ty))
