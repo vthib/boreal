@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 use boreal_parser as parser;
 
@@ -8,7 +8,7 @@ use crate::module::{self, Type as ValueType, Value};
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub value: Value,
+    pub value: Arc<Value>,
 }
 
 /// Operations on identifiers.
@@ -25,7 +25,7 @@ pub enum ValueOperation {
 pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
     Module {
         name: module.get_name(),
-        value: module.get_value(),
+        value: Arc::new(module.get_value()),
     }
 }
 
@@ -34,8 +34,8 @@ pub(super) fn compile_identifier(
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
-    let mut value = match compiler.file.symbols.get(&identifier.name) {
-        Some(v) => &v.value,
+    let module_value = match compiler.file.symbols.get(&identifier.name) {
+        Some(v) => Arc::clone(&v.value),
         None => {
             return Err(CompilationError::UnknownIdentifier {
                 name: identifier.name,
@@ -45,8 +45,11 @@ pub(super) fn compile_identifier(
     };
 
     let ops = identifier.operations;
+    let mut operations = Vec::with_capacity(ops.len());
 
     let mut previous_span = identifier.name_span.clone();
+    let mut value = &*module_value;
+
     // Resolve the value as deep as possible, until reaching either the final value, or a lazy
     // evaluated value.
     let mut i = 0;
@@ -74,6 +77,7 @@ pub(super) fn compile_identifier(
                         })
                     }
                 };
+                operations.push(ValueOperation::Subfield(subfield.to_string()));
             }
             _ => break,
         }
@@ -84,7 +88,6 @@ pub(super) fn compile_identifier(
     let mut ty = &value_type;
 
     // Compile the rest of the operations, and store them to evaluate them when scanning.
-    let mut operations = Vec::with_capacity(ops.len() - i);
     for op in ops.into_iter().skip(i) {
         match op.op {
             parser::IdentifierOperationType::Subfield(subfield) => {
@@ -159,6 +162,8 @@ pub(super) fn compile_identifier(
         previous_span = op.span.clone();
     }
 
+    // TODO: if we resolved up to a primitive, returning directly the right expression would be
+    // better.
     let expr_type = match ty {
         ValueType::Integer => Type::Integer,
         ValueType::Float => Type::Float,
@@ -173,10 +178,9 @@ pub(super) fn compile_identifier(
         }
     };
 
-    // FIXME: value should not be cloned
     Ok((
         Expression::ModuleValue {
-            value: value.clone(),
+            value: module_value,
             operations,
         },
         expr_type,

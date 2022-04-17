@@ -1,8 +1,8 @@
 //! Compiled expression used in a rule.
 //!
 //! This module contains all types describing a rule condition, built from the parsed AST.
-use std::collections::HashSet;
 use std::ops::Range;
+use std::{collections::HashSet, sync::Arc};
 
 use regex::Regex;
 
@@ -322,7 +322,7 @@ pub enum Expression {
     /// A value coming from a module.
     ModuleValue {
         /// The value exported from the module
-        value: crate::module::Value,
+        value: Arc<crate::module::Value>,
         /// List of operations to apply on the value, which the scanning context.
         operations: Vec<ValueOperation>,
     },

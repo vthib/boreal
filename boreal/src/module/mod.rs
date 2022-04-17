@@ -67,7 +67,7 @@ pub trait Module {
 /// A value bound to an identifier.
 ///
 /// This object represents an immediately resolvable value for an identifier.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Value {
     /// An integer
     Integer(i64),
