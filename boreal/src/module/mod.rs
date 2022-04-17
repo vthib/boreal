@@ -161,28 +161,10 @@ impl Value {
     pub fn function(fun: fn(Vec<Value>) -> Option<Value>, return_type: Type) -> Self {
         Value::Function { fun, return_type }
     }
-
-    pub fn get_type(&self) -> Type {
-        match self {
-            Value::Integer(_) => Type::Integer,
-            Value::Float(_) => Type::Float,
-            Value::String(_) => Type::String,
-            Value::Regex(_) => Type::Regex,
-            Value::Boolean(_) => Type::Boolean,
-            Value::Array { value_type, .. } => Type::Array(Box::new(value_type.clone())),
-            Value::Dictionary(map) => {
-                // FIXME: This is horrible, find a better solution
-                Type::Dictionary(map.iter().map(|(k, v)| (*k, v.get_type())).collect())
-            }
-            Value::Function { return_type, .. } => Type::Function {
-                return_type: Box::new(return_type.clone()),
-            },
-        }
-    }
 }
 
 /// Type of a value returned during scanning.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Type {
     Integer,
     Float,
@@ -197,20 +179,6 @@ pub enum Type {
 impl Type {
     pub fn dictionary<const N: usize>(v: [(&'static str, Type); N]) -> Self {
         Type::Dictionary(v.into())
-    }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            Self::Integer => "integer",
-            Self::Float => "float",
-            Self::String => "string",
-            Self::Regex => "regex",
-            Self::Boolean => "boolean",
-            Self::Array { .. } => "array",
-            Self::Dictionary(_) => "dictionary",
-            Self::Function { .. } => "function",
-        }
-        .to_owned()
     }
 }
 
