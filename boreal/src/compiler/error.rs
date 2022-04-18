@@ -53,6 +53,16 @@ pub enum CompilationError {
         span: Range<usize>,
     },
 
+    /// Invalid type for an expression used as an index in an identifier.
+    ///
+    /// For example, `pe.section[true]`
+    InvalidIdentifierIndexType {
+        /// Type of the expression
+        ty: String,
+        /// Span of the expression
+        span: Range<usize>,
+    },
+
     /// Invalid type for an identifier
     InvalidIdentifierType {
         /// Type of the identifier
@@ -147,6 +157,12 @@ impl CompilationError {
 
             Self::DuplicatedVariable(name) => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name)),
+
+            Self::InvalidIdentifierIndexType { ty, span } => Diagnostic::error()
+                .with_message("expected an expression of type integer")
+                .with_labels(vec![
+                    Label::primary((), span.clone()).with_message(format!("this has type {}", ty))
+                ]),
 
             Self::InvalidIdentifierType {
                 actual_type,

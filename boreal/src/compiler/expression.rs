@@ -44,7 +44,7 @@ pub(super) struct Expr {
     pub(super) ty: Type,
 
     // Span of the expression.
-    span: Range<usize>,
+    pub(super) span: Range<usize>,
 }
 
 impl Expr {

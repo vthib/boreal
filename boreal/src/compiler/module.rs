@@ -97,8 +97,14 @@ impl ModuleUse<'_> {
                 res
             }
             parser::IdentifierOperationType::Subscript(subscript) => {
-                // TODO: type check this expr
                 let subscript = compile_expression(self.compiler, *subscript)?;
+                if subscript.ty != Type::Integer {
+                    return Err(CompilationError::InvalidIdentifierIndexType {
+                        ty: subscript.ty.to_string(),
+                        span: subscript.span,
+                    });
+                }
+
                 self.operations
                     .push(ValueOperation::Subscript(Box::new(subscript.expr)));
                 self.current_value.subscript()

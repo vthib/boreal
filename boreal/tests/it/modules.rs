@@ -1,6 +1,20 @@
 use crate::utils::{check, check_boreal, check_err};
 
 #[track_caller]
+fn check_tests_err(condition: &str, expected_err: &str) {
+    check_err(
+        &format!(
+            r#"import "tests"
+rule foo {{
+    condition: {}
+}}"#,
+            condition
+        ),
+        expected_err,
+    );
+}
+
+#[track_caller]
 fn check_ok(condition: &str) {
     check_boreal(
         &format!(
@@ -44,117 +58,62 @@ rule foo { condition: true }"#,
 #[test]
 fn test_value_wrong_op() {
     // Field not existing in a dictionary
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.do_not_exist
-}"#,
-        "mem:4:21: error: unknown field \"do_not_exist\"",
+    check_tests_err(
+        "tests.do_not_exist",
+        "mem:3:21: error: unknown field \"do_not_exist\"",
     );
 
     // Using array syntax on a dictionary, scalar and function
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.constants[0]
-}"#,
-        "mem:4:16: error: invalid identifier type",
+    check_tests_err(
+        "tests.constants[0]",
+        "mem:3:16: error: invalid identifier type",
     );
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.constants.one[0]
-}"#,
-        "mem:4:16: error: invalid identifier type",
+    check_tests_err(
+        "tests.constants.one[0]",
+        "mem:3:16: error: invalid identifier type",
     );
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.isum[0]
-}"#,
-        "mem:4:16: error: invalid identifier type",
-    );
+    check_tests_err("tests.isum[0]", "mem:3:16: error: invalid identifier type");
 
     // Using dict syntax on a array, scalar and function
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.integer_array.foo
-}"#,
-        "mem:4:16: error: invalid identifier type",
+    check_tests_err(
+        "tests.integer_array.foo",
+        "mem:3:16: error: invalid identifier type",
     );
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.constants.one_half.bar
-}"#,
-        "mem:4:16: error: invalid identifier type",
+    check_tests_err(
+        "tests.constants.one_half.bar",
+        "mem:3:16: error: invalid identifier type",
     );
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.isum.foo
-}"#,
-        "mem:4:16: error: invalid identifier type",
-    );
+    check_tests_err("tests.isum.foo", "mem:3:16: error: invalid identifier type");
 
     // Using function call on dictionary, array and scalar
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.constants(5)
-}"#,
-        "mem:4:16: error: invalid identifier type",
+    check_tests_err(
+        "tests.constants(5)",
+        "mem:3:16: error: invalid identifier type",
     );
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.struct_array()
-}"#,
-        "mem:4:16: error: invalid identifier type",
+    check_tests_err(
+        "tests.struct_array()",
+        "mem:3:16: error: invalid identifier type",
     );
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.constants.regex(2, 3)
-}"#,
-        "mem:4:16: error: invalid identifier type",
+    check_tests_err(
+        "tests.constants.regex(2, 3)",
+        "mem:3:16: error: invalid identifier type",
     );
 
     // Cannot use compound values as expressions
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.constants > 0
-}"#,
-        "mem:4:16: error: wrong use of identifier",
+    check_tests_err(
+        "tests.constants > 0",
+        "mem:3:16: error: wrong use of identifier",
     );
-    check_err(
-        r#"import "tests"
-
-rule foo {
-    condition: tests.string_array > 0
-}"#,
-        "mem:4:16: error: wrong use of identifier",
+    check_tests_err(
+        "tests.string_array > 0",
+        "mem:3:16: error: wrong use of identifier",
     );
-    check_err(
-        r#"import "tests"
+    check_tests_err("tests.isum > 0", "mem:3:16: error: wrong use of identifier");
 
-rule foo {
-    condition: tests.isum > 0
-}"#,
-        "mem:4:16: error: wrong use of identifier",
+    // Array subscript must be an integer
+    check_tests_err(
+        "tests.string_array[/a/] > 0",
+        "mem:3:35: error: expected an expression of type integer",
     );
 }
 
@@ -162,16 +121,7 @@ rule foo {
 fn test_value_wrong_type() {
     #[track_caller]
     fn check_invalid_types(condition: &str) {
-        check_err(
-            &format!(
-                r#"import "tests"
-rule foo {{
-    condition: {}
-}}"#,
-                condition
-            ),
-            "error: expressions have invalid types",
-        );
+        check_tests_err(condition, "error: expressions have invalid types");
     }
 
     // Check direct primitives
@@ -241,83 +191,69 @@ fn test_eval() {
 
 #[test]
 fn test_functions() {
-    #[track_caller]
-    fn check_invalid_args(condition: &str, expected_err: &str) {
-        check_err(
-            &format!(
-                r#"import "tests"
-rule foo {{
-    condition: {}
-}}"#,
-                condition
-            ),
-            expected_err,
-        );
-    }
-
     // Check direct primitives
-    check_invalid_args(
+    check_tests_err(
         "tests.lazy(3).constants.one",
         "mem:3:26: error: invalid arguments types: [integer]",
     );
     check_ok("tests.lazy().one");
 
-    check_invalid_args(
+    check_tests_err(
         "tests.match()",
         "mem:3:27: error: invalid arguments types: []",
     );
-    check_invalid_args(
+    check_tests_err(
         "tests.match(\"a\")",
         "mem:3:27: error: invalid arguments types: [string]",
     );
-    check_invalid_args(
+    check_tests_err(
         "tests.match(\"a\", true)",
         "mem:3:27: error: invalid arguments types: [string, boolean]",
     );
     check_ok("tests.match(\"a\", /a/)");
 
-    check_invalid_args(
+    check_tests_err(
         "tests.isum(2)",
         "mem:3:26: error: invalid arguments types: [integer]",
     );
-    check_invalid_args(
+    check_tests_err(
         "tests.isum(2, 3.5)",
         "mem:3:26: error: invalid arguments types: [integer, floating-point number]",
     );
-    check_invalid_args(
+    check_tests_err(
         "tests.isum(2, 3, 4, 5)",
         "mem:3:26: error: invalid arguments types: [integer, integer, integer, integer]",
     );
     check_ok("tests.isum(2, 3) == 5");
     check_ok("tests.isum(2, 3, -2) == 3");
 
-    check_invalid_args(
+    check_tests_err(
         "tests.fsum(2, 3)",
         "mem:3:26: error: invalid arguments types: [integer, integer]",
     );
-    check_invalid_args(
+    check_tests_err(
         "tests.fsum(2.5, 3)",
         "mem:3:26: error: invalid arguments types: [floating-point number, integer]",
     );
     check_ok("tests.fsum(2.5, 3.5) == 6.0");
-    check_invalid_args(
+    check_tests_err(
         "tests.fsum(2.5, 3.5, false)",
         "mem:3:26: error: invalid arguments types: [floating-point number, floating-point number, boolean]",
     );
     check_ok("tests.fsum(2.5, 3.5, 1) == 7.0");
 
-    check_invalid_args(
+    check_tests_err(
         "tests.empty(3)",
         "mem:3:27: error: invalid arguments types: [integer]",
     );
     check_ok("tests.empty() == \"\"");
 
-    check_invalid_args(
+    check_tests_err(
         "tests.log()",
         "mem:3:25: error: invalid arguments types: []",
     );
     check_ok("tests.log(3)");
-    check_invalid_args(
+    check_tests_err(
         "tests.log(/a/)",
         "mem:3:25: error: invalid arguments types: [regex]",
     );
