@@ -21,9 +21,6 @@ pub(super) enum Type {
     String,
     Regex,
     Boolean,
-    // TODO: afaict, we shouldn't need this type.
-    // It's used for the moment for unknown symbols.
-    Undefined,
 }
 
 impl std::fmt::Display for Type {
@@ -34,7 +31,6 @@ impl std::fmt::Display for Type {
             Self::String => "string",
             Self::Regex => "regex",
             Self::Boolean => "boolean",
-            Self::Undefined => "undefined",
         })
     }
 }
@@ -53,7 +49,7 @@ pub(super) struct Expr {
 
 impl Expr {
     fn check_type(&self, expected_type: Type) -> Result<(), CompilationError> {
-        if self.ty != expected_type && self.ty != Type::Undefined {
+        if self.ty != expected_type {
             return Err(CompilationError::ExpressionInvalidType {
                 ty: self.ty.to_string(),
                 expected_type: expected_type.to_string(),
@@ -816,14 +812,8 @@ where
 
     let ty = match (a.ty, b.ty) {
         (Type::Integer, Type::Integer) => Type::Integer,
-        (Type::Undefined, Type::Integer) | (Type::Integer, Type::Undefined) => Type::Integer,
         (Type::Float | Type::Integer, Type::Integer | Type::Float) => Type::Float,
-        (Type::Undefined, Type::Float) | (Type::Float, Type::Undefined) => Type::Float,
         (Type::String, Type::String) if string_allowed => Type::String,
-        (Type::Undefined, Type::String) | (Type::String, Type::Undefined) if string_allowed => {
-            Type::String
-        }
-        (Type::Undefined, Type::Undefined) => Type::Undefined,
         _ => {
             return Err(CompilationError::ExpressionIncompatibleTypes {
                 left_type: a.ty.to_string(),
