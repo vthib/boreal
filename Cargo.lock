@@ -586,8 +586,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 [[package]]
 name = "yara"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce5cb5a313f20e40a341a815882cb513bbc3bc3f34bd26fea014785626803f93"
+source = "git+https://github.com/ikrivosheev/yara-rust?branch=feature/upgrade_yara#5712c0de93f81c9d26b31795b5859a895689350f"
 dependencies = [
  "bitflags",
  "lazy_static",
@@ -598,8 +597,7 @@ dependencies = [
 [[package]]
 name = "yara-sys"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3780dfecead3d8f66d058f31712ec5ae55c990af924069f4376d33a52a235e30"
+source = "git+https://github.com/ikrivosheev/yara-rust?branch=feature/upgrade_yara#5712c0de93f81c9d26b31795b5859a895689350f"
 dependencies = [
  "bindgen",
  "cc",
