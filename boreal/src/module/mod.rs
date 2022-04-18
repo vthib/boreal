@@ -172,15 +172,29 @@ pub enum Type {
     String,
     Regex,
     Boolean,
-    Array(Box<Type>),
     Dictionary(HashMap<&'static str, Type>),
+    Array { value_type: Box<Type> },
     Function { return_type: Box<Type> },
 }
 
 impl Type {
     #[must_use]
     pub fn dictionary<const N: usize>(v: [(&'static str, Type); N]) -> Self {
-        Type::Dictionary(v.into())
+        Self::Dictionary(v.into())
+    }
+
+    #[must_use]
+    pub fn array(value_type: Type) -> Self {
+        Self::Array {
+            value_type: Box::new(value_type),
+        }
+    }
+
+    #[must_use]
+    pub fn function(return_type: Type) -> Self {
+        Self::Function {
+            return_type: Box::new(return_type),
+        }
     }
 }
 

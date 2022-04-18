@@ -254,7 +254,7 @@ impl ValueOrType<'_> {
                 }
             }
             Self::Type(ty) => {
-                if let ValueType::Array(value_type) = ty {
+                if let ValueType::Array { value_type } = ty {
                     *self = Self::Type(value_type);
                     return Ok(());
                 }

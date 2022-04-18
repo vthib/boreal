@@ -41,13 +41,8 @@ impl Module for Tests {
                                 ("oops", Type::Boolean),
                             ]),
                         ),
-                        ("str_array", Type::Array(Box::new(Type::String))),
-                        (
-                            "isum",
-                            Type::Function {
-                                return_type: Box::new(Type::Integer),
-                            },
-                        ),
+                        ("str_array", Type::array(Type::String)),
+                        ("isum", Type::function(Type::Integer)),
                         // Declared as a bool, but exposes an array
                         ("fake_bool_to_array", Type::Boolean),
                         // Declared as a bool, but exposes a dict
@@ -60,14 +55,9 @@ impl Module for Tests {
                             Type::dictionary([("i", Type::Integer)]),
                         ),
                         // Declare as an array, but exposes a bool
-                        ("fake_array_to_bool", Type::Array(Box::new(Type::String))),
+                        ("fake_array_to_bool", Type::array(Type::String)),
                         // Declare as a function, but exposes a bool
-                        (
-                            "fake_fun_to_bool",
-                            Type::Function {
-                                return_type: Box::new(Type::Boolean),
-                            },
-                        ),
+                        ("fake_fun_to_bool", Type::function(Type::Boolean)),
                     ]),
                 ),
             ),
