@@ -298,7 +298,6 @@ impl Evaluator<'_> {
                 // Do not rethrow None result for left & right => None is the "undefined" value,
                 // and the AND and OR operations are the only one not propagating this poisoned
                 // value, but forcing it to false.
-                // FIXME: undefined and X is undefined, and should not eval the right side
                 let left = self.evaluate_expr(left).map_or(false, |v| v.to_bool());
                 let right = self.evaluate_expr(right).map_or(false, |v| v.to_bool());
                 Some(Value::Boolean(left && right))
@@ -307,7 +306,6 @@ impl Evaluator<'_> {
                 // Do not rethrow None result for left & right => None is the "undefined" value,
                 // and the AND and OR operations are the only one not propagating this poisoned
                 // value, but forcing it to false.
-                // FIXME: don't eval right side if left is false
                 let left = self.evaluate_expr(left).map_or(false, |v| v.to_bool());
                 let right = self.evaluate_expr(right).map_or(false, |v| v.to_bool());
                 Some(Value::Boolean(left || right))

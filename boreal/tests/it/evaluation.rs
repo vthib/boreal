@@ -1362,6 +1362,15 @@ fn test_eval_defined() {
     check(&build_empty_rule("defined true"), &[], true);
     check(&build_empty_rule("defined false"), &[], true);
 
+    check(&build_rule("defined ((1 \\ #c0) or false)"), &[], true);
+    check(&build_rule("defined ((1 \\ #c0) or true)"), &[], true);
+    check(&build_rule("defined ((1 \\ #c0) and false)"), &[], true);
+    check(&build_rule("defined ((1 \\ #c0) and true)"), &[], true);
+    check(&build_rule("defined (false or (1 \\ #c0))"), &[], true);
+    check(&build_rule("defined (true or (1 \\ #c0))"), &[], true);
+    check(&build_rule("defined (false and (1 \\ #c0))"), &[], true);
+    check(&build_rule("defined (true and (1 \\ #c0))"), &[], true);
+
     // TODO: test all undefined cases?
     check(&build_rule("defined (1 \\ #c0)"), &[], false);
 }
