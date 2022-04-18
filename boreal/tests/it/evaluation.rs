@@ -1353,4 +1353,17 @@ rule a {
     checker.check(b"a_b aa__b yy zzzzz", true);
 }
 
+#[test]
+fn test_eval_defined() {
+    check(&dbg!(build_empty_rule("defined 0")), &[], true);
+    check(&build_empty_rule("defined 0.0"), &[], true);
+    check(&build_empty_rule("defined \"a\""), &[], true);
+    check(&build_empty_rule("defined /a/"), &[], true);
+    check(&build_empty_rule("defined true"), &[], true);
+    check(&build_empty_rule("defined false"), &[], true);
+
+    // TODO: test all undefined cases?
+    check(&build_rule("defined (1 \\ #c0)"), &[], false);
+}
+
 // TODO: test count, offset, length with selected for variable
