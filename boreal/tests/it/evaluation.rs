@@ -32,7 +32,8 @@ rule a {{
 
 #[test]
 fn test_variable() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "X"
@@ -42,18 +43,19 @@ rule a {
         $e = { FF ( ?A | B? [1-3] ?? ) FF }
     condition:
         any of them
-}"#;
-    check(rule, b"nothing", false);
-    check(rule, b"i Xm", true);
-    check(rule, b"barfool", true);
-    check(rule, b"greeex", true);
-    check(rule, b"bZv", false);
-    check(rule, b"bavaoze", true);
-    check(rule, b"abavaoze", false);
-    check(rule, b"a\xFF\xDC\xFFp", false);
-    check(rule, b"dbaz\xFF\xDA\xFFeaz", true);
-    check(rule, b"dbaz\xFF\xBFer\xFFeaz", true);
-    check(rule, b"dbaz\xFF\xBFerdf\xFFeaz", true);
+}"#,
+    );
+    checker.check(b"nothing", false);
+    checker.check(b"i Xm", true);
+    checker.check(b"barfool", true);
+    checker.check(b"greeex", true);
+    checker.check(b"bZv", false);
+    checker.check(b"bavaoze", true);
+    checker.check(b"abavaoze", false);
+    checker.check(b"a\xFF\xDC\xFFp", false);
+    checker.check(b"dbaz\xFF\xDA\xFFeaz", true);
+    checker.check(b"dbaz\xFF\xBFer\xFFeaz", true);
+    checker.check(b"dbaz\xFF\xBFerdf\xFFeaz", true);
 }
 
 #[test]
@@ -61,7 +63,8 @@ fn test_variable_regex_modifiers() {
     // \x76 is 'v'
     //
     // FIXME: {,2} is OK for yara, not for us...
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /f[aF]T[d-g]\x76/ nocase
@@ -70,72 +73,77 @@ rule a {
         $d = /.{0,2}quu/ nocase fullword
     condition:
         any of them
-}"#;
+}"#,
+    );
 
     // Nocase: work on literals, ranges, and explicit hexa char
-    check(rule, b"faTgv", true);
-    check(rule, b"faTgx", false);
-    check(rule, b"FATGV", true);
-    check(rule, b"fftDV", true);
-    check(rule, b"fftEV", true);
-    check(rule, b"fftE", false);
-    check(rule, b"ftEV", false);
+    checker.check(b"faTgv", true);
+    checker.check(b"faTgx", false);
+    checker.check(b"FATGV", true);
+    checker.check(b"fftDV", true);
+    checker.check(b"fftEV", true);
+    checker.check(b"fftE", false);
+    checker.check(b"ftEV", false);
 
     // Fullword
-    check(rule, b"foo", true);
-    check(rule, b" foo ", true);
-    check(rule, b"-foo_", true);
-    check(rule, b"-fooa", false);
-    check(rule, b"-fooA", false);
-    check(rule, b"-foo0", false);
-    check(rule, b"afoo:", false);
-    check(rule, b"Zfoo:", false);
-    check(rule, b"0foo:", false);
+    checker.check(b"foo", true);
+    checker.check(b" foo ", true);
+    checker.check(b"-foo_", true);
+    checker.check(b"-fooa", false);
+    checker.check(b"-fooA", false);
+    checker.check(b"-foo0", false);
+    checker.check(b"afoo:", false);
+    checker.check(b"Zfoo:", false);
+    checker.check(b"0foo:", false);
 
-    check(rule, b"bar-", true);
-    check(rule, b"bara-", true);
-    check(rule, b"baraa-", true);
-    check(rule, b"baraaa-", true);
-    check(rule, b"baraaaa-", false);
-    check(rule, b"abaraaa-", false);
-    check(rule, b"|baraaa-", true);
-    check(rule, b"|bar", true);
+    checker.check(b"bar-", true);
+    checker.check(b"bara-", true);
+    checker.check(b"baraa-", true);
+    checker.check(b"baraaa-", true);
+    checker.check(b"baraaaa-", false);
+    checker.check(b"abaraaa-", false);
+    checker.check(b"|baraaa-", true);
+    checker.check(b"|bar", true);
 
-    check(rule, b"quu", true);
-    check(rule, b"QUU", true);
-    check(rule, b"quux", false);
-    check(rule, b"aQuu", true);
-    check(rule, b"aqUU", true);
-    check(rule, b"aaqUu", true);
-    check(rule, b"aAaQUu", false);
+    checker.check(b"quu", true);
+    checker.check(b"QUU", true);
+    checker.check(b"quux", false);
+    checker.check(b"aQuu", true);
+    checker.check(b"aqUU", true);
+    checker.check(b"aaqUu", true);
+    checker.check(b"aAaQUu", false);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /.{0,2}yay.{0,2}/ fullword
     condition:
         $a
-}"#;
+}"#,
+    );
 
-    check(rule, b"yay", true);
+    checker.check(b"yay", true);
     // This is an example of something that would match with a smart regex, but does not with the
     // yara implem: find a match, check fullword, find next match, etc.
-    check(rule, b"| yay |a", false);
+    checker.check(b"| yay |a", false);
     // But this works. Why? because we advance by one byte after every match.
     // First match: `| yay |` => not fullword
     // second match: ` yay |` => fullword, match
-    check(rule, b"a| yay |", true);
+    checker.check(b"a| yay |", true);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /.{0,2}yay.{0,2}/
     condition:
         #a == 3
-}"#;
+}"#,
+    );
     // Confirmation, we have three matches here, for the 3 possibles captures on the left. However,
     // the right capture is always greedy.
-    check(rule, b"a| yay |a", true);
+    checker.check(b"a| yay |a", true);
 }
 
 #[test]
@@ -621,229 +629,247 @@ rule a {
 
 #[test]
 fn test_for_expression_all() {
-    check(&build_rule("all of them"), b"", false);
-    check(&build_rule("all of them"), b"a0", false);
-    check(&build_rule("all of them"), b"a1", false);
-    check(&build_rule("all of them"), b"a2", false);
-    check(&build_rule("all of them"), b"b0", false);
-    check(&build_rule("all of them"), b"b1", false);
-    check(&build_rule("all of them"), b"c0", false);
-    check(&build_rule("all of them"), b"a0b1c0", false);
-    check(&build_rule("all of them"), b"a0a1a2b0b1", false);
-    check(&build_rule("all of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("all of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("all of ($*)"), b"", false);
-    check(&build_rule("all of ($*)"), b"a0", false);
-    check(&build_rule("all of ($*)"), b"a1", false);
-    check(&build_rule("all of ($*)"), b"a2", false);
-    check(&build_rule("all of ($*)"), b"b0", false);
-    check(&build_rule("all of ($*)"), b"b1", false);
-    check(&build_rule("all of ($*)"), b"c0", false);
-    check(&build_rule("all of ($*)"), b"a0b1c0", false);
-    check(&build_rule("all of ($*)"), b"a0a1a2b0b1", false);
-    check(&build_rule("all of ($*)"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("all of ($*)"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"a0", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"a1", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"a2", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"b0", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"b1", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"c0", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"a0b1c0", true);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"a0a1a2b0b1", false);
-    check(&build_rule("all of ($a0, $b1, $c0)"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("all of ($a0, $b1, $c0)"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1c0", true);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("all of ($a*)"), b"", false);
-    check(&build_rule("all of ($a*)"), b"a0", false);
-    check(&build_rule("all of ($a*)"), b"a1", false);
-    check(&build_rule("all of ($a*)"), b"a2", false);
-    check(&build_rule("all of ($a*)"), b"b0", false);
-    check(&build_rule("all of ($a*)"), b"b1", false);
-    check(&build_rule("all of ($a*)"), b"c0", false);
-    check(&build_rule("all of ($a*)"), b"a0b1c0", false);
-    check(&build_rule("all of ($a*)"), b"a0a1", false);
-    check(&build_rule("all of ($a*)"), b"a0a1a2", true);
-    check(&build_rule("all of ($a*)"), b"a0a1a2b0b1", true);
-    check(&build_rule("all of ($a*)"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("all of ($a*)"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1", false);
+    checker.check(b"a0a1a2", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 }
 
 #[test]
 fn test_for_expression_any() {
-    check(&build_rule("any of them"), b"", false);
-    check(&build_rule("any of them"), b"a0", true);
-    check(&build_rule("any of them"), b"a1", true);
-    check(&build_rule("any of them"), b"a2", true);
-    check(&build_rule("any of them"), b"b0", true);
-    check(&build_rule("any of them"), b"b1", true);
-    check(&build_rule("any of them"), b"c0", true);
-    check(&build_rule("any of them"), b"a0b1c0", true);
-    check(&build_rule("any of them"), b"a0a1a2b0b1", true);
-    check(&build_rule("any of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("any of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", true);
+    checker.check(b"a1", true);
+    checker.check(b"a2", true);
+    checker.check(b"b0", true);
+    checker.check(b"b1", true);
+    checker.check(b"c0", true);
+    checker.check(b"a0b1c0", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 }
 
 #[test]
 // FIXME: this is broken for libyara, not sure why
 #[ignore]
 fn test_for_expression_none() {
-    check(&build_rule("none of them"), b"", true);
-    check(&build_rule("none of them"), b"a0", false);
-    check(&build_rule("none of them"), b"a1", false);
-    check(&build_rule("none of them"), b"a2", false);
-    check(&build_rule("none of them"), b"b0", false);
-    check(&build_rule("none of them"), b"b1", false);
-    check(&build_rule("none of them"), b"c0", false);
-    check(&build_rule("none of them"), b"a0b1c0", false);
-    check(&build_rule("none of them"), b"a0a1a2b0b1", false);
-    check(&build_rule("none of them"), b"a0a1a2b0b1c0", false);
+    let checker = Checker::new(&build_rule("none of them"));
+    checker.check(b"", true);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", false);
 
-    check(&build_rule("none of ($b*)"), b"", true);
-    check(&build_rule("none of ($b*)"), b"a0", true);
-    check(&build_rule("none of ($b*)"), b"a1", true);
-    check(&build_rule("none of ($b*)"), b"a2", true);
-    check(&build_rule("none of ($b*)"), b"b0", false);
-    check(&build_rule("none of ($b*)"), b"b1", false);
-    check(&build_rule("none of ($b*)"), b"c0", true);
-    check(&build_rule("none of ($b*)"), b"a0b1c0", false);
-    check(&build_rule("none of ($b*)"), b"a0a1a2b0b1", false);
-    check(&build_rule("none of ($b*)"), b"a0a1a2b0b1c0", false);
+    let checker = Checker::new(&build_rule("none of ($b*)"));
+    checker.check(b"", true);
+    checker.check(b"a0", true);
+    checker.check(b"a1", true);
+    checker.check(b"a2", true);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", true);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", false);
 }
 
 #[test]
 fn test_for_expression_number() {
-    check(&build_rule("-1 of them"), b"", true);
-    check(&build_rule("-1 of them"), b"a0", true);
-    check(&build_rule("-1 of them"), b"a1", true);
-    check(&build_rule("-1 of them"), b"a2", true);
-    check(&build_rule("-1 of them"), b"b0", true);
-    check(&build_rule("-1 of them"), b"b1", true);
-    check(&build_rule("-1 of them"), b"c0", true);
-    check(&build_rule("-1 of them"), b"a0b1", true);
-    check(&build_rule("-1 of them"), b"a0b1c0", true);
-    check(&build_rule("-1 of them"), b"a0a1a2b0b1", true);
-    check(&build_rule("-1 of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("-1 of them"));
+    checker.check(b"", true);
+    checker.check(b"a0", true);
+    checker.check(b"a1", true);
+    checker.check(b"a2", true);
+    checker.check(b"b0", true);
+    checker.check(b"b1", true);
+    checker.check(b"c0", true);
+    checker.check(b"a0b1", true);
+    checker.check(b"a0b1c0", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("0 of them"), b"", true);
-    check(&build_rule("0 of them"), b"a0", true);
-    check(&build_rule("0 of them"), b"a1", true);
-    check(&build_rule("0 of them"), b"a2", true);
-    check(&build_rule("0 of them"), b"b0", true);
-    check(&build_rule("0 of them"), b"b1", true);
-    check(&build_rule("0 of them"), b"c0", true);
-    check(&build_rule("0 of them"), b"a0b1", true);
-    check(&build_rule("0 of them"), b"a0b1c0", true);
-    check(&build_rule("0 of them"), b"a0a1a2b0b1", true);
-    check(&build_rule("0 of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("0 of them"));
+    checker.check(b"", true);
+    checker.check(b"a0", true);
+    checker.check(b"a1", true);
+    checker.check(b"a2", true);
+    checker.check(b"b0", true);
+    checker.check(b"b1", true);
+    checker.check(b"c0", true);
+    checker.check(b"a0b1", true);
+    checker.check(b"a0b1c0", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("3 of them"), b"", false);
-    check(&build_rule("3 of them"), b"a0", false);
-    check(&build_rule("3 of them"), b"a1", false);
-    check(&build_rule("3 of them"), b"a2", false);
-    check(&build_rule("3 of them"), b"b0", false);
-    check(&build_rule("3 of them"), b"b1", false);
-    check(&build_rule("3 of them"), b"c0", false);
-    check(&build_rule("3 of them"), b"a0b1", false);
-    check(&build_rule("3 of them"), b"a0b1c0", true);
-    check(&build_rule("3 of them"), b"a0a1a2b0b1", true);
-    check(&build_rule("3 of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("3 of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("6 of them"), b"", false);
-    check(&build_rule("6 of them"), b"a0", false);
-    check(&build_rule("6 of them"), b"a1", false);
-    check(&build_rule("6 of them"), b"a2", false);
-    check(&build_rule("6 of them"), b"b0", false);
-    check(&build_rule("6 of them"), b"b1", false);
-    check(&build_rule("6 of them"), b"c0", false);
-    check(&build_rule("6 of them"), b"a0b1", false);
-    check(&build_rule("6 of them"), b"a0b1c0", false);
-    check(&build_rule("6 of them"), b"a0a1a2b0b1", false);
-    check(&build_rule("6 of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("6 of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("7 of them"), b"", false);
-    check(&build_rule("7 of them"), b"a0", false);
-    check(&build_rule("7 of them"), b"a1", false);
-    check(&build_rule("7 of them"), b"a2", false);
-    check(&build_rule("7 of them"), b"b0", false);
-    check(&build_rule("7 of them"), b"b1", false);
-    check(&build_rule("7 of them"), b"c0", false);
-    check(&build_rule("7 of them"), b"a0b1", false);
-    check(&build_rule("7 of them"), b"a0b1c0", false);
-    check(&build_rule("7 of them"), b"a0a1a2b0b1", false);
-    check(&build_rule("7 of them"), b"a0a1a2b0b1c0", false);
+    let checker = Checker::new(&build_rule("7 of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", false);
 }
 
 #[test]
 fn test_for_expression_percent() {
-    check(&build_rule("(#c0 - 2)% of them"), b"", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"a0", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"a1", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"a2", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"b0", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"b1", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"c0", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"a0b1", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"a0b1c0", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"a0a1a2b0b1", true);
-    check(&build_rule("(#c0 - 2)% of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("(#c0 - 2)% of them"));
+    checker.check(b"", true);
+    checker.check(b"a0", true);
+    checker.check(b"a1", true);
+    checker.check(b"a2", true);
+    checker.check(b"b0", true);
+    checker.check(b"b1", true);
+    checker.check(b"c0", true);
+    checker.check(b"a0b1", true);
+    checker.check(b"a0b1c0", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("(#c0)% of them"), b"", true);
-    check(&build_rule("(#c0)% of them"), b"a0", true);
-    check(&build_rule("(#c0)% of them"), b"a1", true);
-    check(&build_rule("(#c0)% of them"), b"a2", true);
-    check(&build_rule("(#c0)% of them"), b"b0", true);
-    check(&build_rule("(#c0)% of them"), b"b1", true);
-    check(&build_rule("(#c0)% of them"), b"a0b1", true);
-    check(&build_rule("(#c0)% of them"), b"a0a1a2b0b1", true);
+    let checker = Checker::new(&build_rule("(#c0)% of them"));
+    checker.check(b"", true);
+    checker.check(b"a0", true);
+    checker.check(b"a1", true);
+    checker.check(b"a2", true);
+    checker.check(b"b0", true);
+    checker.check(b"b1", true);
+    checker.check(b"a0b1", true);
+    checker.check(b"a0a1a2b0b1", true);
 
-    check(&build_rule("50% of them"), b"", false);
-    check(&build_rule("50% of them"), b"a0", false);
-    check(&build_rule("50% of them"), b"a1", false);
-    check(&build_rule("50% of them"), b"a2", false);
-    check(&build_rule("50% of them"), b"b0", false);
-    check(&build_rule("50% of them"), b"b1", false);
-    check(&build_rule("50% of them"), b"c0", false);
-    check(&build_rule("50% of them"), b"a0b1", false);
-    check(&build_rule("50% of them"), b"a0b1c0", true);
-    check(&build_rule("50% of them"), b"a0a1a2b0b1", true);
-    check(&build_rule("50% of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("50% of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 
     // Gets rounded up to 4 of them
-    check(&build_rule("51% of them"), b"", false);
-    check(&build_rule("51% of them"), b"a0", false);
-    check(&build_rule("51% of them"), b"a1", false);
-    check(&build_rule("51% of them"), b"a2", false);
-    check(&build_rule("51% of them"), b"b0", false);
-    check(&build_rule("51% of them"), b"b1", false);
-    check(&build_rule("51% of them"), b"c0", false);
-    check(&build_rule("51% of them"), b"a0b1", false);
-    check(&build_rule("51% of them"), b"a0b1c0", false);
-    check(&build_rule("51% of them"), b"a0b0b1c0", true);
-    check(&build_rule("51% of them"), b"a0a1a2b0b1", true);
-    check(&build_rule("51% of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("51% of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0b0b1c0", true);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("100% of them"), b"", false);
-    check(&build_rule("100% of them"), b"a0", false);
-    check(&build_rule("100% of them"), b"a1", false);
-    check(&build_rule("100% of them"), b"a2", false);
-    check(&build_rule("100% of them"), b"b0", false);
-    check(&build_rule("100% of them"), b"b1", false);
-    check(&build_rule("100% of them"), b"c0", false);
-    check(&build_rule("100% of them"), b"a0b1", false);
-    check(&build_rule("100% of them"), b"a0b1c0", false);
-    check(&build_rule("100% of them"), b"a0a1a2b0b1", false);
-    check(&build_rule("100% of them"), b"a0a1a2b0b1c0", true);
+    let checker = Checker::new(&build_rule("100% of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", true);
 
-    check(&build_rule("(101 + #c0)% of them"), b"", false);
-    check(&build_rule("(101 + #c0)% of them"), b"a0", false);
-    check(&build_rule("(101 + #c0)% of them"), b"a1", false);
-    check(&build_rule("(101 + #c0)% of them"), b"a2", false);
-    check(&build_rule("(101 + #c0)% of them"), b"b0", false);
-    check(&build_rule("(101 + #c0)% of them"), b"b1", false);
-    check(&build_rule("(101 + #c0)% of them"), b"c0", false);
-    check(&build_rule("(101 + #c0)% of them"), b"a0b1", false);
-    check(&build_rule("(101 + #c0)% of them"), b"a0b1c0", false);
-    check(&build_rule("(101 + #c0)% of them"), b"a0a1a2b0b1", false);
-    check(&build_rule("(101 + #c0)% of them"), b"a0a1a2b0b1c0", false);
+    let checker = Checker::new(&build_rule("(101 + #c0)% of them"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", false);
 }
 
 #[test]
@@ -981,17 +1007,19 @@ fn test_eval_shr() {
 
 #[test]
 fn test_eval_var_count_string() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "abc"
     condition:
         #a == 3
-}"#;
-    check(rule, b"", false);
-    check(rule, b"abcabc", false);
-    check(rule, b"abcabcaabcb", true);
-    check(rule, b"abcabcaabcb abc", false);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abcabc", false);
+    checker.check(b"abcabcaabcb", true);
+    checker.check(b"abcabcaabcb abc", false);
 
     check(
         r#"
@@ -1006,70 +1034,81 @@ rule a {
     );
 
     // Matches can overlap
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "aa"
     condition:
         #a == 3
-}"#;
-    check(rule, b"aa", false);
-    check(rule, b"aaa", false);
-    check(rule, b"aaaa", true);
+}"#,
+    );
+    checker.check(b"aa", false);
+    checker.check(b"aaa", false);
+    checker.check(b"aaaa", true);
 }
 
 #[test]
 fn test_eval_var_length_string() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "abc"
     condition:
         !a == 3
-}"#;
-    check(rule, b"", false);
-    check(rule, b"abc", true);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abc", true);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "abc"
     condition:
         !a[2] == 3
-}"#;
-    check(rule, b"", false);
-    check(rule, b"abc", false);
-    check(rule, b"abc abcc", true);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abc", false);
+    checker.check(b"abc abcc", true);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "abc"
     condition:
         !a != 3
-}"#;
-    check(rule, b"", false);
-    check(rule, b"abc", false);
-    check(rule, b"abcabc", false);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abc", false);
+    checker.check(b"abcabc", false);
 }
 
 #[test]
 fn test_eval_var_offset_string() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "ab"
     condition:
         @a == 2
-}"#;
-    check(rule, b"", false);
-    check(rule, b"ab", false);
-    check(rule, b" ab", false);
-    check(rule, b"  ab", true);
-    check(rule, b"   ab", false);
-    check(rule, b"abab", false);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"ab", false);
+    checker.check(b" ab", false);
+    checker.check(b"  ab", true);
+    checker.check(b"   ab", false);
+    checker.check(b"abab", false);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "abc"
@@ -1077,33 +1116,36 @@ rule a {
         $z = "z"
     condition:
         @a[#y + 1] == #z
-}"#;
-    check(rule, b"", false);
-    check(rule, b"abc", true);
-    check(rule, b"abc z", false);
-    check(rule, b"abc abc y zzz", false);
-    check(rule, b"abc abc y zzzz", true);
-    check(rule, b"abc abc yy zzzz", false);
-    check(rule, b"abcabcabc yy zzzzzz", true);
-    check(rule, b"abcabcabc yy zzzzzzz", false);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abc", true);
+    checker.check(b"abc z", false);
+    checker.check(b"abc abc y zzz", false);
+    checker.check(b"abc abc y zzzz", true);
+    checker.check(b"abc abc yy zzzz", false);
+    checker.check(b"abcabcabc yy zzzzzz", true);
+    checker.check(b"abcabcabc yy zzzzzzz", false);
 }
 
 #[test]
 fn test_eval_var_count_regex() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /a.*b/
     condition:
         #a == 3
-}"#;
-    check(rule, b"", false);
-    check(rule, b"aaab", true);
-    check(rule, b"abab", false);
-    check(rule, b"ab aaabb acb", false);
-    check(rule, b"ab abb acb", true);
-    check(rule, b"aaabbb", true);
-    check(rule, b"aaaabbb", false);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"aaab", true);
+    checker.check(b"abab", false);
+    checker.check(b"ab aaabb acb", false);
+    checker.check(b"ab abb acb", true);
+    checker.check(b"aaabbb", true);
+    checker.check(b"aaaabbb", false);
 
     check(
         r#"
@@ -1120,31 +1162,36 @@ rule a {
 
 #[test]
 fn test_eval_var_length_regex() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /a.*b/
     condition:
         !a == 3
-}"#;
-    check(rule, b"", false);
-    check(rule, b"ab", false);
-    check(rule, b"azb", true);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"ab", false);
+    checker.check(b"azb", true);
     // Regexes are greedy
-    check(rule, b"aabb", false);
+    checker.check(b"aabb", false);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = "a.*b+"
     condition:
         $a
-}"#;
+}"#,
+    );
 
-    check(rule, b"aaabb", false);
-    check(rule, b"aa.*b+", true);
+    checker.check(b"aaabb", false);
+    checker.check(b"aa.*b+", true);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /a.*b+/
@@ -1152,31 +1199,35 @@ rule a {
         $z = "z"
     condition:
         !a[#y + 1] == #z
-}"#;
-    check(rule, b"aaabb", false);
-    check(rule, b"aaabbcb z zzz zzz", true);
-    check(rule, b"aaabb y zzzz", true);
-    check(rule, b"aaabb yy zzz", true);
+}"#,
+    );
+    checker.check(b"aaabb", false);
+    checker.check(b"aaabbcb z zzz zzz", true);
+    checker.check(b"aaabb y zzzz", true);
+    checker.check(b"aaabb yy zzz", true);
 }
 
 #[test]
 fn test_eval_var_offset_regex() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /a+b/
     condition:
         @a == 2
-}"#;
-    check(rule, b"", false);
-    check(rule, b"ab", false);
-    check(rule, b" ab", false);
-    check(rule, b"  ab", true);
-    check(rule, b"  aab", true);
-    check(rule, b"   ab", false);
-    check(rule, b"abab", false);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"ab", false);
+    checker.check(b" ab", false);
+    checker.check(b"  ab", true);
+    checker.check(b"  aab", true);
+    checker.check(b"   ab", false);
+    checker.check(b"abab", false);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = /a.*c/
@@ -1184,31 +1235,34 @@ rule a {
         $z = "z"
     condition:
         @a[#y + 1] == #z
-}"#;
-    check(rule, b"", false);
-    check(rule, b"abc", true);
-    check(rule, b"abc z", false);
-    check(rule, b"abc abc y zzz", false);
-    check(rule, b"abc abc y zzzz", true);
-    check(rule, b"abc abc yy zzzz", false);
-    check(rule, b"abcabcabc yy zzzzzz", true);
-    check(rule, b"abcabcabc yy zzzzzzz", false);
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abc", true);
+    checker.check(b"abc z", false);
+    checker.check(b"abc abc y zzz", false);
+    checker.check(b"abc abc y zzzz", true);
+    checker.check(b"abc abc yy zzzz", false);
+    checker.check(b"abcabcabc yy zzzzzz", true);
+    checker.check(b"abcabcabc yy zzzzzzz", false);
 }
 
 #[test]
 fn test_eval_var_count_hex_string() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = { AB [1-3] CD }
     condition:
         #a == 2
-}"#;
-    check(rule, b"\xab\xcd \xab_\xcd", false);
-    check(rule, b"\xabpad\xcd \xab_\xcd", true);
-    check(rule, b"\xab\xab_\xcd", true);
-    check(rule, b"\xab\xab\xab_\xcd", false);
-    check(rule, b"\xabpa\xcd\xcd", false);
+}"#,
+    );
+    checker.check(b"\xab\xcd \xab_\xcd", false);
+    checker.check(b"\xabpad\xcd \xab_\xcd", true);
+    checker.check(b"\xab\xab_\xcd", true);
+    checker.check(b"\xab\xab\xab_\xcd", false);
+    checker.check(b"\xabpa\xcd\xcd", false);
 
     check(
         r#"
@@ -1225,20 +1279,23 @@ rule a {
 
 #[test]
 fn test_eval_var_length_hex_string() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = { AB [1-3] CD }
     condition:
         !a == 3
-}"#;
-    check(rule, b"\xab_\xcd", true);
+}"#,
+    );
+    checker.check(b"\xab_\xcd", true);
     // hex strings are NOT greedy
-    check(rule, b"\xab_\xcd\xcd", true);
-    check(rule, b"\xab_\xcd\xcd\xcd", true);
-    check(rule, b"\xabpad\xcd", false);
+    checker.check(b"\xab_\xcd\xcd", true);
+    checker.check(b"\xab_\xcd\xcd\xcd", true);
+    checker.check(b"\xabpad\xcd", false);
 
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = { 61 [1-] 62 }
@@ -1246,34 +1303,38 @@ rule a {
         $z = "z"
     condition:
         !a[#y + 1] == #z
-}"#;
-    check(rule, b"a_b", false);
-    check(rule, b"a_b zzz", true);
-    check(rule, b"a1234b zzz zzz", true);
+}"#,
+    );
+    checker.check(b"a_b", false);
+    checker.check(b"a_b zzz", true);
+    checker.check(b"a1234b zzz zzz", true);
 
-    check(rule, b"a_b aa999b y zzz zzz", true);
-    check(rule, b"a_b aa999b yy zz zzz", true);
+    checker.check(b"a_b aa999b y zzz zzz", true);
+    checker.check(b"a_b aa999b yy zz zzz", true);
 
     // This alternation will always resolve to the shortest one.
     // FIXME: fix this, test more complex alternations / masked bytes
     if false {
-        let rule = r#"
+        let checker = Checker::new(
+            r#"
     rule a {
         strings:
             $a = { AB ( ?F | FF [1-3] CD ) }
             $b = { AB ( FF [1-3] CD | ?F ) }
         condition:
             !a == 2 and !b == 2
-    }"#;
-        check(rule, b"\xab\xff", true);
-        check(rule, b"zz \xab\xff_\xcd", true);
-        check(rule, b"zz \xab\xffpad\xcd", true);
+    }"#,
+        );
+        checker.check(b"\xab\xff", true);
+        checker.check(b"zz \xab\xff_\xcd", true);
+        checker.check(b"zz \xab\xffpad\xcd", true);
     }
 }
 
 #[test]
 fn test_eval_var_offset_hex_string() {
-    let rule = r#"
+    let checker = Checker::new(
+        r#"
 rule a {
     strings:
         $a = { 61 [1-3] 62 }
@@ -1281,14 +1342,15 @@ rule a {
         $z = "z"
     condition:
         @a[#y + 1] == #z
-}"#;
-    check(rule, b"a_b zz", false);
-    check(rule, b" a__b zz", false);
-    check(rule, b"  a___b zz", true);
-    check(rule, b" aa_b zz", false);
-    check(rule, b" aa_b y zz", true);
-    check(rule, b"a_b aa__b y zzzz", true);
-    check(rule, b"a_b aa__b yy zzzzz", true);
+}"#,
+    );
+    checker.check(b"a_b zz", false);
+    checker.check(b" a__b zz", false);
+    checker.check(b"  a___b zz", true);
+    checker.check(b" aa_b zz", false);
+    checker.check(b" aa_b y zz", true);
+    checker.check(b"a_b aa__b y zzzz", true);
+    checker.check(b"a_b aa__b yy zzzzz", true);
 }
 
 // TODO: test count, offset, length with selected for variable
