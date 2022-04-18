@@ -53,6 +53,8 @@ impl Module for Tests {
                         ("fake_bool_to_dict", Type::Boolean),
                         // Declared as a bool, but exposes a function
                         ("fake_bool_to_fun", Type::Boolean),
+                        // Declared as an integer, but exposes a regex
+                        ("fake_int", Type::Integer),
                         // Declare as a dict, but exposes a bool
                         (
                             "fake_dict_to_bool",
@@ -253,6 +255,7 @@ impl Tests {
                 "fake_bool_to_fun",
                 Value::function(Self::empty, vec![], Type::Boolean),
             ),
+            ("fake_int", Value::Regex(regex::Regex::new("ht+p").unwrap())),
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),
             ("fake_fun_to_bool", Value::Boolean(false)),

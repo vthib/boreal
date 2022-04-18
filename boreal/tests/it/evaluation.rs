@@ -14,6 +14,7 @@ rule a {{
 fn build_rule(condition: &str) -> String {
     format!(
         r#"
+import "tests"
 rule a {{
     strings:
         $a0 = "a0"
@@ -876,11 +877,11 @@ fn test_for_expression_percent() {
 fn test_for_expression_err() {
     check_err(
         &build_rule("all of ($d)"),
-        "mem:11:9: error: unknown variable $d",
+        "mem:12:9: error: unknown variable $d",
     );
     check_err(
         &build_rule("all of ($d*)"),
-        "mem:11:9: error: unknown variable $d",
+        "mem:12:9: error: unknown variable $d",
     );
 }
 
@@ -1373,6 +1374,33 @@ fn test_eval_defined() {
 
     // TODO: test all undefined cases?
     check(&build_rule("defined (1 \\ #c0)"), &[], false);
+
+    check_boreal(
+        &build_rule("defined (tests.lazy().fake_int == 3)"),
+        &[],
+        false,
+    );
+    check_boreal(
+        &build_rule("defined (tests.lazy().fake_int < 3)"),
+        &[],
+        false,
+    );
+    check_boreal(
+        &build_rule("defined (tests.lazy().fake_int <= 3)"),
+        &[],
+        false,
+    );
+    check_boreal(
+        &build_rule("defined (3 > tests.lazy().fake_int)"),
+        &[],
+        false,
+    );
+    check_boreal(
+        &build_rule("defined (3 >= tests.lazy().fake_int)"),
+        &[],
+        false,
+    );
+    check_boreal(&build_rule("defined (-tests.lazy().fake_int)"), &[], false);
 }
 
 // TODO: test count, offset, length with selected for variable

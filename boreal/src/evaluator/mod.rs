@@ -123,7 +123,7 @@ macro_rules! apply_cmp_op {
             (Value::Number(n), Value::Float(b)) => (n as f64) $op b,
             (Value::Float(a), Value::Number(m)) => a $op (m as f64),
             (Value::String(a), Value::String(b)) => a $op b,
-            _ => todo!(),
+            _ => return None,
         }
     }
 }
@@ -209,7 +209,7 @@ impl Evaluator<'_> {
                 match v {
                     Value::Number(n) => Some(Value::Number(-n)),
                     Value::Float(a) => Some(Value::Float(-a)),
-                    _ => todo!(),
+                    _ => None,
                 }
             }
             Expression::Add(left, right) => {
@@ -338,7 +338,7 @@ impl Evaluator<'_> {
                     }
                     (Value::String(a), Value::String(b)) => a == b,
                     (Value::Boolean(a), Value::Boolean(b)) => a == b,
-                    _ => todo!(),
+                    _ => return None,
                 };
                 Some(Value::Boolean(res))
             }
