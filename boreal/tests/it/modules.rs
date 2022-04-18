@@ -1,5 +1,22 @@
 use crate::utils::{check, check_boreal, check_err};
 
+#[track_caller]
+fn check_ok(condition: &str) {
+    check_boreal(
+        &format!(
+            r#"import "tests"
+rule foo {{
+strings:
+    $a = "abc"
+condition: {} and #a >= 0
+}}"#,
+            condition
+        ),
+        b"",
+        true,
+    );
+}
+
 #[test]
 fn test_imports() {
     check_err(
@@ -174,23 +191,6 @@ rule foo {{
 
 #[test]
 fn test_eval() {
-    #[track_caller]
-    fn check_ok(condition: &str) {
-        check_boreal(
-            &format!(
-                r#"import "tests"
-rule foo {{
-    strings:
-        $a = "abc"
-    condition: {} and #a >= 0
-}}"#,
-                condition
-            ),
-            b"",
-            true,
-        );
-    }
-
     // check immediate values
     check_ok("tests.constants.one == 1");
     check_ok("tests.constants.one_half == 0.5");
@@ -231,9 +231,97 @@ rule foo {{
     check_ok("not defined tests.lazy().fake_fun_to_bool()");
 
     // Test passing undefined values to subscripts/functions
-    check_ok("not defined tests.undefined()");
-    check_ok("not defined tests.isum(tests.undefined())");
-    check_ok("not defined tests.integer_array[tests.undefined()]");
-    check_ok("not defined tests.lazy().str_array[tests.undefined()]");
-    check_ok("not defined tests.lazy().isum(1, tests.undefined())");
+    check_ok("not defined tests.undefined_str()");
+    check_ok("not defined tests.undefined_int()");
+    check_ok("not defined tests.length(tests.undefined_str())");
+    check_ok("not defined tests.integer_array[tests.undefined_int()]");
+    check_ok("not defined tests.lazy().str_array[tests.undefined_int()]");
+    check_ok("not defined tests.lazy().isum(1, tests.undefined_int())");
+}
+
+#[test]
+fn test_functions() {
+    #[track_caller]
+    fn check_invalid_args(condition: &str, expected_err: &str) {
+        check_err(
+            &format!(
+                r#"import "tests"
+rule foo {{
+    condition: {}
+}}"#,
+                condition
+            ),
+            expected_err,
+        );
+    }
+
+    // Check direct primitives
+    check_invalid_args(
+        "tests.lazy(3).constants.one",
+        "mem:3:26: error: invalid arguments types: [integer]",
+    );
+    check_ok("tests.lazy().one");
+
+    check_invalid_args(
+        "tests.match()",
+        "mem:3:27: error: invalid arguments types: []",
+    );
+    check_invalid_args(
+        "tests.match(\"a\")",
+        "mem:3:27: error: invalid arguments types: [string]",
+    );
+    check_invalid_args(
+        "tests.match(\"a\", true)",
+        "mem:3:27: error: invalid arguments types: [string, boolean]",
+    );
+    check_ok("tests.match(\"a\", /a/)");
+
+    check_invalid_args(
+        "tests.isum(2)",
+        "mem:3:26: error: invalid arguments types: [integer]",
+    );
+    check_invalid_args(
+        "tests.isum(2, 3.5)",
+        "mem:3:26: error: invalid arguments types: [integer, floating-point number]",
+    );
+    check_invalid_args(
+        "tests.isum(2, 3, 4, 5)",
+        "mem:3:26: error: invalid arguments types: [integer, integer, integer, integer]",
+    );
+    check_ok("tests.isum(2, 3) == 5");
+    check_ok("tests.isum(2, 3, -2) == 3");
+
+    check_invalid_args(
+        "tests.fsum(2, 3)",
+        "mem:3:26: error: invalid arguments types: [integer, integer]",
+    );
+    check_invalid_args(
+        "tests.fsum(2.5, 3)",
+        "mem:3:26: error: invalid arguments types: [floating-point number, integer]",
+    );
+    check_ok("tests.fsum(2.5, 3.5) == 6.0");
+    check_invalid_args(
+        "tests.fsum(2.5, 3.5, false)",
+        "mem:3:26: error: invalid arguments types: [floating-point number, floating-point number, boolean]",
+    );
+    check_ok("tests.fsum(2.5, 3.5, 1) == 7.0");
+
+    check_invalid_args(
+        "tests.empty(3)",
+        "mem:3:27: error: invalid arguments types: [integer]",
+    );
+    check_ok("tests.empty() == \"\"");
+
+    check_invalid_args(
+        "tests.log()",
+        "mem:3:25: error: invalid arguments types: []",
+    );
+    check_ok("tests.log(3)");
+    check_invalid_args(
+        "tests.log(/a/)",
+        "mem:3:25: error: invalid arguments types: [regex]",
+    );
+    check_ok("tests.log(true, /a/, \"b\")");
+    check_ok("tests.log(true, /a/)");
+    check_ok("tests.log(3, true)");
 }

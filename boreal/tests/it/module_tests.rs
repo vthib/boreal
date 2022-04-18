@@ -26,6 +26,7 @@ impl Module for Tests {
                 "lazy",
                 Value::function(
                     Self::lazy,
+                    vec![],
                     Type::dictionary([
                         ("one", Type::Integer),
                         ("one_half", Type::Float),
@@ -42,7 +43,10 @@ impl Module for Tests {
                             ]),
                         ),
                         ("str_array", Type::array(Type::String)),
-                        ("isum", Type::function(Type::Integer)),
+                        (
+                            "isum",
+                            Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
+                        ),
                         // Declared as a bool, but exposes an array
                         ("fake_bool_to_array", Type::Boolean),
                         // Declared as a bool, but exposes a dict
@@ -57,11 +61,18 @@ impl Module for Tests {
                         // Declare as an array, but exposes a bool
                         ("fake_array_to_bool", Type::array(Type::String)),
                         // Declare as a function, but exposes a bool
-                        ("fake_fun_to_bool", Type::function(Type::Boolean)),
+                        ("fake_fun_to_bool", Type::function(vec![], Type::Boolean)),
                     ]),
                 ),
             ),
-            ("undefined", Value::function(Self::undefined, Type::Boolean)),
+            (
+                "undefined_str",
+                Value::function(Self::undefined, vec![], Type::String),
+            ),
+            (
+                "undefined_int",
+                Value::function(Self::undefined, vec![], Type::Integer),
+            ),
             (
                 "string_dict",
                 Value::dictionary([("foo", Value::string("foo")), ("bar", Value::string("bar"))]),
@@ -88,12 +99,54 @@ impl Module for Tests {
                     Type::dictionary([("i", Type::Integer), ("s", Type::String)]),
                 ),
             ),
-            ("match", Value::function(Self::r#match, Type::Boolean)),
-            ("isum", Value::function(Self::isum, Type::Integer)),
-            ("fsum", Value::function(Self::fsum, Type::Float)),
-            ("length", Value::function(Self::length, Type::Integer)),
-            ("empty", Value::function(Self::empty, Type::String)),
-            ("foobar", Value::function(Self::foobar, Type::String)),
+            (
+                "match",
+                Value::function(
+                    Self::r#match,
+                    vec![vec![Type::String, Type::Regex]],
+                    Type::Boolean,
+                ),
+            ),
+            (
+                "isum",
+                Value::function(
+                    Self::isum,
+                    vec![
+                        vec![Type::Integer, Type::Integer],
+                        vec![Type::Integer, Type::Integer, Type::Integer],
+                    ],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "fsum",
+                Value::function(
+                    Self::fsum,
+                    vec![
+                        vec![Type::Float, Type::Float],
+                        vec![Type::Float, Type::Float, Type::Integer],
+                    ],
+                    Type::Float,
+                ),
+            ),
+            (
+                "length",
+                Value::function(Self::length, vec![vec![Type::String]], Type::Integer),
+            ),
+            ("empty", Value::function(Self::empty, vec![], Type::String)),
+            (
+                "log",
+                Value::function(
+                    Self::log,
+                    vec![
+                        vec![Type::Integer],
+                        vec![Type::Boolean, Type::Regex, Type::String],
+                        vec![Type::Boolean, Type::Regex],
+                        vec![Type::Integer, Type::Boolean],
+                    ],
+                    Type::Boolean,
+                ),
+            ),
         ])
     }
 }
@@ -104,9 +157,12 @@ impl Tests {
     }
 
     fn fsum(arguments: Vec<Value>) -> Option<Value> {
-        let mut res = 0.0;
-        for arg in arguments {
-            res += f64::try_from(arg).ok()?;
+        let mut args = arguments.into_iter();
+        let mut res = f64::try_from(args.next()?).ok()?;
+        res += f64::try_from(args.next()?).ok()?;
+        if let Some(v) = args.next() {
+            let v: i64 = v.try_into().ok()?;
+            res += v as f64;
         }
         Some(Value::Float(res))
     }
@@ -126,29 +182,18 @@ impl Tests {
         i64::try_from(s.len()).ok().map(Value::Integer)
     }
 
-    #[allow(clippy::unnecessary_wraps)]
     fn empty(_: Vec<Value>) -> Option<Value> {
         Some(Value::String("".into()))
     }
 
-    fn foobar(arguments: Vec<Value>) -> Option<Value> {
-        let mut args = arguments.into_iter();
-        let v: i64 = args.next()?.try_into().ok()?;
-
-        Some(Value::String(
-            match v {
-                1 => "foo",
-                2 => "bar",
-                _ => "oops",
-            }
-            .into(),
-        ))
+    fn log(_: Vec<Value>) -> Option<Value> {
+        Some(Value::Boolean(true))
     }
 
     fn r#match(arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
-        let regex: Regex = args.next()?.try_into().ok()?;
         let s: String = args.next()?.try_into().ok()?;
+        let regex: Regex = args.next()?.try_into().ok()?;
 
         Some(Value::Boolean(regex.is_match(&s)))
     }
@@ -191,7 +236,14 @@ impl Tests {
                 Value::dictionary([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
             ),
             ("str_array", Value::array(Self::string_array, Type::String)),
-            ("isum", Value::function(Self::isum, Type::Integer)),
+            (
+                "isum",
+                Value::function(
+                    Self::isum,
+                    vec![vec![Type::Integer, Type::Integer]],
+                    Type::Integer,
+                ),
+            ),
             (
                 "fake_bool_to_array",
                 Value::array(Self::integer_array, Type::Integer),
@@ -199,7 +251,7 @@ impl Tests {
             ("fake_bool_to_dict", Value::dictionary([])),
             (
                 "fake_bool_to_fun",
-                Value::function(Self::empty, Type::Boolean),
+                Value::function(Self::empty, vec![], Type::Boolean),
             ),
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),

@@ -104,14 +104,16 @@ impl ModuleUse<'_> {
                 self.current_value.subscript()
             }
             parser::IdentifierOperationType::FunctionCall(arguments) => {
-                // TODO: type check those expr
-                let arguments: Result<Vec<_>, _> = arguments
-                    .into_iter()
-                    .map(|expr| compile_expression(self.compiler, expr).map(|v| v.expr))
-                    .collect();
+                let mut arguments_exprs = Vec::with_capacity(arguments.len());
+                let mut arguments_types = Vec::with_capacity(arguments.len());
+                for arg in arguments {
+                    let res = compile_expression(self.compiler, arg)?;
+                    arguments_exprs.push(res.expr);
+                    arguments_types.push(res.ty);
+                }
                 self.operations
-                    .push(ValueOperation::FunctionCall(arguments?));
-                self.current_value.function_call()
+                    .push(ValueOperation::FunctionCall(arguments_exprs));
+                self.current_value.function_call(&arguments_types)
             }
         };
 
@@ -130,6 +132,12 @@ impl ModuleUse<'_> {
                     actual_type,
                     expected_type,
                     span: self.current_span.clone(),
+                });
+            }
+            Err(TypeError::WrongFunctionArguments { arguments_types }) => {
+                return Err(CompilationError::InvalidIdentifierCall {
+                    arguments_types,
+                    span: op.span,
                 });
             }
             Ok(()) => (),
@@ -210,6 +218,9 @@ enum TypeError {
         actual_type: String,
         expected_type: String,
     },
+    WrongFunctionArguments {
+        arguments_types: Vec<String>,
+    },
 }
 
 impl ValueOrType<'_> {
@@ -267,16 +278,27 @@ impl ValueOrType<'_> {
         })
     }
 
-    fn function_call(&mut self) -> Result<(), TypeError> {
+    fn function_call(&mut self, actual_args_types: &[Type]) -> Result<(), TypeError> {
         match self {
             Self::Value(value) => {
-                if let Value::Function { return_type, .. } = value {
+                if let Value::Function {
+                    arguments_types,
+                    return_type,
+                    ..
+                } = value
+                {
+                    check_all_arguments_types(arguments_types, actual_args_types)?;
                     *self = Self::Type(return_type);
                     return Ok(());
                 }
             }
             Self::Type(ty) => {
-                if let ValueType::Function { return_type } = ty {
+                if let ValueType::Function {
+                    arguments_types,
+                    return_type,
+                } = ty
+                {
+                    check_all_arguments_types(arguments_types, actual_args_types)?;
                     *self = Self::Type(return_type);
                     return Ok(());
                 }
@@ -334,5 +356,53 @@ impl ValueOrType<'_> {
                 _ => None,
             },
         }
+    }
+}
+
+fn check_all_arguments_types(
+    valid_types_vec: &[Vec<ValueType>],
+    actual_types: &[Type],
+) -> Result<(), TypeError> {
+    if valid_types_vec.is_empty() && actual_types.is_empty() {
+        return Ok(());
+    }
+
+    for valid_types in valid_types_vec {
+        if arguments_types_are_equal(valid_types, actual_types) {
+            return Ok(());
+        }
+    }
+
+    Err(TypeError::WrongFunctionArguments {
+        arguments_types: actual_types.iter().map(ToString::to_string).collect(),
+    })
+}
+
+fn arguments_types_are_equal(valid_types: &[ValueType], actual_types: &[Type]) -> bool {
+    if valid_types.len() != actual_types.len() {
+        return false;
+    }
+    for (expected, actual) in valid_types.iter().zip(actual_types.iter()) {
+        let expected = module_type_to_expr_type(expected);
+        if let Some(expected) = expected {
+            if expected != *actual {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn module_type_to_expr_type(v: &ValueType) -> Option<Type> {
+    match v {
+        ValueType::Integer => Some(Type::Integer),
+        ValueType::Float => Some(Type::Float),
+        ValueType::String => Some(Type::String),
+        ValueType::Regex => Some(Type::Regex),
+        ValueType::Boolean => Some(Type::Boolean),
+        _ => None,
     }
 }

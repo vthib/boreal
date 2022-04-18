@@ -45,6 +45,14 @@ pub enum CompilationError {
     /// in the declarations.
     DuplicatedVariable(String),
 
+    /// Invalid function call on an identifier
+    InvalidIdentifierCall {
+        /// Types of the provided arguments
+        arguments_types: Vec<String>,
+        /// The span of the function call.
+        span: Range<usize>,
+    },
+
     /// Invalid type for an identifier
     InvalidIdentifierType {
         /// Type of the identifier
@@ -149,6 +157,16 @@ impl CompilationError {
                 .with_labels(vec![Label::primary((), span.clone()).with_message(
                     format!("expected {}, found {}", expected_type, actual_type),
                 )]),
+
+            Self::InvalidIdentifierCall {
+                arguments_types,
+                span,
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "invalid arguments types: [{}]",
+                    arguments_types.join(", ")
+                ))
+                .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::InvalidIdentifierUse { span } => Diagnostic::error()
                 .with_message("wrong use of identifier")

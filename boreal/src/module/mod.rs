@@ -136,7 +136,21 @@ pub enum Value {
         /// ```
         fun: fn(Vec<Value>) -> Option<Value>,
 
-        // TODO: type description of the arguments
+        /// List of types of arguments.
+        ///
+        /// Each element of the list is a valid list of types that are accepted as arguments for
+        /// the function. This is used when compiling a rule, to check the typings are correct.
+        ///
+        /// For example: `[ [Type::Boolean], [Type::String, Type::Integer] ]` accepts both:
+        /// - `fun(<boolean>)``
+        /// - `fun(<string>, <integer>)`
+        ///
+        /// Anything else will be rejected when compiling the rule.
+        ///
+        /// Please note that only primitive values can actually be received: integer, floats,
+        /// strings, regexes or booleans.
+        arguments_types: Vec<Vec<Type>>,
+
         /// Type of the value returned by the function.
         return_type: Type,
     },
@@ -159,8 +173,16 @@ impl Value {
         }
     }
 
-    pub fn function(fun: fn(Vec<Value>) -> Option<Value>, return_type: Type) -> Self {
-        Value::Function { fun, return_type }
+    pub fn function(
+        fun: fn(Vec<Value>) -> Option<Value>,
+        arguments_types: Vec<Vec<Type>>,
+        return_type: Type,
+    ) -> Self {
+        Value::Function {
+            fun,
+            arguments_types,
+            return_type,
+        }
     }
 }
 
@@ -173,8 +195,13 @@ pub enum Type {
     Regex,
     Boolean,
     Dictionary(HashMap<&'static str, Type>),
-    Array { value_type: Box<Type> },
-    Function { return_type: Box<Type> },
+    Array {
+        value_type: Box<Type>,
+    },
+    Function {
+        arguments_types: Vec<Vec<Type>>,
+        return_type: Box<Type>,
+    },
 }
 
 impl Type {
@@ -191,8 +218,9 @@ impl Type {
     }
 
     #[must_use]
-    pub fn function(return_type: Type) -> Self {
+    pub fn function(arguments_types: Vec<Vec<Type>>, return_type: Type) -> Self {
         Self::Function {
+            arguments_types,
             return_type: Box::new(return_type),
         }
     }
