@@ -1355,6 +1355,124 @@ rule a {
 }
 
 #[test]
+fn test_variable_find() {
+    let checker = Checker::new(
+        r#"
+        rule a {
+            strings:
+                $a = "45"
+            condition:
+                $a
+        }"#,
+    );
+    checker.check(b"12345678", true);
+    checker.check(b"45678", true);
+    checker.check(b"45", true);
+    checker.check(b"345", true);
+    checker.check(b"1234678", false);
+    checker.check(b"465", false);
+
+    let checker = Checker::new(
+        r#"
+        rule a {
+            strings:
+                $a = /4.5+/
+            condition:
+                $a
+        }"#,
+    );
+    checker.check(b"445", true);
+    checker.check(b"34\x3D555", true);
+    checker.check(b"123", false);
+    checker.check(b"44", false);
+    checker.check(b"4\n5", false);
+
+    let checker = Checker::new(
+        r#"
+        rule a {
+            strings:
+                $a = /fo{2,}/i
+            condition:
+                $a
+        }"#,
+    );
+    checker.check(b"foo", true);
+    checker.check(b"FoOoOoO", true);
+    checker.check(b"barFOOObaz", true);
+    checker.check(b"fo", false);
+    checker.check(b"FO", false);
+
+    let checker = Checker::new(
+        r#"
+        rule a {
+            strings:
+                $a = /.*b/s
+            condition:
+                $a
+        }"#,
+    );
+    checker.check(b"ab", true);
+    checker.check(b"ba\n\n  ba", true);
+    checker.check(b"AB", false);
+    checker.check(b"ec", false);
+}
+
+#[test]
+fn test_variable_find_at() {
+    fn check_at(mem: &[u8], at: u64, res: bool) {
+        let rule = format!(
+            r#"
+    rule a {{
+        strings:
+            $a = "34"
+            $b = /[a-z]{{2}}/
+        condition:
+            for any of them: ($ at {})
+    }}"#,
+            at
+        );
+        check(&rule, mem, res);
+    }
+
+    check_at(b"01234567", 3, true);
+    check_at(b"342342", 3, true);
+    check_at(b"34", 0, true);
+    check_at(b"234", 2, false);
+    check_at(b"234", 0, false);
+    check_at(b"01234", 15, false);
+
+    check_at(b"abc", 0, true);
+    check_at(b"abc", 1, true);
+    check_at(b"abc", 2, false);
+}
+
+#[test]
+fn test_variable_find_in() {
+    fn check_in(mem: &[u8], from: u64, to: u64, res: bool) {
+        let rule = format!(
+            r#"
+    rule a {{
+        strings:
+            $a = "345"
+        condition:
+            $a in ({}..{})
+    }}"#,
+            from, to
+        );
+        check(&rule, mem, res);
+    }
+
+    check_in(b"01234567", 0, 20, true);
+    check_in(b"01234567", 2, 6, true);
+    check_in(b"01234567", 3, 5, true);
+    check_in(b"01234567", 3, 4, true);
+    check_in(b"01234567", 3, 3, true);
+    check_in(b"01234567", 2, 3, true);
+    check_in(b"01234567", 1, 2, false);
+    check_in(b"34353435", 1, 6, false);
+}
+
+#[test]
 fn test_eval_defined() {
     check(&dbg!(build_empty_rule("defined 0")), &[], true);
     check(&build_empty_rule("defined 0.0"), &[], true);

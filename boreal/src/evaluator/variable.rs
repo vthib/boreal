@@ -94,6 +94,7 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable at a given offset
+    // FIXME: this is really bad performance
     pub fn find_at(&mut self, mem: &[u8], offset: usize) -> bool {
         if offset >= mem.len() {
             return false;
@@ -118,6 +119,7 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable in between given offset
+    // FIXME: this is really bad performance
     pub fn find_in(&mut self, mem: &[u8], from: usize, to: usize) -> bool {
         if from >= mem.len() {
             return false;
@@ -251,108 +253,4 @@ fn is_match_wide(mat: &Match, mem: &[u8]) -> bool {
 
 fn is_ascii_alnum(c: u8) -> bool {
     (b'0'..=b'9').contains(&c) || (b'A'..=b'Z').contains(&c) || (b'a'..=b'z').contains(&c)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::compile_variable;
-    use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue, VariableModifiers};
-
-    fn build_var_string(s: &str) -> Variable {
-        compile_variable(VariableDeclaration {
-            name: "umbasa".to_owned(),
-            value: VariableDeclarationValue::String(s.to_owned()),
-            modifiers: VariableModifiers::default(),
-        })
-        .unwrap()
-    }
-
-    fn build_var_regex(s: &str, case_insensitive: bool, dot_all: bool) -> Variable {
-        compile_variable(VariableDeclaration {
-            name: "umbasa".to_owned(),
-            value: VariableDeclarationValue::Regex(Regex {
-                expr: s.to_owned(),
-                case_insensitive,
-                dot_all,
-            }),
-            modifiers: VariableModifiers::default(),
-        })
-        .unwrap()
-    }
-
-    #[test]
-    fn test_variable_find() {
-        let find = |var, input| {
-            let mut eval_context = VariableEvaluation::new(var);
-            eval_context.find(input)
-        };
-
-        let v = build_var_string("45");
-        assert!(find(&v, b"12345678").is_some());
-        assert!(find(&v, b"45678").is_some());
-        assert!(find(&v, b"45").is_some());
-        assert!(find(&v, b"345").is_some());
-        assert!(!find(&v, b"1234678").is_some());
-        assert!(!find(&v, b"465").is_some());
-
-        let v = build_var_regex("4.5+", false, false);
-        assert!(find(&v, b"445").is_some());
-        assert!(find(&v, b"34\x3D555").is_some());
-        assert!(!find(&v, b"123").is_some());
-        assert!(!find(&v, b"44").is_some());
-        assert!(!find(&v, "4\n5".as_bytes()).is_some());
-
-        let v = build_var_regex("fo{2,}", true, false);
-        assert!(find(&v, b"foo").is_some());
-        assert!(find(&v, b"FoOoOoO").is_some());
-        assert!(find(&v, b"barFOOObaz").is_some());
-        assert!(!find(&v, b"fo").is_some());
-        assert!(!find(&v, b"FO").is_some());
-
-        let v = build_var_regex("a.*b", false, true);
-        assert!(find(&v, b"ab").is_some());
-        assert!(find(&v, b"ba\n\n  ba").is_some());
-        assert!(!find(&v, b"AB").is_some());
-        assert!(!find(&v, b"ec").is_some());
-    }
-
-    #[test]
-    fn test_variable_find_at() {
-        let find_at = |var, input, offset| {
-            let mut eval_context = VariableEvaluation::new(var);
-            eval_context.find_at(input, offset)
-        };
-
-        let v = build_var_string("34");
-        assert!(find_at(&v, b"01234567", 3));
-        assert!(find_at(&v, b"342342", 3));
-        assert!(find_at(&v, b"34", 0));
-        assert!(!find_at(&v, b"234", 2));
-        assert!(!find_at(&v, b"234", 0));
-        assert!(!find_at(&v, b"01234", 15));
-
-        let v = build_var_regex("[a-z]{2}", false, false);
-        assert!(find_at(&v, b"abc", 0));
-        assert!(find_at(&v, b"abc", 1));
-        assert!(!find_at(&v, b"abc", 2));
-    }
-
-    #[test]
-    fn test_variable_find_in() {
-        let find_in = |var, input, from, to| {
-            let mut eval_context = VariableEvaluation::new(var);
-            eval_context.find_in(input, from, to)
-        };
-
-        let v = build_var_string("345");
-        assert!(find_in(&v, b"01234567", 0, 20));
-        assert!(find_in(&v, b"01234567", 2, 6));
-        assert!(find_in(&v, b"01234567", 3, 5));
-        assert!(find_in(&v, b"01234567", 3, 4));
-        assert!(find_in(&v, b"01234567", 3, 3));
-        assert!(find_in(&v, b"01234567", 2, 3));
-        assert!(!find_in(&v, b"01234567", 1, 2));
-        assert!(!find_in(&v, b"34353435", 1, 6));
-    }
 }
