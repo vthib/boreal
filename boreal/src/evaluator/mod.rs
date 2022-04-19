@@ -395,8 +395,14 @@ impl Evaluator<'_> {
                 offset,
             } => {
                 // Safety: index has been generated during compilation and is valid.
-                let offset = self.evaluate_expr(offset)?.unwrap_number()?;
+                let offset = match self.evaluate_expr(offset) {
+                    Some(v) => v.unwrap_number()?,
+                    // This is actually what libyara does instead of returning an undefined value,
+                    // not sure why.
+                    None => return Some(Value::Boolean(false)),
+                };
                 let index = self.get_variable_index(*variable_index)?;
+
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
                 // - retrieve from the currently selected variable, and thus valid.
@@ -404,7 +410,7 @@ impl Evaluator<'_> {
 
                 match usize::try_from(offset) {
                     Ok(offset) => Some(Value::Boolean(var.find_at(self.mem, offset))),
-                    Err(_) => todo!(),
+                    Err(_) => Some(Value::Boolean(false)),
                 }
             }
 
@@ -426,7 +432,7 @@ impl Evaluator<'_> {
                     (Ok(from), Ok(to)) if from <= to => {
                         Some(Value::Boolean(var.find_in(self.mem, from, to)))
                     }
-                    _ => todo!(),
+                    _ => Some(Value::Boolean(false)),
                 }
             }
 

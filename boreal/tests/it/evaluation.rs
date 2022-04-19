@@ -1473,8 +1473,46 @@ fn test_variable_find_in() {
 }
 
 #[test]
+fn test_variable_find_at_invalid() {
+    // Negative index gives a defined result, but false
+    check(&build_rule("defined ($a0 at (#a0-10))"), b"", true);
+    check(&build_rule("$a0 at (#a0-10)"), b"", false);
+
+    // Undefined value
+    // FIXME: libyara actually returns "false" for a FOUND_AT operation with an undefined
+    // param, inconsistently with FOUND_IN for example. To report
+    check(
+        &build_rule("defined ($a0 at tests.integer_array[5])"),
+        b"",
+        true,
+    );
+    check(&build_rule("$a0 at tests.integer_array[5]"), b"", false);
+}
+
+#[test]
+fn test_variable_find_in_invalid() {
+    // Negative values give result false
+    check(&build_rule("defined ($a0 in (0..(#a0-1)))"), b"", true);
+    check(&build_rule("defined ($a0 in ((#a0-1)..0))"), b"", true);
+    check(&build_rule("$a0 in (0..(#a0-1))"), b"", false);
+    check(&build_rule("$a0 in ((#a0-1)..0)"), b"", false);
+
+    // Undefined value is propagated
+    check(
+        &build_rule("defined ($a0 in (0..tests.integer_array[5]))"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("defined ($a0 in ((tests.integer_array[5])..3))"),
+        b"",
+        false,
+    );
+}
+
+#[test]
 fn test_eval_defined() {
-    check(&dbg!(build_empty_rule("defined 0")), &[], true);
+    check(&build_empty_rule("defined 0"), &[], true);
     check(&build_empty_rule("defined 0.0"), &[], true);
     check(&build_empty_rule("defined \"a\""), &[], true);
     check(&build_empty_rule("defined /a/"), &[], true);
