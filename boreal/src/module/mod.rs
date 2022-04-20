@@ -1,4 +1,4 @@
-use regex::Regex;
+use regex::bytes::Regex;
 use std::collections::HashMap;
 
 /// A module allows providing custom values and functions in rules.

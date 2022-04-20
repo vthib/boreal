@@ -1557,6 +1557,27 @@ fn test_eval_defined() {
         false,
     );
     check_boreal(&build_rule("defined (-tests.lazy().fake_int)"), &[], false);
+
+    check(
+        &build_rule("defined (tests.string_array[5] matches /a.+z/s)"),
+        &[],
+        false,
+    );
+}
+
+#[test]
+fn test_eval_matches() {
+    check(&build_rule("\"az\" matches /a.+z/"), &[], false);
+    check(&build_rule("\"a<>z\" matches /a.+z/"), &[], true);
+    check(&build_rule("\"a<>Z\" matches /a.+z/"), &[], false);
+    check(&build_rule("\"a<>Z\" matches /a.+z/i"), &[], true);
+    check(&build_rule("\"a<>Z\" matches /a.+z/i"), &[], true);
+    check(&build_rule("\"a<\\n>Z\" matches /a.+z/i"), &[], false);
+    check(&build_rule("\"A<\\n>Z\" matches /a.+z/is"), &[], true);
+    check(&build_rule("\"A<\\n>Z\" matches /a.+z/s"), &[], false);
+    check(&build_rule("\"a<\\n>z\" matches /a.+z/s"), &[], true);
+
+    check(&build_rule("\"a<\\xFF>z\" matches /a.+z/"), &[], true);
 }
 
 // TODO: test count, offset, length with selected for variable

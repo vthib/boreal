@@ -9,7 +9,7 @@
 //! - etc
 //!
 //! The use of an `Option` is useful to propagate this poison value easily.
-use regex::Regex;
+use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForSelection, Rule, VariableIndex};
 
@@ -368,7 +368,10 @@ impl Evaluator<'_> {
                 let right = self.evaluate_expr(right)?.unwrap_string()?.to_lowercase();
                 Some(Value::Boolean(left == right))
             }
-            Expression::Matches(..) => todo!(),
+            Expression::Matches(expr, regex) => {
+                let s = self.evaluate_expr(expr)?.unwrap_string()?;
+                Some(Value::Boolean(regex.is_match(s.as_bytes())))
+            }
             Expression::Defined(expr) => {
                 let expr = self.evaluate_expr(expr);
 

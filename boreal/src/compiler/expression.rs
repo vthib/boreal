@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use regex::Regex;
+use regex::bytes::{Regex, RegexBuilder};
 
 use boreal_parser as parser;
 
@@ -978,21 +978,16 @@ fn compile_for_iterator(
 
 fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
     let parser::Regex {
-        mut expr,
+        expr,
         case_insensitive,
         dot_all,
     } = regex;
 
-    let flags = match (case_insensitive, dot_all) {
-        (false, false) => "",
-        (true, false) => "i",
-        (false, true) => "s",
-        (true, true) => "is",
-    };
-    if !flags.is_empty() {
-        expr = format!("(?{}){}", flags, expr);
-    }
-
-    // FIXME: get a span for the regex
-    Regex::new(&expr).map_err(|error| CompilationError::RegexError { expr, error })
+    RegexBuilder::new(&expr)
+        .unicode(false)
+        .case_insensitive(case_insensitive)
+        .dot_matches_new_line(dot_all)
+        .build()
+        // FIXME: get a span for the regex
+        .map_err(|error| CompilationError::RegexError { expr, error })
 }

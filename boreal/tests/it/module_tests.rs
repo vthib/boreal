@@ -1,4 +1,4 @@
-use regex::Regex;
+use regex::bytes::Regex;
 
 use boreal::module::{Module, Type, Value};
 
@@ -197,7 +197,7 @@ impl Tests {
         let s: String = args.next()?.try_into().ok()?;
         let regex: Regex = args.next()?.try_into().ok()?;
 
-        Some(Value::Boolean(regex.is_match(&s)))
+        Some(Value::Boolean(regex.is_match(s.as_bytes())))
     }
 
     fn integer_array(index: u64) -> Option<Value> {
@@ -255,7 +255,7 @@ impl Tests {
                 "fake_bool_to_fun",
                 Value::function(Self::empty, vec![], Type::Boolean),
             ),
-            ("fake_int", Value::Regex(regex::Regex::new("ht+p").unwrap())),
+            ("fake_int", Value::Regex(Regex::new("ht+p").unwrap())),
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),
             ("fake_fun_to_bool", Value::Boolean(false)),
