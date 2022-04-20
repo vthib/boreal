@@ -1580,4 +1580,78 @@ fn test_eval_matches() {
     check(&build_rule("\"a<\\xFF>z\" matches /a.+z/"), &[], true);
 }
 
+#[test]
+fn test_eval_var_count_in_range() {
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        #a in (0..8) == 3
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abcabc", false);
+    checker.check(b"abcabcabc", true);
+    checker.check(b"abcabcabc", true);
+    checker.check(b" abcabcabc", true);
+    checker.check(b"  abcabcabc", true);
+    checker.check(b"   abcabcabc", false);
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a.*b/
+    condition:
+        #a in (2..5) == 3
+}"#,
+    );
+    // FIXME: this raises a FATAL_INTERNAL_ERROR in libyara
+    checker.check_boreal(b"", false);
+    checker.check_boreal(b"  abaabb", true);
+    checker.check_boreal(b"  ababab", false);
+    checker.check_boreal(b"  abab", false);
+    checker.check_boreal(b"  aaaab", false);
+    checker.check_boreal(b" aaabb", false);
+    checker.check_boreal(b"  aaabb", true);
+    checker.check_boreal(b"   aaabb", true);
+    checker.check_boreal(b"    aaabb", false);
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { AB [1-3] CD }
+    condition:
+        #a in (3..6) == 2
+}"#,
+    );
+    checker.check_boreal(b"<<<\xab\xcd \xab_\xcd", false);
+    checker.check_boreal(b"<<\xab\xcd \xab_\xcd", false);
+    checker.check_boreal(b"<<<\xabpad\xcd \xab_\xcd", false);
+    checker.check_boreal(b"<<<\xab\xab_\xcd", true);
+    checker.check_boreal(b"<<<\xab\xab\xab_\xcd", false);
+    checker.check_boreal(b"<<<|\xab\xab\xab_\xcd", false);
+    checker.check_boreal(b"<<<||\xab\xab\xab_\xcd", true);
+    checker.check_boreal(b"<<<|||\xab\xab\xab_\xcd", false);
+
+    // Invalid range returns undefined
+    check_boreal(&build_rule("defined (#a0 in (5..#c0))"), b"", false);
+
+    // undefined is propagated
+    check(
+        &build_rule("defined (#a0 in (0..tests.integer_array[5]))"),
+        b"",
+        false,
+    );
+    // FIXME: (tests.integer_array[5]..5) is not properly parsed as a range in boreal-parser
+    check(
+        &build_rule("defined (#a0 in ((tests.integer_array[5])..5))"),
+        b"",
+        false,
+    );
+}
+
 // TODO: test count, offset, length with selected for variable

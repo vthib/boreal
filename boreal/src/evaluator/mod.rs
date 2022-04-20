@@ -156,7 +156,7 @@ impl Evaluator<'_> {
 
                         i64::try_from(count).ok().map(Value::Number)
                     }
-                    _ => todo!(),
+                    _ => None,
                 }
             }
             Expression::Count(variable_index) => {

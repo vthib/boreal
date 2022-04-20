@@ -36,14 +36,19 @@ impl Checker {
 
     #[track_caller]
     pub fn check(&self, mem: &[u8], expected_res: bool) {
-        let res = self.scanner.scan_mem(mem);
-        let res = res.matching_rules.len() > 0;
-        assert_eq!(res, expected_res, "test failed for boreal");
+        self.check_boreal(mem, expected_res);
 
         if let Some(rules) = &self.yara_rules {
             let res = rules.scan_mem(mem, 1).unwrap().len() > 0;
             assert_eq!(res, expected_res, "conformity test failed for libyara");
         }
+    }
+
+    #[track_caller]
+    pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
+        let res = self.scanner.scan_mem(mem);
+        let res = res.matching_rules.len() > 0;
+        assert_eq!(res, expected_res, "test failed for boreal");
     }
 }
 

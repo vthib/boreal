@@ -74,6 +74,5 @@ pub fn encode_base64(s: &[u8], alphabet: &Option<[u8; 64]>, offset: usize) -> Op
         }
         _ => (),
     }
-    dbg!(std::str::from_utf8(&res).unwrap());
     Some(res)
 }
