@@ -565,6 +565,7 @@ mod tests {
                         expr: "b".to_owned(),
                         case_insensitive: true,
                         dot_all: false,
+                        span: 12..16,
                     },
                 ),
                 span: 0..16,

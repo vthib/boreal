@@ -1,5 +1,6 @@
 //! Parsing related to strings, regexes and identifiers.
 use std::borrow::ToOwned;
+use std::ops::Range;
 
 use nom::{
     branch::alt,
@@ -24,6 +25,9 @@ pub struct Regex {
     pub case_insensitive: bool,
     /// `.` matches `\n` (`s` flag).
     pub dot_all: bool,
+
+    /// The span of the regex expression
+    pub span: Range<usize>,
 }
 
 /// Returns true if the char is an identifier digit, ie a-z, a-Z, 0-9, _
@@ -178,6 +182,7 @@ pub fn regex(input: Input) -> ParseResult<Regex> {
             expr,
             case_insensitive: no_case.is_some(),
             dot_all: dot_all.is_some(),
+            span: input.get_span_from(start),
         },
     ))
 }
@@ -272,6 +277,7 @@ mod tests {
                 expr: "a".to_owned(),
                 case_insensitive: true,
                 dot_all: false,
+                span: 0..4,
             },
         );
         parse(
@@ -282,6 +288,7 @@ mod tests {
                 expr: "[^0-9]+".to_owned(),
                 case_insensitive: false,
                 dot_all: false,
+                span: 0..9,
             },
         );
         parse(
@@ -292,6 +299,7 @@ mod tests {
                 expr: "a/b\\cd".to_owned(),
                 case_insensitive: true,
                 dot_all: true,
+                span: 0..11,
             },
         );
         parse(
@@ -302,6 +310,7 @@ mod tests {
                 expr: ".{2}".to_owned(),
                 case_insensitive: false,
                 dot_all: true,
+                span: 0..7,
             },
         );
         parse(
@@ -312,6 +321,7 @@ mod tests {
                 expr: "\0\\\0".to_owned(),
                 case_insensitive: false,
                 dot_all: false,
+                span: 0..5,
             },
         );
 

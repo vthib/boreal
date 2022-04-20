@@ -164,6 +164,7 @@ fn build_regex_matcher(
         expr,
         mut case_insensitive,
         dot_all,
+        span: _,
     } = regex;
 
     if modifiers.flags.contains(VariableFlags::NOCASE) {

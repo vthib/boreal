@@ -12,6 +12,8 @@ pub enum CompilationError {
         expr: String,
         /// Error returned by the [`regex`] crate.
         error: regex::Error,
+        /// Span of the regex expression in the input
+        span: Range<usize>,
     },
 
     /// Expression with an invalid type
@@ -130,9 +132,10 @@ impl CompilationError {
     #[must_use]
     pub(crate) fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
-            // TODO: get span from parser
-            Self::RegexError { expr, error } => Diagnostic::error()
-                .with_message(format!("regex `{}` failed to build: {:?}", expr, error)),
+            Self::RegexError { expr, error, span } => Diagnostic::error()
+                .with_message(format!("regex `{}` failed to build: {:?}", expr, error))
+                .with_labels(vec![Label::primary((), span.clone())]),
+
             Self::ExpressionInvalidType {
                 ty,
                 expected_type,
@@ -141,6 +144,7 @@ impl CompilationError {
                 .with_message("expression has an invalid type")
                 .with_labels(vec![Label::primary((), span.clone())
                     .with_message(format!("expected {}, found {}", expected_type, ty))]),
+
             Self::ExpressionIncompatibleTypes {
                 left_type,
                 left_span,

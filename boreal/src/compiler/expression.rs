@@ -981,6 +981,7 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         expr,
         case_insensitive,
         dot_all,
+        span,
     } = regex;
 
     RegexBuilder::new(&expr)
@@ -988,6 +989,5 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         .case_insensitive(case_insensitive)
         .dot_matches_new_line(dot_all)
         .build()
-        // FIXME: get a span for the regex
-        .map_err(|error| CompilationError::RegexError { expr, error })
+        .map_err(|error| CompilationError::RegexError { expr, error, span })
 }

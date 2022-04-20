@@ -439,6 +439,7 @@ mod tests {
                     expr: "a*b$".to_owned(),
                     case_insensitive: true,
                     dot_all: false,
+                    span: 0..7,
                 }),
                 span: 0..7,
             },

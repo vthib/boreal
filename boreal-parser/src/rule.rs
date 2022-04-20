@@ -818,6 +818,7 @@ mod tests {
                         expr: "a?b".to_owned(),
                         case_insensitive: false,
                         dot_all: false,
+                        span: 38..43,
                     }),
                     modifiers: VariableModifiers {
                         flags: VariableFlags::empty(),
