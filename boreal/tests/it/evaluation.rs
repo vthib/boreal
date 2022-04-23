@@ -1654,4 +1654,213 @@ rule a {
     );
 }
 
+#[test]
+fn test_eval_read_integer_8() {
+    check(&build_rule("uint8(0) == 0"), b"\0", true);
+    check(&build_rule("uint8(2) == 99"), b"abcd", true);
+    check(&build_rule("uint8(2) == 99"), b"\0\0\0\0", false);
+    check(&build_rule("uint8(2) == 255"), b"\0\0\xFF\0", true);
+
+    check(&build_rule("int8(0) == 0"), b"\0", true);
+    check(&build_rule("int8(2) == 99"), b"abcd", true);
+    check(&build_rule("int8(2) == 127"), b"\0\0\x7F\0", true);
+    check(&build_rule("int8(0) == -128"), b"\xFF", false);
+    check(&build_rule("int8(0) == -1"), b"\xFF\0", true);
+    check(&build_rule("int8(0) == -128"), b"\x80\0", true);
+
+    check(&build_rule("defined uint8(-1)"), b"", false);
+    check(&build_rule("defined uint8(1)"), b"", false);
+    check(
+        &build_rule("defined uint8(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+    check(&build_rule("defined int8(-1)"), b"", false);
+    check(&build_rule("defined int8(1)"), b"", false);
+    check(
+        &build_rule("defined int8(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+}
+
+#[test]
+fn test_eval_read_integer_16() {
+    check(&build_rule("uint16(0) == 0"), b"\0\0", true);
+    check(&build_rule("uint16(2) == 25699"), b"abcd", true);
+    check(&build_rule("uint16(0) == 255"), b"\0\xFF\0", false);
+    check(&build_rule("uint16(0) == 65280"), b"\0\xFF\0", true);
+    check(&build_rule("uint16(0) == 65535"), b"\xFF\xFF\0", true);
+
+    check(&build_rule("uint16be(0) == 0"), b"\0\0", true);
+    check(&build_rule("uint16be(2) == 25444"), b"abcd", true);
+    check(&build_rule("uint16be(0) == 255"), b"\0\xFF\0", true);
+    check(&build_rule("uint16be(0) == 65280"), b"\0\xFF\0", false);
+    check(&build_rule("uint16be(0) == 65535"), b"\xFF\xFF\0", true);
+
+    check(&build_rule("int16(0) == 0"), b"\0\0", true);
+    check(&build_rule("int16(2) == 25699"), b"abcd", true);
+    check(&build_rule("int16(0) == 255"), b"\0\xFF\0", false);
+    check(&build_rule("int16(0) == -256"), b"\0\xFF\0", true);
+    check(&build_rule("int16(0) == 32767"), b"\x7F\xFF\0", false);
+    check(&build_rule("int16(0) == 32767"), b"\xFF\x7F\0", true);
+    check(&build_rule("int16(0) == -1"), b"\xFF\xFF\0", true);
+    check(&build_rule("int16(0) == -32768"), b"\x00\x80\0", true);
+
+    check(&build_rule("int16be(0) == 0"), b"\0\0", true);
+    check(&build_rule("int16be(2) == 25444"), b"abcd", true);
+    check(&build_rule("int16be(0) == 255"), b"\0\xFF\0", true);
+    check(&build_rule("int16be(0) == -256"), b"\0\xFF\0", false);
+    check(&build_rule("int16be(0) == -256"), b"\xFF\0\0", true);
+    check(&build_rule("int16be(0) == 32767"), b"\x7F\xFF\0", true);
+    check(&build_rule("int16be(0) == 32767"), b"\xFF\x7F\0", false);
+    check(&build_rule("int16be(0) == -1"), b"\xFF\xFF\0", true);
+    check(&build_rule("int16be(0) == -32768"), b"\x80\0\0", true);
+
+    // undefined with out of bounds index
+    check(&build_rule("defined uint16(-1)"), b"", false);
+    check(&build_rule("defined int16(-1)"), b"", false);
+    check(&build_rule("defined uint16be(-1)"), b"", false);
+    check(&build_rule("defined int16be(-1)"), b"", false);
+    check(&build_rule("defined uint16(5)"), b"", false);
+    check(&build_rule("defined int16(5)"), b"", false);
+    check(&build_rule("defined uint16be(5)"), b"", false);
+    check(&build_rule("defined int16be(5)"), b"", false);
+
+    // undefined with in bounds, but missing some bytes
+    check(&build_rule("defined uint16(2)"), b"abc", false);
+    check(&build_rule("defined int16(2)"), b"abc", false);
+    check(&build_rule("defined uint16be(2)"), b"abc", false);
+    check(&build_rule("defined int16be(2)"), b"abc", false);
+
+    // undefined with undefined index
+    check(
+        &build_rule("defined uint16(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("defined int16(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("defined uint16be(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("defined int16be(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+}
+
+#[test]
+fn test_eval_read_integer_32() {
+    check(&build_rule("uint32(0) == 0"), b"\0\0\0\0", true);
+    check(&build_rule("uint32(2) == 1717920867"), b"abcdefg", true);
+    check(&build_rule("uint32(0) == 255"), b"\0\0\0\xFF", false);
+    check(&build_rule("uint32(0) == 4278190080"), b"\0\0\0\xFF", true);
+    check(
+        &build_rule("uint32(0) == 4294967295"),
+        b"\xFF\xFF\xFF\xFF",
+        true,
+    );
+
+    check(&build_rule("uint32be(0) == 0"), b"\0\0\0\0", true);
+    check(&build_rule("uint32be(2) == 1667523942"), b"abcdefg", true);
+    check(&build_rule("uint32be(0) == 255"), b"\0\0\0\xFF", true);
+    check(
+        &build_rule("uint32be(0) == 4278190080"),
+        b"\0\0\0\xFF",
+        false,
+    );
+    check(
+        &build_rule("uint32be(0) == 4294967295"),
+        b"\xFF\xFF\xFF\xFF",
+        true,
+    );
+
+    check(&build_rule("int32(0) == 0"), b"\0\0\0\0", true);
+    check(&build_rule("int32(2) == 1717920867"), b"abcdefg", true);
+    check(&build_rule("int32(0) == 255"), b"\0\0\0\xFF", false);
+    check(&build_rule("int32(0) == -16777216"), b"\0\0\0\xFF", true);
+    check(&build_rule("int32(0) == 255"), b"\xFF\0\0\0", true);
+    check(
+        &build_rule("int32(0) == 2147483647"),
+        b"\xFF\xFF\x7F\xFF\0",
+        false,
+    );
+    check(
+        &build_rule("int32(0) == 2147483647"),
+        b"\xFF\xFF\xFF\x7F\0",
+        true,
+    );
+    check(&build_rule("int32(0) == -1"), b"\xFF\xFF\0\0", false);
+    check(&build_rule("int32(0) == -1"), b"\xFF\xFF\xFF\xFF\0", true);
+    check(&build_rule("int32(0) == -2147483648"), b"\0\0\0\x80", true);
+
+    check(&build_rule("int32be(0) == 0"), b"\0\0\0\0", true);
+    check(&build_rule("int32be(2) == 1667523942"), b"abcdefg", true);
+    check(&build_rule("int32be(0) == 255"), b"\0\0\0\xFF", true);
+    check(&build_rule("int32be(0) == -16777216"), b"\0\0\0\xFF", false);
+    check(&build_rule("int32be(0) == -16777216"), b"\xFF\0\0\0", true);
+    check(
+        &build_rule("int32be(0) == 2147483647"),
+        b"\xFF\xFF\x7F\xFF\0",
+        false,
+    );
+    check(
+        &build_rule("int32be(0) == 2147483647"),
+        b"\x7F\xFF\xFF\xFF\0",
+        true,
+    );
+    check(&build_rule("int32be(0) == -1"), b"\xFF\xFF\0\0", false);
+    check(&build_rule("int32be(0) == -1"), b"\xFF\xFF\xFF\xFF\0", true);
+    check(
+        &build_rule("int32be(0) == -2147483648"),
+        b"\x80\0\0\0",
+        true,
+    );
+
+    // undefined with out of bounds index
+    check(&build_rule("defined uint32(-1)"), b"", false);
+    check(&build_rule("defined int32(-1)"), b"", false);
+    check(&build_rule("defined uint32be(-1)"), b"", false);
+    check(&build_rule("defined int32be(-1)"), b"", false);
+    check(&build_rule("defined uint32(5)"), b"", false);
+    check(&build_rule("defined int32(5)"), b"", false);
+    check(&build_rule("defined uint32be(5)"), b"", false);
+    check(&build_rule("defined int32be(5)"), b"", false);
+
+    // undefined with in bounds, but missing some bytes
+    check(&build_rule("defined uint32(4)"), b"abcdefg", false);
+    check(&build_rule("defined int32(4)"), b"abcdefg", false);
+    check(&build_rule("defined uint32be(4)"), b"abcdefg", false);
+    check(&build_rule("defined int32be(4)"), b"abcdefg", false);
+
+    // undefined with undefined index
+    check(
+        &build_rule("defined uint32(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("defined int32(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("defined uint32be(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("defined int32be(tests.integer_array[5])"),
+        b"",
+        false,
+    );
+}
+
 // TODO: test count, offset, length with selected for variable

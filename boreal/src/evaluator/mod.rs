@@ -15,6 +15,8 @@ use crate::compiler::{Expression, ForSelection, Rule, VariableIndex};
 
 mod module;
 use module::{evaluate_module_array, evaluate_module_function};
+mod read_integer;
+use read_integer::evaluate_read_integer;
 mod variable;
 use variable::VariableEvaluation;
 
@@ -138,7 +140,7 @@ impl Evaluator<'_> {
         match expr {
             Expression::Filesize => todo!(),
             Expression::Entrypoint => todo!(),
-            Expression::ReadInteger { .. } => todo!(),
+            Expression::ReadInteger { addr, ty } => evaluate_read_integer(self, addr, *ty),
 
             Expression::CountInRange {
                 variable_index,

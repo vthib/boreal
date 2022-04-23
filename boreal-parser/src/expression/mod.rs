@@ -15,7 +15,7 @@ use crate::string::Regex;
 // Maybe implementing Shunting-Yard would be better, to bench and test.
 
 /// Integer read type, see [`ExpressionKind::ReadInteger`].
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ReadIntegerType {
     /// 8 bits, signed
     Int8,
