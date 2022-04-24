@@ -12,16 +12,87 @@ impl Module for Tests {
 
     fn get_value(&self) -> Value {
         Value::object([
+            // Following is same as libyara, used in compliance tests
             (
                 "constants",
                 Value::object([
                     ("one", Value::Integer(1)),
+                    ("two", Value::Integer(2)),
+                    ("foo", Value::string("foo")),
+                    ("empty", Value::string("")),
+                    // Not libyara
                     ("one_half", Value::Float(0.5)),
                     ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
                     ("str", Value::string("str")),
                     ("true", Value::Boolean(true)),
                 ]),
             ),
+            (
+                "undefined",
+                Value::function(
+                    Self::undefined,
+                    vec![],
+                    Type::object([("i", Type::Integer), ("f", Type::Float)]),
+                ),
+            ),
+            // TODO: missing module_data
+            (
+                "integer_array",
+                Value::array(Self::integer_array, Type::Integer),
+            ),
+            (
+                "string_array",
+                Value::array(Self::string_array, Type::String),
+            ),
+            // TODO: integer_dict & string_dict
+            (
+                "struct_array",
+                Value::array(
+                    Self::struct_array,
+                    Type::object([("i", Type::Integer), ("s", Type::String)]),
+                ),
+            ),
+            // TODO: struct_dict & empty_struct_dict
+            (
+                "match",
+                Value::function(
+                    Self::r#match,
+                    vec![vec![Type::String, Type::Regex]],
+                    Type::Boolean,
+                ),
+            ),
+            (
+                "isum",
+                Value::function(
+                    Self::isum,
+                    vec![
+                        vec![Type::Integer, Type::Integer],
+                        vec![Type::Integer, Type::Integer, Type::Integer],
+                    ],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "fsum",
+                Value::function(
+                    Self::fsum,
+                    vec![
+                        vec![Type::Float, Type::Float],
+                        vec![Type::Float, Type::Float, Type::Integer],
+                    ],
+                    Type::Float,
+                ),
+            ),
+            (
+                "length",
+                Value::function(Self::length, vec![vec![Type::String]], Type::Integer),
+            ),
+            ("empty", Value::function(Self::empty, vec![], Type::String)),
+            (
+                "foobar",
+                Value::function(Self::foobar, vec![vec![Type::Integer]], Type::String),
+            ),
+            // The rest is not in libyara
             (
                 "lazy",
                 Value::function(
@@ -81,14 +152,6 @@ impl Module for Tests {
                 Value::function(Self::undefined, vec![], Type::Integer),
             ),
             (
-                "undefined",
-                Value::function(
-                    Self::undefined,
-                    vec![],
-                    Type::object([("i", Type::Integer), ("f", Type::Float)]),
-                ),
-            ),
-            (
                 "string_dict",
                 Value::object([
                     ("foo", Value::string("foo")),
@@ -106,56 +169,6 @@ impl Module for Tests {
                     Value::object([("s", Value::string("foo")), ("i", Value::Integer(1))]),
                 )]),
             ),
-            (
-                "integer_array",
-                Value::array(Self::integer_array, Type::Integer),
-            ),
-            (
-                "string_array",
-                Value::array(Self::string_array, Type::String),
-            ),
-            (
-                "struct_array",
-                Value::array(
-                    Self::struct_array,
-                    Type::object([("i", Type::Integer), ("s", Type::String)]),
-                ),
-            ),
-            (
-                "match",
-                Value::function(
-                    Self::r#match,
-                    vec![vec![Type::String, Type::Regex]],
-                    Type::Boolean,
-                ),
-            ),
-            (
-                "isum",
-                Value::function(
-                    Self::isum,
-                    vec![
-                        vec![Type::Integer, Type::Integer],
-                        vec![Type::Integer, Type::Integer, Type::Integer],
-                    ],
-                    Type::Integer,
-                ),
-            ),
-            (
-                "fsum",
-                Value::function(
-                    Self::fsum,
-                    vec![
-                        vec![Type::Float, Type::Float],
-                        vec![Type::Float, Type::Float, Type::Integer],
-                    ],
-                    Type::Float,
-                ),
-            ),
-            (
-                "length",
-                Value::function(Self::length, vec![vec![Type::String]], Type::Integer),
-            ),
-            ("empty", Value::function(Self::empty, vec![], Type::String)),
             (
                 "log",
                 Value::function(
@@ -208,6 +221,17 @@ impl Tests {
         Some(Value::String("".into()))
     }
 
+    fn foobar(args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let v = i64::try_from(args.next()?).ok()?;
+
+        Some(Value::string(match v {
+            1 => "foo",
+            2 => "bar",
+            _ => "oops",
+        }))
+    }
+
     fn log(_: Vec<Value>) -> Option<Value> {
         Some(Value::Boolean(true))
     }
@@ -221,10 +245,9 @@ impl Tests {
     }
 
     fn integer_array(index: u64) -> Option<Value> {
-        if index <= 2 {
-            Some(Value::Integer(index as i64))
-        } else {
-            None
+        match index {
+            0 | 1 | 2 | 256 => Some(Value::Integer(index as i64)),
+            _ => None,
         }
     }
 
@@ -233,7 +256,6 @@ impl Tests {
             0 => Some(Value::string("foo")),
             1 => Some(Value::string("bar")),
             2 => Some(Value::string("baz")),
-            3 => Some(Value::string("foo\0bar")),
             _ => None,
         }
     }
