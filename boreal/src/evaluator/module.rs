@@ -79,7 +79,7 @@ fn evaluate_value_operation(
 ) -> Option<ModuleValue> {
     match op {
         ValueOperation::Subfield(subfield) => match value {
-            ModuleValue::Dictionary(mut map) => map.remove(&**subfield),
+            ModuleValue::Object(mut map) => map.remove(&**subfield),
             _ => None,
         },
         ValueOperation::Subscript(subscript) => match value {

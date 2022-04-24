@@ -11,10 +11,10 @@ impl Module for Tests {
     }
 
     fn get_value(&self) -> Value {
-        Value::dictionary([
+        Value::object([
             (
                 "constants",
-                Value::dictionary([
+                Value::object([
                     ("one", Value::Integer(1)),
                     ("one_half", Value::Float(0.5)),
                     ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
@@ -27,7 +27,7 @@ impl Module for Tests {
                 Value::function(
                     Self::lazy,
                     vec![],
-                    Type::dictionary([
+                    Type::object([
                         ("one", Type::Integer),
                         ("one_half", Type::Float),
                         ("regex", Type::Regex),
@@ -35,7 +35,7 @@ impl Module for Tests {
                         ("true", Type::Boolean),
                         (
                             "dict",
-                            Type::dictionary([
+                            Type::object([
                                 ("i", Type::Integer),
                                 ("s", Type::String),
                                 // Declared here, but not exposed on evaluation
@@ -56,10 +56,7 @@ impl Module for Tests {
                         // Declared as an integer, but exposes a regex
                         ("fake_int", Type::Integer),
                         // Declare as a dict, but exposes a bool
-                        (
-                            "fake_dict_to_bool",
-                            Type::dictionary([("i", Type::Integer)]),
-                        ),
+                        ("fake_dict_to_bool", Type::object([("i", Type::Integer)])),
                         // Declare as an array, but exposes a bool
                         ("fake_array_to_bool", Type::array(Type::String)),
                         // Declare as a function, but exposes a bool
@@ -69,10 +66,7 @@ impl Module for Tests {
                             "lazy",
                             Type::function(
                                 vec![],
-                                Type::dictionary([(
-                                    "lazy_int",
-                                    Type::function(vec![], Type::Integer),
-                                )]),
+                                Type::object([("lazy_int", Type::function(vec![], Type::Integer))]),
                             ),
                         ),
                     ]),
@@ -91,12 +85,12 @@ impl Module for Tests {
                 Value::function(
                     Self::undefined,
                     vec![],
-                    Type::dictionary([("i", Type::Integer), ("f", Type::Float)]),
+                    Type::object([("i", Type::Integer), ("f", Type::Float)]),
                 ),
             ),
             (
                 "string_dict",
-                Value::dictionary([
+                Value::object([
                     ("foo", Value::string("foo")),
                     ("bar", Value::string("bar")),
                     (
@@ -107,9 +101,9 @@ impl Module for Tests {
             ),
             (
                 "struct_dict",
-                Value::dictionary([(
+                Value::object([(
                     "foo",
-                    Value::dictionary([("s", Value::string("foo")), ("i", Value::Integer(1))]),
+                    Value::object([("s", Value::string("foo")), ("i", Value::Integer(1))]),
                 )]),
             ),
             (
@@ -124,7 +118,7 @@ impl Module for Tests {
                 "struct_array",
                 Value::array(
                     Self::struct_array,
-                    Type::dictionary([("i", Type::Integer), ("s", Type::String)]),
+                    Type::object([("i", Type::Integer), ("s", Type::String)]),
                 ),
             ),
             (
@@ -246,14 +240,14 @@ impl Tests {
 
     fn struct_array(index: u64) -> Option<Value> {
         if index == 1 {
-            Some(Value::dictionary([("i", Value::Integer(1))]))
+            Some(Value::object([("i", Value::Integer(1))]))
         } else {
             None
         }
     }
 
     fn lazy(_: Vec<Value>) -> Option<Value> {
-        Some(Value::dictionary([
+        Some(Value::object([
             ("one", Value::Integer(1)),
             ("one_half", Value::Float(0.5)),
             ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
@@ -261,7 +255,7 @@ impl Tests {
             ("true", Value::Boolean(true)),
             (
                 "dict",
-                Value::dictionary([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
+                Value::object([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
             ),
             ("str_array", Value::array(Self::string_array, Type::String)),
             (
@@ -276,7 +270,7 @@ impl Tests {
                 "fake_bool_to_array",
                 Value::array(Self::integer_array, Type::Integer),
             ),
-            ("fake_bool_to_dict", Value::dictionary([])),
+            ("fake_bool_to_dict", Value::object([])),
             (
                 "fake_bool_to_fun",
                 Value::function(Self::empty, vec![], Type::Boolean),
@@ -290,14 +284,14 @@ impl Tests {
                 Value::function(
                     Self::lazy_lazy,
                     vec![],
-                    Type::dictionary([("lazy_int", Type::function(vec![], Type::Integer))]),
+                    Type::object([("lazy_int", Type::function(vec![], Type::Integer))]),
                 ),
             ),
         ]))
     }
 
     fn lazy_lazy(_: Vec<Value>) -> Option<Value> {
-        Some(Value::dictionary([(
+        Some(Value::object([(
             "lazy_int",
             Value::function(Self::lazy_lazy_int, vec![], Type::Integer),
         )]))

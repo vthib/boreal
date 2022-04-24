@@ -40,7 +40,7 @@ pub trait Module {
     ///     }
     ///
     ///     fn get_value(&self) -> Value {
-    ///         Value::dictionary([
+    ///         Value::object([
     ///             ("int", Value::Integer(1)),
     ///             ("array", Value::array(bar_array, Type::String)),
     ///         ])
@@ -79,11 +79,11 @@ pub enum Value {
     Regex(Regex),
     /// A boolean.
     Boolean(bool),
-    /// A dictionary, mapping to other values.
+    /// An object, mapping to other values.
     ///
-    /// For example, if a module `foo` exports a dictionary value with the key `bar`, then it can
+    /// For example, if a module `foo` exports an object value with the key `bar`, then it can
     /// be accessed with the syntax `foo.bar` in a rule.
-    Dictionary(HashMap<&'static str, Value>),
+    Object(HashMap<&'static str, Value>),
 
     /// An array.
     ///
@@ -162,8 +162,8 @@ impl Value {
     }
 
     #[must_use]
-    pub fn dictionary<const N: usize>(v: [(&'static str, Value); N]) -> Self {
-        Value::Dictionary(v.into())
+    pub fn object<const N: usize>(v: [(&'static str, Value); N]) -> Self {
+        Value::Object(v.into())
     }
 
     pub fn array(fun: fn(u64) -> Option<Value>, ty: Type) -> Self {
@@ -194,7 +194,7 @@ pub enum Type {
     String,
     Regex,
     Boolean,
-    Dictionary(HashMap<&'static str, Type>),
+    Object(HashMap<&'static str, Type>),
     Array {
         value_type: Box<Type>,
     },
@@ -206,8 +206,8 @@ pub enum Type {
 
 impl Type {
     #[must_use]
-    pub fn dictionary<const N: usize>(v: [(&'static str, Type); N]) -> Self {
-        Self::Dictionary(v.into())
+    pub fn object<const N: usize>(v: [(&'static str, Type); N]) -> Self {
+        Self::Object(v.into())
     }
 
     #[must_use]

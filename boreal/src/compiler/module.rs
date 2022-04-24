@@ -172,9 +172,9 @@ impl ModuleUse<'_> {
             Value::Regex(v) => Expression::Regex(v.clone()),
             Value::Boolean(v) => Expression::Boolean(*v),
 
-            // There is no legitimate situation where we can end up with a dictionary
+            // There is no legitimate situation where we can end up with an object
             // as the last immediate value.
-            Value::Dictionary(_) => return None,
+            Value::Object(_) => return None,
 
             Value::Array { on_scan, .. } => {
                 let mut ops = self.operations.into_iter();
@@ -241,7 +241,7 @@ impl ValueOrType<'_> {
     fn subfield(&mut self, subfield: &str) -> Result<(), TypeError> {
         match self {
             Self::Value(value) => {
-                if let Value::Dictionary(map) = value {
+                if let Value::Object(map) = value {
                     match map.get(&*subfield) {
                         Some(v) => {
                             *self = Self::Value(v);
@@ -252,7 +252,7 @@ impl ValueOrType<'_> {
                 }
             }
             Self::Type(ty) => {
-                if let ValueType::Dictionary(map) = ty {
+                if let ValueType::Object(map) = ty {
                     match map.get(&*subfield) {
                         Some(v) => {
                             *self = Self::Type(v);
@@ -266,7 +266,7 @@ impl ValueOrType<'_> {
 
         Err(TypeError::WrongType {
             actual_type: self.type_to_string(),
-            expected_type: "dictionary".to_owned(),
+            expected_type: "object".to_owned(),
         })
     }
 
@@ -370,7 +370,7 @@ impl ValueOrType<'_> {
                 Value::Regex(_) => "regex",
                 Value::Boolean(_) => "boolean",
                 Value::Array { .. } => "array",
-                Value::Dictionary(_) => "dictionary",
+                Value::Object(_) => "object",
                 Value::Function { .. } => "function",
             },
             Self::Type(ty) => match ty {
@@ -380,7 +380,7 @@ impl ValueOrType<'_> {
                 ValueType::Regex => "regex",
                 ValueType::Boolean => "boolean",
                 ValueType::Array { .. } => "array",
-                ValueType::Dictionary(_) => "dictionary",
+                ValueType::Object(_) => "object",
                 ValueType::Function { .. } => "function",
             },
         }
