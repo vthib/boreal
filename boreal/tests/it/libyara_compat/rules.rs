@@ -36,8 +36,6 @@ fn test_boolean_operators() {
 }
 
 #[test]
-// TODO: Implement identifiers
-#[ignore]
 fn test_boolean_operators_with_identifiers() {
     check(
         "import \"tests\" rule test { condition: not tests.undefined.i }",
@@ -105,15 +103,16 @@ fn test_boolean_operators_with_identifiers() {
         false,
     );
 
-    check(
-        "import \"tests\"
-    rule test {
-        condition:
-        not tests.string_dict[\"undefined\"] matches /foo/
-    }",
-        &[],
-        false,
-    );
+    // TODO: implement dictionaries
+    // check(
+    //     "import \"tests\"
+    // rule test {
+    //     condition:
+    //     not tests.string_dict[\"undefined\"] matches /foo/
+    // }",
+    //     &[],
+    //     false,
+    // );
 
     check(
         "import \"tests\"

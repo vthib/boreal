@@ -64,6 +64,17 @@ impl Module for Tests {
                         ("fake_array_to_bool", Type::array(Type::String)),
                         // Declare as a function, but exposes a bool
                         ("fake_fun_to_bool", Type::function(vec![], Type::Boolean)),
+                        // Lazy to lazy to int
+                        (
+                            "lazy",
+                            Type::function(
+                                vec![],
+                                Type::dictionary([(
+                                    "lazy_int",
+                                    Type::function(vec![], Type::Integer),
+                                )]),
+                            ),
+                        ),
                     ]),
                 ),
             ),
@@ -76,8 +87,23 @@ impl Module for Tests {
                 Value::function(Self::undefined, vec![], Type::Integer),
             ),
             (
+                "undefined",
+                Value::function(
+                    Self::undefined,
+                    vec![],
+                    Type::dictionary([("i", Type::Integer), ("f", Type::Float)]),
+                ),
+            ),
+            (
                 "string_dict",
-                Value::dictionary([("foo", Value::string("foo")), ("bar", Value::string("bar"))]),
+                Value::dictionary([
+                    ("foo", Value::string("foo")),
+                    ("bar", Value::string("bar")),
+                    (
+                        "undefined",
+                        Value::function(Self::undefined, vec![], Type::String),
+                    ),
+                ]),
             ),
             (
                 "struct_dict",
@@ -259,6 +285,25 @@ impl Tests {
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),
             ("fake_fun_to_bool", Value::Boolean(false)),
+            (
+                "lazy",
+                Value::function(
+                    Self::lazy_lazy,
+                    vec![],
+                    Type::dictionary([("lazy_int", Type::function(vec![], Type::Integer))]),
+                ),
+            ),
         ]))
+    }
+
+    fn lazy_lazy(_: Vec<Value>) -> Option<Value> {
+        Some(Value::dictionary([(
+            "lazy_int",
+            Value::function(Self::lazy_lazy_int, vec![], Type::Integer),
+        )]))
+    }
+
+    fn lazy_lazy_int(_: Vec<Value>) -> Option<Value> {
+        Some(Value::Integer(3))
     }
 }

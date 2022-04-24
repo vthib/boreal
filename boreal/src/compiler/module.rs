@@ -86,6 +86,10 @@ impl ModuleUse<'_> {
     fn add_operation(&mut self, op: parser::IdentifierOperation) -> Result<(), CompilationError> {
         let res = match op.op {
             parser::IdentifierOperationType::Subfield(subfield) => {
+                if self.current_value.coalesce_noarg_function() {
+                    self.operations.push(ValueOperation::FunctionCall(vec![]));
+                }
+
                 let res = self.current_value.subfield(&subfield);
                 match self.current_value {
                     ValueOrType::Value(v) => self.last_immediate_value = v,
@@ -152,7 +156,11 @@ impl ModuleUse<'_> {
         Ok(())
     }
 
-    fn into_expression(self) -> Option<(Expression, Type)> {
+    fn into_expression(mut self) -> Option<(Expression, Type)> {
+        if self.current_value.coalesce_noarg_function() {
+            self.operations.push(ValueOperation::FunctionCall(vec![]));
+        }
+
         let ty = self.current_value.into_expression_type()?;
 
         let expr = match self.last_immediate_value {
@@ -315,6 +323,42 @@ impl ValueOrType<'_> {
             actual_type: self.type_to_string(),
             expected_type: "function".to_owned(),
         })
+    }
+
+    // Coalesce function with no arguments to its return type.
+    //
+    // This allows using a function with no arguments without the `()` syntax, enabling
+    // use of such functions transparently for properties that need to be computed
+    // at scan time.
+    fn coalesce_noarg_function(&mut self) -> bool {
+        match self {
+            Self::Value(value) => {
+                if let Value::Function {
+                    arguments_types,
+                    return_type,
+                    ..
+                } = value
+                {
+                    if arguments_types.is_empty() {
+                        *self = Self::Type(return_type);
+                        return true;
+                    }
+                }
+            }
+            Self::Type(ty) => {
+                if let ValueType::Function {
+                    arguments_types,
+                    return_type,
+                } = ty
+                {
+                    if arguments_types.is_empty() {
+                        *self = Self::Type(return_type);
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn type_to_string(&self) -> String {
