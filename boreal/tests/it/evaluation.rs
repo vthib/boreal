@@ -1863,4 +1863,15 @@ fn test_eval_read_integer_32() {
     );
 }
 
+#[test]
+fn test_eval_filesize() {
+    check(&build_empty_rule("filesize == 0"), b"", true);
+    check(&build_empty_rule("filesize == 0"), b"a", false);
+    check(
+        &build_empty_rule("filesize == 4096"),
+        format!("{:<4096}", " ").as_bytes(),
+        true,
+    );
+}
+
 // TODO: test count, offset, length with selected for variable

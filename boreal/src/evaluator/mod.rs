@@ -138,7 +138,7 @@ impl Evaluator<'_> {
     #[allow(clippy::too_many_lines)]
     fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
         match expr {
-            Expression::Filesize => todo!(),
+            Expression::Filesize => Some(Value::Number(self.mem.len() as i64)),
             Expression::Entrypoint => todo!(),
             Expression::ReadInteger { addr, ty } => evaluate_read_integer(self, addr, *ty),
 
