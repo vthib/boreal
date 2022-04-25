@@ -44,7 +44,11 @@ impl Module for Tests {
                 "string_array",
                 Value::array(Self::string_array, Type::String),
             ),
-            // TODO: integer_dict & string_dict
+            (
+                "integer_dict",
+                Value::dict(Self::integer_dict, Type::Integer),
+            ),
+            ("string_dict", Value::dict(Self::string_dict, Type::String)),
             (
                 "struct_array",
                 Value::array(
@@ -52,7 +56,17 @@ impl Module for Tests {
                     Type::object([("i", Type::Integer), ("s", Type::String)]),
                 ),
             ),
-            // TODO: struct_dict & empty_struct_dict
+            (
+                "struct_dict",
+                Value::dict(
+                    Self::struct_dict,
+                    Type::object([("i", Type::Integer), ("s", Type::String)]),
+                ),
+            ),
+            (
+                "empty_struct_dict",
+                Value::dict(Self::undefined_dict, Type::object([("i", Type::Integer)])),
+            ),
             (
                 "match",
                 Value::function(
@@ -118,6 +132,11 @@ impl Module for Tests {
                             "isum",
                             Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
                         ),
+                        ("string_dict", Type::dict(Type::String)),
+                        (
+                            "isum",
+                            Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
+                        ),
                         // Declared as a bool, but exposes an array
                         ("fake_bool_to_array", Type::Boolean),
                         // Declared as a bool, but exposes a dict
@@ -152,24 +171,6 @@ impl Module for Tests {
                 Value::function(Self::undefined, vec![], Type::Integer),
             ),
             (
-                "string_dict",
-                Value::object([
-                    ("foo", Value::string("foo")),
-                    ("bar", Value::string("bar")),
-                    (
-                        "undefined",
-                        Value::function(Self::undefined, vec![], Type::String),
-                    ),
-                ]),
-            ),
-            (
-                "struct_dict",
-                Value::object([(
-                    "foo",
-                    Value::object([("s", Value::string("foo")), ("i", Value::Integer(1))]),
-                )]),
-            ),
-            (
                 "log",
                 Value::function(
                     Self::log,
@@ -188,6 +189,10 @@ impl Module for Tests {
 
 impl Tests {
     fn undefined(_: Vec<Value>) -> Option<Value> {
+        None
+    }
+
+    fn undefined_dict(_: String) -> Option<Value> {
         None
     }
 
@@ -260,9 +265,35 @@ impl Tests {
         }
     }
 
+    fn integer_dict(v: String) -> Option<Value> {
+        match &*v {
+            "foo" => Some(Value::Integer(1)),
+            "bar" => Some(Value::Integer(2)),
+            _ => None,
+        }
+    }
+    fn string_dict(v: String) -> Option<Value> {
+        if v == "foo" || v == "bar" {
+            Some(Value::String(v))
+        } else {
+            None
+        }
+    }
+
     fn struct_array(index: u64) -> Option<Value> {
         if index == 1 {
             Some(Value::object([("i", Value::Integer(1))]))
+        } else {
+            None
+        }
+    }
+
+    fn struct_dict(v: String) -> Option<Value> {
+        if v == "foo" {
+            Some(Value::object([
+                ("i", Value::Integer(1)),
+                ("s", Value::String(v)),
+            ]))
         } else {
             None
         }
@@ -280,6 +311,7 @@ impl Tests {
                 Value::object([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
             ),
             ("str_array", Value::array(Self::string_array, Type::String)),
+            ("string_dict", Value::dict(Self::string_dict, Type::String)),
             (
                 "isum",
                 Value::function(

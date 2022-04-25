@@ -325,6 +325,16 @@ pub enum Expression {
         operations: Vec<ValueOperation>,
     },
 
+    /// A value coming from a dictionary exposed by a module.
+    ModuleDictionary {
+        /// The function to call with the computed index
+        fun: fn(String) -> Option<crate::module::Value>,
+        /// The expression giving the index to use with the function.
+        subscript: Box<Expression>,
+        /// List of operations to apply on the value returned by the function.
+        operations: Vec<ValueOperation>,
+    },
+
     /// A value coming from a function exposed by a module.
     ModuleFunction {
         /// The function to call with the computed index

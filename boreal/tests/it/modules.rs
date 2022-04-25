@@ -57,13 +57,13 @@ rule foo { condition: true }"#,
 
 #[test]
 fn test_value_wrong_op() {
-    // Field not existing in a dictionary
+    // Field not existing in an object
     check_tests_err(
         "tests.do_not_exist",
         "mem:3:21: error: unknown field \"do_not_exist\"",
     );
 
-    // Using array syntax on a dictionary, scalar and function
+    // Using array syntax on an object, scalar and function
     check_tests_err(
         "tests.constants[0]",
         "mem:3:16: error: invalid identifier type",
@@ -74,9 +74,13 @@ fn test_value_wrong_op() {
     );
     check_tests_err("tests.isum[0]", "mem:3:16: error: invalid identifier type");
 
-    // Using dict syntax on a array, scalar and function
+    // Using object syntax on a array, dict, scalar and function
     check_tests_err(
         "tests.integer_array.foo",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.integer_dict.foo",
         "mem:3:16: error: invalid identifier type",
     );
     check_tests_err(
@@ -85,9 +89,13 @@ fn test_value_wrong_op() {
     );
     check_tests_err("tests.isum.foo", "mem:3:16: error: invalid identifier type");
 
-    // Using function call on dictionary, array and scalar
+    // Using function call on object, dict, array and scalar
     check_tests_err(
         "tests.constants(5)",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.integer_array()",
         "mem:3:16: error: invalid identifier type",
     );
     check_tests_err(
@@ -108,12 +116,32 @@ fn test_value_wrong_op() {
         "tests.string_array > 0",
         "mem:3:16: error: wrong use of identifier",
     );
+    check_tests_err(
+        "tests.string_dict > 0",
+        "mem:3:16: error: wrong use of identifier",
+    );
     check_tests_err("tests.isum > 0", "mem:3:16: error: wrong use of identifier");
 
     // Array subscript must be an integer
     check_tests_err(
-        "tests.string_array[/a/] > 0",
-        "mem:3:35: error: expected an expression of type integer",
+        "tests.integer_array[/a/] > 0",
+        "mem:3:36: error: expected an expression of type integer",
+    );
+
+    // Dict subscript must be a string
+    check_tests_err(
+        "tests.integer_dict[/a/] > 0",
+        "mem:3:35: error: expected an expression of type string",
+    );
+
+    // Subscript on array/subscript must be the right type
+    check_tests_err(
+        "tests.integer_array[\"a\"] > 0",
+        "mem:3:36: error: expected an expression of type integer",
+    );
+    check_tests_err(
+        "tests.integer_dict[5] > 0",
+        "mem:3:35: error: expected an expression of type string",
     );
 }
 
@@ -146,8 +174,6 @@ fn test_eval() {
     check_ok("tests.constants.one_half == 0.5");
     check_ok("tests.constants.str == \"str\"");
     check_ok("tests.constants.true");
-    check_ok("tests.string_dict.foo == \"foo\"");
-    check_ok("tests.string_dict.bar == \"bar\"");
 
     // Check array eval
     check_ok("tests.integer_array[0] == 0");
@@ -157,6 +183,13 @@ fn test_eval() {
     check_ok("not defined tests.struct_array[0].i");
     check_ok("not defined tests.integer_array[3]");
     check_ok("not defined tests.integer_array[#a - 1]");
+
+    // Check dict eval
+    check_ok("tests.integer_dict[\"foo\"] == 1");
+    check_ok("tests.integer_dict[\"bar\"] == 2");
+    check_ok("tests.string_dict[\"bar\"] == \"bar\"");
+    check_ok("tests.struct_dict[\"foo\"].i == 1");
+    check_ok("not defined tests.integer_dict[\"\"]");
 
     // Check lazy eval into primitive
     check_ok("tests.lazy().one == 1");
@@ -168,6 +201,7 @@ fn test_eval() {
     check_ok("tests.lazy.isum(2, 3+5) == 10");
     check_ok("tests.lazy.str_array[1] == \"bar\"");
     check_ok("tests.lazy().str_array[1] == \"bar\"");
+    check_ok("tests.lazy.string_dict[\"foo\"] == \"foo\"");
     check_ok("not defined tests.lazy.str_array[10]");
     check_ok("not defined tests.lazy().str_array[#a - 5]");
 
@@ -188,6 +222,7 @@ fn test_eval() {
     check_ok("not defined tests.undefined_int()");
     check_ok("not defined tests.length(tests.undefined_str())");
     check_ok("not defined tests.integer_array[tests.undefined_int]");
+    check_ok("not defined tests.integer_dict[tests.undefined_str]");
     check_ok("not defined tests.lazy().str_array[tests.undefined_int()]");
     check_ok("not defined tests.lazy.isum(1, tests.undefined_int)");
 }

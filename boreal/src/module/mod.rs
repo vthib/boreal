@@ -108,6 +108,29 @@ pub enum Value {
         value_type: Type,
     },
 
+    /// A dictionary.
+    ///
+    /// For example, if a module `foo` exports a dictionary value, then it can be accessed with the
+    /// syntax `foo["key"]` in a rule.
+    Dictionary {
+        /// Function called during scanning.
+        ///
+        /// The only argument is the accessed index in the array.
+        ///
+        /// The function can return None, if the index is out-of-bounds, or if the array does not
+        /// make sense in the current context. For example, `pe.sections[0]` does not make sense
+        /// if the scanned object is not a PE.
+        on_scan: fn(String) -> Option<Value>,
+
+        /// Type of all the elements in the dirctionary.
+        ///
+        /// This is not a [`Value`] as we cannot know the real values of this before evaluating
+        /// a rule during scanning and accessing the array. Hence, this can only be a [`Type`],
+        /// which still provides the description of the type stored in the array, which can
+        /// be used to properly type-check use of this array in rules.
+        value_type: Type,
+    },
+
     /// A function.
     ///
     /// For example, if a module `foo` exports a function, then it can be accessed with the
@@ -173,6 +196,13 @@ impl Value {
         }
     }
 
+    pub fn dict(fun: fn(String) -> Option<Value>, ty: Type) -> Self {
+        Value::Dictionary {
+            on_scan: fun,
+            value_type: ty,
+        }
+    }
+
     pub fn function(
         fun: fn(Vec<Value>) -> Option<Value>,
         arguments_types: Vec<Vec<Type>>,
@@ -198,6 +228,9 @@ pub enum Type {
     Array {
         value_type: Box<Type>,
     },
+    Dictionary {
+        value_type: Box<Type>,
+    },
     Function {
         arguments_types: Vec<Vec<Type>>,
         return_type: Box<Type>,
@@ -213,6 +246,13 @@ impl Type {
     #[must_use]
     pub fn array(value_type: Type) -> Self {
         Self::Array {
+            value_type: Box::new(value_type),
+        }
+    }
+
+    #[must_use]
+    pub fn dict(value_type: Type) -> Self {
+        Self::Dictionary {
             value_type: Box::new(value_type),
         }
     }

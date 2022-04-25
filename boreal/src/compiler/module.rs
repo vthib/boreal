@@ -16,7 +16,7 @@ pub struct Module {
 pub enum ValueOperation {
     /// Object subfield, i.e. `value.subfield`.
     Subfield(String),
-    /// Array subscript, i.e. `value[subscript]`.
+    /// Array/dict subscript, i.e. `value[subscript]`.
     Subscript(Box<Expression>),
     /// Function call, i.e. `value(arguments)`.
     FunctionCall(Vec<Expression>),
@@ -97,21 +97,15 @@ impl ModuleUse<'_> {
                         self.operations
                             .push(ValueOperation::Subfield(subfield.to_string()));
                     }
-                };
+                }
                 res
             }
             parser::IdentifierOperationType::Subscript(subscript) => {
                 let subscript = compile_expression(self.compiler, *subscript)?;
-                if subscript.ty != Type::Integer {
-                    return Err(CompilationError::InvalidIdentifierIndexType {
-                        ty: subscript.ty.to_string(),
-                        span: subscript.span,
-                    });
-                }
 
                 self.operations
                     .push(ValueOperation::Subscript(Box::new(subscript.expr)));
-                self.current_value.subscript()
+                self.current_value.subscript(subscript.ty, subscript.span)
             }
             parser::IdentifierOperationType::FunctionCall(arguments) => {
                 let mut arguments_exprs = Vec::with_capacity(arguments.len());
@@ -129,31 +123,39 @@ impl ModuleUse<'_> {
 
         match res {
             Err(TypeError::UnknownSubfield(subfield)) => {
-                return Err(CompilationError::UnknownIdentifierField {
+                Err(CompilationError::UnknownIdentifierField {
                     field_name: subfield,
                     span: op.span,
-                });
+                })
             }
             Err(TypeError::WrongType {
                 actual_type,
                 expected_type,
-            }) => {
-                return Err(CompilationError::InvalidIdentifierType {
-                    actual_type,
-                    expected_type,
-                    span: self.current_span.clone(),
-                });
-            }
+            }) => Err(CompilationError::InvalidIdentifierType {
+                actual_type,
+                expected_type,
+                span: self.current_span.clone(),
+            }),
+            Err(TypeError::WrongIndexType {
+                actual_type,
+                expected_type,
+                span,
+            }) => Err(CompilationError::InvalidIdentifierIndexType {
+                ty: actual_type.to_string(),
+                span,
+                expected_type: expected_type.to_string(),
+            }),
             Err(TypeError::WrongFunctionArguments { arguments_types }) => {
-                return Err(CompilationError::InvalidIdentifierCall {
+                Err(CompilationError::InvalidIdentifierCall {
                     arguments_types,
                     span: op.span,
-                });
+                })
             }
-            Ok(()) => (),
-        };
-        self.current_span.end = op.span.end;
-        Ok(())
+            Ok(()) => {
+                self.current_span.end = op.span.end;
+                Ok(())
+            }
+        }
     }
 
     fn into_expression(mut self) -> Option<(Expression, Type)> {
@@ -192,6 +194,22 @@ impl ModuleUse<'_> {
                     operations: ops.collect(),
                 }
             }
+            Value::Dictionary { on_scan, .. } => {
+                let mut ops = self.operations.into_iter();
+                let subscript = if let Some(ValueOperation::Subscript(v)) = ops.next() {
+                    v
+                } else {
+                    // This is unreachable code, but avoid a call to unreachable!() to prevent
+                    // panic code.
+                    debug_assert!(false);
+                    return None;
+                };
+                Expression::ModuleDictionary {
+                    fun: *on_scan,
+                    subscript,
+                    operations: ops.collect(),
+                }
+            }
             Value::Function { fun, .. } => {
                 let mut ops = self.operations.into_iter();
                 let arguments = if let Some(ValueOperation::FunctionCall(v)) = ops.next() {
@@ -219,6 +237,7 @@ impl ModuleUse<'_> {
 /// Tries to keep a proper [`Value`] for as long as possible, so that the compiled expression
 /// can be optimized if possible (if the end value is a primitive of a function returning a
 /// primitive for example).
+#[derive(Debug)]
 enum ValueOrType<'a> {
     /// Currently value, if available.
     Value(&'a Value),
@@ -226,11 +245,17 @@ enum ValueOrType<'a> {
     Type(&'a ValueType),
 }
 
+#[derive(Debug)]
 enum TypeError {
     UnknownSubfield(String),
     WrongType {
         actual_type: String,
         expected_type: String,
+    },
+    WrongIndexType {
+        actual_type: Type,
+        expected_type: Type,
+        span: Range<usize>,
     },
     WrongFunctionArguments {
         arguments_types: Vec<String>,
@@ -270,25 +295,55 @@ impl ValueOrType<'_> {
         })
     }
 
-    fn subscript(&mut self) -> Result<(), TypeError> {
+    fn subscript(
+        &mut self,
+        subscript_type: Type,
+        subscript_span: Range<usize>,
+    ) -> Result<(), TypeError> {
+        let check_subscript_type = |expected_type: Type| {
+            if subscript_type == expected_type {
+                Ok(())
+            } else {
+                Err(TypeError::WrongIndexType {
+                    actual_type: subscript_type,
+                    expected_type,
+                    span: subscript_span,
+                })
+            }
+        };
+
         match self {
-            Self::Value(value) => {
-                if let Value::Array { value_type, .. } = value {
+            Self::Value(value) => match value {
+                Value::Array { value_type, .. } => {
+                    check_subscript_type(Type::Integer)?;
                     *self = Self::Type(value_type);
                     return Ok(());
                 }
-            }
-            Self::Type(ty) => {
-                if let ValueType::Array { value_type } = ty {
+                Value::Dictionary { value_type, .. } => {
+                    check_subscript_type(Type::String)?;
                     *self = Self::Type(value_type);
                     return Ok(());
                 }
-            }
+                _ => (),
+            },
+            Self::Type(ty) => match ty {
+                ValueType::Array { value_type, .. } => {
+                    check_subscript_type(Type::Integer)?;
+                    *self = Self::Type(value_type);
+                    return Ok(());
+                }
+                ValueType::Dictionary { value_type, .. } => {
+                    check_subscript_type(Type::String)?;
+                    *self = Self::Type(value_type);
+                    return Ok(());
+                }
+                _ => (),
+            },
         }
 
         Err(TypeError::WrongType {
             actual_type: self.type_to_string(),
-            expected_type: "array".to_owned(),
+            expected_type: "array or dictionary".to_string(),
         })
     }
 
@@ -370,6 +425,7 @@ impl ValueOrType<'_> {
                 Value::Regex(_) => "regex",
                 Value::Boolean(_) => "boolean",
                 Value::Array { .. } => "array",
+                Value::Dictionary { .. } => "dict",
                 Value::Object(_) => "object",
                 Value::Function { .. } => "function",
             },
@@ -380,6 +436,7 @@ impl ValueOrType<'_> {
                 ValueType::Regex => "regex",
                 ValueType::Boolean => "boolean",
                 ValueType::Array { .. } => "array",
+                ValueType::Dictionary { .. } => "dict",
                 ValueType::Object(_) => "object",
                 ValueType::Function { .. } => "function",
             },

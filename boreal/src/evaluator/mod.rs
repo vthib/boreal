@@ -14,7 +14,6 @@ use regex::bytes::Regex;
 use crate::compiler::{Expression, ForSelection, Rule, VariableIndex};
 
 mod module;
-use module::{evaluate_module_array, evaluate_module_function};
 mod read_integer;
 use read_integer::evaluate_read_integer;
 mod variable;
@@ -468,12 +467,17 @@ impl Evaluator<'_> {
                 fun,
                 subscript,
                 operations,
-            } => evaluate_module_array(self, *fun, subscript, operations),
+            } => module::evaluate_module_array(self, *fun, subscript, operations),
+            Expression::ModuleDictionary {
+                fun,
+                subscript,
+                operations,
+            } => module::evaluate_module_dict(self, *fun, subscript, operations),
             Expression::ModuleFunction {
                 fun,
                 arguments,
                 operations,
-            } => evaluate_module_function(self, *fun, arguments, operations),
+            } => module::evaluate_module_function(self, *fun, arguments, operations),
 
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),

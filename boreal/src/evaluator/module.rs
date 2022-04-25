@@ -21,6 +21,21 @@ pub(super) fn evaluate_module_array(
     module_value_to_expr_value(value)
 }
 
+pub(super) fn evaluate_module_dict(
+    evaluator: &mut Evaluator<'_>,
+    fun: fn(String) -> Option<ModuleValue>,
+    subscript: &Expression,
+    operations: &[ValueOperation],
+) -> Option<Value> {
+    let mut value = eval_dict_op(evaluator, fun, subscript)?;
+
+    for op in operations {
+        value = evaluate_value_operation(evaluator, value, op)?;
+    }
+
+    module_value_to_expr_value(value)
+}
+
 pub(super) fn evaluate_module_function(
     evaluator: &mut Evaluator<'_>,
     fun: fn(Vec<ModuleValue>) -> Option<ModuleValue>,
@@ -41,18 +56,23 @@ fn eval_array_op(
     fun: fn(u64) -> Option<ModuleValue>,
     subscript: &Expression,
 ) -> Option<ModuleValue> {
-    let index = evaluator.evaluate_expr(subscript)?;
+    let index = evaluator.evaluate_expr(subscript)?.unwrap_number()?;
 
-    match index {
-        Value::Number(i) => {
-            if let Ok(u) = u64::try_from(i) {
-                fun(u)
-            } else {
-                None
-            }
-        }
-        _ => None,
+    if let Ok(u) = u64::try_from(index) {
+        fun(u)
+    } else {
+        None
     }
+}
+
+fn eval_dict_op(
+    evaluator: &mut Evaluator<'_>,
+    fun: fn(String) -> Option<ModuleValue>,
+    subscript: &Expression,
+) -> Option<ModuleValue> {
+    let val = evaluator.evaluate_expr(subscript)?.unwrap_string()?;
+
+    fun(val)
 }
 
 fn eval_function_op(
@@ -84,6 +104,7 @@ fn evaluate_value_operation(
         },
         ValueOperation::Subscript(subscript) => match value {
             ModuleValue::Array { on_scan, .. } => eval_array_op(evaluator, on_scan, subscript),
+            ModuleValue::Dictionary { on_scan, .. } => eval_dict_op(evaluator, on_scan, subscript),
             _ => None,
         },
         ValueOperation::FunctionCall(arguments) => match value {

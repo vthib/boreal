@@ -63,6 +63,8 @@ pub enum CompilationError {
         ty: String,
         /// Span of the expression
         span: Range<usize>,
+        /// Expected type for the index
+        expected_type: String,
     },
 
     /// Invalid type for an identifier
@@ -162,8 +164,12 @@ impl CompilationError {
             Self::DuplicatedVariable(name) => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name)),
 
-            Self::InvalidIdentifierIndexType { ty, span } => Diagnostic::error()
-                .with_message("expected an expression of type integer")
+            Self::InvalidIdentifierIndexType {
+                ty,
+                span,
+                expected_type,
+            } => Diagnostic::error()
+                .with_message(format!("expected an expression of type {}", expected_type))
                 .with_labels(vec![
                     Label::primary((), span.clone()).with_message(format!("this has type {}", ty))
                 ]),
