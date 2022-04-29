@@ -48,9 +48,7 @@ impl Scanner {
 
     /// Add rules in the scanner.
     fn add_file(&mut self, file: parser::YaraFile) -> Result<(), CompilationError> {
-        let rules = compile_file(file, &self.modules)?;
-        self.rules.extend(rules);
-        Ok(())
+        compile_file(file, &self.modules, &mut self.rules)
     }
 
     /// Scan a byte slice.

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{expression::Type, FileContext, RuleCompiler};
+use super::{expression::Type, RuleCompiler};
 use crate::compiler::compile_file;
 use crate::AddRuleError;
 use boreal_parser::parse_str;
@@ -19,9 +19,16 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
     });
 
     let modules = HashMap::new();
-    let file_context = FileContext::new(&file, &modules).unwrap();
-    let rule = file.rules.into_iter().next().unwrap();
-    let compiler = RuleCompiler::new(&rule, &file_context).unwrap();
+    let rule = file
+        .components
+        .into_iter()
+        .next()
+        .map(|v| match v {
+            boreal_parser::YaraFileComponent::Rule(v) => v,
+            _ => panic!(),
+        })
+        .unwrap();
+    let compiler = RuleCompiler::new(&rule, &modules).unwrap();
     let res = super::compile_expression(&compiler, rule.condition).unwrap();
     assert_eq!(res.ty, expected_type);
 }
@@ -36,7 +43,8 @@ fn compile_rule_err(rule_str: &str) {
     let file = parse_str(&rule_str).unwrap();
 
     let modules = HashMap::new();
-    let res = compile_file(file, &modules);
+    let mut rules = Vec::new();
+    let res = compile_file(file, &modules, &mut rules);
     assert!(res.is_err());
 }
 

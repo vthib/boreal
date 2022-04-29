@@ -45,6 +45,15 @@ rule foo { condition: pe.nb_sections > 0 }"#,
         "mem:2:23: error: unknown identifier \"pe\"",
     );
 
+    check_err(
+        r#"
+rule foo { condition: tests.constants.one == 1 }
+import "tests"
+rule bar { condition: tests.constants.one == 1 }
+"#,
+        "mem:2:23: error: unknown identifier \"tests\"",
+    );
+
     check(
         r#"
 import "tests"

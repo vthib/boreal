@@ -13,14 +13,24 @@ use super::{
 /// A parsed Yara file.
 #[derive(Debug, PartialEq)]
 pub struct YaraFile {
-    /// List of rules contained in the file.
-    pub rules: Vec<Rule>,
+    /// List of components contained in the file.
+    ///
+    /// This enum form is required to keep the order in which rules and imports
+    /// appear the file. This is needed to properly resolve symbols to a rule
+    /// or a module, or to properly use included rules in wildcard use of rule
+    /// names in conditions.
+    pub components: Vec<YaraFileComponent>,
+}
 
-    /// List of imports in the file.
-    pub imports: Vec<String>,
-
-    /// List of includes in the file.
-    pub includes: Vec<String>,
+/// A top-level component of a Yara file.
+#[derive(Debug, PartialEq)]
+pub enum YaraFileComponent {
+    /// A Yara rule
+    Rule(Box<Rule>),
+    /// A module import
+    Import(String),
+    /// An include of another file
+    Include(String),
 }
 
 /// Parse a full YARA file.
@@ -33,20 +43,19 @@ pub fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
     let (mut input, _) = ltrim(input)?;
 
     let mut file = YaraFile {
-        rules: Vec::new(),
-        imports: Vec::new(),
-        includes: Vec::new(),
+        components: Vec::new(),
     };
     while !input.is_empty() {
         if let Ok((i, v)) = include_file(input) {
-            file.includes.push(v);
+            file.components.push(YaraFileComponent::Include(v));
             input = i;
         } else if let Ok((i, v)) = import(input) {
-            file.imports.push(v);
+            file.components.push(YaraFileComponent::Import(v));
             input = i;
         } else {
             let (i, rule) = rule(input)?;
-            file.rules.push(rule);
+            file.components
+                .push(YaraFileComponent::Rule(Box::new(rule)));
             input = i;
         }
     }
@@ -79,7 +88,7 @@ mod tests {
             "  global rule c { condition: false }",
             "",
             YaraFile {
-                rules: vec![Rule {
+                components: vec![YaraFileComponent::Rule(Box::new(Rule {
                     name: "c".to_owned(),
                     condition: Expression {
                         expr: ExpressionKind::Boolean(false),
@@ -90,9 +99,7 @@ mod tests {
                     variables: Vec::new(),
                     is_private: false,
                     is_global: true,
-                }],
-                imports: vec![],
-                includes: vec![],
+                }))],
             },
         );
 
@@ -106,8 +113,9 @@ mod tests {
                 "#,
             "",
             YaraFile {
-                rules: vec![
-                    Rule {
+                components: vec![
+                    YaraFileComponent::Import("pe".to_owned()),
+                    YaraFileComponent::Rule(Box::new(Rule {
                         name: "c".to_owned(),
                         condition: Expression {
                             expr: ExpressionKind::Boolean(false),
@@ -118,8 +126,10 @@ mod tests {
                         variables: Vec::new(),
                         is_private: false,
                         is_global: true,
-                    },
-                    Rule {
+                    })),
+                    YaraFileComponent::Import("foo".to_owned()),
+                    YaraFileComponent::Import("quux".to_owned()),
+                    YaraFileComponent::Rule(Box::new(Rule {
                         name: "d".to_owned(),
                         condition: Expression {
                             expr: ExpressionKind::Boolean(true),
@@ -130,40 +140,26 @@ mod tests {
                         variables: Vec::new(),
                         is_private: false,
                         is_global: false,
-                    },
+                    })),
                 ],
-                imports: vec!["pe".to_owned(), "foo".to_owned(), "quux".to_owned()],
-                includes: vec![],
             },
         );
-        parse(
-            parse_yara_file,
-            "",
-            "",
-            YaraFile {
-                rules: Vec::new(),
-                imports: Vec::new(),
-                includes: vec![],
-            },
-        );
+        parse(parse_yara_file, "", "", YaraFile { components: vec![] });
         parse(
             parse_yara_file,
             " /* removed */ ",
             "",
-            YaraFile {
-                rules: Vec::new(),
-                imports: Vec::new(),
-                includes: vec![],
-            },
+            YaraFile { components: vec![] },
         );
         parse(
             parse_yara_file,
             "include \"v\"\ninclude\"i\"",
             "",
             YaraFile {
-                rules: Vec::new(),
-                imports: Vec::new(),
-                includes: vec!["v".to_owned(), "i".to_owned()],
+                components: vec![
+                    YaraFileComponent::Include("v".to_owned()),
+                    YaraFileComponent::Include("i".to_owned()),
+                ],
             },
         );
 

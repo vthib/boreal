@@ -36,7 +36,7 @@ pub(super) fn compile_identifier(
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
-    let module_value = match compiler.file.symbols.get(&identifier.name) {
+    let module_value = match compiler.symbols.get(&identifier.name) {
         Some(v) => Arc::clone(&v.value),
         None => {
             return Err(CompilationError::UnknownIdentifier {

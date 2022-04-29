@@ -32,41 +32,14 @@ pub struct Rule {
     pub(crate) condition: Expression,
 }
 
-/// Context linked to compilation of a yara file.
-struct FileContext<'a> {
-    /// Symbols available to use in the file.
+/// Object used to compile a rule.
+struct RuleCompiler<'a> {
+    /// Symbols available to use in the rule.
     ///
     /// Those symbols come from two sources:
     /// - imported modules in the file
     /// - rules included, or rules declared earlier in the file.
-    symbols: HashMap<String, &'a Module>,
-}
-
-impl<'a> FileContext<'a> {
-    fn new(
-        file: &parser::YaraFile,
-        available_modules: &'a HashMap<String, Module>,
-    ) -> Result<Self, CompilationError> {
-        let mut symbols = HashMap::with_capacity(file.imports.len());
-
-        for import in &file.imports {
-            match available_modules.get(import) {
-                Some(module) => {
-                    // Ignore result: if the import was already done, it's fine.
-                    let _r = symbols.insert(import.clone(), module);
-                }
-                None => return Err(CompilationError::UnknownImport(import.clone())),
-            };
-        }
-
-        Ok(Self { symbols })
-    }
-}
-
-/// Object used to compile a rule.
-struct RuleCompiler<'a> {
-    /// Context linked to the file containing the rule.
-    file: &'a FileContext<'a>,
+    symbols: &'a HashMap<String, &'a Module>,
 
     /// Map of variable name to index in the compiled rule variables vec.
     ///
@@ -80,7 +53,7 @@ struct RuleCompiler<'a> {
 impl<'a> RuleCompiler<'a> {
     fn new(
         rule: &parser::Rule,
-        file_context: &'a FileContext<'a>,
+        symbols: &'a HashMap<String, &'a Module>,
     ) -> Result<Self, CompilationError> {
         let mut variables_map = HashMap::new();
         for (idx, var) in rule.variables.iter().enumerate() {
@@ -93,7 +66,7 @@ impl<'a> RuleCompiler<'a> {
         }
 
         Ok(Self {
-            file: file_context,
+            symbols,
             variables_map,
         })
     }
@@ -136,22 +109,36 @@ impl<'a> RuleCompiler<'a> {
 pub fn compile_file(
     file: parser::YaraFile,
     available_modules: &HashMap<String, Module>,
-) -> Result<Vec<Rule>, CompilationError> {
-    let file_context = FileContext::new(&file, available_modules)?;
+    rules: &mut Vec<Rule>,
+) -> Result<(), CompilationError> {
+    let mut symbols = HashMap::new();
 
-    let mut compiled_rules = Vec::with_capacity(file.rules.len());
-    for rule in file.rules {
-        compiled_rules.push(compile_rule(rule, &file_context)?);
+    for component in file.components {
+        match component {
+            parser::YaraFileComponent::Include(_) => todo!(),
+            parser::YaraFileComponent::Import(import) => {
+                match available_modules.get(&import) {
+                    Some(module) => {
+                        // Ignore result: if the import was already done, it's fine.
+                        let _r = symbols.insert(import.clone(), module);
+                    }
+                    None => return Err(CompilationError::UnknownImport(import.clone())),
+                };
+            }
+            parser::YaraFileComponent::Rule(rule) => {
+                rules.push(compile_rule(*rule, &symbols)?);
+            }
+        }
     }
 
-    Ok(compiled_rules)
+    Ok(())
 }
 
-fn compile_rule(
+fn compile_rule<'a>(
     rule: parser::Rule,
-    file_context: &FileContext<'_>,
+    symbols: &'a HashMap<String, &'a Module>,
 ) -> Result<Rule, CompilationError> {
-    let compiler = RuleCompiler::new(&rule, file_context)?;
+    let compiler = RuleCompiler::new(&rule, symbols)?;
     let condition = compile_expression(&compiler, rule.condition)?;
 
     Ok(Rule {

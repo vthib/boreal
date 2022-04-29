@@ -51,7 +51,7 @@ pub use expression::{
     IdentifierOperationType, ReadIntegerType, VariableSet,
 };
 mod file;
-pub use file::YaraFile;
+pub use file::{YaraFile, YaraFileComponent};
 mod hex_string;
 pub use hex_string::{HexToken, Jump as HexJump, Mask as HexMask};
 mod nom_recipes;
