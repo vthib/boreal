@@ -38,7 +38,7 @@ fn compile_expr_err(expression_str: &str) {
 #[track_caller]
 fn compile_rule_err(rule_str: &str) {
     let mut compiler = Compiler::new();
-    let res = compiler.add_rules_from_str(rule_str);
+    let res = compiler.add_rules_str(rule_str);
     assert!(res.is_err());
 }
 

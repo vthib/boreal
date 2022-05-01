@@ -16,7 +16,7 @@ impl Checker {
 
     fn new_inner(rule: &str, with_yara: bool) -> Self {
         let mut compiler = new_compiler();
-        if let Err(err) = compiler.add_rules_from_str(&rule) {
+        if let Err(err) = compiler.add_rules_str(&rule) {
             panic!("parsing failed: {}", err.to_short_description("mem", rule));
         }
 
@@ -87,7 +87,7 @@ pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
 #[track_caller]
 pub fn check_err(rule: &str, expected_prefix: &str) {
     let mut compiler = new_compiler();
-    let err = compiler.add_rules_from_str(&rule).unwrap_err();
+    let err = compiler.add_rules_str(&rule).unwrap_err();
     let desc = err.to_short_description("mem", rule);
     assert!(
         desc.starts_with(expected_prefix),

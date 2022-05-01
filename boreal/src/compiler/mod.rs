@@ -32,7 +32,7 @@ pub struct Compiler {
     default_namespace: Namespace,
 
     /// Other namespaces, accessible by their names.
-    _namespaces: HashMap<String, Namespace>,
+    namespaces: HashMap<String, Namespace>,
 
     /// Modules declared in the scanner, added with [`Compiler::add_module`].
     ///
@@ -56,18 +56,44 @@ impl Compiler {
 
     /// Add rules to the scanner from a string.
     ///
+    /// The default namespace will be used.
+    ///
     /// # Errors
     ///
     /// If parsing of the rules fails, an error is returned.
-    pub fn add_rules_from_str(&mut self, s: &str) -> Result<(), AddRuleError> {
+    pub fn add_rules_str(&mut self, s: &str) -> Result<(), AddRuleError> {
         let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
-        self.add_file(file)
+        self.add_file(file, None)
             .map_err(AddRuleError::CompilationError)?;
         Ok(())
     }
 
-    /// Add rules in the scanner.
-    fn add_file(&mut self, file: parser::YaraFile) -> Result<(), CompilationError> {
+    /// Add rules to the scanner from a string into a specific namespace.
+    ///
+    /// # Errors
+    ///
+    /// If parsing of the rules fails, an error is returned.
+    pub fn add_rules_str_in_namespace<S: Into<String>>(
+        &mut self,
+        s: &str,
+        namespace: S,
+    ) -> Result<(), AddRuleError> {
+        let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
+        self.add_file(file, Some(namespace.into()))
+            .map_err(AddRuleError::CompilationError)?;
+        Ok(())
+    }
+
+    fn add_file(
+        &mut self,
+        file: parser::YaraFile,
+        namespace: Option<String>,
+    ) -> Result<(), CompilationError> {
+        let namespace = match namespace {
+            Some(name) => self.namespaces.entry(name).or_default(),
+            None => &mut self.default_namespace,
+        };
+
         for component in file.components {
             match component {
                 parser::YaraFileComponent::Include(_) => todo!(),
@@ -75,8 +101,7 @@ impl Compiler {
                     match self.available_modules.get(&import) {
                         Some(module) => {
                             // Ignore result: if the import was already done, it's fine.
-                            let _r = self
-                                .default_namespace
+                            let _r = namespace
                                 .imported_modules
                                 .insert(import.clone(), Arc::clone(module));
                         }
@@ -84,8 +109,7 @@ impl Compiler {
                     };
                 }
                 parser::YaraFileComponent::Rule(rule) => {
-                    self.rules
-                        .push(compile_rule(*rule, &self.default_namespace)?);
+                    self.rules.push(compile_rule(*rule, namespace)?);
                 }
             }
         }

@@ -21,7 +21,7 @@ fn main() -> Result<(), std::io::Error> {
     let contents = std::fs::read_to_string(&path)?;
 
     let mut compiler = Compiler::new();
-    match compiler.add_rules_from_str(&contents) {
+    match compiler.add_rules_str(&contents) {
         Err(err) => {
             let writer = StandardStream::stderr(ColorChoice::Always);
             let config = codespan_reporting::term::Config::default();
