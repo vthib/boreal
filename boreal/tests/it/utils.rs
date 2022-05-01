@@ -1,7 +1,7 @@
-use boreal::Scanner;
+use boreal::{Compiler, Scanner};
 
 pub struct Checker {
-    scanner: boreal::Scanner,
+    scanner: Scanner,
     yara_rules: Option<yara::Rules>,
 }
 
@@ -15,8 +15,8 @@ impl Checker {
     }
 
     fn new_inner(rule: &str, with_yara: bool) -> Self {
-        let mut scanner = new_scanner();
-        if let Err(err) = scanner.add_rules_from_str(&rule) {
+        let mut compiler = new_compiler();
+        if let Err(err) = compiler.add_rules_from_str(&rule) {
             panic!("parsing failed: {}", err.to_short_description("mem", rule));
         }
 
@@ -29,7 +29,7 @@ impl Checker {
         };
 
         Self {
-            scanner,
+            scanner: compiler.into_scanner(),
             yara_rules,
         }
     }
@@ -52,10 +52,10 @@ impl Checker {
     }
 }
 
-fn new_scanner() -> Scanner {
-    let mut scanner = Scanner::new();
-    scanner.add_module(super::module_tests::Tests);
-    scanner
+fn new_compiler() -> Compiler {
+    let mut compiler = Compiler::new();
+    compiler.add_module(super::module_tests::Tests);
+    compiler
 }
 
 // Parse and compile `rule`, then for each test,
@@ -86,8 +86,8 @@ pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
 
 #[track_caller]
 pub fn check_err(rule: &str, expected_prefix: &str) {
-    let mut scanner = new_scanner();
-    let err = scanner.add_rules_from_str(&rule).unwrap_err();
+    let mut compiler = new_compiler();
+    let err = compiler.add_rules_from_str(&rule).unwrap_err();
     let desc = err.to_short_description("mem", rule);
     assert!(
         desc.starts_with(expected_prefix),

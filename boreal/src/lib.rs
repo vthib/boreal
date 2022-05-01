@@ -40,7 +40,8 @@ use const_format as _;
 use yara as _;
 
 mod compiler;
+pub use compiler::{AddRuleError, Compiler};
 mod evaluator;
 pub mod module;
 mod scanner;
-pub use scanner::{AddRuleError, Scanner};
+pub use scanner::Scanner;

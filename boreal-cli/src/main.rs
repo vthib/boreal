@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::exit;
 
-use boreal::Scanner;
+use boreal::Compiler;
 use codespan_reporting::{
     files::SimpleFile,
     term::{
@@ -20,8 +20,8 @@ fn main() -> Result<(), std::io::Error> {
     let path = PathBuf::from(&yara_filepath);
     let contents = std::fs::read_to_string(&path)?;
 
-    let mut scanner = Scanner::new();
-    match scanner.add_rules_from_str(&contents) {
+    let mut compiler = Compiler::new();
+    match compiler.add_rules_from_str(&contents) {
         Err(err) => {
             let writer = StandardStream::stderr(ColorChoice::Always);
             let config = codespan_reporting::term::Config::default();

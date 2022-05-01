@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use super::{expression::Type, RuleCompiler};
-use crate::compiler::compile_file;
-use crate::AddRuleError;
+use crate::{AddRuleError, Compiler};
 use boreal_parser::parse_str;
 
 #[track_caller]
@@ -40,11 +39,8 @@ fn compile_expr_err(expression_str: &str) {
 
 #[track_caller]
 fn compile_rule_err(rule_str: &str) {
-    let file = parse_str(&rule_str).unwrap();
-
-    let modules = HashMap::new();
-    let mut rules = Vec::new();
-    let res = compile_file(file, &modules, &mut rules);
+    let mut compiler = Compiler::new();
+    let res = compiler.add_rules_from_str(rule_str);
     assert!(res.is_err());
 }
 
