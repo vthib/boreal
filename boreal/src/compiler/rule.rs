@@ -4,7 +4,7 @@ use std::ops::Range;
 use boreal_parser as parser;
 
 use super::{
-    compile_expression, compile_variable, CompilationError, Expression, Module, Variable,
+    compile_expression, compile_variable, CompilationError, Expression, Namespace, Variable,
     VariableIndex,
 };
 
@@ -29,12 +29,8 @@ pub struct Rule {
 
 /// Object used to compile a rule.
 pub(super) struct RuleCompiler<'a> {
-    /// Symbols available to use in the rule.
-    ///
-    /// Those symbols come from two sources:
-    /// - imported modules in the file
-    /// - rules included, or rules declared earlier in the file.
-    pub symbols: &'a HashMap<String, &'a Module>,
+    /// Namespace in which the rule is built and added to.
+    pub namespace: &'a Namespace,
 
     /// Map of variable name to index in the compiled rule variables vec.
     ///
@@ -48,7 +44,7 @@ pub(super) struct RuleCompiler<'a> {
 impl<'a> RuleCompiler<'a> {
     pub(super) fn new(
         rule: &parser::Rule,
-        symbols: &'a HashMap<String, &'a Module>,
+        namespace: &'a Namespace,
     ) -> Result<Self, CompilationError> {
         let mut variables_map = HashMap::new();
         for (idx, var) in rule.variables.iter().enumerate() {
@@ -61,7 +57,7 @@ impl<'a> RuleCompiler<'a> {
         }
 
         Ok(Self {
-            symbols,
+            namespace,
             variables_map,
         })
     }
@@ -101,11 +97,11 @@ impl<'a> RuleCompiler<'a> {
     }
 }
 
-pub(super) fn compile_rule<'a>(
+pub(super) fn compile_rule(
     rule: parser::Rule,
-    symbols: &'a HashMap<String, &'a Module>,
+    namespace: &Namespace,
 ) -> Result<Rule, CompilationError> {
-    let compiler = RuleCompiler::new(&rule, symbols)?;
+    let compiler = RuleCompiler::new(&rule, namespace)?;
     let condition = compile_expression(&compiler, rule.condition)?;
 
     Ok(Rule {

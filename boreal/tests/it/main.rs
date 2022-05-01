@@ -8,5 +8,7 @@ mod module_tests;
 mod evaluation;
 // Test related to modules
 mod modules;
+// Test related to namespaces
+mod namespaces;
 
 mod utils;

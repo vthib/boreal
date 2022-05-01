@@ -52,7 +52,7 @@ impl Checker {
     }
 }
 
-fn new_compiler() -> Compiler {
+pub fn new_compiler() -> Compiler {
     let mut compiler = Compiler::new();
     compiler.add_module(super::module_tests::Tests);
     compiler

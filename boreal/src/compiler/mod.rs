@@ -1,5 +1,6 @@
 //! Compilation of a parsed expression into an optimized one.
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::files::SimpleFile;
@@ -27,10 +28,16 @@ pub struct Compiler {
     /// List of compiled rules.
     rules: Vec<Rule>,
 
+    /// Default namespace, see [`Namespace`]
+    default_namespace: Namespace,
+
+    /// Other namespaces, accessible by their names.
+    _namespaces: HashMap<String, Namespace>,
+
     /// Modules declared in the scanner, added with [`Compiler::add_module`].
     ///
     /// These are modules that can be imported and used in the namespaces.
-    available_modules: HashMap<String, Module>,
+    available_modules: HashMap<String, Arc<Module>>,
 }
 
 impl Compiler {
@@ -44,7 +51,7 @@ impl Compiler {
         let m = compile_module(module);
         // Ignore the result: that would mean the same module is already registered.
         // FIXME: this is done to allow the double "import" in a rule, but this can be improved.
-        let _res = self.available_modules.insert(m.name.clone(), m);
+        let _res = self.available_modules.insert(m.name.clone(), Arc::new(m));
     }
 
     /// Add rules to the scanner from a string.
@@ -61,8 +68,6 @@ impl Compiler {
 
     /// Add rules in the scanner.
     fn add_file(&mut self, file: parser::YaraFile) -> Result<(), CompilationError> {
-        let mut symbols = HashMap::new();
-
         for component in file.components {
             match component {
                 parser::YaraFileComponent::Include(_) => todo!(),
@@ -70,13 +75,17 @@ impl Compiler {
                     match self.available_modules.get(&import) {
                         Some(module) => {
                             // Ignore result: if the import was already done, it's fine.
-                            let _r = symbols.insert(import.clone(), module);
+                            let _r = self
+                                .default_namespace
+                                .imported_modules
+                                .insert(import.clone(), Arc::clone(module));
                         }
                         None => return Err(CompilationError::UnknownImport(import.clone())),
                     };
                 }
                 parser::YaraFileComponent::Rule(rule) => {
-                    self.rules.push(compile_rule(*rule, &symbols)?);
+                    self.rules
+                        .push(compile_rule(*rule, &self.default_namespace)?);
                 }
             }
         }
@@ -88,6 +97,25 @@ impl Compiler {
     pub fn into_scanner(self) -> Scanner {
         Scanner::new(self.rules)
     }
+}
+
+/// Contains rules and modules that belong to the same shared namespace.
+///
+/// In a namespace:
+/// - all rules must have unique names
+/// - new rules can reference already existing rules
+/// - new rules can either import new modules, or directly use already imported modules
+#[derive(Debug, Default)]
+struct Namespace {
+    /// Map of a rule name to its index in the `rules` vector in [`super::Scanner``].
+    _rules_names: HashMap<String, usize>,
+
+    /// Modules imported in the namespace.
+    ///
+    /// Those modules have precedence in the namespace over rules. If a module `foo` is imported,
+    /// and a rule named `foo` is added, this is not an error, but the identifier `foo` will refer
+    /// to the module.
+    imported_modules: HashMap<String, Arc<Module>>,
 }
 
 #[derive(Debug)]

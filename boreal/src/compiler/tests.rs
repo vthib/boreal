@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use super::{expression::Type, RuleCompiler};
 use crate::{AddRuleError, Compiler};
 use boreal_parser::parse_str;
@@ -17,7 +15,6 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         )
     });
 
-    let modules = HashMap::new();
     let rule = file
         .components
         .into_iter()
@@ -27,8 +24,9 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
             _ => panic!(),
         })
         .unwrap();
-    let compiler = RuleCompiler::new(&rule, &modules).unwrap();
-    let res = super::compile_expression(&compiler, rule.condition).unwrap();
+    let compiler = Compiler::new();
+    let rule_compiler = RuleCompiler::new(&rule, &compiler.default_namespace).unwrap();
+    let res = super::compile_expression(&rule_compiler, rule.condition).unwrap();
     assert_eq!(res.ty, expected_type);
 }
 
