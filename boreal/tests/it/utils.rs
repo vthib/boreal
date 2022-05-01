@@ -16,7 +16,7 @@ impl Checker {
 
     fn new_inner(rule: &str, with_yara: bool) -> Self {
         let mut compiler = new_compiler();
-        if let Err(err) = compiler.add_rules_str(&rule) {
+        if let Err(err) = compiler.add_rules_str(rule) {
             panic!("parsing failed: {}", err.to_short_description("mem", rule));
         }
 
@@ -39,7 +39,7 @@ impl Checker {
         self.check_boreal(mem, expected_res);
 
         if let Some(rules) = &self.yara_rules {
-            let res = rules.scan_mem(mem, 1).unwrap().len() > 0;
+            let res = !rules.scan_mem(mem, 1).unwrap().is_empty();
             assert_eq!(res, expected_res, "conformity test failed for libyara");
         }
     }
@@ -47,7 +47,7 @@ impl Checker {
     #[track_caller]
     pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
         let res = self.scanner.scan_mem(mem);
-        let res = res.matching_rules.len() > 0;
+        let res = !res.matching_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
     }
 }
@@ -87,7 +87,7 @@ pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
 #[track_caller]
 pub fn check_err(rule: &str, expected_prefix: &str) {
     let mut compiler = new_compiler();
-    let err = compiler.add_rules_str(&rule).unwrap_err();
+    let err = compiler.add_rules_str(rule).unwrap_err();
     let desc = err.to_short_description("mem", rule);
     assert!(
         desc.starts_with(expected_prefix),

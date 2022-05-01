@@ -244,7 +244,6 @@ mod tests {
     use std::ops::Range;
 
     #[test]
-    #[allow(clippy::too_many_lines)]
     fn test_primary_expression() {
         parse(
             pe,
@@ -456,7 +455,6 @@ mod tests {
         parse_err(pe, "uint32be ( 3");
     }
 
-    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_primary_expression_associativity() {
         // Check handling of chain of operators, and associativity

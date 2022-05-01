@@ -351,7 +351,6 @@ pub enum Expression {
     Regex(Regex),
 }
 
-#[allow(clippy::too_many_lines)]
 pub(super) fn compile_expression(
     compiler: &RuleCompiler<'_>,
     expression: parser::Expression,

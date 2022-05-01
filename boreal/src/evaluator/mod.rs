@@ -134,7 +134,6 @@ impl Evaluator<'_> {
         var_index.0.or(self.currently_selected_variable_index)
     }
 
-    #[allow(clippy::too_many_lines)]
     fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
         match expr {
             Expression::Filesize => Some(Value::Number(self.mem.len() as i64)),

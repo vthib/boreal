@@ -31,6 +31,7 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::range_plus_one)]
+#![allow(clippy::too_many_lines)]
 
 // TODO: To activate before release
 // #![deny(clippy::cargo)]

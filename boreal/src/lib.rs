@@ -24,6 +24,7 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::unnested_or_patterns)]
 #![allow(clippy::match_same_arms)]
+#![allow(clippy::too_many_lines)]
 
 // TODO: To activate before release
 // #![deny(missing_docs)]
