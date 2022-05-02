@@ -41,6 +41,10 @@ pub enum CompilationError {
         right_span: Range<usize>,
     },
 
+    /// Duplicated rule name in a namespace.
+    // TODO: add span
+    DuplicatedRuleName(String),
+
     /// Duplicated variable names in a rule.
     ///
     /// The value is the name of the variable that appears more than once
@@ -160,6 +164,11 @@ impl CompilationError {
                     Label::secondary((), right_span.clone())
                         .with_message(format!("this has type {}", right_type)),
                 ]),
+
+            Self::DuplicatedRuleName(name) => Diagnostic::error().with_message(format!(
+                "rule `{}` is already declared in this namespace",
+                name
+            )),
 
             Self::DuplicatedVariable(name) => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name)),

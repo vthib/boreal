@@ -109,6 +109,14 @@ impl Compiler {
                     };
                 }
                 parser::YaraFileComponent::Rule(rule) => {
+                    if namespace
+                        .rules_names
+                        .insert(rule.name.clone(), self.rules.len())
+                        .is_some()
+                    {
+                        return Err(CompilationError::DuplicatedRuleName(rule.name));
+                    }
+
                     self.rules.push(compile_rule(*rule, namespace)?);
                 }
             }
@@ -131,8 +139,8 @@ impl Compiler {
 /// - new rules can either import new modules, or directly use already imported modules
 #[derive(Debug, Default)]
 struct Namespace {
-    /// Map of a rule name to its index in the `rules` vector in [`super::Scanner``].
-    _rules_names: HashMap<String, usize>,
+    /// Map of a rule name to its index in the `rules` vector in [`Compiler`].
+    rules_names: HashMap<String, usize>,
 
     /// Modules imported in the namespace.
     ///
