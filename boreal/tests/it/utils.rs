@@ -113,6 +113,34 @@ impl Checker {
         }
     }
 
+    // Check matches against a list of "<namespace>:<rule_name>" strings.
+    #[track_caller]
+    pub fn check_matches(&self, mem: &[u8], expected_matches: &[&str]) {
+        let expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
+        let res = self.scanner.scan_mem(mem);
+        let res: Vec<String> = res
+            .matching_rules
+            .into_iter()
+            .map(|v| {
+                if let Some(ns) = &v.namespace {
+                    format!("{}:{}", ns, v.name)
+                } else {
+                    format!("default:{}", v.name)
+                }
+            })
+            .collect();
+        assert_eq!(res, expected, "test failed for boreal");
+
+        if let Some(rules) = &self.yara_rules {
+            let res = rules.scan_mem(mem, 1).unwrap();
+            let res: Vec<String> = res
+                .iter()
+                .map(|v| format!("{}:{}", v.namespace, v.identifier))
+                .collect();
+            assert_eq!(res, expected, "conformity test failed for libyara");
+        }
+    }
+
     #[track_caller]
     pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
         let res = self.scanner.scan_mem(mem);

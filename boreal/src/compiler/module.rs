@@ -31,25 +31,16 @@ pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
     }
 }
 
-pub(super) fn compile_identifier(
+pub(super) fn compile_module_identifier(
     compiler: &RuleCompiler<'_>,
+    module_value: &Value,
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
-    let module_value = match compiler.namespace.imported_modules.get(&identifier.name) {
-        Some(v) => Arc::clone(&v.value),
-        None => {
-            return Err(CompilationError::UnknownIdentifier {
-                name: identifier.name,
-                span: identifier.name_span,
-            })
-        }
-    };
-
     let mut module_use = ModuleUse {
         compiler,
-        last_immediate_value: &module_value,
-        current_value: ValueOrType::Value(&module_value),
+        last_immediate_value: module_value,
+        current_value: ValueOrType::Value(module_value),
         operations: Vec::with_capacity(identifier.operations.len()),
         current_span: identifier.name_span.clone(),
     };

@@ -8,7 +8,7 @@ use regex::bytes::{Regex, RegexBuilder};
 
 use boreal_parser as parser;
 
-use super::{compile_identifier, CompilationError, RuleCompiler, ValueOperation};
+use super::{compile_module_identifier, CompilationError, RuleCompiler, ValueOperation};
 
 /// Type of a parsed expression
 ///
@@ -344,6 +344,11 @@ pub enum Expression {
         /// List of operations to apply on the value returned by the function.
         operations: Vec<ValueOperation>,
     },
+
+    /// Dependency on another rule.
+    ///
+    /// The value is the index of the rule result in the stored rules result vector.
+    Rule(usize),
 
     /// A string.
     String(String),
@@ -999,4 +1004,29 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         .dot_matches_new_line(dot_all)
         .build()
         .map_err(|error| CompilationError::RegexError { expr, error, span })
+}
+
+fn compile_identifier(
+    compiler: &RuleCompiler<'_>,
+    identifier: parser::Identifier,
+    identifier_span: &Range<usize>,
+) -> Result<(Expression, Type), CompilationError> {
+    // First, try to resolve to a module. This has precedence over rule names.
+    if let Some(v) = compiler.namespace.imported_modules.get(&identifier.name) {
+        compile_module_identifier(compiler, &v.value, identifier, identifier_span)
+    // Then, try to resolve to an existing rule in the namespace.
+    } else if let Some(index) = compiler.namespace.rules_names.get(&identifier.name) {
+        if identifier.operations.is_empty() {
+            Ok((Expression::Rule(*index), Type::Boolean))
+        } else {
+            Err(CompilationError::InvalidIdentifierUse {
+                span: identifier_span.clone(),
+            })
+        }
+    } else {
+        Err(CompilationError::UnknownIdentifier {
+            name: identifier.name,
+            span: identifier.name_span,
+        })
+    }
 }

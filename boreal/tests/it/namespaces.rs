@@ -1,8 +1,8 @@
 use crate::utils::Compiler;
 
+// An import is reused in the same namespace
 #[test]
 fn test_reuse_of_imports() {
-    // An import is reused in the same namespace
     let mut compiler = Compiler::new();
     compiler.add_rules(
         r#"
@@ -62,4 +62,59 @@ fn test_name_unicity() {
     compiler.add_rules_in_namespace("rule a { condition: true }", "ns2");
     let checker = compiler.into_checker();
     checker.check_count(b"", 3);
+}
+
+// Dependencies on other rules in a given namespace
+#[test]
+fn test_rule_dependencies() {
+    let mut compiler = Compiler::new();
+
+    compiler.add_rules("rule a { strings: $a = /a/ condition: $a }");
+    compiler.add_rules("rule b { strings: $b = /b/ condition: a and $b }");
+
+    compiler.add_rules_in_namespace("rule a { strings: $c = /c/ condition: $c }", "ns1");
+    compiler.add_rules_in_namespace("rule b { strings: $d = /d/ condition: a or $d }", "ns1");
+
+    let checker = compiler.into_checker();
+    checker.check_matches(b"", &[]);
+
+    checker.check_matches(b"a", &["default:a"]);
+    checker.check_matches(b"ab", &["default:a", "default:b"]);
+    checker.check_matches(b"b", &[]);
+
+    checker.check_matches(b"c", &["ns1:a", "ns1:b"]);
+    checker.check_matches(b"cd", &["ns1:a", "ns1:b"]);
+    checker.check_matches(b"d", &["ns1:b"]);
+    checker.check_matches(b"bd", &["ns1:b"]);
+}
+
+// Test the identifier is resolved to the import first, then the rule names
+#[test]
+fn test_identifier_precedence() {
+    // An identifier resolved to a rule, until an import shadows the rule.
+    let mut compiler = Compiler::new();
+    compiler.add_rules(r#"
+rule tests { strings: $c = "tests" condition: $c }
+rule a1 { condition: tests }
+import "tests"
+rule a2 { condition: tests.constants.one == 1 }
+        "#,
+        );
+    compiler.add_rules(r#"
+rule a3 { condition: tests.constants.two == 2 }
+        "#);
+
+    // The opposite works: declaring a rule with the same name as an import is valid, but the rule
+    // cannot be depended upon
+    compiler.add_rules_in_namespace(r#"
+import "tests"
+rule tests { condition: tests.constants.one == 1 }
+        "#, "nsa");
+    compiler.add_rules_in_namespace(r#"
+rule b2 { condition: tests.constants.two == 2 }
+        "#, "nsa");
+
+    let checker = compiler.into_checker();
+    checker.check_matches(b"", &["default:a2", "default:a3", "nsa:tests", "nsa:b2"]);
+    checker.check_matches(b"<tests>", &["default:tests", "default:a1", "default:a2", "default:a3", "nsa:tests", "nsa:b2"]);
 }

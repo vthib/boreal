@@ -83,10 +83,12 @@ pub enum CompilationError {
 
     /// Invalid use of an identifier.
     ///
-    /// This indicates that an identifier with a compound type was used as a value in an
-    /// expression.
+    /// This indicates either:
     ///
-    /// For example, `pe.foo > 0`, where `pe.foo` is an array, a dictionary or a function.
+    /// - that an identifier with a compound type was used as a value in an expression.
+    ///   For example, `pe.foo > 0`, where `pe.foo` is an array, a dictionary or a function.
+    /// - that a rule identifier (so a boolean) was used as a compound type.
+    ///   For example, `a.foo`, when `a` is the name of a rule, as `a` is a boolean.
     InvalidIdentifierUse {
         /// The span of the identifier that is not used correctly.
         span: Range<usize>,

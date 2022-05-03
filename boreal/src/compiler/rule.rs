@@ -14,6 +14,11 @@ pub struct Rule {
     /// Name of the rule.
     pub name: String,
 
+    /// Namespace containing the rule.
+    ///
+    /// `None` if in the default namespace.
+    pub namespace: Option<String>,
+
     /// Tags associated with the rule.
     pub tags: Vec<String>,
 
@@ -106,6 +111,7 @@ pub(super) fn compile_rule(
 
     Ok(Rule {
         name: rule.name,
+        namespace: namespace.name.clone(),
         tags: rule.tags,
         metadatas: rule.metadatas,
         variables: rule

@@ -58,10 +58,11 @@ impl Value {
 ///
 /// Returns true if the expression (with the associated variables) matches on the given
 /// byte slice, false otherwise.
-pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> bool {
+pub fn evaluate_rule(rule: &Rule, mem: &[u8], previous_rules_results: &[bool]) -> bool {
     let mut evaluator = Evaluator {
         variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
         mem,
+        previous_rules_results,
         currently_selected_variable_index: None,
     };
     evaluator
@@ -72,6 +73,11 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8]) -> bool {
 struct Evaluator<'a> {
     variables: Vec<VariableEvaluation<'a>>,
     mem: &'a [u8],
+
+    // Array of previous rules results.
+    //
+    // This only stores results of rules that are depended upon, not all rules.
+    previous_rules_results: &'a [bool],
 
     // Index of the currently selected variable.
     //
@@ -477,6 +483,11 @@ impl Evaluator<'_> {
                 arguments,
                 operations,
             } => module::evaluate_module_function(self, *fun, arguments, operations),
+
+            Expression::Rule(index) => self
+                .previous_rules_results
+                .get(*index)
+                .map(|v| Value::Boolean(*v)),
 
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),

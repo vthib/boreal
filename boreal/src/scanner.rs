@@ -22,10 +22,13 @@ impl Scanner {
     pub fn scan_mem(&self, mem: &[u8]) -> ScanResults {
         // FIXME: this is pretty bad performance wise
         let mut results = ScanResults::default();
+        let mut previous_results = Vec::with_capacity(self.rules.len());
         for rule in &self.rules {
-            if evaluator::evaluate_rule(rule, mem) {
+            let res = evaluator::evaluate_rule(rule, mem, &previous_results);
+            if res {
                 results.matching_rules.push(rule);
             }
+            previous_results.push(res);
         }
         results
     }

@@ -90,7 +90,13 @@ impl Compiler {
         namespace: Option<String>,
     ) -> Result<(), CompilationError> {
         let namespace = match namespace {
-            Some(name) => self.namespaces.entry(name).or_default(),
+            Some(name) => self
+                .namespaces
+                .entry(name.clone())
+                .or_insert_with(|| Namespace {
+                    name: Some(name),
+                    ..Namespace::default()
+                }),
             None => &mut self.default_namespace,
         };
 
@@ -139,6 +145,9 @@ impl Compiler {
 /// - new rules can either import new modules, or directly use already imported modules
 #[derive(Debug, Default)]
 struct Namespace {
+    /// Name of the namespace, `None` if default.
+    name: Option<String>,
+
     /// Map of a rule name to its index in the `rules` vector in [`Compiler`].
     rules_names: HashMap<String, usize>,
 
