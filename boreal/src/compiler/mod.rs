@@ -115,15 +115,17 @@ impl Compiler {
                     };
                 }
                 parser::YaraFileComponent::Rule(rule) => {
-                    if namespace
-                        .rules_names
-                        .insert(rule.name.clone(), self.rules.len())
-                        .is_some()
-                    {
-                        return Err(CompilationError::DuplicatedRuleName(rule.name));
-                    }
+                    let rule_name = rule.name.clone();
+                    let rule = compile_rule(*rule, namespace)?;
 
-                    self.rules.push(compile_rule(*rule, namespace)?);
+                    // Check then insert, to avoid a double clone on the rule name. Maybe
+                    // someday we'll get the raw entry API.
+                    if namespace.rules_names.contains_key(&rule_name) {
+                        return Err(CompilationError::DuplicatedRuleName(rule_name));
+                    }
+                    let _r = namespace.rules_names.insert(rule_name, self.rules.len());
+
+                    self.rules.push(rule);
                 }
             }
         }
