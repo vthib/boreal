@@ -4,11 +4,11 @@ mod libyara_compat;
 // Custom module "tests"
 mod module_tests;
 
-// Test evaluation of conditions
+// Tests related to evaluation of rules
 mod evaluation;
-// Test related to modules
+mod for_expression;
 mod modules;
-// Test related to namespaces
 mod namespaces;
 
+// utils to run tests both with boreal and with yara
 mod utils;

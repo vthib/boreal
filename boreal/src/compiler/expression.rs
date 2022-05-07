@@ -775,10 +775,20 @@ pub(super) fn compile_expression(
         parser::ExpressionKind::ForIdentifiers {
             selection,
             identifiers,
+            identifiers_span,
             iterator,
+            iterator_span,
             body,
         } => {
             let body = compile_expression(compiler, *body)?;
+            if identifiers.len() != 1 {
+                return Err(CompilationError::InvalidIdentifierBinding {
+                    actual_number: identifiers.len(),
+                    expected_number: 1,
+                    identifiers_span,
+                    iterator_span,
+                });
+            }
 
             Ok(Expr {
                 expr: Expression::ForIdentifiers {

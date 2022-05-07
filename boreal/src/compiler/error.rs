@@ -51,6 +51,22 @@ pub enum CompilationError {
     /// in the declarations.
     DuplicatedVariable(String),
 
+    /// Invalid binding of an identifier in a for expression.
+    ///
+    /// This indicates that the iterator items is a different cardinality from the bound identifiers.
+    ///
+    /// For example, `for any i in module.dictionary`, or `for any k, v in (0..3)`.
+    InvalidIdentifierBinding {
+        /// Actual number of identifiers to bind.
+        actual_number: usize,
+        /// Expected number of identifiers, i.e. cardinality of the iterator's items.
+        expected_number: usize,
+        /// Span of the identifiers
+        identifiers_span: Range<usize>,
+        /// Span of the iterator
+        iterator_span: Range<usize>,
+    },
+
     /// Invalid function call on an identifier
     InvalidIdentifierCall {
         /// Types of the provided arguments
@@ -194,6 +210,32 @@ impl CompilationError {
                 .with_labels(vec![Label::primary((), span.clone()).with_message(
                     format!("expected {}, found {}", expected_type, actual_type),
                 )]),
+
+            Self::InvalidIdentifierBinding {
+                actual_number,
+                expected_number,
+                identifiers_span,
+                iterator_span,
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "expected {} identifiers to bind, got {}",
+                    expected_number, actual_number
+                ))
+                .with_labels(vec![
+                    Label::primary(
+                        (),
+                        Range {
+                            start: identifiers_span.start,
+                            end: iterator_span.end,
+                        },
+                    ),
+                    Label::secondary((), identifiers_span.clone())
+                        .with_message(format!("only {} identifiers being bound", actual_number)),
+                    Label::secondary((), iterator_span.clone()).with_message(format!(
+                        "this yields {} elements on every iteration",
+                        expected_number
+                    )),
+                ]),
 
             Self::InvalidIdentifierCall {
                 arguments_types,

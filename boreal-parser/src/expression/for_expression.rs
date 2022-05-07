@@ -4,6 +4,8 @@
 //! - X of Y
 //! - for X of Y
 //! - ...
+use std::ops::Range;
+
 use nom::{
     branch::alt,
     character::complete::char,
@@ -148,8 +150,12 @@ fn for_expression_full(input: Input) -> ParseResult<Expression> {
             },
         ))
     } else {
-        let (input, identifiers) = cut(terminated(for_variables, rtrim(ttag("in"))))(input)?;
-        let (input, iterator) = cut(terminated(iterator, rtrim(char(':'))))(input)?;
+        let (input, (identifiers, identifiers_span)) =
+            cut(terminated(for_variables, rtrim(ttag("in"))))(input)?;
+
+        let (input, (iterator, iterator_span)) =
+            cut(terminated(iterator, rtrim(char(':'))))(input)?;
+
         let (input, body) = cut(delimited(
             rtrim(char('(')),
             boolean_expression,
@@ -162,7 +168,9 @@ fn for_expression_full(input: Input) -> ParseResult<Expression> {
                 expr: ExpressionKind::ForIdentifiers {
                     selection,
                     identifiers,
+                    identifiers_span,
                     iterator,
+                    iterator_span,
                     body: Box::new(body),
                 },
                 span: input.get_span_from(start),
@@ -226,19 +234,23 @@ fn string_enumeration(input: Input) -> ParseResult<Vec<(String, bool)>> {
 /// Parse a list of identifiers to bind for a for expression.
 ///
 /// Equivalent to the `for_variables` pattern in grammar.y in libyara.
-fn for_variables(input: Input) -> ParseResult<Vec<String>> {
-    separated_list1(rtrim(char(',')), crate::string::identifier)(input)
+fn for_variables(input: Input) -> ParseResult<(Vec<String>, Range<usize>)> {
+    let start = input;
+    let (input, identifiers) = separated_list1(rtrim(char(',')), crate::string::identifier)(input)?;
+    Ok((input, (identifiers, input.get_span_from(start))))
 }
 
 /// Parse an iterator for a for over an identifier.
 ///
 /// Equivalent to the `iterator` pattern in grammar.y in libyara.
-fn iterator(input: Input) -> ParseResult<ForIterator> {
-    alt((
+fn iterator(input: Input) -> ParseResult<(ForIterator, Range<usize>)> {
+    let start = input;
+    let (input, iterator) = alt((
         map(identifier, ForIterator::Identifier),
         iterator_list,
         iterator_range,
-    ))(input)
+    ))(input)?;
+    Ok((input, (iterator, input.get_span_from(start))))
 }
 
 fn iterator_list(input: Input) -> ParseResult<ForIterator> {
@@ -504,6 +516,7 @@ mod tests {
                 expr: ExpressionKind::ForIdentifiers {
                     selection: ForSelection::All,
                     identifiers: vec!["i".to_owned()],
+                    identifiers_span: 8..9,
                     iterator: ForIterator::List(vec![
                         Expression {
                             expr: ExpressionKind::Number(1),
@@ -514,6 +527,7 @@ mod tests {
                             span: 17..18,
                         },
                     ]),
+                    iterator_span: 13..19,
                     body: Box::new(Expression {
                         expr: ExpressionKind::Boolean(false),
                         span: 24..29,
@@ -530,6 +544,7 @@ mod tests {
                 expr: ExpressionKind::ForIdentifiers {
                     selection: ForSelection::Any,
                     identifiers: vec!["s".to_owned()],
+                    identifiers_span: 8..9,
                     iterator: ForIterator::Range {
                         from: Box::new(Expression {
                             expr: ExpressionKind::Number(0),
@@ -549,6 +564,7 @@ mod tests {
                             span: 17..22,
                         }),
                     },
+                    iterator_span: 13..23,
                     body: Box::new(Expression {
                         expr: ExpressionKind::Boolean(false),
                         span: 28..33,
@@ -565,11 +581,13 @@ mod tests {
                 expr: ExpressionKind::ForIdentifiers {
                     selection: ForSelection::Any,
                     identifiers: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
+                    identifiers_span: 8..13,
                     iterator: ForIterator::Identifier(Identifier {
                         name: "toto".to_owned(),
                         name_span: 17..21,
                         operations: vec![],
                     }),
+                    iterator_span: 17..21,
                     body: Box::new(Expression {
                         expr: ExpressionKind::Boolean(false),
                         span: 23..28,
@@ -590,12 +608,12 @@ mod tests {
 
     #[test]
     fn test_for_variables() {
-        parse(for_variables, "i a", "a", vec!["i".to_owned()]);
+        parse(for_variables, "i a", "a", (vec!["i".to_owned()], 0..1));
         parse(
             for_variables,
             "i, ae ,t b",
             "b",
-            vec!["i".to_owned(), "ae".to_owned(), "t".to_owned()],
+            (vec!["i".to_owned(), "ae".to_owned(), "t".to_owned()], 0..8),
         );
 
         parse_err(for_variables, "");
@@ -608,57 +626,69 @@ mod tests {
             iterator,
             "i.b a",
             "a",
-            ForIterator::Identifier(Identifier {
-                name: "i".to_owned(),
-                name_span: 0..1,
-                operations: vec![IdentifierOperation {
-                    op: IdentifierOperationType::Subfield("b".to_owned()),
-                    span: 1..3,
-                }],
-            }),
+            (
+                ForIterator::Identifier(Identifier {
+                    name: "i".to_owned(),
+                    name_span: 0..1,
+                    operations: vec![IdentifierOperation {
+                        op: IdentifierOperationType::Subfield("b".to_owned()),
+                        span: 1..3,
+                    }],
+                }),
+                0..3,
+            ),
         );
         parse(
             iterator,
             "(1)b",
             "b",
-            ForIterator::List(vec![Expression {
-                expr: ExpressionKind::Number(1),
-                span: 1..2,
-            }]),
+            (
+                ForIterator::List(vec![Expression {
+                    expr: ExpressionKind::Number(1),
+                    span: 1..2,
+                }]),
+                0..3,
+            ),
         );
         parse(
             iterator,
             "(1, 2,#a)b",
             "b",
-            ForIterator::List(vec![
-                Expression {
-                    expr: ExpressionKind::Number(1),
-                    span: 1..2,
-                },
-                Expression {
-                    expr: ExpressionKind::Number(2),
-                    span: 4..5,
-                },
-                Expression {
-                    expr: ExpressionKind::Count("a".to_owned()),
-                    span: 6..8,
-                },
-            ]),
+            (
+                ForIterator::List(vec![
+                    Expression {
+                        expr: ExpressionKind::Number(1),
+                        span: 1..2,
+                    },
+                    Expression {
+                        expr: ExpressionKind::Number(2),
+                        span: 4..5,
+                    },
+                    Expression {
+                        expr: ExpressionKind::Count("a".to_owned()),
+                        span: 6..8,
+                    },
+                ]),
+                0..9,
+            ),
         );
         parse(
             iterator,
             "(1..#t) b",
             "b",
-            ForIterator::Range {
-                from: Box::new(Expression {
-                    expr: ExpressionKind::Number(1),
-                    span: 1..2,
-                }),
-                to: Box::new(Expression {
-                    expr: ExpressionKind::Count("t".to_owned()),
-                    span: 4..6,
-                }),
-            },
+            (
+                ForIterator::Range {
+                    from: Box::new(Expression {
+                        expr: ExpressionKind::Number(1),
+                        span: 1..2,
+                    }),
+                    to: Box::new(Expression {
+                        expr: ExpressionKind::Count("t".to_owned()),
+                        span: 4..6,
+                    }),
+                },
+                0..7,
+            ),
         );
 
         parse_err(iterator, "");

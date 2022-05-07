@@ -316,8 +316,14 @@ pub enum ExpressionKind {
         /// cardinality of the values in the iterator.
         identifiers: Vec<String>,
 
+        /// Span covering the identifiers declaration
+        identifiers_span: Range<usize>,
+
         /// Values to bind to the identifiers.
         iterator: ForIterator,
+
+        /// Span covering the iterator
+        iterator_span: Range<usize>,
 
         /// Body to evaluate for each binding.
         body: Box<Expression>,
