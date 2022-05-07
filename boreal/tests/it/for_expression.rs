@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check_err, Checker};
+use crate::utils::{build_rule, check, check_boreal, check_err, Checker};
 
 #[test]
 fn test_for_identifiers_errors() {
@@ -262,5 +262,35 @@ fn test_for_expression_err() {
     check_err(
         &build_rule("all of ($d*)"),
         "mem:12:9: error: unknown variable $d",
+    );
+}
+
+// Test behavior of for expression evaluation with undefined values
+#[test]
+fn test_for_expression_undefined() {
+    check(&build_rule("tests.integer_array[5] of them"), b"a0", false);
+    check(
+        &build_rule("defined tests.integer_array[5] of them"),
+        b"a0",
+        true,
+    );
+
+    check(&build_rule("tests.integer_array[5]% of them"), b"a0", false);
+    // TODO: this is a weird behavior from YARA
+    check_boreal(
+        &build_rule("defined tests.integer_array[5]% of them"),
+        b"a0",
+        true,
+    );
+
+    check(
+        &build_rule("for any of them: (tests.integer_array[5] == 1)"),
+        b"a0",
+        false,
+    );
+    check(
+        &build_rule("defined (for any of them: (tests.integer_array[5] == 1))"),
+        b"a0",
+        true,
     );
 }

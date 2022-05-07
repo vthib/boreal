@@ -450,9 +450,10 @@ impl Evaluator<'_> {
                 set,
                 body,
             } => {
-                let selection = match self.evaluate_for_selection(selection)? {
-                    ForSelectionEvaluation::Evaluator(e) => e,
-                    ForSelectionEvaluation::Value(v) => return Some(v),
+                let selection = match self.evaluate_for_selection(selection) {
+                    Some(ForSelectionEvaluation::Evaluator(e)) => e,
+                    Some(ForSelectionEvaluation::Value(v)) => return Some(v),
+                    None => return Some(Value::Boolean(false)),
                 };
 
                 let prev_selected_var_index = self.currently_selected_variable_index;
@@ -548,7 +549,6 @@ impl Evaluator<'_> {
     {
         for index in iter {
             self.currently_selected_variable_index = Some(index);
-            // TODO: check with libyara that this operation forces the undefined value to false.
             let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
             if let Some(result) = selection.add_result_and_check(v) {
                 return Value::Boolean(result);
