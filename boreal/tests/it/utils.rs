@@ -180,3 +180,23 @@ pub fn check_err(rule: &str, expected_prefix: &str) {
     let compiler = Compiler::new();
     compiler.check_add_rules_err(rule, expected_prefix);
 }
+
+pub fn build_rule(condition: &str) -> String {
+    format!(
+        r#"
+import "tests"
+rule a {{
+    strings:
+        $a0 = "a0"
+        $a1 = "a1"
+        $a2 = "a2"
+        $b0 = "b0"
+        $b1 = "b1"
+        $c0 = "c0"
+    condition:
+        {}
+        and for all of ($*) : (# >= 0) // this part is just to remove "unused strings" errors
+}}"#,
+        condition
+    )
+}
