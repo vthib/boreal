@@ -786,19 +786,26 @@ pub(super) fn compile_expression(
                 iterator,
                 iterator_span,
                 identifiers_len,
-                identifiers_span,
+                identifiers_span.clone(),
             )?;
 
-            let prev_map = compiler.bounded_identifiers.clone();
-            for name in identifiers {
+            for name in &identifiers {
                 let index = compiler.bounded_identifiers.len();
-                // Ignore returned results: if there is already a bounded identifier of the same
-                // name, we will shadow it, and the previous identifier will be re-used once
-                // we leave this loop by resetting to the previously saved map.
-                let _r = compiler.bounded_identifiers.insert(name, index);
+                if compiler
+                    .bounded_identifiers
+                    .insert(name.clone(), index)
+                    .is_some()
+                {
+                    return Err(CompilationError::DuplicatedIdentifierBinding {
+                        identifier: name.clone(),
+                        span: identifiers_span,
+                    });
+                }
             }
             let body = compile_expression(compiler, *body)?;
-            compiler.bounded_identifiers = prev_map;
+            for name in &identifiers {
+                let _ = compiler.bounded_identifiers.remove(name);
+            }
 
             Ok(Expr {
                 expr: Expression::ForIdentifiers {

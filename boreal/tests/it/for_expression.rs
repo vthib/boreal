@@ -16,6 +16,23 @@ fn test_for_identifiers_errors() {
         "rule a { condition: for any i in (j): (true) }",
         "mem:1:35: error: unknown identifier \"j\"",
     );
+
+    check_err(
+        r#"
+rule a {
+    condition:
+        for any a in (1, 2): (
+            for any b in (3, 4): (
+                for any a in (5..10): (
+                    b == 4 and a >= 8
+                )
+            )
+            and a == 2
+        )
+}
+"#,
+        "mem:6:25: error: duplicated loop identifier a",
+    );
 }
 
 #[test]
@@ -86,6 +103,29 @@ rule a {
 }"#,
     );
     checker.check(b"", true);
+}
+
+#[test]
+fn test_for_identifiers_shadowing() {
+    // Bounded identifier shadows a rule name.
+    let checker = Checker::new(
+        r#"
+rule a { condition: true }
+rule b { condition: for any a in (2): (a == 2) }
+rule c { condition: for any i in (3): (i == 3 and a and b) }
+"#,
+    );
+    checker.check_count(b"", 3);
+
+    // Bounded identifier shadows imports
+    check(
+        r#"
+import "tests"
+rule a { condition: for any tests in (2): (tests == 2) }
+"#,
+        b"",
+        true,
+    );
 }
 
 #[test]

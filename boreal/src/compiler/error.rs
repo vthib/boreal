@@ -45,6 +45,31 @@ pub enum CompilationError {
     // TODO: add span
     DuplicatedRuleName(String),
 
+    /// Duplicated binding on an identifier.
+    ///
+    /// This indicates that a for expression attempts to bind an identifier that is already
+    /// bounded.
+    ///
+    /// For example:
+    ///
+    /// ```no_rust
+    /// rule duplicated_binding {
+    ///     condition:
+    ///         for any i in (1..#a): (
+    ///             for any i in (1..#b): (
+    ///                 ...
+    ///             )
+    ///         )
+    /// }
+    /// ```
+    DuplicatedIdentifierBinding {
+        /// Name being duplicated.
+        identifier: String,
+
+        /// Span containing the duplicated binding.
+        span: Range<usize>,
+    },
+
     /// Duplicated variable names in a rule.
     ///
     /// The value is the name of the variable that appears more than once
@@ -190,6 +215,10 @@ impl CompilationError {
 
             Self::DuplicatedVariable(name) => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name)),
+
+            Self::DuplicatedIdentifierBinding { identifier, span } => Diagnostic::error()
+                .with_message(format!("duplicated loop identifier {}", identifier))
+                .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::InvalidIdentifierIndexType {
                 ty,
