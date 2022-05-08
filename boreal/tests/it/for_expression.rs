@@ -6,6 +6,16 @@ fn test_for_identifiers_errors() {
         "rule a { condition: for any a, b in (0..3): (true) }",
         "mem:1:29: error: expected 1 identifiers to bind, got 2",
     );
+
+    check_err(
+        "rule a { condition: for any i in (/a/): (true) }",
+        "mem:1:35: error: expression has an invalid type",
+    );
+
+    check_err(
+        "rule a { condition: for any i in (j): (true) }",
+        "mem:1:35: error: unknown identifier \"j\"",
+    );
 }
 
 #[test]

@@ -991,12 +991,15 @@ fn compile_for_iterator(
                 to: to.unwrap_expr(Type::Integer)?,
             })
         }
-        parser::ForIterator::List(exprs) => Ok(ForIterator::List(
-            exprs
-                .into_iter()
-                .map(|expr| compile_expression(compiler, expr).map(|v| v.expr))
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
+        parser::ForIterator::List(exprs) => {
+            let mut res = Vec::with_capacity(exprs.len());
+            for expr in exprs {
+                let expr = compile_expression(compiler, expr)?;
+                expr.check_type(Type::Integer)?;
+                res.push(expr.expr);
+            }
+            Ok(ForIterator::List(res))
+        }
     }
 }
 
