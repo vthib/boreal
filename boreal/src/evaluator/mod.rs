@@ -9,8 +9,6 @@
 //! - etc
 //!
 //! The use of an `Option` is useful to propagate this poison value easily.
-use std::collections::HashMap;
-
 use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
@@ -66,7 +64,7 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8], previous_rules_results: &[bool]) -
         mem,
         previous_rules_results,
         currently_selected_variable_index: None,
-        bound_identifiers: HashMap::new(),
+        bounded_identifiers_stack: Vec::new(),
     };
     evaluator
         .evaluate_expr(&rule.condition)
@@ -87,8 +85,8 @@ struct Evaluator<'a> {
     // This is only set when in a for expression.
     currently_selected_variable_index: Option<usize>,
 
-    // Map of bound identifiers to their integer values.
-    bound_identifiers: HashMap<String, i64>,
+    // Stack of bounded identifiers to their integer values.
+    bounded_identifiers_stack: Vec<i64>,
 }
 
 macro_rules! string_op {
@@ -144,10 +142,6 @@ macro_rules! apply_cmp_op {
 impl Evaluator<'_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Option<usize> {
         var_index.0.or(self.currently_selected_variable_index)
-    }
-
-    fn set_identifier_binding(&mut self, identifier: String, value: i64) {
-        let _r = self.bound_identifiers.insert(identifier, value);
     }
 
     fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
@@ -512,9 +506,9 @@ impl Evaluator<'_> {
                 .get(*index)
                 .map(|v| Value::Boolean(*v)),
 
-            Expression::BoundIdentifier(name) => self
-                .bound_identifiers
-                .get(&*name)
+            Expression::BoundIdentifier(index) => self
+                .bounded_identifiers_stack
+                .get(*index)
                 .map(|v| Value::Number(*v)),
 
             Expression::Number(v) => Some(Value::Number(*v)),
@@ -591,11 +585,7 @@ impl Evaluator<'_> {
         body: &Expression,
     ) -> Option<Value> {
         match iterator {
-            ForIterator::Range {
-                identifier,
-                from,
-                to,
-            } => {
+            ForIterator::Range { from, to } => {
                 let from = self.evaluate_expr(from)?.unwrap_number()?;
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
 
@@ -603,9 +593,11 @@ impl Evaluator<'_> {
                     return None;
                 }
 
-                for v in from..=to {
-                    self.set_identifier_binding(identifier.clone(), v);
+                for value in from..=to {
+                    self.bounded_identifiers_stack.push(value);
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                    let _ = self.bounded_identifiers_stack.pop();
+
                     if let Some(result) = selection.add_result_and_check(v) {
                         return Some(Value::Boolean(result));
                     }
@@ -613,12 +605,14 @@ impl Evaluator<'_> {
                 Some(Value::Boolean(selection.end()))
             }
 
-            ForIterator::List { identifier, exprs } => {
+            ForIterator::List(exprs) => {
                 for expr in exprs {
                     let value = self.evaluate_expr(expr)?.unwrap_number()?;
 
-                    self.set_identifier_binding(identifier.clone(), value);
+                    self.bounded_identifiers_stack.push(value);
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                    let _ = self.bounded_identifiers_stack.pop();
+
                     if let Some(result) = selection.add_result_and_check(v) {
                         return Some(Value::Boolean(result));
                     }

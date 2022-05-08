@@ -344,7 +344,10 @@ pub enum Expression {
     Rule(usize),
 
     /// A Bound identifier from a for expression.
-    BoundIdentifier(String),
+    ///
+    /// The value is the index on the stack of bounded identifiers that is populated during
+    /// scanning.
+    BoundIdentifier(usize),
 
     /// A string.
     String(String),
@@ -776,21 +779,30 @@ pub(super) fn compile_expression(
             iterator_span,
             body,
         } => {
-            for name in &identifiers {
-                let _r = compiler.bound_identifiers.insert(name.clone());
-            }
+            let selection = compile_for_selection(compiler, selection)?;
+            let identifiers_len = identifiers.len();
             let iterator = compile_for_iterator(
                 compiler,
                 iterator,
                 iterator_span,
-                identifiers,
+                identifiers_len,
                 identifiers_span,
             )?;
+
+            let prev_map = compiler.bounded_identifiers.clone();
+            for name in identifiers {
+                let index = compiler.bounded_identifiers.len();
+                // Ignore returned results: if there is already a bounded identifier of the same
+                // name, we will shadow it, and the previous identifier will be re-used once
+                // we leave this loop by resetting to the previously saved map.
+                let _r = compiler.bounded_identifiers.insert(name, index);
+            }
             let body = compile_expression(compiler, *body)?;
+            compiler.bounded_identifiers = prev_map;
 
             Ok(Expr {
                 expr: Expression::ForIdentifiers {
-                    selection: compile_for_selection(compiler, selection)?,
+                    selection,
                     iterator,
                     body: Box::new(body.expr),
                 },
@@ -962,26 +974,19 @@ fn compile_variable_set(
 #[derive(Debug)]
 pub enum ForIterator {
     Range {
-        identifier: String,
         from: Box<Expression>,
         to: Box<Expression>,
     },
-    List {
-        identifier: String,
-        exprs: Vec<Expression>,
-    },
+    List(Vec<Expression>),
 }
 
 fn compile_for_iterator(
     compiler: &mut RuleCompiler<'_>,
     iterator: parser::ForIterator,
     iterator_span: Range<usize>,
-    identifiers: Vec<String>,
+    identifiers_len: usize,
     identifiers_span: Range<usize>,
 ) -> Result<ForIterator, CompilationError> {
-    let identifiers_len = identifiers.len();
-    let mut identifiers = identifiers.into_iter();
-
     let check_identifiers_len = move |expected_number| {
         if identifiers_len != expected_number {
             return Err(CompilationError::InvalidIdentifierBinding {
@@ -1003,8 +1008,6 @@ fn compile_for_iterator(
             check_identifiers_len(1)?;
 
             Ok(ForIterator::Range {
-                // Safety: we checked for the len earlierkk
-                identifier: identifiers.next().unwrap(),
                 from: from.unwrap_expr(Type::Integer)?,
                 to: to.unwrap_expr(Type::Integer)?,
             })
@@ -1018,11 +1021,7 @@ fn compile_for_iterator(
                 expr.check_type(Type::Integer)?;
                 res.push(expr.expr);
             }
-            Ok(ForIterator::List {
-                // Safety: we checked for the len earlier
-                identifier: identifiers.next().unwrap(),
-                exprs: res,
-            })
+            Ok(ForIterator::List(res))
         }
     }
 }
@@ -1049,9 +1048,9 @@ fn compile_identifier(
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
     // First, try to resolve to a bound identifier.
-    if compiler.bound_identifiers.contains(&identifier.name) {
+    if let Some(v) = compiler.bounded_identifiers.get(&identifier.name) {
         if identifier.operations.is_empty() {
-            Ok((Expression::BoundIdentifier(identifier.name), Type::Integer))
+            Ok((Expression::BoundIdentifier(*v), Type::Integer))
         } else {
             Err(CompilationError::InvalidIdentifierUse {
                 span: identifier_span.clone(),

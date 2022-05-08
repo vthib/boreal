@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ops::Range;
 
 use boreal_parser as parser;
@@ -45,8 +45,8 @@ pub(super) struct RuleCompiler<'a> {
     // are unused.
     pub variables_map: HashMap<String, usize>,
 
-    /// Set of bounded identifiers, updated as we enter/exit for expressions.
-    pub bound_identifiers: HashSet<String>,
+    /// Map of the name of a bounded identifier to its index on the bounded identifier stack.
+    pub bounded_identifiers: HashMap<String, usize>,
 }
 
 impl<'a> RuleCompiler<'a> {
@@ -67,7 +67,7 @@ impl<'a> RuleCompiler<'a> {
         Ok(Self {
             namespace,
             variables_map,
-            bound_identifiers: HashSet::new(),
+            bounded_identifiers: HashMap::new(),
         })
     }
 
