@@ -357,7 +357,7 @@ pub enum Expression {
 }
 
 pub(super) fn compile_expression(
-    compiler: &RuleCompiler<'_>,
+    compiler: &mut RuleCompiler<'_>,
     expression: parser::Expression,
 ) -> Result<Expr, CompilationError> {
     let span = expression.span;
@@ -821,7 +821,7 @@ pub(super) fn compile_expression(
 }
 
 fn compile_primary_op<F>(
-    compiler: &RuleCompiler<'_>,
+    compiler: &mut RuleCompiler<'_>,
     a: parser::Expression,
     b: parser::Expression,
     span: Range<usize>,
@@ -856,7 +856,7 @@ where
 }
 
 fn compile_arith_binary_op<F>(
-    compiler: &RuleCompiler<'_>,
+    compiler: &mut RuleCompiler<'_>,
     a: parser::Expression,
     b: parser::Expression,
     span: Range<usize>,
@@ -902,7 +902,7 @@ pub enum ForSelection {
 }
 
 fn compile_for_selection(
-    compiler: &RuleCompiler<'_>,
+    compiler: &mut RuleCompiler<'_>,
     selection: parser::ForSelection,
 ) -> Result<ForSelection, CompilationError> {
     match selection {
@@ -921,7 +921,7 @@ fn compile_for_selection(
 }
 
 fn compile_variable_set(
-    compiler: &RuleCompiler<'_>,
+    compiler: &mut RuleCompiler<'_>,
     set: parser::VariableSet,
     span: Range<usize>,
 ) -> Result<VariableSet, CompilationError> {
@@ -973,7 +973,7 @@ pub enum ForIterator {
 }
 
 fn compile_for_iterator(
-    compiler: &RuleCompiler<'_>,
+    compiler: &mut RuleCompiler<'_>,
     selection: parser::ForIterator,
 ) -> Result<ForIterator, CompilationError> {
     match selection {
@@ -1020,13 +1020,13 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
 }
 
 fn compile_identifier(
-    compiler: &RuleCompiler<'_>,
+    compiler: &mut RuleCompiler<'_>,
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
     // First, try to resolve to a module. This has precedence over rule names.
     if let Some(v) = compiler.namespace.imported_modules.get(&identifier.name) {
-        compile_module_identifier(compiler, &v.value, identifier, identifier_span)
+        compile_module_identifier(compiler, v, identifier, identifier_span)
     // Then, try to resolve to an existing rule in the namespace.
     } else if let Some(index) = compiler.namespace.rules_names.get(&identifier.name) {
         if identifier.operations.is_empty() {

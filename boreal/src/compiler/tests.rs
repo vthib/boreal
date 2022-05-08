@@ -25,8 +25,8 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         })
         .unwrap();
     let compiler = Compiler::new();
-    let rule_compiler = RuleCompiler::new(&rule, &compiler.default_namespace).unwrap();
-    let res = super::compile_expression(&rule_compiler, rule.condition).unwrap();
+    let mut rule_compiler = RuleCompiler::new(&rule, &compiler.default_namespace).unwrap();
+    let res = super::compile_expression(&mut rule_compiler, rule.condition).unwrap();
     assert_eq!(res.ty, expected_type);
 }
 

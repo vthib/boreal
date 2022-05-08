@@ -32,11 +32,13 @@ pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
 }
 
 pub(super) fn compile_module_identifier(
-    compiler: &RuleCompiler<'_>,
-    module_value: &Value,
+    compiler: &mut RuleCompiler<'_>,
+    module: &Module,
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
+    let module_value = &module.value;
+
     let mut module_use = ModuleUse {
         compiler,
         last_immediate_value: module_value,
@@ -56,15 +58,15 @@ pub(super) fn compile_module_identifier(
         })
 }
 
-struct ModuleUse<'a> {
-    compiler: &'a RuleCompiler<'a>,
+struct ModuleUse<'a, 'b> {
+    compiler: &'b mut RuleCompiler<'a>,
 
     // Last value to can be computed immediately (does not depend on a function to be called during
     // scanning).
-    last_immediate_value: &'a Value,
+    last_immediate_value: &'b Value,
 
     // Current value (or type).
-    current_value: ValueOrType<'a>,
+    current_value: ValueOrType<'b>,
 
     // Operations that will need to be evaluated at scanning time.
     operations: Vec<ValueOperation>,
@@ -73,7 +75,7 @@ struct ModuleUse<'a> {
     current_span: Range<usize>,
 }
 
-impl ModuleUse<'_> {
+impl ModuleUse<'_, '_> {
     fn add_operation(&mut self, op: parser::IdentifierOperation) -> Result<(), CompilationError> {
         let res = match op.op {
             parser::IdentifierOperationType::Subfield(subfield) => {

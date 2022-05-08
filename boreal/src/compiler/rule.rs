@@ -106,8 +106,8 @@ pub(super) fn compile_rule(
     rule: parser::Rule,
     namespace: &Namespace,
 ) -> Result<Rule, CompilationError> {
-    let compiler = RuleCompiler::new(&rule, namespace)?;
-    let condition = compile_expression(&compiler, rule.condition)?;
+    let mut compiler = RuleCompiler::new(&rule, namespace)?;
+    let condition = compile_expression(&mut compiler, rule.condition)?;
 
     Ok(Rule {
         name: rule.name,
