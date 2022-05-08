@@ -19,6 +19,53 @@ fn test_for_identifiers_errors() {
 }
 
 #[test]
+fn test_for_identifiers() {
+    let build = |cond: &str| {
+        format!(
+            r#"rule a {{
+    strings:
+        $a = /ba+/
+    condition:
+        {}
+}}"#,
+            cond
+        )
+    };
+
+    let checker = Checker::new(&build("for any a in (1..(#a)): (!a[a] == 4)"));
+    checker.check(b"", false);
+    checker.check(b"ba baa baaaa baa", false);
+    checker.check(b"ba baa baaa baa", true);
+    checker.check(b"baaa baa", true);
+    checker.check(b"ba ba baaa", true);
+
+    let checker = Checker::new(&build("for all a in (1..(#a-1)): (!a[a] == 4)"));
+    checker.check(b"", false);
+    checker.check(b"ba baa baaaa baa", false);
+    checker.check(b"baaa baaa baaa", true);
+    checker.check(b"baaa baaa ba", true);
+    checker.check(b"baaa baa baaa", false);
+    checker.check(b"baaa baaa", true);
+    checker.check(b"baaa", false);
+
+    let checker = Checker::new(&build("for any a in (1, #a): (!a[a] == 4)"));
+    checker.check(b"", false);
+    checker.check(b"ba baa baaaa baa", false);
+    checker.check(b"baaa ba ba", true);
+    checker.check(b"ba baaa ba", false);
+    checker.check(b"ba ba baaa", true);
+
+    let checker = Checker::new(&build("for all a in (1, #a-1): (!a[a] == 4)"));
+    checker.check(b"", false);
+    checker.check(b"ba baa baaaa baa", false);
+    checker.check(b"baaa ba ba", false);
+    checker.check(b"baaa baaa ba", true);
+    checker.check(b"baaa ba baaa", false);
+    checker.check(b"baaa ba", true);
+    checker.check(b"baaa", false);
+}
+
+#[test]
 fn test_for_expression_all() {
     let checker = Checker::new(&build_rule("all of them"));
     checker.check(b"", false);

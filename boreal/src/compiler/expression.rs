@@ -301,14 +301,7 @@ pub enum Expression {
         /// to be true.
         selection: ForSelection,
 
-        /// List of identifiers to bind.
-        ///
-        /// This is a list because the values bounded can be complex, ie
-        /// arrays or dictionaries. This list is the same length as the
-        /// cardinality of the values in the iterator.
-        identifiers: Vec<String>,
-
-        /// Values to bind to the identifiers.
+        /// Identifiers names & values to bind.
         iterator: ForIterator,
 
         /// Body to evaluate for each binding.
@@ -349,6 +342,9 @@ pub enum Expression {
     ///
     /// The value is the index of the rule result in the stored rules result vector.
     Rule(usize),
+
+    /// A Bound identifier from a for expression.
+    BoundIdentifier(String),
 
     /// A string.
     String(String),
@@ -780,21 +776,22 @@ pub(super) fn compile_expression(
             iterator_span,
             body,
         } => {
-            let body = compile_expression(compiler, *body)?;
-            if identifiers.len() != 1 {
-                return Err(CompilationError::InvalidIdentifierBinding {
-                    actual_number: identifiers.len(),
-                    expected_number: 1,
-                    identifiers_span,
-                    iterator_span,
-                });
+            for name in &identifiers {
+                let _r = compiler.bound_identifiers.insert(name.clone());
             }
+            let iterator = compile_for_iterator(
+                compiler,
+                iterator,
+                iterator_span,
+                identifiers,
+                identifiers_span,
+            )?;
+            let body = compile_expression(compiler, *body)?;
 
             Ok(Expr {
                 expr: Expression::ForIdentifiers {
                     selection: compile_for_selection(compiler, selection)?,
-                    identifiers,
-                    iterator: compile_for_iterator(compiler, iterator)?,
+                    iterator,
                     body: Box::new(body.expr),
                 },
                 ty: Type::Boolean,
@@ -964,41 +961,68 @@ fn compile_variable_set(
 /// Iterator for a 'for' expression over an identifier.
 #[derive(Debug)]
 pub enum ForIterator {
-    Identifier(()),
     Range {
+        identifier: String,
         from: Box<Expression>,
         to: Box<Expression>,
     },
-    List(Vec<Expression>),
+    List {
+        identifier: String,
+        exprs: Vec<Expression>,
+    },
 }
 
 fn compile_for_iterator(
     compiler: &mut RuleCompiler<'_>,
-    selection: parser::ForIterator,
+    iterator: parser::ForIterator,
+    iterator_span: Range<usize>,
+    identifiers: Vec<String>,
+    identifiers_span: Range<usize>,
 ) -> Result<ForIterator, CompilationError> {
-    match selection {
-        parser::ForIterator::Identifier(_) => {
-            // FIXME: handle this identifier
-            // let _ = compile_identifier(compiler, identifier)?,
-            Ok(ForIterator::Identifier(()))
+    let identifiers_len = identifiers.len();
+    let mut identifiers = identifiers.into_iter();
+
+    let check_identifiers_len = move |expected_number| {
+        if identifiers_len != expected_number {
+            return Err(CompilationError::InvalidIdentifierBinding {
+                actual_number: identifiers_len,
+                expected_number,
+                identifiers_span,
+                iterator_span,
+            });
         }
+        Ok(())
+    };
+
+    match iterator {
+        parser::ForIterator::Identifier(_) => todo!(),
         parser::ForIterator::Range { from, to } => {
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
 
+            check_identifiers_len(1)?;
+
             Ok(ForIterator::Range {
+                // Safety: we checked for the len earlierkk
+                identifier: identifiers.next().unwrap(),
                 from: from.unwrap_expr(Type::Integer)?,
                 to: to.unwrap_expr(Type::Integer)?,
             })
         }
         parser::ForIterator::List(exprs) => {
+            check_identifiers_len(1)?;
+
             let mut res = Vec::with_capacity(exprs.len());
             for expr in exprs {
                 let expr = compile_expression(compiler, expr)?;
                 expr.check_type(Type::Integer)?;
                 res.push(expr.expr);
             }
-            Ok(ForIterator::List(res))
+            Ok(ForIterator::List {
+                // Safety: we checked for the len earlier
+                identifier: identifiers.next().unwrap(),
+                exprs: res,
+            })
         }
     }
 }
@@ -1024,10 +1048,19 @@ fn compile_identifier(
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
-    // First, try to resolve to a module. This has precedence over rule names.
-    if let Some(v) = compiler.namespace.imported_modules.get(&identifier.name) {
+    // First, try to resolve to a bound identifier.
+    if compiler.bound_identifiers.contains(&identifier.name) {
+        if identifier.operations.is_empty() {
+            Ok((Expression::BoundIdentifier(identifier.name), Type::Integer))
+        } else {
+            Err(CompilationError::InvalidIdentifierUse {
+                span: identifier_span.clone(),
+            })
+        }
+    // Then, try to resolve to a module. This has precedence over rule names.
+    } else if let Some(v) = compiler.namespace.imported_modules.get(&identifier.name) {
         compile_module_identifier(compiler, v, identifier, identifier_span)
-    // Then, try to resolve to an existing rule in the namespace.
+    // Finally, try to resolve to an existing rule in the namespace.
     } else if let Some(index) = compiler.namespace.rules_names.get(&identifier.name) {
         if identifier.operations.is_empty() {
             Ok((Expression::Rule(*index), Type::Boolean))
