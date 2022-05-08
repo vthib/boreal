@@ -63,6 +63,29 @@ fn test_for_identifiers() {
     checker.check(b"baaa ba baaa", false);
     checker.check(b"baaa ba", true);
     checker.check(b"baaa", false);
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    condition:
+        for any i in (1..5): (
+            for any j in (6..10): (
+                for any k in (11..15): (
+                    i == 3 and j == 10 and k == 12
+                )
+            )
+            and
+            for any j in (16..20): (
+                for any k in (21..25): (
+                    for any l in (26..30): (
+                        i == 3 and j == 17 and l == 28 and k == 21
+                    )
+                )
+            )
+        )
+}"#,
+    );
+    checker.check(b"", true);
 }
 
 #[test]
