@@ -1,11 +1,11 @@
-use std::collections::HashMap;
 use std::ops::Range;
+use std::{collections::HashMap, sync::Arc};
 
 use boreal_parser as parser;
 
 use super::{
-    compile_expression, compile_variable, CompilationError, Expression, Namespace, Variable,
-    VariableIndex,
+    compile_expression, compile_variable, BoundedIdentifierType, CompilationError, Expression,
+    Namespace, Variable, VariableIndex,
 };
 
 /// A compiled scanning rule.
@@ -33,6 +33,7 @@ pub struct Rule {
 }
 
 /// Object used to compile a rule.
+#[derive(Debug)]
 pub(super) struct RuleCompiler<'a> {
     /// Namespace in which the rule is built and added to.
     pub namespace: &'a Namespace,
@@ -45,8 +46,9 @@ pub(super) struct RuleCompiler<'a> {
     // are unused.
     pub variables_map: HashMap<String, usize>,
 
-    /// Map of the name of a bounded identifier to its index on the bounded identifier stack.
-    pub bounded_identifiers: HashMap<String, usize>,
+    /// Map of the name of a bounded identifier to its type and index in the bounded identifier
+    /// stack.
+    pub bounded_identifiers: HashMap<String, Arc<(BoundedIdentifierType, usize)>>,
 }
 
 impl<'a> RuleCompiler<'a> {
@@ -103,6 +105,31 @@ impl<'a> RuleCompiler<'a> {
                 span: span.clone(),
             }),
         }
+    }
+
+    /// Add a bounded identifier.
+    pub(super) fn add_bounded_identifier(
+        &mut self,
+        name: &str,
+        typ: BoundedIdentifierType,
+        span: &Range<usize>,
+    ) -> Result<(), CompilationError> {
+        let index = self.bounded_identifiers.len();
+        match self
+            .bounded_identifiers
+            .insert(name.to_string(), Arc::new((typ, index)))
+        {
+            Some(_) => Err(CompilationError::DuplicatedIdentifierBinding {
+                identifier: name.to_string(),
+                span: span.clone(),
+            }),
+            None => Ok(()),
+        }
+    }
+
+    /// Remove a bounded identifier.
+    pub(super) fn remove_bounded_identifier(&mut self, name: &str) {
+        drop(self.bounded_identifiers.remove(name));
     }
 }
 

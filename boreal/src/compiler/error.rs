@@ -135,6 +135,14 @@ pub enum CompilationError {
         span: Range<usize>,
     },
 
+    /// An identifier used as an iterator is not iterable.
+    ///
+    /// When iterating on an identifier, only arrays and dictionaries are allowed.
+    NonIterableIdentifier {
+        /// The span of the identifier used as an iterator.
+        span: Range<usize>,
+    },
+
     /// Unknown identifier used in a rule.
     UnknownIdentifier {
         /// The name of the identifier that is not bound.
@@ -278,6 +286,10 @@ impl CompilationError {
 
             Self::InvalidIdentifierUse { span } => Diagnostic::error()
                 .with_message("wrong use of identifier")
+                .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::NonIterableIdentifier { span } => Diagnostic::error()
+                .with_message("identifier is not iterable")
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnknownIdentifier { name, span } => Diagnostic::error()

@@ -11,47 +11,55 @@ use super::{Evaluator, Value};
 pub(super) fn evaluate_expr(
     evaluator: &mut Evaluator<'_>,
     expr: &ModuleExpression,
-) -> Option<Value> {
+) -> Option<ModuleValue> {
     match expr {
         ModuleExpression::Array {
             fun,
             subscript,
             operations,
         } => {
-            let mut value = eval_array_op(evaluator, *fun, subscript)?;
-
-            for op in operations {
-                value = evaluate_value_operation(evaluator, value, op)?;
-            }
-
-            module_value_to_expr_value(value)
+            let value = eval_array_op(evaluator, *fun, subscript)?;
+            evaluate_ops(evaluator, value, operations)
         }
         ModuleExpression::Dictionary {
             fun,
             subscript,
             operations,
         } => {
-            let mut value = eval_dict_op(evaluator, *fun, subscript)?;
-
-            for op in operations {
-                value = evaluate_value_operation(evaluator, value, op)?;
-            }
-
-            module_value_to_expr_value(value)
+            let value = eval_dict_op(evaluator, *fun, subscript)?;
+            evaluate_ops(evaluator, value, operations)
         }
         ModuleExpression::Function {
             fun,
             arguments,
             operations,
         } => {
-            let mut value = eval_function_op(evaluator, *fun, arguments)?;
-
-            for op in operations {
-                value = evaluate_value_operation(evaluator, value, op)?;
-            }
-
-            module_value_to_expr_value(value)
+            let value = eval_function_op(evaluator, *fun, arguments)?;
+            evaluate_ops(evaluator, value, operations)
         }
+    }
+}
+
+pub(super) fn evaluate_ops(
+    evaluator: &mut Evaluator<'_>,
+    mut value: ModuleValue,
+    operations: &[ValueOperation],
+) -> Option<ModuleValue> {
+    for op in operations {
+        value = evaluate_value_operation(evaluator, value, op)?;
+    }
+    Some(value)
+}
+
+pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
+    match value {
+        ModuleValue::Integer(v) => Some(Value::Number(v)),
+        ModuleValue::Float(v) => Some(Value::Float(v)),
+        ModuleValue::String(v) => Some(Value::String(v)),
+        ModuleValue::Regex(v) => Some(Value::Regex(v)),
+        ModuleValue::Boolean(v) => Some(Value::Boolean(v)),
+
+        _ => None,
     }
 }
 
@@ -142,17 +150,5 @@ fn expr_value_to_module_value(v: Value) -> ModuleValue {
         Value::String(v) => ModuleValue::String(v),
         Value::Regex(v) => ModuleValue::Regex(v),
         Value::Boolean(v) => ModuleValue::Boolean(v),
-    }
-}
-
-fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
-    match value {
-        ModuleValue::Integer(v) => Some(Value::Number(v)),
-        ModuleValue::Float(v) => Some(Value::Float(v)),
-        ModuleValue::String(v) => Some(Value::String(v)),
-        ModuleValue::Regex(v) => Some(Value::Regex(v)),
-        ModuleValue::Boolean(v) => Some(Value::Boolean(v)),
-
-        _ => None,
     }
 }

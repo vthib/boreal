@@ -264,6 +264,7 @@ impl Tests {
             Value::string("foo"),
             Value::string("bar"),
             Value::string("baz"),
+            Value::string("foo\0bar"),
         ])
     }
 

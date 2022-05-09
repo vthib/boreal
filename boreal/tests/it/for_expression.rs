@@ -36,6 +36,85 @@ rule a {
 }
 
 #[test]
+fn test_for_identifiers_modules_errors() {
+    // Cannot iterate on scalar, object, function
+    check_err(
+        &build_rule("for any i in tests.constants.one: (true)"),
+        "mem:12:22: error: identifier is not iterable",
+    );
+    check_err(
+        &build_rule("for any i in tests.constants.foo: (true)"),
+        "mem:12:22: error: identifier is not iterable",
+    );
+    check_err(
+        &build_rule("for any i in tests.constants: (true)"),
+        "mem:12:22: error: identifier is not iterable",
+    );
+    check_err(
+        &build_rule("for any i in tests.match: (true)"),
+        "mem:12:22: error: identifier is not iterable",
+    );
+    check_err(
+        &build_rule("for any i in tests: (true)"),
+        "mem:12:22: error: identifier is not iterable",
+    );
+
+    // Wrong number of identifiers
+    check_err(
+        &build_rule("for any i in tests.integer_dict: (true)"),
+        "mem:12:17: error: expected 2 identifiers to bind, got 1",
+    );
+    check_err(
+        &build_rule("for any i,j,k in tests.integer_dict: (true)"),
+        "mem:12:17: error: expected 2 identifiers to bind, got 3",
+    );
+    check_err(
+        &build_rule("for any a,b in tests.integer_array: (true)"),
+        "mem:12:17: error: expected 1 identifiers to bind, got 2",
+    );
+
+    // Wrong operations on iterated value
+    check_err(
+        &build_rule("for any i in tests.struct_array: (i.i.s == 3)"),
+        "mem:12:43: error: invalid identifier type",
+    );
+    check_err(
+        &build_rule("for any i in tests.struct_array: (i == 3)"),
+        "mem:12:43: error: wrong use of identifier",
+    );
+    check_err(
+        &build_rule("for any i in tests.struct_array: (i[0] == 3)"),
+        "mem:12:43: error: invalid identifier type",
+    );
+    check_err(
+        &build_rule("for any i in tests.struct_array: (i() == 3)"),
+        "mem:12:43: error: invalid identifier type",
+    );
+
+    // Type checking fails on use of bounded identifier
+    check_err(
+        &build_rule(r#"for all i in tests.integer_array: (i == "foo")"#),
+        "error: expressions have invalid types",
+    );
+    check_err(
+        &build_rule("for all s in tests.string_array: (s == 1)"),
+        "error: expressions have invalid types",
+    );
+    check_err(
+        &build_rule("for all k,v in tests.integer_dict: (k == 1)"),
+        "error: expressions have invalid types",
+    );
+    check_err(
+        &build_rule(r#"for all k,v in tests.integer_dict: (v == "foo")"#),
+        "error: expressions have invalid types",
+    );
+    check_err(
+        &build_rule(r#"for all k,v in tests.struct_dict: (v.i == "foo")"#),
+        "error: expressions have invalid types",
+    );
+}
+
+#[test]
 fn test_for_identifiers() {
     let build = |cond: &str| {
         format!(
@@ -103,6 +182,51 @@ rule a {
 }"#,
     );
     checker.check(b"", true);
+}
+
+#[test]
+fn test_for_modules() {
+    check(
+        &build_rule(
+            r#"
+        for all s in tests.string_array: (
+            s == "foo" or s == "bar" or s == "baz" or s == "foo\x00bar"
+        )
+        "#,
+        ),
+        b"",
+        true,
+    );
+
+    check(
+        &build_rule(
+            r#"for all k,v in tests.string_dict: (
+            (k == "foo" and v == "foo") or (k == "bar" and v == k)
+        )"#,
+        ),
+        b"",
+        true,
+    );
+    check(
+        &build_rule(
+            r#"for any k,v in tests.struct_dict: (
+            (k == "foo" and v.i == 1 and v.s == "foo")
+        )"#,
+        ),
+        b"",
+        true,
+    );
+
+    // Check with number
+    check(
+        &build_rule(
+            r#"for 3 s in tests.string_array: (
+            (s startswith "ba" or s contains "\x00")
+        )"#,
+        ),
+        b"",
+        true,
+    );
 }
 
 #[test]

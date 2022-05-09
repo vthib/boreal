@@ -12,6 +12,7 @@
 use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
+use crate::module::Value as ModuleValue;
 
 mod module;
 mod read_integer;
@@ -19,7 +20,7 @@ use read_integer::evaluate_read_integer;
 mod variable;
 use variable::VariableEvaluation;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum Value {
     Number(i64),
     Float(f64),
@@ -86,7 +87,7 @@ struct Evaluator<'a> {
     currently_selected_variable_index: Option<usize>,
 
     // Stack of bounded identifiers to their integer values.
-    bounded_identifiers_stack: Vec<i64>,
+    bounded_identifiers_stack: Vec<BoundedIdentifierValue>,
 }
 
 macro_rules! string_op {
@@ -137,6 +138,11 @@ macro_rules! apply_cmp_op {
             _ => return None,
         }
     }
+}
+
+enum BoundedIdentifierValue {
+    RawValue(Value),
+    ModuleValue(ModuleValue),
 }
 
 impl Evaluator<'_> {
@@ -485,17 +491,32 @@ impl Evaluator<'_> {
                 self.evaluate_for_iterator(iterator, selection, body)
             }
 
-            Expression::Module(module_expr) => module::evaluate_expr(self, module_expr),
+            Expression::Module(module_expr) => module::evaluate_expr(self, module_expr)
+                .and_then(module::module_value_to_expr_value),
 
             Expression::Rule(index) => self
                 .previous_rules_results
                 .get(*index)
                 .map(|v| Value::Boolean(*v)),
 
-            Expression::BoundIdentifier(index) => self
+            Expression::BoundedIdentifier(index) => self
                 .bounded_identifiers_stack
                 .get(*index)
-                .map(|v| Value::Number(*v)),
+                .and_then(|v| match v {
+                    BoundedIdentifierValue::RawValue(value) => Some((*value).clone()),
+                    BoundedIdentifierValue::ModuleValue(_) => None,
+                }),
+
+            Expression::BoundedModuleIdentifier { index, operations } => self
+                .bounded_identifiers_stack
+                .get(*index)
+                .and_then(|v| match v {
+                    BoundedIdentifierValue::RawValue(_) => None,
+                    // TODO: find a way to avoid the clone
+                    BoundedIdentifierValue::ModuleValue(v) => Some((*v).clone()),
+                })
+                .and_then(|module_value| module::evaluate_ops(self, module_value, operations))
+                .and_then(module::module_value_to_expr_value),
 
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
@@ -570,7 +591,44 @@ impl Evaluator<'_> {
         mut selection: ForSelectionEvaluator,
         body: &Expression,
     ) -> Option<Value> {
+        let prev_stack_len = self.bounded_identifiers_stack.len();
+
         match iterator {
+            ForIterator::ModuleIterator(value) => {
+                match value {
+                    ModuleValue::Array { on_scan, .. } => {
+                        let array = on_scan()?;
+                        for value in array {
+                            self.bounded_identifiers_stack
+                                .push(BoundedIdentifierValue::ModuleValue(value));
+                            let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                            self.bounded_identifiers_stack.truncate(prev_stack_len);
+
+                            if let Some(result) = selection.add_result_and_check(v) {
+                                return Some(Value::Boolean(result));
+                            }
+                        }
+                    }
+                    ModuleValue::Dictionary { on_scan, .. } => {
+                        let dict = on_scan()?;
+                        for (key, value) in dict {
+                            self.bounded_identifiers_stack
+                                .push(BoundedIdentifierValue::RawValue(Value::String(key)));
+                            self.bounded_identifiers_stack
+                                .push(BoundedIdentifierValue::ModuleValue(value));
+                            let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                            self.bounded_identifiers_stack.truncate(prev_stack_len);
+
+                            if let Some(result) = selection.add_result_and_check(v) {
+                                return Some(Value::Boolean(result));
+                            }
+                        }
+                    }
+                    _ => return None,
+                };
+
+                Some(Value::Boolean(selection.end()))
+            }
             ForIterator::Range { from, to } => {
                 let from = self.evaluate_expr(from)?.unwrap_number()?;
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
@@ -580,9 +638,10 @@ impl Evaluator<'_> {
                 }
 
                 for value in from..=to {
-                    self.bounded_identifiers_stack.push(value);
+                    self.bounded_identifiers_stack
+                        .push(BoundedIdentifierValue::RawValue(Value::Number(value)));
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
-                    let _ = self.bounded_identifiers_stack.pop();
+                    self.bounded_identifiers_stack.truncate(prev_stack_len);
 
                     if let Some(result) = selection.add_result_and_check(v) {
                         return Some(Value::Boolean(result));
@@ -595,9 +654,10 @@ impl Evaluator<'_> {
                 for expr in exprs {
                     let value = self.evaluate_expr(expr)?.unwrap_number()?;
 
-                    self.bounded_identifiers_stack.push(value);
+                    self.bounded_identifiers_stack
+                        .push(BoundedIdentifierValue::RawValue(Value::Number(value)));
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
-                    let _ = self.bounded_identifiers_stack.pop();
+                    self.bounded_identifiers_stack.truncate(prev_stack_len);
 
                     if let Some(result) = selection.add_result_and_check(v) {
                         return Some(Value::Boolean(result));
