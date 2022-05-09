@@ -22,6 +22,40 @@ pub enum ValueOperation {
     FunctionCall(Vec<Expression>),
 }
 
+/// Different type of expressions related to the use of a module.
+#[derive(Debug)]
+pub enum ModuleExpression {
+    /// A value coming from an array exposed by a module.
+    Array {
+        /// The function to call with the computed index
+        fun: fn(u64) -> Option<Value>,
+        /// The expression giving the index to use with the function.
+        subscript: Box<Expression>,
+        /// List of operations to apply on the value returned by the function.
+        operations: Vec<ValueOperation>,
+    },
+
+    /// A value coming from a dictionary exposed by a module.
+    Dictionary {
+        /// The function to call with the computed index
+        fun: fn(String) -> Option<Value>,
+        /// The expression giving the index to use with the function.
+        subscript: Box<Expression>,
+        /// List of operations to apply on the value returned by the function.
+        operations: Vec<ValueOperation>,
+    },
+
+    /// A value coming from a function exposed by a module.
+    Function {
+        /// The function to call with the computed index
+        fun: fn(Vec<Value>) -> Option<Value>,
+        /// The expressions that provides the arguments of the function.
+        arguments: Vec<Expression>,
+        /// List of operations to apply on the value returned by the function.
+        operations: Vec<ValueOperation>,
+    },
+}
+
 // XXX: I want to pass by value, as in the future, we might want to keep the owned module around.
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
@@ -181,11 +215,11 @@ impl ModuleUse<'_, '_> {
                     debug_assert!(false);
                     return None;
                 };
-                Expression::ModuleArray {
+                Expression::Module(ModuleExpression::Array {
                     fun: *on_scan,
                     subscript,
                     operations: ops.collect(),
-                }
+                })
             }
             Value::Dictionary { on_scan, .. } => {
                 let mut ops = self.operations.into_iter();
@@ -197,11 +231,11 @@ impl ModuleUse<'_, '_> {
                     debug_assert!(false);
                     return None;
                 };
-                Expression::ModuleDictionary {
+                Expression::Module(ModuleExpression::Dictionary {
                     fun: *on_scan,
                     subscript,
                     operations: ops.collect(),
-                }
+                })
             }
             Value::Function { fun, .. } => {
                 let mut ops = self.operations.into_iter();
@@ -213,11 +247,11 @@ impl ModuleUse<'_, '_> {
                     debug_assert!(false);
                     return None;
                 };
-                Expression::ModuleFunction {
+                Expression::Module(ModuleExpression::Function {
                     fun: *fun,
                     arguments,
                     operations: ops.collect(),
-                }
+                })
             }
         };
 

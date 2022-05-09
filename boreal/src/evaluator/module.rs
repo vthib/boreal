@@ -1,54 +1,56 @@
 //! Provides methods to evaluate module values during scanning.
 use crate::{
-    compiler::{Expression, ValueOperation},
+    compiler::{Expression, ModuleExpression, ValueOperation},
     module::Value as ModuleValue,
 };
 
 use super::{Evaluator, Value};
 
-pub(super) fn evaluate_module_array(
+pub(super) fn evaluate_expr(
     evaluator: &mut Evaluator<'_>,
-    fun: fn(u64) -> Option<ModuleValue>,
-    subscript: &Expression,
-    operations: &[ValueOperation],
+    expr: &ModuleExpression,
 ) -> Option<Value> {
-    let mut value = eval_array_op(evaluator, fun, subscript)?;
+    match expr {
+        ModuleExpression::Array {
+            fun,
+            subscript,
+            operations,
+        } => {
+            let mut value = eval_array_op(evaluator, *fun, subscript)?;
 
-    for op in operations {
-        value = evaluate_value_operation(evaluator, value, op)?;
+            for op in operations {
+                value = evaluate_value_operation(evaluator, value, op)?;
+            }
+
+            module_value_to_expr_value(value)
+        }
+        ModuleExpression::Dictionary {
+            fun,
+            subscript,
+            operations,
+        } => {
+            let mut value = eval_dict_op(evaluator, *fun, subscript)?;
+
+            for op in operations {
+                value = evaluate_value_operation(evaluator, value, op)?;
+            }
+
+            module_value_to_expr_value(value)
+        }
+        ModuleExpression::Function {
+            fun,
+            arguments,
+            operations,
+        } => {
+            let mut value = eval_function_op(evaluator, *fun, arguments)?;
+
+            for op in operations {
+                value = evaluate_value_operation(evaluator, value, op)?;
+            }
+
+            module_value_to_expr_value(value)
+        }
     }
-
-    module_value_to_expr_value(value)
-}
-
-pub(super) fn evaluate_module_dict(
-    evaluator: &mut Evaluator<'_>,
-    fun: fn(String) -> Option<ModuleValue>,
-    subscript: &Expression,
-    operations: &[ValueOperation],
-) -> Option<Value> {
-    let mut value = eval_dict_op(evaluator, fun, subscript)?;
-
-    for op in operations {
-        value = evaluate_value_operation(evaluator, value, op)?;
-    }
-
-    module_value_to_expr_value(value)
-}
-
-pub(super) fn evaluate_module_function(
-    evaluator: &mut Evaluator<'_>,
-    fun: fn(Vec<ModuleValue>) -> Option<ModuleValue>,
-    arguments: &[Expression],
-    operations: &[ValueOperation],
-) -> Option<Value> {
-    let mut value = eval_function_op(evaluator, fun, arguments)?;
-
-    for op in operations {
-        value = evaluate_value_operation(evaluator, value, op)?;
-    }
-
-    module_value_to_expr_value(value)
 }
 
 fn eval_array_op(

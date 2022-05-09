@@ -8,7 +8,7 @@ use regex::bytes::{Regex, RegexBuilder};
 
 use boreal_parser as parser;
 
-use super::{compile_module_identifier, CompilationError, RuleCompiler, ValueOperation};
+use super::{compile_module_identifier, CompilationError, ModuleExpression, RuleCompiler};
 
 /// Type of a parsed expression
 ///
@@ -308,35 +308,8 @@ pub enum Expression {
         body: Box<Expression>,
     },
 
-    /// A value coming from an array exposed by a module.
-    ModuleArray {
-        /// The function to call with the computed index
-        fun: fn(u64) -> Option<crate::module::Value>,
-        /// The expression giving the index to use with the function.
-        subscript: Box<Expression>,
-        /// List of operations to apply on the value returned by the function.
-        operations: Vec<ValueOperation>,
-    },
-
-    /// A value coming from a dictionary exposed by a module.
-    ModuleDictionary {
-        /// The function to call with the computed index
-        fun: fn(String) -> Option<crate::module::Value>,
-        /// The expression giving the index to use with the function.
-        subscript: Box<Expression>,
-        /// List of operations to apply on the value returned by the function.
-        operations: Vec<ValueOperation>,
-    },
-
-    /// A value coming from a function exposed by a module.
-    ModuleFunction {
-        /// The function to call with the computed index
-        fun: fn(Vec<crate::module::Value>) -> Option<crate::module::Value>,
-        /// The expressions that provides the arguments of the function.
-        arguments: Vec<Expression>,
-        /// List of operations to apply on the value returned by the function.
-        operations: Vec<ValueOperation>,
-    },
+    /// Call into a module
+    Module(ModuleExpression),
 
     /// Dependency on another rule.
     ///

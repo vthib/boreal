@@ -485,21 +485,7 @@ impl Evaluator<'_> {
                 self.evaluate_for_iterator(iterator, selection, body)
             }
 
-            Expression::ModuleArray {
-                fun,
-                subscript,
-                operations,
-            } => module::evaluate_module_array(self, *fun, subscript, operations),
-            Expression::ModuleDictionary {
-                fun,
-                subscript,
-                operations,
-            } => module::evaluate_module_dict(self, *fun, subscript, operations),
-            Expression::ModuleFunction {
-                fun,
-                arguments,
-                operations,
-            } => module::evaluate_module_function(self, *fun, arguments, operations),
+            Expression::Module(module_expr) => module::evaluate_expr(self, module_expr),
 
             Expression::Rule(index) => self
                 .previous_rules_results
