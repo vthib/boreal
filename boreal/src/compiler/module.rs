@@ -1,4 +1,4 @@
-use std::{ops::Range, sync::Arc};
+use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use boreal_parser as parser;
 
@@ -27,8 +27,8 @@ pub enum ValueOperation {
 pub enum ModuleExpression {
     /// A value coming from an array exposed by a module.
     Array {
-        /// The function to call with the computed index
-        fun: fn(u64) -> Option<Value>,
+        /// The function to call to get the array
+        fun: fn() -> Option<Vec<Value>>,
         /// The expression giving the index to use with the function.
         subscript: Box<Expression>,
         /// List of operations to apply on the value returned by the function.
@@ -37,8 +37,8 @@ pub enum ModuleExpression {
 
     /// A value coming from a dictionary exposed by a module.
     Dictionary {
-        /// The function to call with the computed index
-        fun: fn(String) -> Option<Value>,
+        /// The function to call to get the dictionary
+        fun: fn() -> Option<HashMap<String, Value>>,
         /// The expression giving the index to use with the function.
         subscript: Box<Expression>,
         /// List of operations to apply on the value returned by the function.

@@ -1,4 +1,6 @@
 //! Provides methods to evaluate module values during scanning.
+use std::collections::HashMap;
+
 use crate::{
     compiler::{Expression, ModuleExpression, ValueOperation},
     module::Value as ModuleValue,
@@ -55,13 +57,18 @@ pub(super) fn evaluate_expr(
 
 fn eval_array_op(
     evaluator: &mut Evaluator<'_>,
-    fun: fn(u64) -> Option<ModuleValue>,
+    fun: fn() -> Option<Vec<ModuleValue>>,
     subscript: &Expression,
 ) -> Option<ModuleValue> {
+    let mut array = fun()?;
     let index = evaluator.evaluate_expr(subscript)?.unwrap_number()?;
 
-    if let Ok(u) = u64::try_from(index) {
-        fun(u)
+    if let Ok(i) = usize::try_from(index) {
+        if i < array.len() {
+            Some(array.remove(i))
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -69,12 +76,13 @@ fn eval_array_op(
 
 fn eval_dict_op(
     evaluator: &mut Evaluator<'_>,
-    fun: fn(String) -> Option<ModuleValue>,
+    fun: fn() -> Option<HashMap<String, ModuleValue>>,
     subscript: &Expression,
 ) -> Option<ModuleValue> {
+    let mut dict = fun()?;
     let val = evaluator.evaluate_expr(subscript)?.unwrap_string()?;
 
-    fun(val)
+    dict.remove(&val)
 }
 
 fn eval_function_op(

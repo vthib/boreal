@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use regex::bytes::Regex;
 
 use boreal::module::{Module, Type, Value};
@@ -192,7 +194,7 @@ impl Tests {
         None
     }
 
-    fn undefined_dict(_: String) -> Option<Value> {
+    fn undefined_dict() -> Option<HashMap<String, Value>> {
         None
     }
 
@@ -249,54 +251,57 @@ impl Tests {
         Some(Value::Boolean(regex.is_match(s.as_bytes())))
     }
 
-    fn integer_array(index: u64) -> Option<Value> {
-        match index {
-            0 | 1 | 2 | 256 => Some(Value::Integer(index as i64)),
-            _ => None,
-        }
+    fn integer_array() -> Option<Vec<Value>> {
+        Some(vec![
+            Value::Integer(0),
+            Value::Integer(1),
+            Value::Integer(2),
+        ])
     }
 
-    fn string_array(index: u64) -> Option<Value> {
-        match index {
-            0 => Some(Value::string("foo")),
-            1 => Some(Value::string("bar")),
-            2 => Some(Value::string("baz")),
-            _ => None,
-        }
+    fn string_array() -> Option<Vec<Value>> {
+        Some(vec![
+            Value::string("foo"),
+            Value::string("bar"),
+            Value::string("baz"),
+        ])
     }
 
-    fn integer_dict(v: String) -> Option<Value> {
-        match &*v {
-            "foo" => Some(Value::Integer(1)),
-            "bar" => Some(Value::Integer(2)),
-            _ => None,
-        }
-    }
-    fn string_dict(v: String) -> Option<Value> {
-        if v == "foo" || v == "bar" {
-            Some(Value::String(v))
-        } else {
-            None
-        }
+    fn integer_dict() -> Option<HashMap<String, Value>> {
+        Some(
+            [
+                ("foo".to_string(), Value::Integer(1)),
+                ("bar".to_string(), Value::Integer(2)),
+            ]
+            .into(),
+        )
     }
 
-    fn struct_array(index: u64) -> Option<Value> {
-        if index == 1 {
-            Some(Value::object([("i", Value::Integer(1))]))
-        } else {
-            None
-        }
+    fn string_dict() -> Option<HashMap<String, Value>> {
+        Some(
+            [
+                ("foo".to_string(), Value::string("foo")),
+                ("bar".to_string(), Value::string("bar")),
+            ]
+            .into(),
+        )
     }
 
-    fn struct_dict(v: String) -> Option<Value> {
-        if v == "foo" {
-            Some(Value::object([
-                ("i", Value::Integer(1)),
-                ("s", Value::String(v)),
-            ]))
-        } else {
-            None
-        }
+    fn struct_array() -> Option<Vec<Value>> {
+        Some(vec![
+            Value::object([("i", Value::Integer(0))]),
+            Value::object([("i", Value::Integer(1))]),
+        ])
+    }
+
+    fn struct_dict() -> Option<HashMap<String, Value>> {
+        Some(
+            [(
+                "foo".to_string(),
+                Value::object([("i", Value::Integer(1)), ("s", Value::string("foo"))]),
+            )]
+            .into(),
+        )
     }
 
     fn lazy(_: Vec<Value>) -> Option<Value> {

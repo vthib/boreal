@@ -47,8 +47,8 @@ pub trait Module {
     ///     }
     /// }
     ///
-    /// fn bar_array(index: u64) -> Option<Value> {
-    ///     Some(Value::String(index.to_string()))
+    /// fn bar_array() -> Option<Vec<Value>> {
+    ///     Some(vec![Value::string("a"), Value::string("b")])
     /// }
     /// ```
     ///
@@ -94,10 +94,9 @@ pub enum Value {
         ///
         /// The only argument is the accessed index in the array.
         ///
-        /// The function can return None, if the index is out-of-bounds, or if the array does not
-        /// make sense in the current context. For example, `pe.sections[0]` does not make sense
-        /// if the scanned object is not a PE.
-        on_scan: fn(u64) -> Option<Value>,
+        /// The function can return None if the array does not make sense in the current context.
+        /// For example, `pe.sections[0]` does not make sense if the scanned object is not a PE.
+        on_scan: fn() -> Option<Vec<Value>>,
 
         /// Type of all the elements in the array.
         ///
@@ -115,12 +114,9 @@ pub enum Value {
     Dictionary {
         /// Function called during scanning.
         ///
-        /// The only argument is the accessed index in the array.
-        ///
-        /// The function can return None, if the index is out-of-bounds, or if the array does not
-        /// make sense in the current context. For example, `pe.sections[0]` does not make sense
-        /// if the scanned object is not a PE.
-        on_scan: fn(String) -> Option<Value>,
+        /// The function can return None if the array does not make sense in the current context.
+        /// For example, `pe.sections[0]` does not make sense if the scanned object is not a PE.
+        on_scan: fn() -> Option<HashMap<String, Value>>,
 
         /// Type of all the elements in the dirctionary.
         ///
@@ -189,14 +185,14 @@ impl Value {
         Value::Object(v.into())
     }
 
-    pub fn array(fun: fn(u64) -> Option<Value>, ty: Type) -> Self {
+    pub fn array(fun: fn() -> Option<Vec<Value>>, ty: Type) -> Self {
         Value::Array {
             on_scan: fun,
             value_type: ty,
         }
     }
 
-    pub fn dict(fun: fn(String) -> Option<Value>, ty: Type) -> Self {
+    pub fn dict(fun: fn() -> Option<HashMap<String, Value>>, ty: Type) -> Self {
         Value::Dictionary {
             on_scan: fun,
             value_type: ty,

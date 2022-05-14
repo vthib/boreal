@@ -189,7 +189,7 @@ fn test_eval() {
     check_ok("tests.integer_array[1] == 1");
     check_ok("tests.struct_array[1].i == 1");
     check_ok("not defined tests.struct_array[1].s");
-    check_ok("not defined tests.struct_array[0].i");
+    check_ok("not defined tests.struct_array[2].i");
     check_ok("not defined tests.integer_array[3]");
     check_ok("not defined tests.integer_array[#a - 1]");
 
