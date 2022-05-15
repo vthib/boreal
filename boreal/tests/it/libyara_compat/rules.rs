@@ -1808,3 +1808,428 @@ fn test_length() {
         true,
     );
 }
+
+#[test]
+fn test_of() {
+    check(
+        "rule test { strings: $a = \"ssi\" $b = \"mis\" $c = \"oops\"
+      condition: any of them }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ssi\" $b = \"mis\" $c = \"oops\"
+      condition: none of them }",
+        concatcp!(TEXT_1024_BYTES, "AXSERS").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ssi\" $b = \"mis\" private $c = \"oops\"
+      condition: 1 of them }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = \"ssi\" $b = \"mis\" $c = \"oops\"
+      condition: 2 of them }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    // FIXME: implement rule of
+    // check(
+    //     "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
+    //   condition: any of ($a*, $b*) }",
+    //     concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+    //     true,
+    // );
+    //
+    // check(
+    //     "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
+    //   condition: none of ($a*, $b*) }",
+    //     concatcp!(TEXT_1024_BYTES, "AXSERS").as_bytes(),
+    //     true,
+    // );
+
+    check(
+        "rule test {
+         strings:
+           $ = /abc/
+           $ = /def/
+           $ = /ghi/
+         condition:
+           for any of ($*) : ( for any i in (1..#): (uint8(@[i] - 1) == 0x00) )
+       }",
+        concatcp!(TEXT_1024_BYTES, "abc\0def\0ghi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings:
+          $a = \"ssi\"
+          $b = \"mis\"
+          $c = \"oops\"
+        condition:
+          all of them
+      }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        false,
+    );
+
+    // FIXME: implement rule of
+    // check_err("rule test { condition: all of ($a*) }", "z");
+
+    check_err(
+        "rule test { condition: all of them }",
+        "mem:1:24: error: unknown variable $*",
+    );
+
+    // TODO: ideally, catch those in future simplifying step.
+    if false {
+        check_err(
+            "rule test { strings: $a = \"AXS\" condition: 101% of them }",
+            "z",
+        );
+
+        check_err(
+            "rule test { strings: $a = \"ERS\" condition: 0% of them }",
+            "z",
+        );
+    }
+
+    check(
+        "rule test {
+        strings:
+          $a1 = \"dummy\"
+          $a2 = \"issi\"
+        condition:
+          50% of them
+      }",
+        b"mississippi",
+        true,
+    );
+
+    // This is equivalent to "50% of them" because 1050%50 == 50
+    check(
+        "rule test {
+        strings:
+          $a1 = \"miss\"
+          $a2 = \"issi\"
+        condition:
+          1050%100% of them
+      }",
+        b"mississippi",
+        true,
+    );
+
+    check(
+        "rule test {
+        strings:
+          $a1 = \"miss\"
+          $a2 = \"issi\"
+        condition:
+          100% of them
+      }",
+        b"mississippi",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+         strings:
+           $a1 = \"miss\"
+           $a2 = \"issi\"
+         condition:
+           (25*tests.constants.two)% of them
+       }",
+        b"mississippi",
+        true,
+    );
+
+    // tests.integer_array[5] is undefined, so the following rule must evaluate
+    // to false.
+    check(
+        "import \"tests\"
+       rule test {
+         strings:
+           $a1 = \"miss\"
+           $a2 = \"issi\"
+         condition:
+           tests.integer_array[5]% of them
+       }",
+        b"mississippi",
+        false,
+    );
+}
+
+#[test]
+fn test_for() {
+    check(
+        "rule test {
+        strings:
+          $a = \"ssi\"
+        condition:
+          for all i in (1..#a) : (@a[i] >= (1024+2) and @a[i] <= (1024+5))
+      }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings:
+          $a = \"ssi\"
+          $b = \"mi\"
+        condition:
+          for all i in (1..#a) : ( for all j in (1..#b) : (@a[i] >= @b[j]))
+      }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings:
+          $a = \"ssi\"
+        condition:
+          for all i in (1..#a) : (@a[i] == (1024+5))
+      }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test {
+        condition:
+          for any i in (1, 2, 3) : (i <= 1)
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test {
+        condition:
+          for all i in (1, 2, 3) : (i >= 1)
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test {
+        condition:
+          for all i in (1, 0) : (i != 1)
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any item in tests.struct_array : (
+            item.i == 1
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for 0 item in tests.struct_array : (
+            item.i == 100
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any item in tests.integer_array : (
+            item == 2
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any item in tests.string_array : (
+            item == \"bar\"
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test {
+        condition:
+          for all i in (3,5,4) : (
+            i >= 3 and i <= 5
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test {
+        condition:
+          for all i in (3..5) : (
+            i >= 3 and i <= 5
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test {
+        condition:
+          for 2 i in (5..10) : (
+            i == 6 or i == 7
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any k,v in tests.empty_struct_dict : (
+            true
+          )
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for all i in (1..tests.undefined.i) : (
+            true
+          )
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for all i in (tests.undefined.i..10) : (
+            true
+          )
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for all i in (1..tests.undefined.i) : (
+            false
+          )
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any k,v in tests.struct_dict : (
+            k == \"foo\" and v.s == \"foo\" and v.i == 1
+          )
+      }",
+        b"",
+        true,
+    );
+
+    check_err(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any k,v in tests.integer_array : ( false )
+      }",
+        "mem:4:19: error: expected 1 identifiers to bind, got 2",
+    );
+
+    check_err(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any a,b,c in tests.struct_dict : ( false )
+      }",
+        "mem:4:19: error: expected 2 identifiers to bind, got 3",
+    );
+
+    check_err(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any i in tests.struct_dict : ( false )
+      }",
+        "mem:4:19: error: expected 2 identifiers to bind, got 1",
+    );
+
+    check_err(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any i in tests.integer_array : ( undefined_ident )
+      }",
+        "mem:4:48: error: unknown identifier \"undefined_ident\"",
+    );
+
+    check_err(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any i in tests.integer_array : ( i == \"foo\" )
+      }",
+        "error: expressions have invalid types",
+    );
+
+    check(
+        "rule test {
+        condition:
+          for any i in (0,1): (
+            for any j in (0,1): (
+              for any k in (0,1): (
+                for any l in (0,1): (
+                  false
+                )
+              )
+            )
+        )
+      }",
+        b"",
+        false,
+    );
+}
