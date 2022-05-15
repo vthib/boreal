@@ -9,7 +9,7 @@ use nom::{
 };
 
 use super::{Expression, Identifier, IdentifierOperation};
-use crate::nom_recipes::rtrim;
+use crate::nom_recipes::{not_followed, rtrim};
 use crate::string::identifier as raw_identifier;
 use crate::types::{Input, ParseResult};
 use crate::IdentifierOperationType;
@@ -19,7 +19,10 @@ use super::primary_expression::primary_expression;
 
 /// Parse a subfield, eg `.foo`.
 fn subfield(input: Input) -> ParseResult<String> {
-    let (input, _) = rtrim(char('.'))(input)?;
+    // Use not_followed to ensure we do not eat the first character of the
+    // .. operator. This can happen for example when parsing:
+    // `for all i in (tests.constants.one..5)`
+    let (input, _) = rtrim(not_followed(char('.'), char('.')))(input)?;
 
     cut(raw_identifier)(input)
 }

@@ -538,7 +538,7 @@ mod tests {
         );
         parse(
             for_expression_full,
-            "for any s in (0..5 - 1) : ( false )",
+            "for any s in (a.b..5 - 1) : ( false )",
             "",
             Expression {
                 expr: ExpressionKind::ForIdentifiers {
@@ -547,30 +547,37 @@ mod tests {
                     identifiers_span: 8..9,
                     iterator: ForIterator::Range {
                         from: Box::new(Expression {
-                            expr: ExpressionKind::Number(0),
-                            span: 14..15,
+                            expr: ExpressionKind::Identifier(Identifier {
+                                name: "a".to_string(),
+                                name_span: 14..15,
+                                operations: vec![IdentifierOperation {
+                                    op: IdentifierOperationType::Subfield("b".to_string()),
+                                    span: 15..17,
+                                }],
+                            }),
+                            span: 14..17,
                         }),
                         to: Box::new(Expression {
                             expr: ExpressionKind::Sub(
                                 Box::new(Expression {
                                     expr: ExpressionKind::Number(5),
-                                    span: 17..18,
+                                    span: 19..20,
                                 }),
                                 Box::new(Expression {
                                     expr: ExpressionKind::Number(1),
-                                    span: 21..22,
+                                    span: 23..24,
                                 }),
                             ),
-                            span: 17..22,
+                            span: 19..24,
                         }),
                     },
-                    iterator_span: 13..23,
+                    iterator_span: 13..25,
                     body: Box::new(Expression {
                         expr: ExpressionKind::Boolean(false),
-                        span: 28..33,
+                        span: 30..35,
                     }),
                 },
-                span: 0..35,
+                span: 0..37,
             },
         );
         parse(

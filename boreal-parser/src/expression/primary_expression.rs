@@ -12,7 +12,7 @@ use nom::{
 
 use super::{expression, identifier, read_integer, string_expression, Expression, ExpressionKind};
 use crate::{
-    nom_recipes::{not_followed, rtrim, textual_tag as ttag},
+    nom_recipes::{rtrim, textual_tag as ttag},
     number, string,
     types::{Input, ParseResult},
 };
@@ -22,9 +22,7 @@ pub fn primary_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
-    // Use not_followed to ensure we do not eat the first character of the
-    // || operator
-    while let Ok((i, _)) = rtrim(not_followed(char('|'), char('|')))(input) {
+    while let Ok((i, _)) = rtrim(char('|'))(input) {
         let (i2, right_elem) = cut(primary_expression_bitwise_xor)(i)?;
         input = i2;
 
@@ -58,9 +56,7 @@ fn primary_expression_bitwise_and(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = primary_expression_shift(input)?;
 
-    // Use not_followed to ensure we do not eat the first character of the
-    // && operator
-    while let Ok((i, _)) = rtrim(not_followed(char('&'), char('&')))(input) {
+    while let Ok((i, _)) = rtrim(char('&'))(input) {
         let (i2, right_elem) = cut(primary_expression_shift)(i)?;
         input = i2;
 
