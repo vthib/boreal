@@ -1,7 +1,6 @@
 //! Compiled expression used in a rule.
 //!
 //! This module contains all types describing a rule condition, built from the parsed AST.
-use std::collections::HashSet;
 use std::ops::Range;
 
 use regex::bytes::{Regex, RegexBuilder};
@@ -920,8 +919,6 @@ fn compile_variable_set(
 ) -> Result<VariableSet, CompilationError> {
     // selected indexes.
     let mut indexes = Vec::new();
-    // hashset of already selected indexes.
-    let mut indexes_set = HashSet::new();
 
     for elem in set.elements {
         if elem.1 {
@@ -930,9 +927,7 @@ fn compile_variable_set(
             for (name, index) in &compiler.variables_map {
                 if name.starts_with(&elem.0) {
                     found = true;
-                    if indexes_set.insert(*index) {
-                        indexes.push(*index);
-                    }
+                    indexes.push(*index);
                 }
             }
             if !found {
@@ -945,9 +940,7 @@ fn compile_variable_set(
         } else {
             // TODO: get better span
             let index = compiler.find_named_variable(&elem.0, &span)?;
-            if indexes_set.insert(index) {
-                indexes.push(index);
-            }
+            indexes.push(index);
         }
     }
 

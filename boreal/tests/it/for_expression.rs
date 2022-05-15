@@ -497,6 +497,58 @@ fn test_for_expression_percent() {
     checker.check(b"a0a1a2b0b1c0", false);
 }
 
+// It is possible for a variable to be reused multiple times in a variable set.
+#[test]
+fn test_for_expression_overlap() {
+    // Even if the selection number is bigger than the number of variables, this does not
+    // mean the for expression is false: a variable can be reused.
+    let checker = Checker::new(
+        r#"
+    rule a {
+        strings:
+            $a = "abc"
+            $b = "def"
+        condition:
+            for 3 of ($a, $b, $a): ($)
+    }"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"def", false);
+    checker.check(b"abc", false);
+    checker.check(b"abcdef", true);
+
+    // Same for wildcards
+    let checker = Checker::new(
+        r#"
+    rule a {
+        strings:
+            $a   = "a"
+            $aa  = "bb"
+            $aaa = "ccc"
+        condition:
+            // This include "$a, $aa, $aaa", "$aa, $aaa", "$aaa", so 6 variables total
+            for 6 of ($a*, $aa*, $aaa*): ($)
+    }"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"a", false);
+    checker.check(b"bb", false);
+    checker.check(b"ccc", false);
+    checker.check(b"abbccc", true);
+
+    // This is also the case for identifiers
+    check(
+        &build_rule("for 4 i in tests.string_array : ( true )"),
+        b"",
+        true,
+    );
+    check(
+        &build_rule("for 5 i in tests.string_array : ( true )"),
+        b"",
+        false,
+    );
+}
+
 #[test]
 fn test_for_expression_err() {
     check_err(

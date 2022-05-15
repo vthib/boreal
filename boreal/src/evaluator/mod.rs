@@ -555,12 +555,7 @@ impl Evaluator<'_> {
                 } else {
                     #[allow(clippy::cast_sign_loss)]
                     let value = { value as u64 };
-
-                    if value > self.variables.len() as u64 {
-                        Some(FSEvaluation::Value(Value::Boolean(false)))
-                    } else {
-                        Some(FSEvaluation::Evaluator(FSEvaluator::Number(value)))
-                    }
+                    Some(FSEvaluation::Evaluator(FSEvaluator::Number(value)))
                 }
             }
         }
@@ -670,6 +665,7 @@ impl Evaluator<'_> {
 }
 
 /// Result of the evaluation of a for selection.
+#[derive(Debug)]
 enum ForSelectionEvaluation {
     /// An evaluator that accumulates evaluations of each variable, and return a result as early
     /// as possible.
@@ -680,6 +676,7 @@ enum ForSelectionEvaluation {
 }
 
 /// Evaluator of a for selection
+#[derive(Debug)]
 enum ForSelectionEvaluator {
     /// All variables must match
     All,
