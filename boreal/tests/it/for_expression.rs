@@ -557,7 +557,16 @@ fn test_for_expression_err() {
     );
     check_err(
         &build_rule("all of ($d*)"),
-        "mem:12:9: error: unknown variable $d",
+        "mem:12:9: error: unknown variable $d*",
+    );
+
+    check_err(
+        "rule a { condition: any of () }",
+        "mem:1:29: error: syntax error",
+    );
+    check_err(
+        "rule a { condition: all of them }",
+        "mem:1:21: error: unknown variable $*",
     );
 }
 

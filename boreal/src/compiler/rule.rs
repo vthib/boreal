@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::Range;
 use std::{collections::HashMap, sync::Arc};
 
@@ -38,13 +39,13 @@ pub(super) struct RuleCompiler<'a> {
     /// Namespace in which the rule is built and added to.
     pub namespace: &'a Namespace,
 
-    /// Map of variable name to index in the compiled rule variables vec.
+    /// Names of variables declared in this rule.
     ///
-    /// This only stores named variables. Anonymous ones are still stored
-    /// (and thus have an index), but cannot be referred by name.
-    // TODO: hashset of used variables per index, to indicate which ones
-    // are unused.
-    pub variables_map: HashMap<String, usize>,
+    /// The index of the name in this vector will match the index of the variable
+    /// in the compiled rules's variable vec. It can thus be used to compile
+    /// access to the variable.
+    // TODO: detect which ones are unused.
+    pub variable_names: Vec<String>,
 
     /// Map of the name of a bounded identifier to its type and index in the bounded identifier
     /// stack.
@@ -56,19 +57,20 @@ impl<'a> RuleCompiler<'a> {
         rule: &parser::Rule,
         namespace: &'a Namespace,
     ) -> Result<Self, CompilationError> {
-        let mut variables_map = HashMap::new();
-        for (idx, var) in rule.variables.iter().enumerate() {
-            if var.name.is_empty() {
-                continue;
-            }
-            if variables_map.insert(var.name.clone(), idx).is_some() {
+        let mut names_set = HashSet::new();
+        let mut variable_names = Vec::with_capacity(rule.variables.len());
+        for var in &rule.variables {
+            // Check duplicated names, but only for non anonymous strings
+            if !var.name.is_empty() && !names_set.insert(var.name.clone()) {
                 return Err(CompilationError::DuplicatedVariable(var.name.clone()));
             }
+
+            variable_names.push(var.name.clone());
         }
 
         Ok(Self {
             namespace,
-            variables_map,
+            variable_names,
             bounded_identifiers: HashMap::new(),
         })
     }
@@ -98,13 +100,15 @@ impl<'a> RuleCompiler<'a> {
         name: &str,
         span: &Range<usize>,
     ) -> Result<usize, CompilationError> {
-        match self.variables_map.get(name) {
-            Some(index) => Ok(*index),
-            None => Err(CompilationError::UnknownVariable {
-                variable_name: name.to_owned(),
-                span: span.clone(),
-            }),
+        for (index, var_name) in self.variable_names.iter().enumerate() {
+            if var_name == name {
+                return Ok(index);
+            }
         }
+        Err(CompilationError::UnknownVariable {
+            variable_name: name.to_owned(),
+            span: span.clone(),
+        })
     }
 
     /// Add a bounded identifier.

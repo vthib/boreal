@@ -920,20 +920,29 @@ fn compile_variable_set(
     // selected indexes.
     let mut indexes = Vec::new();
 
+    // A for expression on an empty set is not allowed by YARA.
+    // The empty set (or "them") acts as a "($*)" element.
+    if set.elements.is_empty() && compiler.variable_names.is_empty() {
+        return Err(CompilationError::UnknownVariable {
+            variable_name: "*".to_string(),
+            span,
+        });
+    }
+
     for elem in set.elements {
         if elem.1 {
             let mut found = false;
 
-            for (name, index) in &compiler.variables_map {
+            for (index, name) in compiler.variable_names.iter().enumerate() {
                 if name.starts_with(&elem.0) {
                     found = true;
-                    indexes.push(*index);
+                    indexes.push(index);
                 }
             }
             if !found {
                 // TODO: get better span
                 return Err(CompilationError::UnknownVariable {
-                    variable_name: elem.0,
+                    variable_name: format!("{}*", elem.0),
                     span,
                 });
             }
