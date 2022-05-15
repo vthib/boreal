@@ -11,19 +11,19 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt},
     multi::separated_list1,
-    sequence::{delimited, preceded, terminated},
+    sequence::{delimited, pair, preceded, terminated},
 };
 
 use crate::{
     nom_recipes::{rtrim, textual_tag as ttag},
-    string::string_identifier_with_wildcard,
+    string::{self, string_identifier_with_wildcard},
     types::{Input, ParseResult},
 };
 
 use super::{
     boolean_expression::boolean_expression, common::range, identifier::identifier,
     primary_expression::primary_expression, Expression, ExpressionKind, ForIterator, ForSelection,
-    VariableSet,
+    RuleSet, VariableSet,
 };
 
 // There is a very ugly hack in this file.
@@ -94,21 +94,30 @@ fn for_expression_with_selection<'a>(
     start: Input<'a>,
     input: Input<'a>,
 ) -> ParseResult<'a, Expression> {
-    let (input, set) = preceded(rtrim(ttag("of")), cut(string_set))(input)?;
-    let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
+    let (input, _) = rtrim(ttag("of"))(input)?;
 
-    let expr = match range {
-        None => ExpressionKind::For {
-            selection,
-            set,
-            body: None,
-        },
-        Some((from, to)) => ExpressionKind::ForIn {
-            selection,
-            set,
-            from,
-            to,
-        },
+    let (input, expr) = match rule_set(input) {
+        Ok((input, set)) => (input, ExpressionKind::ForRules { selection, set }),
+        Err(nom::Err::Failure(e)) => return Err(nom::Err::Failure(e)),
+        Err(_) => {
+            let (input, set) = cut(string_set)(input)?;
+            let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
+
+            let kind = match range {
+                None => ExpressionKind::For {
+                    selection,
+                    set,
+                    body: None,
+                },
+                Some((from, to)) => ExpressionKind::ForIn {
+                    selection,
+                    set,
+                    from,
+                    to,
+                },
+            };
+            (input, kind)
+        }
     };
 
     Ok((
@@ -266,6 +275,29 @@ fn iterator_list(input: Input) -> ParseResult<ForIterator> {
 fn iterator_range(input: Input) -> ParseResult<ForIterator> {
     let (input, (from, to)) = range(input)?;
     Ok((input, ForIterator::Range { from, to }))
+}
+
+/// Parse a set of rules.
+///
+/// Equivalent to the `rule_set` pattern in grammar.y in libyara.
+fn rule_set(input: Input) -> ParseResult<RuleSet> {
+    map(
+        delimited(rtrim(char('(')), rule_enumeration, rtrim(char(')'))),
+        |elements| RuleSet { elements },
+    )(input)
+}
+
+/// Parse an enumeration of rules.
+///
+/// Equivalent to the `rule_enumeration` pattern in grammar.y in libyara.
+fn rule_enumeration(input: Input) -> ParseResult<Vec<(String, bool)>> {
+    separated_list1(
+        rtrim(char(',')),
+        pair(
+            string::identifier,
+            map(opt(rtrim(char('*'))), |v| v.is_some()),
+        ),
+    )(input)
 }
 
 #[cfg(test)]
@@ -455,6 +487,26 @@ mod tests {
                     }),
                 },
                 span: 0..35,
+            },
+        );
+        parse(
+            boolean_expression,
+            "2% of (a, b*)",
+            "",
+            Expression {
+                expr: ExpressionKind::ForRules {
+                    selection: ForSelection::Expr {
+                        expr: Box::new(Expression {
+                            expr: ExpressionKind::Number(2),
+                            span: 0..1,
+                        }),
+                        as_percent: true,
+                    },
+                    set: RuleSet {
+                        elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
+                    },
+                },
+                span: 0..13,
             },
         );
 

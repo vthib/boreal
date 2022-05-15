@@ -1,4 +1,4 @@
-use crate::utils::Compiler;
+use crate::utils::{check_err, Compiler};
 
 // An import is reused in the same namespace
 #[test]
@@ -95,6 +95,53 @@ fn test_rule_dependencies() {
     checker.check_matches(b"cd", &["ns1:a", "ns1:b"]);
     checker.check_matches(b"d", &["ns1:b"]);
     checker.check_matches(b"bd", &["ns1:b"]);
+}
+
+#[test]
+fn test_for_expression_rules_err() {
+    check_err(
+        "rule a { condition: all of (b) }",
+        "mem:1:21: error: unknown identifier \"b\"",
+    );
+    check_err(
+        "rule a { condition: all of (b*) }",
+        "mem:1:21: error: unknown identifier \"b*\"",
+    );
+    check_err(
+        "rule a { condition: true } rule c { condition: all of (a, b) }",
+        "mem:1:48: error: unknown identifier \"b\"",
+    );
+}
+
+#[test]
+fn test_for_expression_rules() {
+    let mut compiler = Compiler::new();
+
+    compiler.add_rules("rule a0 { strings: $a = /a0/ condition: $a }");
+    compiler.add_rules("rule a1 { strings: $a = /a1/ condition: $a }");
+    compiler.add_rules("rule a2 { strings: $a = /a2/ condition: $a }");
+    compiler.add_rules("rule a3 { strings: $a = /a3/ condition: $a }");
+    compiler.add_rules_in_namespace("rule a2p { strings: $a = /a2/ condition: $a }", "ns1");
+    compiler.add_rules("rule b0 { condition: 3 of (a*) }");
+    compiler.add_rules("rule b1 { condition: all of (a1, a3) }");
+    compiler.add_rules("rule b2 { condition: 4 of (a0, a*) }");
+
+    let checker = compiler.into_checker();
+    checker.check_matches(b"", &[]);
+
+    checker.check_matches(b"a0", &["default:a0"]);
+    checker.check_matches(
+        b"a0a1a2",
+        &[
+            "default:a0",
+            "default:a1",
+            "default:a2",
+            "ns1:a2p",
+            "default:b0",
+            "default:b2",
+        ],
+    );
+    checker.check_matches(b"a1a3", &["default:a1", "default:a3", "default:b1"]);
 }
 
 // Test the identifier is resolved to the import first, then the rule names

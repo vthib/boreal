@@ -49,7 +49,7 @@ pub use error::Error;
 mod expression;
 pub use expression::{
     Expression, ExpressionKind, ForIterator, ForSelection, Identifier, IdentifierOperation,
-    IdentifierOperationType, ReadIntegerType, VariableSet,
+    IdentifierOperationType, ReadIntegerType, RuleSet, VariableSet,
 };
 mod file;
 pub use file::{YaraFile, YaraFileComponent};

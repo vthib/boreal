@@ -477,6 +477,7 @@ impl Evaluator<'_> {
                 self.currently_selected_variable_index = prev_selected_var_index;
                 Some(result)
             }
+
             Expression::ForIdentifiers {
                 selection,
                 iterator,
@@ -489,6 +490,22 @@ impl Evaluator<'_> {
                 };
 
                 self.evaluate_for_iterator(iterator, selection, body)
+            }
+
+            Expression::ForRules { selection, set } => {
+                let mut selection = match self.evaluate_for_selection(selection) {
+                    Some(ForSelectionEvaluation::Evaluator(e)) => e,
+                    Some(ForSelectionEvaluation::Value(v)) => return Some(v),
+                    None => return Some(Value::Boolean(false)),
+                };
+
+                for index in &set.elements {
+                    let v = self.previous_rules_results.get(*index)?;
+                    if let Some(result) = selection.add_result_and_check(*v) {
+                        return Some(Value::Boolean(result));
+                    }
+                }
+                Some(Value::Boolean(selection.end()))
             }
 
             Expression::Module(module_expr) => module::evaluate_expr(self, module_expr)

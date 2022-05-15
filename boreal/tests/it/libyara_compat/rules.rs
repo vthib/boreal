@@ -1839,20 +1839,19 @@ fn test_of() {
         true,
     );
 
-    // FIXME: implement rule of
-    // check(
-    //     "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
-    //   condition: any of ($a*, $b*) }",
-    //     concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
-    //     true,
-    // );
-    //
-    // check(
-    //     "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
-    //   condition: none of ($a*, $b*) }",
-    //     concatcp!(TEXT_1024_BYTES, "AXSERS").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
+      condition: any of ($a*, $b*) }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
+      condition: none of ($a*, $b*) }",
+        concatcp!(TEXT_1024_BYTES, "AXSERS").as_bytes(),
+        true,
+    );
 
     check(
         "rule test {
@@ -1880,8 +1879,10 @@ fn test_of() {
         false,
     );
 
-    // FIXME: implement rule of
-    // check_err("rule test { condition: all of ($a*) }", "z");
+    check_err(
+        "rule test { condition: all of ($a*) }",
+        "mem:1:24: error: unknown variable $a*",
+    );
 
     check_err(
         "rule test { condition: all of them }",

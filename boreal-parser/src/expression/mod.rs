@@ -329,6 +329,18 @@ pub enum ExpressionKind {
         body: Box<Expression>,
     },
 
+    /// Depend on multiple rules already declared in the namespace.
+    ///
+    /// If the number of matching rules in the set matches the `selection`,
+    /// this expression returns true.
+    ForRules {
+        /// How many variables must match for this expression to be true.
+        selection: ForSelection,
+
+        /// Which rules are selected.
+        set: RuleSet,
+    },
+
     /// An identifier.
     Identifier(Identifier),
     /// A string.
@@ -388,6 +400,16 @@ pub struct VariableSet {
     /// Names of the variables in the set.
     ///
     /// If empty, the set is considered as containing *all* variables.
+    /// The associated boolean indicates if the name has a trailing
+    /// wildcard.
+    pub elements: Vec<(String, bool)>,
+}
+
+/// Set of multiple rules.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleSet {
+    /// Names of the rules in the set.
+    ///
     /// The associated boolean indicates if the name has a trailing
     /// wildcard.
     pub elements: Vec<(String, bool)>,
