@@ -50,6 +50,13 @@ pub(super) struct RuleCompiler<'a> {
     /// Map of the name of a bounded identifier to its type and index in the bounded identifier
     /// stack.
     pub bounded_identifiers: HashMap<String, Arc<(BoundedIdentifierType, usize)>>,
+
+    /// List of rules wildcard used in for expressions.
+    ///
+    /// This will be added to the compiler if the rule is successfully compiled,
+    /// and used to ensure no rules matching those wildcard can be declared anymore
+    /// in the namespace.
+    pub rule_wildcard_uses: Vec<String>,
 }
 
 impl<'a> RuleCompiler<'a> {
@@ -72,6 +79,7 @@ impl<'a> RuleCompiler<'a> {
             namespace,
             variable_names,
             bounded_identifiers: HashMap::new(),
+            rule_wildcard_uses: Vec::new(),
         })
     }
 
@@ -139,10 +147,17 @@ impl<'a> RuleCompiler<'a> {
 
 pub(super) fn compile_rule(
     rule: parser::Rule,
-    namespace: &Namespace,
+    namespace: &mut Namespace,
 ) -> Result<Rule, CompilationError> {
-    let mut compiler = RuleCompiler::new(&rule, namespace)?;
-    let condition = compile_expression(&mut compiler, rule.condition)?;
+    let (condition, wildcards) = {
+        let mut compiler = RuleCompiler::new(&rule, namespace)?;
+        let condition = compile_expression(&mut compiler, rule.condition)?;
+
+        (condition, compiler.rule_wildcard_uses)
+    };
+    if !wildcards.is_empty() {
+        namespace.forbidden_rule_prefixes.extend(wildcards);
+    }
 
     Ok(Rule {
         name: rule.name,

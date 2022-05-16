@@ -165,6 +165,12 @@ pub fn check(rule: &str, mem: &[u8], expected_res: bool) {
 }
 
 #[track_caller]
+pub fn check_count(rule: &str, mem: &[u8], expected_count: usize) {
+    let checker = Checker::new(rule);
+    checker.check_count(mem, expected_count);
+}
+
+#[track_caller]
 pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
     use std::io::Read;
 

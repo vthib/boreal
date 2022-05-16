@@ -115,6 +115,15 @@ impl Compiler {
                     };
                 }
                 parser::YaraFileComponent::Rule(rule) => {
+                    for prefix in &namespace.forbidden_rule_prefixes {
+                        if rule.name.starts_with(prefix) {
+                            return Err(CompilationError::MatchOnWildcardRuleSet {
+                                rule_name: rule.name,
+                                rule_set: format!("{}*", prefix),
+                            });
+                        }
+                    }
+
                     let rule_name = rule.name.clone();
                     let rule = compile_rule(*rule, namespace)?;
 
@@ -159,6 +168,12 @@ struct Namespace {
     /// and a rule named `foo` is added, this is not an error, but the identifier `foo` will refer
     /// to the module.
     imported_modules: HashMap<String, Arc<Module>>,
+
+    /// List of names prefixes that cannot be used anymore in this namespace.
+    ///
+    /// This is a list of rule wildcards that have already been used by rules in
+    /// this namespace.
+    pub forbidden_rule_prefixes: Vec<String>,
 }
 
 #[derive(Debug)]

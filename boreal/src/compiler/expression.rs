@@ -1011,6 +1011,7 @@ fn compile_rule_set(
                     span,
                 });
             }
+            compiler.rule_wildcard_uses.push(elem.0);
         } else {
             // TODO: get better span
             match compiler.namespace.rules_names.get(&elem.0) {

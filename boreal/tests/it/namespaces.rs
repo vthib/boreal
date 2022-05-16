@@ -111,6 +111,14 @@ fn test_for_expression_rules_err() {
         "rule a { condition: true } rule c { condition: all of (a, b) }",
         "mem:1:48: error: unknown identifier \"b\"",
     );
+    check_err(
+        "rule a0 { condition: true }
+         rule b0 { condition: all of (a*) }
+         rule b1 { condition: true }
+         rule b2 { condition: all of (b*) }
+         rule b3 { condition: true }",
+        r#"error: rule "b3" matches a previous rule set "b*""#,
+    );
 }
 
 #[test]

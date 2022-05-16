@@ -6,7 +6,7 @@
 use const_format::concatcp;
 
 use super::util::{PE32_FILE, TEXT_1024_BYTES};
-use crate::utils::{check, check_boreal, check_err, check_file};
+use crate::utils::{check, check_boreal, check_count, check_err, check_file};
 
 #[test]
 fn test_boolean_operators() {
@@ -1807,6 +1807,58 @@ fn test_length() {
         concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
         true,
     );
+}
+
+#[test]
+fn test_rule_of() {
+    check_count(
+        "rule a { condition: true }
+         rule b { condition: 1 of (a) }",
+        b"",
+        2,
+    );
+
+    check_count(
+        "rule a1 { condition: true }
+         rule a2 { condition: true }
+         rule b { condition: 2 of (a*) }",
+        b"",
+        3,
+    );
+
+    check_count(
+        "rule a1 { condition: true }
+         rule a2 { condition: false }
+         rule b { condition: 50% of (a*) }",
+        b"",
+        2,
+    );
+
+    check_err(
+        "rule a { condition: all of (b*) }",
+        "mem:1:21: error: unknown identifier \"b*\"",
+    );
+
+    check_err(
+        "rule a0 { condition: true }
+         rule b { condition: 1 of (a*) }
+         rule a1 { condition: true } ",
+        r#"error: rule "a1" matches a previous rule set "a*""#,
+    );
+
+    // Make sure repeating the rule set works
+    check_count(
+        "rule a { condition: true }
+         rule b { condition: 1 of (a*) }
+         rule c { condition: 1 of (a*) }",
+        b"",
+        3,
+    );
+
+    // This will compile but is false for the same reason that
+    // "rule x { condition: x }" is compiles but is false.
+    // TODO: handle this...
+    // check("rule a { condition: 1 of (a*) }", b"", false);
 }
 
 #[test]

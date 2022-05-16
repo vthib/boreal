@@ -135,6 +135,24 @@ pub enum CompilationError {
         span: Range<usize>,
     },
 
+    /// A rule matching a previous wildcard rule set cannot be added.
+    ///
+    /// Rules that match previous wildcard rule set are not allowed in a namespace.
+    ///
+    /// For example:
+    ///
+    /// ```no_rust
+    /// rule a0 { condition: true }
+    /// rule b { condition: all of (a*) }
+    /// rule a1 { condition: true } // This rule is not allowed
+    /// ```
+    MatchOnWildcardRuleSet {
+        /// The name of the rule being rejected
+        rule_name: String,
+        /// The corresponding wildcard rule set previously used in the namespace.
+        rule_set: String,
+    },
+
     /// An identifier used as an iterator is not iterable.
     ///
     /// When iterating on an identifier, only arrays and dictionaries are allowed.
@@ -287,6 +305,15 @@ impl CompilationError {
             Self::InvalidIdentifierUse { span } => Diagnostic::error()
                 .with_message("wrong use of identifier")
                 .with_labels(vec![Label::primary((), span.clone())]),
+
+            // TODO: add span on rule name
+            Self::MatchOnWildcardRuleSet {
+                rule_name,
+                rule_set,
+            } => Diagnostic::error().with_message(format!(
+                "rule \"{}\" matches a previous rule set \"{}\"",
+                rule_name, rule_set
+            )),
 
             Self::NonIterableIdentifier { span } => Diagnostic::error()
                 .with_message("identifier is not iterable")
