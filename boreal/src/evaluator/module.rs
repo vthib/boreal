@@ -9,7 +9,7 @@ use crate::{
 use super::{Evaluator, Value};
 
 pub(super) fn evaluate_expr(
-    evaluator: &mut Evaluator<'_>,
+    evaluator: &mut Evaluator,
     expr: &ModuleExpression,
 ) -> Option<ModuleValue> {
     match expr {
@@ -41,7 +41,7 @@ pub(super) fn evaluate_expr(
 }
 
 pub(super) fn evaluate_ops(
-    evaluator: &mut Evaluator<'_>,
+    evaluator: &mut Evaluator,
     mut value: ModuleValue,
     operations: &[ValueOperation],
 ) -> Option<ModuleValue> {
@@ -64,7 +64,7 @@ pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
 }
 
 fn eval_array_op(
-    evaluator: &mut Evaluator<'_>,
+    evaluator: &mut Evaluator,
     fun: fn() -> Option<Vec<ModuleValue>>,
     subscript: &Expression,
 ) -> Option<ModuleValue> {
@@ -83,7 +83,7 @@ fn eval_array_op(
 }
 
 fn eval_dict_op(
-    evaluator: &mut Evaluator<'_>,
+    evaluator: &mut Evaluator,
     fun: fn() -> Option<HashMap<String, ModuleValue>>,
     subscript: &Expression,
 ) -> Option<ModuleValue> {
@@ -94,7 +94,7 @@ fn eval_dict_op(
 }
 
 fn eval_function_op(
-    evaluator: &mut Evaluator<'_>,
+    evaluator: &mut Evaluator,
     fun: fn(Vec<ModuleValue>) -> Option<ModuleValue>,
     arguments: &[Expression],
 ) -> Option<ModuleValue> {
@@ -111,7 +111,7 @@ fn eval_function_op(
 }
 
 fn evaluate_value_operation(
-    evaluator: &mut Evaluator<'_>,
+    evaluator: &mut Evaluator,
     value: ModuleValue,
     op: &ValueOperation,
 ) -> Option<ModuleValue> {

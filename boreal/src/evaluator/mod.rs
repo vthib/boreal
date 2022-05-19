@@ -59,7 +59,11 @@ impl Value {
 ///
 /// Returns true if the expression (with the associated variables) matches on the given
 /// byte slice, false otherwise.
-pub fn evaluate_rule(rule: &Rule, mem: &[u8], previous_rules_results: &[bool]) -> bool {
+pub(crate) fn evaluate_rule<'rule>(
+    rule: &'rule Rule,
+    mem: &[u8],
+    previous_rules_results: &[bool],
+) -> (bool, Vec<VariableEvaluation<'rule>>) {
     let mut evaluator = Evaluator {
         variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
         mem,
@@ -67,19 +71,20 @@ pub fn evaluate_rule(rule: &Rule, mem: &[u8], previous_rules_results: &[bool]) -
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
     };
-    evaluator
+    let res = evaluator
         .evaluate_expr(&rule.condition)
-        .map_or(false, |v| v.to_bool())
+        .map_or(false, |v| v.to_bool());
+    (res, evaluator.variables)
 }
 
-struct Evaluator<'a> {
+struct Evaluator<'a, 'b, 'c> {
     variables: Vec<VariableEvaluation<'a>>,
-    mem: &'a [u8],
+    mem: &'b [u8],
 
     // Array of previous rules results.
     //
     // This only stores results of rules that are depended upon, not all rules.
-    previous_rules_results: &'a [bool],
+    previous_rules_results: &'c [bool],
 
     // Index of the currently selected variable.
     //
@@ -145,7 +150,7 @@ enum BoundedIdentifierValue {
     ModuleValue(ModuleValue),
 }
 
-impl Evaluator<'_> {
+impl Evaluator<'_, '_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Option<usize> {
         var_index.0.or(self.currently_selected_variable_index)
     }

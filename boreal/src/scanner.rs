@@ -19,22 +19,73 @@ impl Scanner {
     /// Returns a list of rules that matched on the given
     /// byte slice.
     #[must_use]
-    pub fn scan_mem(&self, mem: &[u8]) -> ScanResults {
+    pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> Vec<MatchedRule<'scanner>> {
         // FIXME: this is pretty bad performance wise
-        let mut results = ScanResults::default();
+        let mut results = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
         for rule in &self.rules {
-            let res = evaluator::evaluate_rule(rule, mem, &previous_results);
-            if res {
-                results.matching_rules.push(rule);
-            }
+            let res = {
+                let (res, var_evals) = evaluator::evaluate_rule(rule, mem, &previous_results);
+                if res {
+                    results.push(MatchedRule {
+                        namespace: rule.namespace.as_deref(),
+                        name: &rule.name,
+                        matches: var_evals
+                            .into_iter()
+                            .map(|eval| StringMatches {
+                                name: &eval.var.name,
+                                matches: eval
+                                    .matches
+                                    .iter()
+                                    .map(|mat| StringMatch {
+                                        offset: mat.start,
+                                        value: mem[mat.start..mat.end].to_vec(),
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
+                    });
+                }
+                res
+            };
             previous_results.push(res);
         }
         results
     }
 }
 
-#[derive(Default)]
-pub struct ScanResults<'a> {
-    pub matching_rules: Vec<&'a Rule>,
+/// Description of a rule that matched during a scan.
+pub struct MatchedRule<'scanner> {
+    /// Namespace containing the rule. None if in the default namespace.
+    pub namespace: Option<&'scanner str>,
+
+    /// Name of the rule.
+    pub name: &'scanner str,
+
+    /// List of matched strings, with details on their matches.
+    pub matches: Vec<StringMatches<'scanner>>,
+}
+
+/// Details on matches for a string.
+pub struct StringMatches<'scanner> {
+    /// Name of the string
+    pub name: &'scanner str,
+
+    /// List of matches found for this string.
+    ///
+    /// This is not guaranteed to be complete! If the rule
+    /// could be resolved without scanning entirely the input
+    /// for this variable, some potential matches will not
+    /// be reported.
+    pub matches: Vec<StringMatch>,
+}
+
+/// Details on a match on a string during a scan.
+pub struct StringMatch {
+    /// Offset of the match
+    pub offset: usize,
+
+    /// The matched data.
+    // TODO: implement a max bound for this
+    pub value: Vec<u8>,
 }

@@ -11,10 +11,11 @@ use crate::compiler::{Variable, VariableMatcher};
 /// on a single input.
 #[derive(Debug)]
 pub(crate) struct VariableEvaluation<'a> {
-    var: &'a Variable,
+    pub(crate) var: &'a Variable,
 
     /// Matches already done
-    matches: Vec<Match>,
+    pub(crate) matches: Vec<Match>,
+
     /// Offset for the next scan.
     ///
     /// Set to None once the whole mem has been scanned.

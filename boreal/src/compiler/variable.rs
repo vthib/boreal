@@ -13,6 +13,8 @@ use super::CompilationError;
 
 #[derive(Debug)]
 pub struct Variable {
+    pub name: String,
+
     pub matcher: VariableMatcher,
 
     // Those three modifiers are used to handle fullword check on matches.
@@ -44,7 +46,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         VariableDeclarationValue::Regex(regex) => {
             let matcher = build_regex_matcher(regex, &modifiers);
             matcher.map_err(|error| CompilationError::VariableCompilation {
-                variable_name: name,
+                variable_name: name.clone(),
                 error,
             })?
         }
@@ -64,7 +66,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
                 .build(&regex);
             VariableMatcher::Regex(matcher.map_err(|error| {
                 CompilationError::VariableCompilation {
-                    variable_name: name,
+                    variable_name: name.clone(),
                     error,
                 }
             })?)
@@ -72,6 +74,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     };
 
     Ok(Variable {
+        name,
         matcher,
         is_fullword,
         is_wide,

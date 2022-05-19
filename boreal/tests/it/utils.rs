@@ -105,7 +105,7 @@ impl Checker {
     #[track_caller]
     pub fn check_count(&self, mem: &[u8], count: usize) {
         let res = self.scanner.scan_mem(mem);
-        assert_eq!(res.matching_rules.len(), count, "test failed for boreal");
+        assert_eq!(res.len(), count, "test failed for boreal");
 
         if let Some(rules) = &self.yara_rules {
             let len = rules.scan_mem(mem, 1).unwrap().len();
@@ -119,7 +119,6 @@ impl Checker {
         let expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
         let res = self.scanner.scan_mem(mem);
         let res: Vec<String> = res
-            .matching_rules
             .into_iter()
             .map(|v| {
                 if let Some(ns) = &v.namespace {
@@ -144,7 +143,7 @@ impl Checker {
     #[track_caller]
     pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
         let res = self.scanner.scan_mem(mem);
-        let res = !res.matching_rules.is_empty();
+        let res = !res.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
     }
 }

@@ -29,7 +29,7 @@ macro_rules! read_be {
 }
 
 pub(super) fn evaluate_read_integer(
-    evaluator: &mut Evaluator<'_>,
+    evaluator: &mut Evaluator,
     addr: &Expression,
     ty: ReadIntegerType,
 ) -> Option<Value> {
