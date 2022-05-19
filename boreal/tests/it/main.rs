@@ -9,6 +9,7 @@ mod evaluation;
 mod for_expression;
 mod modules;
 mod namespaces;
+mod variables;
 
 // utils to run tests both with boreal and with yara
 mod utils;
