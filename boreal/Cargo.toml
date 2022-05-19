@@ -9,6 +9,9 @@ license = "MIT OR Apache-2.0"
 boreal-parser = { path = "../boreal-parser", version = "0.0.1" }
 
 regex = "1.5"
+# Needed to parse & modify HIR for some modifiers (eg wide regex)
+# No default features to disable unicode, we do not need it
+regex-syntax = { version = "0.6", default-features = false }
 
 # Proper error reporting on compilation
 codespan-reporting = "0.11"

@@ -5,6 +5,8 @@ use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 
 use boreal_parser::{HexMask, HexToken, VariableFlags, VariableModifiers};
 use boreal_parser::{Regex, VariableDeclaration, VariableDeclarationValue};
+use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
+use regex_syntax::ParserBuilder;
 
 use super::base64::encode_base64;
 use super::CompilationError;
@@ -161,7 +163,7 @@ fn build_regex_matcher(
 ) -> Result<VariableMatcher, grep_regex::Error> {
     let mut matcher = RegexMatcherBuilder::new();
     let Regex {
-        expr,
+        mut expr,
         mut case_insensitive,
         dot_all,
         span: _,
@@ -172,11 +174,14 @@ fn build_regex_matcher(
     }
 
     if modifiers.flags.contains(VariableFlags::WIDE) {
-        // TODO: hmmmmm this is gonna be fun
+        let hir = expr_to_hir(&expr, case_insensitive, dot_all).unwrap();
+        let wide_hir = hir_to_wide(&hir);
+
         if modifiers.flags.contains(VariableFlags::ASCII) {
-            todo!();
+            expr = Hir::alternation(vec![hir, wide_hir]).to_string();
+        } else {
+            expr = wide_hir.to_string();
         }
-        todo!();
     }
 
     matcher
@@ -229,6 +234,169 @@ fn hex_token_to_regex(token: HexToken, regex: &mut String) {
     }
 }
 
+fn expr_to_hir(
+    expr: &str,
+    case_insensitive: bool,
+    dot_all: bool,
+) -> Result<Hir, regex_syntax::Error> {
+    ParserBuilder::new()
+        .octal(false)
+        .unicode(false)
+        .allow_invalid_utf8(true)
+        .case_insensitive(case_insensitive)
+        .multi_line(dot_all)
+        .dot_matches_new_line(dot_all)
+        .build()
+        .parse(expr)
+}
+
+fn hir_to_wide(hir: &Hir) -> Hir {
+    visit(hir, HirWidener::new()).unwrap()
+}
+
+#[derive(Debug)]
+struct HirWidener {
+    // Top-level HIR expr being constructed
+    hir: Hir,
+
+    // Accumulation of HIR nodes when building a compound expr.
+    nodes: Vec<Nodes>,
+}
+
+#[derive(Debug)]
+struct Nodes {
+    nodes: Vec<Hir>,
+
+    in_concat: bool,
+}
+
+impl Nodes {
+    fn new(in_concat: bool) -> Self {
+        Self {
+            nodes: Vec::new(),
+            in_concat,
+        }
+    }
+
+    fn push(&mut self, hir: Hir) {
+        self.nodes.push(hir);
+    }
+}
+
+impl HirWidener {
+    fn new() -> Self {
+        Self {
+            hir: Hir::empty(),
+            nodes: Vec::new(),
+        }
+    }
+
+    fn add(&mut self, hir: Hir) {
+        if self.nodes.is_empty() {
+            self.hir = hir;
+        } else {
+            let pos = self.nodes.len() - 1;
+            self.nodes[pos].push(hir);
+        }
+    }
+
+    fn add_wide(&mut self, hir: Hir) {
+        let nul_byte = Hir::literal(Literal::Unicode('\0'));
+
+        if self.nodes.is_empty() {
+            self.hir = Hir::concat(vec![hir, nul_byte]);
+        } else {
+            let pos = self.nodes.len() - 1;
+            let nodes = &mut self.nodes[pos];
+            if nodes.in_concat {
+                nodes.nodes.push(hir);
+                nodes.nodes.push(nul_byte);
+            } else {
+                nodes.nodes.push(Hir::group(Group {
+                    kind: GroupKind::NonCapturing,
+                    hir: Box::new(Hir::concat(vec![hir, nul_byte])),
+                }));
+            }
+        }
+    }
+
+    fn pop(&mut self) -> Option<Vec<Hir>> {
+        self.nodes.pop().map(|v| v.nodes)
+    }
+}
+
+#[derive(Debug)]
+struct Illformed;
+
+impl Visitor for HirWidener {
+    type Output = Hir;
+    type Err = Illformed;
+
+    fn finish(self) -> Result<Hir, Self::Err> {
+        Ok(self.hir)
+    }
+
+    fn visit_pre(&mut self, hir: &Hir) -> Result<(), Self::Err> {
+        match *hir.kind() {
+            HirKind::Empty
+            | HirKind::Literal(_)
+            | HirKind::Class(_)
+            | HirKind::Anchor(_)
+            | HirKind::WordBoundary(_) => {}
+
+            HirKind::Repetition(_) | HirKind::Group(_) | HirKind::Alternation(_) => {
+                self.nodes.push(Nodes::new(false));
+            }
+            HirKind::Concat(_) => {
+                self.nodes.push(Nodes::new(true));
+            }
+        }
+        Ok(())
+    }
+
+    fn visit_post(&mut self, hir: &Hir) -> Result<(), Self::Err> {
+        match hir.kind() {
+            HirKind::Empty => self.add(Hir::empty()),
+            HirKind::Literal(lit) => {
+                self.add_wide(Hir::literal(lit.clone()));
+            }
+            HirKind::Class(cls) => {
+                self.add_wide(Hir::class(cls.clone()));
+            }
+            HirKind::Anchor(anchor) => {
+                self.add(Hir::anchor(anchor.clone()));
+            }
+            HirKind::WordBoundary(boundary) => {
+                self.add(Hir::word_boundary(boundary.clone()));
+            }
+
+            HirKind::Repetition(repetition) => {
+                let hir = self.pop().and_then(|mut v| v.pop()).ok_or(Illformed)?;
+                self.add(Hir::repetition(Repetition {
+                    kind: repetition.kind.clone(),
+                    greedy: repetition.greedy,
+                    hir: Box::new(hir),
+                }));
+            }
+            HirKind::Group(group) => {
+                let hir = self.pop().and_then(|mut v| v.pop()).ok_or(Illformed)?;
+                self.add(Hir::group(Group {
+                    kind: group.kind.clone(),
+                    hir: Box::new(hir),
+                }));
+            }
+            HirKind::Concat(_) => {
+                let vec = self.pop().ok_or(Illformed)?;
+                self.add(Hir::concat(vec));
+            }
+            HirKind::Alternation(_) => {
+                let vec = self.pop().ok_or(Illformed)?;
+                self.add(Hir::alternation(vec));
+            }
+        }
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

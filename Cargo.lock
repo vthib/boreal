@@ -78,6 +78,7 @@ dependencies = [
  "grep-matcher",
  "grep-regex",
  "regex",
+ "regex-syntax",
  "yara",
 ]
 

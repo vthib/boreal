@@ -117,6 +117,85 @@ rule a {
 }
 
 #[test]
+fn test_variable_regex_wide() {
+    let build_checker = |regex: &str| {
+        Checker::new(&format!(
+            r#"
+rule a {{
+    strings:
+        $a = /{}/ wide
+    condition:
+        $a
+}}"#,
+            regex
+        ))
+    };
+
+    let checker = build_checker("abc");
+    checker.check(b"abc", false);
+    checker.check(b"a\0b\0c\0", true);
+    checker.check(b"a\0b\0c", false);
+    checker.check(b"ab\0c\0", false);
+    checker.check(b"\0a\0b\0c\0", true);
+    checker.check(b"\0a\0b\0c", false);
+
+    let checker = build_checker("a+b|cd{2,}");
+    checker.check(b"ab", false);
+    checker.check(b"aaab", false);
+    checker.check(b"abcd", false);
+    checker.check(b"cdd", false);
+    checker.check(b"a\0b\0", true);
+    checker.check(b"aa\0b\0", true);
+    checker.check(b"a\0a\0b\0", true);
+    checker.check(b"a\0a\0a\0a\0b\0", true);
+    checker.check(b"c\0d\0", false);
+    checker.check(b"c\0d\0d", false);
+    checker.check(b"c\0d\0d\0", true);
+    checker.check(b"c\0d\0d\0d\0d\0", true);
+
+    let checker = build_checker("<[a-z][0-9]*>");
+    checker.check(b"<a>", false);
+    checker.check(b"<\0a\0>\0", true);
+    checker.check(b"<\0a>\0", false);
+    checker.check(b"<\0\0\0>\0", false);
+    checker.check(b"<\0\0>\0", false);
+    checker.check(b"<b22>", false);
+    checker.check(b"<\0b\022\0>\0", false);
+    checker.check(b"<\0b\02\02\0>\0", true);
+    checker.check(b"<\0a\09\03\0>\0", true);
+    checker.check(b"<\0a\09\0d\0>\0", false);
+    checker.check(b"a\09\0", false);
+
+    let checker = build_checker(r#"\d[^abc]d$"#);
+    checker.check(b"13d", false);
+    checker.check(b"1\03\0d\0", true);
+    checker.check(b"1\03\0d", false);
+    checker.check(b"1\03\0\0", false);
+    checker.check(b"a\0d\0d\0", false);
+    checker.check(b"1\0a\0d\0", false);
+    checker.check(b"1\0d\0e\0", false);
+    checker.check(b"1\0d\0d\0", true);
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a(b|c+)[def][^g]/ wide ascii
+    condition:
+        $a
+}"#,
+    );
+    checker.check(b"abdf", true);
+    checker.check(b"a\0b\0d\0f\0", true);
+    checker.check(b"a\0b\0d\0f", false);
+    checker.check(b"abeg", false);
+    checker.check(b"a\0b\0e\0g\0", false);
+    checker.check(b"acccf\0", true);
+    checker.check(b"a\0c\0c\0c\0f\0\0\0", true);
+    checker.check(b"a\0c\0c\0c\0f\0\0", false);
+}
+
+#[test]
 fn test_variable_string_modifiers() {
     // \x76 is 'v'
     let checker = Checker::new(
