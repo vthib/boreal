@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, Checker};
+use crate::utils::{build_rule, check, Checker, Compiler};
 
 #[test]
 fn test_variable() {
@@ -193,6 +193,15 @@ rule a {
     checker.check(b"acccf\0", true);
     checker.check(b"a\0c\0c\0c\0f\0\0\0", true);
     checker.check(b"a\0c\0c\0c\0f\0\0", false);
+
+    // Boundaries are not handled with the wide modifier
+    // TODO: This is handled by libyara, would be nice to find a solution
+    let compiler = Compiler::new_without_yara();
+    compiler.check_add_rules_err(
+        r#"rule a { strings: $a = /\bab/ wide condition: $a }"#,
+        "error: variable $a cannot be compiled: wide modifier cannot be applied \
+        on regexes containing boundaries",
+    );
 }
 
 #[test]

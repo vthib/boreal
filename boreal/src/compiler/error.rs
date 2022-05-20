@@ -3,6 +3,8 @@ use std::ops::Range;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
+use super::VariableCompilationError;
+
 /// Type of error while compiling a rule.
 #[derive(Debug)]
 pub enum CompilationError {
@@ -197,9 +199,8 @@ pub enum CompilationError {
         /// Name of the variable
         variable_name: String,
 
-        /// Error returned by [`grep_regex`] when compiling the contents
-        /// of the variable.
-        error: grep_regex::Error,
+        /// Type of error
+        error: VariableCompilationError,
     },
 }
 
@@ -343,7 +344,7 @@ impl CompilationError {
                 variable_name,
                 error,
             } => Diagnostic::error().with_message(format!(
-                "variable ${} cannot be compiled: {:?}",
+                "variable ${} cannot be compiled: {}",
                 variable_name, error
             )),
         }

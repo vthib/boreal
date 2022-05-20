@@ -54,7 +54,10 @@ impl Scanner {
     }
 }
 
+// TODO: add tests on those results
+
 /// Description of a rule that matched during a scan.
+#[derive(Debug)]
 pub struct MatchedRule<'scanner> {
     /// Namespace containing the rule. None if in the default namespace.
     pub namespace: Option<&'scanner str>,
@@ -67,6 +70,7 @@ pub struct MatchedRule<'scanner> {
 }
 
 /// Details on matches for a string.
+#[derive(Debug)]
 pub struct StringMatches<'scanner> {
     /// Name of the string
     pub name: &'scanner str,
@@ -81,6 +85,7 @@ pub struct StringMatches<'scanner> {
 }
 
 /// Details on a match on a string during a scan.
+#[derive(Debug)]
 pub struct StringMatch {
     /// Offset of the match
     pub offset: usize,

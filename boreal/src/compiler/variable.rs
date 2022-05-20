@@ -67,7 +67,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             VariableMatcher::Regex(matcher.map_err(|error| {
                 CompilationError::VariableCompilation {
                     variable_name: name.clone(),
-                    error,
+                    error: VariableCompilationError::GrepRegex(error),
                 }
             })?)
         }
@@ -163,7 +163,7 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
 fn build_regex_matcher(
     regex: Regex,
     modifiers: &VariableModifiers,
-) -> Result<VariableMatcher, grep_regex::Error> {
+) -> Result<VariableMatcher, VariableCompilationError> {
     let mut matcher = RegexMatcherBuilder::new();
     let Regex {
         mut expr,
@@ -178,7 +178,7 @@ fn build_regex_matcher(
 
     if modifiers.flags.contains(VariableFlags::WIDE) {
         let hir = expr_to_hir(&expr, case_insensitive, dot_all).unwrap();
-        let wide_hir = hir_to_wide(&hir);
+        let wide_hir = hir_to_wide(&hir)?;
 
         if modifiers.flags.contains(VariableFlags::ASCII) {
             expr = Hir::alternation(vec![hir, wide_hir]).to_string();
@@ -195,6 +195,7 @@ fn build_regex_matcher(
         .dot_matches_new_line(dot_all)
         .build(&expr)
         .map(VariableMatcher::Regex)
+        .map_err(VariableCompilationError::GrepRegex)
 }
 
 fn hex_string_to_regex(hex_string: Vec<HexToken>, regex: &mut String) {
@@ -253,90 +254,110 @@ fn expr_to_hir(
         .parse(expr)
 }
 
-fn hir_to_wide(hir: &Hir) -> Hir {
-    visit(hir, HirWidener::new()).unwrap()
+/// Transform a regex HIR to make the regex match "wide" characters.
+///
+/// This is intented to transform a regex with the "wide" modifier, that is make it so
+/// the regex will not match raw ASCII but UCS-2.
+///
+/// This means translating every match on a literal or class into this literal/class followed by a
+/// nul byte. See the implementation of the [`Visitor`] trait on [`HirWidener`] for more details.
+fn hir_to_wide(hir: &Hir) -> Result<Hir, VariableCompilationError> {
+    visit(hir, HirWidener::new())
 }
 
+/// Struct used to hold state while visiting the original HIR and building the widen one.
 #[derive(Debug)]
 struct HirWidener {
-    // Top-level HIR expr being constructed
-    hir: Hir,
+    /// Top level HIR object
+    hir: Option<Hir>,
 
-    // Accumulation of HIR nodes when building a compound expr.
-    nodes: Vec<Nodes>,
+    /// Stack of HIR objects built.
+    ///
+    /// Each visit to a compound HIR value (group, alternation, etc) will push a new level
+    /// to the stack. Then when we finish visiting the compound value, the level will be pop-ed,
+    /// and the new compound HIR value built.
+    stack: Vec<StackLevel>,
 }
 
 #[derive(Debug)]
-struct Nodes {
-    nodes: Vec<Hir>,
+struct StackLevel {
+    /// HIR values built in this level.
+    hirs: Vec<Hir>,
 
+    /// Is this level for a concat HIR value.
     in_concat: bool,
 }
 
-impl Nodes {
+impl StackLevel {
     fn new(in_concat: bool) -> Self {
         Self {
-            nodes: Vec::new(),
+            hirs: Vec::new(),
             in_concat,
         }
     }
 
     fn push(&mut self, hir: Hir) {
-        self.nodes.push(hir);
+        self.hirs.push(hir);
     }
 }
 
 impl HirWidener {
     fn new() -> Self {
         Self {
-            hir: Hir::empty(),
-            nodes: Vec::new(),
+            hir: None,
+            stack: Vec::new(),
         }
     }
 
-    fn add(&mut self, hir: Hir) {
-        if self.nodes.is_empty() {
-            self.hir = hir;
+    fn add(&mut self, hir: Hir) -> Result<(), VariableCompilationError> {
+        if self.stack.is_empty() {
+            // Empty stack: we should only have a single HIR to set at top-level.
+            match self.hir.replace(hir) {
+                Some(_) => Err(VariableCompilationError::WidenError),
+                None => Ok(()),
+            }
         } else {
-            let pos = self.nodes.len() - 1;
-            self.nodes[pos].push(hir);
+            let pos = self.stack.len() - 1;
+            self.stack[pos].push(hir);
+            Ok(())
         }
     }
 
-    fn add_wide(&mut self, hir: Hir) {
+    fn add_wide(&mut self, hir: Hir) -> Result<(), VariableCompilationError> {
         let nul_byte = Hir::literal(Literal::Unicode('\0'));
 
-        if self.nodes.is_empty() {
-            self.hir = Hir::concat(vec![hir, nul_byte]);
+        if self.stack.is_empty() {
+            match self.hir.replace(Hir::concat(vec![hir, nul_byte])) {
+                Some(_) => Err(VariableCompilationError::WidenError),
+                None => Ok(()),
+            }
         } else {
-            let pos = self.nodes.len() - 1;
-            let nodes = &mut self.nodes[pos];
-            if nodes.in_concat {
-                nodes.nodes.push(hir);
-                nodes.nodes.push(nul_byte);
+            let pos = self.stack.len() - 1;
+            let level = &mut self.stack[pos];
+            if level.in_concat {
+                level.hirs.push(hir);
+                level.hirs.push(nul_byte);
             } else {
-                nodes.nodes.push(Hir::group(Group {
+                level.hirs.push(Hir::group(Group {
                     kind: GroupKind::NonCapturing,
                     hir: Box::new(Hir::concat(vec![hir, nul_byte])),
                 }));
             }
+            Ok(())
         }
     }
 
     fn pop(&mut self) -> Option<Vec<Hir>> {
-        self.nodes.pop().map(|v| v.nodes)
+        self.stack.pop().map(|v| v.hirs)
     }
 }
 
-#[derive(Debug)]
-struct Illformed;
-
 impl Visitor for HirWidener {
     type Output = Hir;
-    type Err = Illformed;
+    type Err = VariableCompilationError;
 
     fn finish(self) -> Result<Hir, Self::Err> {
-        Ok(self.hir)
+        self.hir.ok_or(VariableCompilationError::WidenError)
     }
 
     fn visit_pre(&mut self, hir: &Hir) -> Result<(), Self::Err> {
@@ -348,10 +369,10 @@ impl Visitor for HirWidener {
             | HirKind::WordBoundary(_) => {}
 
             HirKind::Repetition(_) | HirKind::Group(_) | HirKind::Alternation(_) => {
-                self.nodes.push(Nodes::new(false));
+                self.stack.push(StackLevel::new(false));
             }
             HirKind::Concat(_) => {
-                self.nodes.push(Nodes::new(true));
+                self.stack.push(StackLevel::new(true));
             }
         }
         Ok(())
@@ -360,44 +381,89 @@ impl Visitor for HirWidener {
     fn visit_post(&mut self, hir: &Hir) -> Result<(), Self::Err> {
         match hir.kind() {
             HirKind::Empty => self.add(Hir::empty()),
-            HirKind::Literal(lit) => {
-                self.add_wide(Hir::literal(lit.clone()));
-            }
-            HirKind::Class(cls) => {
-                self.add_wide(Hir::class(cls.clone()));
-            }
-            HirKind::Anchor(anchor) => {
-                self.add(Hir::anchor(anchor.clone()));
-            }
-            HirKind::WordBoundary(boundary) => {
-                self.add(Hir::word_boundary(boundary.clone()));
-            }
+
+            // Literal or class: add a nul_byte after it
+            HirKind::Literal(lit) => self.add_wide(Hir::literal(lit.clone())),
+            HirKind::Class(cls) => self.add_wide(Hir::class(cls.clone())),
+
+            // Anchor: no need to add anything
+            HirKind::Anchor(anchor) => self.add(Hir::anchor(anchor.clone())),
+
+            // Boundary is tricky as it looks for a match between two characters:
+            // \b means: word on the left side, non-word on the right, or the opposite:
+            // - \ta, a\t, \0a, \t\0 matches
+            // - ab, \t\n does not match
+            // When the input is wide, this is harder:
+            // - \t\0a\0, a\0\t\0 matches
+            // - a\0b\0, \t\0\b\0 does not match
+            //
+            // This can be handled if the boundary is the very start or end of the regex.
+            // However, if it is in the middle, it is not really possible to translate it.
+            // For the moment, reject it, handling it at the start/end of the regex
+            // can be implemented without too much issue in the near future.
+            HirKind::WordBoundary(_) => Err(VariableCompilationError::WideWithBoundary),
 
             HirKind::Repetition(repetition) => {
-                let hir = self.pop().and_then(|mut v| v.pop()).ok_or(Illformed)?;
+                let hir = self
+                    .pop()
+                    .and_then(|mut v| v.pop())
+                    .ok_or(VariableCompilationError::WidenError)?;
                 self.add(Hir::repetition(Repetition {
                     kind: repetition.kind.clone(),
                     greedy: repetition.greedy,
                     hir: Box::new(hir),
-                }));
+                }))
             }
             HirKind::Group(group) => {
-                let hir = self.pop().and_then(|mut v| v.pop()).ok_or(Illformed)?;
+                let hir = self
+                    .pop()
+                    .and_then(|mut v| v.pop())
+                    .ok_or(VariableCompilationError::WidenError)?;
                 self.add(Hir::group(Group {
                     kind: group.kind.clone(),
                     hir: Box::new(hir),
-                }));
+                }))
             }
             HirKind::Concat(_) => {
-                let vec = self.pop().ok_or(Illformed)?;
-                self.add(Hir::concat(vec));
+                let vec = self.pop().ok_or(VariableCompilationError::WidenError)?;
+                self.add(Hir::concat(vec))
             }
             HirKind::Alternation(_) => {
-                let vec = self.pop().ok_or(Illformed)?;
-                self.add(Hir::alternation(vec));
+                let vec = self.pop().ok_or(VariableCompilationError::WidenError)?;
+                self.add(Hir::alternation(vec))
             }
         }
-        Ok(())
+    }
+}
+
+/// Error during the compilation of a variable.
+#[derive(Debug)]
+pub enum VariableCompilationError {
+    /// Error returned by [`grep_regex`] when compiling a variable
+    // TODO: this should not be part of the public API
+    GrepRegex(grep_regex::Error),
+
+    /// Regexes with boundaries cannot use the `wide` modifier
+    WideWithBoundary,
+
+    /// Structural error when applying the `wide` modifier to a regex.
+    ///
+    /// This really should not happen, and indicates a bug in the code
+    /// applying this modifier.
+    WidenError,
+}
+
+impl std::fmt::Display for VariableCompilationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::GrepRegex(e) => e.fmt(f),
+            Self::WideWithBoundary => write!(
+                f,
+                "wide modifier cannot be applied on regexes containing boundaries"
+            ),
+            // This should not happen. Please report it upstream if it does.
+            Self::WidenError => write!(f, "unable to apply the wide modifier to the regex"),
+        }
     }
 }
 #[cfg(test)]
