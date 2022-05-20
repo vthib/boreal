@@ -5,8 +5,8 @@
 //! tests, outside of the `libyara` directory.
 use const_format::concatcp;
 
-use super::util::{PE32_FILE, TEXT_1024_BYTES};
-use crate::utils::{check, check_boreal, check_count, check_err, check_file};
+use super::util::{ISSUE_1006, PE32_FILE, TEXT_1024_BYTES};
+use crate::utils::{check, check_boreal, check_count, check_err, check_file, Checker};
 
 #[test]
 fn test_boolean_operators() {
@@ -2284,5 +2284,690 @@ fn test_for() {
       }",
         b"",
         false,
+    );
+}
+
+#[test]
+fn test_re() {
+    fn build_regex_rule(regex: &str) -> String {
+        // XXX: this is modified from the libyara version, to force boreal
+        // to compute all matches of the string
+        format!(
+            "rule test {{ strings: $a = /{}/ condition: $a and #a > 0 }}",
+            regex
+        )
+    }
+
+    #[track_caller]
+    fn check_regex_match(regex: &str, mem: &[u8], expected_match: &[u8]) {
+        let checker = Checker::new(&build_regex_rule(regex));
+        checker.check_str_has_match(mem, expected_match);
+    }
+
+    check(
+        "rule test { strings: $a = /ssi/ condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /ssi(s|p)/ condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /ssim*/ condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /ssa?/ condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /Miss/ nocase condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /(M|N)iss/ nocase condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /[M-N]iss/ nocase condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /(Mi|ssi)ssippi/ nocase condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /ppi\\tmi/ condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /ppi\\.mi/ condition: $a }",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /^mississippi/ fullword condition: $a }",
+        concatcp!(
+            "mississippi\tmississippi.mississippi\nmississippi",
+            TEXT_1024_BYTES
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /mississippi.*mississippi$/s condition: $a}",
+        concatcp!(
+            TEXT_1024_BYTES,
+            "mississippi\tmississippi.mississippi\nmississippi"
+        )
+        .as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /^ssi/ condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = /ssi$/ condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = /ssissi/ fullword condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = /^[isp]+/ condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = /a.{1,2}b/ wide condition: !a == 6 }",
+        concatcp!(TEXT_1024_BYTES, "a\0x\0b\0").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /a.{1,2}b/ wide condition: !a == 8 }",
+        concatcp!(TEXT_1024_BYTES, "a\0x\0x\0b\0").as_bytes(),
+        true,
+    );
+
+    // TODO: handle boundaries and wide modifier
+    // check(
+    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "\0a\0b\0c\0").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "\ta\0b\0c\0").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0").as_bytes(),
+    //     false,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "x\ta\0b\0c\0").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\0").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\t").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0x\0").as_bytes(),
+    //     false,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0b\t").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test { strings: $a = /\\b/ wide condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "abc").as_bytes(),
+    //     false,
+    // );
+
+    check_err(
+        &build_regex_rule(")"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+    check_regex_match("abc", b"abc", b"abc");
+    check(&build_regex_rule("abc"), b"xbc", false);
+    check(&build_regex_rule("abc"), b"axc", false);
+    check(&build_regex_rule("abc"), b"abx", false);
+    check_regex_match("abc", b"xabcx", b"abc");
+    check_regex_match("abc", b"ababc", b"abc");
+    check_regex_match("a.c", b"abc", b"abc");
+    check(&build_regex_rule("a.b"), b"a\nb", false);
+    check(&build_regex_rule("a.*b"), b"acc\nccb", false);
+    check(&build_regex_rule("a.{4,5}b"), b"acc\nccb", false);
+    check_regex_match("a.b", b"a\rb", b"a\rb");
+    check_regex_match("ab*c", b"abc", b"abc");
+    check_regex_match("ab*c", b"ac", b"ac");
+    check_regex_match("ab*bc", b"abc", b"abc");
+    check_regex_match("ab*bc", b"abbc", b"abbc");
+    check_regex_match("a.*bb", b"abbbb", b"abbbb");
+    check_regex_match("a.*?bbb", b"abbbbbb", b"abbb");
+    check_regex_match("a.*c", b"ac", b"ac");
+    check_regex_match("a.*c", b"axyzc", b"axyzc");
+    check_regex_match("ab+c", b"abbc", b"abbc");
+    check(&build_regex_rule("ab+c"), b"ac", false);
+    check_regex_match("ab+", b"abbbb", b"abbbb");
+    check_regex_match("ab+?", b"abbbb", b"ab");
+    check(&build_regex_rule("ab+bc"), b"abc", false);
+    check(&build_regex_rule("ab+bc"), b"abq", false);
+    check_regex_match("a+b+c", b"aabbabc", b"abc");
+    check(&build_regex_rule("ab?bc"), b"abbbbc", false);
+    check_regex_match("ab?c", b"abc", b"abc");
+    check_regex_match("ab*?", b"abbb", b"a");
+    check_regex_match("ab?c", b"ac", b"ac");
+
+    // TODO: re-enable this test once https://github.com/rust-lang/regex/issues/862 is fixed.
+    // check_regex_match("ab??", b"ab", b"a");
+
+    check_regex_match("a(b|x)c", b"abc", b"abc");
+    check_regex_match("a(b|x)c", b"axc", b"axc");
+    check_regex_match("a(b|.)c", b"axc", b"axc");
+    check_regex_match("a(b|x|y)c", b"ayc", b"ayc");
+    check_regex_match("(a+|b)*", b"ab", b"ab");
+    check_regex_match("a|b|c|d|e", b"e", b"e");
+    check_regex_match("(a|b|c|d|e)f", b"ef", b"ef");
+    check_regex_match("a|b", b"a", b"a");
+    check_regex_match(".b{2}", b"abb", b"abb");
+    check_regex_match(".b{2,3}", b"abbb", b"abbb");
+    check_regex_match(".b{2,3}?", b"abbb", b"abb");
+    check_regex_match("ab{2,3}c", b"abbbc", b"abbbc");
+    check_regex_match("ab{2,3}?c", b"abbbc", b"abbbc");
+    check_regex_match(".b{2,3}cccc", b"abbbcccc", b"abbbcccc");
+    check_regex_match(".b{2,3}?cccc", b"abbbcccc", b"bbbcccc");
+    check_regex_match("a.b{2,3}cccc", b"aabbbcccc", b"aabbbcccc");
+    check_regex_match("ab{2,3}c", b"abbbc", b"abbbc");
+    check_regex_match("ab{2,3}?c", b"abbbc", b"abbbc");
+    check_regex_match("ab{0,1}?c", b"abc", b"abc");
+    check_regex_match("a{0,1}?bc", b"abc", b"abc");
+    check_regex_match("a{0,1}bc", b"bbc", b"bc");
+    check_regex_match("a{0,1}?bc", b"abc", b"bc");
+    check_regex_match("aa{0,1}?bc", b"abc", b"abc");
+    check_regex_match("aa{0,1}?bc", b"abc", b"abc");
+    check_regex_match("aa{0,1}bc", b"abc", b"abc");
+    check_regex_match("ab{1}c", b"abc", b"abc");
+    check_regex_match("ab{1,2}c", b"abbc", b"abbc");
+    check(&build_regex_rule("ab{1,2}c"), b"abbbc", false);
+    check_regex_match("ab{1,}c", b"abbbc", b"abbbc");
+    check(&build_regex_rule("ab{1,}b"), b"ab", false);
+    check(&build_regex_rule("ab{1}c"), b"abbc", false);
+    check(&build_regex_rule("ab{1}c"), b"ac", false);
+    check_regex_match("ab{0,}c", b"ac", b"ac");
+    check_regex_match("ab{1,1}c", b"abc", b"abc");
+    check_regex_match("ab{0,}c", b"abbbc", b"abbbc");
+
+    // TODO: handle this syntax
+    // check_regex_match("ab{,3}c", b"abbbc", b"abbbc");
+    // check(&build_regex_rule("ab{,2}c"), b"abbbc", false);
+
+    check(&build_regex_rule("ab{4,5}bc"), b"abbbbc", false);
+    check(&build_regex_rule("ab{3}c"), b"abbbbc", false); // Issue #817
+    check(&build_regex_rule("ab{4}c"), b"abbbbbc", false);
+    check(&build_regex_rule("ab{5}c"), b"abbbbbbc", false);
+    check_regex_match("ab{0,1}", b"abbbbb", b"ab");
+    check_regex_match("ab{0,2}", b"abbbbb", b"abb");
+    check_regex_match("ab{0,3}", b"abbbbb", b"abbb");
+    check_regex_match("ab{0,4}", b"abbbbb", b"abbbb");
+    check_regex_match("ab{1,1}", b"abbbbb", b"ab");
+    check_regex_match("ab{1,2}", b"abbbbb", b"abb");
+    check_regex_match("ab{1,3}", b"abbbbb", b"abbb");
+    check_regex_match("ab{2,2}", b"abbbbb", b"abb");
+    check_regex_match("ab{2,3}", b"abbbbb", b"abbb");
+    check_regex_match("ab{2,4}", b"abbbbc", b"abbbb");
+    check_regex_match("ab{3,4}", b"abbb", b"abbb");
+    check_regex_match("ab{3,5}", b"abbbbb", b"abbbbb");
+    check(&build_regex_rule("ab{3,4}c"), b"abbbbbc", false);
+    check(&build_regex_rule("ab{3,4}c"), b"abbc", false);
+    check(&build_regex_rule("ab{3,5}c"), b"abbbbbbc", false);
+    check_regex_match("ab{1,3}?", b"abbbbb", b"ab");
+    check_regex_match("ab{0,1}?", b"abbbbb", b"a");
+    check_regex_match("ab{0,2}?", b"abbbbb", b"a");
+    check_regex_match("ab{0,3}?", b"abbbbb", b"a");
+    check_regex_match("ab{0,4}?", b"abbbbb", b"a");
+    check_regex_match("ab{1,1}?", b"abbbbb", b"ab");
+    check_regex_match("ab{1,2}?", b"abbbbb", b"ab");
+    check_regex_match("ab{1,3}?", b"abbbbb", b"ab");
+    check_regex_match("ab{2,2}?", b"abbbbb", b"abb");
+    check_regex_match("ab{2,3}?", b"abbbbb", b"abb");
+    check_regex_match("(a{2,3}b){2,3}", b"aabaaabaab", b"aabaaabaab");
+    check_regex_match("(a{2,3}?b){2,3}?", b"aabaaabaab", b"aabaaab");
+    check(
+        &build_regex_rule("(a{4,5}b){4,5}"),
+        b"aaaabaaaabaaaaab",
+        false,
+    );
+    check_regex_match(
+        "(a{4,5}b){4,5}",
+        b"aaaabaaaabaaaaabaaaaab",
+        b"aaaabaaaabaaaaabaaaaab",
+    );
+    check_regex_match(".(abc){0,1}", b"xabcabcabcabc", b"xabc");
+    check_regex_match(".(abc){0,2}", b"xabcabcabcabc", b"xabcabc");
+    check_regex_match("x{1,2}abcd", b"xxxxabcd", b"xxabcd");
+    check_regex_match("x{1,2}abcd", b"xxxxabcd", b"xxabcd");
+
+    // TODO: this is not supported by the regex crate
+    // check_regex_match("ab{.*}", b"ab{c}", b"ab{c}");
+
+    check_regex_match(".(aa){1,2}", b"aaaaaaaaaa", b"aaaaa");
+    check_regex_match("a.(bc.){2}", b"aabcabca", b"aabcabca");
+    check_regex_match("(ab{1,2}c){1,3}", b"abbcabc", b"abbcabc");
+    check_regex_match("ab(c|cc){1,3}d", b"abccccccd", b"abccccccd");
+    check_regex_match("a[bx]c", b"abc", b"abc");
+    check_regex_match("a[bx]c", b"axc", b"axc");
+    check_regex_match("a[0-9]*b", b"ab", b"ab");
+    check_regex_match("a[0-9]*b", b"a0123456789b", b"a0123456789b");
+    check_regex_match("[0-9a-f]+", b"0123456789abcdef", b"0123456789abcdef");
+    check_regex_match("[0-9a-f]+", b"xyz0123456789xyz", b"0123456789");
+    check_regex_match("a[\\s\\S]b", b"a b", b"a b");
+    check_regex_match("a[\\d\\D]b", b"a1b", b"a1b");
+    check(&build_regex_rule("[x-z]+"), b"abc", false);
+    check_regex_match("a[-]?c", b"ac", b"ac");
+    check_regex_match("a[-b]", b"a-", b"a-");
+    check_regex_match("a[-b]", b"ab", b"ab");
+    check_regex_match("a[b-]", b"a-", b"a-");
+    check_regex_match("a[b-]", b"ab", b"ab");
+    check_regex_match("[a-c-e]", b"b", b"b");
+    check_regex_match("[a-c-e]", b"-", b"-");
+    check(&build_regex_rule("[a-c-e]"), b"d", false);
+
+    check_err(
+        &build_regex_rule("[b-a]"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+    check_err(
+        &build_regex_rule("(abc"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+    check_err(
+        &build_regex_rule("abc)"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+    check_err(
+        &build_regex_rule("a[]b"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+    check_regex_match("a[\\-b]", b"a-", b"a-");
+    check_regex_match("a[\\-b]", b"ab", b"ab");
+    check_regex_match("a]", b"a]", b"a]");
+    check_regex_match("a[]]b", b"a]b", b"a]b");
+    check_regex_match("a[\\]]b", b"a]b", b"a]b");
+    check_regex_match("a[^bc]d", b"aed", b"aed");
+    check(&build_regex_rule("a[^bc]d"), b"abd", false);
+    check_regex_match("a[^-b]c", b"adc", b"adc");
+    check(&build_regex_rule("a[^-b]c"), b"a-c", false);
+    check(&build_regex_rule("a[^]b]c"), b"a]c", false);
+    check_regex_match("a[^]b]c", b"adc", b"adc");
+    check_regex_match("[^ab]*", b"cde", b"cde");
+    check_err(
+        &build_regex_rule(")("),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+    check_regex_match("a\\sb", b"a b", b"a b");
+    check_regex_match("a\\sb", b"a\tb", b"a\tb");
+    check_regex_match("a\\sb", b"a\rb", b"a\rb");
+    check_regex_match("a\\sb", b"a\nb", b"a\nb");
+    check_regex_match("a\\sb", b"a\x0Bb", b"a\x0Bb");
+    check_regex_match("a\\sb", b"a\x0Cb", b"a\x0Cb");
+    check_regex_match("a[\\s]*b", b"a \t\r\n\x0B\x0Cb", b"a \t\r\n\x0B\x0Cb");
+    check_regex_match("a[^\\S]*b", b"a \t\r\n\x0B\x0Cb", b"a \t\r\n\x0B\x0Cb");
+    check(&build_regex_rule("a\\Sb"), b"a b", false);
+    check(&build_regex_rule("a\\Sb"), b"a\tb", false);
+    check(&build_regex_rule("a\\Sb"), b"a\rb", false);
+    check(&build_regex_rule("a\\Sb"), b"a\nb", false);
+    check(&build_regex_rule("a\\Sb"), b"a\x0Bb", false);
+    check(&build_regex_rule("a\\Sb"), b"a\x0Cb", false);
+    check_regex_match("foo([^\\s]*)", b"foobar\n", b"foobar");
+    check_regex_match("foo([^\\s]*)", b"foobar\r\n", b"foobar");
+    check_regex_match("\\n\\r\\t\\x0C\\x07", b"\n\r\t\x0C\x07", b"\n\r\t\x0C\x07");
+    check_regex_match(
+        "[\\n][\\r][\\t][\\x0C][\\x07]",
+        b"\n\r\t\x0C\x07",
+        b"\n\r\t\x0C\x07",
+    );
+    check_regex_match("\\x01\\x02\\x03", b"\x01\x02\x03", b"\x01\x02\x03");
+    check_regex_match("[\\x01-\\x03]+", b"\x01\x02\x03", b"\x01\x02\x03");
+    check(&build_regex_rule("[\\x00-\\x02]+"), b"\x03\x04\x05", false);
+    check_regex_match("[\\x5D]", b"]", b"]");
+
+    // TODO: not sure how this is supposed to work.
+    // check_regex_match("[\\0x5A-\\x5D]", b"\x5B", b"\x5B");
+
+    check_regex_match("[\\x5D-\\x5F]", b"\x5E", b"\x5E");
+    check_regex_match("[\\x5C-\\x5F]", b"\x5E", b"\x5E");
+    check_regex_match("[\\x5D-\\x5F]", b"\x5E", b"\x5E");
+    check_regex_match("a\\wc", b"abc", b"abc");
+    check_regex_match("a\\wc", b"a_c", b"a_c");
+    check_regex_match("a\\wc", b"a0c", b"a0c");
+    check(&build_regex_rule("a\\wc"), b"a*c", false);
+    check_regex_match("\\w+", b"--ab_cd0123--", b"ab_cd0123");
+    check_regex_match("[\\w]+", b"--ab_cd0123--", b"ab_cd0123");
+    check_regex_match("\\D+", b"1234abc5678", b"abc");
+    check_regex_match("[\\d]+", b"0123456789", b"0123456789");
+    check_regex_match("[\\D]+", b"1234abc5678", b"abc");
+    check_regex_match("[\\da-fA-F]+", b"123abc", b"123abc");
+    check(&build_regex_rule("^(ab|cd)e"), b"abcde", false);
+    check_regex_match("(abc|)ef", b"abcdef", b"ef");
+    check_regex_match("(abc|)ef", b"abcef", b"abcef");
+    check_regex_match("\\babc", b"abc", b"abc");
+    check_regex_match("abc\\b", b"abc", b"abc");
+    check(&build_regex_rule("\\babc"), b"1abc", false);
+    check(&build_regex_rule("abc\\b"), b"abc1", false);
+    check_regex_match("abc\\s\\b", b"abc x", b"abc ");
+    check(&build_regex_rule("abc\\s\\b"), b"abc  ", false);
+    check_regex_match("\\babc\\b", b" abc ", b"abc");
+    check_regex_match("\\b\\w\\w\\w\\b", b" abc ", b"abc");
+    check_regex_match("\\w\\w\\w\\b", b"abcd", b"bcd");
+    check_regex_match("\\b\\w\\w\\w", b"abcd", b"abc");
+    check(&build_regex_rule("\\b\\w\\w\\w\\b"), b"abcd", false);
+    check(&build_regex_rule("\\Babc"), b"abc", false);
+    check(&build_regex_rule("abc\\B"), b"abc", false);
+    check_regex_match("\\Babc", b"1abc", b"abc");
+    check_regex_match("abc\\B", b"abc1", b"abc");
+    check(&build_regex_rule("abc\\s\\B"), b"abc x", false);
+    check_regex_match("abc\\s\\B", b"abc  ", b"abc ");
+    check_regex_match("\\w\\w\\w\\B", b"abcd", b"abc");
+    check_regex_match("\\B\\w\\w\\w", b"abcd", b"bcd");
+    check(&build_regex_rule("\\B\\w\\w\\w\\B"), b"abcd", false);
+
+    // XXX: not allowed by libyara, allowed for us, this is fine
+    // check_err(&build_regex_rule("(|abc)ef"), "z");
+
+    check_regex_match("((a)(b)c)(d)", b"abcd", b"abcd");
+    check_regex_match("(a|b)c*d", b"abcd", b"bcd");
+    check_regex_match("(ab|ab*)bc", b"abc", b"abc");
+    check_regex_match("a([bc]*)c*", b"abc", b"abc");
+    check_regex_match("a([bc]*)c*", b"ac", b"ac");
+    check_regex_match("a([bc]*)c*", b"a", b"a");
+    check_regex_match("a([bc]*)(c*d)", b"abcd", b"abcd");
+    check_regex_match("a([bc]+)(c*d)", b"abcd", b"abcd");
+    check_regex_match("a([bc]*)(c+d)", b"abcd", b"abcd");
+    check_regex_match("a[bcd]*dcdcde", b"adcdcde", b"adcdcde");
+    check(&build_regex_rule("a[bcd]+dcdcde"), b"adcdcde", false);
+    check_regex_match("\\((.*), (.*)\\)", b"(a, b)", b"(a, b)");
+    check_regex_match("abc|123$", b"abcx", b"abc");
+    check(&build_regex_rule("abc|123$"), b"123x", false);
+    check_regex_match("abc|^123", b"123", b"123");
+    check(&build_regex_rule("abc|^123"), b"x123", false);
+    check_regex_match("^abc$", b"abc", b"abc");
+    check(&build_regex_rule("^abc$"), b"abcc", false);
+    check_regex_match("^abc", b"abcc", b"abc");
+    check(&build_regex_rule("^abc$"), b"aabc", false);
+    check(&build_regex_rule("abc^"), b"abc", false);
+    check(&build_regex_rule("ab^c"), b"abc", false);
+    check(&build_regex_rule("a^bcdef"), b"abcdef", false);
+    check_regex_match("abc$", b"aabc", b"abc");
+    check(&build_regex_rule("$abc"), b"abc", false);
+    check_regex_match("(a|a$)bcd", b"abcd", b"abcd");
+    check(&build_regex_rule("(a$|a$)bcd"), b"abcd", false);
+    check(&build_regex_rule("(abc$|ab$)"), b"abcd", false);
+    check_regex_match("^a(bc+|b[eh])g|.h$", b"abhg", b"abhg");
+    check_regex_match("(bc+d$|ef*g.|h?i(j|k))", b"effgz", b"effgz");
+    check_regex_match("(bc+d$|ef*g.|h?i(j|k))", b"ij", b"ij");
+    check(&build_regex_rule("(bc+d$|ef*g.|h?i(j|k))"), b"effg", false);
+    check(&build_regex_rule("(bc+d$|ef*g.|h?i(j|k))"), b"bcdd", false);
+    check_regex_match("(bc+d$|ef*g.|h?i(j|k))", b"reffgz", b"effgz");
+
+    // Test case for issue #324
+    check_regex_match("whatever|   x.   x", b"   xy   x", b"   xy   x");
+
+    // Test case for issue #503, \x without two following hex-digits
+    check_err(
+        &build_regex_rule("\\x0"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+    check_err(
+        &build_regex_rule("\\x"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+
+    // XXX: not allowed by libyara, ok for us, this is fine
+    // check_err(&build_regex_rule("x{0,0}"), "z");
+    // check_err(&build_regex_rule("x{0}"), "z");
+
+    check_err(
+        &build_regex_rule("\\xxy"),
+        "error: variable $a cannot be compiled: regex parse error",
+    );
+
+    // Test case for issue #682
+    check_regex_match("(a|\\b)[a]{1,}", b"aaaa", b"aaaa");
+
+    // Test cases for issue #1018
+    check_regex_match(
+        "(ba{4}){4,10}",
+        b"baaaabaaaabaaaabaaaabaaaa",
+        b"baaaabaaaabaaaabaaaabaaaa",
+    );
+
+    check_regex_match(
+        "(ba{2}a{2}){5,10}",
+        b"baaaabaaaabaaaabaaaabaaaa",
+        b"baaaabaaaabaaaabaaaabaaaa",
+    );
+
+    check_regex_match(
+        "(ba{3}){4,10}",
+        b"baaabaaabaaabaaabaaa",
+        b"baaabaaabaaabaaabaaa",
+    );
+
+    check_regex_match(
+        "(ba{4}){5,10}",
+        b"baaaabaaaabaaaabaaaabaaaa",
+        b"baaaabaaaabaaaabaaaabaaaa",
+    );
+
+    check(
+        &build_regex_rule("(ba{4}){4,10}"),
+        b"baaaabaaaabaaaa",
+        false,
+    );
+
+    // Test for integer overflow in repeat interval
+    check_err(
+        &build_regex_rule("a{2977952116}"),
+        "error: variable $a cannot be compiled: Compiled regex exceeds size limit",
+    );
+
+    check_err(
+        "rule test { strings: $a = /a\\/ condition: $a }",
+        "mem:1:47: error: syntax error",
+    );
+
+    check_err(
+        "rule test { strings: $a = /[a\\/ condition: $a }",
+        "mem:1:48: error: syntax error",
+    );
+
+    // Test case for issue #996
+    check_err(
+        "rule test {strings:$=/.{,}? /",
+        "mem:1:30: error: syntax error",
+    );
+
+    check(
+        "rule test { \
+        strings: $a = /MZ.{300,}t/ \
+        condition: !a == 317 }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test { \
+        strings: $a = /MZ.{300,}?t/ \
+        condition: !a == 314 }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^d]/ nocase condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^d]/ condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^D]/ nocase condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        false,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^D]/ condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^f]/ nocase condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^f]/ condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^F]/ nocase condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /abc[^F]/ condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        true,
+    );
+
+    // Test case for issue #1006
+    check(
+        "rule test { strings: $a = \" cmd.exe \" nocase wide condition: $a }",
+        ISSUE_1006,
+        false,
+    );
+
+    // Test case for issue #1117
+    let mut data = TEXT_1024_BYTES.as_bytes().to_vec();
+    data.extend(b"abc\xE0\x22");
+    check(
+        "rule test { strings: $a =/abc([^\"\\\\])*\"/ nocase condition: $a }",
+        &data,
+        true,
     );
 }

@@ -115,7 +115,7 @@ impl Checker {
 
     // Check matches against a list of "<namespace>:<rule_name>" strings.
     #[track_caller]
-    pub fn check_matches(&self, mem: &[u8], expected_matches: &[&str]) {
+    pub fn check_rule_matches(&self, mem: &[u8], expected_matches: &[&str]) {
         let expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
         let res = self.scanner.scan_mem(mem);
         let res: Vec<String> = res
@@ -145,6 +145,37 @@ impl Checker {
         let res = self.scanner.scan_mem(mem);
         let res = !res.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
+    }
+
+    #[track_caller]
+    pub fn check_str_has_match(&self, mem: &[u8], expected_match: &[u8]) {
+        let res = self.scanner.scan_mem(mem);
+        let mut found = false;
+        for r in res {
+            for var in r.matches {
+                for mat in var.matches {
+                    if mat.value == expected_match {
+                        found = true;
+                    }
+                }
+            }
+        }
+        assert!(found);
+
+        if let Some(rules) = &self.yara_rules {
+            let res = rules.scan_mem(mem, 1).unwrap();
+            found = false;
+            for r in res {
+                for var in r.strings {
+                    for mat in var.matches {
+                        if mat.data == expected_match {
+                            found = true;
+                        }
+                    }
+                }
+            }
+            assert!(found, "conformity test failed for libyara");
+        }
     }
 }
 

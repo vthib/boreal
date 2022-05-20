@@ -85,16 +85,16 @@ fn test_rule_dependencies() {
     compiler.add_rules_in_namespace("rule b { strings: $d = /d/ condition: a or $d }", "ns1");
 
     let checker = compiler.into_checker();
-    checker.check_matches(b"", &[]);
+    checker.check_rule_matches(b"", &[]);
 
-    checker.check_matches(b"a", &["default:a"]);
-    checker.check_matches(b"ab", &["default:a", "default:b"]);
-    checker.check_matches(b"b", &[]);
+    checker.check_rule_matches(b"a", &["default:a"]);
+    checker.check_rule_matches(b"ab", &["default:a", "default:b"]);
+    checker.check_rule_matches(b"b", &[]);
 
-    checker.check_matches(b"c", &["ns1:a", "ns1:b"]);
-    checker.check_matches(b"cd", &["ns1:a", "ns1:b"]);
-    checker.check_matches(b"d", &["ns1:b"]);
-    checker.check_matches(b"bd", &["ns1:b"]);
+    checker.check_rule_matches(b"c", &["ns1:a", "ns1:b"]);
+    checker.check_rule_matches(b"cd", &["ns1:a", "ns1:b"]);
+    checker.check_rule_matches(b"d", &["ns1:b"]);
+    checker.check_rule_matches(b"bd", &["ns1:b"]);
 }
 
 #[test]
@@ -135,10 +135,10 @@ fn test_for_expression_rules() {
     compiler.add_rules("rule b2 { condition: 4 of (a0, a*) }");
 
     let checker = compiler.into_checker();
-    checker.check_matches(b"", &[]);
+    checker.check_rule_matches(b"", &[]);
 
-    checker.check_matches(b"a0", &["default:a0"]);
-    checker.check_matches(
+    checker.check_rule_matches(b"a0", &["default:a0"]);
+    checker.check_rule_matches(
         b"a0a1a2",
         &[
             "default:a0",
@@ -149,7 +149,7 @@ fn test_for_expression_rules() {
             "default:b2",
         ],
     );
-    checker.check_matches(b"a1a3", &["default:a1", "default:a3", "default:b1"]);
+    checker.check_rule_matches(b"a1a3", &["default:a1", "default:a3", "default:b1"]);
 }
 
 // Test the identifier is resolved to the import first, then the rule names
@@ -188,8 +188,8 @@ rule b2 { condition: tests.constants.two == 2 }
     );
 
     let checker = compiler.into_checker();
-    checker.check_matches(b"", &["default:a2", "default:a3", "nsa:tests", "nsa:b2"]);
-    checker.check_matches(
+    checker.check_rule_matches(b"", &["default:a2", "default:a3", "nsa:tests", "nsa:b2"]);
+    checker.check_rule_matches(
         b"<tests>",
         &[
             "default:tests",
