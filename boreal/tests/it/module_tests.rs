@@ -70,11 +70,27 @@ impl Module for Tests {
                 Value::dict(Self::undefined_dict, Type::object([("i", Type::Integer)])),
             ),
             (
+                "empty_struct_array",
+                Value::array(
+                    Self::undefined_array,
+                    Type::object([
+                        (
+                            "struct_array",
+                            Type::array(Type::object([("unused", Type::String)])),
+                        ),
+                        (
+                            "struct_dict",
+                            Type::dict(Type::object([("unused", Type::String)])),
+                        ),
+                    ]),
+                ),
+            ),
+            (
                 "match",
                 Value::function(
                     Self::r#match,
-                    vec![vec![Type::String, Type::Regex]],
-                    Type::Boolean,
+                    vec![vec![Type::Regex, Type::String]],
+                    Type::Integer,
                 ),
             ),
             (
@@ -94,7 +110,7 @@ impl Module for Tests {
                     Self::fsum,
                     vec![
                         vec![Type::Float, Type::Float],
-                        vec![Type::Float, Type::Float, Type::Integer],
+                        vec![Type::Float, Type::Float, Type::Float],
                     ],
                     Type::Float,
                 ),
@@ -198,13 +214,16 @@ impl Tests {
         None
     }
 
+    fn undefined_array() -> Option<Vec<Value>> {
+        None
+    }
+
     fn fsum(arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let mut res = f64::try_from(args.next()?).ok()?;
         res += f64::try_from(args.next()?).ok()?;
         if let Some(v) = args.next() {
-            let v: i64 = v.try_into().ok()?;
-            res += v as f64;
+            res += f64::try_from(v).ok()?;
         }
         Some(Value::Float(res))
     }
@@ -245,10 +264,13 @@ impl Tests {
 
     fn r#match(arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
-        let s: String = args.next()?.try_into().ok()?;
         let regex: Regex = args.next()?.try_into().ok()?;
+        let s: String = args.next()?.try_into().ok()?;
 
-        Some(Value::Boolean(regex.is_match(s.as_bytes())))
+        Some(Value::Integer(match regex.find(s.as_bytes()) {
+            Some(m) => m.range().len() as i64,
+            None => -1,
+        }))
     }
 
     fn integer_array() -> Option<Vec<Value>> {

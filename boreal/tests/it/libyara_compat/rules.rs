@@ -2971,3 +2971,399 @@ fn test_re() {
         true,
     );
 }
+
+// FIXME: add test_entrypoint
+
+#[test]
+fn test_filesize() {
+    check(
+        &format!("rule test {{ condition: filesize == {} }}", PE32_FILE.len()),
+        PE32_FILE,
+        true,
+    );
+}
+
+#[test]
+fn test_comments() {
+    check(
+        "rule test {
+         condition:
+             //  this is a comment
+             /*** this is a comment ***/
+             /* /* /*
+                 this is a comment
+             */
+             true
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 [-] // Inline comment
+\r 38 39 }
+        condition: !a == 9 }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 /* Inline comment */ [-] 38 39 }
+        condition: !a == 9 }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 /* Inline comment */ [-] 38 39 }
+                 $b = { 31 32 /* Inline comment */ [-] 35 36 }
+        condition: (!a == 9) and (!b == 6) }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 /* Inline comment with *asterisks* */ [-] 38 39 }
+        condition: !a == 9}",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31 32 /* Inline multi-line
+\r     comment */ [-] 38 39 }
+        condition: !a == 9 }",
+        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { /*Some*/ 31 /*interleaved*/ [-] /*comments*/ 38 39 }
+        condition: !a == 9 }",
+        concatcp!("1234567890", TEXT_1024_BYTES).as_bytes(),
+        true,
+    );
+}
+
+#[test]
+fn test_matches_operator() {
+    check("rule test { condition: \"foo\" matches /foo/ }", b"", true);
+
+    check("rule test { condition: \"foo\" matches /bar/ }", b"", false);
+
+    check("rule test { condition: \"FoO\" matches /fOo/i }", b"", true);
+
+    check(
+        "rule test { condition: \"xxFoOxx\" matches /fOo/i }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test { condition: \"xxFoOxx\" matches /^fOo/i }",
+        b"",
+        false,
+    );
+
+    check(
+        "rule test { condition: \"xxFoOxx\" matches /fOo$/i }",
+        b"",
+        false,
+    );
+
+    check(
+        "rule test { condition: \"foo\" matches /^foo$/i }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test { condition: \"foo\\nbar\" matches /foo.*bar/s }",
+        b"",
+        true,
+    );
+
+    check(
+        "rule test { condition: \"foo\\nbar\" matches /foo.*bar/ }",
+        b"",
+        false,
+    );
+}
+
+// FIXME: add test_global_rules
+
+#[test]
+fn test_modules() {
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.constants.one + 1 == tests.constants.two
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.constants.foo == \"foo\"
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.constants.empty == \"\" 
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.empty() == \"\" 
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.struct_array[1].i == 1 
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.struct_array[0].i == 1 or true
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.integer_array[0] == 0
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.integer_array[1] == 1
+      }",
+        b"",
+        true,
+    );
+
+    // XXX: boreal does not allow non consecutive indexes in
+    // arrays. This is not really a feature actually used in yara either,
+    // so ignore this test.
+    // check(
+    //     "import \"tests\"
+    //    rule test {
+    //     condition: tests.integer_array[256] == 256
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.string_array[0] == \"foo\"
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.string_array[2] == \"baz\"
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.string_dict[\"foo\"] == \"foo\"
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.string_dict[\"bar\"] == \"bar\"
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.isum(1,2) == 3
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.isum(1,2,3) == 6
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.fsum(1.0,2.0) == 3.0
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.fsum(1.0,2.0,3.0) == 6.0
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.foobar(1) == tests.foobar(1)
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.foobar(1) != tests.foobar(2)
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+       rule test {
+        condition: tests.length(\"dummy\") == 5
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test { condition: tests.struct_array[0].i == 1 
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test { condition: tests.isum(1,1) == 3
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test { condition: tests.fsum(1.0,1.0) == 3.0
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test { condition: tests.match(/foo/,\"foo\") == 3
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test { condition: tests.match(/foo/,\"bar\") == -1
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test { condition: tests.match(/foo.bar/i,\"FOO\\nBAR\") == -1
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test { condition: tests.match(/foo.bar/is,\"FOO\\nBAR\") == 7
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any k,v in tests.empty_struct_array[0].struct_dict: (
+            v.unused == \"foo\"
+          )
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"tests\"
+      rule test {
+        condition:
+          for any item in tests.empty_struct_array[0].struct_array: (
+            item.unused == \"foo\"
+          )
+      }",
+        b"",
+        false,
+    );
+
+    check_err("import \"\\x00\"", "error: unknown import");
+
+    check_err("import \"\"", "error: unknown import");
+}

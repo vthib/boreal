@@ -254,10 +254,10 @@ fn test_functions() {
         "mem:3:27: error: invalid arguments types: [string]",
     );
     check_tests_err(
-        "tests.match(\"a\", true)",
-        "mem:3:27: error: invalid arguments types: [string, boolean]",
+        "tests.match(/a/, true)",
+        "mem:3:27: error: invalid arguments types: [regex, boolean]",
     );
-    check_ok("tests.match(\"a\", /a/)");
+    check_ok("tests.match(/a/, \"a\")");
 
     check_tests_err(
         "tests.isum(2)",
@@ -287,7 +287,7 @@ fn test_functions() {
         "tests.fsum(2.5, 3.5, false)",
         "mem:3:26: error: invalid arguments types: [floating-point number, floating-point number, boolean]",
     );
-    check_ok("tests.fsum(2.5, 3.5, 1) == 7.0");
+    check_ok("tests.fsum(2.5, 3.5, 1.0) == 7.0");
 
     check_tests_err(
         "tests.empty(3)",
