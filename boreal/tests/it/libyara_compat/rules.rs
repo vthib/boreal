@@ -2892,16 +2892,16 @@ fn test_re() {
     );
 
     check(
-        "rule test { \
-        strings: $a = /MZ.{300,}t/ \
+        "rule test {
+        strings: $a = /MZ.{300,}t/
         condition: !a == 317 }",
         PE32_FILE,
         true,
     );
 
     check(
-        "rule test { \
-        strings: $a = /MZ.{300,}?t/ \
+        "rule test {
+        strings: $a = /MZ.{300,}?t/
         condition: !a == 314 }",
         PE32_FILE,
         true,
@@ -3374,6 +3374,135 @@ fn test_time_module() {
         "import \"time\"
         rule test { condition: time.now() > 0 }",
         b"",
+        true,
+    );
+}
+
+#[test]
+#[cfg(feature = "hash")]
+fn test_module_hash() {
+    let blob = &[0x61, 0x62, 0x63, 0x64, 0x65]; // abcde without trailing zero
+
+    check(
+        "import \"hash\"
+       rule test {
+        condition:
+          hash.md5(0, filesize) ==
+            \"ab56b4d92b40713acc5af89985d4b786\"
+            and
+          hash.md5(1, filesize) ==
+            \"e02cfbe5502b64aa5ae9f2d0d69eaa8d\"
+            and
+          hash.sha1(0, filesize) ==
+            \"03de6c570bfe24bfc328ccd7ca46b76eadaf4334\"
+            and
+          hash.sha1(1, filesize) ==
+            \"a302d65ae4d9e768a1538d53605f203fd8e2d6e2\"
+            and
+          hash.sha256(0, filesize) ==
+            \"36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c\"
+            and
+          hash.sha256(1, filesize) ==
+            \"aaaaf2863e043b9df604158ad5c16ff1adaf3fd7e9fcea5dcb322b6762b3b59a\"
+            and
+          hash.crc32(0, filesize) == 0x8587d865
+            and
+          hash.checksum32(0, filesize) == 0x1ef
+      }",
+        blob,
+        true,
+    );
+
+    check(
+        "import \"hash\"
+       rule test {
+        condition:
+          hash.md5(\"TEST STRING\") ==
+            \"2d7d687432758a8eeeca7b7e5d518e7f\"
+            and
+          hash.sha1(\"TEST STRING\") ==
+            \"d39d009c05797a93a79720952e99c7054a24e7c4\"
+            and
+          hash.sha256(\"TEST STRING\") ==
+            \"fb6ca29024bd42f1894620ffa45fd976217e72d988b04ee02bb4793ab9d0c862\"
+            and
+          hash.crc32(\"TEST STRING\") == 0x51f9be31
+            and
+          hash.checksum32(\"TEST STRING\") == 0x337
+      }",
+        b"",
+        true,
+    );
+
+    // Test hash caching mechanism
+
+    check(
+        "import \"hash\"
+       rule test {
+        condition:
+          hash.md5(0, filesize) ==
+            \"ab56b4d92b40713acc5af89985d4b786\"
+            and
+          hash.md5(1, filesize) ==
+            \"e02cfbe5502b64aa5ae9f2d0d69eaa8d\"
+            and
+          hash.md5(0, filesize) ==
+            \"ab56b4d92b40713acc5af89985d4b786\"
+            and
+          hash.md5(1, filesize) ==
+            \"e02cfbe5502b64aa5ae9f2d0d69eaa8d\"
+      }",
+        blob,
+        true,
+    );
+
+    let multi_block_blob = concatcp!(TEXT_1024_BYTES, TEXT_1024_BYTES, "\0").as_bytes();
+
+    check(
+        "import \"hash\"
+       rule test {
+        condition:
+          hash.md5(768, 8) ==
+            \"9edc35bab4510f115d0974fc3597d444\" /*    exact 1st block boundary - overlap */
+            and
+          hash.md5(1024, 8) ==
+            \"2b607f2bcdf01d2cc5484230c89f5e18\" /*    exact 1st block boundary */
+            and
+          hash.md5(764, 8) ==
+            \"0cdfa992f3a982b27c364ab7d4ae9aa2\" /* straddle 1st block boundary - overlap */
+            and
+          hash.md5(764, 8) ==
+            \"0cdfa992f3a982b27c364ab7d4ae9aa2\" /* straddle 1st block boundary - overlap; cache */
+            and
+          hash.md5(1020, 8) ==
+            \"478adcaee8dec0bf8d9425d6894e8672\" /* straddle 1st block boundary */
+            and
+          hash.md5(1020, 8) ==
+            \"478adcaee8dec0bf8d9425d6894e8672\" /* straddle 1st block boundary; cache */
+            and
+          hash.md5(0, filesize) ==
+            \"578848bccbd8294394864707e7f581e3\"
+            and
+          hash.md5(1, filesize) ==
+            \"633e48db55a5b477f9eeafad0ebbe108\"
+            and
+          hash.sha1(0, filesize) ==
+            \"0170d3bfb54b5ba2fc12df571ffb000fcb2a379d\"
+            and
+          hash.sha1(1, filesize) ==
+            \"89d614c846abe670f998ef02c4f5277ab76c0b4d\"
+            and
+          hash.sha256(0, filesize) ==
+            \"ebc7a22f28028552576eeef3c17182a7d635ddaefbc94fc6d85f099289fdf8a5\"
+            and
+          hash.sha256(1, filesize) ==
+            \"9c19006ade01c93f42949723f4ec8b1158e07fa43fd946f03e84a1ce25baa2c1\"
+            and
+          hash.crc32(0, filesize) == 0x2b11af72
+            and
+          hash.crc32(\"TEST STRING\") == 0x51f9be31
+      }",
+        multi_block_blob,
         true,
     );
 }
