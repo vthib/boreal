@@ -2561,10 +2561,7 @@ fn test_re() {
     check_regex_match("ab?c", b"abc", b"abc");
     check_regex_match("ab*?", b"abbb", b"a");
     check_regex_match("ab?c", b"ac", b"ac");
-
-    // TODO: re-enable this test once https://github.com/rust-lang/regex/issues/862 is fixed.
-    // check_regex_match("ab??", b"ab", b"a");
-
+    check_regex_match("ab??", b"ab", b"a");
     check_regex_match("a(b|x)c", b"abc", b"abc");
     check_regex_match("a(b|x)c", b"axc", b"axc");
     check_regex_match("a(b|.)c", b"axc", b"axc");
