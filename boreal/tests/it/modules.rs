@@ -320,3 +320,73 @@ rule a {
         true,
     );
 }
+
+#[test]
+#[cfg(feature = "hash")]
+fn test_module_hash() {
+    #[track_caller]
+    fn test(cond: &str) {
+        check(
+            &format!(
+                "import \"hash\"
+    rule a {{
+        condition: {}
+    }}",
+                cond
+            ),
+            b"gabuzomeu",
+            true,
+        )
+    }
+
+    test("hash.md5(0, 500) == \"ecac3b377a507fec74b2f4c512ed9554\"");
+    test("hash.md5(0, filesize) == hash.md5(\"gabuzomeu\")");
+    test("hash.md5(2, 9) == \"7b73eda4ba472912fff88c5e6b7ea103\"");
+    test("hash.md5(0, 8) == \"aca342eca8df22ac40b939b15095950f\"");
+    test("hash.md5(0, 0) == \"d41d8cd98f00b204e9800998ecf8427e\"");
+    test("not defined hash.md5(0, -1)");
+    test("not defined hash.md5(-1, 0)");
+    test("not defined hash.md5(100, 2)");
+
+    test("hash.sha1(0, 500) == \"86cfb1983fb9daaabbd865e16dc3f9870fe76474\"");
+    test("hash.sha1(0, filesize) == hash.sha1(\"gabuzomeu\")");
+    test("hash.sha1(2, 9) == \"57bbcd8d2706dc88dd5831efa7cfe11e92ae3f3a\"");
+    test("hash.sha1(0, 8) == \"634d0c2b932e8f7f68ad56cc42c590e1052a6491\"");
+    test("hash.sha1(0, 0) == \"da39a3ee5e6b4b0d3255bfef95601890afd80709\"");
+    test("not defined hash.sha1(0, -1)");
+    test("not defined hash.sha1(-1, 0)");
+    test("not defined hash.sha1(100, 2)");
+
+    test(
+        "hash.sha256(0, 500) == \"f94ba43d9d5949c608563293761495e2f0335fbffba1a05760d1ae609d061fc0\"",
+    );
+    test("hash.sha256(0, filesize) == hash.sha256(\"gabuzomeu\")");
+    test(
+        "hash.sha256(2, 9) == \"3e3cb308199e801415e4991209043f40bde2352f5bc61625b137e1cd6c51fd3e\"",
+    );
+    test(
+        "hash.sha256(0, 8) == \"d89026b06cb9d69a9185096cf6f67d700d860c4c49a17922399221165ff051b8\"",
+    );
+    test(
+        "hash.sha256(0, 0) == \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"",
+    );
+    test("not defined hash.sha256(0, -1)");
+    test("not defined hash.sha256(-1, 0)");
+    test("not defined hash.sha256(100, 2)");
+
+    test("hash.checksum32(0, 500) == 975");
+    test("hash.checksum32(0, 500) == hash.checksum32(\"gabuzomeu\")");
+    test("hash.checksum32(2, 9) == 775");
+    test("hash.checksum32(0, 8) == 858");
+    test("not defined hash.checksum32(0, -1)");
+    test("not defined hash.checksum32(-1, 0)");
+    test("not defined hash.checksum32(100, 2)");
+
+    test("hash.crc32(0, 500) == 759284801");
+    test("hash.crc32(0, 500) == hash.crc32(\"gabuzomeu\")");
+    test("hash.crc32(2, 9) == 1919370201");
+    test("hash.crc32(0, 8) == 1279376556");
+    test("not defined hash.crc32(0, -1)");
+    test("not defined hash.crc32(-1, 0)");
+    test("not defined hash.crc32(100, 2)");
+}

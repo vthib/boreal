@@ -12,7 +12,7 @@
 use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
-use crate::module::Value as ModuleValue;
+use crate::module::{ScanContext, Value as ModuleValue};
 
 mod module;
 mod read_integer;
@@ -70,6 +70,7 @@ pub(crate) fn evaluate_rule<'rule>(
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
+        module_ctx: ScanContext { mem },
     };
     let res = evaluator
         .evaluate_expr(&rule.condition)
@@ -93,6 +94,9 @@ struct Evaluator<'a, 'b, 'c> {
 
     // Stack of bounded identifiers to their integer values.
     bounded_identifiers_stack: Vec<BoundedIdentifierValue>,
+
+    // Scan context used for module function calls
+    module_ctx: ScanContext<'b>,
 }
 
 macro_rules! string_op {
@@ -614,7 +618,7 @@ impl Evaluator<'_, '_, '_> {
             ForIterator::ModuleIterator(value) => {
                 match value {
                     ModuleValue::Array { on_scan, .. } => {
-                        let array = on_scan()?;
+                        let array = on_scan(&self.module_ctx)?;
                         for value in array {
                             self.bounded_identifiers_stack
                                 .push(BoundedIdentifierValue::ModuleValue(value));
@@ -627,7 +631,7 @@ impl Evaluator<'_, '_, '_> {
                         }
                     }
                     ModuleValue::Dictionary { on_scan, .. } => {
-                        let dict = on_scan()?;
+                        let dict = on_scan(&self.module_ctx)?;
                         for (key, value) in dict {
                             self.bounded_identifiers_stack
                                 .push(BoundedIdentifierValue::RawValue(Value::String(key)));

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     compiler::{Expression, ModuleExpression, ValueOperation},
-    module::Value as ModuleValue,
+    module::{ScanContext, Value as ModuleValue},
 };
 
 use super::{Evaluator, Value};
@@ -65,10 +65,10 @@ pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
 
 fn eval_array_op(
     evaluator: &mut Evaluator,
-    fun: fn() -> Option<Vec<ModuleValue>>,
+    fun: fn(&ScanContext) -> Option<Vec<ModuleValue>>,
     subscript: &Expression,
 ) -> Option<ModuleValue> {
-    let mut array = fun()?;
+    let mut array = fun(&evaluator.module_ctx)?;
     let index = evaluator.evaluate_expr(subscript)?.unwrap_number()?;
 
     if let Ok(i) = usize::try_from(index) {
@@ -84,10 +84,10 @@ fn eval_array_op(
 
 fn eval_dict_op(
     evaluator: &mut Evaluator,
-    fun: fn() -> Option<HashMap<String, ModuleValue>>,
+    fun: fn(&ScanContext) -> Option<HashMap<String, ModuleValue>>,
     subscript: &Expression,
 ) -> Option<ModuleValue> {
-    let mut dict = fun()?;
+    let mut dict = fun(&evaluator.module_ctx)?;
     let val = evaluator.evaluate_expr(subscript)?.unwrap_string()?;
 
     dict.remove(&val)
@@ -95,7 +95,7 @@ fn eval_dict_op(
 
 fn eval_function_op(
     evaluator: &mut Evaluator,
-    fun: fn(Vec<ModuleValue>) -> Option<ModuleValue>,
+    fun: fn(&ScanContext, Vec<ModuleValue>) -> Option<ModuleValue>,
     arguments: &[Expression],
 ) -> Option<ModuleValue> {
     let arguments: Option<Vec<_>> = arguments
@@ -107,7 +107,7 @@ fn eval_function_op(
         })
         .collect();
 
-    fun(arguments?)
+    fun(&evaluator.module_ctx, arguments?)
 }
 
 fn evaluate_value_operation(
@@ -136,7 +136,7 @@ fn evaluate_value_operation(
                     })
                     .collect();
 
-                Some(fun(arguments?)?)
+                Some(fun(&evaluator.module_ctx, arguments?)?)
             }
             _ => None,
         },

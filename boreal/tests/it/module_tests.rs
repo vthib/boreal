@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use regex::bytes::Regex;
 
-use boreal::module::{Module, Type, Value};
+use boreal::module::{Module, ScanContext, Type, Value};
 
 #[derive(Debug)]
 pub struct Tests;
@@ -206,19 +206,19 @@ impl Module for Tests {
 }
 
 impl Tests {
-    fn undefined(_: Vec<Value>) -> Option<Value> {
+    fn undefined(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         None
     }
 
-    fn undefined_dict() -> Option<HashMap<String, Value>> {
+    fn undefined_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
         None
     }
 
-    fn undefined_array() -> Option<Vec<Value>> {
+    fn undefined_array(_: &ScanContext) -> Option<Vec<Value>> {
         None
     }
 
-    fn fsum(arguments: Vec<Value>) -> Option<Value> {
+    fn fsum(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let mut res = f64::try_from(args.next()?).ok()?;
         res += f64::try_from(args.next()?).ok()?;
@@ -228,7 +228,7 @@ impl Tests {
         Some(Value::Float(res))
     }
 
-    fn isum(arguments: Vec<Value>) -> Option<Value> {
+    fn isum(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut res = 0;
         for arg in arguments {
             res += i64::try_from(arg).ok()?;
@@ -236,18 +236,18 @@ impl Tests {
         Some(Value::Integer(res))
     }
 
-    fn length(arguments: Vec<Value>) -> Option<Value> {
+    fn length(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let s: String = args.next()?.try_into().ok()?;
 
         i64::try_from(s.len()).ok().map(Value::Integer)
     }
 
-    fn empty(_: Vec<Value>) -> Option<Value> {
+    fn empty(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::String("".into()))
     }
 
-    fn foobar(args: Vec<Value>) -> Option<Value> {
+    fn foobar(_: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v = i64::try_from(args.next()?).ok()?;
 
@@ -258,11 +258,11 @@ impl Tests {
         }))
     }
 
-    fn log(_: Vec<Value>) -> Option<Value> {
+    fn log(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::Boolean(true))
     }
 
-    fn r#match(arguments: Vec<Value>) -> Option<Value> {
+    fn r#match(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let regex: Regex = args.next()?.try_into().ok()?;
         let s: String = args.next()?.try_into().ok()?;
@@ -273,7 +273,7 @@ impl Tests {
         }))
     }
 
-    fn integer_array() -> Option<Vec<Value>> {
+    fn integer_array(_: &ScanContext) -> Option<Vec<Value>> {
         Some(vec![
             Value::Integer(0),
             Value::Integer(1),
@@ -281,7 +281,7 @@ impl Tests {
         ])
     }
 
-    fn string_array() -> Option<Vec<Value>> {
+    fn string_array(_: &ScanContext) -> Option<Vec<Value>> {
         Some(vec![
             Value::string("foo"),
             Value::string("bar"),
@@ -290,7 +290,7 @@ impl Tests {
         ])
     }
 
-    fn integer_dict() -> Option<HashMap<String, Value>> {
+    fn integer_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
         Some(
             [
                 ("foo".to_string(), Value::Integer(1)),
@@ -300,7 +300,7 @@ impl Tests {
         )
     }
 
-    fn string_dict() -> Option<HashMap<String, Value>> {
+    fn string_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
         Some(
             [
                 ("foo".to_string(), Value::string("foo")),
@@ -310,14 +310,14 @@ impl Tests {
         )
     }
 
-    fn struct_array() -> Option<Vec<Value>> {
+    fn struct_array(_: &ScanContext) -> Option<Vec<Value>> {
         Some(vec![
             Value::object([("i", Value::Integer(0))]),
             Value::object([("i", Value::Integer(1))]),
         ])
     }
 
-    fn struct_dict() -> Option<HashMap<String, Value>> {
+    fn struct_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
         Some(
             [(
                 "foo".to_string(),
@@ -327,7 +327,7 @@ impl Tests {
         )
     }
 
-    fn lazy(_: Vec<Value>) -> Option<Value> {
+    fn lazy(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::object([
             ("one", Value::Integer(1)),
             ("one_half", Value::Float(0.5)),
@@ -372,14 +372,14 @@ impl Tests {
         ]))
     }
 
-    fn lazy_lazy(_: Vec<Value>) -> Option<Value> {
+    fn lazy_lazy(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::object([(
             "lazy_int",
             Value::function(Self::lazy_lazy_int, vec![], Type::Integer),
         )]))
     }
 
-    fn lazy_lazy_int(_: Vec<Value>) -> Option<Value> {
+    fn lazy_lazy_int(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::Integer(3))
     }
 }

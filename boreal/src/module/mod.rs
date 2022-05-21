@@ -4,6 +4,11 @@ use std::collections::HashMap;
 mod time;
 pub use time::Time;
 
+#[cfg(feature = "hash")]
+mod hash;
+#[cfg(feature = "hash")]
+pub use hash::Hash;
+
 /// A module allows providing custom values and functions in rules.
 ///
 /// The trait in itself only requires static values and methods, which are used
@@ -33,7 +38,7 @@ pub trait Module {
     /// For example, lets take this module:
     ///
     /// ```
-    /// use boreal::module::{Module, Value, Type};
+    /// use boreal::module::{Module, Value, Type, ScanContext};
     ///
     /// struct Foo;
     ///
@@ -50,7 +55,7 @@ pub trait Module {
     ///     }
     /// }
     ///
-    /// fn bar_array() -> Option<Vec<Value>> {
+    /// fn bar_array(_: &ScanContext) -> Option<Vec<Value>> {
     ///     Some(vec![Value::string("a"), Value::string("b")])
     /// }
     /// ```
@@ -67,10 +72,17 @@ pub trait Module {
     fn get_value(&self) -> Value;
 }
 
+/// Context provided to module functions during scanning.
+#[derive(Debug)]
+pub struct ScanContext<'a> {
+    /// Input being scanned.
+    pub mem: &'a [u8],
+}
+
 /// A value bound to an identifier.
 ///
 /// This object represents an immediately resolvable value for an identifier.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Value {
     /// An integer
     Integer(i64),
@@ -99,7 +111,7 @@ pub enum Value {
         ///
         /// The function can return None if the array does not make sense in the current context.
         /// For example, `pe.sections[0]` does not make sense if the scanned object is not a PE.
-        on_scan: fn() -> Option<Vec<Value>>,
+        on_scan: fn(&ScanContext) -> Option<Vec<Value>>,
 
         /// Type of all the elements in the array.
         ///
@@ -119,7 +131,7 @@ pub enum Value {
         ///
         /// The function can return None if the array does not make sense in the current context.
         /// For example, `pe.sections[0]` does not make sense if the scanned object is not a PE.
-        on_scan: fn() -> Option<HashMap<String, Value>>,
+        on_scan: fn(&ScanContext) -> Option<HashMap<String, Value>>,
 
         /// Type of all the elements in the dirctionary.
         ///
@@ -147,16 +159,17 @@ pub enum Value {
         /// `fun("a", 1 + 2, #foo)` would call the function `fun` with:
         ///
         /// ```
-        /// # use boreal::module::Value;
+        /// # use boreal::module::{ScanContext, Value};
         /// # let x = 3;
-        /// # fn fun(_: Vec<Value>) -> Option<Value> { None }
-        /// let result = fun(vec![
+        /// # fn fun(_: &ScanContext, _: Vec<Value>) -> Option<Value> { None }
+        /// # let ctx = ScanContext { mem: b"" };
+        /// let result = fun(&ctx, vec![
         ///     Value::string("a"),
         ///     Value::Integer(3),
         ///     Value::Integer(x), // Number of matches of string $foo
         /// ]);
         /// ```
-        fun: fn(Vec<Value>) -> Option<Value>,
+        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
 
         /// List of types of arguments.
         ///
@@ -178,6 +191,46 @@ pub enum Value {
     },
 }
 
+// XXX: custom Debug impl needed because derive does not work with the fn fields.
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer(arg0) => f.debug_tuple("Integer").field(arg0).finish(),
+            Self::Float(arg0) => f.debug_tuple("Float").field(arg0).finish(),
+            Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
+            Self::Regex(arg0) => f.debug_tuple("Regex").field(arg0).finish(),
+            Self::Boolean(arg0) => f.debug_tuple("Boolean").field(arg0).finish(),
+            Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
+            Self::Array {
+                on_scan,
+                value_type,
+            } => f
+                .debug_struct("Array")
+                .field("on_scan", &(*on_scan as usize))
+                .field("value_type", value_type)
+                .finish(),
+            Self::Dictionary {
+                on_scan,
+                value_type,
+            } => f
+                .debug_struct("Dictionary")
+                .field("on_scan", &(*on_scan as usize))
+                .field("value_type", value_type)
+                .finish(),
+            Self::Function {
+                fun,
+                arguments_types,
+                return_type,
+            } => f
+                .debug_struct("Function")
+                .field("fun", &(*fun as usize))
+                .field("arguments_types", arguments_types)
+                .field("return_type", return_type)
+                .finish(),
+        }
+    }
+}
+
 impl Value {
     pub fn string<T: Into<String>>(v: T) -> Self {
         Value::String(v.into())
@@ -188,14 +241,14 @@ impl Value {
         Value::Object(v.into())
     }
 
-    pub fn array(fun: fn() -> Option<Vec<Value>>, ty: Type) -> Self {
+    pub fn array(fun: fn(&ScanContext) -> Option<Vec<Value>>, ty: Type) -> Self {
         Value::Array {
             on_scan: fun,
             value_type: ty,
         }
     }
 
-    pub fn dict(fun: fn() -> Option<HashMap<String, Value>>, ty: Type) -> Self {
+    pub fn dict(fun: fn(&ScanContext) -> Option<HashMap<String, Value>>, ty: Type) -> Self {
         Value::Dictionary {
             on_scan: fun,
             value_type: ty,
@@ -203,7 +256,7 @@ impl Value {
     }
 
     pub fn function(
-        fun: fn(Vec<Value>) -> Option<Value>,
+        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
         arguments_types: Vec<Vec<Type>>,
         return_type: Type,
     ) -> Self {
