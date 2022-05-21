@@ -3367,3 +3367,13 @@ fn test_modules() {
 
     check_err("import \"\"", "error: unknown import");
 }
+
+#[test]
+fn test_time_module() {
+    check(
+        "import \"time\"
+        rule test { condition: time.now() > 0 }",
+        b"",
+        true,
+    );
+}

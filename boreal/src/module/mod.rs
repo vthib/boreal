@@ -1,6 +1,9 @@
 use regex::bytes::Regex;
 use std::collections::HashMap;
 
+mod time;
+pub use time::Time;
+
 /// A module allows providing custom values and functions in rules.
 ///
 /// The trait in itself only requires static values and methods, which are used

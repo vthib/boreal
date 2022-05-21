@@ -22,7 +22,7 @@ pub use rule::*;
 
 use crate::Scanner;
 
-/// Object used to compile rules.rovides methods to
+/// Object used to compile rules.
 #[derive(Debug, Default)]
 pub struct Compiler {
     /// List of compiled rules.
@@ -41,9 +41,15 @@ pub struct Compiler {
 }
 
 impl Compiler {
+    /// Create a new object to compile YARA rules.
+    ///
+    /// All available modules are enabled by default:
+    /// - `time`
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        let mut this = Self::default();
+        this.add_module(crate::module::Time);
+        this
     }
 
     /// Add a module

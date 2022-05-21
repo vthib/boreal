@@ -308,3 +308,15 @@ fn test_functions() {
     check_ok("tests.log(true, /a/)");
     check_ok("tests.log(3, true)");
 }
+
+#[test]
+fn test_module_time() {
+    check(
+        "import \"time\"
+rule a {
+    condition: time.now() > 0
+}",
+        b"",
+        true,
+    );
+}
