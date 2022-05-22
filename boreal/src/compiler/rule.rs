@@ -159,6 +159,14 @@ pub(super) fn compile_rule(
         namespace.forbidden_rule_prefixes.extend(wildcards);
     }
 
+    // Check duplication of tags
+    let mut tags_set = HashSet::new();
+    for tag in &rule.tags {
+        if !tags_set.insert(tag) {
+            return Err(CompilationError::DuplicatedRuleTag(tag.to_string()));
+        }
+    }
+
     Ok(Rule {
         name: rule.name,
         namespace: namespace.name.clone(),

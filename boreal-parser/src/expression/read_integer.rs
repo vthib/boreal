@@ -33,7 +33,9 @@ fn read_integer_type(input: Input) -> ParseResult<ReadIntegerType> {
         map(ttag("uint16"), |_| ReadIntegerType::Uint16),
         map(ttag("int16be"), |_| ReadIntegerType::Int16BE),
         map(ttag("int16"), |_| ReadIntegerType::Int16),
+        map(ttag("uint8be"), |_| ReadIntegerType::Uint8),
         map(ttag("uint8"), |_| ReadIntegerType::Uint8),
+        map(ttag("int8be"), |_| ReadIntegerType::Int8),
         map(ttag("int8"), |_| ReadIntegerType::Int8),
     )))(input)
 }
@@ -109,7 +111,6 @@ mod tests {
         parse_err(read_integer_type, "uint");
         parse_err(read_integer_type, "int");
         parse_err(read_integer_type, "int8b");
-        parse_err(read_integer_type, "int8be");
         parse_err(read_integer_type, "int8bet");
         parse_err(read_integer_type, "int16bet");
         parse_err(read_integer_type, "int9");

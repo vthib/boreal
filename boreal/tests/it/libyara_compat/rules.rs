@@ -3503,3 +3503,144 @@ fn test_module_hash() {
         true,
     );
 }
+
+#[test]
+fn test_integer_functions() {
+    let mut input = TEXT_1024_BYTES.as_bytes().to_vec();
+    input.extend(b"\xaa\xbb\xcc\xdd");
+
+    check("rule test { condition: uint8(1024) == 0xAA}", &input, true);
+
+    check(
+        "rule test { condition: uint16(1024) == 0xBBAA}",
+        &input,
+        true,
+    );
+
+    check(
+        "rule test { condition: uint32(1024) == 0xDDCCBBAA}",
+        &input,
+        true,
+    );
+
+    check(
+        "rule test { condition: uint8be(1024) == 0xAA}",
+        &input,
+        true,
+    );
+
+    check(
+        "rule test { condition: uint16be(1024) == 0xAABB}",
+        &input,
+        true,
+    );
+
+    check(
+        "rule test { condition: uint32be(1024) == 0xAABBCCDD}",
+        &input,
+        true,
+    );
+}
+
+// FIXME: add test_include
+
+#[test]
+fn test_tags() {
+    check("rule test : tag1 { condition: true}", b"", true);
+
+    check("rule test : tag1 tag2 { condition: true}", b"", true);
+
+    check_err(
+        "rule test : tag1 tag1 { condition: true}",
+        "error: tag `tag1` specified multiple times",
+    );
+}
+
+// FIXME add test_process_scan
+
+// FIXME add test_performance_warnings ?
+
+#[test]
+fn test_meta() {
+    // Make sure that multiple metadata with the same identifier are allowed.
+    // This was not intentionally designed like that, but users are alreay
+    // relying on this.
+    check(
+        "rule test { \
+         meta: \
+           foo = \"foo\" \
+           foo = 1 \
+           foo = false \
+         condition:\
+           true \
+      }",
+        b"",
+        true,
+    );
+}
+
+// FIXME: enable when pe module is done
+// #[test]
+// fn test_defined() {
+//     check("rule t { condition: defined 1 }", b"", true);
+//
+//     check(
+//         "import \"pe\" \
+//       rule t { \
+//         condition: \
+//           defined pe.number_of_resources \
+//       }",
+//         b"",
+//         false,
+//     );
+//
+//     check(
+//         "import \"pe\" \
+//       rule t { \
+//         condition: \
+//           not defined pe.number_of_resources \
+//       }",
+//         b"",
+//         true,
+//     );
+//
+//     check(
+//         "import \"pe\" \
+//       rule t { \
+//         condition: \
+//           defined not pe.number_of_resources \
+//       }",
+//         b"",
+//         true,
+//     );
+//
+//     check(
+//         "import \"pe\" \
+//       rule t { \
+//         condition: \
+//           defined pe.number_of_resources and pe.number_of_resources == 0 \
+//       }",
+//         b"",
+//         true,
+//     );
+//
+//     check(
+//         "import \"pe\" \
+//       rule t { \
+//         condition: \
+//           defined (pe.number_of_resources and pe.number_of_resources == 0) \
+//       }",
+//         b"",
+//         true,
+//     );
+//
+//     check(
+//         "import \"pe\" \
+//       rule t { \
+//         condition: \
+//           defined \"foo\" contains \"f\" \
+//       }",
+//         b"",
+//         true,
+//     );
+// }

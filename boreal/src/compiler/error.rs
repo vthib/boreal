@@ -47,6 +47,10 @@ pub enum CompilationError {
     // TODO: add span
     DuplicatedRuleName(String),
 
+    /// Duplicated tag in a rule.
+    // TODO: add span
+    DuplicatedRuleTag(String),
+
     /// Duplicated binding on an identifier.
     ///
     /// This indicates that a for expression attempts to bind an identifier that is already
@@ -239,6 +243,10 @@ impl CompilationError {
                 "rule `{}` is already declared in this namespace",
                 name
             )),
+
+            Self::DuplicatedRuleTag(tag) => {
+                Diagnostic::error().with_message(format!("tag `{}` specified multiple times", tag))
+            }
 
             Self::DuplicatedVariable(name) => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name)),
