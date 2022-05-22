@@ -39,13 +39,12 @@ pub(super) struct RuleCompiler<'a> {
     /// Namespace in which the rule is built and added to.
     pub namespace: &'a Namespace,
 
-    /// Names of variables declared in this rule.
+    /// Variables declared in this rule.
     ///
-    /// The index of the name in this vector will match the index of the variable
+    /// The index of the variable in this vector will match the index of the variable
     /// in the compiled rules's variable vec. It can thus be used to compile
     /// access to the variable.
-    // TODO: detect which ones are unused.
-    pub variable_names: Vec<String>,
+    pub variables: Vec<RuleCompilerVariable>,
 
     /// Map of the name of a bounded identifier to its type and index in the bounded identifier
     /// stack.
@@ -59,25 +58,41 @@ pub(super) struct RuleCompiler<'a> {
     pub rule_wildcard_uses: Vec<String>,
 }
 
+/// Helper struct used to track variables being compiled in a rule.
+#[derive(Debug)]
+pub(super) struct RuleCompilerVariable {
+    /// Name of the variable.
+    pub name: String,
+
+    /// Has the variable been used.
+    ///
+    /// If by the end of the compilation of the rule, the variable is unused, a compilation
+    /// error is raised.
+    pub used: bool,
+}
+
 impl<'a> RuleCompiler<'a> {
     pub(super) fn new(
         rule: &parser::Rule,
         namespace: &'a Namespace,
     ) -> Result<Self, CompilationError> {
         let mut names_set = HashSet::new();
-        let mut variable_names = Vec::with_capacity(rule.variables.len());
+        let mut variables = Vec::with_capacity(rule.variables.len());
         for var in &rule.variables {
             // Check duplicated names, but only for non anonymous strings
             if !var.name.is_empty() && !names_set.insert(var.name.clone()) {
                 return Err(CompilationError::DuplicatedVariable(var.name.clone()));
             }
 
-            variable_names.push(var.name.clone());
+            variables.push(RuleCompilerVariable {
+                name: var.name.clone(),
+                used: false,
+            });
         }
 
         Ok(Self {
             namespace,
-            variable_names,
+            variables,
             bounded_identifiers: HashMap::new(),
             rule_wildcard_uses: Vec::new(),
         })
@@ -91,7 +106,7 @@ impl<'a> RuleCompiler<'a> {
     /// This function allows anonymous variables. To only allow named variable, use
     /// [`self.find_named_variable`] instead.
     pub(super) fn find_variable(
-        &self,
+        &mut self,
         name: &str,
         span: &Range<usize>,
     ) -> Result<VariableIndex, CompilationError> {
@@ -104,12 +119,13 @@ impl<'a> RuleCompiler<'a> {
 
     /// Find a variable used in a rule by name, without accepting anonymous variables.
     pub(super) fn find_named_variable(
-        &self,
+        &mut self,
         name: &str,
         span: &Range<usize>,
     ) -> Result<usize, CompilationError> {
-        for (index, var_name) in self.variable_names.iter().enumerate() {
-            if var_name == name {
+        for (index, var) in self.variables.iter_mut().enumerate() {
+            if var.name == name {
+                var.used = true;
                 return Ok(index);
             }
         }
@@ -149,11 +165,11 @@ pub(super) fn compile_rule(
     rule: parser::Rule,
     namespace: &mut Namespace,
 ) -> Result<Rule, CompilationError> {
-    let (condition, wildcards) = {
+    let (condition, wildcards, vars) = {
         let mut compiler = RuleCompiler::new(&rule, namespace)?;
         let condition = compile_expression(&mut compiler, rule.condition)?;
 
-        (condition, compiler.rule_wildcard_uses)
+        (condition, compiler.rule_wildcard_uses, compiler.variables)
     };
     if !wildcards.is_empty() {
         namespace.forbidden_rule_prefixes.extend(wildcards);
@@ -164,6 +180,13 @@ pub(super) fn compile_rule(
     for tag in &rule.tags {
         if !tags_set.insert(tag) {
             return Err(CompilationError::DuplicatedRuleTag(tag.to_string()));
+        }
+    }
+
+    // Check whether some variables were not used.
+    for var in vars {
+        if !var.used {
+            return Err(CompilationError::UnusedVariable(var.name));
         }
     }
 

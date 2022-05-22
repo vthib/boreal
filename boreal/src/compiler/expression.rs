@@ -952,20 +952,27 @@ fn compile_variable_set(
 
     // A for expression on an empty set is not allowed by YARA.
     // The empty set (or "them") acts as a "($*)" element.
-    if set.elements.is_empty() && compiler.variable_names.is_empty() {
-        return Err(CompilationError::UnknownVariable {
-            variable_name: "*".to_string(),
-            span,
-        });
+    if set.elements.is_empty() {
+        if compiler.variables.is_empty() {
+            return Err(CompilationError::UnknownVariable {
+                variable_name: "*".to_string(),
+                span,
+            });
+        }
+
+        for var in compiler.variables.iter_mut() {
+            var.used = true;
+        }
     }
 
     for elem in set.elements {
         if elem.1 {
             let mut found = false;
 
-            for (index, name) in compiler.variable_names.iter().enumerate() {
-                if name.starts_with(&elem.0) {
+            for (index, var) in compiler.variables.iter_mut().enumerate() {
+                if var.name.starts_with(&elem.0) {
                     found = true;
+                    var.used = true;
                     indexes.push(index);
                 }
             }

@@ -197,6 +197,10 @@ pub enum CompilationError {
         span: Range<usize>,
     },
 
+    /// A variable declared in a rule was not used.
+    // TODO: add span
+    UnusedVariable(String),
+
     /// Error while compiling a variable, indicating an issue with
     /// its expression.
     VariableCompilation {
@@ -346,6 +350,10 @@ impl CompilationError {
             } => Diagnostic::error()
                 .with_message(format!("unknown variable ${}", variable_name))
                 .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::UnusedVariable(name) => {
+                Diagnostic::error().with_message(format!("variable ${} is unused", name))
+            }
 
             // TODO: need span for variable
             Self::VariableCompilation {

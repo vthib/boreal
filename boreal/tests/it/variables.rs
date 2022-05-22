@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, Checker, Compiler};
+use crate::utils::{build_rule, check, check_err, Checker, Compiler};
 
 #[test]
 fn test_variable() {
@@ -26,6 +26,27 @@ rule a {
     checker.check(b"dbaz\xFF\xDA\xFFeaz", true);
     checker.check(b"dbaz\xFF\xBFer\xFFeaz", true);
     checker.check(b"dbaz\xFF\xBFerdf\xFFeaz", true);
+}
+
+#[test]
+fn test_variable_err() {
+    check_err(
+        "rule a {
+    condition:
+        $a
+}",
+        "mem:3:9: error: unknown variable $a",
+    );
+
+    check_err(
+        "rule a {
+    strings:
+        $a = /aaa/
+    condition:
+        true
+}",
+        "error: variable $a is unused",
+    );
 }
 
 #[test]
