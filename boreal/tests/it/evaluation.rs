@@ -12,6 +12,17 @@ rule a {{
 }
 
 #[test]
+fn test_eval_cast_to_bool() {
+    check("rule test { condition: 0.0 }", &[], false);
+    check("rule test { condition: 1.3 }", &[], true);
+    check("rule test { condition: \"\" }", &[], false);
+    check("rule test { condition: \"a\" }", &[], true);
+    check("rule test { condition: 0 }", &[], false);
+    check("rule test { condition: 1 }", &[], true);
+    check("rule test { condition: /a/ }", &[], true);
+}
+
+#[test]
 fn test_eval_add() {
     check(&build_empty_rule("2 + 6 == 8"), &[], true);
     check(&build_empty_rule("3 + 4.2 == 7.2"), &[], true);

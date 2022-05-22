@@ -6,7 +6,7 @@
 use const_format::concatcp;
 
 use super::util::{ISSUE_1006, PE32_FILE, TEXT_1024_BYTES};
-use crate::utils::{check, check_boreal, check_count, check_err, check_file, Checker};
+use crate::utils::{check, check_count, check_err, check_file, Checker};
 
 #[test]
 fn test_boolean_operators() {
@@ -24,19 +24,12 @@ fn test_boolean_operators() {
     check("rule test { condition: false }", &[], false);
     check("rule test { condition: true and false }", &[], false);
     check("rule test { condition: false or false }", &[], false);
+    // TODO: implement constants
+    // check("rule test { condition: not var_false }", b"", true);
+    // check("rule test { condition: var_true }", b"", true);
+    // check("rule test { condition: var_false }", b"", false);
+    // check("rule test { condition: not var_true }", b"", false);
 
-    // Added tests: test cast to bool
-    check("rule test { condition: 0.0 }", &[], false);
-    check("rule test { condition: 1.3 }", &[], true);
-    check("rule test { condition: \"\" }", &[], false);
-    check("rule test { condition: \"a\" }", &[], true);
-    check("rule test { condition: 0 }", &[], false);
-    check("rule test { condition: 1 }", &[], true);
-    check("rule test { condition: /a/ }", &[], true);
-}
-
-#[test]
-fn test_boolean_operators_with_identifiers() {
     check(
         "import \"tests\" rule test { condition: not tests.undefined.i }",
         &[],
@@ -103,16 +96,15 @@ fn test_boolean_operators_with_identifiers() {
         false,
     );
 
-    // TODO: implement dictionaries
-    // check(
-    //     "import \"tests\"
-    // rule test {
-    //     condition:
-    //     not tests.string_dict[\"undefined\"] matches /foo/
-    // }",
-    //     &[],
-    //     false,
-    // );
+    check(
+        "import \"tests\"
+    rule test {
+        condition:
+        not tests.string_dict[\"undefined\"] matches /foo/
+    }",
+        &[],
+        false,
+    );
 
     check(
         "import \"tests\"
@@ -223,6 +215,10 @@ fn test_arithmetic_operators() {
     check("rule test { condition: 0o10 == 8 }", &[], true);
     check("rule test { condition: 0o100 == 64 }", &[], true);
     check("rule test { condition: 0o755 == 493 }", &[], true);
+
+    // TODO: implement constants
+    // check("rule test { condition: var_one*3 == 3}", b"", true);
+    // check("rule test { condition: var_zero*3 == 0}", b"", true);
 
     check_err(
         "rule test { condition: 9223372036854775808 > 0 }",
@@ -704,8 +700,7 @@ fn test_strings() {
         true,
     );
 
-    // TODO: test with libyara when yara-rust is update to 4.2.0
-    check_boreal(
+    check(
         "rule test {
          strings:
              $a = \"foo\"
@@ -718,8 +713,21 @@ fn test_strings() {
         true,
     );
 
-    // TODO: test with libyara when yara-rust is update to 4.2.0
-    check_boreal(
+    // https://github.com/VirusTotal/yara/issues/1660
+    check(
+        "rule test {
+         strings:
+             $a = \"foo\"
+             $b = \"bar\"
+             $c = \"baz\"
+         condition:
+             all of them in (0..1)
+       }",
+        TEXT_1024_BYTES.as_bytes(),
+        false,
+    );
+
+    check(
         "rule test {
          strings:
              $a = \"foo\"
@@ -3337,8 +3345,7 @@ fn test_modules() {
     );
 
     check(
-        "import \"tests\"
-      rule test {
+        "import \"tests\" rule test {
         condition:
           for any k,v in tests.empty_struct_array[0].struct_dict: (
             v.unused == \"foo\"
