@@ -6,9 +6,11 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [features]
-default = ["hash"]
+default = ["hash", "object"]
 # Enables the "hash" module.
 hash = ["md-5", "sha1", "sha2", "hex", "crc32fast"]
+# Enables the "pe", "elf" and "macho" modules.
+object = ["dep:object"]
 
 [dependencies]
 boreal-parser = { path = "../boreal-parser", version = "0.0.1" }
@@ -26,12 +28,15 @@ grep-matcher = "0.1"
 grep-regex = "0.1"
 aho-corasick = "0.7"
 
-# "hash" module
+# "hash" feature
 crc32fast = { version = "1.3", optional = true }
 hex = { version = "0.4", optional = true }
 md-5 = { version = "0.10", optional = true }
 sha1 = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
+
+# "object" feature
+object = { version = "0.28", optional = true }
 
 [dev-dependencies]
 const_format = "0.2"

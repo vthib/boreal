@@ -52,6 +52,8 @@ impl Compiler {
         this.add_module(crate::module::Time);
         #[cfg(feature = "hash")]
         this.add_module(crate::module::Hash);
+        #[cfg(feature = "object")]
+        this.add_module(crate::module::Elf);
         this
     }
 

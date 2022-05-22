@@ -9,6 +9,11 @@ mod hash;
 #[cfg(feature = "hash")]
 pub use hash::Hash;
 
+#[cfg(feature = "object")]
+mod elf;
+#[cfg(feature = "object")]
+pub use elf::Elf;
+
 /// A module allows providing custom values and functions in rules.
 ///
 /// The trait in itself only requires static values and methods, which are used
@@ -338,3 +343,40 @@ try_from_value!(f64, Float);
 try_from_value!(String, String);
 try_from_value!(Regex, Regex);
 try_from_value!(bool, Boolean);
+
+macro_rules! from_prim {
+    ($ty:ty, $name:ident) => {
+        impl From<$ty> for Value {
+            fn from(v: $ty) -> Value {
+                Value::$name(v.into())
+            }
+        }
+    };
+}
+
+from_prim!(i64, Integer);
+from_prim!(u32, Integer);
+from_prim!(i32, Integer);
+from_prim!(u16, Integer);
+from_prim!(i16, Integer);
+from_prim!(u8, Integer);
+from_prim!(i8, Integer);
+from_prim!(f64, Float);
+from_prim!(String, String);
+from_prim!(Regex, Regex);
+from_prim!(bool, Boolean);
+
+macro_rules! try_from_value_integer {
+    ($ty:ty) => {
+        impl TryFrom<$ty> for Value {
+            type Error = <i64 as TryFrom<$ty>>::Error;
+
+            fn try_from(v: $ty) -> Result<Value, Self::Error> {
+                v.try_into().map(Value::Integer)
+            }
+        }
+    };
+}
+
+try_from_value_integer!(u64);
+try_from_value_integer!(usize);
