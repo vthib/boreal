@@ -34,6 +34,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         name,
         value,
         modifiers,
+        span,
     } = decl;
     let mut is_fullword = modifiers.flags.contains(VariableFlags::FULLWORD);
     let mut is_wide = modifiers.flags.contains(VariableFlags::WIDE);
@@ -47,6 +48,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             let matcher = build_regex_matcher(regex, &modifiers);
             matcher.map_err(|error| CompilationError::VariableCompilation {
                 variable_name: name.clone(),
+                span,
                 error,
             })?
         }
@@ -67,6 +69,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             VariableMatcher::Regex(matcher.map_err(|error| {
                 CompilationError::VariableCompilation {
                     variable_name: name.clone(),
+                    span,
                     error: VariableCompilationError::GrepRegex(error),
                 }
             })?)

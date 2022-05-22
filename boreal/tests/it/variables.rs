@@ -45,7 +45,7 @@ fn test_variable_err() {
     condition:
         true
 }",
-        "error: variable $a is unused",
+        "mem:3:9: error: variable $a is unused",
     );
 }
 
@@ -220,7 +220,7 @@ rule a {
     let compiler = Compiler::new_without_yara();
     compiler.check_add_rules_err(
         r#"rule a { strings: $a = /\bab/ wide condition: $a }"#,
-        "error: variable $a cannot be compiled: wide modifier cannot be applied \
+        "mem:1:19: error: variable $a cannot be compiled: wide modifier cannot be applied \
         on regexes containing boundaries",
     );
 }

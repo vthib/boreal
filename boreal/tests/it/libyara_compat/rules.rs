@@ -460,7 +460,7 @@ fn test_string_operators() {
 fn test_syntax() {
     check_err(
         "rule test { strings: $a = \"a\" $a = \"a\" condition: all of them }",
-        "error: variable $a is declared more than once",
+        "mem:1:31: error: variable $a is declared more than once",
     );
 
     check_err(
@@ -2537,7 +2537,7 @@ fn test_re() {
 
     check_err(
         &build_regex_rule(")"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
     check_regex_match("abc", b"abc", b"abc");
     check(&build_regex_rule("abc"), b"xbc", false);
@@ -2683,19 +2683,19 @@ fn test_re() {
 
     check_err(
         &build_regex_rule("[b-a]"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
     check_err(
         &build_regex_rule("(abc"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
     check_err(
         &build_regex_rule("abc)"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
     check_err(
         &build_regex_rule("a[]b"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
     check_regex_match("a[\\-b]", b"a-", b"a-");
     check_regex_match("a[\\-b]", b"ab", b"ab");
@@ -2711,7 +2711,7 @@ fn test_re() {
     check_regex_match("[^ab]*", b"cde", b"cde");
     check_err(
         &build_regex_rule(")("),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
     check_regex_match("a\\sb", b"a b", b"a b");
     check_regex_match("a\\sb", b"a\tb", b"a\tb");
@@ -2824,11 +2824,11 @@ fn test_re() {
     // Test case for issue #503, \x without two following hex-digits
     check_err(
         &build_regex_rule("\\x0"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
     check_err(
         &build_regex_rule("\\x"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
 
     // XXX: not allowed by libyara, ok for us, this is fine
@@ -2837,7 +2837,7 @@ fn test_re() {
 
     check_err(
         &build_regex_rule("\\xxy"),
-        "error: variable $a cannot be compiled: regex parse error",
+        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
     );
 
     // Test case for issue #682
@@ -2877,7 +2877,7 @@ fn test_re() {
     // Test for integer overflow in repeat interval
     check_err(
         &build_regex_rule("a{2977952116}"),
-        "error: variable $a cannot be compiled: Compiled regex exceeds size limit",
+        "mem:1:22: error: variable $a cannot be compiled: Compiled regex exceeds size limit",
     );
 
     check_err(

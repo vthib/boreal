@@ -64,6 +64,9 @@ pub(super) struct RuleCompilerVariable {
     /// Name of the variable.
     pub name: String,
 
+    /// Span of the variable declaration.
+    pub span: Range<usize>,
+
     /// Has the variable been used.
     ///
     /// If by the end of the compilation of the rule, the variable is unused, a compilation
@@ -81,12 +84,16 @@ impl<'a> RuleCompiler<'a> {
         for var in &rule.variables {
             // Check duplicated names, but only for non anonymous strings
             if !var.name.is_empty() && !names_set.insert(var.name.clone()) {
-                return Err(CompilationError::DuplicatedVariable(var.name.clone()));
+                return Err(CompilationError::DuplicatedVariable {
+                    name: var.name.clone(),
+                    span: var.span.clone(),
+                });
             }
 
             variables.push(RuleCompilerVariable {
                 name: var.name.clone(),
                 used: false,
+                span: var.span.clone(),
             });
         }
 
@@ -186,7 +193,10 @@ pub(super) fn compile_rule(
     // Check whether some variables were not used.
     for var in vars {
         if !var.used {
-            return Err(CompilationError::UnusedVariable(var.name));
+            return Err(CompilationError::UnusedVariable {
+                name: var.name,
+                span: var.span,
+            });
         }
     }
 

@@ -80,7 +80,13 @@ pub enum CompilationError {
     ///
     /// The value is the name of the variable that appears more than once
     /// in the declarations.
-    DuplicatedVariable(String),
+    DuplicatedVariable {
+        /// Variable name appearing multiple times
+        name: String,
+
+        /// Span of the second variable declaration with this name.
+        span: Range<usize>,
+    },
 
     /// Invalid binding of an identifier in a for expression.
     ///
@@ -198,14 +204,22 @@ pub enum CompilationError {
     },
 
     /// A variable declared in a rule was not used.
-    // TODO: add span
-    UnusedVariable(String),
+    UnusedVariable {
+        /// Name of the variable
+        name: String,
+
+        /// Span covering the declaration of the variable
+        span: Range<usize>,
+    },
 
     /// Error while compiling a variable, indicating an issue with
     /// its expression.
     VariableCompilation {
         /// Name of the variable
         variable_name: String,
+
+        /// Span covering the declaration of the variable
+        span: Range<usize>,
 
         /// Type of error
         error: VariableCompilationError,
@@ -252,8 +266,9 @@ impl CompilationError {
                 Diagnostic::error().with_message(format!("tag `{}` specified multiple times", tag))
             }
 
-            Self::DuplicatedVariable(name) => Diagnostic::error()
-                .with_message(format!("variable ${} is declared more than once", name)),
+            Self::DuplicatedVariable { name, span } => Diagnostic::error()
+                .with_message(format!("variable ${} is declared more than once", name))
+                .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::DuplicatedIdentifierBinding { identifier, span } => Diagnostic::error()
                 .with_message(format!("duplicated loop identifier {}", identifier))
@@ -351,18 +366,21 @@ impl CompilationError {
                 .with_message(format!("unknown variable ${}", variable_name))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
-            Self::UnusedVariable(name) => {
-                Diagnostic::error().with_message(format!("variable ${} is unused", name))
-            }
+            Self::UnusedVariable { name, span } => Diagnostic::error()
+                .with_message(format!("variable ${} is unused", name))
+                .with_labels(vec![Label::primary((), span.clone())]),
 
             // TODO: need span for variable
             Self::VariableCompilation {
                 variable_name,
+                span,
                 error,
-            } => Diagnostic::error().with_message(format!(
-                "variable ${} cannot be compiled: {}",
-                variable_name, error
-            )),
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "variable ${} cannot be compiled: {}",
+                    variable_name, error
+                ))
+                .with_labels(vec![Label::primary((), span.clone())]),
         }
     }
 }

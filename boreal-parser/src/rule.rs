@@ -1,4 +1,6 @@
 //! Parse yara rules.
+use std::ops::Range;
+
 use bitflags::bitflags;
 use nom::{
     branch::alt,
@@ -125,6 +127,8 @@ pub struct VariableDeclaration {
     pub value: VariableDeclarationValue,
     /// Modifiers for the string.
     pub modifiers: VariableModifiers,
+    /// Span for the whole declaration
+    pub span: Range<usize>,
 }
 
 /// Parse a rule
@@ -232,31 +236,35 @@ fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
 ///
 /// Related to the `string_declaration` pattern in `grammar.y` in libyara.
 fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
-    map(
-        separated_pair(
-            string::string_identifier,
-            cut(rtrim(char('='))),
-            cut(alt((
-                pair(
-                    map(string::quoted, VariableDeclarationValue::String),
-                    string_modifiers,
-                ),
-                pair(
-                    map(string::regex, VariableDeclarationValue::Regex),
-                    regex_modifiers,
-                ),
-                pair(
-                    map(hex_string::hex_string, VariableDeclarationValue::HexString),
-                    hex_string_modifiers,
-                ),
-            ))),
-        ),
-        |(name, (value, modifiers))| VariableDeclaration {
+    let start = input;
+
+    let (input, (name, (value, modifiers))) = separated_pair(
+        string::string_identifier,
+        cut(rtrim(char('='))),
+        cut(alt((
+            pair(
+                map(string::quoted, VariableDeclarationValue::String),
+                string_modifiers,
+            ),
+            pair(
+                map(string::regex, VariableDeclarationValue::Regex),
+                regex_modifiers,
+            ),
+            pair(
+                map(hex_string::hex_string, VariableDeclarationValue::HexString),
+                hex_string_modifiers,
+            ),
+        ))),
+    )(input)?;
+    Ok((
+        input,
+        VariableDeclaration {
             name,
             value,
             modifiers,
+            span: input.get_span_from(start),
         },
-    )(input)
+    ))
 }
 
 /// A single parsed modifier
@@ -811,6 +819,7 @@ mod tests {
                         xor_range: (0, 255),
                         ..VariableModifiers::default()
                     },
+                    span: 10..30,
                 },
                 VariableDeclaration {
                     name: "b".to_owned(),
@@ -824,6 +833,7 @@ mod tests {
                         flags: VariableFlags::empty(),
                         ..VariableModifiers::default()
                     },
+                    span: 34..43,
                 },
                 VariableDeclaration {
                     name: "".to_owned(),
@@ -835,6 +845,7 @@ mod tests {
                         flags: VariableFlags::PRIVATE,
                         ..VariableModifiers::default()
                     },
+                    span: 45..61,
                 },
             ],
         );
@@ -880,7 +891,8 @@ mod tests {
                         modifiers: VariableModifiers {
                             flags: VariableFlags::empty(),
                             ..VariableModifiers::default()
-                        }
+                        },
+                        span: 60..68,
                     }
                 ],
                 condition: Expression {
