@@ -56,7 +56,7 @@ fn test_for_identifiers_modules_errors() {
     );
     check_err(
         &build_rule("for any i in tests: (true)"),
-        "mem:12:22: error: identifier is not iterable",
+        "mem:12:22: error: wrong use of identifier",
     );
 
     // Wrong number of identifiers

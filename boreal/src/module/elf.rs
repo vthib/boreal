@@ -21,8 +21,8 @@ impl Module for Elf {
         "elf".to_owned()
     }
 
-    fn get_value(&self) -> Value {
-        Value::object([
+    fn get_value(&self) -> HashMap<&'static str, Value> {
+        [
             // ET contants
             ("ET_NONE", Value::Integer(elf::ET_NONE.into())),
             ("ET_REL", Value::Integer(elf::ET_REL.into())),
@@ -246,7 +246,8 @@ impl Module for Elf {
                     ]),
                 ),
             ),
-        ])
+        ]
+        .into()
     }
 }
 

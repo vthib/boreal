@@ -43,6 +43,7 @@ pub trait Module {
     /// For example, lets take this module:
     ///
     /// ```
+    /// # use std::collections::HashMap;
     /// use boreal::module::{Module, Value, Type, ScanContext};
     ///
     /// struct Foo;
@@ -52,11 +53,11 @@ pub trait Module {
     ///         "foo".to_owned()
     ///     }
     ///
-    ///     fn get_value(&self) -> Value {
-    ///         Value::object([
+    ///     fn get_value(&self) -> HashMap<&'static str, Value> {
+    ///         [
     ///             ("int", Value::Integer(1)),
     ///             ("array", Value::array(bar_array, Type::String)),
-    ///         ])
+    ///         ].into()
     ///     }
     /// }
     ///
@@ -74,7 +75,7 @@ pub trait Module {
     ///   on every scan.
     /// * `foo.array[2] + 1` would fail to compile, as the array is indicated as returning a
     ///   string, which cannot be added to an integer.
-    fn get_value(&self) -> Value;
+    fn get_value(&self) -> HashMap<&'static str, Value>;
 }
 
 /// Context provided to module functions during scanning.

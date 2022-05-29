@@ -66,6 +66,11 @@ rule foo { condition: true }"#,
 
 #[test]
 fn test_value_wrong_op() {
+    // Wrong operations on the initial value
+    check_tests_err("tests > 0", "mem:3:16: error: wrong use of identifier");
+    check_tests_err("tests[2] > 0", "mem:3:16: error: invalid identifier type");
+    check_tests_err("tests() > 0", "mem:3:16: error: invalid identifier type");
+
     // Field not existing in an object
     check_tests_err(
         "tests.do_not_exist",

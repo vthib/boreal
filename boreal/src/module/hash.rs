@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::{Module, ScanContext, Type, Value};
 use md5::{Digest, Md5};
 use sha1::Sha1;
@@ -14,8 +16,8 @@ impl Module for Hash {
         "hash".to_owned()
     }
 
-    fn get_value(&self) -> Value {
-        Value::object([
+    fn get_value(&self) -> HashMap<&'static str, Value> {
+        [
             (
                 "md5",
                 Value::function(
@@ -56,7 +58,8 @@ impl Module for Hash {
                     Type::Integer,
                 ),
             ),
-        ])
+        ]
+        .into()
     }
 }
 

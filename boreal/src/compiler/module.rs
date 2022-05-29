@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range, sync::Arc};
+use std::{collections::HashMap, ops::Range};
 
 use boreal_parser as parser;
 
@@ -8,7 +8,7 @@ use crate::module::{self, ScanContext, Type as ValueType, Value};
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub value: Arc<Value>,
+    pub value: HashMap<&'static str, Value>,
 }
 
 /// Operations on identifiers.
@@ -108,7 +108,7 @@ pub enum IteratorType {
 pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
     Module {
         name: module.get_name(),
-        value: Arc::new(module.get_value()),
+        value: module.get_value(),
     }
 }
 
@@ -122,7 +122,7 @@ pub(super) fn compile_module_identifier(
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Expression, Type), CompilationError> {
-    let module_use = compile_identifier(compiler, module, identifier)?;
+    let module_use = compile_identifier(compiler, module, identifier, identifier_span)?;
 
     module_use
         .into_expression()
@@ -140,7 +140,7 @@ pub(super) fn compile_module_identifier_as_iterator(
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<(Value, IteratorType), CompilationError> {
-    let module_use = compile_identifier(compiler, module, identifier)?;
+    let module_use = compile_identifier(compiler, module, identifier, identifier_span)?;
 
     module_use
         .into_iterator_value()
@@ -194,19 +194,59 @@ fn compile_identifier<'a, 'b>(
     compiler: &'b mut RuleCompiler<'a>,
     module: &'b Module,
     identifier: parser::Identifier,
+    identifier_span: &Range<usize>,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
     let module_value = &module.value;
+    let nb_ops = identifier.operations.len();
+
+    // Extract first operation, it must be a subfielding.
+    let mut ops = identifier.operations.into_iter();
+    let first_op = match ops.next() {
+        Some(v) => v,
+        None => {
+            return Err(CompilationError::InvalidIdentifierUse {
+                span: identifier_span.clone(),
+            })
+        }
+    };
+    let subfield = match first_op.op {
+        parser::IdentifierOperationType::Subfield(subfield) => subfield,
+        parser::IdentifierOperationType::Subscript(_) => {
+            return Err(CompilationError::InvalidIdentifierType {
+                actual_type: "object".to_string(),
+                expected_type: "array or dictionary".to_string(),
+                span: identifier.name_span,
+            });
+        }
+        parser::IdentifierOperationType::FunctionCall(_) => {
+            return Err(CompilationError::InvalidIdentifierType {
+                actual_type: "object".to_string(),
+                expected_type: "function".to_string(),
+                span: identifier.name_span,
+            });
+        }
+    };
+
+    let module_value = match module_value.get(&*subfield) {
+        Some(v) => v,
+        None => {
+            return Err(CompilationError::UnknownIdentifierField {
+                field_name: subfield,
+                span: first_op.span,
+            })
+        }
+    };
 
     let mut module_use = ModuleUse {
         compiler,
         last_immediate_value: Some(module_value),
         current_value: ValueOrType::Value(module_value),
-        operations: Vec::with_capacity(identifier.operations.len()),
-        current_span: identifier.name_span.clone(),
+        operations: Vec::with_capacity(nb_ops),
+        current_span: identifier.name_span,
         identifier_stack_index: 0,
     };
 
-    for op in identifier.operations {
+    for op in ops {
         module_use.add_operation(op)?;
     }
     Ok(module_use)

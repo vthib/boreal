@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use super::{Module, ScanContext, Type, Value};
 
@@ -11,8 +14,8 @@ impl Module for Time {
         "time".to_owned()
     }
 
-    fn get_value(&self) -> Value {
-        Value::object([("now", Value::function(Self::now, vec![], Type::Integer))])
+    fn get_value(&self) -> HashMap<&'static str, Value> {
+        [("now", Value::function(Self::now, vec![], Type::Integer))].into()
     }
 }
 

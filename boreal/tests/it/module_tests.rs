@@ -12,8 +12,8 @@ impl Module for Tests {
         "tests".to_owned()
     }
 
-    fn get_value(&self) -> Value {
-        Value::object([
+    fn get_value(&self) -> HashMap<&'static str, Value> {
+        [
             // Following is same as libyara, used in compliance tests
             (
                 "constants",
@@ -201,7 +201,8 @@ impl Module for Tests {
                     Type::Boolean,
                 ),
             ),
-        ])
+        ]
+        .into()
     }
 }
 
