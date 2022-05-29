@@ -12,7 +12,167 @@ impl Module for Tests {
         "tests".to_owned()
     }
 
-    fn get_static_values(&self) -> HashMap<&'static str, Value> {
+    fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
+        [
+            // Following is same as libyara, used in compliance tests
+            (
+                "constants",
+                Type::object([
+                    ("one", Type::Integer),
+                    ("two", Type::Integer),
+                    ("foo", Type::String),
+                    ("empty", Type::String),
+                    // Not libyara
+                    ("one_half", Type::Float),
+                    ("regex", Type::Regex),
+                    ("str", Type::String),
+                    ("true", Type::Boolean),
+                ]),
+            ),
+            (
+                "undefined",
+                Type::function(
+                    vec![],
+                    Type::object([("i", Type::Integer), ("f", Type::Float)]),
+                ),
+            ),
+            // TODO: missing module_data
+            ("integer_array", Type::array(Type::Integer)),
+            ("string_array", Type::array(Type::String)),
+            ("integer_dict", Type::dict(Type::Integer)),
+            ("string_dict", Type::dict(Type::String)),
+            (
+                "struct_array",
+                Type::array(Type::object([("i", Type::Integer), ("s", Type::String)])),
+            ),
+            (
+                "struct_dict",
+                Type::dict(Type::object([("i", Type::Integer), ("s", Type::String)])),
+            ),
+            (
+                "empty_struct_dict",
+                Type::dict(Type::object([("i", Type::Integer)])),
+            ),
+            (
+                "empty_struct_array",
+                Type::array(Type::object([
+                    (
+                        "struct_array",
+                        Type::array(Type::object([("unused", Type::String)])),
+                    ),
+                    (
+                        "struct_dict",
+                        Type::dict(Type::object([("unused", Type::String)])),
+                    ),
+                ])),
+            ),
+            (
+                "match",
+                Type::function(vec![vec![Type::Regex, Type::String]], Type::Integer),
+            ),
+            (
+                "isum",
+                Type::function(
+                    vec![
+                        vec![Type::Integer, Type::Integer],
+                        vec![Type::Integer, Type::Integer, Type::Integer],
+                    ],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "fsum",
+                Type::function(
+                    vec![
+                        vec![Type::Float, Type::Float],
+                        vec![Type::Float, Type::Float, Type::Float],
+                    ],
+                    Type::Float,
+                ),
+            ),
+            (
+                "length",
+                Type::function(vec![vec![Type::String]], Type::Integer),
+            ),
+            ("empty", Type::function(vec![], Type::String)),
+            (
+                "foobar",
+                Type::function(vec![vec![Type::Integer]], Type::String),
+            ),
+            // The rest is not in libyara
+            (
+                "lazy",
+                Type::function(
+                    vec![],
+                    Type::object([
+                        ("one", Type::Integer),
+                        ("one_half", Type::Float),
+                        ("regex", Type::Regex),
+                        ("str", Type::String),
+                        ("true", Type::Boolean),
+                        (
+                            "dict",
+                            Type::object([
+                                ("i", Type::Integer),
+                                ("s", Type::String),
+                                // Declared here, but not exposed on evaluation
+                                ("oops", Type::Boolean),
+                            ]),
+                        ),
+                        ("str_array", Type::array(Type::String)),
+                        (
+                            "isum",
+                            Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
+                        ),
+                        ("string_dict", Type::dict(Type::String)),
+                        (
+                            "isum",
+                            Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
+                        ),
+                        // Declared as a bool, but exposes an array
+                        ("fake_bool_to_array", Type::Boolean),
+                        // Declared as a bool, but exposes a dict
+                        ("fake_bool_to_dict", Type::Boolean),
+                        // Declared as a bool, but exposes a function
+                        ("fake_bool_to_fun", Type::Boolean),
+                        // Declared as an integer, but exposes a regex
+                        ("fake_int", Type::Integer),
+                        // Declare as a dict, but exposes a bool
+                        ("fake_dict_to_bool", Type::object([("i", Type::Integer)])),
+                        // Declare as an array, but exposes a bool
+                        ("fake_array_to_bool", Type::array(Type::String)),
+                        // Declare as a function, but exposes a bool
+                        ("fake_fun_to_bool", Type::function(vec![], Type::Boolean)),
+                        // Lazy to lazy to int
+                        (
+                            "lazy",
+                            Type::function(
+                                vec![],
+                                Type::object([("lazy_int", Type::function(vec![], Type::Integer))]),
+                            ),
+                        ),
+                    ]),
+                ),
+            ),
+            ("undefined_str", Type::function(vec![], Type::String)),
+            ("undefined_int", Type::function(vec![], Type::Integer)),
+            (
+                "log",
+                Type::function(
+                    vec![
+                        vec![Type::Integer],
+                        vec![Type::Boolean, Type::Regex, Type::String],
+                        vec![Type::Boolean, Type::Regex],
+                        vec![Type::Integer, Type::Boolean],
+                    ],
+                    Type::Boolean,
+                ),
+            ),
+        ]
+        .into()
+    }
+
+    fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
         [
             // Following is same as libyara, used in compliance tests
             (

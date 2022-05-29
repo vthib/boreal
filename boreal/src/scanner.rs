@@ -1,17 +1,22 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
+use std::collections::HashMap;
+
 use crate::{compiler::Rule, evaluator};
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
 #[derive(Debug)]
 pub struct Scanner {
     rules: Vec<Rule>,
+
+    // List of modules used during scanning.
+    modules: HashMap<String, ScannerModule>,
 }
 
 impl Scanner {
     #[must_use]
-    pub(crate) fn new(rules: Vec<Rule>) -> Self {
-        Self { rules }
+    pub(crate) fn new(rules: Vec<Rule>, modules: HashMap<String, ScannerModule>) -> Self {
+        Self { rules, modules }
     }
 
     /// Scan a byte slice.
@@ -25,7 +30,9 @@ impl Scanner {
         let mut previous_results = Vec::with_capacity(self.rules.len());
         for rule in &self.rules {
             let res = {
-                let (res, var_evals) = evaluator::evaluate_rule(rule, mem, &previous_results);
+                // TODO: only get dynamic values for modules once for the mem, not once per rule.
+                let (res, var_evals) =
+                    evaluator::evaluate_rule(rule, &self.modules, mem, &previous_results);
                 if res {
                     results.push(MatchedRule {
                         namespace: rule.namespace.as_deref(),
@@ -51,6 +58,32 @@ impl Scanner {
             previous_results.push(res);
         }
         results
+    }
+}
+
+/// Module to use during scan.
+///
+/// Cheap to clone, as it is cloned on every scan.
+pub struct ScannerModule {
+    // TODO: keep only the get_dynamic_values function?
+    module: Box<dyn crate::module::Module>,
+}
+
+impl std::fmt::Debug for ScannerModule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScannerModule")
+            .field("module", &self.module.get_name())
+            .finish()
+    }
+}
+
+impl ScannerModule {
+    pub fn new(module: Box<dyn crate::module::Module>) -> Self {
+        Self { module }
+    }
+
+    pub fn on_scan(&self, ctx: &crate::module::ScanContext) -> crate::module::Value {
+        crate::module::Value::Object(self.module.get_dynamic_values(ctx))
     }
 }
 

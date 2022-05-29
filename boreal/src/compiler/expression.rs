@@ -9,7 +9,7 @@ use boreal_parser as parser;
 
 use super::{module, ModuleExpression};
 use super::{CompilationError, RuleCompiler, ValueOperation};
-use crate::module::{Type as ModuleType, Value as ModuleValue};
+use crate::module::Type as ModuleType;
 
 /// Type of a parsed expression
 ///
@@ -960,7 +960,7 @@ fn compile_variable_set(
             });
         }
 
-        for var in compiler.variables.iter_mut() {
+        for var in &mut compiler.variables {
             var.used = true;
         }
     }
@@ -1034,7 +1034,7 @@ fn compile_rule_set(
 /// Iterator for a 'for' expression over an identifier.
 #[derive(Debug)]
 pub enum ForIterator {
-    ModuleIterator(ModuleValue),
+    ModuleIterator(ModuleExpression),
     Range {
         from: Box<Expression>,
         to: Box<Expression>,
@@ -1060,7 +1060,7 @@ fn compile_for_iterator(
 
     match iterator {
         parser::ForIterator::Identifier(identifier) => {
-            let (value, iterator_type) =
+            let (expr, iterator_type) =
                 compile_identifier_as_iterator(compiler, identifier, iterator_span)?;
 
             match iterator_type {
@@ -1091,7 +1091,7 @@ fn compile_for_iterator(
                 },
             };
 
-            Ok(ForIterator::ModuleIterator(value))
+            Ok(ForIterator::ModuleIterator(expr))
         }
         parser::ForIterator::Range { from, to } => {
             let from = compile_expression(compiler, *from)?;
@@ -1200,7 +1200,7 @@ fn compile_identifier_as_iterator(
     compiler: &mut RuleCompiler<'_>,
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
-) -> Result<(ModuleValue, module::IteratorType), CompilationError> {
+) -> Result<(ModuleExpression, module::IteratorType), CompilationError> {
     // First, try to resolve to a bound identifier.
     if compiler.bounded_identifiers.get(&identifier.name).is_some() {
         todo!()

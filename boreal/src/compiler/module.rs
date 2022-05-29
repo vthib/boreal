@@ -5,10 +5,15 @@ use boreal_parser as parser;
 use super::{compile_expression, CompilationError, Expression, RuleCompiler, Type};
 use crate::module::{self, ScanContext, Type as ValueType, Value};
 
+/// Module used during compilation
 #[derive(Debug)]
 pub struct Module {
+    /// Name of the module
     pub name: String,
-    pub static_value: HashMap<&'static str, Value>,
+    /// Static values of the module, usable directly during compilation
+    static_values: HashMap<&'static str, Value>,
+    /// Dynamic types for values computed during scanning.
+    dynamic_types: ValueType,
 }
 
 /// Operations on identifiers.
@@ -24,6 +29,16 @@ pub enum ValueOperation {
 
 /// Different type of expressions related to the use of a module.
 pub enum ModuleExpression {
+    /// Operations applied on a dynamic value.
+    DynamicValue {
+        /// Name of the module to use
+        // TODO: optimize this
+        module_name: String,
+
+        /// List of operations to apply on the value returned by the function.
+        operations: Vec<ValueOperation>,
+    },
+
     /// A value coming from an array exposed by a module.
     Array {
         /// The function to call to get the array
@@ -59,6 +74,14 @@ pub enum ModuleExpression {
 impl std::fmt::Debug for ModuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::DynamicValue {
+                module_name,
+                operations,
+            } => f
+                .debug_struct("DynamicValue")
+                .field("module_name", module_name)
+                .field("operations", operations)
+                .finish(),
             Self::Array {
                 fun,
                 subscript,
@@ -103,12 +126,11 @@ pub enum IteratorType {
     Dictionary(ValueType),
 }
 
-// XXX: I want to pass by value, as in the future, we might want to keep the owned module around.
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
+pub(crate) fn compile_module<M: module::Module>(module: &M) -> Module {
     Module {
         name: module.get_name(),
-        static_value: module.get_static_values(),
+        static_values: module.get_static_values(),
+        dynamic_types: ValueType::Object(module.get_dynamic_types()),
     }
 }
 
@@ -139,11 +161,11 @@ pub(super) fn compile_module_identifier_as_iterator(
     module: &Module,
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
-) -> Result<(Value, IteratorType), CompilationError> {
+) -> Result<(ModuleExpression, IteratorType), CompilationError> {
     let module_use = compile_identifier(compiler, module, identifier, identifier_span)?;
 
     module_use
-        .into_iterator_value()
+        .into_iterator_expression()
         .ok_or_else(|| CompilationError::NonIterableIdentifier {
             span: identifier_span.clone(),
         })
@@ -171,12 +193,13 @@ pub(super) fn compile_module_identifier_used_in_iteration(
     identifier_stack_index: usize,
 ) -> Result<(Expression, Type), CompilationError> {
     let mut module_use = ModuleUse {
+        module_name: None,
         compiler,
         last_immediate_value: None,
         current_value: ValueOrType::Type(starting_type),
         operations: Vec::with_capacity(identifier.operations.len()),
         current_span: identifier.name_span.clone(),
-        identifier_stack_index,
+        identifier_stack_index: Some(identifier_stack_index),
     };
 
     for op in identifier.operations {
@@ -196,7 +219,6 @@ fn compile_identifier<'a, 'b>(
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
-    let module_value = &module.static_value;
     let nb_ops = identifier.operations.len();
 
     // Extract first operation, it must be a subfielding.
@@ -209,8 +231,8 @@ fn compile_identifier<'a, 'b>(
             })
         }
     };
-    let subfield = match first_op.op {
-        parser::IdentifierOperationType::Subfield(subfield) => subfield,
+    let subfield = match &first_op.op {
+        parser::IdentifierOperationType::Subfield(subfield) => &*subfield,
         parser::IdentifierOperationType::Subscript(_) => {
             return Err(CompilationError::InvalidIdentifierType {
                 actual_type: "object".to_string(),
@@ -227,23 +249,32 @@ fn compile_identifier<'a, 'b>(
         }
     };
 
-    let module_value = match module_value.get(&*subfield) {
-        Some(v) => v,
+    // First try to get from the static values
+    let mut module_use = match module.static_values.get(&**subfield) {
+        Some(value) => ModuleUse {
+            module_name: Some(&module.name),
+            compiler,
+            last_immediate_value: Some(value),
+            current_value: ValueOrType::Value(value),
+            operations: Vec::with_capacity(nb_ops),
+            current_span: identifier.name_span,
+            identifier_stack_index: None,
+        },
         None => {
-            return Err(CompilationError::UnknownIdentifierField {
-                field_name: subfield,
-                span: first_op.span,
-            })
+            // otherwise, use dynamic types, and apply the first operation (so that it will be
+            // applied on scan).
+            let mut module_use = ModuleUse {
+                module_name: Some(&module.name),
+                compiler,
+                last_immediate_value: None,
+                current_value: ValueOrType::Type(&module.dynamic_types),
+                operations: Vec::with_capacity(nb_ops),
+                current_span: identifier.name_span,
+                identifier_stack_index: None,
+            };
+            module_use.add_operation(first_op)?;
+            module_use
         }
-    };
-
-    let mut module_use = ModuleUse {
-        compiler,
-        last_immediate_value: Some(module_value),
-        current_value: ValueOrType::Value(module_value),
-        operations: Vec::with_capacity(nb_ops),
-        current_span: identifier.name_span,
-        identifier_stack_index: 0,
     };
 
     for op in ops {
@@ -269,9 +300,11 @@ struct ModuleUse<'a, 'b> {
     // Current span of the module + added operations.
     current_span: Range<usize>,
 
-    // stack index for the identifier being compiled. Only used when compiling the use of
+    // stack index for the identifier being compiled. Only set when compiling the use of
     // a identifier bounded from a for expression.
-    identifier_stack_index: usize,
+    identifier_stack_index: Option<usize>,
+    // TODO: this is WIP with the module rework
+    module_name: Option<&'b str>,
 }
 
 impl ModuleUse<'_, '_> {
@@ -415,27 +448,33 @@ impl ModuleUse<'_, '_> {
             // - second one is when the identifier is used: we need to apply the operations to
             //   the Value retrieved from the stack.
             // Here, we are compiling the second one.
-            None => Expression::BoundedModuleIdentifier {
-                index: self.identifier_stack_index,
-                operations: self.operations,
+            None => match self.identifier_stack_index {
+                Some(index) => Expression::BoundedModuleIdentifier {
+                    index,
+                    operations: self.operations,
+                },
+                None => Expression::Module(ModuleExpression::DynamicValue {
+                    module_name: self.module_name.unwrap().to_string(),
+                    operations: self.operations,
+                }),
             },
         };
 
         Some((expr, ty))
     }
 
-    fn into_iterator_value(mut self) -> Option<(Value, IteratorType)> {
+    fn into_iterator_expression(mut self) -> Option<(ModuleExpression, IteratorType)> {
         if self.current_value.coalesce_noarg_function() {
             self.operations.push(ValueOperation::FunctionCall(vec![]));
         }
 
         let ty = self.current_value.into_iterator_type()?;
-        let value = match self.last_immediate_value {
-            Some(a @ Value::Array { .. }) | Some(a @ Value::Dictionary { .. }) => a.clone(),
-            _ => return None,
+        let expr = ModuleExpression::DynamicValue {
+            module_name: self.module_name.unwrap().to_string(),
+            operations: self.operations,
         };
 
-        Some((value, ty))
+        Some((expr, ty))
     }
 }
 

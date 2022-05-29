@@ -61,7 +61,7 @@ pub trait Module {
     ///         [("array", Type::array(Type::String))].into()
     ///     }
     ///
-    ///     fn get_dynamic_values(&self) -> HashMap<&'static str, Value> {
+    ///     fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
     ///         [("array", Value::array(bar_array, Type::String))].into()
     ///     }
     /// }
@@ -87,7 +87,7 @@ pub trait Module {
     /// Values computed dynamically.
     ///
     /// This is called on every scan.
-    fn get_dynamic_values(&self) -> HashMap<&'static str, Value> {
+    fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
         HashMap::new()
     }
 }

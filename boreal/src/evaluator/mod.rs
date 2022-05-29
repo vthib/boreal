@@ -9,10 +9,13 @@
 //! - etc
 //!
 //! The use of an `Option` is useful to propagate this poison value easily.
+use std::collections::HashMap;
+
 use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
 use crate::module::{ScanContext, Value as ModuleValue};
+use crate::scanner::ScannerModule;
 
 mod module;
 mod read_integer;
@@ -61,6 +64,7 @@ impl Value {
 /// byte slice, false otherwise.
 pub(crate) fn evaluate_rule<'rule>(
     rule: &'rule Rule,
+    modules: &'rule HashMap<String, ScannerModule>,
     mem: &[u8],
     previous_rules_results: &[bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
@@ -70,6 +74,7 @@ pub(crate) fn evaluate_rule<'rule>(
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
+        modules,
         module_ctx: ScanContext { mem },
     };
     let res = evaluator
@@ -94,6 +99,12 @@ struct Evaluator<'a, 'b, 'c> {
 
     // Stack of bounded identifiers to their integer values.
     bounded_identifiers_stack: Vec<BoundedIdentifierValue>,
+
+    // List of modules available during the scan.
+    //
+    // Used to generate the on scan dynamic values when used.
+    // TODO: cache the on_scan value.
+    modules: &'a HashMap<String, ScannerModule>,
 
     // Scan context used for module function calls
     module_ctx: ScanContext<'b>,
@@ -615,7 +626,9 @@ impl Evaluator<'_, '_, '_> {
         let prev_stack_len = self.bounded_identifiers_stack.len();
 
         match iterator {
-            ForIterator::ModuleIterator(value) => {
+            ForIterator::ModuleIterator(expr) => {
+                let value = module::evaluate_expr(self, expr)?;
+
                 match value {
                     ModuleValue::Array { on_scan, .. } => {
                         let array = on_scan(&self.module_ctx)?;
@@ -687,6 +700,12 @@ impl Evaluator<'_, '_, '_> {
                 Some(Value::Boolean(selection.end()))
             }
         }
+    }
+
+    fn get_module_value(&self, module_name: &str) -> Option<crate::module::Value> {
+        self.modules
+            .get(module_name)
+            .map(|m| m.on_scan(&self.module_ctx))
     }
 }
 

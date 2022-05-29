@@ -13,6 +13,13 @@ pub(super) fn evaluate_expr(
     expr: &ModuleExpression,
 ) -> Option<ModuleValue> {
     match expr {
+        ModuleExpression::DynamicValue {
+            module_name,
+            operations,
+        } => {
+            let value = evaluator.get_module_value(module_name)?;
+            evaluate_ops(evaluator, value, operations)
+        }
         ModuleExpression::Array {
             fun,
             subscript,
