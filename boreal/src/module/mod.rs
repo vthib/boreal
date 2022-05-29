@@ -14,31 +14,31 @@ mod elf;
 #[cfg(feature = "object")]
 pub use elf::Elf;
 
-/// A module allows providing custom values and functions in rules.
+/// Module providing custom values and functions in rules.
 ///
-/// The trait in itself only requires static values and methods, which are used
-/// only the module itself is added to
+/// A module can provide values in two ways:
+///
+/// - As static values, whose shape do not depend on the memory being scanned. This includes
+///   constants such as `pe.MACHINE_AMD64`, but also functions such as `hash.md5`: the function
+///   pointer is static, and do not need to be recomputed on every scan.
+///
+/// - As dynamic values, whose shape depend on the memory being scanned. This often includes
+///   arrays such as `elf.sections`, or raw values such as `pe.machine`.
 pub trait Module {
     /// Name of the module, used in `import` clauses.
     fn get_name(&self) -> String;
 
-    /// Value exported by the module.
+    /// Static values exported by the module.
     ///
-    /// This is the value bound to the module name when the module is imported in a rule.
+    /// This function is called once, when the module is added to a scanner.
+    fn get_static_values(&self) -> HashMap<&'static str, Value> {
+        HashMap::new()
+    }
+
+    /// Type of the dynamic values exported by the module.
     ///
-    /// ```ignore
-    /// import "foo"
-    ///
-    /// rule a {
-    ///     condition:
-    ///         a >= 0 # a resolves to this value
-    /// ```
-    ///
-    /// This function is called once, when the module is added to a scanner. It must describe all
-    /// of the accessible data from this module.
-    ///
-    /// This is used to check the validity of rules using the module, but also to improve scan
-    /// times by resolving as much as possible the vule when compiling a rule.
+    /// Dynamic values are computed on every new scan. As these values are not known when compiling
+    /// the rules, its type must be returned here to check the validity of rules using the module.
     ///
     /// For example, lets take this module:
     ///
@@ -53,11 +53,16 @@ pub trait Module {
     ///         "foo".to_owned()
     ///     }
     ///
-    ///     fn get_value(&self) -> HashMap<&'static str, Value> {
-    ///         [
-    ///             ("int", Value::Integer(1)),
-    ///             ("array", Value::array(bar_array, Type::String)),
-    ///         ].into()
+    ///     fn get_static_values(&self) -> HashMap<&'static str, Value> {
+    ///         [("int", Value::Integer(1))].into()
+    ///     }
+    ///
+    ///     fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
+    ///         [("array", Type::array(Type::String))].into()
+    ///     }
+    ///
+    ///     fn get_dynamic_values(&self) -> HashMap<&'static str, Value> {
+    ///         [("array", Value::array(bar_array, Type::String))].into()
     ///     }
     /// }
     ///
@@ -69,13 +74,22 @@ pub trait Module {
     /// Then:
     ///
     /// * `foo.a > 0` would fail to compile, as the module does not expose the key `a`.
-    /// * `foo.int > 0` would compile directly to `true`, as we already know the value of this key
-    ///    when compiling the rule.
-    /// * `foo.array[2] matches /regex/` would compile properly, but delay evaluating the array
+    /// * `foo.int == !a` would compile directly to `1 == !a`, as we already know the value of this
+    ///    key when compiling the rule.
+    /// * `foo.array[2] matches /regex/` would compile properly, but delay evaluation of the array
     ///   on every scan.
     /// * `foo.array[2] + 1` would fail to compile, as the array is indicated as returning a
     ///   string, which cannot be added to an integer.
-    fn get_value(&self) -> HashMap<&'static str, Value>;
+    fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
+        HashMap::new()
+    }
+
+    /// Values computed dynamically.
+    ///
+    /// This is called on every scan.
+    fn get_dynamic_values(&self) -> HashMap<&'static str, Value> {
+        HashMap::new()
+    }
 }
 
 /// Context provided to module functions during scanning.

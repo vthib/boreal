@@ -14,7 +14,7 @@ impl Module for Time {
         "time".to_owned()
     }
 
-    fn get_value(&self) -> HashMap<&'static str, Value> {
+    fn get_static_values(&self) -> HashMap<&'static str, Value> {
         [("now", Value::function(Self::now, vec![], Type::Integer))].into()
     }
 }

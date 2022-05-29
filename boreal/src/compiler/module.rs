@@ -8,7 +8,7 @@ use crate::module::{self, ScanContext, Type as ValueType, Value};
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub value: HashMap<&'static str, Value>,
+    pub static_value: HashMap<&'static str, Value>,
 }
 
 /// Operations on identifiers.
@@ -108,7 +108,7 @@ pub enum IteratorType {
 pub(crate) fn compile_module<M: module::Module>(module: M) -> Module {
     Module {
         name: module.get_name(),
-        value: module.get_value(),
+        static_value: module.get_static_values(),
     }
 }
 
@@ -196,7 +196,7 @@ fn compile_identifier<'a, 'b>(
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
-    let module_value = &module.value;
+    let module_value = &module.static_value;
     let nb_ops = identifier.operations.len();
 
     // Extract first operation, it must be a subfielding.

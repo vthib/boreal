@@ -12,7 +12,7 @@ impl Module for Tests {
         "tests".to_owned()
     }
 
-    fn get_value(&self) -> HashMap<&'static str, Value> {
+    fn get_static_values(&self) -> HashMap<&'static str, Value> {
         [
             // Following is same as libyara, used in compliance tests
             (
