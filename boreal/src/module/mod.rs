@@ -31,7 +31,7 @@ pub trait Module {
     /// Static values exported by the module.
     ///
     /// This function is called once, when the module is added to a scanner.
-    fn get_static_values(&self) -> HashMap<&'static str, Value> {
+    fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
         HashMap::new()
     }
 
@@ -44,7 +44,7 @@ pub trait Module {
     ///
     /// ```
     /// # use std::collections::HashMap;
-    /// use boreal::module::{Module, Value, Type, ScanContext};
+    /// use boreal::module::{Module, StaticValue, Value, Type, ScanContext};
     ///
     /// struct Foo;
     ///
@@ -53,8 +53,8 @@ pub trait Module {
     ///         "foo".to_owned()
     ///     }
     ///
-    ///     fn get_static_values(&self) -> HashMap<&'static str, Value> {
-    ///         [("int", Value::Integer(1))].into()
+    ///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+    ///         [("int", StaticValue::Integer(1))].into()
     ///     }
     ///
     ///     fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
@@ -201,14 +201,65 @@ impl std::fmt::Debug for Value {
     }
 }
 
+/// A static value provided by a module at compilation time.
+///
+/// This is similar to [`Value`], but without some compounds values that require evaluation
+/// to resolve.
+#[derive(Clone)]
+pub enum StaticValue {
+    /// An integer
+    Integer(i64),
+    /// A floating-point value.
+    Float(f64),
+    /// A string.
+    String(String),
+    /// A regex.
+    Regex(Regex),
+    /// A boolean.
+    Boolean(bool),
+    /// An object, mapping to other values. See [`Value::Object`].
+    Object(HashMap<&'static str, StaticValue>),
+
+    /// A function, see [`Value::Function`].
+    Function {
+        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
+        arguments_types: Vec<Vec<Type>>,
+        return_type: Type,
+    },
+}
+
+// XXX: custom Debug impl needed because derive does not work with the fn fields.
+impl std::fmt::Debug for StaticValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer(arg0) => f.debug_tuple("Integer").field(arg0).finish(),
+            Self::Float(arg0) => f.debug_tuple("Float").field(arg0).finish(),
+            Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
+            Self::Regex(arg0) => f.debug_tuple("Regex").field(arg0).finish(),
+            Self::Boolean(arg0) => f.debug_tuple("Boolean").field(arg0).finish(),
+            Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
+            Self::Function {
+                fun,
+                arguments_types,
+                return_type,
+            } => f
+                .debug_struct("Function")
+                .field("fun", &(*fun as usize))
+                .field("arguments_types", arguments_types)
+                .field("return_type", return_type)
+                .finish(),
+        }
+    }
+}
+
 impl Value {
     pub fn string<T: Into<String>>(v: T) -> Self {
-        Value::String(v.into())
+        Self::String(v.into())
     }
 
     #[must_use]
     pub fn object<const N: usize>(v: [(&'static str, Value); N]) -> Self {
-        Value::Object(v.into())
+        Self::Object(v.into())
     }
 
     pub fn function(
@@ -216,7 +267,30 @@ impl Value {
         arguments_types: Vec<Vec<Type>>,
         return_type: Type,
     ) -> Self {
-        Value::Function {
+        Self::Function {
+            fun,
+            arguments_types,
+            return_type,
+        }
+    }
+}
+
+impl StaticValue {
+    pub fn string<T: Into<String>>(v: T) -> Self {
+        Self::String(v.into())
+    }
+
+    #[must_use]
+    pub fn object<const N: usize>(v: [(&'static str, StaticValue); N]) -> Self {
+        Self::Object(v.into())
+    }
+
+    pub fn function(
+        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
+        arguments_types: Vec<Vec<Type>>,
+        return_type: Type,
+    ) -> Self {
+        Self::Function {
             fun,
             arguments_types,
             return_type,

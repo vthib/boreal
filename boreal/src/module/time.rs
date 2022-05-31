@@ -3,7 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::{Module, ScanContext, Type, Value};
+use super::{Module, ScanContext, StaticValue, Type, Value};
 
 /// `time` module. Only exposes a `now` function to get the unix timestamp.
 #[derive(Debug)]
@@ -14,8 +14,12 @@ impl Module for Time {
         "time".to_owned()
     }
 
-    fn get_static_values(&self) -> HashMap<&'static str, Value> {
-        [("now", Value::function(Self::now, vec![], Type::Integer))].into()
+    fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+        [(
+            "now",
+            StaticValue::function(Self::now, vec![], Type::Integer),
+        )]
+        .into()
     }
 }
 

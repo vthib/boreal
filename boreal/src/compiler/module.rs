@@ -3,7 +3,7 @@ use std::{collections::HashMap, ops::Range};
 use boreal_parser as parser;
 
 use super::{compile_expression, CompilationError, Expression, RuleCompiler, Type};
-use crate::module::{self, ScanContext, Type as ValueType, Value};
+use crate::module::{self, ScanContext, StaticValue, Type as ValueType, Value};
 
 /// Module used during compilation
 #[derive(Debug)]
@@ -11,7 +11,7 @@ pub struct Module {
     /// Name of the module
     pub name: String,
     /// Static values of the module, usable directly during compilation
-    static_values: HashMap<&'static str, Value>,
+    static_values: HashMap<&'static str, StaticValue>,
     /// Dynamic types for values computed during scanning.
     dynamic_types: ValueType,
 }
@@ -249,7 +249,7 @@ struct ModuleUse<'a, 'b> {
 
     // Last value to can be computed immediately (does not depend on a function to be called during
     // scanning).
-    last_immediate_value: Option<&'b Value>,
+    last_immediate_value: Option<&'b StaticValue>,
 
     // Current value (or type).
     current_value: ValueOrType<'b>,
@@ -303,12 +303,6 @@ impl ModuleUse<'_, '_> {
         };
 
         match res {
-            Err(TypeError::InvalidStaticValue(value_type)) => {
-                Err(CompilationError::InvalidModuleStaticValue {
-                    value_type,
-                    span: op.span,
-                })
-            }
             Err(TypeError::UnknownSubfield(subfield)) => {
                 Err(CompilationError::UnknownIdentifierField {
                     field_name: subfield,
@@ -350,13 +344,15 @@ impl ModuleUse<'_, '_> {
         let expr = match self.last_immediate_value {
             // Those are all primitive values. This means there are no operations applied, and
             // we can directly generate a primitive expression.
-            Some(Value::Integer(v)) => Expression::Number(*v),
-            Some(Value::Float(v)) => Expression::Double(*v),
-            Some(Value::String(v)) => Expression::String(v.clone()),
-            Some(Value::Regex(v)) => Expression::Regex(v.clone()),
-            Some(Value::Boolean(v)) => Expression::Boolean(*v),
+            Some(StaticValue::Integer(v)) => Expression::Number(*v),
+            Some(StaticValue::Float(v)) => Expression::Double(*v),
+            Some(StaticValue::String(v)) => Expression::String(v.clone()),
+            Some(StaticValue::Regex(v)) => Expression::Regex(v.clone()),
+            Some(StaticValue::Boolean(v)) => Expression::Boolean(*v),
 
-            Some(Value::Function { fun, .. }) => {
+            Some(StaticValue::Object(_)) => return None,
+
+            Some(StaticValue::Function { fun, .. }) => {
                 let mut ops = self.operations.into_iter();
                 let arguments = if let Some(ValueOperation::FunctionCall(v)) = ops.next() {
                     v
@@ -369,10 +365,6 @@ impl ModuleUse<'_, '_> {
                     operations: ops.collect(),
                 })
             }
-
-            // There is no legitimate situation where we can end up with another value
-            // as the last immediate value.
-            Some(_) => return None,
 
             // This is a two-step evaluation:
             // - first one is during an iteration: a `Value` will be pushed in the identifier
@@ -414,14 +406,13 @@ impl ModuleUse<'_, '_> {
 #[derive(Debug)]
 enum ValueOrType<'a> {
     /// Currently value, if available.
-    Value(&'a Value),
+    Value(&'a StaticValue),
     /// Otherwise, type the expression will have when evaluated.
     Type(&'a ValueType),
 }
 
 #[derive(Debug)]
 enum TypeError {
-    InvalidStaticValue(String),
     UnknownSubfield(String),
     WrongType {
         actual_type: String,
@@ -441,7 +432,7 @@ impl ValueOrType<'_> {
     fn subfield(&mut self, subfield: &str) -> Result<(), TypeError> {
         match self {
             Self::Value(value) => {
-                if let Value::Object(map) = value {
+                if let StaticValue::Object(map) = value {
                     match map.get(&*subfield) {
                         Some(v) => {
                             *self = Self::Value(v);
@@ -488,12 +479,7 @@ impl ValueOrType<'_> {
         };
 
         match self {
-            Self::Value(value) => match value {
-                Value::Array { .. } | Value::Dictionary { .. } => {
-                    return Err(TypeError::InvalidStaticValue(self.type_to_string()));
-                }
-                _ => (),
-            },
+            Self::Value(_) => (),
             Self::Type(ty) => match ty {
                 ValueType::Array { value_type, .. } => {
                     check_subscript_type(Type::Integer)?;
@@ -518,7 +504,7 @@ impl ValueOrType<'_> {
     fn function_call(&mut self, actual_args_types: &[Type]) -> Result<(), TypeError> {
         match self {
             Self::Value(value) => {
-                if let Value::Function {
+                if let StaticValue::Function {
                     arguments_types,
                     return_type,
                     ..
@@ -551,15 +537,13 @@ impl ValueOrType<'_> {
     fn type_to_string(&self) -> String {
         match self {
             Self::Value(value) => match value {
-                Value::Integer(_) => "integer",
-                Value::Float(_) => "float",
-                Value::String(_) => "string",
-                Value::Regex(_) => "regex",
-                Value::Boolean(_) => "boolean",
-                Value::Array { .. } => "array",
-                Value::Dictionary { .. } => "dict",
-                Value::Object(_) => "object",
-                Value::Function { .. } => "function",
+                StaticValue::Integer(_) => "integer",
+                StaticValue::Float(_) => "float",
+                StaticValue::String(_) => "string",
+                StaticValue::Regex(_) => "regex",
+                StaticValue::Boolean(_) => "boolean",
+                StaticValue::Object(_) => "object",
+                StaticValue::Function { .. } => "function",
             },
             Self::Type(ty) => match ty {
                 ValueType::Integer => "integer",
@@ -579,11 +563,11 @@ impl ValueOrType<'_> {
     fn into_expression_type(self) -> Option<Type> {
         match self {
             Self::Value(value) => match value {
-                Value::Integer(_) => Some(Type::Integer),
-                Value::Float(_) => Some(Type::Float),
-                Value::String(_) => Some(Type::String),
-                Value::Regex(_) => Some(Type::Regex),
-                Value::Boolean(_) => Some(Type::Boolean),
+                StaticValue::Integer(_) => Some(Type::Integer),
+                StaticValue::Float(_) => Some(Type::Float),
+                StaticValue::String(_) => Some(Type::String),
+                StaticValue::Regex(_) => Some(Type::Regex),
+                StaticValue::Boolean(_) => Some(Type::Boolean),
                 _ => None,
             },
             Self::Type(ty) => match ty {

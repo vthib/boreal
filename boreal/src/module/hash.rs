@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{Module, ScanContext, Type, Value};
+use super::{Module, ScanContext, StaticValue, Type, Value};
 use md5::{Digest, Md5};
 use sha1::Sha1;
 use sha2::Sha256;
@@ -16,11 +16,11 @@ impl Module for Hash {
         "hash".to_owned()
     }
 
-    fn get_static_values(&self) -> HashMap<&'static str, Value> {
+    fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
         [
             (
                 "md5",
-                Value::function(
+                StaticValue::function(
                     Self::md5,
                     vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
                     Type::String,
@@ -28,7 +28,7 @@ impl Module for Hash {
             ),
             (
                 "sha1",
-                Value::function(
+                StaticValue::function(
                     Self::sha1,
                     vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
                     Type::String,
@@ -36,7 +36,7 @@ impl Module for Hash {
             ),
             (
                 "sha256",
-                Value::function(
+                StaticValue::function(
                     Self::sha2,
                     vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
                     Type::String,
@@ -44,7 +44,7 @@ impl Module for Hash {
             ),
             (
                 "checksum32",
-                Value::function(
+                StaticValue::function(
                     Self::checksum32,
                     vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
                     Type::Integer,
@@ -52,7 +52,7 @@ impl Module for Hash {
             ),
             (
                 "crc32",
-                Value::function(
+                StaticValue::function(
                     Self::crc32,
                     vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
                     Type::Integer,
