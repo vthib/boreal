@@ -39,26 +39,6 @@ pub enum ModuleExpression {
         operations: Vec<ValueOperation>,
     },
 
-    /// A value coming from an array exposed by a module.
-    Array {
-        /// The function to call to get the array
-        fun: fn(&ScanContext) -> Option<Vec<Value>>,
-        /// The expression giving the index to use with the function.
-        subscript: Box<Expression>,
-        /// List of operations to apply on the value returned by the function.
-        operations: Vec<ValueOperation>,
-    },
-
-    /// A value coming from a dictionary exposed by a module.
-    Dictionary {
-        /// The function to call to get the dictionary
-        fun: fn(&ScanContext) -> Option<HashMap<String, Value>>,
-        /// The expression giving the index to use with the function.
-        subscript: Box<Expression>,
-        /// List of operations to apply on the value returned by the function.
-        operations: Vec<ValueOperation>,
-    },
-
     /// A value coming from a function exposed by a module.
     Function {
         /// The function to call with the computed index
@@ -80,26 +60,6 @@ impl std::fmt::Debug for ModuleExpression {
             } => f
                 .debug_struct("DynamicValue")
                 .field("module_name", module_name)
-                .field("operations", operations)
-                .finish(),
-            Self::Array {
-                fun,
-                subscript,
-                operations,
-            } => f
-                .debug_struct("Array")
-                .field("fun", &(*fun as usize))
-                .field("subscript", subscript)
-                .field("operations", operations)
-                .finish(),
-            Self::Dictionary {
-                fun,
-                subscript,
-                operations,
-            } => f
-                .debug_struct("Dictionary")
-                .field("fun", &(*fun as usize))
-                .field("subscript", subscript)
                 .field("operations", operations)
                 .finish(),
             Self::Function {
@@ -347,6 +307,12 @@ impl ModuleUse<'_, '_> {
         };
 
         match res {
+            Err(TypeError::InvalidStaticValue(value_type)) => {
+                Err(CompilationError::InvalidModuleStaticValue {
+                    value_type,
+                    span: op.span,
+                })
+            }
             Err(TypeError::UnknownSubfield(subfield)) => {
                 Err(CompilationError::UnknownIdentifierField {
                     field_name: subfield,
@@ -398,36 +364,6 @@ impl ModuleUse<'_, '_> {
             Some(Value::Regex(v)) => Expression::Regex(v.clone()),
             Some(Value::Boolean(v)) => Expression::Boolean(*v),
 
-            // There is no legitimate situation where we can end up with an object
-            // as the last immediate value.
-            Some(Value::Object(_)) => return None,
-
-            Some(Value::Array { on_scan, .. }) => {
-                let mut ops = self.operations.into_iter();
-                let subscript = if let Some(ValueOperation::Subscript(v)) = ops.next() {
-                    v
-                } else {
-                    return None;
-                };
-                Expression::Module(ModuleExpression::Array {
-                    fun: *on_scan,
-                    subscript,
-                    operations: ops.collect(),
-                })
-            }
-            Some(Value::Dictionary { on_scan, .. }) => {
-                let mut ops = self.operations.into_iter();
-                let subscript = if let Some(ValueOperation::Subscript(v)) = ops.next() {
-                    v
-                } else {
-                    return None;
-                };
-                Expression::Module(ModuleExpression::Dictionary {
-                    fun: *on_scan,
-                    subscript,
-                    operations: ops.collect(),
-                })
-            }
             Some(Value::Function { fun, .. }) => {
                 let mut ops = self.operations.into_iter();
                 let arguments = if let Some(ValueOperation::FunctionCall(v)) = ops.next() {
@@ -441,6 +377,10 @@ impl ModuleUse<'_, '_> {
                     operations: ops.collect(),
                 })
             }
+
+            // There is no legitimate situation where we can end up with another value
+            // as the last immediate value.
+            Some(_) => return None,
 
             // This is a two-step evaluation:
             // - first one is during an iteration: a `Value` will be pushed in the identifier
@@ -493,6 +433,7 @@ enum ValueOrType<'a> {
 
 #[derive(Debug)]
 enum TypeError {
+    InvalidStaticValue(String),
     UnknownSubfield(String),
     WrongType {
         actual_type: String,
@@ -560,15 +501,8 @@ impl ValueOrType<'_> {
 
         match self {
             Self::Value(value) => match value {
-                Value::Array { value_type, .. } => {
-                    check_subscript_type(Type::Integer)?;
-                    *self = Self::Type(value_type);
-                    return Ok(());
-                }
-                Value::Dictionary { value_type, .. } => {
-                    check_subscript_type(Type::String)?;
-                    *self = Self::Type(value_type);
-                    return Ok(());
+                Value::Array { .. } | Value::Dictionary { .. } => {
+                    return Err(TypeError::InvalidStaticValue(self.type_to_string()));
                 }
                 _ => (),
             },
@@ -713,14 +647,7 @@ impl ValueOrType<'_> {
 
     fn into_iterator_type(self) -> Option<IteratorType> {
         match self {
-            Self::Value(value) => match value {
-                // TODO: is there a way to avoid those clones?
-                Value::Array { value_type, .. } => Some(IteratorType::Array(value_type.clone())),
-                Value::Dictionary { value_type, .. } => {
-                    Some(IteratorType::Dictionary(value_type.clone()))
-                }
-                _ => None,
-            },
+            Self::Value(_) => None,
             Self::Type(ty) => match ty {
                 ValueType::Array { value_type, .. } => {
                     Some(IteratorType::Array((**value_type).clone()))

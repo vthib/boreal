@@ -130,124 +130,114 @@ impl Module for Elf {
             ("PF_X", Value::Integer(elf::PF_X.into())),
             ("PF_W", Value::Integer(elf::PF_W.into())),
             ("PF_R", Value::Integer(elf::PF_R.into())),
+        ]
+        .into()
+    }
+
+    fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
+        [
             // Integers depending on scan
-            ("type", Value::function(Self::r#type, vec![], Type::Integer)),
-            (
-                "machine",
-                Value::function(Self::machine, vec![], Type::Integer),
-            ),
-            (
-                "entry_point",
-                Value::function(Self::entry_point, vec![], Type::Integer),
-            ),
-            (
-                "number_of_sections",
-                Value::function(Self::number_of_sections, vec![], Type::Integer),
-            ),
-            (
-                "sh_offset",
-                Value::function(Self::sh_offset, vec![], Type::Integer),
-            ),
-            (
-                "sh_entry_size",
-                Value::function(Self::sh_entry_size, vec![], Type::Integer),
-            ),
-            (
-                "number_of_segments",
-                Value::function(Self::number_of_segments, vec![], Type::Integer),
-            ),
-            (
-                "ph_offset",
-                Value::function(Self::ph_offset, vec![], Type::Integer),
-            ),
-            (
-                "ph_entry_size",
-                Value::function(Self::ph_entry_size, vec![], Type::Integer),
-            ),
-            (
-                "dynamic_section_entries",
-                Value::function(Self::dynamic_section_entries, vec![], Type::Integer),
-            ),
-            (
-                "symtab_entries",
-                Value::function(Self::symtab_entries, vec![], Type::Integer),
-            ),
-            (
-                "dynsym_entries",
-                Value::function(Self::dynsym_entries, vec![], Type::Integer),
-            ),
+            ("type", Type::Integer),
+            ("machine", Type::Integer),
+            ("entry_point", Type::Integer),
+            ("number_of_sections", Type::Integer),
+            ("sh_offset", Type::Integer),
+            ("sh_entry_size", Type::Integer),
+            ("number_of_segments", Type::Integer),
+            ("ph_offset", Type::Integer),
+            ("ph_entry_size", Type::Integer),
+            ("dynamic_section_entries", Type::Integer),
+            ("symtab_entries", Type::Integer),
+            ("dynsym_entries", Type::Integer),
             // Sections array
             (
                 "sections",
-                Value::array(
-                    Self::sections,
-                    Type::object([
-                        ("type", Type::Integer),
-                        ("flags", Type::Integer),
-                        ("address", Type::Integer),
-                        ("name", Type::String),
-                        ("size", Type::Integer),
-                        ("offset", Type::Integer),
-                    ]),
-                ),
+                Type::array(Type::object([
+                    ("type", Type::Integer),
+                    ("flags", Type::Integer),
+                    ("address", Type::Integer),
+                    ("name", Type::String),
+                    ("size", Type::Integer),
+                    ("offset", Type::Integer),
+                ])),
             ),
             // Segments array
             (
                 "segments",
-                Value::array(
-                    Self::segments,
-                    Type::object([
-                        ("type", Type::Integer),
-                        ("flags", Type::Integer),
-                        ("offset", Type::Integer),
-                        ("virtual_address", Type::Integer),
-                        ("physical_address", Type::Integer),
-                        ("file_size", Type::Integer),
-                        ("memory_size", Type::Integer),
-                        ("alignment", Type::Integer),
-                    ]),
-                ),
+                Type::array(Type::object([
+                    ("type", Type::Integer),
+                    ("flags", Type::Integer),
+                    ("offset", Type::Integer),
+                    ("virtual_address", Type::Integer),
+                    ("physical_address", Type::Integer),
+                    ("file_size", Type::Integer),
+                    ("memory_size", Type::Integer),
+                    ("alignment", Type::Integer),
+                ])),
             ),
             // Dynamic array
             (
                 "dynamic",
-                Value::array(
-                    Self::dynamic,
-                    Type::object([("type", Type::Integer), ("val", Type::Integer)]),
-                ),
+                Type::array(Type::object([
+                    ("type", Type::Integer),
+                    ("val", Type::Integer),
+                ])),
             ),
             // Symtab array
             (
                 "symtab",
-                Value::array(
-                    Self::symtab,
-                    Type::object([
-                        ("name", Type::String),
-                        ("value", Type::Integer),
-                        ("size", Type::Integer),
-                        ("type", Type::Integer),
-                        ("bind", Type::Integer),
-                        ("shndx", Type::Integer),
-                    ]),
-                ),
+                Type::array(Type::object([
+                    ("name", Type::String),
+                    ("value", Type::Integer),
+                    ("size", Type::Integer),
+                    ("type", Type::Integer),
+                    ("bind", Type::Integer),
+                    ("shndx", Type::Integer),
+                ])),
             ),
             // Dynsym array
             (
                 "dynsym",
-                Value::array(
-                    Self::dynsym,
-                    Type::object([
-                        ("name", Type::String),
-                        ("value", Type::Integer),
-                        ("size", Type::Integer),
-                        ("type", Type::Integer),
-                        ("bind", Type::Integer),
-                        ("shndx", Type::Integer),
-                    ]),
-                ),
+                Type::array(Type::object([
+                    ("name", Type::String),
+                    ("value", Type::Integer),
+                    ("size", Type::Integer),
+                    ("type", Type::Integer),
+                    ("bind", Type::Integer),
+                    ("shndx", Type::Integer),
+                ])),
             ),
         ]
         .into()
+    }
+
+    fn get_dynamic_values(&self, ctx: &ScanContext) -> HashMap<&'static str, Value> {
+        // TODO: fix this
+        [
+            ("type", Self::r#type(ctx)),
+            ("machine", Self::machine(ctx)),
+            ("entry_point", Self::entry_point(ctx)),
+            ("number_of_sections", Self::number_of_sections(ctx)),
+            ("sh_offset", Self::sh_offset(ctx)),
+            ("sh_entry_size", Self::sh_entry_size(ctx)),
+            ("number_of_segments", Self::number_of_segments(ctx)),
+            ("ph_offset", Self::ph_offset(ctx)),
+            ("ph_entry_size", Self::ph_entry_size(ctx)),
+            (
+                "dynamic_section_entries",
+                Self::dynamic_section_entries(ctx),
+            ),
+            ("symtab_entries", Self::symtab_entries(ctx)),
+            ("dynsym_entries", Self::dynsym_entries(ctx)),
+            ("sections", Self::sections(ctx).map(Value::Array)),
+            ("segments", Self::segments(ctx).map(Value::Array)),
+            ("dynamic", Self::dynamic(ctx).map(Value::Array)),
+            ("symtab", Self::symtab(ctx).map(Value::Array)),
+            ("dynsym", Self::dynsym(ctx).map(Value::Array)),
+        ]
+        .into_iter()
+        .filter_map(|(k, v)| v.map(|v| (k, v)))
+        .collect()
     }
 }
 
@@ -277,7 +267,7 @@ macro_rules! apply {
 }
 
 impl Elf {
-    fn r#type(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn r#type(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(file: &ElfFile<Elf>) -> Value {
             file.raw_header().e_type(file.endian()).into()
         }
@@ -286,7 +276,7 @@ impl Elf {
         apply!(data, f => Some(fun(&f)))
     }
 
-    fn machine(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn machine(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(file: &ElfFile<Elf>) -> Value {
             file.raw_header().e_machine(file.endian()).into()
         }
@@ -295,7 +285,7 @@ impl Elf {
         apply!(data, f => Some(fun(&f)))
     }
 
-    fn entry_point(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn entry_point(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(file: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
             let e = file.endian();
             let entrypoint = file.entry();
@@ -341,7 +331,7 @@ impl Elf {
         apply!(data, f => fun(&f, ctx.mem))
     }
 
-    fn number_of_sections(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn number_of_sections(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
             f.raw_header().shnum(f.endian(), mem).ok()?.try_into().ok()
         }
@@ -350,7 +340,7 @@ impl Elf {
         apply!(data, f => fun(&f, ctx.mem))
     }
 
-    fn sh_offset(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn sh_offset(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(f: &ElfFile<Elf>) -> Option<Value> {
             f.raw_header().e_shoff(f.endian()).into().try_into().ok()
         }
@@ -359,7 +349,7 @@ impl Elf {
         apply!(data, f => fun(&f))
     }
 
-    fn sh_entry_size(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn sh_entry_size(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(f: &ElfFile<Elf>) -> Option<Value> {
             u64::from(f.raw_header().e_shentsize(f.endian()))
                 .try_into()
@@ -370,7 +360,7 @@ impl Elf {
         apply!(data, f => fun(&f))
     }
 
-    fn number_of_segments(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn number_of_segments(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
             f.raw_header().phnum(f.endian(), mem).ok()?.try_into().ok()
         }
@@ -379,7 +369,7 @@ impl Elf {
         apply!(data, f => fun(&f, ctx.mem))
     }
 
-    fn ph_offset(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn ph_offset(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(f: &ElfFile<Elf>) -> Option<Value> {
             f.raw_header().e_phoff(f.endian()).into().try_into().ok()
         }
@@ -388,7 +378,7 @@ impl Elf {
         apply!(data, f => fun(&f))
     }
 
-    fn ph_entry_size(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn ph_entry_size(ctx: &ScanContext) -> Option<Value> {
         fn fun<Elf: FileHeader>(f: &ElfFile<Elf>) -> Option<Value> {
             u64::from(f.raw_header().e_phentsize(f.endian()))
                 .try_into()
@@ -480,7 +470,7 @@ impl Elf {
         apply!(data, f => Some(fun(&f)))
     }
 
-    fn dynamic_section_entries(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn dynamic_section_entries(ctx: &ScanContext) -> Option<Value> {
         // TODO: compute both dynamic and this len at the same time
         dbg!(Self::dynamic(ctx).and_then(|v| v.len().try_into().ok()))
     }
@@ -519,7 +509,7 @@ impl Elf {
         apply!(data, f => fun(&f, ctx.mem))
     }
 
-    fn symtab_entries(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn symtab_entries(ctx: &ScanContext) -> Option<Value> {
         let data = Data::new(ctx.mem)?;
         apply!(data, f => get_symbols_len(&f, ctx.mem, elf::SHT_SYMTAB))
     }
@@ -529,7 +519,7 @@ impl Elf {
         apply!(data, f => get_symbols(&f, ctx.mem, elf::SHT_SYMTAB))
     }
 
-    fn dynsym_entries(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn dynsym_entries(ctx: &ScanContext) -> Option<Value> {
         let data = Data::new(ctx.mem)?;
         apply!(data, f => get_symbols_len(&f, ctx.mem, elf::SHT_DYNSYM))
     }

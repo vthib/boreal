@@ -62,12 +62,11 @@ pub trait Module {
     ///     }
     ///
     ///     fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
-    ///         [("array", Value::array(bar_array, Type::String))].into()
+    ///         [(
+    ///             "array",
+    ///             Value::Array(vec![Value::string("a"), Value::string("b")])
+    ///         )].into()
     ///     }
-    /// }
-    ///
-    /// fn bar_array(_: &ScanContext) -> Option<Vec<Value>> {
-    ///     Some(vec![Value::string("a"), Value::string("b")])
     /// }
     /// ```
     ///
@@ -124,43 +123,13 @@ pub enum Value {
     ///
     /// For example, if a module `foo` exports an array value, then it can be accessed with the
     /// syntax `foo[x]` in a rule.
-    Array {
-        /// Function called during scanning.
-        ///
-        /// The only argument is the accessed index in the array.
-        ///
-        /// The function can return None if the array does not make sense in the current context.
-        /// For example, `pe.sections[0]` does not make sense if the scanned object is not a PE.
-        on_scan: fn(&ScanContext) -> Option<Vec<Value>>,
-
-        /// Type of all the elements in the array.
-        ///
-        /// This is not a [`Value`] as we cannot know the real values of this before evaluating
-        /// a rule during scanning and accessing the array. Hence, this can only be a [`Type`],
-        /// which still provides the description of the type stored in the array, which can
-        /// be used to properly type-check use of this array in rules.
-        value_type: Type,
-    },
+    Array(Vec<Value>),
 
     /// A dictionary.
     ///
     /// For example, if a module `foo` exports a dictionary value, then it can be accessed with the
     /// syntax `foo["key"]` in a rule.
-    Dictionary {
-        /// Function called during scanning.
-        ///
-        /// The function can return None if the array does not make sense in the current context.
-        /// For example, `pe.sections[0]` does not make sense if the scanned object is not a PE.
-        on_scan: fn(&ScanContext) -> Option<HashMap<String, Value>>,
-
-        /// Type of all the elements in the dirctionary.
-        ///
-        /// This is not a [`Value`] as we cannot know the real values of this before evaluating
-        /// a rule during scanning and accessing the array. Hence, this can only be a [`Type`],
-        /// which still provides the description of the type stored in the array, which can
-        /// be used to properly type-check use of this array in rules.
-        value_type: Type,
-    },
+    Dictionary(HashMap<String, Value>),
 
     /// A function.
     ///
@@ -221,22 +190,8 @@ impl std::fmt::Debug for Value {
             Self::Regex(arg0) => f.debug_tuple("Regex").field(arg0).finish(),
             Self::Boolean(arg0) => f.debug_tuple("Boolean").field(arg0).finish(),
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
-            Self::Array {
-                on_scan,
-                value_type,
-            } => f
-                .debug_struct("Array")
-                .field("on_scan", &(*on_scan as usize))
-                .field("value_type", value_type)
-                .finish(),
-            Self::Dictionary {
-                on_scan,
-                value_type,
-            } => f
-                .debug_struct("Dictionary")
-                .field("on_scan", &(*on_scan as usize))
-                .field("value_type", value_type)
-                .finish(),
+            Self::Array(arg0) => f.debug_tuple("Array").field(arg0).finish(),
+            Self::Dictionary(arg0) => f.debug_tuple("Dictionary").field(arg0).finish(),
             Self::Function {
                 fun,
                 arguments_types,
@@ -259,20 +214,6 @@ impl Value {
     #[must_use]
     pub fn object<const N: usize>(v: [(&'static str, Value); N]) -> Self {
         Value::Object(v.into())
-    }
-
-    pub fn array(fun: fn(&ScanContext) -> Option<Vec<Value>>, ty: Type) -> Self {
-        Value::Array {
-            on_scan: fun,
-            value_type: ty,
-        }
-    }
-
-    pub fn dict(fun: fn(&ScanContext) -> Option<HashMap<String, Value>>, ty: Type) -> Self {
-        Value::Dictionary {
-            on_scan: fun,
-            value_type: ty,
-        }
     }
 
     pub fn function(

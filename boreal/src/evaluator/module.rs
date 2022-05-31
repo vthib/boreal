@@ -20,22 +20,6 @@ pub(super) fn evaluate_expr(
             let value = evaluator.get_module_value(module_name)?;
             evaluate_ops(evaluator, value, operations)
         }
-        ModuleExpression::Array {
-            fun,
-            subscript,
-            operations,
-        } => {
-            let value = eval_array_op(evaluator, *fun, subscript)?;
-            evaluate_ops(evaluator, value, operations)
-        }
-        ModuleExpression::Dictionary {
-            fun,
-            subscript,
-            operations,
-        } => {
-            let value = eval_dict_op(evaluator, *fun, subscript)?;
-            evaluate_ops(evaluator, value, operations)
-        }
         ModuleExpression::Function {
             fun,
             arguments,
@@ -72,10 +56,9 @@ pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
 
 fn eval_array_op(
     evaluator: &mut Evaluator,
-    fun: fn(&ScanContext) -> Option<Vec<ModuleValue>>,
     subscript: &Expression,
+    mut array: Vec<ModuleValue>,
 ) -> Option<ModuleValue> {
-    let mut array = fun(&evaluator.module_ctx)?;
     let index = evaluator.evaluate_expr(subscript)?.unwrap_number()?;
 
     if let Ok(i) = usize::try_from(index) {
@@ -91,10 +74,9 @@ fn eval_array_op(
 
 fn eval_dict_op(
     evaluator: &mut Evaluator,
-    fun: fn(&ScanContext) -> Option<HashMap<String, ModuleValue>>,
     subscript: &Expression,
+    mut dict: HashMap<String, ModuleValue>,
 ) -> Option<ModuleValue> {
-    let mut dict = fun(&evaluator.module_ctx)?;
     let val = evaluator.evaluate_expr(subscript)?.unwrap_string()?;
 
     dict.remove(&val)
@@ -128,8 +110,8 @@ fn evaluate_value_operation(
             _ => None,
         },
         ValueOperation::Subscript(subscript) => match value {
-            ModuleValue::Array { on_scan, .. } => eval_array_op(evaluator, on_scan, subscript),
-            ModuleValue::Dictionary { on_scan, .. } => eval_dict_op(evaluator, on_scan, subscript),
+            ModuleValue::Array(array) => eval_array_op(evaluator, subscript, array),
+            ModuleValue::Dictionary(dict) => eval_dict_op(evaluator, subscript, dict),
             _ => None,
         },
         ValueOperation::FunctionCall(arguments) => match value {

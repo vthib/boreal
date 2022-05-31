@@ -147,6 +147,18 @@ pub enum CompilationError {
         span: Range<usize>,
     },
 
+    /// Invalid module value exposed as static.
+    ///
+    /// This indicates that an identifier resolved to a static value exposed by a module of a
+    /// forbidden type, either array or dictionary. Modules are not allowed to expose such values
+    /// as static, this is a bug in the module that needs to be fixed.
+    InvalidModuleStaticValue {
+        /// Type of the value exposed by the module.
+        value_type: String,
+        /// The span of the identifier with the wrong type.
+        span: Range<usize>,
+    },
+
     /// A rule matching a previous wildcard rule set cannot be added.
     ///
     /// Rules that match previous wildcard rule set are not allowed in a namespace.
@@ -332,6 +344,15 @@ impl CompilationError {
 
             Self::InvalidIdentifierUse { span } => Diagnostic::error()
                 .with_message("wrong use of identifier")
+                .with_labels(vec![Label::primary((), span.clone())]),
+
+            // TODO: remove this error, it's an implementation detail: rejecting a module that
+            // does this would be much better.
+            Self::InvalidModuleStaticValue { value_type, span } => Diagnostic::error()
+                .with_message(format!(
+                    "Cannot use a value of type `{}` as a static value",
+                    value_type
+                ))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             // TODO: add span on rule name

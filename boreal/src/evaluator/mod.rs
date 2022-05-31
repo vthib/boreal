@@ -630,8 +630,7 @@ impl Evaluator<'_, '_, '_> {
                 let value = module::evaluate_expr(self, expr)?;
 
                 match value {
-                    ModuleValue::Array { on_scan, .. } => {
-                        let array = on_scan(&self.module_ctx)?;
+                    ModuleValue::Array(array) => {
                         for value in array {
                             self.bounded_identifiers_stack
                                 .push(BoundedIdentifierValue::ModuleValue(value));
@@ -643,8 +642,7 @@ impl Evaluator<'_, '_, '_> {
                             }
                         }
                     }
-                    ModuleValue::Dictionary { on_scan, .. } => {
-                        let dict = on_scan(&self.module_ctx)?;
+                    ModuleValue::Dictionary(dict) => {
                         for (key, value) in dict {
                             self.bounded_identifiers_stack
                                 .push(BoundedIdentifierValue::RawValue(Value::String(key)));

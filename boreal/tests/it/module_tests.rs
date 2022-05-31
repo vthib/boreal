@@ -200,49 +200,56 @@ impl Module for Tests {
             // TODO: missing module_data
             (
                 "integer_array",
-                Value::array(Self::integer_array, Type::Integer),
+                Value::Array(vec![
+                    Value::Integer(0),
+                    Value::Integer(1),
+                    Value::Integer(2),
+                ]),
             ),
             (
                 "string_array",
-                Value::array(Self::string_array, Type::String),
+                Value::Array(vec![
+                    Value::string("foo"),
+                    Value::string("bar"),
+                    Value::string("baz"),
+                    Value::string("foo\0bar"),
+                ]),
             ),
             (
                 "integer_dict",
-                Value::dict(Self::integer_dict, Type::Integer),
+                Value::Dictionary(
+                    [
+                        ("foo".to_string(), Value::Integer(1)),
+                        ("bar".to_string(), Value::Integer(2)),
+                    ]
+                    .into(),
+                ),
             ),
-            ("string_dict", Value::dict(Self::string_dict, Type::String)),
+            (
+                "string_dict",
+                Value::Dictionary(
+                    [
+                        ("foo".to_string(), Value::string("foo")),
+                        ("bar".to_string(), Value::string("bar")),
+                    ]
+                    .into(),
+                ),
+            ),
             (
                 "struct_array",
-                Value::array(
-                    Self::struct_array,
-                    Type::object([("i", Type::Integer), ("s", Type::String)]),
-                ),
+                Value::Array(vec![
+                    Value::object([("i", Value::Integer(0))]),
+                    Value::object([("i", Value::Integer(1))]),
+                ]),
             ),
             (
                 "struct_dict",
-                Value::dict(
-                    Self::struct_dict,
-                    Type::object([("i", Type::Integer), ("s", Type::String)]),
-                ),
-            ),
-            (
-                "empty_struct_dict",
-                Value::dict(Self::undefined_dict, Type::object([("i", Type::Integer)])),
-            ),
-            (
-                "empty_struct_array",
-                Value::array(
-                    Self::undefined_array,
-                    Type::object([
-                        (
-                            "struct_array",
-                            Type::array(Type::object([("unused", Type::String)])),
-                        ),
-                        (
-                            "struct_dict",
-                            Type::dict(Type::object([("unused", Type::String)])),
-                        ),
-                    ]),
+                Value::Dictionary(
+                    [(
+                        "foo".to_string(),
+                        Value::object([("i", Value::Integer(1)), ("s", Value::string("foo"))]),
+                    )]
+                    .into(),
                 ),
             ),
             (
@@ -371,14 +378,6 @@ impl Tests {
         None
     }
 
-    fn undefined_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
-        None
-    }
-
-    fn undefined_array(_: &ScanContext) -> Option<Vec<Value>> {
-        None
-    }
-
     fn fsum(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let mut res = f64::try_from(args.next()?).ok()?;
@@ -434,60 +433,6 @@ impl Tests {
         }))
     }
 
-    fn integer_array(_: &ScanContext) -> Option<Vec<Value>> {
-        Some(vec![
-            Value::Integer(0),
-            Value::Integer(1),
-            Value::Integer(2),
-        ])
-    }
-
-    fn string_array(_: &ScanContext) -> Option<Vec<Value>> {
-        Some(vec![
-            Value::string("foo"),
-            Value::string("bar"),
-            Value::string("baz"),
-            Value::string("foo\0bar"),
-        ])
-    }
-
-    fn integer_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
-        Some(
-            [
-                ("foo".to_string(), Value::Integer(1)),
-                ("bar".to_string(), Value::Integer(2)),
-            ]
-            .into(),
-        )
-    }
-
-    fn string_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
-        Some(
-            [
-                ("foo".to_string(), Value::string("foo")),
-                ("bar".to_string(), Value::string("bar")),
-            ]
-            .into(),
-        )
-    }
-
-    fn struct_array(_: &ScanContext) -> Option<Vec<Value>> {
-        Some(vec![
-            Value::object([("i", Value::Integer(0))]),
-            Value::object([("i", Value::Integer(1))]),
-        ])
-    }
-
-    fn struct_dict(_: &ScanContext) -> Option<HashMap<String, Value>> {
-        Some(
-            [(
-                "foo".to_string(),
-                Value::object([("i", Value::Integer(1)), ("s", Value::string("foo"))]),
-            )]
-            .into(),
-        )
-    }
-
     fn lazy(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::object([
             ("one", Value::Integer(1)),
@@ -499,8 +444,25 @@ impl Tests {
                 "dict",
                 Value::object([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
             ),
-            ("str_array", Value::array(Self::string_array, Type::String)),
-            ("string_dict", Value::dict(Self::string_dict, Type::String)),
+            (
+                "str_array",
+                Value::Array(vec![
+                    Value::string("foo"),
+                    Value::string("bar"),
+                    Value::string("baz"),
+                    Value::string("foo\0bar"),
+                ]),
+            ),
+            (
+                "string_dict",
+                Value::Dictionary(
+                    [
+                        ("foo".to_string(), Value::string("foo")),
+                        ("bar".to_string(), Value::string("bar")),
+                    ]
+                    .into(),
+                ),
+            ),
             (
                 "isum",
                 Value::function(
@@ -509,10 +471,7 @@ impl Tests {
                     Type::Integer,
                 ),
             ),
-            (
-                "fake_bool_to_array",
-                Value::array(Self::integer_array, Type::Integer),
-            ),
+            ("fake_bool_to_array", Value::Array(vec![Value::Integer(2)])),
             ("fake_bool_to_dict", Value::object([])),
             (
                 "fake_bool_to_fun",
