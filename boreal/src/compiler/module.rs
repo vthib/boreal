@@ -271,10 +271,6 @@ impl ModuleUse<'_, '_> {
     fn add_operation(&mut self, op: parser::IdentifierOperation) -> Result<(), CompilationError> {
         let res = match op.op {
             parser::IdentifierOperationType::Subfield(subfield) => {
-                if self.current_value.coalesce_noarg_function() {
-                    self.operations.push(ValueOperation::FunctionCall(vec![]));
-                }
-
                 let res = self.current_value.subfield(&subfield);
                 match self.current_value {
                     ValueOrType::Value(v) => self.last_immediate_value = Some(v),
@@ -349,11 +345,7 @@ impl ModuleUse<'_, '_> {
         }
     }
 
-    fn into_expression(mut self) -> Option<(Expression, Type)> {
-        if self.current_value.coalesce_noarg_function() {
-            self.operations.push(ValueOperation::FunctionCall(vec![]));
-        }
-
+    fn into_expression(self) -> Option<(Expression, Type)> {
         let ty = self.current_value.into_expression_type()?;
         let expr = match self.last_immediate_value {
             // Those are all primitive values. This means there are no operations applied, and
@@ -403,11 +395,7 @@ impl ModuleUse<'_, '_> {
         Some((expr, ty))
     }
 
-    fn into_iterator_expression(mut self) -> Option<(ModuleExpression, IteratorType)> {
-        if self.current_value.coalesce_noarg_function() {
-            self.operations.push(ValueOperation::FunctionCall(vec![]));
-        }
-
+    fn into_iterator_expression(self) -> Option<(ModuleExpression, IteratorType)> {
         let ty = self.current_value.into_iterator_type()?;
         let expr = ModuleExpression::DynamicValue {
             module_name: self.module_name.unwrap().to_string(),
@@ -558,42 +546,6 @@ impl ValueOrType<'_> {
             actual_type: self.type_to_string(),
             expected_type: "function".to_owned(),
         })
-    }
-
-    // Coalesce function with no arguments to its return type.
-    //
-    // This allows using a function with no arguments without the `()` syntax, enabling
-    // use of such functions transparently for properties that need to be computed
-    // at scan time.
-    fn coalesce_noarg_function(&mut self) -> bool {
-        match self {
-            Self::Value(value) => {
-                if let Value::Function {
-                    arguments_types,
-                    return_type,
-                    ..
-                } = value
-                {
-                    if arguments_types.is_empty() {
-                        *self = Self::Type(return_type);
-                        return true;
-                    }
-                }
-            }
-            Self::Type(ty) => {
-                if let ValueType::Function {
-                    arguments_types,
-                    return_type,
-                } = ty
-                {
-                    if arguments_types.is_empty() {
-                        *self = Self::Type(return_type);
-                        return true;
-                    }
-                }
-            }
-        }
-        false
     }
 
     fn type_to_string(&self) -> String {

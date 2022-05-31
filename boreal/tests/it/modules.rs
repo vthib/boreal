@@ -175,10 +175,10 @@ fn test_value_wrong_type() {
 
     // Check lazy values
     check_invalid_types("tests.lazy().one == \"foo\"");
-    check_invalid_types("tests.lazy.one_half == \"foo\"");
-    check_invalid_types("tests.lazy.str + 1 > 0");
+    check_invalid_types("tests.lazy().one_half == \"foo\"");
+    check_invalid_types("tests.lazy().str + 1 > 0");
     check_invalid_types("tests.lazy().regex + 1 > 0");
-    check_invalid_types("tests.lazy.true + 1 > 0");
+    check_invalid_types("tests.lazy().true + 1 > 0");
 }
 
 #[test]
@@ -208,37 +208,37 @@ fn test_eval() {
     // Check lazy eval into primitive
     check_ok("tests.lazy().one == 1");
     check_ok("tests.lazy().one_half == 0.5");
-    check_ok("tests.lazy.str == \"str\"");
+    check_ok("tests.lazy().str == \"str\"");
     check_ok("tests.lazy().true");
     check_ok("tests.lazy().dict.i == 3");
-    check_ok("tests.lazy.dict.s == \"<acb>\"");
-    check_ok("tests.lazy.isum(2, 3+5) == 10");
-    check_ok("tests.lazy.str_array[1] == \"bar\"");
+    check_ok("tests.lazy().dict.s == \"<acb>\"");
+    check_ok("tests.lazy().isum(2, 3+5) == 10");
     check_ok("tests.lazy().str_array[1] == \"bar\"");
-    check_ok("tests.lazy.string_dict[\"foo\"] == \"foo\"");
-    check_ok("not defined tests.lazy.str_array[10]");
+    check_ok("tests.lazy().str_array[1] == \"bar\"");
+    check_ok("tests.lazy().string_dict[\"foo\"] == \"foo\"");
+    check_ok("not defined tests.lazy().str_array[10]");
     check_ok("not defined tests.lazy().str_array[#a - 5]");
 
     // Multiple lazy calls
-    check_ok("tests.lazy.lazy.lazy_int == 3");
+    check_ok("tests.lazy().lazy().lazy_int() == 3");
 
     // Test discrepancies between declared type, and returned type.
     check_ok("not defined tests.lazy().dict.oops");
     check_ok("not defined tests.lazy().fake_bool_to_array");
     check_ok("not defined tests.lazy().fake_bool_to_dict");
     check_ok("not defined tests.lazy().fake_bool_to_fun");
-    check_ok("not defined tests.lazy.fake_dict_to_bool.i");
+    check_ok("not defined tests.lazy().fake_dict_to_bool.i");
     check_ok("not defined tests.lazy().fake_array_to_bool[2]");
     check_ok("not defined tests.lazy().fake_fun_to_bool()");
 
     // Test passing undefined values to subscripts/functions
     check_ok("not defined tests.undefined_str");
-    check_ok("not defined tests.undefined_int()");
-    check_ok("not defined tests.length(tests.undefined_str())");
+    check_ok("not defined tests.undefined_int");
+    check_ok("not defined tests.length(tests.undefined_str)");
     check_ok("not defined tests.integer_array[tests.undefined_int]");
     check_ok("not defined tests.integer_dict[tests.undefined_str]");
-    check_ok("not defined tests.lazy().str_array[tests.undefined_int()]");
-    check_ok("not defined tests.lazy.isum(1, tests.undefined_int)");
+    check_ok("not defined tests.lazy().str_array[tests.undefined_int]");
+    check_ok("not defined tests.lazy().isum(1, tests.undefined_int)");
 }
 
 #[test]

@@ -135,11 +135,6 @@ pub enum Value {
     ///
     /// For example, if a module `foo` exports a function, then it can be accessed with the
     /// syntax `foo(arg1, arg2, ...)` in a rule.
-    ///
-    /// Do note that if the function is documented as taking no arguments, then both `foo()` and
-    /// simply `foo` are valid syntaxes to call the function. This is useful to have lazy evaluated
-    /// values, such as `pe.nb_sections`, which can be used as is in a rule, but will call
-    /// a function declared by the `pe` module, so that its value can depend on the current scan.
     Function {
         /// The function to call during scanning.
         ///

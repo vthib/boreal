@@ -31,10 +31,7 @@ impl Module for Tests {
             ),
             (
                 "undefined",
-                Type::function(
-                    vec![],
-                    Type::object([("i", Type::Integer), ("f", Type::Float)]),
-                ),
+                Type::object([("i", Type::Integer), ("f", Type::Float)]),
             ),
             // TODO: missing module_data
             ("integer_array", Type::array(Type::Integer)),
@@ -154,8 +151,8 @@ impl Module for Tests {
                     ]),
                 ),
             ),
-            ("undefined_str", Type::function(vec![], Type::String)),
-            ("undefined_int", Type::function(vec![], Type::Integer)),
+            ("undefined_str", Type::String),
+            ("undefined_int", Type::Integer),
             (
                 "log",
                 Type::function(
@@ -188,14 +185,6 @@ impl Module for Tests {
                     ("str", Value::string("str")),
                     ("true", Value::Boolean(true)),
                 ]),
-            ),
-            (
-                "undefined",
-                Value::function(
-                    Self::undefined,
-                    vec![],
-                    Type::object([("i", Type::Integer), ("f", Type::Float)]),
-                ),
             ),
             // TODO: missing module_data
             (
@@ -348,14 +337,6 @@ impl Module for Tests {
                 ),
             ),
             (
-                "undefined_str",
-                Value::function(Self::undefined, vec![], Type::String),
-            ),
-            (
-                "undefined_int",
-                Value::function(Self::undefined, vec![], Type::Integer),
-            ),
-            (
                 "log",
                 Value::function(
                     Self::log,
@@ -374,10 +355,6 @@ impl Module for Tests {
 }
 
 impl Tests {
-    fn undefined(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
-        None
-    }
-
     fn fsum(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let mut res = f64::try_from(args.next()?).ok()?;
