@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use regex::bytes::Regex;
 
-use boreal::module::{Module, ScanContext, Type, Value};
+use boreal::module::{Module, ScanContext, StaticValue, Type, Value};
 
 #[derive(Debug)]
 pub struct Tests;
@@ -12,28 +12,52 @@ impl Module for Tests {
         "tests".to_owned()
     }
 
+    fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+        [
+            (
+                "constants",
+                StaticValue::object([
+                    ("one", StaticValue::Integer(1)),
+                    ("two", StaticValue::Integer(2)),
+                    ("foo", StaticValue::string("foo")),
+                    ("empty", StaticValue::string("")),
+                    // Not libyara
+                    ("one_half", StaticValue::Float(0.5)),
+                    ("regex", StaticValue::Regex(Regex::new("<a.b>").unwrap())),
+                    ("str", StaticValue::string("str")),
+                    ("true", StaticValue::Boolean(true)),
+                ]),
+            ),
+            (
+                "match",
+                StaticValue::function(
+                    Self::r#match,
+                    vec![vec![Type::Regex, Type::String]],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "isum",
+                StaticValue::function(
+                    Self::isum,
+                    vec![
+                        vec![Type::Integer, Type::Integer],
+                        vec![Type::Integer, Type::Integer, Type::Integer],
+                    ],
+                    Type::Integer,
+                ),
+            ),
+        ]
+        .into()
+    }
+
     fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
         [
             // Following is same as libyara, used in compliance tests
             (
-                "constants",
-                Type::object([
-                    ("one", Type::Integer),
-                    ("two", Type::Integer),
-                    ("foo", Type::String),
-                    ("empty", Type::String),
-                    // Not libyara
-                    ("one_half", Type::Float),
-                    ("regex", Type::Regex),
-                    ("str", Type::String),
-                    ("true", Type::Boolean),
-                ]),
-            ),
-            (
                 "undefined",
                 Type::object([("i", Type::Integer), ("f", Type::Float)]),
             ),
-            // TODO: missing module_data
             ("integer_array", Type::array(Type::Integer)),
             ("string_array", Type::array(Type::String)),
             ("integer_dict", Type::dict(Type::Integer)),
@@ -62,20 +86,6 @@ impl Module for Tests {
                         Type::dict(Type::object([("unused", Type::String)])),
                     ),
                 ])),
-            ),
-            (
-                "match",
-                Type::function(vec![vec![Type::Regex, Type::String]], Type::Integer),
-            ),
-            (
-                "isum",
-                Type::function(
-                    vec![
-                        vec![Type::Integer, Type::Integer],
-                        vec![Type::Integer, Type::Integer, Type::Integer],
-                    ],
-                    Type::Integer,
-                ),
             ),
             (
                 "fsum",
@@ -171,21 +181,6 @@ impl Module for Tests {
 
     fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
         [
-            // Following is same as libyara, used in compliance tests
-            (
-                "constants",
-                Value::object([
-                    ("one", Value::Integer(1)),
-                    ("two", Value::Integer(2)),
-                    ("foo", Value::string("foo")),
-                    ("empty", Value::string("")),
-                    // Not libyara
-                    ("one_half", Value::Float(0.5)),
-                    ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
-                    ("str", Value::string("str")),
-                    ("true", Value::Boolean(true)),
-                ]),
-            ),
             // TODO: missing module_data
             (
                 "integer_array",
@@ -239,25 +234,6 @@ impl Module for Tests {
                         Value::object([("i", Value::Integer(1)), ("s", Value::string("foo"))]),
                     )]
                     .into(),
-                ),
-            ),
-            (
-                "match",
-                Value::function(
-                    Self::r#match,
-                    vec![vec![Type::Regex, Type::String]],
-                    Type::Integer,
-                ),
-            ),
-            (
-                "isum",
-                Value::function(
-                    Self::isum,
-                    vec![
-                        vec![Type::Integer, Type::Integer],
-                        vec![Type::Integer, Type::Integer, Type::Integer],
-                    ],
-                    Type::Integer,
                 ),
             ),
             (
