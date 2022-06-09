@@ -13,6 +13,10 @@ pub use hash::Hash;
 mod elf;
 #[cfg(feature = "object")]
 pub use elf::Elf;
+#[cfg(feature = "object")]
+mod macho;
+#[cfg(feature = "object")]
+pub use macho::MachO;
 
 /// Module providing custom values and functions in rules.
 ///
