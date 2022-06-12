@@ -3,9 +3,12 @@ use std::collections::HashMap;
 // TODO: add tests on all methods, not relying on libyara compat tests
 
 use object::{
-    macho::{self, FatHeader, MachHeader32, MachHeader64, SegmentCommand32, SegmentCommand64},
-    read::macho::{FatArch, MachHeader, Section, Segment},
-    BigEndian, Endian, Endianness, FileKind,
+    macho::{
+        self, FatHeader, MachHeader32, MachHeader64, SegmentCommand32, SegmentCommand64,
+        ThreadCommand,
+    },
+    read::macho::{FatArch, LoadCommandData, MachHeader, Section, Segment},
+    BigEndian, Endian, Endianness, FileKind, U32, U64,
 };
 
 use super::{Module, ScanContext, StaticValue, Type, Value};
@@ -795,7 +798,7 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     reserved: Option<u32>,
 ) -> HashMap<&'static str, Value> {
     let magic = header.magic().into();
-    let cputype = header.cputype(e).into();
+    let cputype = header.cputype(e);
     let cpusubtype = header.cpusubtype(e).into();
     let filetype = header.filetype(e).into();
     let ncmds = header.ncmds(e).into();
@@ -806,11 +809,11 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     let nb_segments = segments.as_ref().and_then(|v| v.len().try_into().ok());
 
     // TODO: handle the UnixThread load command
-    let (entry_point, stack_size) = entry_point_data(header, e, mem);
+    let (entry_point, stack_size) = entry_point_data(header, e, mem, cputype);
 
     [
         ("magic", Some(magic)),
-        ("cputype", Some(cputype)),
+        ("cputype", Some(cputype.into())),
         ("cpusubtype", Some(cpusubtype)),
         ("filetype", Some(filetype)),
         ("ncmds", Some(ncmds)),
@@ -857,6 +860,7 @@ fn entry_point_data<Mach: MachHeader<Endian = Endianness>>(
     header: &Mach,
     e: Endianness,
     mem: &[u8],
+    cputype: u32,
 ) -> (Option<Value>, Option<Value>) {
     if let Ok(mut cmds) = header.load_commands(e, mem, 0) {
         while let Ok(Some(cmd)) = cmds.next() {
@@ -865,10 +869,134 @@ fn entry_point_data<Mach: MachHeader<Endian = Endianness>>(
                     entry.entryoff.get(e).try_into().ok(),
                     entry.stacksize.get(e).try_into().ok(),
                 );
+            } else if cmd.cmd() == macho::LC_UNIXTHREAD {
+                match handle_unix_thread(cmd, e, cputype) {
+                    Some(ep) => {
+                        // Entry-point retrieved is a VA, it must be converted into a file offset.
+                        return (va_to_file_offset(header, e, mem, ep), None);
+                    }
+                    None => return (None, None),
+                }
             }
         }
     }
     (None, None)
+}
+
+fn va_to_file_offset<Mach: MachHeader<Endian = Endianness>>(
+    header: &Mach,
+    e: Endianness,
+    mem: &[u8],
+    ep: u64,
+) -> Option<Value> {
+    let mut cmds = header.load_commands(e, mem, 0).ok()?;
+    while let Ok(Some(cmd)) = cmds.next() {
+        if let Ok(Some((segment, _))) = Mach::Segment::from_command(cmd) {
+            let vmaddr: u64 = segment.vmaddr(e).into();
+            let vmsize: u64 = segment.vmsize(e).into();
+
+            if ep >= vmaddr && ep < vmaddr.saturating_add(vmsize) {
+                let fileoff: u64 = segment.fileoff(e).into();
+                return fileoff.saturating_add(ep - vmaddr).try_into().ok();
+            }
+        }
+    }
+
+    None
+}
+
+fn handle_unix_thread(
+    cmd: LoadCommandData<Endianness>,
+    e: Endianness,
+    cputype: u32,
+) -> Option<u64> {
+    let thread_cmd: &ThreadCommand<Endianness> = cmd.data().ok()?;
+    let cmdsize = thread_cmd.cmdsize.get(e) as usize;
+
+    // The command is:
+    // - cmd: u32
+    // - cmdsize: u32,
+    // - flavor: u32
+    // - count: u32
+    // - <extra_state>
+    // with:
+    // - <extra_state> being additional fields depending on the cputype
+    // - cmdsize being the size of the whole command (so the 4 u32 + the extra state).
+    //
+    // We want to retrieve the entry point from the right field in the extra state.
+
+    // Get entry_point from an offset into the xtra state
+    let get_at = |mut offset: usize, is64: bool| {
+        // Add the 4 u32 at the start of the cmd.
+        offset += 16;
+        // 4 is the size of the entry point we are getting (u32).
+        if (is64 && offset + 8 > cmdsize) || (!is64 && offset + 4 > cmdsize) {
+            return None;
+        }
+
+        // TODO: ask object to expose the data buffer directly, this would avoid
+        // this very scary unsafe block.
+        //
+        // Safety:
+        //
+        // - underlying data buffer (address of thread_cmd) is of size "cmdsize". This is
+        //   guaranteed by object, but getting the underlying buffer would help ensure this
+        //   never changes.
+        // - offset is ensured to be in [0; cmdsize - N]
+        // Hence the N bytes pointed to after the add is in bound of the same allocated object.
+        let ptr: *const ThreadCommand<Endianness> = thread_cmd;
+        unsafe {
+            let ptr = ptr.cast::<u8>().add(offset);
+            if is64 {
+                let ptr = ptr.cast::<U64<Endianness>>();
+                Some((*ptr).get(e))
+            } else {
+                let ptr = ptr.cast::<U32<Endianness>>();
+                Some((*ptr).get(e).into())
+            }
+        }
+    };
+
+    // TODO: would be nice to test all this...
+    match cputype {
+        macho::CPU_TYPE_MC680X0 => {
+            // pc is after 16 u32 and 2 u16
+            get_at(16 * 4 + 2 * 2, false)
+        }
+        macho::CPU_TYPE_MC88000 => {
+            // entry point is after 31 u32s
+            get_at(31 * 4, false)
+        }
+        macho::CPU_TYPE_SPARC => {
+            // entry point is fater a single u32
+            get_at(4, false)
+        }
+        macho::CPU_TYPE_POWERPC => {
+            // srr0 is the first u32
+            get_at(0, false)
+        }
+        macho::CPU_TYPE_X86 => {
+            // eip is after 10 u32s
+            get_at(10 * 4, false)
+        }
+        macho::CPU_TYPE_ARM => {
+            // pc is after 15 u32s
+            get_at(15 * 4, false)
+        }
+        macho::CPU_TYPE_X86_64 => {
+            // rip is after 16 u64s
+            get_at(16 * 8, true)
+        }
+        macho::CPU_TYPE_ARM64 => {
+            // pc is after 32 u64s
+            get_at(32 * 8, true)
+        }
+        macho::CPU_TYPE_POWERPC64 => {
+            // srr0 is the first u64
+            get_at(0, true)
+        }
+        _ => None,
+    }
 }
 
 fn segment_to_map<S: Segment<Endian = E>, E: Copy>(

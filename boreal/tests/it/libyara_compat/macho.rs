@@ -164,13 +164,12 @@ fn test_macho() {
 
     // Entry point (LC_UNIXTHREAD)
 
-    // FIXME: handle this
-    // check(
-    //     "import \"macho\" rule test { condition:
-    // macho.entry_point == 0xeb8 }",
-    //     MACHO_PPC_FILE,
-    //     true,
-    // );
+    check(
+        "import \"macho\" rule test { condition:
+    macho.entry_point == 0xeb8 }",
+        MACHO_PPC_FILE,
+        true,
+    );
 
     // Tests for 64-bit and shared library files
 

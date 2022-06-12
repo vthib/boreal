@@ -11,7 +11,6 @@
 #![deny(single_use_lifetimes)]
 #![deny(trivial_casts)]
 #![deny(trivial_numeric_casts)]
-#![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
 #![deny(unused_extern_crates)]
 #![deny(unused_import_braces)]
@@ -25,6 +24,8 @@
 #![allow(clippy::unnested_or_patterns)]
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::too_many_lines)]
+// Would be nice to not need this, thanks macho module
+#![allow(unsafe_code)]
 
 // TODO: To activate before release
 // #![deny(missing_docs)]
