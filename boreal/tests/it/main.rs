@@ -11,5 +11,8 @@ mod modules;
 mod namespaces;
 mod variables;
 
+// Tests related to modules
+mod macho;
+
 // utils to run tests both with boreal and with yara
 mod utils;

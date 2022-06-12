@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-// TODO: add tests on all methods, not relying on libyara compat tests
-
 use object::{
     macho::{
         self, FatHeader, MachHeader32, MachHeader64, SegmentCommand32, SegmentCommand64,
@@ -786,6 +784,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
             Some(parse_header(header, e, mem, Some(header.reserved.get(e))))
         }
         FileKind::MachOFat32 => parse_fat(mem, false),
+        // TODO: add test on this format
         FileKind::MachOFat64 => parse_fat(mem, true),
         _ => None,
     }
@@ -797,7 +796,7 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     mem: &[u8],
     reserved: Option<u32>,
 ) -> HashMap<&'static str, Value> {
-    let magic = header.magic().into();
+    let magic = header.magic().to_be().into();
     let cputype = header.cputype(e);
     let cpusubtype = header.cpusubtype(e).into();
     let filetype = header.filetype(e).into();
@@ -840,14 +839,20 @@ fn segments<Mach: MachHeader<Endian = Endianness>>(
     while let Ok(Some(cmd)) = cmds.next() {
         if let Ok(Some((segment32, section_data))) = cmd.segment_32() {
             let mut map = segment_to_map(segment32, e);
-            if let Some(sections) = sections32(segment32, e, section_data) {
-                let _r = map.insert("sections", Value::Array(sections));
+            match sections32(segment32, e, section_data) {
+                Some(sections) if !sections.is_empty() => {
+                    let _r = map.insert("sections", Value::Array(sections));
+                }
+                _ => (),
             }
             segments.push(Value::Object(map));
         } else if let Ok(Some((segment64, section_data))) = cmd.segment_64() {
             let mut map = segment_to_map(segment64, e);
-            if let Some(sections) = sections64(segment64, e, section_data) {
-                let _r = map.insert("sections", Value::Array(sections));
+            match sections64(segment64, e, section_data) {
+                Some(sections) if !sections.is_empty() => {
+                    let _r = map.insert("sections", Value::Array(sections));
+                }
+                _ => (),
             }
             segments.push(Value::Object(map));
         }
@@ -1016,7 +1021,7 @@ fn segment_to_map<S: Segment<Endian = E>, E: Copy>(
         ("fileoff", fileoff.try_into().ok()),
         ("fsize", fsize.try_into().ok()),
         ("maxprot", Some(segment.maxprot(e).into())),
-        ("iniprot", Some(segment.initprot(e).into())),
+        ("initprot", Some(segment.initprot(e).into())),
         ("nsects", Some(segment.nsects(e).into())),
         ("flags", Some(segment.flags(e).into())),
     ]
