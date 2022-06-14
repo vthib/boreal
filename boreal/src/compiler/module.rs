@@ -346,7 +346,7 @@ impl ModuleUse<'_, '_> {
             // we can directly generate a primitive expression.
             Some(StaticValue::Integer(v)) => Expression::Number(*v),
             Some(StaticValue::Float(v)) => Expression::Double(*v),
-            Some(StaticValue::String(v)) => Expression::String(v.clone()),
+            Some(StaticValue::Bytes(v)) => Expression::Bytes(v.clone()),
             Some(StaticValue::Regex(v)) => Expression::Regex(v.clone()),
             Some(StaticValue::Boolean(v)) => Expression::Boolean(*v),
 
@@ -487,7 +487,7 @@ impl ValueOrType<'_> {
                     return Ok(());
                 }
                 ValueType::Dictionary { value_type, .. } => {
-                    check_subscript_type(Type::String)?;
+                    check_subscript_type(Type::Bytes)?;
                     *self = Self::Type(value_type);
                     return Ok(());
                 }
@@ -539,7 +539,7 @@ impl ValueOrType<'_> {
             Self::Value(value) => match value {
                 StaticValue::Integer(_) => "integer",
                 StaticValue::Float(_) => "float",
-                StaticValue::String(_) => "string",
+                StaticValue::Bytes(_) => "bytes",
                 StaticValue::Regex(_) => "regex",
                 StaticValue::Boolean(_) => "boolean",
                 StaticValue::Object(_) => "object",
@@ -548,7 +548,7 @@ impl ValueOrType<'_> {
             Self::Type(ty) => match ty {
                 ValueType::Integer => "integer",
                 ValueType::Float => "float",
-                ValueType::String => "string",
+                ValueType::Bytes => "bytes",
                 ValueType::Regex => "regex",
                 ValueType::Boolean => "boolean",
                 ValueType::Array { .. } => "array",
@@ -565,7 +565,7 @@ impl ValueOrType<'_> {
             Self::Value(value) => match value {
                 StaticValue::Integer(_) => Some(Type::Integer),
                 StaticValue::Float(_) => Some(Type::Float),
-                StaticValue::String(_) => Some(Type::String),
+                StaticValue::Bytes(_) => Some(Type::Bytes),
                 StaticValue::Regex(_) => Some(Type::Regex),
                 StaticValue::Boolean(_) => Some(Type::Boolean),
                 _ => None,
@@ -573,7 +573,7 @@ impl ValueOrType<'_> {
             Self::Type(ty) => match ty {
                 ValueType::Integer => Some(Type::Integer),
                 ValueType::Float => Some(Type::Float),
-                ValueType::String => Some(Type::String),
+                ValueType::Bytes => Some(Type::Bytes),
                 ValueType::Regex => Some(Type::Regex),
                 ValueType::Boolean => Some(Type::Boolean),
                 _ => None,
@@ -638,7 +638,7 @@ fn module_type_to_expr_type(v: &ValueType) -> Option<Type> {
     match v {
         ValueType::Integer => Some(Type::Integer),
         ValueType::Float => Some(Type::Float),
-        ValueType::String => Some(Type::String),
+        ValueType::Bytes => Some(Type::Bytes),
         ValueType::Regex => Some(Type::Regex),
         ValueType::Boolean => Some(Type::Boolean),
         _ => None,

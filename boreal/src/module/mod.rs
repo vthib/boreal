@@ -62,13 +62,13 @@ pub trait Module {
     ///     }
     ///
     ///     fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
-    ///         [("array", Type::array(Type::String))].into()
+    ///         [("array", Type::array(Type::Bytes))].into()
     ///     }
     ///
     ///     fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
     ///         [(
     ///             "array",
-    ///             Value::Array(vec![Value::string("a"), Value::string("b")])
+    ///             Value::Array(vec![Value::bytes("a"), Value::bytes("b")])
     ///         )].into()
     ///     }
     /// }
@@ -111,8 +111,8 @@ pub enum Value {
     Integer(i64),
     /// A floating-point value.
     Float(f64),
-    /// A string.
-    String(String),
+    /// A byte string.
+    Bytes(Vec<u8>),
     /// A regex.
     Regex(Regex),
     /// A boolean.
@@ -152,7 +152,7 @@ pub enum Value {
         /// # fn fun(_: &ScanContext, _: Vec<Value>) -> Option<Value> { None }
         /// # let ctx = ScanContext { mem: b"" };
         /// let result = fun(&ctx, vec![
-        ///     Value::string("a"),
+        ///     Value::bytes("a"),
         ///     Value::Integer(3),
         ///     Value::Integer(x), // Number of matches of string $foo
         /// ]);
@@ -164,7 +164,7 @@ pub enum Value {
         /// Each element of the list is a valid list of types that are accepted as arguments for
         /// the function. This is used when compiling a rule, to check the typings are correct.
         ///
-        /// For example: `[ [Type::Boolean], [Type::String, Type::Integer] ]` accepts both:
+        /// For example: `[ [Type::Boolean], [Type::Bytes, Type::Integer] ]` accepts both:
         /// - `fun(<boolean>)``
         /// - `fun(<string>, <integer>)`
         ///
@@ -185,7 +185,7 @@ impl std::fmt::Debug for Value {
         match self {
             Self::Integer(arg0) => f.debug_tuple("Integer").field(arg0).finish(),
             Self::Float(arg0) => f.debug_tuple("Float").field(arg0).finish(),
-            Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
+            Self::Bytes(arg0) => f.debug_tuple("Bytes").field(arg0).finish(),
             Self::Regex(arg0) => f.debug_tuple("Regex").field(arg0).finish(),
             Self::Boolean(arg0) => f.debug_tuple("Boolean").field(arg0).finish(),
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
@@ -215,8 +215,8 @@ pub enum StaticValue {
     Integer(i64),
     /// A floating-point value.
     Float(f64),
-    /// A string.
-    String(String),
+    /// A byte string.
+    Bytes(Vec<u8>),
     /// A regex.
     Regex(Regex),
     /// A boolean.
@@ -238,7 +238,7 @@ impl std::fmt::Debug for StaticValue {
         match self {
             Self::Integer(arg0) => f.debug_tuple("Integer").field(arg0).finish(),
             Self::Float(arg0) => f.debug_tuple("Float").field(arg0).finish(),
-            Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
+            Self::Bytes(arg0) => f.debug_tuple("Bytes").field(arg0).finish(),
             Self::Regex(arg0) => f.debug_tuple("Regex").field(arg0).finish(),
             Self::Boolean(arg0) => f.debug_tuple("Boolean").field(arg0).finish(),
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
@@ -257,8 +257,8 @@ impl std::fmt::Debug for StaticValue {
 }
 
 impl Value {
-    pub fn string<T: Into<String>>(v: T) -> Self {
-        Self::String(v.into())
+    pub fn bytes<T: Into<Vec<u8>>>(v: T) -> Self {
+        Self::Bytes(v.into())
     }
 
     #[must_use]
@@ -280,8 +280,8 @@ impl Value {
 }
 
 impl StaticValue {
-    pub fn string<T: Into<String>>(v: T) -> Self {
-        Self::String(v.into())
+    pub fn bytes<T: Into<Vec<u8>>>(v: T) -> Self {
+        Self::Bytes(v.into())
     }
 
     #[must_use]
@@ -307,7 +307,7 @@ impl StaticValue {
 pub enum Type {
     Integer,
     Float,
-    String,
+    Bytes,
     Regex,
     Boolean,
     Object(HashMap<&'static str, Type>),
@@ -369,7 +369,7 @@ macro_rules! try_from_value {
 
 try_from_value!(i64, Integer);
 try_from_value!(f64, Float);
-try_from_value!(String, String);
+try_from_value!(Vec<u8>, Bytes);
 try_from_value!(Regex, Regex);
 try_from_value!(bool, Boolean);
 
@@ -391,7 +391,7 @@ from_prim!(i16, Integer);
 from_prim!(u8, Integer);
 from_prim!(i8, Integer);
 from_prim!(f64, Float);
-from_prim!(String, String);
+from_prim!(Vec<u8>, Bytes);
 from_prim!(Regex, Regex);
 from_prim!(bool, Boolean);
 

@@ -46,7 +46,7 @@ pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
     match value {
         ModuleValue::Integer(v) => Some(Value::Number(v)),
         ModuleValue::Float(v) => Some(Value::Float(v)),
-        ModuleValue::String(v) => Some(Value::String(v)),
+        ModuleValue::Bytes(v) => Some(Value::Bytes(v)),
         ModuleValue::Regex(v) => Some(Value::Regex(v)),
         ModuleValue::Boolean(v) => Some(Value::Boolean(v)),
 
@@ -77,9 +77,9 @@ fn eval_dict_op(
     subscript: &Expression,
     mut dict: HashMap<String, ModuleValue>,
 ) -> Option<ModuleValue> {
-    let val = evaluator.evaluate_expr(subscript)?.unwrap_string()?;
+    let val = evaluator.evaluate_expr(subscript)?.unwrap_bytes()?;
 
-    dict.remove(&val)
+    std::str::from_utf8(&val).ok().and_then(|v| dict.remove(v))
 }
 
 fn eval_function_op(
@@ -136,7 +136,7 @@ fn expr_value_to_module_value(v: Value) -> ModuleValue {
     match v {
         Value::Number(v) => ModuleValue::Integer(v),
         Value::Float(v) => ModuleValue::Float(v),
-        Value::String(v) => ModuleValue::String(v),
+        Value::Bytes(v) => ModuleValue::Bytes(v),
         Value::Regex(v) => ModuleValue::Regex(v),
         Value::Boolean(v) => ModuleValue::Boolean(v),
     }

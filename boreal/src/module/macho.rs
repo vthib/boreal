@@ -616,7 +616,7 @@ impl Module for MachO {
             (
                 "segments",
                 Type::array(Type::object([
-                    ("segname", Type::String),
+                    ("segname", Type::Bytes),
                     ("vmaddr", Type::Integer),
                     ("vmsize", Type::Integer),
                     ("fileoff", Type::Integer),
@@ -628,8 +628,8 @@ impl Module for MachO {
                     (
                         "sections",
                         Type::array(Type::object([
-                            ("sectname", Type::String),
-                            ("segname", Type::String),
+                            ("sectname", Type::Bytes),
+                            ("segname", Type::Bytes),
                             ("addr", Type::Integer),
                             ("size", Type::Integer),
                             ("offset", Type::Integer),
@@ -1012,10 +1012,10 @@ fn segment_to_map<S: Segment<Endian = E>, E: Copy>(
     let vmsize: u64 = segment.vmsize(e).into();
     let fileoff: u64 = segment.fileoff(e).into();
     let fsize: u64 = segment.filesize(e).into();
-    let segname = std::str::from_utf8(segment.name()).ok();
+    let segname = segment.name().to_vec();
 
     [
-        ("segname", segname.map(|v| v.to_string().into())),
+        ("segname", Some(segname.into())),
         ("vmaddr", vmaddr.try_into().ok()),
         ("vmsize", vmsize.try_into().ok()),
         ("fileoff", fileoff.try_into().ok()),
@@ -1044,13 +1044,13 @@ fn sections32<E: Endian>(
             .map(|section| {
                 let addr: u64 = section.addr(e).into();
                 let size: u64 = section.size(e).into();
-                let segname = std::str::from_utf8(section.segment_name()).ok();
-                let sectname = std::str::from_utf8(section.name()).ok();
+                let segname = section.segment_name().to_vec();
+                let sectname = section.name().to_vec();
 
                 Value::Object(
                     [
-                        ("segname", segname.map(|v| v.to_string().into())),
-                        ("sectname", sectname.map(|v| v.to_string().into())),
+                        ("segname", Some(segname.into())),
+                        ("sectname", Some(sectname.into())),
                         ("addr", addr.try_into().ok()),
                         ("size", size.try_into().ok()),
                         ("offset", Some(section.offset(e).into())),
@@ -1083,13 +1083,13 @@ fn sections64<E: Endian>(
             .map(|section| {
                 let addr: u64 = section.addr(e);
                 let size: u64 = section.size(e);
-                let segname = std::str::from_utf8(section.segment_name()).ok();
-                let sectname = std::str::from_utf8(section.name()).ok();
+                let segname = section.segment_name().to_vec();
+                let sectname = section.name().to_vec();
 
                 Value::Object(
                     [
-                        ("segname", segname.map(|v| v.to_string().into())),
-                        ("sectname", sectname.map(|v| v.to_string().into())),
+                        ("segname", Some(segname.into())),
+                        ("sectname", Some(sectname.into())),
                         ("addr", addr.try_into().ok()),
                         ("size", size.try_into().ok()),
                         ("offset", Some(section.offset(e).into())),

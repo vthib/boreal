@@ -235,7 +235,7 @@ fn test_compilation_types() {
     compile_expr("$a at 100", Type::Boolean);
     compile_expr("$a in (0..10)", Type::Boolean);
 
-    compile_expr("\"a\"", Type::String);
+    compile_expr("\"a\"", Type::Bytes);
     compile_expr("/a/", Type::Regex);
 
     compile_expr("any of them", Type::Boolean);

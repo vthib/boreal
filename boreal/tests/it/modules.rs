@@ -145,7 +145,7 @@ fn test_value_wrong_op() {
     // Dict subscript must be a string
     check_tests_err(
         "tests.integer_dict[/a/] > 0",
-        "mem:3:35: error: expected an expression of type string",
+        "mem:3:35: error: expected an expression of type bytes",
     );
 
     // Subscript on array/subscript must be the right type
@@ -155,7 +155,7 @@ fn test_value_wrong_op() {
     );
     check_tests_err(
         "tests.integer_dict[5] > 0",
-        "mem:3:35: error: expected an expression of type string",
+        "mem:3:35: error: expected an expression of type bytes",
     );
 }
 
@@ -256,7 +256,7 @@ fn test_functions() {
     );
     check_tests_err(
         "tests.match(\"a\")",
-        "mem:3:27: error: invalid arguments types: [string]",
+        "mem:3:27: error: invalid arguments types: [bytes]",
     );
     check_tests_err(
         "tests.match(/a/, true)",

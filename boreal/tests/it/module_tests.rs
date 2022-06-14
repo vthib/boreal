@@ -19,12 +19,12 @@ impl Module for Tests {
                 StaticValue::object([
                     ("one", StaticValue::Integer(1)),
                     ("two", StaticValue::Integer(2)),
-                    ("foo", StaticValue::string("foo")),
-                    ("empty", StaticValue::string("")),
+                    ("foo", StaticValue::bytes("foo")),
+                    ("empty", StaticValue::bytes("")),
                     // Not libyara
                     ("one_half", StaticValue::Float(0.5)),
                     ("regex", StaticValue::Regex(Regex::new("<a.b>").unwrap())),
-                    ("str", StaticValue::string("str")),
+                    ("str", StaticValue::bytes("str")),
                     ("true", StaticValue::Boolean(true)),
                 ]),
             ),
@@ -32,7 +32,7 @@ impl Module for Tests {
                 "match",
                 StaticValue::function(
                     Self::r#match,
-                    vec![vec![Type::Regex, Type::String]],
+                    vec![vec![Type::Regex, Type::Bytes]],
                     Type::Integer,
                 ),
             ),
@@ -59,16 +59,16 @@ impl Module for Tests {
                 Type::object([("i", Type::Integer), ("f", Type::Float)]),
             ),
             ("integer_array", Type::array(Type::Integer)),
-            ("string_array", Type::array(Type::String)),
+            ("string_array", Type::array(Type::Bytes)),
             ("integer_dict", Type::dict(Type::Integer)),
-            ("string_dict", Type::dict(Type::String)),
+            ("string_dict", Type::dict(Type::Bytes)),
             (
                 "struct_array",
-                Type::array(Type::object([("i", Type::Integer), ("s", Type::String)])),
+                Type::array(Type::object([("i", Type::Integer), ("s", Type::Bytes)])),
             ),
             (
                 "struct_dict",
-                Type::dict(Type::object([("i", Type::Integer), ("s", Type::String)])),
+                Type::dict(Type::object([("i", Type::Integer), ("s", Type::Bytes)])),
             ),
             (
                 "empty_struct_dict",
@@ -79,11 +79,11 @@ impl Module for Tests {
                 Type::array(Type::object([
                     (
                         "struct_array",
-                        Type::array(Type::object([("unused", Type::String)])),
+                        Type::array(Type::object([("unused", Type::Bytes)])),
                     ),
                     (
                         "struct_dict",
-                        Type::dict(Type::object([("unused", Type::String)])),
+                        Type::dict(Type::object([("unused", Type::Bytes)])),
                     ),
                 ])),
             ),
@@ -99,12 +99,12 @@ impl Module for Tests {
             ),
             (
                 "length",
-                Type::function(vec![vec![Type::String]], Type::Integer),
+                Type::function(vec![vec![Type::Bytes]], Type::Integer),
             ),
-            ("empty", Type::function(vec![], Type::String)),
+            ("empty", Type::function(vec![], Type::Bytes)),
             (
                 "foobar",
-                Type::function(vec![vec![Type::Integer]], Type::String),
+                Type::function(vec![vec![Type::Integer]], Type::Bytes),
             ),
             // The rest is not in libyara
             (
@@ -115,23 +115,23 @@ impl Module for Tests {
                         ("one", Type::Integer),
                         ("one_half", Type::Float),
                         ("regex", Type::Regex),
-                        ("str", Type::String),
+                        ("str", Type::Bytes),
                         ("true", Type::Boolean),
                         (
                             "dict",
                             Type::object([
                                 ("i", Type::Integer),
-                                ("s", Type::String),
+                                ("s", Type::Bytes),
                                 // Declared here, but not exposed on evaluation
                                 ("oops", Type::Boolean),
                             ]),
                         ),
-                        ("str_array", Type::array(Type::String)),
+                        ("str_array", Type::array(Type::Bytes)),
                         (
                             "isum",
                             Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
                         ),
-                        ("string_dict", Type::dict(Type::String)),
+                        ("string_dict", Type::dict(Type::Bytes)),
                         (
                             "isum",
                             Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
@@ -147,7 +147,7 @@ impl Module for Tests {
                         // Declare as a dict, but exposes a bool
                         ("fake_dict_to_bool", Type::object([("i", Type::Integer)])),
                         // Declare as an array, but exposes a bool
-                        ("fake_array_to_bool", Type::array(Type::String)),
+                        ("fake_array_to_bool", Type::array(Type::Bytes)),
                         // Declare as a function, but exposes a bool
                         ("fake_fun_to_bool", Type::function(vec![], Type::Boolean)),
                         // Lazy to lazy to int
@@ -161,14 +161,14 @@ impl Module for Tests {
                     ]),
                 ),
             ),
-            ("undefined_str", Type::String),
+            ("undefined_str", Type::Bytes),
             ("undefined_int", Type::Integer),
             (
                 "log",
                 Type::function(
                     vec![
                         vec![Type::Integer],
-                        vec![Type::Boolean, Type::Regex, Type::String],
+                        vec![Type::Boolean, Type::Regex, Type::Bytes],
                         vec![Type::Boolean, Type::Regex],
                         vec![Type::Integer, Type::Boolean],
                     ],
@@ -193,10 +193,10 @@ impl Module for Tests {
             (
                 "string_array",
                 Value::Array(vec![
-                    Value::string("foo"),
-                    Value::string("bar"),
-                    Value::string("baz"),
-                    Value::string("foo\0bar"),
+                    Value::bytes("foo"),
+                    Value::bytes("bar"),
+                    Value::bytes("baz"),
+                    Value::bytes("foo\0bar"),
                 ]),
             ),
             (
@@ -213,8 +213,8 @@ impl Module for Tests {
                 "string_dict",
                 Value::Dictionary(
                     [
-                        ("foo".to_string(), Value::string("foo")),
-                        ("bar".to_string(), Value::string("bar")),
+                        ("foo".to_string(), Value::bytes("foo")),
+                        ("bar".to_string(), Value::bytes("bar")),
                     ]
                     .into(),
                 ),
@@ -231,7 +231,7 @@ impl Module for Tests {
                 Value::Dictionary(
                     [(
                         "foo".to_string(),
-                        Value::object([("i", Value::Integer(1)), ("s", Value::string("foo"))]),
+                        Value::object([("i", Value::Integer(1)), ("s", Value::bytes("foo"))]),
                     )]
                     .into(),
                 ),
@@ -249,12 +249,12 @@ impl Module for Tests {
             ),
             (
                 "length",
-                Value::function(Self::length, vec![vec![Type::String]], Type::Integer),
+                Value::function(Self::length, vec![vec![Type::Bytes]], Type::Integer),
             ),
-            ("empty", Value::function(Self::empty, vec![], Type::String)),
+            ("empty", Value::function(Self::empty, vec![], Type::Bytes)),
             (
                 "foobar",
-                Value::function(Self::foobar, vec![vec![Type::Integer]], Type::String),
+                Value::function(Self::foobar, vec![vec![Type::Integer]], Type::Bytes),
             ),
             // The rest is not in libyara
             (
@@ -266,23 +266,23 @@ impl Module for Tests {
                         ("one", Type::Integer),
                         ("one_half", Type::Float),
                         ("regex", Type::Regex),
-                        ("str", Type::String),
+                        ("str", Type::Bytes),
                         ("true", Type::Boolean),
                         (
                             "dict",
                             Type::object([
                                 ("i", Type::Integer),
-                                ("s", Type::String),
+                                ("s", Type::Bytes),
                                 // Declared here, but not exposed on evaluation
                                 ("oops", Type::Boolean),
                             ]),
                         ),
-                        ("str_array", Type::array(Type::String)),
+                        ("str_array", Type::array(Type::Bytes)),
                         (
                             "isum",
                             Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
                         ),
-                        ("string_dict", Type::dict(Type::String)),
+                        ("string_dict", Type::dict(Type::Bytes)),
                         (
                             "isum",
                             Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
@@ -298,7 +298,7 @@ impl Module for Tests {
                         // Declare as a dict, but exposes a bool
                         ("fake_dict_to_bool", Type::object([("i", Type::Integer)])),
                         // Declare as an array, but exposes a bool
-                        ("fake_array_to_bool", Type::array(Type::String)),
+                        ("fake_array_to_bool", Type::array(Type::Bytes)),
                         // Declare as a function, but exposes a bool
                         ("fake_fun_to_bool", Type::function(vec![], Type::Boolean)),
                         // Lazy to lazy to int
@@ -318,7 +318,7 @@ impl Module for Tests {
                     Self::log,
                     vec![
                         vec![Type::Integer],
-                        vec![Type::Boolean, Type::Regex, Type::String],
+                        vec![Type::Boolean, Type::Regex, Type::Bytes],
                         vec![Type::Boolean, Type::Regex],
                         vec![Type::Integer, Type::Boolean],
                     ],
@@ -351,20 +351,20 @@ impl Tests {
 
     fn length(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
-        let s: String = args.next()?.try_into().ok()?;
+        let s: Vec<u8> = args.next()?.try_into().ok()?;
 
         i64::try_from(s.len()).ok().map(Value::Integer)
     }
 
     fn empty(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
-        Some(Value::String("".into()))
+        Some(Value::Bytes("".into()))
     }
 
     fn foobar(_: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v = i64::try_from(args.next()?).ok()?;
 
-        Some(Value::string(match v {
+        Some(Value::bytes(match v {
             1 => "foo",
             2 => "bar",
             _ => "oops",
@@ -378,9 +378,9 @@ impl Tests {
     fn r#match(_: &ScanContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let regex: Regex = args.next()?.try_into().ok()?;
-        let s: String = args.next()?.try_into().ok()?;
+        let s: Vec<u8> = args.next()?.try_into().ok()?;
 
-        Some(Value::Integer(match regex.find(s.as_bytes()) {
+        Some(Value::Integer(match regex.find(&s) {
             Some(m) => m.range().len() as i64,
             None => -1,
         }))
@@ -391,27 +391,27 @@ impl Tests {
             ("one", Value::Integer(1)),
             ("one_half", Value::Float(0.5)),
             ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
-            ("str", Value::string("str")),
+            ("str", Value::bytes("str")),
             ("true", Value::Boolean(true)),
             (
                 "dict",
-                Value::object([("i", Value::Integer(3)), ("s", Value::string("<acb>"))]),
+                Value::object([("i", Value::Integer(3)), ("s", Value::bytes("<acb>"))]),
             ),
             (
                 "str_array",
                 Value::Array(vec![
-                    Value::string("foo"),
-                    Value::string("bar"),
-                    Value::string("baz"),
-                    Value::string("foo\0bar"),
+                    Value::bytes("foo"),
+                    Value::bytes("bar"),
+                    Value::bytes("baz"),
+                    Value::bytes("foo\0bar"),
                 ]),
             ),
             (
                 "string_dict",
                 Value::Dictionary(
                     [
-                        ("foo".to_string(), Value::string("foo")),
-                        ("bar".to_string(), Value::string("bar")),
+                        ("foo".to_string(), Value::bytes("foo")),
+                        ("bar".to_string(), Value::bytes("bar")),
                     ]
                     .into(),
                 ),

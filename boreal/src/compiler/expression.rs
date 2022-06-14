@@ -19,7 +19,7 @@ use crate::module::Type as ModuleType;
 pub(super) enum Type {
     Integer,
     Float,
-    String,
+    Bytes,
     Regex,
     Boolean,
 }
@@ -29,7 +29,7 @@ impl std::fmt::Display for Type {
         fmt.write_str(match self {
             Self::Integer => "integer",
             Self::Float => "floating-point number",
-            Self::String => "string",
+            Self::Bytes => "bytes",
             Self::Regex => "regex",
             Self::Boolean => "boolean",
         })
@@ -361,8 +361,8 @@ pub enum Expression {
         operations: Vec<ValueOperation>,
     },
 
-    /// A string.
-    String(String),
+    /// A byte string.
+    Bytes(Vec<u8>),
     /// A regex.
     Regex(Regex),
 }
@@ -605,8 +605,8 @@ pub(super) fn compile_expression(
 
             Ok(Expr {
                 expr: Expression::Contains {
-                    haystack: haystack.unwrap_expr(Type::String)?,
-                    needle: needle.unwrap_expr(Type::String)?,
+                    haystack: haystack.unwrap_expr(Type::Bytes)?,
+                    needle: needle.unwrap_expr(Type::Bytes)?,
                     case_insensitive,
                 },
                 ty: Type::Boolean,
@@ -624,8 +624,8 @@ pub(super) fn compile_expression(
 
             Ok(Expr {
                 expr: Expression::StartsWith {
-                    expr: expr.unwrap_expr(Type::String)?,
-                    prefix: prefix.unwrap_expr(Type::String)?,
+                    expr: expr.unwrap_expr(Type::Bytes)?,
+                    prefix: prefix.unwrap_expr(Type::Bytes)?,
                     case_insensitive,
                 },
                 ty: Type::Boolean,
@@ -643,8 +643,8 @@ pub(super) fn compile_expression(
 
             Ok(Expr {
                 expr: Expression::EndsWith {
-                    expr: expr.unwrap_expr(Type::String)?,
-                    suffix: suffix.unwrap_expr(Type::String)?,
+                    expr: expr.unwrap_expr(Type::Bytes)?,
+                    suffix: suffix.unwrap_expr(Type::Bytes)?,
                     case_insensitive,
                 },
                 ty: Type::Boolean,
@@ -658,8 +658,8 @@ pub(super) fn compile_expression(
 
             Ok(Expr {
                 expr: Expression::IEquals(
-                    left.unwrap_expr(Type::String)?,
-                    right.unwrap_expr(Type::String)?,
+                    left.unwrap_expr(Type::Bytes)?,
+                    right.unwrap_expr(Type::Bytes)?,
                 ),
                 ty: Type::Boolean,
                 span,
@@ -670,7 +670,7 @@ pub(super) fn compile_expression(
             let expr = compile_expression(compiler, *expr)?;
 
             Ok(Expr {
-                expr: Expression::Matches(expr.unwrap_expr(Type::String)?, compile_regex(regex)?),
+                expr: Expression::Matches(expr.unwrap_expr(Type::Bytes)?, compile_regex(regex)?),
                 ty: Type::Boolean,
                 span,
             })
@@ -830,8 +830,8 @@ pub(super) fn compile_expression(
             Ok(Expr { expr, ty, span })
         }
         parser::ExpressionKind::String(s) => Ok(Expr {
-            expr: Expression::String(s),
-            ty: Type::String,
+            expr: Expression::Bytes(s.into_bytes()),
+            ty: Type::Bytes,
             span,
         }),
         parser::ExpressionKind::Regex(regex) => Ok(Expr {
@@ -859,7 +859,7 @@ where
     let ty = match (a.ty, b.ty) {
         (Type::Integer, Type::Integer) => Type::Integer,
         (Type::Float | Type::Integer, Type::Integer | Type::Float) => Type::Float,
-        (Type::String, Type::String) if string_allowed => Type::String,
+        (Type::Bytes, Type::Bytes) if string_allowed => Type::Bytes,
         _ => {
             return Err(CompilationError::ExpressionIncompatibleTypes {
                 left_type: a.ty.to_string(),
@@ -1078,7 +1078,7 @@ fn compile_for_iterator(
                     &[key, value] => {
                         compiler.add_bounded_identifier(
                             key,
-                            BoundedIdentifierType::Type(Type::String),
+                            BoundedIdentifierType::Type(Type::Bytes),
                             identifiers_span,
                         )?;
                         compiler.add_bounded_identifier(

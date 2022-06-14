@@ -22,31 +22,31 @@ impl Module for Hash {
                 "md5",
                 StaticValue::function(
                     Self::md5,
-                    vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
-                    Type::String,
+                    vec![vec![Type::Integer, Type::Integer], vec![Type::Bytes]],
+                    Type::Bytes,
                 ),
             ),
             (
                 "sha1",
                 StaticValue::function(
                     Self::sha1,
-                    vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
-                    Type::String,
+                    vec![vec![Type::Integer, Type::Integer], vec![Type::Bytes]],
+                    Type::Bytes,
                 ),
             ),
             (
                 "sha256",
                 StaticValue::function(
                     Self::sha2,
-                    vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
-                    Type::String,
+                    vec![vec![Type::Integer, Type::Integer], vec![Type::Bytes]],
+                    Type::Bytes,
                 ),
             ),
             (
                 "checksum32",
                 StaticValue::function(
                     Self::checksum32,
-                    vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
+                    vec![vec![Type::Integer, Type::Integer], vec![Type::Bytes]],
                     Type::Integer,
                 ),
             ),
@@ -54,7 +54,7 @@ impl Module for Hash {
                 "crc32",
                 StaticValue::function(
                     Self::crc32,
-                    vec![vec![Type::Integer, Type::Integer], vec![Type::String]],
+                    vec![vec![Type::Integer, Type::Integer], vec![Type::Bytes]],
                     Type::Integer,
                 ),
             ),
@@ -65,15 +65,21 @@ impl Module for Hash {
 
 impl Hash {
     fn md5(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        apply(ctx, args, |s| Value::String(hex::encode(Md5::digest(s))))
+        apply(ctx, args, |s| {
+            Value::Bytes(hex::encode(Md5::digest(s)).into_bytes())
+        })
     }
 
     fn sha1(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        apply(ctx, args, |s| Value::String(hex::encode(Sha1::digest(s))))
+        apply(ctx, args, |s| {
+            Value::Bytes(hex::encode(Sha1::digest(s)).into_bytes())
+        })
     }
 
     fn sha2(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        apply(ctx, args, |s| Value::String(hex::encode(Sha256::digest(s))))
+        apply(ctx, args, |s| {
+            Value::Bytes(hex::encode(Sha256::digest(s)).into_bytes())
+        })
     }
 
     fn checksum32(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
@@ -100,7 +106,7 @@ where
     let mut args = args.into_iter();
     let v = args.next()?;
     match v {
-        Value::String(s) => Some(fun(s.as_bytes())),
+        Value::Bytes(s) => Some(fun(&s)),
         Value::Integer(offset) => {
             let length = i64::try_from(args.next()?).ok()?;
             match (usize::try_from(offset), usize::try_from(length)) {

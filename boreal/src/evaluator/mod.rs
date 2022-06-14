@@ -11,6 +11,7 @@
 //! The use of an `Option` is useful to propagate this poison value easily.
 use std::collections::HashMap;
 
+use memchr::memmem;
 use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
@@ -27,7 +28,7 @@ use variable::VariableEvaluation;
 enum Value {
     Number(i64),
     Float(f64),
-    String(String),
+    Bytes(Vec<u8>),
     Regex(Regex),
     Boolean(bool),
 }
@@ -36,7 +37,7 @@ impl Value {
     fn to_bool(&self) -> bool {
         match self {
             Self::Boolean(b) => *b,
-            Self::String(s) => !s.is_empty(),
+            Self::Bytes(s) => !s.is_empty(),
             Self::Float(a) => *a != 0.0,
             Self::Number(n) => *n != 0,
             Self::Regex(_) => true,
@@ -50,9 +51,9 @@ impl Value {
         }
     }
 
-    fn unwrap_string(self) -> Option<String> {
+    fn unwrap_bytes(self) -> Option<Vec<u8>> {
         match self {
-            Self::String(v) => Some(v),
+            Self::Bytes(v) => Some(v),
             _ => None,
         }
     }
@@ -110,16 +111,16 @@ struct Evaluator<'a, 'b, 'c> {
     module_ctx: ScanContext<'b>,
 }
 
-macro_rules! string_op {
+macro_rules! bytes_op {
     ($self:expr, $left:expr, $right:expr, $case_insensitive:expr, $method:ident) => {{
         let left = $self.evaluate_expr($left)?;
-        let left = left.unwrap_string()?;
+        let mut left = left.unwrap_bytes()?;
         let right = $self.evaluate_expr($right)?;
-        let right = right.unwrap_string()?;
+        let mut right = right.unwrap_bytes()?;
 
         if $case_insensitive {
-            let left = left.to_lowercase();
-            let right = right.to_lowercase();
+            left.make_ascii_lowercase();
+            right.make_ascii_lowercase();
             Some(Value::Boolean(left.$method(&right)))
         } else {
             Some(Value::Boolean(left.$method(&right)))
@@ -154,7 +155,7 @@ macro_rules! apply_cmp_op {
             (Value::Float(a), Value::Float(b)) => a $op b,
             (Value::Number(n), Value::Float(b)) => (n as f64) $op b,
             (Value::Float(a), Value::Number(m)) => a $op (m as f64),
-            (Value::String(a), Value::String(b)) => a $op b,
+            (Value::Bytes(a), Value::Bytes(b)) => a $op b,
             _ => return None,
         }
     }
@@ -372,7 +373,7 @@ impl Evaluator<'_, '_, '_> {
                     (Value::Number(n), Value::Float(a)) | (Value::Float(a), Value::Number(n)) => {
                         (a - (n as f64)).abs() < f64::EPSILON
                     }
-                    (Value::String(a), Value::String(b)) => a == b,
+                    (Value::Bytes(a), Value::Bytes(b)) => a == b,
                     (Value::Boolean(a), Value::Boolean(b)) => a == b,
                     _ => return None,
                 };
@@ -383,30 +384,43 @@ impl Evaluator<'_, '_, '_> {
                 needle,
                 case_insensitive,
             } => {
-                string_op!(self, haystack, needle, *case_insensitive, contains)
+                let left = self.evaluate_expr(haystack)?;
+                let mut left = left.unwrap_bytes()?;
+                let right = self.evaluate_expr(needle)?;
+                let mut right = right.unwrap_bytes()?;
+
+                if *case_insensitive {
+                    left.make_ascii_lowercase();
+                    right.make_ascii_lowercase();
+                    Some(Value::Boolean(memmem::find(&left, &right).is_some()))
+                } else {
+                    Some(Value::Boolean(memmem::find(&left, &right).is_some()))
+                }
             }
             Expression::StartsWith {
                 expr,
                 prefix,
                 case_insensitive,
             } => {
-                string_op!(self, expr, prefix, *case_insensitive, starts_with)
+                bytes_op!(self, expr, prefix, *case_insensitive, starts_with)
             }
             Expression::EndsWith {
                 expr,
                 suffix,
                 case_insensitive,
             } => {
-                string_op!(self, expr, suffix, *case_insensitive, ends_with)
+                bytes_op!(self, expr, suffix, *case_insensitive, ends_with)
             }
             Expression::IEquals(left, right) => {
-                let left = self.evaluate_expr(left)?.unwrap_string()?.to_lowercase();
-                let right = self.evaluate_expr(right)?.unwrap_string()?.to_lowercase();
+                let mut left = self.evaluate_expr(left)?.unwrap_bytes()?;
+                left.make_ascii_lowercase();
+                let mut right = self.evaluate_expr(right)?.unwrap_bytes()?;
+                right.make_ascii_lowercase();
                 Some(Value::Boolean(left == right))
             }
             Expression::Matches(expr, regex) => {
-                let s = self.evaluate_expr(expr)?.unwrap_string()?;
-                Some(Value::Boolean(regex.is_match(s.as_bytes())))
+                let s = self.evaluate_expr(expr)?.unwrap_bytes()?;
+                Some(Value::Boolean(regex.is_match(&s)))
             }
             Expression::Defined(expr) => {
                 let expr = self.evaluate_expr(expr);
@@ -557,7 +571,7 @@ impl Evaluator<'_, '_, '_> {
 
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
-            Expression::String(v) => Some(Value::String(v.clone())),
+            Expression::Bytes(v) => Some(Value::Bytes(v.clone())),
             Expression::Regex(v) => Some(Value::Regex(v.clone())),
             Expression::Boolean(v) => Some(Value::Boolean(*v)),
         }
@@ -645,7 +659,9 @@ impl Evaluator<'_, '_, '_> {
                     ModuleValue::Dictionary(dict) => {
                         for (key, value) in dict {
                             self.bounded_identifiers_stack
-                                .push(BoundedIdentifierValue::RawValue(Value::String(key)));
+                                .push(BoundedIdentifierValue::RawValue(Value::Bytes(
+                                    key.into_bytes(),
+                                )));
                             self.bounded_identifiers_stack
                                 .push(BoundedIdentifierValue::ModuleValue(value));
                             let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());

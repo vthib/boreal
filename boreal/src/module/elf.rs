@@ -174,7 +174,7 @@ impl Module for Elf {
                     ("type", Type::Integer),
                     ("flags", Type::Integer),
                     ("address", Type::Integer),
-                    ("name", Type::String),
+                    ("name", Type::Bytes),
                     ("size", Type::Integer),
                     ("offset", Type::Integer),
                 ])),
@@ -205,7 +205,7 @@ impl Module for Elf {
             (
                 "symtab",
                 Type::array(Type::object([
-                    ("name", Type::String),
+                    ("name", Type::Bytes),
                     ("value", Type::Integer),
                     ("size", Type::Integer),
                     ("type", Type::Integer),
@@ -217,7 +217,7 @@ impl Module for Elf {
             (
                 "dynsym",
                 Type::array(Type::object([
-                    ("name", Type::String),
+                    ("name", Type::Bytes),
                     ("value", Type::Integer),
                     ("size", Type::Integer),
                     ("type", Type::Integer),
@@ -354,12 +354,8 @@ fn sections<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
                 if let Ok(v) = section.sh_offset(e).into().try_into() {
                     let _r = obj.insert("offset", v);
                 }
-                if let Some(v) = section_table
-                    .section_name(e, section)
-                    .ok()
-                    .and_then(|v| std::str::from_utf8(v).ok())
-                {
-                    let _r = obj.insert("name", v.to_string().into());
+                if let Some(v) = section_table.section_name(e, section).ok() {
+                    let _r = obj.insert("name", v.to_vec().into());
                 }
 
                 Value::Object(obj)
@@ -449,12 +445,8 @@ fn get_symbols<Elf: FileHeader>(
             .map(|symbol| {
                 let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
 
-                if let Some(v) = symbol
-                    .name(e, strings_table)
-                    .ok()
-                    .and_then(|v| std::str::from_utf8(v).ok())
-                {
-                    let _r = obj.insert("name", v.to_string().into());
+                if let Some(v) = symbol.name(e, strings_table).ok() {
+                    let _r = obj.insert("name", v.to_vec().into());
                 }
                 let _r = obj.insert("bind", symbol.st_bind().into());
                 let _r = obj.insert("type", symbol.st_type().into());

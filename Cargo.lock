@@ -95,6 +95,7 @@ dependencies = [
  "grep-regex",
  "hex",
  "md-5",
+ "memchr",
  "object",
  "regex",
  "regex-syntax",
