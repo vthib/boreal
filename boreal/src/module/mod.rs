@@ -19,6 +19,10 @@ pub use elf::Elf;
 mod macho;
 #[cfg(feature = "object")]
 pub use macho::MachO;
+#[cfg(feature = "object")]
+mod pe;
+#[cfg(feature = "object")]
+pub use pe::Pe;
 
 /// Module providing custom values and functions in rules.
 ///

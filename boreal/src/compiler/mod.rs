@@ -50,7 +50,7 @@ impl Compiler {
     /// All available modules are enabled by default:
     /// - `time`
     /// - `hash` if the `hash` feature is enabled
-    /// - `elf` and `macho` if the `object` feature is enabled
+    /// - `elf`, `macho` and `pe` if the `object` feature is enabled
     #[must_use]
     pub fn new() -> Self {
         let mut this = Self::default();
@@ -62,6 +62,8 @@ impl Compiler {
         this.add_module(crate::module::Elf);
         #[cfg(feature = "object")]
         this.add_module(crate::module::MachO);
+        #[cfg(feature = "object")]
+        this.add_module(crate::module::Pe);
 
         this
     }
