@@ -354,7 +354,7 @@ fn sections<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
                 if let Ok(v) = section.sh_offset(e).into().try_into() {
                     let _r = obj.insert("offset", v);
                 }
-                if let Some(v) = section_table.section_name(e, section).ok() {
+                if let Ok(v) = section_table.section_name(e, section) {
                     let _r = obj.insert("name", v.to_vec().into());
                 }
 
@@ -445,7 +445,7 @@ fn get_symbols<Elf: FileHeader>(
             .map(|symbol| {
                 let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
 
-                if let Some(v) = symbol.name(e, strings_table).ok() {
+                if let Ok(v) = symbol.name(e, strings_table) {
                     let _r = obj.insert("name", v.to_vec().into());
                 }
                 let _r = obj.insert("bind", symbol.st_bind().into());

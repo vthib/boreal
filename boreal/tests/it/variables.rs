@@ -176,26 +176,26 @@ rule a {{
 
     let checker = build_checker("<[a-z][0-9]*>");
     checker.check(b"<a>", false);
-    checker.check(b"<\0a\0>\0", true);
-    checker.check(b"<\0a>\0", false);
-    checker.check(b"<\0\0\0>\0", false);
-    checker.check(b"<\0\0>\0", false);
+    checker.check(b"<\x00a\x00>\x00", true);
+    checker.check(b"<\x00a>\x00", false);
+    checker.check(b"<\x00\x00\x00>\x00", false);
+    checker.check(b"<\x00\x00>\x00", false);
     checker.check(b"<b22>", false);
-    checker.check(b"<\0b\022\0>\0", false);
-    checker.check(b"<\0b\02\02\0>\0", true);
-    checker.check(b"<\0a\09\03\0>\0", true);
-    checker.check(b"<\0a\09\0d\0>\0", false);
-    checker.check(b"a\09\0", false);
+    checker.check(b"<\x00b\x0022\x00>\x00", false);
+    checker.check(b"<\x00b\x002\x002\x00>\x00", true);
+    checker.check(b"<\x00a\x009\x003\x00>\x00", true);
+    checker.check(b"<\x00a\x009\x00d\x00>\x00", false);
+    checker.check(b"a\x009\x00", false);
 
     let checker = build_checker(r#"\d[^abc]d$"#);
     checker.check(b"13d", false);
-    checker.check(b"1\03\0d\0", true);
-    checker.check(b"1\03\0d", false);
-    checker.check(b"1\03\0\0", false);
-    checker.check(b"a\0d\0d\0", false);
-    checker.check(b"1\0a\0d\0", false);
-    checker.check(b"1\0d\0e\0", false);
-    checker.check(b"1\0d\0d\0", true);
+    checker.check(b"1\x003\x00d\x00", true);
+    checker.check(b"1\x003\x00d", false);
+    checker.check(b"1\x003\x00\x00", false);
+    checker.check(b"a\x00d\x00d\x00", false);
+    checker.check(b"1\x00a\x00d\x00", false);
+    checker.check(b"1\x00d\x00e\x00", false);
+    checker.check(b"1\x00d\x00d\x00", true);
 
     let checker = Checker::new(
         r#"
