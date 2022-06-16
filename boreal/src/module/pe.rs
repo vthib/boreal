@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use object::{
     coff::{SectionTable, SymbolTable},
-    pe::{self, ImageDosHeader, ImageImportDescriptor, ImageNtHeaders32, ImageNtHeaders64},
+    pe::{self, ImageImportDescriptor, ImageNtHeaders32, ImageNtHeaders64},
     read::pe::{
         DataDirectories, ExportTable, ImageNtHeaders, ImageOptionalHeader, ImageThunkData,
-        ImportTable,
+        ImportTable, PeFile, RichHeaderInfo,
     },
     FileKind, LittleEndian as LE, StringTable,
 };
@@ -690,6 +690,67 @@ impl Module for Pe {
             ("IMPORT_STANDARD", StaticValue::Integer(2)),
             ("IMPORT_ANY", StaticValue::Integer(!0)),
             (
+                "section_index",
+                StaticValue::function(
+                    Self::section_index,
+                    vec![vec![Type::Bytes], vec![Type::Integer]],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "exports",
+                StaticValue::function(
+                    Self::exports,
+                    vec![vec![Type::Bytes], vec![Type::Integer], vec![Type::Regex]],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "exports_index",
+                StaticValue::function(
+                    Self::exports_index,
+                    vec![vec![Type::Bytes], vec![Type::Integer], vec![Type::Regex]],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "imports",
+                StaticValue::function(
+                    Self::exports,
+                    vec![
+                        vec![Type::Bytes, Type::Bytes],
+                        vec![Type::Bytes, Type::Integer],
+                        vec![Type::Bytes],
+                        vec![Type::Regex, Type::Regex],
+                        vec![Type::Integer, Type::Bytes, Type::Bytes],
+                        vec![Type::Integer, Type::Bytes, Type::Integer],
+                        vec![Type::Integer, Type::Bytes],
+                        vec![Type::Integer, Type::Regex, Type::Regex],
+                    ],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "locale",
+                StaticValue::function(Self::locale, vec![vec![Type::Integer]], Type::Integer),
+            ),
+            (
+                "language",
+                StaticValue::function(Self::language, vec![vec![Type::Integer]], Type::Integer),
+            ),
+            (
+                "is_dll",
+                StaticValue::function(Self::is_dll, vec![], Type::Integer),
+            ),
+            (
+                "is_32bit",
+                StaticValue::function(Self::is_32bit, vec![], Type::Integer),
+            ),
+            (
+                "is_64bit",
+                StaticValue::function(Self::is_64bit, vec![], Type::Integer),
+            ),
+            (
                 "calculate_checksum",
                 StaticValue::function(Self::calculate_checksum, vec![], Type::Integer),
             ),
@@ -786,7 +847,7 @@ impl Module for Pe {
             ),
             (
                 "rich_signature",
-                Type::array(Type::object([
+                Type::object([
                     ("offset", Type::Integer),
                     ("length", Type::Integer),
                     ("key", Type::Integer),
@@ -806,7 +867,7 @@ impl Module for Pe {
                             Type::Integer,
                         ),
                     ),
-                ])),
+                ]),
             ),
             // TODO: imphash
             ("number_of_imports", Type::Integer),
@@ -906,12 +967,15 @@ impl Module for Pe {
 }
 
 fn parse_file<Pe: ImageNtHeaders>(data: &[u8]) -> Option<HashMap<&'static str, Value>> {
-    let image_dos_header = ImageDosHeader::parse(data).ok()?;
-    let mut offset = image_dos_header.nt_headers_offset().into();
-    let (nt_headers, data_dirs) = Pe::parse(data, &mut offset).ok()?;
+    let file = PeFile::<Pe>::parse(data).ok()?;
+    let nt_headers = file.nt_headers();
+    let data_dirs = file.data_directories();
 
     let hdr = nt_headers.file_header();
     let opt_hdr = nt_headers.optional_header();
+
+    let sections = file.section_table();
+    let symbols = hdr.symbols(data).ok();
 
     let ep = opt_hdr.address_of_entry_point();
 
@@ -1022,30 +1086,44 @@ fn parse_file<Pe: ImageNtHeaders>(data: &[u8]) -> Option<HashMap<&'static str, V
         ("loader_flags", Some(opt_hdr.loader_flags().into())),
         //
         ("data_directories", Some(data_directories(data_dirs))),
+        (
+            "sections",
+            Some(sections_to_value(
+                &sections,
+                symbols.as_ref().map(SymbolTable::strings),
+            )),
+        ),
+        ("overlay", overlay(&sections, data)),
+        (
+            "rich_signature",
+            file.rich_header_info().map(rich_signature),
+        ),
     ]
     .into_iter()
     .filter_map(|(k, v)| v.map(|v| (k, v)))
     .collect();
 
-    if let Ok(sections) = hdr.sections(data, offset) {
-        let symbols = hdr.symbols(data).ok();
-
-        let _r = map.insert(
-            "sections",
-            sections_to_value(&sections, symbols.as_ref().map(SymbolTable::strings)),
-        );
-        if let Some(v) = overlay(&sections, data) {
-            let _r = map.insert("overlay", v);
-        }
-
-        add_imports::<Pe>(&data_dirs, data, &sections, &mut map);
-        add_exports(&data_dirs, data, &sections, &mut map);
-    }
+    add_imports::<Pe>(&data_dirs, data, &sections, &mut map);
+    add_exports(&data_dirs, data, &sections, &mut map);
 
     // TODO: rich signature
     // TODO: delay import details
     //
     Some(map)
+}
+
+fn rich_signature(info: RichHeaderInfo) -> Value {
+    Value::Object(
+        [
+            ("offset", info.offset.try_into().ok()),
+            ("length", info.length.try_into().ok()),
+            ("key", Some(info.xor_key.into())),
+            // TODO: get raw & unmask data from object
+        ]
+        .into_iter()
+        .filter_map(|(k, v)| v.map(|v| (k, v)))
+        .collect(),
+    )
 }
 
 fn add_imports<Pe: ImageNtHeaders>(
@@ -1289,12 +1367,75 @@ fn overlay(sections: &SectionTable, data: &[u8]) -> Option<Value> {
     }
 }
 
-fn rva_to_offset(ep: u32) -> Option<Value> {
+fn rva_to_offset(_ep: u32) -> Option<Value> {
     todo!()
 }
 
 impl Pe {
-    fn calculate_checksum(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn calculate_checksum(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+
+    fn section_index(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+    fn exports(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+    fn exports_index(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+    fn imports(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let first = args.next()?;
+        let second = args.next();
+        let third = args.next();
+        match (first, second, third) {
+            (Value::Bytes(dll_name), Some(Value::Bytes(function_name)), None) => None,
+            (Value::Bytes(dll_name), Some(Value::Integer(ordinal)), None) => None,
+            (Value::Bytes(dll_name), None, None) => None,
+            (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => None,
+            (
+                Value::Integer(flags),
+                Some(Value::Bytes(dll_name)),
+                Some(Value::Bytes(function_name)),
+            ) => None,
+            (
+                Value::Integer(flags),
+                Some(Value::Bytes(dll_name)),
+                Some(Value::Integer(ordinal)),
+            ) => None,
+            (Value::Integer(flags), Some(Value::Bytes(dll_name)), None) => None,
+            (
+                Value::Integer(flags),
+                Some(Value::Regex(dll_name)),
+                Some(Value::Regex(function_name)),
+            ) => None,
+            _ => None,
+        }
+    }
+    fn locale(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+    fn language(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+    fn is_dll(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+    fn is_32bit(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
+        todo!()
+    }
+    fn is_64bit(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let _args = args.into_iter();
         todo!()
     }
 }
