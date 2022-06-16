@@ -2,7 +2,11 @@
 //! files or memory on a set of rules.
 use std::collections::HashMap;
 
-use crate::{compiler::Rule, evaluator};
+use crate::{
+    compiler::Rule,
+    evaluator::{self, ScanData},
+    module::Module,
+};
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
 #[derive(Debug)]
@@ -10,12 +14,12 @@ pub struct Scanner {
     rules: Vec<Rule>,
 
     // List of modules used during scanning.
-    modules: HashMap<String, ScannerModule>,
+    modules: HashMap<String, Box<dyn Module>>,
 }
 
 impl Scanner {
     #[must_use]
-    pub(crate) fn new(rules: Vec<Rule>, modules: HashMap<String, ScannerModule>) -> Self {
+    pub(crate) fn new(rules: Vec<Rule>, modules: HashMap<String, Box<dyn Module>>) -> Self {
         Self { rules, modules }
     }
 
@@ -25,14 +29,17 @@ impl Scanner {
     /// byte slice.
     #[must_use]
     pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> Vec<MatchedRule<'scanner>> {
+        let scan_data = ScanData::new(mem, &self.modules);
+
         // FIXME: this is pretty bad performance wise
         let mut results = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
+
         for rule in &self.rules {
             let res = {
                 // TODO: only get dynamic values for modules once for the mem, not once per rule.
                 let (res, var_evals) =
-                    evaluator::evaluate_rule(rule, &self.modules, mem, &previous_results);
+                    evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
                 if res {
                     results.push(MatchedRule {
                         namespace: rule.namespace.as_deref(),
@@ -58,32 +65,6 @@ impl Scanner {
             previous_results.push(res);
         }
         results
-    }
-}
-
-/// Module to use during scan.
-///
-/// Cheap to clone, as it is cloned on every scan.
-pub struct ScannerModule {
-    // TODO: keep only the get_dynamic_values function?
-    module: Box<dyn crate::module::Module>,
-}
-
-impl std::fmt::Debug for ScannerModule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ScannerModule")
-            .field("module", &self.module.get_name())
-            .finish()
-    }
-}
-
-impl ScannerModule {
-    pub fn new(module: Box<dyn crate::module::Module>) -> Self {
-        Self { module }
-    }
-
-    pub fn on_scan(&self, ctx: &crate::module::ScanContext) -> crate::module::Value {
-        crate::module::Value::Object(self.module.get_dynamic_values(ctx))
     }
 }
 

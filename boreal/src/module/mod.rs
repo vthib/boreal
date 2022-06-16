@@ -95,6 +95,14 @@ pub trait Module {
     }
 }
 
+impl std::fmt::Debug for Box<dyn Module> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Module")
+            .field("name", &self.get_name())
+            .finish()
+    }
+}
+
 /// Context provided to module functions during scanning.
 #[derive(Debug)]
 pub struct ScanContext<'a> {

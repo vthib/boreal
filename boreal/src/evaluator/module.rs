@@ -17,7 +17,8 @@ pub(super) fn evaluate_expr(
             module_name,
             operations,
         } => {
-            let value = evaluator.get_module_value(module_name)?;
+            // FIXME: avoid this clone
+            let value = evaluator.scan_data.module_values.get(module_name)?.clone();
             evaluate_ops(evaluator, value, operations)
         }
         ModuleExpression::Function {
@@ -96,7 +97,7 @@ fn eval_function_op(
         })
         .collect();
 
-    fun(&evaluator.module_ctx, arguments?)
+    fun(&evaluator.scan_data.module_ctx, arguments?)
 }
 
 fn evaluate_value_operation(
@@ -125,7 +126,7 @@ fn evaluate_value_operation(
                     })
                     .collect();
 
-                Some(fun(&evaluator.module_ctx, arguments?)?)
+                Some(fun(&evaluator.scan_data.module_ctx, arguments?)?)
             }
             _ => None,
         },

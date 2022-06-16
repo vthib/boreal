@@ -20,7 +20,6 @@ pub use module::*;
 mod rule;
 pub use rule::*;
 
-use crate::scanner::ScannerModule;
 use crate::Scanner;
 
 /// Object used to compile rules.
@@ -42,7 +41,7 @@ pub struct Compiler {
 
     /// List of modules passed to the scanner.
     // TODO rework this
-    modules: HashMap<String, ScannerModule>,
+    modules: HashMap<String, Box<dyn crate::module::Module>>,
 }
 
 impl Compiler {
@@ -70,9 +69,7 @@ impl Compiler {
     /// Add a module
     pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) {
         let m = compile_module(&module);
-        let _res = self
-            .modules
-            .insert(m.name.clone(), ScannerModule::new(Box::new(module)));
+        let _res = self.modules.insert(m.name.clone(), Box::new(module));
         // Ignore the result: that would mean the same module is already registered.
         // FIXME: this is done to allow the double "import" in a rule, but this can be improved.
         let _res = self.available_modules.insert(m.name.clone(), Arc::new(m));

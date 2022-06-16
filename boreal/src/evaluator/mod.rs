@@ -15,8 +15,7 @@ use memchr::memmem;
 use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
-use crate::module::{ScanContext, Value as ModuleValue};
-use crate::scanner::ScannerModule;
+use crate::module::{Module, ScanContext, Value as ModuleValue};
 
 mod module;
 mod read_integer;
@@ -59,13 +58,41 @@ impl Value {
     }
 }
 
+/// Data linked to the scan, shared by all rules.
+pub struct ScanData<'a> {
+    // TODO: make this lazy?
+    module_values: HashMap<String, ModuleValue>,
+
+    // Context used when calling module functions
+    module_ctx: ScanContext<'a>,
+}
+
+impl<'a> ScanData<'a> {
+    pub fn new(mem: &'a [u8], modules: &HashMap<String, Box<dyn Module>>) -> Self {
+        let module_ctx = ScanContext { mem };
+
+        Self {
+            module_values: modules
+                .iter()
+                .map(|(name, module)| {
+                    (
+                        name.to_string(),
+                        crate::module::Value::Object(module.get_dynamic_values(&module_ctx)),
+                    )
+                })
+                .collect(),
+            module_ctx: ScanContext { mem },
+        }
+    }
+}
+
 /// Evaluates an expression on a given byte slice.
 ///
 /// Returns true if the expression (with the associated variables) matches on the given
 /// byte slice, false otherwise.
 pub(crate) fn evaluate_rule<'rule>(
     rule: &'rule Rule,
-    modules: &'rule HashMap<String, ScannerModule>,
+    scan_data: &ScanData,
     mem: &[u8],
     previous_rules_results: &[bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
@@ -75,8 +102,7 @@ pub(crate) fn evaluate_rule<'rule>(
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
-        modules,
-        module_ctx: ScanContext { mem },
+        scan_data,
     };
     let res = evaluator
         .evaluate_expr(&rule.condition)
@@ -101,14 +127,8 @@ struct Evaluator<'a, 'b, 'c> {
     // Stack of bounded identifiers to their integer values.
     bounded_identifiers_stack: Vec<BoundedIdentifierValue>,
 
-    // List of modules available during the scan.
-    //
-    // Used to generate the on scan dynamic values when used.
-    // TODO: cache the on_scan value.
-    modules: &'a HashMap<String, ScannerModule>,
-
-    // Scan context used for module function calls
-    module_ctx: ScanContext<'b>,
+    // Data only to the scan, independent of the rule.
+    scan_data: &'b ScanData<'b>,
 }
 
 macro_rules! bytes_op {
@@ -714,12 +734,6 @@ impl Evaluator<'_, '_, '_> {
                 Some(Value::Boolean(selection.end()))
             }
         }
-    }
-
-    fn get_module_value(&self, module_name: &str) -> Option<crate::module::Value> {
-        self.modules
-            .get(module_name)
-            .map(|m| m.on_scan(&self.module_ctx))
     }
 }
 
