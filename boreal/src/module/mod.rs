@@ -1,5 +1,6 @@
 use regex::bytes::Regex;
 use std::collections::HashMap;
+use typemap_rev::TypeMap;
 
 mod time;
 pub use time::Time;
@@ -65,7 +66,7 @@ pub trait Module {
     ///         [("array", Type::array(Type::Bytes))].into()
     ///     }
     ///
-    ///     fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
+    ///     fn get_dynamic_values(&self, _ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
     ///         [(
     ///             "array",
     ///             Value::Array(vec![Value::bytes("a"), Value::bytes("b")])
@@ -90,7 +91,7 @@ pub trait Module {
     /// Values computed dynamically.
     ///
     /// This is called on every scan.
-    fn get_dynamic_values(&self, _ctx: &ScanContext) -> HashMap<&'static str, Value> {
+    fn get_dynamic_values(&self, _ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
         HashMap::new()
     }
 }
@@ -104,10 +105,68 @@ impl std::fmt::Debug for Box<dyn Module> {
 }
 
 /// Context provided to module functions during scanning.
-#[derive(Debug)]
 pub struct ScanContext<'a> {
     /// Input being scanned.
     pub mem: &'a [u8],
+
+    /// Private data (per-scan) of each module.
+    ///
+    /// This can be used by a module to store data used in functions. The data must be set when
+    /// [`Module::get_dynamic_values`] is called, and can be retrieved when functions are called.
+    ///
+    /// ```
+    /// # use std::collections::HashMap;
+    /// use boreal::module::{Module, StaticValue, Value, Type, ScanContext};
+    /// use typemap_rev::TypeMapKey;
+    ///
+    /// struct Foo;
+    ///
+    /// struct FooData {
+    ///     a: i64,
+    /// }
+    ///
+    /// impl TypeMapKey for Foo {
+    ///     type Value = FooData;
+    /// }
+    ///
+    /// impl Module for Foo {
+    ///     fn get_name(&self) -> String {
+    ///         "foo".to_owned()
+    ///     }
+    ///
+    ///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+    ///         [("fun", StaticValue::function(Self::fun, vec![vec![]], Type::Integer))].into()
+    ///     }
+    ///
+    ///     fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
+    ///         [("b", Type::Boolean)].into()
+    ///     }
+    ///
+    ///     fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
+    ///         ctx.module_data.insert::<Self>(FooData {
+    ///             a: 5,
+    ///             });
+    ///
+    ///         [("b", true.into())].into()
+    ///     }
+    /// }
+    ///
+    /// impl Foo {
+    ///     fn fun(ctx: &ScanContext, _args: Vec<Value>) -> Option<Value> {
+    ///         let data = ctx.module_data.get::<Self>()?;
+    ///
+    ///         Some(data.a.into())
+    ///     }
+    /// }
+    /// ```
+    // FIXME: do not depend on this :/ inline it
+    pub module_data: TypeMap,
+}
+
+impl std::fmt::Debug for ScanContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScanContext").finish()
+    }
 }
 
 /// A value bound to an identifier.
@@ -158,7 +217,7 @@ pub enum Value {
         /// # use boreal::module::{ScanContext, Value};
         /// # let x = 3;
         /// # fn fun(_: &ScanContext, _: Vec<Value>) -> Option<Value> { None }
-        /// # let ctx = ScanContext { mem: b"" };
+        /// # let ctx = ScanContext { mem: b"", module_data: Default::default() };
         /// let result = fun(&ctx, vec![
         ///     Value::bytes("a"),
         ///     Value::Integer(3),

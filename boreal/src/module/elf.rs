@@ -229,7 +229,7 @@ impl Module for Elf {
         .into()
     }
 
-    fn get_dynamic_values(&self, ctx: &ScanContext) -> HashMap<&'static str, Value> {
+    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
         parse_file(ctx.mem).unwrap_or_default()
     }
 }

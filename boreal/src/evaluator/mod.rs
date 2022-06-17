@@ -13,6 +13,7 @@ use std::collections::HashMap;
 
 use memchr::memmem;
 use regex::bytes::Regex;
+use typemap_rev::TypeMap;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
 use crate::module::{Module, ScanContext, Value as ModuleValue};
@@ -69,7 +70,10 @@ pub struct ScanData<'a> {
 
 impl<'a> ScanData<'a> {
     pub fn new(mem: &'a [u8], modules: &HashMap<String, Box<dyn Module>>) -> Self {
-        let module_ctx = ScanContext { mem };
+        let mut module_ctx = ScanContext {
+            mem,
+            module_data: TypeMap::new(),
+        };
 
         Self {
             module_values: modules
@@ -77,11 +81,11 @@ impl<'a> ScanData<'a> {
                 .map(|(name, module)| {
                     (
                         name.to_string(),
-                        crate::module::Value::Object(module.get_dynamic_values(&module_ctx)),
+                        crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx)),
                     )
                 })
                 .collect(),
-            module_ctx: ScanContext { mem },
+            module_ctx,
         }
     }
 }

@@ -8,6 +8,7 @@ use object::{
     read::macho::{FatArch, LoadCommandData, MachHeader, Section, Segment},
     BigEndian, Endian, Endianness, FileKind, U32, U64,
 };
+use typemap_rev::TypeMapKey;
 
 use super::{Module, ScanContext, StaticValue, Type, Value};
 
@@ -676,9 +677,30 @@ impl Module for MachO {
         out
     }
 
-    fn get_dynamic_values(&self, ctx: &ScanContext) -> HashMap<&'static str, Value> {
-        parse_file(ctx.mem).unwrap_or_default()
+    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
+        let mut data = Data::default();
+
+        let res = parse_file(ctx.mem, &mut data, false).unwrap_or_default();
+        ctx.module_data.insert::<Self>(data);
+        res
     }
+}
+
+#[derive(Debug, Default)]
+pub struct Data {
+    files: Vec<FileData>,
+    arch_offsets: Vec<u64>,
+}
+
+#[derive(Debug, Default)]
+struct FileData {
+    cputype: u32,
+    cpusubtype: u32,
+    entry_point: Option<u64>,
+}
+
+impl TypeMapKey for MachO {
+    type Value = Data;
 }
 
 impl MachO {
@@ -687,31 +709,18 @@ impl MachO {
         let v1: i64 = args.next()?.try_into().ok()?;
         let v2 = args.next().and_then(|v| i64::try_from(v).ok());
 
-        // FIXME: get computed value for the module
-        let mut value = parse_file(ctx.mem)?;
-        let nfat: i64 = value.remove("nfat_arch")?.try_into().ok()?;
-        let nfat: usize = nfat.try_into().ok()?;
-        let files = match value.remove("file")? {
-            Value::Array(files) => files,
-            _ => return None,
-        };
+        let data = ctx.module_data.get::<Self>()?;
 
-        for i in 0..nfat {
-            if let Some(Value::Object(file)) = files.get(i) {
-                if let Some(Value::Integer(cputype)) = file.get("cputype") {
-                    if *cputype != v1 {
-                        continue;
-                    }
-                }
-                if let Some(v2) = v2 {
-                    if let Some(Value::Integer(cpusubtype)) = file.get("cpusubtype") {
-                        if *cpusubtype != v2 {
-                            continue;
-                        }
-                    }
-                }
-                return Some(Value::Integer(i as i64));
+        for (i, file) in data.files.iter().enumerate() {
+            if i64::from(file.cputype) != v1 {
+                continue;
             }
+            if let Some(v2) = v2 {
+                if i64::from(file.cpusubtype) != v2 {
+                    continue;
+                }
+            }
+            return Some(Value::Integer(i as i64));
         }
         None
     }
@@ -721,71 +730,57 @@ impl MachO {
         let v1: i64 = args.next()?.try_into().ok()?;
         let v2 = args.next().and_then(|v| i64::try_from(v).ok());
 
-        // FIXME: get computed value for the module
-        let mut value = parse_file(ctx.mem)?;
-        let nfat: i64 = value.remove("nfat_arch")?.try_into().ok()?;
-        let nfat: usize = nfat.try_into().ok()?;
-        let archs = match value.remove("fat_arch")? {
-            Value::Array(archs) => archs,
-            _ => return None,
-        };
-        let files = match value.remove("file")? {
-            Value::Array(files) => files,
-            _ => return None,
-        };
-
-        for i in 0..nfat {
-            if let Some(Value::Object(file)) = files.get(i) {
-                if let Some(Value::Integer(cputype)) = file.get("cputype") {
-                    if *cputype != v1 {
-                        continue;
-                    }
-                }
-                if let Some(v2) = v2 {
-                    if let Some(Value::Integer(cpusubtype)) = file.get("cpusubtype") {
-                        if *cpusubtype != v2 {
-                            continue;
-                        }
-                    }
-                }
-
-                let offset = archs
-                    .get(i)
-                    .and_then(|v| match v {
-                        Value::Object(dict) => Some(dict),
-                        _ => None,
-                    })
-                    .and_then(|arch| match arch.get("offset") {
-                        Some(Value::Integer(v)) => Some(*v),
-                        _ => None,
-                    })?;
-                let entry_point = match file.get("entry_point") {
-                    Some(Value::Integer(v)) => Some(*v),
-                    _ => None,
-                }?;
-
-                return Some(Value::Integer(offset.saturating_add(entry_point)));
+        let data = ctx.module_data.get::<Self>()?;
+        for (i, file) in data.files.iter().enumerate() {
+            if i64::from(file.cputype) != v1 {
+                continue;
             }
+            if let Some(v2) = v2 {
+                if i64::from(file.cpusubtype) != v2 {
+                    continue;
+                }
+            }
+
+            let offset = data.arch_offsets.get(i)?;
+            let entry_point = file.entry_point?;
+
+            return offset.saturating_add(entry_point).try_into().ok();
         }
         None
     }
 }
 
-fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
+fn parse_file(
+    mem: &[u8],
+    data: &mut Data,
+    add_file_to_data: bool,
+) -> Option<HashMap<&'static str, Value>> {
     match FileKind::parse(mem).ok()? {
         FileKind::MachO32 => {
             let header = MachHeader32::parse(mem, 0).ok()?;
             let e = header.endian().ok()?;
-            Some(parse_header(header, e, mem, None))
+            Some(parse_header(
+                header,
+                e,
+                mem,
+                None,
+                add_file_to_data.then(|| data),
+            ))
         }
         FileKind::MachO64 => {
             let header = MachHeader64::parse(mem, 0).ok()?;
             let e = header.endian().ok()?;
-            Some(parse_header(header, e, mem, Some(header.reserved.get(e))))
+            Some(parse_header(
+                header,
+                e,
+                mem,
+                Some(header.reserved.get(e)),
+                add_file_to_data.then(|| data),
+            ))
         }
-        FileKind::MachOFat32 => parse_fat(mem, false),
+        FileKind::MachOFat32 => parse_fat(mem, data, false),
         // TODO: add test on this format
-        FileKind::MachOFat64 => parse_fat(mem, true),
+        FileKind::MachOFat64 => parse_fat(mem, data, true),
         _ => None,
     }
 }
@@ -795,10 +790,11 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     e: Endianness,
     mem: &[u8],
     reserved: Option<u32>,
+    data: Option<&mut Data>,
 ) -> HashMap<&'static str, Value> {
     let magic = header.magic().to_be().into();
     let cputype = header.cputype(e);
-    let cpusubtype = header.cpusubtype(e).into();
+    let cpusubtype = header.cpusubtype(e);
     let filetype = header.filetype(e).into();
     let ncmds = header.ncmds(e).into();
     let sizeofcmds = header.sizeofcmds(e).into();
@@ -807,13 +803,20 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     let segments = segments(header, e, mem);
     let nb_segments = segments.as_ref().and_then(|v| v.len().try_into().ok());
 
-    // TODO: handle the UnixThread load command
     let (entry_point, stack_size) = entry_point_data(header, e, mem, cputype);
+
+    if let Some(data) = data {
+        data.files.push(FileData {
+            cputype,
+            cpusubtype,
+            entry_point,
+        });
+    }
 
     [
         ("magic", Some(magic)),
         ("cputype", Some(cputype.into())),
-        ("cpusubtype", Some(cpusubtype)),
+        ("cpusubtype", Some(cpusubtype.into())),
         ("filetype", Some(filetype)),
         ("ncmds", Some(ncmds)),
         ("sizeofcmds", Some(sizeofcmds)),
@@ -821,8 +824,8 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
         ("reserved", reserved.map(Into::into)),
         ("segments", segments.map(Value::Array)),
         ("number_of_segments", nb_segments),
-        ("entry_point", entry_point),
-        ("stack_size", stack_size),
+        ("entry_point", entry_point.and_then(|v| v.try_into().ok())),
+        ("stack_size", stack_size.and_then(|v| v.try_into().ok())),
     ]
     .into_iter()
     .filter_map(|(k, v)| v.map(|v| (k, v)))
@@ -866,14 +869,11 @@ fn entry_point_data<Mach: MachHeader<Endian = Endianness>>(
     e: Endianness,
     mem: &[u8],
     cputype: u32,
-) -> (Option<Value>, Option<Value>) {
+) -> (Option<u64>, Option<u64>) {
     if let Ok(mut cmds) = header.load_commands(e, mem, 0) {
         while let Ok(Some(cmd)) = cmds.next() {
             if let Ok(Some(entry)) = cmd.entry_point() {
-                return (
-                    entry.entryoff.get(e).try_into().ok(),
-                    entry.stacksize.get(e).try_into().ok(),
-                );
+                return (Some(entry.entryoff.get(e)), Some(entry.stacksize.get(e)));
             } else if cmd.cmd() == macho::LC_UNIXTHREAD {
                 match handle_unix_thread(cmd, e, cputype) {
                     Some(ep) => {
@@ -893,7 +893,7 @@ fn va_to_file_offset<Mach: MachHeader<Endian = Endianness>>(
     e: Endianness,
     mem: &[u8],
     ep: u64,
-) -> Option<Value> {
+) -> Option<u64> {
     let mut cmds = header.load_commands(e, mem, 0).ok()?;
     while let Ok(Some(cmd)) = cmds.next() {
         if let Ok(Some((segment, _))) = Mach::Segment::from_command(cmd) {
@@ -902,7 +902,7 @@ fn va_to_file_offset<Mach: MachHeader<Endian = Endianness>>(
 
             if ep >= vmaddr && ep < vmaddr.saturating_add(vmsize) {
                 let fileoff: u64 = segment.fileoff(e).into();
-                return fileoff.saturating_add(ep - vmaddr).try_into().ok();
+                return Some(fileoff.saturating_add(ep - vmaddr));
             }
         }
     }
@@ -1110,7 +1110,7 @@ fn sections64<E: Endian>(
     )
 }
 
-fn parse_fat(mem: &[u8], is64: bool) -> Option<HashMap<&'static str, Value>> {
+fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static str, Value>> {
     let (magic, nfat_arch) = match FatHeader::parse(mem) {
         Ok(header) => (
             Some(header.magic.get(BigEndian).into()),
@@ -1124,13 +1124,17 @@ fn parse_fat(mem: &[u8], is64: bool) -> Option<HashMap<&'static str, Value>> {
 
     if is64 {
         for arch in FatHeader::parse_arch64(mem).ok()? {
-            archs.push(fat_arch_to_value(arch, Some(arch.reserved.get(BigEndian))));
-            files.push(fat_arch_to_file_value(arch, mem));
+            archs.push(fat_arch_to_value(
+                arch,
+                data,
+                Some(arch.reserved.get(BigEndian)),
+            ));
+            files.push(fat_arch_to_file_value(arch, data, mem));
         }
     } else {
         for arch in FatHeader::parse_arch32(mem).ok()? {
-            archs.push(fat_arch_to_value(arch, None));
-            files.push(fat_arch_to_file_value(arch, mem));
+            archs.push(fat_arch_to_value(arch, data, None));
+            files.push(fat_arch_to_file_value(arch, data, mem));
         }
     }
 
@@ -1147,16 +1151,23 @@ fn parse_fat(mem: &[u8], is64: bool) -> Option<HashMap<&'static str, Value>> {
     )
 }
 
-fn fat_arch_to_file_value<A: FatArch>(arch: &A, mem: &[u8]) -> Value {
-    Value::Object(arch.data(mem).ok().and_then(parse_file).unwrap_or_default())
+fn fat_arch_to_file_value<A: FatArch>(arch: &A, data: &mut Data, mem: &[u8]) -> Value {
+    Value::Object(
+        arch.data(mem)
+            .ok()
+            .and_then(|new_mem| parse_file(new_mem, data, true))
+            .unwrap_or_default(),
+    )
 }
 
-fn fat_arch_to_value<A: FatArch>(arch: &A, reserved: Option<u32>) -> Value {
+fn fat_arch_to_value<A: FatArch>(arch: &A, data: &mut Data, reserved: Option<u32>) -> Value {
     let cputype = arch.cputype().into();
     let cpusubtype = arch.cpusubtype().into();
     let offset = arch.offset().into();
     let size = arch.size().into();
     let align = arch.align().into();
+
+    data.arch_offsets.push(offset);
 
     Value::Object(
         [
