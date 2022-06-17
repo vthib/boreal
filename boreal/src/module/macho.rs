@@ -8,9 +8,8 @@ use object::{
     read::macho::{FatArch, LoadCommandData, MachHeader, Section, Segment},
     BigEndian, Endian, Endianness, FileKind, U32, U64,
 };
-use typemap_rev::TypeMapKey;
 
-use super::{Module, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
 /// `macho` module. Allows inspecting Mach-O inputs
 #[derive(Debug)]
@@ -699,8 +698,8 @@ struct FileData {
     entry_point: Option<u64>,
 }
 
-impl TypeMapKey for MachO {
-    type Value = Data;
+impl ModuleData for MachO {
+    type Data = Data;
 }
 
 impl MachO {

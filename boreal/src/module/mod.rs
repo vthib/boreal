@@ -1,6 +1,7 @@
-use regex::bytes::Regex;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use typemap_rev::TypeMap;
+
+use regex::bytes::Regex;
 
 mod time;
 pub use time::Time;
@@ -116,8 +117,7 @@ pub struct ScanContext<'a> {
     ///
     /// ```
     /// # use std::collections::HashMap;
-    /// use boreal::module::{Module, StaticValue, Value, Type, ScanContext};
-    /// use typemap_rev::TypeMapKey;
+    /// use boreal::module::{Module, StaticValue, Value, Type, ScanContext, ModuleData};
     ///
     /// struct Foo;
     ///
@@ -125,8 +125,8 @@ pub struct ScanContext<'a> {
     ///     a: i64,
     /// }
     ///
-    /// impl TypeMapKey for Foo {
-    ///     type Value = FooData;
+    /// impl ModuleData for Foo {
+    ///     type Data = FooData;
     /// }
     ///
     /// impl Module for Foo {
@@ -159,8 +159,7 @@ pub struct ScanContext<'a> {
     ///     }
     /// }
     /// ```
-    // FIXME: do not depend on this :/ inline it
-    pub module_data: TypeMap,
+    pub module_data: ModuleDataMap,
 }
 
 impl std::fmt::Debug for ScanContext<'_> {
@@ -169,6 +168,25 @@ impl std::fmt::Debug for ScanContext<'_> {
     }
 }
 
+#[derive(Default)]
+pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any>>);
+
+pub trait ModuleData {
+    type Data: Any + Send + Sync;
+}
+
+impl ModuleDataMap {
+    pub fn insert<T: ModuleData + 'static>(&mut self, data: T::Data) {
+        let _r = self.0.insert(TypeId::of::<T>(), Box::new(data));
+    }
+
+    #[must_use]
+    pub fn get<T: ModuleData + 'static>(&self) -> Option<&T::Data> {
+        self.0
+            .get(&TypeId::of::<T>())
+            .and_then(|v| v.downcast_ref())
+    }
+}
 /// A value bound to an identifier.
 ///
 /// This object represents an immediately resolvable value for an identifier.

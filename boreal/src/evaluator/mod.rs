@@ -13,10 +13,9 @@ use std::collections::HashMap;
 
 use memchr::memmem;
 use regex::bytes::Regex;
-use typemap_rev::TypeMap;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
-use crate::module::{Module, ScanContext, Value as ModuleValue};
+use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 mod module;
 mod read_integer;
@@ -72,7 +71,7 @@ impl<'a> ScanData<'a> {
     pub fn new(mem: &'a [u8], modules: &HashMap<String, Box<dyn Module>>) -> Self {
         let mut module_ctx = ScanContext {
             mem,
-            module_data: TypeMap::new(),
+            module_data: ModuleDataMap::default(),
         };
 
         Self {

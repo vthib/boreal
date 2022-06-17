@@ -20,8 +20,6 @@ regex = "1.5"
 # No default features to disable unicode, we do not need it
 regex-syntax = { version = "0.6", default-features = false }
 
-typemap_rev = "0.1"
-
 # Proper error reporting on compilation
 codespan-reporting = "0.11"
 
