@@ -17,6 +17,12 @@ use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 #[derive(Debug)]
 pub struct Pe;
 
+#[repr(u8)]
+enum ImportType {
+    Delayed = 0b0001,
+    Standard = 0b0010,
+}
+
 impl Module for Pe {
     fn get_name(&self) -> String {
         "pe".to_owned()
@@ -687,8 +693,14 @@ impl Module for Pe {
                 "IMAGE_DEBUG_TYPE_REPRO",
                 StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_REPRO.into()),
             ),
-            ("IMPORT_DELAYED", StaticValue::Integer(1)),
-            ("IMPORT_STANDARD", StaticValue::Integer(2)),
+            (
+                "IMPORT_DELAYED",
+                StaticValue::Integer((ImportType::Delayed as u8).into()),
+            ),
+            (
+                "IMPORT_STANDARD",
+                StaticValue::Integer((ImportType::Standard as u8).into()),
+            ),
             ("IMPORT_ANY", StaticValue::Integer(!0)),
             (
                 "section_index",
@@ -936,7 +948,7 @@ impl Module for Pe {
                 ])),
             ),
             ("number_of_resources", Type::Integer),
-            ("pdb_path", Type::Integer),
+            ("pdb_path", Type::Bytes),
             // TODO: signatures
             ("number_of_signatures", Type::Integer),
             //
@@ -952,8 +964,14 @@ impl Module for Pe {
         let mut data = Data::default();
 
         let res = match FileKind::parse(ctx.mem) {
-            Ok(FileKind::Pe32) => parse_file::<ImageNtHeaders32>(ctx.mem, &mut data),
-            Ok(FileKind::Pe64) => parse_file::<ImageNtHeaders64>(ctx.mem, &mut data),
+            Ok(FileKind::Pe32) => {
+                data.is_32bit = true;
+                parse_file::<ImageNtHeaders32>(ctx.mem, &mut data)
+            }
+            Ok(FileKind::Pe64) => {
+                data.is_32bit = false;
+                parse_file::<ImageNtHeaders64>(ctx.mem, &mut data)
+            }
             _ => None,
         };
 
@@ -1010,7 +1028,7 @@ fn parse_file<Pe: ImageNtHeaders>(
         ),
         ("characteristics", Some(hdr.characteristics.get(LE).into())),
         //
-        ("entry_point", rva_to_offset(ep)),
+        ("entry_point", va_to_file_offset(&sections, ep)),
         ("entry_point_raw", Some(ep.into())),
         ("image_base", opt_hdr.image_base().try_into().ok()),
         (
@@ -1099,9 +1117,10 @@ fn parse_file<Pe: ImageNtHeaders>(
             Some(sections_to_value(
                 &sections,
                 symbols.as_ref().map(SymbolTable::strings),
+                data,
             )),
         ),
-        ("overlay", overlay(&sections, mem)),
+        ("overlay", Some(overlay(&sections, mem))),
         (
             "rich_signature",
             file.rich_header_info().map(rich_signature),
@@ -1320,7 +1339,11 @@ fn data_directories(dirs: DataDirectories) -> Value {
     )
 }
 
-fn sections_to_value(sections: &SectionTable, strings: Option<StringTable>) -> Value {
+fn sections_to_value(
+    sections: &SectionTable,
+    strings: Option<StringTable>,
+    data: &mut Data,
+) -> Value {
     Value::Array(
         sections
             .iter()
@@ -1328,6 +1351,14 @@ fn sections_to_value(sections: &SectionTable, strings: Option<StringTable>) -> V
                 let full_name = strings.and_then(|strings| section.name(strings).ok());
                 // TODO: libyara does some rtrim of nul bytes here
                 let name = section.raw_name().to_vec();
+                let raw_data_offset = i64::from(section.pointer_to_raw_data.get(LE));
+                let raw_data_size = i64::from(section.size_of_raw_data.get(LE));
+
+                data.sections.push(DataSection {
+                    name: name.clone(),
+                    raw_data_offset,
+                    raw_data_size,
+                });
 
                 Value::Object(
                     [
@@ -1342,14 +1373,8 @@ fn sections_to_value(sections: &SectionTable, strings: Option<StringTable>) -> V
                             Some(section.virtual_address.get(LE).into()),
                         ),
                         ("virtual_size", Some(section.virtual_size.get(LE).into())),
-                        (
-                            "raw_data_size",
-                            Some(section.size_of_raw_data.get(LE).into()),
-                        ),
-                        (
-                            "raw_data_offset",
-                            Some(section.pointer_to_raw_data.get(LE).into()),
-                        ),
+                        ("raw_data_size", Some(raw_data_size.into())),
+                        ("raw_data_offset", Some(raw_data_offset.into())),
                         (
                             "pointer_to_relocations",
                             Some(section.pointer_to_relocations.get(LE).into()),
@@ -1376,11 +1401,11 @@ fn sections_to_value(sections: &SectionTable, strings: Option<StringTable>) -> V
     )
 }
 
-fn overlay(sections: &SectionTable, mem: &[u8]) -> Option<Value> {
+fn overlay(sections: &SectionTable, mem: &[u8]) -> Value {
     let offset = sections.max_section_file_offset();
 
     if offset < mem.len() as u64 {
-        Some(Value::Object(
+        Value::Object(
             [
                 ("offset", offset.try_into().ok()),
                 ("size", (mem.len() as u64 - offset).try_into().ok()),
@@ -1388,26 +1413,101 @@ fn overlay(sections: &SectionTable, mem: &[u8]) -> Option<Value> {
             .into_iter()
             .filter_map(|(k, v)| v.map(|v| (k, v)))
             .collect(),
-        ))
+        )
     } else {
-        None
+        Value::object([("offset", 0.into()), ("size", 0.into())])
     }
 }
 
-fn rva_to_offset(_ep: u32) -> Option<Value> {
-    // TODO
+fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<Value> {
+    for section in sections.iter() {
+        let section_va = section.virtual_address.get(LE);
+        let (section_offset, section_size) = section.pe_file_range();
+
+        let offset = va.checked_sub(section_va)?;
+        // Address must be within section (and not at its end).
+        if offset < section_size {
+            return section_offset.checked_add(offset).map(Into::into);
+        }
+    }
     None
 }
 
+fn bool_to_int_value(b: bool) -> Value {
+    Value::Integer(if b { 1 } else { 0 })
+}
+
 impl Pe {
-    fn calculate_checksum(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+    fn calculate_checksum(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        // Compute offset of checksum in the file: this is replaced by 0 when computing the
+        // checksum
+        let dos_header = pe::ImageDosHeader::parse(ctx.mem).ok()?;
+        // 64 is the offset of the checksum in the optional header, and 24 is the offset of the
+        // optional header in the nt headers: See
+        // <https://docs.microsoft.com/en-us/windows/win32/debug/pe-format>
+        let csum_offset = dos_header.nt_headers_offset() + 64 + 24;
+
+        // Add data as LE u32 with overflow
+        let mut csum: u64 = 0;
+        let mut idx = 0;
+        let mut mem = ctx.mem;
+        while mem.len() >= 4 {
+            if idx != csum_offset {
+                let dword = u32::from_le_bytes([mem[0], mem[1], mem[2], mem[3]]);
+
+                csum += u64::from(dword);
+                if csum > 0xFFFF_FFFF {
+                    csum = (csum & 0xFFFF_FFFF) + (csum >> 32);
+                }
+            }
+
+            mem = &mem[4..];
+            idx += 4;
+        }
+
+        // pad with 0 for the last chunk
+        let dword = match mem {
+            [a] => u32::from_le_bytes([*a, 0, 0, 0]),
+            [a, b] => u32::from_le_bytes([*a, *b, 0, 0]),
+            [a, b, c] => u32::from_le_bytes([*a, *b, *c, 0]),
+            _ => 0,
+        };
+        csum += u64::from(dword);
+        if csum > 0xFFFF_FFFF {
+            csum = (csum & 0xFFFF_FFFF) + (csum >> 32);
+        }
+
+        // Fold the checksum to a u16
+        let mut csum = (csum & 0xFFFF) + (csum >> 16);
+        csum += csum >> 16;
+        csum &= 0xFFFF;
+
+        // Finally, add the filesize
+        #[allow(clippy::cast_possible_truncation)]
+        (csum as usize).wrapping_add(ctx.mem.len()).try_into().ok()
     }
 
-    fn section_index(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+    fn section_index(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let arg = args.next()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        match arg {
+            Value::Bytes(section_name) => data
+                .sections
+                .iter()
+                .position(|sec| sec.name == section_name)
+                .and_then(|v| v.try_into().ok()),
+            Value::Integer(addr) => data
+                .sections
+                .iter()
+                .position(|sec| {
+                    addr >= sec.raw_data_offset && addr - sec.raw_data_offset < sec.raw_data_size
+                })
+                .and_then(|v| v.try_into().ok()),
+            _ => None,
+        }
     }
     fn exports(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let _args = args.into_iter();
@@ -1419,10 +1519,6 @@ impl Pe {
     }
 
     fn imports(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        fn bool_to_int_value(b: bool) -> Value {
-            Value::Integer(if b { 1 } else { 0 })
-        }
-
         let mut args = args.into_iter();
         let first = args.next()?;
         let second = args.next();
@@ -1441,23 +1537,51 @@ impl Pe {
             (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => {
                 Some(data.nb_functions_regex(&dll_name, &function_name).into())
             }
-            // TODO impl
+            // TODO handle delayed imports
             (
                 Value::Integer(flags),
                 Some(Value::Bytes(dll_name)),
                 Some(Value::Bytes(function_name)),
-            ) => None,
+            ) => {
+                if flags & (ImportType::Standard as i64) != 0
+                    && data.find_function(&dll_name, &function_name)
+                {
+                    Some(Value::Integer(1))
+                } else {
+                    Some(Value::Integer(0))
+                }
+            }
             (
                 Value::Integer(flags),
                 Some(Value::Bytes(dll_name)),
                 Some(Value::Integer(ordinal)),
-            ) => None,
-            (Value::Integer(flags), Some(Value::Bytes(dll_name)), None) => None,
+            ) => {
+                if flags & (ImportType::Standard as i64) != 0
+                    && data.find_function_ordinal(&dll_name, ordinal)
+                {
+                    Some(Value::Integer(1))
+                } else {
+                    Some(Value::Integer(0))
+                }
+            }
+            (Value::Integer(flags), Some(Value::Bytes(dll_name)), None) => {
+                let mut res = 0;
+                if flags & (ImportType::Standard as i64) != 0 {
+                    res += data.nb_functions(&dll_name);
+                }
+                res.try_into().ok()
+            }
             (
                 Value::Integer(flags),
                 Some(Value::Regex(dll_name)),
                 Some(Value::Regex(function_name)),
-            ) => None,
+            ) => {
+                let mut res = 0;
+                if flags & (ImportType::Standard as i64) != 0 {
+                    res += data.nb_functions_regex(&dll_name, &function_name);
+                }
+                res.try_into().ok()
+            }
             _ => None,
         }
     }
@@ -1466,32 +1590,44 @@ impl Pe {
         let _args = args.into_iter();
         todo!()
     }
+
     fn language(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let _args = args.into_iter();
         todo!()
     }
+
     fn is_dll(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let _args = args.into_iter();
         todo!()
     }
-    fn is_32bit(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+
+    fn is_32bit(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Self>()?;
+        Some(bool_to_int_value(data.is_32bit))
     }
-    fn is_64bit(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+
+    fn is_64bit(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Self>()?;
+        Some(bool_to_int_value(!data.is_32bit))
     }
 }
 
 #[derive(Default)]
 pub struct Data {
     dlls: HashMap<Vec<u8>, Vec<DataFunction>>,
+    sections: Vec<DataSection>,
+    is_32bit: bool,
 }
 
 struct DataFunction {
     name: Vec<u8>,
     ordinal: Option<u16>,
+}
+
+struct DataSection {
+    name: Vec<u8>,
+    raw_data_offset: i64,
+    raw_data_size: i64,
 }
 
 impl Data {
