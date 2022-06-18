@@ -274,7 +274,13 @@ impl std::fmt::Debug for Value {
         match self {
             Self::Integer(arg0) => f.debug_tuple("Integer").field(arg0).finish(),
             Self::Float(arg0) => f.debug_tuple("Float").field(arg0).finish(),
-            Self::Bytes(arg0) => f.debug_tuple("Bytes").field(arg0).finish(),
+            Self::Bytes(arg0) => {
+                let mut t = f.debug_tuple("Bytes");
+                match std::str::from_utf8(arg0) {
+                    Ok(v) => t.field(&v).finish(),
+                    Err(_) => t.field(arg0).finish(),
+                }
+            }
             Self::Regex(arg0) => f.debug_tuple("Regex").field(arg0).finish(),
             Self::Boolean(arg0) => f.debug_tuple("Boolean").field(arg0).finish(),
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),

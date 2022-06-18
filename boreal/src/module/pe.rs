@@ -4,10 +4,10 @@ use object::{
     coff::{SectionTable, SymbolTable},
     pe::{self, ImageImportDescriptor, ImageNtHeaders32, ImageNtHeaders64},
     read::pe::{
-        DataDirectories, ExportTable, ImageNtHeaders, ImageOptionalHeader, ImageThunkData,
-        ImportTable, PeFile, RichHeaderInfo,
+        DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportTable, PeFile,
+        ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
-    FileKind, LittleEndian as LE, StringTable,
+    FileKind, LittleEndian as LE, Object, StringTable,
 };
 use regex::bytes::Regex;
 
@@ -1125,13 +1125,21 @@ fn parse_file<Pe: ImageNtHeaders>(
             "rich_signature",
             file.rich_header_info().map(rich_signature),
         ),
+        (
+            "pdb_path",
+            file.pdb_info()
+                .ok()
+                .flatten()
+                .map(|info| info.path().to_vec().into()),
+        ),
     ]
     .into_iter()
     .filter_map(|(k, v)| v.map(|v| (k, v)))
     .collect();
 
     add_imports::<Pe>(&data_dirs, mem, &sections, data, &mut map);
-    add_exports(&data_dirs, mem, &sections, &mut map);
+    add_exports(&data_dirs, mem, &sections, data, &mut map);
+    add_resources(&data_dirs, mem, &sections, data, &mut map);
 
     // TODO: rich signature
     // TODO: delay import details
@@ -1184,7 +1192,10 @@ fn add_imports<Pe: ImageNtHeaders>(
             nb_functions_total += n;
         }
 
-        let _r = data.dlls.insert(library.clone(), data_functions);
+        data.imports.push(DataImport {
+            dll_name: library.clone(),
+            functions: data_functions,
+        });
 
         imports.push(Value::Object(
             [
@@ -1261,22 +1272,12 @@ fn add_exports(
     data_dirs: &DataDirectories,
     mem: &[u8],
     sections: &SectionTable,
+    data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
-    // TODO: could call data_dirs.export_table, but need to retrieve export_va because it is not
-    // exposed.
-    let entry = match data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_EXPORT) {
-        Some(entry) => entry,
-        None => return,
-    };
-    let export_va = entry.virtual_address.get(LE);
-    let export_data = match entry.data(mem, sections) {
-        Ok(d) => d,
-        Err(_) => return,
-    };
-    let table = match ExportTable::parse(export_data, export_va) {
-        Ok(table) => table,
-        Err(_) => return,
+    let table = match data_dirs.export_table(mem, sections) {
+        Ok(Some(table)) => table,
+        _ => return,
     };
 
     let ordinal_base = table.ordinal_base() as usize;
@@ -1294,9 +1295,14 @@ fn add_exports(
             let address = address.get(LE);
             if let Ok(Some(forward)) = table.forward_string(address) {
                 let _r = map.insert("forward_name", Value::bytes(forward));
-            } else {
-                let _r = map.insert("offset", address.saturating_sub(export_va).into());
+            } else if let Some(v) = va_to_file_offset(sections, address) {
+                let _r = map.insert("offset", v);
             }
+
+            data.exports.push(DataExport {
+                name: None,
+                ordinal: ordinal_base + i,
+            });
 
             Value::Object(map)
         })
@@ -1308,8 +1314,13 @@ fn add_exports(
             Ok(v) => v,
             Err(_) => continue,
         };
-        if let Some(Value::Object(map)) = details.get_mut(ordinal_index as usize) {
+        let ordinal_index = usize::from(ordinal_index);
+
+        if let Some(Value::Object(map)) = details.get_mut(ordinal_index) {
             let _r = map.insert("name", Value::bytes(name));
+        }
+        if let Some(export) = data.exports.get_mut(ordinal_index) {
+            export.name = Some(name.to_vec());
         }
     }
 
@@ -1419,6 +1430,112 @@ fn overlay(sections: &SectionTable, mem: &[u8]) -> Value {
     }
 }
 
+fn add_resources(
+    data_dirs: &DataDirectories,
+    mem: &[u8],
+    sections: &SectionTable,
+    data: &mut Data,
+    out: &mut HashMap<&'static str, Value>,
+) {
+    let dir = match data_dirs.resource_directory(mem, sections) {
+        Ok(Some(dir)) => dir,
+        _ => return,
+    };
+    let root = match dir.root() {
+        Ok(root) => root,
+        Err(_) => return,
+    };
+
+    let mut resources = Vec::new();
+    for entry in root.entries {
+        // First level is type
+        let ty = entry.name_or_id.get(LE);
+        let ty_name = match entry.name_or_id() {
+            ResourceNameOrId::Name(name) => name.data(dir).ok(),
+            ResourceNameOrId::Id(_) => None,
+        };
+
+        let table = match entry.data(dir) {
+            Ok(ResourceDirectoryEntryData::Table(table)) => table,
+            _ => continue,
+        };
+        for entry in table.entries {
+            // Second level is id
+            let id = entry.name_or_id.get(LE);
+            let id_name = match entry.name_or_id() {
+                ResourceNameOrId::Name(name) => name.data(dir).ok(),
+                ResourceNameOrId::Id(_) => None,
+            };
+
+            let table = match entry.data(dir) {
+                Ok(ResourceDirectoryEntryData::Table(table)) => table,
+                _ => continue,
+            };
+            for entry in table.entries {
+                // Third level is language
+                let lang = entry.name_or_id.get(LE);
+                let lang_name = match entry.name_or_id() {
+                    ResourceNameOrId::Name(name) => name.data(dir).ok(),
+                    ResourceNameOrId::Id(_) => None,
+                };
+
+                if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
+                    // TODO: max sources limit
+
+                    let rva = entry_data.offset_to_data.get(LE);
+                    let mut obj: HashMap<_, _> = [
+                        ("rva", rva.into()),
+                        ("length", entry_data.size.get(LE).into()),
+                    ]
+                    .into();
+
+                    if let Some(offset) = va_to_file_offset(sections, rva) {
+                        let _r = obj.insert("offset", offset);
+                    }
+
+                    let _r = match ty_name {
+                        Some(name) => obj.insert("type_string", u16_slice_to_value(name)),
+                        None => obj.insert("type", ty.into()),
+                    };
+                    let _r = match id_name {
+                        Some(name) => obj.insert("name_string", u16_slice_to_value(name)),
+                        None => obj.insert("id", id.into()),
+                    };
+                    let _r = match lang_name {
+                        Some(name) => obj.insert("language_string", u16_slice_to_value(name)),
+                        None => obj.insert("language", lang.into()),
+                    };
+
+                    resources.push(Value::Object(obj));
+                }
+            }
+        }
+    }
+
+    out.extend([
+        (
+            "resource_timestamp",
+            root.header.time_date_stamp.get(LE).into(),
+        ),
+        (
+            "resource_version",
+            Value::object([
+                ("major", root.header.major_version.get(LE).into()),
+                ("minor", root.header.minor_version.get(LE).into()),
+            ]),
+        ),
+        ("resources", Value::Array(resources)),
+    ]);
+}
+
+fn u16_slice_to_value(slice: &[u16]) -> Value {
+    // Safety: it is always safe to interpret anything as bytes
+    let (pre, bytes, suf) = unsafe { slice.align_to::<u8>() };
+    debug_assert!(pre.is_empty());
+    debug_assert!(suf.is_empty());
+    Value::Bytes(bytes.to_vec())
+}
+
 fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<Value> {
     for section in sections.iter() {
         let section_va = section.virtual_address.get(LE);
@@ -1509,13 +1626,73 @@ impl Pe {
             _ => None,
         }
     }
-    fn exports(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+
+    fn exports(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let arg = args.next()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        let res = match arg {
+            Value::Bytes(function_name) => data.exports.iter().any(|export| {
+                export
+                    .name
+                    .as_ref()
+                    .map_or(false, |name| name.eq_ignore_ascii_case(&function_name))
+            }),
+            Value::Integer(ordinal) => match usize::try_from(ordinal) {
+                Ok(ord) => data.exports.iter().any(|export| export.ordinal == ord),
+                Err(_) => false,
+            },
+            Value::Regex(function_name_regex) => data.exports.iter().any(|export| {
+                export
+                    .name
+                    .as_ref()
+                    .map_or(false, |name| function_name_regex.is_match(name))
+            }),
+            _ => return None,
+        };
+
+        Some(bool_to_int_value(res))
     }
-    fn exports_index(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+
+    fn exports_index(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let arg = args.next()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+        // XXX: yara does this, for some reason
+        if data.exports.is_empty() {
+            return None;
+        }
+
+        let res = match arg {
+            Value::Bytes(function_name) => data.exports.iter().position(|export| {
+                export
+                    .name
+                    .as_ref()
+                    .map_or(false, |name| name.eq_ignore_ascii_case(&function_name))
+            })?,
+            Value::Integer(ordinal) => {
+                let ordinal = usize::try_from(ordinal).ok()?;
+                if ordinal == 0 || ordinal > data.exports.len() {
+                    return None;
+                }
+
+                data.exports
+                    .iter()
+                    .position(|export| export.ordinal == ordinal)?
+            }
+            Value::Regex(function_name_regex) => data.exports.iter().position(|export| {
+                export
+                    .name
+                    .as_ref()
+                    .map_or(false, |name| function_name_regex.is_match(name))
+            })?,
+            _ => return None,
+        };
+
+        res.try_into().ok()
     }
 
     fn imports(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
@@ -1614,9 +1791,20 @@ impl Pe {
 
 #[derive(Default)]
 pub struct Data {
-    dlls: HashMap<Vec<u8>, Vec<DataFunction>>,
+    imports: Vec<DataImport>,
+    exports: Vec<DataExport>,
     sections: Vec<DataSection>,
     is_32bit: bool,
+}
+
+struct DataImport {
+    dll_name: Vec<u8>,
+    functions: Vec<DataFunction>,
+}
+
+struct DataExport {
+    name: Option<Vec<u8>>,
+    ordinal: usize,
 }
 
 struct DataFunction {
@@ -1632,17 +1820,19 @@ struct DataSection {
 
 impl Data {
     fn find_function(&self, dll_name: &[u8], fun_name: &[u8]) -> bool {
-        self.dlls
-            .get(dll_name)
-            .and_then(|funs| funs.iter().find(|f| f.name == fun_name))
+        self.imports
+            .iter()
+            .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
+            .and_then(|imp| imp.functions.iter().find(|f| f.name == fun_name))
             .is_some()
     }
 
     fn find_function_ordinal(&self, dll_name: &[u8], ordinal: i64) -> bool {
-        self.dlls
-            .get(dll_name)
-            .and_then(|funs| {
-                funs.iter().find(|f| match f.ordinal {
+        self.imports
+            .iter()
+            .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
+            .and_then(|imp| {
+                imp.functions.iter().find(|f| match f.ordinal {
                     Some(v) => i64::from(v) == ordinal,
                     None => false,
                 })
@@ -1651,15 +1841,18 @@ impl Data {
     }
 
     fn nb_functions(&self, dll_name: &[u8]) -> usize {
-        self.dlls.get(dll_name).map_or(0, Vec::len)
+        self.imports
+            .iter()
+            .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
+            .map_or(0, |imp| imp.functions.len())
     }
 
     fn nb_functions_regex(&self, dll_regex: &Regex, fun_regex: &Regex) -> u32 {
         let mut nb_matches = 0;
 
-        for (dll, funs) in &self.dlls {
-            if dll_regex.is_match(dll) {
-                for fun in funs {
+        for imp in &self.imports {
+            if dll_regex.is_match(&imp.dll_name) {
+                for fun in &imp.functions {
                     if fun_regex.is_match(&fun.name) {
                         nb_matches += 1;
                     }
