@@ -9,8 +9,9 @@ use object::{
     },
     FileKind, LittleEndian as LE, StringTable,
 };
+use regex::bytes::Regex;
 
-use super::{Module, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
 /// `pe` module. Allows inspecting PE inputs.
 #[derive(Debug)]
@@ -716,7 +717,7 @@ impl Module for Pe {
             (
                 "imports",
                 StaticValue::function(
-                    Self::exports,
+                    Self::imports,
                     vec![
                         vec![Type::Bytes, Type::Bytes],
                         vec![Type::Bytes, Type::Integer],
@@ -947,27 +948,34 @@ impl Module for Pe {
         .into()
     }
 
-    fn get_dynamic_values(&self, ctx: &ScanContext) -> HashMap<&'static str, Value> {
-        match FileKind::parse(ctx.mem) {
-            Ok(FileKind::Pe32) => {
-                if let Some(dict) = parse_file::<ImageNtHeaders32>(ctx.mem) {
-                    return dict;
-                }
-            }
-            Ok(FileKind::Pe64) => {
-                if let Some(dict) = parse_file::<ImageNtHeaders64>(ctx.mem) {
-                    return dict;
-                }
-            }
-            _ => (),
-        }
+    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
+        let mut data = Data::default();
 
-        [("is_pe", 0.into())].into()
+        let res = match FileKind::parse(ctx.mem) {
+            Ok(FileKind::Pe32) => parse_file::<ImageNtHeaders32>(ctx.mem, &mut data),
+            Ok(FileKind::Pe64) => parse_file::<ImageNtHeaders64>(ctx.mem, &mut data),
+            _ => None,
+        };
+
+        match res {
+            Some(dict) => {
+                ctx.module_data.insert::<Self>(data);
+                dict
+            }
+            None => [("is_pe", 0.into())].into(),
+        }
     }
 }
 
-fn parse_file<Pe: ImageNtHeaders>(data: &[u8]) -> Option<HashMap<&'static str, Value>> {
-    let file = PeFile::<Pe>::parse(data).ok()?;
+impl ModuleData for Pe {
+    type Data = Data;
+}
+
+fn parse_file<Pe: ImageNtHeaders>(
+    mem: &[u8],
+    data: &mut Data,
+) -> Option<HashMap<&'static str, Value>> {
+    let file = PeFile::<Pe>::parse(mem).ok()?;
     let nt_headers = file.nt_headers();
     let data_dirs = file.data_directories();
 
@@ -975,7 +983,7 @@ fn parse_file<Pe: ImageNtHeaders>(data: &[u8]) -> Option<HashMap<&'static str, V
     let opt_hdr = nt_headers.optional_header();
 
     let sections = file.section_table();
-    let symbols = hdr.symbols(data).ok();
+    let symbols = hdr.symbols(mem).ok();
 
     let ep = opt_hdr.address_of_entry_point();
 
@@ -1093,7 +1101,7 @@ fn parse_file<Pe: ImageNtHeaders>(data: &[u8]) -> Option<HashMap<&'static str, V
                 symbols.as_ref().map(SymbolTable::strings),
             )),
         ),
-        ("overlay", overlay(&sections, data)),
+        ("overlay", overlay(&sections, mem)),
         (
             "rich_signature",
             file.rich_header_info().map(rich_signature),
@@ -1103,8 +1111,8 @@ fn parse_file<Pe: ImageNtHeaders>(data: &[u8]) -> Option<HashMap<&'static str, V
     .filter_map(|(k, v)| v.map(|v| (k, v)))
     .collect();
 
-    add_imports::<Pe>(&data_dirs, data, &sections, &mut map);
-    add_exports(&data_dirs, data, &sections, &mut map);
+    add_imports::<Pe>(&data_dirs, mem, &sections, data, &mut map);
+    add_exports(&data_dirs, mem, &sections, &mut map);
 
     // TODO: rich signature
     // TODO: delay import details
@@ -1128,11 +1136,12 @@ fn rich_signature(info: RichHeaderInfo) -> Value {
 
 fn add_imports<Pe: ImageNtHeaders>(
     data_dirs: &DataDirectories,
-    data: &[u8],
+    mem: &[u8],
     sections: &SectionTable,
+    data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
-    let table = match data_dirs.import_table(data, sections) {
+    let table = match data_dirs.import_table(mem, sections) {
         Ok(Some(table)) => table,
         _ => return,
     };
@@ -1145,15 +1154,18 @@ fn add_imports<Pe: ImageNtHeaders>(
 
     // TODO: implement limits on nb imports & functions
     while let Ok(Some(import_desc)) = descriptors.next() {
-        let library = match table.name(import_desc.name.get(LE)).ok() {
-            Some(name) => name.to_vec(),
-            None => continue,
+        let library = match table.name(import_desc.name.get(LE)) {
+            Ok(name) => name.to_vec(),
+            Err(_) => continue,
         };
-        let functions = import_functions::<Pe>(&table, import_desc);
+        let mut data_functions = Vec::new();
+        let functions = import_functions::<Pe>(&table, import_desc, &mut data_functions);
         let nb_functions = functions.as_ref().map(Vec::len);
         if let Some(n) = nb_functions {
             nb_functions_total += n;
         }
+
+        let _r = data.dlls.insert(library.clone(), data_functions);
 
         imports.push(Value::Object(
             [
@@ -1182,6 +1194,7 @@ fn add_imports<Pe: ImageNtHeaders>(
 fn import_functions<Pe: ImageNtHeaders>(
     import_table: &ImportTable,
     desc: &ImageImportDescriptor,
+    data_functions: &mut Vec<DataFunction>,
 ) -> Option<Vec<Value>> {
     let mut first_thunk = desc.original_first_thunk.get(LE);
     if first_thunk == 0 {
@@ -1191,29 +1204,43 @@ fn import_functions<Pe: ImageNtHeaders>(
 
     let mut functions = Vec::new();
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
-        if let Some(v) = thunk_to_value::<Pe>(thunk, import_table) {
-            functions.push(v);
-        }
+        add_thunk::<Pe>(thunk, import_table, &mut functions, data_functions);
     }
     Some(functions)
 }
 
-fn thunk_to_value<Pe: ImageNtHeaders>(
+fn add_thunk<Pe: ImageNtHeaders>(
     thunk: Pe::ImageThunkData,
     import_table: &ImportTable,
-) -> Option<Value> {
+    functions: &mut Vec<Value>,
+    data_functions: &mut Vec<DataFunction>,
+) {
     if thunk.is_ordinal() {
         // TODO: get name from ordinal
-        Some(Value::object([("ordinal", thunk.ordinal().into())]))
+        let ordinal = thunk.ordinal();
+
+        data_functions.push(DataFunction {
+            name: vec![],
+            ordinal: Some(ordinal),
+        });
+        functions.push(Value::object([("ordinal", thunk.ordinal().into())]));
     } else {
-        let (_hint, name) = import_table.hint_name(thunk.address()).ok()?;
-        Some(Value::object([("name", name.to_vec().into())]))
+        let name = match import_table.hint_name(thunk.address()) {
+            Ok((_, name)) => name,
+            Err(_) => return,
+        };
+
+        data_functions.push(DataFunction {
+            name: name.to_vec(),
+            ordinal: None,
+        });
+        functions.push(Value::object([("name", name.to_vec().into())]));
     }
 }
 
 fn add_exports(
     data_dirs: &DataDirectories,
-    data: &[u8],
+    mem: &[u8],
     sections: &SectionTable,
     out: &mut HashMap<&'static str, Value>,
 ) {
@@ -1224,7 +1251,7 @@ fn add_exports(
         None => return,
     };
     let export_va = entry.virtual_address.get(LE);
-    let export_data = match entry.data(data, sections) {
+    let export_data = match entry.data(mem, sections) {
         Ok(d) => d,
         Err(_) => return,
     };
@@ -1349,14 +1376,14 @@ fn sections_to_value(sections: &SectionTable, strings: Option<StringTable>) -> V
     )
 }
 
-fn overlay(sections: &SectionTable, data: &[u8]) -> Option<Value> {
+fn overlay(sections: &SectionTable, mem: &[u8]) -> Option<Value> {
     let offset = sections.max_section_file_offset();
 
-    if offset < data.len() as u64 {
+    if offset < mem.len() as u64 {
         Some(Value::Object(
             [
                 ("offset", offset.try_into().ok()),
-                ("size", (data.len() as u64 - offset).try_into().ok()),
+                ("size", (mem.len() as u64 - offset).try_into().ok()),
             ]
             .into_iter()
             .filter_map(|(k, v)| v.map(|v| (k, v)))
@@ -1368,7 +1395,8 @@ fn overlay(sections: &SectionTable, data: &[u8]) -> Option<Value> {
 }
 
 fn rva_to_offset(_ep: u32) -> Option<Value> {
-    todo!()
+    // TODO
+    None
 }
 
 impl Pe {
@@ -1389,16 +1417,31 @@ impl Pe {
         let _args = args.into_iter();
         todo!()
     }
-    fn imports(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+
+    fn imports(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        fn bool_to_int_value(b: bool) -> Value {
+            Value::Integer(if b { 1 } else { 0 })
+        }
+
         let mut args = args.into_iter();
         let first = args.next()?;
         let second = args.next();
         let third = args.next();
+
+        let data = ctx.module_data.get::<Self>()?;
+
         match (first, second, third) {
-            (Value::Bytes(dll_name), Some(Value::Bytes(function_name)), None) => None,
-            (Value::Bytes(dll_name), Some(Value::Integer(ordinal)), None) => None,
-            (Value::Bytes(dll_name), None, None) => None,
-            (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => None,
+            (Value::Bytes(dll_name), Some(Value::Bytes(function_name)), None) => Some(
+                bool_to_int_value(data.find_function(&dll_name, &function_name)),
+            ),
+            (Value::Bytes(dll_name), Some(Value::Integer(ordinal)), None) => Some(
+                bool_to_int_value(data.find_function_ordinal(&dll_name, ordinal)),
+            ),
+            (Value::Bytes(dll_name), None, None) => data.nb_functions(&dll_name).try_into().ok(),
+            (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => {
+                Some(data.nb_functions_regex(&dll_name, &function_name).into())
+            }
+            // TODO impl
             (
                 Value::Integer(flags),
                 Some(Value::Bytes(dll_name)),
@@ -1418,6 +1461,7 @@ impl Pe {
             _ => None,
         }
     }
+
     fn locale(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let _args = args.into_iter();
         todo!()
@@ -1437,5 +1481,55 @@ impl Pe {
     fn is_64bit(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let _args = args.into_iter();
         todo!()
+    }
+}
+
+#[derive(Default)]
+pub struct Data {
+    dlls: HashMap<Vec<u8>, Vec<DataFunction>>,
+}
+
+struct DataFunction {
+    name: Vec<u8>,
+    ordinal: Option<u16>,
+}
+
+impl Data {
+    fn find_function(&self, dll_name: &[u8], fun_name: &[u8]) -> bool {
+        self.dlls
+            .get(dll_name)
+            .and_then(|funs| funs.iter().find(|f| f.name == fun_name))
+            .is_some()
+    }
+
+    fn find_function_ordinal(&self, dll_name: &[u8], ordinal: i64) -> bool {
+        self.dlls
+            .get(dll_name)
+            .and_then(|funs| {
+                funs.iter().find(|f| match f.ordinal {
+                    Some(v) => i64::from(v) == ordinal,
+                    None => false,
+                })
+            })
+            .is_some()
+    }
+
+    fn nb_functions(&self, dll_name: &[u8]) -> usize {
+        self.dlls.get(dll_name).map_or(0, Vec::len)
+    }
+
+    fn nb_functions_regex(&self, dll_regex: &Regex, fun_regex: &Regex) -> u32 {
+        let mut nb_matches = 0;
+
+        for (dll, funs) in &self.dlls {
+            if dll_regex.is_match(dll) {
+                for fun in funs {
+                    if fun_regex.is_match(&fun.name) {
+                        nb_matches += 1;
+                    }
+                }
+            }
+        }
+        nb_matches
     }
 }
