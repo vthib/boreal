@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use object::{
     coff::{SectionTable, SymbolTable},
-    pe::{self, ImageImportDescriptor, ImageNtHeaders32, ImageNtHeaders64},
+    pe::{self, ImageDosHeader, ImageImportDescriptor, ImageNtHeaders32, ImageNtHeaders64},
     read::pe::{
-        DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportTable, PeFile,
+        DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportTable,
         ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
     Bytes, FileKind, LittleEndian as LE, ReadRef, StringTable, U32,
@@ -993,14 +993,15 @@ fn parse_file<Pe: ImageNtHeaders>(
     mem: &[u8],
     data: &mut Data,
 ) -> Option<HashMap<&'static str, Value>> {
-    let file = PeFile::<Pe>::parse(mem).ok()?;
-    let nt_headers = file.nt_headers();
-    let data_dirs = file.data_directories();
+    let dos_header = ImageDosHeader::parse(mem).ok()?;
+    let mut offset = dos_header.nt_headers_offset().into();
+    let (nt_headers, data_dirs) = Pe::parse(mem, &mut offset).ok()?;
+
+    let sections = nt_headers.sections(mem, offset).ok();
 
     let hdr = nt_headers.file_header();
     let opt_hdr = nt_headers.optional_header();
 
-    let sections = file.section_table();
     let symbols = hdr.symbols(mem).ok();
 
     let ep = opt_hdr.address_of_entry_point();
@@ -1028,7 +1029,10 @@ fn parse_file<Pe: ImageNtHeaders>(
         ),
         ("characteristics", Some(hdr.characteristics.get(LE).into())),
         //
-        ("entry_point", va_to_file_offset(&sections, ep)),
+        (
+            "entry_point",
+            sections.and_then(|sections| va_to_file_offset(&sections, ep)),
+        ),
         ("entry_point_raw", Some(ep.into())),
         ("image_base", opt_hdr.image_base().try_into().ok()),
         (
@@ -1114,26 +1118,35 @@ fn parse_file<Pe: ImageNtHeaders>(
         ("data_directories", Some(data_directories(data_dirs))),
         (
             "sections",
-            Some(sections_to_value(
-                &sections,
-                symbols.as_ref().map(SymbolTable::strings),
-                data,
-            )),
+            sections.as_ref().map(|sections| {
+                sections_to_value(sections, symbols.as_ref().map(SymbolTable::strings), data)
+            }),
         ),
-        ("overlay", Some(overlay(&sections, mem))),
+        (
+            "overlay",
+            sections.as_ref().map(|sections| overlay(sections, mem)),
+        ),
+        (
+            "pdb_path",
+            sections
+                .as_ref()
+                .and_then(|sections| pdb_path(&data_dirs, mem, sections)),
+        ),
         (
             "rich_signature",
-            file.rich_header_info().map(rich_signature),
+            RichHeaderInfo::parse(mem, dos_header.nt_headers_offset().into())
+                .map(|info| rich_signature(info, mem, data)),
         ),
-        ("pdb_path", pdb_path(&data_dirs, mem, &sections)),
     ]
     .into_iter()
     .filter_map(|(k, v)| v.map(|v| (k, v)))
     .collect();
 
-    add_imports::<Pe>(&data_dirs, mem, &sections, data, &mut map);
-    add_exports(&data_dirs, mem, &sections, data, &mut map);
-    add_resources(&data_dirs, mem, &sections, data, &mut map);
+    if let Some(sections) = sections.as_ref() {
+        add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
+        add_exports(&data_dirs, mem, sections, data, &mut map);
+        add_resources(&data_dirs, mem, sections, data, &mut map);
+    }
 
     // TODO: rich signature
     // TODO: delay import details
@@ -1172,13 +1185,56 @@ fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable) ->
     Some(path.to_vec().into())
 }
 
-fn rich_signature(info: RichHeaderInfo) -> Value {
+fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
+    data.rich_entries = info
+        .unmasked_entries()
+        .map(|entry| DataRichEntry {
+            version: (entry.comp_id & 0xFFFF) as u16,
+            toolid: (entry.comp_id >> 16) as u16,
+            times: entry.count,
+        })
+        .collect();
+
+    let length = info.length.saturating_sub(8);
+
+    let raw = if info.offset + length <= mem.len() {
+        Some(mem[info.offset..(info.offset + length)].to_vec())
+    } else {
+        None
+    };
+    let xor_key_bytes = info.xor_key.to_le_bytes();
+    // Xor raw with the xor_key, but 4 bytes by 4 bytes
+    let clear = raw.clone().map(|mut clear| {
+        for (b, k) in clear.iter_mut().zip(xor_key_bytes.iter().cycle()) {
+            *b ^= k;
+        }
+        clear
+    });
+
     Value::Object(
         [
             ("offset", info.offset.try_into().ok()),
-            ("length", info.length.try_into().ok()),
+            ("length", length.try_into().ok()),
             ("key", Some(info.xor_key.into())),
+            ("raw_data", raw.map(Into::into)),
+            ("clear_data", clear.map(Into::into)),
             // TODO: get raw & unmask data from object
+            (
+                "version",
+                Some(Value::function(
+                    Pe::rich_signature_version,
+                    vec![vec![Type::Integer], vec![Type::Integer, Type::Integer]],
+                    Type::Integer,
+                )),
+            ),
+            (
+                "toolid",
+                Some(Value::function(
+                    Pe::rich_signature_toolid,
+                    vec![vec![Type::Integer], vec![Type::Integer, Type::Integer]],
+                    Type::Integer,
+                )),
+            ),
         ]
         .into_iter()
         .filter_map(|(k, v)| v.map(|v| (k, v)))
@@ -1812,6 +1868,42 @@ impl Pe {
         let data = ctx.module_data.get::<Self>()?;
         Some(bool_to_int_value(!data.is_32bit))
     }
+
+    fn rich_signature_version(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let first = args.next()?;
+        let second = args.next();
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        let res = match (first, second) {
+            (Value::Integer(version), Some(Value::Integer(toolid))) => {
+                data.count_rich_entries(Some(version), Some(toolid))
+            }
+            (Value::Integer(version), None) => data.count_rich_entries(Some(version), None),
+            _ => return None,
+        };
+
+        res.try_into().ok()
+    }
+
+    fn rich_signature_toolid(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let first = args.next()?;
+        let second = args.next();
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        let res = match (first, second) {
+            (Value::Integer(toolid), Some(Value::Integer(version))) => {
+                data.count_rich_entries(Some(version), Some(toolid))
+            }
+            (Value::Integer(toolid), None) => data.count_rich_entries(None, Some(toolid)),
+            _ => return None,
+        };
+
+        res.try_into().ok()
+    }
 }
 
 #[derive(Default)]
@@ -1819,6 +1911,7 @@ pub struct Data {
     imports: Vec<DataImport>,
     exports: Vec<DataExport>,
     sections: Vec<DataSection>,
+    rich_entries: Vec<DataRichEntry>,
     is_32bit: bool,
 }
 
@@ -1841,6 +1934,12 @@ struct DataSection {
     name: Vec<u8>,
     raw_data_offset: i64,
     raw_data_size: i64,
+}
+
+struct DataRichEntry {
+    version: u16,
+    toolid: u16,
+    times: u32,
 }
 
 impl Data {
@@ -1885,5 +1984,41 @@ impl Data {
             }
         }
         nb_matches
+    }
+
+    fn count_rich_entries(&self, version: Option<i64>, toolid: Option<i64>) -> u64 {
+        let version = match version {
+            Some(v) => match u16::try_from(v) {
+                Ok(v) => Some(v),
+                Err(_) => return 0,
+            },
+            None => None,
+        };
+        let toolid = match toolid {
+            Some(v) => match u16::try_from(v) {
+                Ok(v) => Some(v),
+                Err(_) => return 0,
+            },
+            None => None,
+        };
+
+        self.rich_entries
+            .iter()
+            .map(|entry| {
+                let mut matched = true;
+                if let Some(v) = version {
+                    matched = matched && v == entry.version;
+                }
+                if let Some(t) = toolid {
+                    matched = matched && t == entry.toolid;
+                }
+
+                if matched {
+                    u64::from(entry.times)
+                } else {
+                    0
+                }
+            })
+            .sum()
     }
 }

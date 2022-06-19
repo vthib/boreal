@@ -462,12 +462,14 @@ fn test_pe() {
     );
 
     check_file(
-      "import \"pe\"
+        r#"import "pe"
       rule test {
         condition:
-          pe.pdb_path == \"D:\\\\workspace\\\\2018_R9_RelBld\\\\target\\\\checkout\\\\custprof\\\\Release\\\\custprof.pdb\"
-      }",
-      "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+          pe.pdb_path == "D:\\workspace\\2018_R9_RelBld\\target\\checkout\\custprof\\Release\\custprof.pdb"
+      }"#,
+        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
 
     // TODO: improve handling of debug directory
     // check_file(
@@ -602,15 +604,20 @@ fn test_pe() {
     // parsed) of
     // 3593d3d08761d8ddc269dde945c0cb07e5cef5dd46ad9eefc22d17901f542093.
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule test {
         condition:
           pe.rich_signature.offset == 0x200 and
           pe.rich_signature.length == 64 and
           pe.rich_signature.key == 0x9f1d8511 and
-          pe.rich_signature.clear_data == \"DanS\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x01\\x00\\x11\\x00\\x00\\x00\\xc3\\x0f]\\x00\\x03\\x00\\x00\\x00\\x09x\\x95\\x00\\x01\\x00\\x00\\x00\\x09x\\x83\\x00\\x05\\x00\\x00\\x00\\x09x\\x94\\x00\\x01\\x00\\x00\\x00\\x09x\\x91\\x00\\x01\\x00\\x00\\x00\"
+          pe.rich_signature.clear_data == \"DanS\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\
+\\x00\\x00\\x00\\x00\\x01\\x00\\x11\\x00\\x00\\x00\\xc3\\x0f]\\x00\\x03\\x00\\x00\\x00\\x09x\\x95\
+\\x00\\x01\\x00\\x00\\x00\\x09x\\x83\\x00\\x05\\x00\\x00\\x00\\x09x\\x94\\x00\\x01\\x00\\x00\\x00\
+\\x09x\\x91\\x00\\x01\\x00\\x00\\x00\"
       }",
-      "assets/libyara/data/weird_rich", true);
+        "assets/libyara/data/weird_rich",
+        true,
+    );
 
     check_file(
         "import \"pe\"

@@ -228,6 +228,7 @@ pub enum Value {
     ///
     /// For example, if a module `foo` exports a function, then it can be accessed with the
     /// syntax `foo(arg1, arg2, ...)` in a rule.
+    // TODO: remove the typings? there should be no need for it.
     Function {
         /// The function to call during scanning.
         ///
