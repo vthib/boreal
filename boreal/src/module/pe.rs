@@ -1563,6 +1563,8 @@ fn add_resources(
                 if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
                     // TODO: max sources limit
 
+                    data.resource_languages.push(lang);
+
                     let rva = entry_data.offset_to_data.get(LE);
                     let mut obj: HashMap<_, _> = [
                         ("rva", rva.into()),
@@ -1844,14 +1846,28 @@ impl Pe {
         }
     }
 
-    fn locale(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+    fn locale(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let locale: i64 = args.next()?.try_into().ok()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+        Some(bool_to_int_value(
+            data.resource_languages
+                .iter()
+                .any(|language| i64::from(language & 0xFFFF) == locale),
+        ))
     }
 
-    fn language(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+    fn language(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let lang: i64 = args.next()?.try_into().ok()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+        Some(bool_to_int_value(
+            data.resource_languages
+                .iter()
+                .any(|language| i64::from(language & 0xFF) == lang),
+        ))
     }
 
     fn is_dll(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
@@ -1912,6 +1928,7 @@ pub struct Data {
     exports: Vec<DataExport>,
     sections: Vec<DataSection>,
     rich_entries: Vec<DataRichEntry>,
+    resource_languages: Vec<u32>,
     is_32bit: bool,
 }
 
