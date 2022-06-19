@@ -7,7 +7,7 @@ use object::{
         DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportTable, PeFile,
         ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
-    FileKind, LittleEndian as LE, Object, StringTable,
+    Bytes, FileKind, LittleEndian as LE, ReadRef, StringTable, U32,
 };
 use regex::bytes::Regex;
 
@@ -1125,13 +1125,7 @@ fn parse_file<Pe: ImageNtHeaders>(
             "rich_signature",
             file.rich_header_info().map(rich_signature),
         ),
-        (
-            "pdb_path",
-            file.pdb_info()
-                .ok()
-                .flatten()
-                .map(|info| info.path().to_vec().into()),
-        ),
+        ("pdb_path", pdb_path(&data_dirs, mem, &sections)),
     ]
     .into_iter()
     .filter_map(|(k, v)| v.map(|v| (k, v)))
@@ -1145,6 +1139,37 @@ fn parse_file<Pe: ImageNtHeaders>(
     // TODO: delay import details
     //
     Some(map)
+}
+
+fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable) -> Option<Value> {
+    let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_DEBUG)?;
+    let debug_data = Bytes(dir.data(mem, sections).ok()?);
+    let debug_dir = debug_data.read_at::<pe::ImageDebugDirectory>(0).ok()?;
+
+    // TODO: handle more debug types
+    if debug_dir.typ.get(LE) != pe::IMAGE_DEBUG_TYPE_CODEVIEW {
+        return None;
+    }
+
+    let info = mem
+        .read_slice_at::<u8>(
+            debug_dir.pointer_to_raw_data.get(LE).into(),
+            debug_dir.size_of_data.get(LE) as usize,
+        )
+        .ok()?;
+
+    let mut info = Bytes(info);
+
+    let sig = info.read_bytes(4).ok()?;
+    if sig.0 != b"RSDS" {
+        return None;
+    }
+
+    let _guid = info.read_bytes(16).ok()?;
+    let _age = info.read::<U32<LE>>().ok()?;
+    let path = info.read_string().ok()?;
+
+    Some(path.to_vec().into())
 }
 
 fn rich_signature(info: RichHeaderInfo) -> Value {
