@@ -54,7 +54,7 @@ pub struct Rule {
 /// Value associated with a metadata key.
 #[derive(Debug, PartialEq)]
 pub enum MetadataValue {
-    String(String),
+    Bytes(Vec<u8>),
     Number(i64),
     Boolean(bool),
 }
@@ -94,8 +94,8 @@ bitflags! {
 /// Value for a string associated with a rule.
 #[derive(Debug, PartialEq)]
 pub enum VariableDeclarationValue {
-    /// A raw string.
-    String(String),
+    /// A raw byte string.
+    Bytes(Vec<u8>),
     /// A regular expression.
     Regex(Regex),
     /// A hex string.
@@ -210,7 +210,7 @@ fn meta_declaration(input: Input) -> ParseResult<Metadata> {
             string::identifier,
             rtrim(char('=')),
             alt((
-                map(string::quoted, MetadataValue::String),
+                map(string::quoted, MetadataValue::Bytes),
                 map(number::number, MetadataValue::Number),
                 map(preceded(rtrim(char('-')), number::number), |v| {
                     MetadataValue::Number(-v)
@@ -243,7 +243,7 @@ fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
         cut(rtrim(char('='))),
         cut(alt((
             pair(
-                map(string::quoted, VariableDeclarationValue::String),
+                map(string::quoted, VariableDeclarationValue::Bytes),
                 string_modifiers,
             ),
             pair(
@@ -498,12 +498,13 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
     if open_paren.is_some() {
         let start = input;
         let (input2, val) = cut(string::quoted)(input)?;
-        match val.as_bytes().try_into() {
+        let length = val.len();
+        match val.try_into() {
             Ok(v) => alphabet = Some(v),
             Err(_) => {
                 return Err(nom::Err::Failure(Error::new(
                     input2.get_span_from(start),
-                    ErrorKind::Base64AlphabetInvalidLength { length: val.len() },
+                    ErrorKind::Base64AlphabetInvalidLength { length },
                 )));
             }
         };
@@ -585,7 +586,7 @@ mod tests {
             vec![
                 Metadata {
                     name: "a".to_owned(),
-                    value: MetadataValue::String(" a\rb ".to_owned()),
+                    value: MetadataValue::Bytes(b" a\rb ".to_vec()),
                 },
                 Metadata {
                     name: "b".to_owned(),
@@ -608,7 +609,7 @@ mod tests {
             "d",
             vec![Metadata {
                 name: "a".to_owned(),
-                value: MetadataValue::String(String::new()),
+                value: MetadataValue::Bytes(Vec::new()),
             }],
         );
 
@@ -813,7 +814,7 @@ mod tests {
             [
                 VariableDeclaration {
                     name: "a".to_owned(),
-                    value: VariableDeclarationValue::String("b\td".to_owned()),
+                    value: VariableDeclarationValue::Bytes(b"b\td".to_vec()),
                     modifiers: VariableModifiers {
                         flags: VariableFlags::XOR | VariableFlags::ASCII,
                         xor_range: (0, 255),
@@ -887,7 +888,7 @@ mod tests {
                 variables: vec![
                     VariableDeclaration {
                         name: "b".to_owned(),
-                        value: VariableDeclarationValue::String("t".to_owned()),
+                        value: VariableDeclarationValue::Bytes(b"t".to_vec()),
                         modifiers: VariableModifiers {
                             flags: VariableFlags::empty(),
                             ..VariableModifiers::default()

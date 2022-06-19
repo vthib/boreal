@@ -193,7 +193,7 @@ mod tests {
                 operations: vec![
                     IdentifierOperation {
                         op: IdentifierOperationType::Subscript(Box::new(Expression {
-                            expr: ExpressionKind::String("d".to_owned()),
+                            expr: ExpressionKind::Bytes(b"d".to_vec()),
                             span: 8..11,
                         })),
                         span: 7..12,

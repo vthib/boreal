@@ -43,7 +43,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     // TODO: handle private flag
     //
     let matcher = match value {
-        VariableDeclarationValue::String(s) => build_string_matcher(s, &modifiers),
+        VariableDeclarationValue::Bytes(s) => build_string_matcher(s, &modifiers),
         VariableDeclarationValue::Regex(regex) => {
             let matcher = build_regex_matcher(regex, &modifiers);
             matcher.map_err(|error| CompilationError::VariableCompilation {
@@ -85,13 +85,12 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     })
 }
 
-fn build_string_matcher(value: String, modifiers: &VariableModifiers) -> VariableMatcher {
+fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> VariableMatcher {
     let mut builder = AhoCorasickBuilder::new();
     let mut literals = Vec::with_capacity(2);
 
     let case_insensitive = modifiers.flags.contains(VariableFlags::NOCASE);
 
-    let value = value.into_bytes();
     if modifiers.flags.contains(VariableFlags::WIDE) {
         if modifiers.flags.contains(VariableFlags::ASCII) {
             literals.push(string_to_wide(&value));

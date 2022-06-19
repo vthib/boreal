@@ -192,7 +192,7 @@ fn primary_expression_item(input: Input) -> ParseResult<Expression> {
         // number
         map_expr(number::number, ExpressionKind::Number),
         // text string
-        map_expr(string::quoted, ExpressionKind::String),
+        map_expr(string::quoted, ExpressionKind::Bytes),
         // regex
         map_expr(string::regex, ExpressionKind::Regex),
         // string_count | string_count 'in' range
@@ -306,7 +306,7 @@ mod tests {
             "\"a\\nb \" b",
             "b",
             Expression {
-                expr: Expr::String("a\nb ".to_owned()),
+                expr: Expr::Bytes(b"a\nb ".to_vec()),
                 span: 0..7,
             },
         );

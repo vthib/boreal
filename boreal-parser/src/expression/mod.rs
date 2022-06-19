@@ -343,8 +343,8 @@ pub enum ExpressionKind {
 
     /// An identifier.
     Identifier(Identifier),
-    /// A string.
-    String(String),
+    /// A byte string.
+    Bytes(Vec<u8>),
     /// A regex.
     Regex(Regex),
 }

@@ -1,4 +1,8 @@
 //! Parse yara rules.
+use nom::bytes::complete::take_till1;
+use nom::character::complete::char;
+use nom::combinator::map;
+use nom::sequence::delimited;
 use nom::{combinator::cut, sequence::preceded};
 
 use crate::Rule;
@@ -6,7 +10,6 @@ use crate::Rule;
 use super::rule::rule;
 use super::{
     nom_recipes::{ltrim, rtrim, textual_tag as ttag},
-    string,
     types::{Input, ParseResult},
 };
 
@@ -65,12 +68,26 @@ pub fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
 
 /// Parse an include declaration
 fn include_file(input: Input) -> ParseResult<String> {
-    preceded(rtrim(ttag("include")), cut(string::quoted))(input)
+    rtrim(preceded(
+        rtrim(ttag("include")),
+        cut(delimited(
+            char('"'),
+            map(take_till1(|c| c == '"'), |v: Input| v.to_string()),
+            char('"'),
+        )),
+    ))(input)
 }
 
 /// Parse an import declaration
 fn import(input: Input) -> ParseResult<String> {
-    preceded(rtrim(ttag("import")), cut(string::quoted))(input)
+    rtrim(preceded(
+        rtrim(ttag("import")),
+        cut(delimited(
+            char('"'),
+            map(take_till1(|c| c == '"'), |v: Input| v.to_string()),
+            char('"'),
+        )),
+    ))(input)
 }
 
 #[cfg(test)]

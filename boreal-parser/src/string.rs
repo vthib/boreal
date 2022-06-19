@@ -3,12 +3,10 @@ use std::borrow::ToOwned;
 use std::ops::Range;
 
 use nom::{
-    branch::alt,
-    bytes::complete::{escaped_transform, is_not, take_while},
-    character::complete::{char, one_of},
-    combinator::{cut, map, opt, recognize, value},
+    bytes::complete::{is_not, take_while},
+    character::complete::char,
+    combinator::{cut, map, opt, recognize},
     error::{ErrorKind as NomErrorKind, ParseError},
-    multi::fold_many_m_n,
     sequence::{pair, preceded, terminated, tuple},
 };
 
@@ -106,48 +104,73 @@ pub fn identifier(input: Input) -> ParseResult<String> {
 /// Equivalent to the `_TEXT_STRING_` lexical pattern in libyara.
 /// This is roughly equivalent to the pattern `/"[^\n\"]*"/`, with control
 /// patterns `\t`, `\r`, `\n`, `\"`, `\\`, and `\x[0-9a-fA-F]{2}`.
-pub fn quoted(input: Input) -> ParseResult<String> {
-    let (input, _) = char('"')(input)?;
+///
+/// This parser allows non ascii bytes, hence returning a byte string.
+pub fn quoted(input: Input) -> ParseResult<Vec<u8>> {
+    rtrim(quoted_no_rtrim)(input)
+}
 
-    // escaped transform does not handle having no content, so
-    // handle empty string explicitly.
-    // TODO: ticket for nom?
-    if let Ok((next_input, '"')) = rtrim(char::<Input, Error>('"'))(input) {
-        return Ok((next_input, "".to_owned()));
+fn quoted_no_rtrim(input: Input) -> ParseResult<Vec<u8>> {
+    let (mut input, _) = char('"')(input)?;
+
+    let mut index = 0;
+    let mut res = Vec::new();
+
+    let mut chars = input.cursor().chars().enumerate();
+
+    while let Some((i, c)) = chars.next() {
+        index = i;
+        match c {
+            '\\' => match chars.next() {
+                Some((_, 't')) => res.push(b'\t'),
+                Some((_, 'r')) => res.push(b'\r'),
+                Some((_, 'n')) => res.push(b'\n'),
+                Some((_, '"')) => res.push(b'"'),
+                Some((_, '\\')) => res.push(b'\\'),
+                Some((_, 'x')) => match (chars.next(), chars.next()) {
+                    (Some((i1, a)), Some((i2, b))) => {
+                        let a = match a.to_digit(16) {
+                            Some(a) => a,
+                            None => {
+                                index = i1;
+                                break;
+                            }
+                        };
+                        let b = match b.to_digit(16) {
+                            Some(b) => b,
+                            None => {
+                                index = i2;
+                                break;
+                            }
+                        };
+                        #[allow(clippy::cast_possible_truncation)]
+                        res.push(((a as u8) << 4) + (b as u8));
+                    }
+                    _ => break,
+                },
+                Some((j, _)) => {
+                    index = j;
+                    break;
+                }
+                None => break,
+            },
+            '"' => {
+                input.advance(i + 1);
+                return Ok((input, res));
+            }
+            c => {
+                let mut buf = [0; 4];
+                let _r = c.encode_utf8(&mut buf);
+                res.extend(&buf[..c.len_utf8()]);
+            }
+        }
     }
 
-    rtrim(cut(terminated(
-        escaped_transform(
-            is_not("\\\n\""),
-            '\\',
-            alt((
-                value('\t', char('t')),
-                value('\r', char('r')),
-                value('\n', char('n')),
-                value('\"', char('\"')),
-                value('\\', char('\\')),
-                preceded(
-                    char('x'),
-                    cut(map(
-                        fold_many_m_n(
-                            2,
-                            2,
-                            one_of("0123456789abcdefABCDEF"),
-                            || 0,
-                            |acc, v| {
-                                // Cannot truncate, so disable clippy on this line
-                                #[allow(clippy::cast_possible_truncation)]
-                                let n = v.to_digit(16).unwrap_or(0) as u8;
-                                (acc << 4) + n
-                            },
-                        ),
-                        |v| v as char,
-                    )),
-                ),
-            )),
-        ),
-        char('"'),
-    )))(input)
+    input.advance(index);
+    Err(nom::Err::Error(Error::from_error_kind(
+        input,
+        NomErrorKind::EscapedTransform,
+    )))
 }
 
 /// Parse a regular expression.
@@ -242,6 +265,7 @@ mod tests {
     use super::super::tests::{parse, parse_err};
 
     #[test]
+    // TODO: test this more extensively, but with libyara compliance tests
     fn test_parse_quoted() {
         use super::quoted;
 
@@ -256,12 +280,16 @@ mod tests {
             " \r \n \t \"\\a \\r",
         );
         parse(quoted, r#""\x10 \x32""#, "", "\u{10} 2");
-        parse(quoted, r#""\x00 \xFF""#, "", "\u{00} \u{FF}");
+        parse(quoted, r#""\x00 \xFF""#, "", [0, b' ', 255]);
+
+        parse(quoted, r#""\xc3\x0f]\x00""#, "", [0xc3, 0x0f, b']', 0x00]);
 
         parse_err(quoted, "a");
-        parse_err(quoted, "\"");
-        parse_err(quoted, "\"\n\"");
-        parse_err(quoted, "\"\n\"");
+        parse_err(quoted, r#"""#);
+        parse_err(quoted, r#""ab"#);
+        parse_err(quoted, r#""a\"#);
+        parse_err(quoted, r#""a\xAG""#);
+        parse_err(quoted, r#""a\xGA""#);
         parse_err(quoted, r#""\a""#);
     }
 

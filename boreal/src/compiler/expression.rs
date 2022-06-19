@@ -829,8 +829,8 @@ pub(super) fn compile_expression(
 
             Ok(Expr { expr, ty, span })
         }
-        parser::ExpressionKind::String(s) => Ok(Expr {
-            expr: Expression::Bytes(s.into_bytes()),
+        parser::ExpressionKind::Bytes(s) => Ok(Expr {
+            expr: Expression::Bytes(s),
             ty: Type::Bytes,
             span,
         }),

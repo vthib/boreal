@@ -465,11 +465,11 @@ mod tests {
                 Expression {
                     expr: constructor(
                         Box::new(Expression {
-                            expr: ExpressionKind::String("a".to_owned()),
+                            expr: ExpressionKind::Bytes(b"a".to_vec()),
                             span: 0..3,
                         }),
                         Box::new(Expression {
-                            expr: ExpressionKind::String("b".to_owned()),
+                            expr: ExpressionKind::Bytes(b"b".to_vec()),
                             span: Range {
                                 start: 5 + op.len(),
                                 end: 8 + op.len(),
@@ -558,7 +558,7 @@ mod tests {
             Expression {
                 expr: ExpressionKind::Matches(
                     Box::new(Expression {
-                        expr: ExpressionKind::String("a".to_owned()),
+                        expr: ExpressionKind::Bytes(b"a".to_vec()),
                         span: 0..3,
                     }),
                     Regex {

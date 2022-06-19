@@ -3369,7 +3369,7 @@ fn test_modules() {
 
     check_err("import \"\\x00\"", "error: unknown import");
 
-    check_err("import \"\"", "error: unknown import");
+    check_err("import \"\"", "mem:1:1: error: syntax error");
 }
 
 #[test]
