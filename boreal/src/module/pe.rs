@@ -13,6 +13,8 @@ use regex::bytes::Regex;
 
 use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
+mod version_info;
+
 /// `pe` module. Allows inspecting PE inputs.
 #[derive(Debug)]
 pub struct Pe;
@@ -1031,7 +1033,9 @@ fn parse_file<Pe: ImageNtHeaders>(
         //
         (
             "entry_point",
-            sections.and_then(|sections| va_to_file_offset(&sections, ep)),
+            sections
+                .and_then(|sections| va_to_file_offset(&sections, ep))
+                .map(Into::into),
         ),
         ("entry_point_raw", Some(ep.into())),
         ("image_base", opt_hdr.image_base().try_into().ok()),
@@ -1377,7 +1381,7 @@ fn add_exports(
             if let Ok(Some(forward)) = table.forward_string(address) {
                 let _r = map.insert("forward_name", Value::bytes(forward));
             } else if let Some(v) = va_to_file_offset(sections, address) {
-                let _r = map.insert("offset", v);
+                let _r = map.insert("offset", v.into());
             }
 
             data.exports.push(DataExport {
@@ -1572,8 +1576,9 @@ fn add_resources(
                     ]
                     .into();
 
-                    if let Some(offset) = va_to_file_offset(sections, rva) {
-                        let _r = obj.insert("offset", offset);
+                    let offset = va_to_file_offset(sections, rva);
+                    if let Some(offset) = offset {
+                        let _r = obj.insert("offset", offset.into());
                     }
 
                     let _r = match ty_name {
@@ -1590,6 +1595,12 @@ fn add_resources(
                     };
 
                     resources.push(Value::Object(obj));
+
+                    if ty == pe::RT_VERSION.into() {
+                        if let Some(offset) = offset {
+                            add_version_infos(mem, offset, out);
+                        }
+                    }
                 }
             }
         }
@@ -1611,6 +1622,37 @@ fn add_resources(
     ]);
 }
 
+pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str, Value>) {
+    let infos = match version_info::read_version_info(mem, offset as usize) {
+        Some(infos) => infos,
+        None => return,
+    };
+
+    out.extend([
+        ("number_of_version_infos", (infos.len() as i64).into()),
+        (
+            "version_info",
+            Value::Dictionary(
+                infos
+                    .iter()
+                    .map(|info| (info.key.clone(), info.value.clone().into()))
+                    .collect(),
+            ),
+        ),
+        (
+            "version_info_list",
+            Value::Array(
+                infos
+                    .into_iter()
+                    .map(|info| {
+                        Value::object([("key", info.key.into()), ("value", info.value.into())])
+                    })
+                    .collect(),
+            ),
+        ),
+    ]);
+}
+
 fn u16_slice_to_value(slice: &[u16]) -> Value {
     // Safety: it is always safe to interpret anything as bytes
     let (pre, bytes, suf) = unsafe { slice.align_to::<u8>() };
@@ -1619,7 +1661,7 @@ fn u16_slice_to_value(slice: &[u16]) -> Value {
     Value::Bytes(bytes.to_vec())
 }
 
-fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<Value> {
+fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<u32> {
     for section in sections.iter() {
         let section_va = section.virtual_address.get(LE);
         let (section_offset, section_size) = section.pe_file_range();
