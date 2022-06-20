@@ -76,11 +76,11 @@ fn eval_array_op(
 fn eval_dict_op(
     evaluator: &mut Evaluator,
     subscript: &Expression,
-    mut dict: HashMap<String, ModuleValue>,
+    mut dict: HashMap<Vec<u8>, ModuleValue>,
 ) -> Option<ModuleValue> {
     let val = evaluator.evaluate_expr(subscript)?.unwrap_bytes()?;
 
-    std::str::from_utf8(&val).ok().and_then(|v| dict.remove(v))
+    dict.remove(&val)
 }
 
 fn eval_function_op(

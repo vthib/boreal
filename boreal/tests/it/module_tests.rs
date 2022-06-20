@@ -203,8 +203,8 @@ impl Module for Tests {
                 "integer_dict",
                 Value::Dictionary(
                     [
-                        ("foo".to_string(), Value::Integer(1)),
-                        ("bar".to_string(), Value::Integer(2)),
+                        (b"foo".to_vec(), Value::Integer(1)),
+                        (b"bar".to_vec(), Value::Integer(2)),
                     ]
                     .into(),
                 ),
@@ -213,8 +213,8 @@ impl Module for Tests {
                 "string_dict",
                 Value::Dictionary(
                     [
-                        ("foo".to_string(), Value::bytes("foo")),
-                        ("bar".to_string(), Value::bytes("bar")),
+                        (b"foo".to_vec(), Value::bytes("foo")),
+                        (b"bar".to_vec(), Value::bytes("bar")),
                     ]
                     .into(),
                 ),
@@ -230,7 +230,7 @@ impl Module for Tests {
                 "struct_dict",
                 Value::Dictionary(
                     [(
-                        "foo".to_string(),
+                        b"foo".to_vec(),
                         Value::object([("i", Value::Integer(1)), ("s", Value::bytes("foo"))]),
                     )]
                     .into(),
@@ -410,8 +410,8 @@ impl Tests {
                 "string_dict",
                 Value::Dictionary(
                     [
-                        ("foo".to_string(), Value::bytes("foo")),
-                        ("bar".to_string(), Value::bytes("bar")),
+                        (b"foo".to_vec(), Value::bytes("foo")),
+                        (b"bar".to_vec(), Value::bytes("bar")),
                     ]
                     .into(),
                 ),

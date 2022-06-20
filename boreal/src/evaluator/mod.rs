@@ -682,9 +682,7 @@ impl Evaluator<'_, '_, '_> {
                     ModuleValue::Dictionary(dict) => {
                         for (key, value) in dict {
                             self.bounded_identifiers_stack
-                                .push(BoundedIdentifierValue::RawValue(Value::Bytes(
-                                    key.into_bytes(),
-                                )));
+                                .push(BoundedIdentifierValue::RawValue(Value::Bytes(key)));
                             self.bounded_identifiers_stack
                                 .push(BoundedIdentifierValue::ModuleValue(value));
                             let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());

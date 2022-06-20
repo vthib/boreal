@@ -222,7 +222,7 @@ pub enum Value {
     ///
     /// For example, if a module `foo` exports a dictionary value, then it can be accessed with the
     /// syntax `foo["key"]` in a rule.
-    Dictionary(HashMap<String, Value>),
+    Dictionary(HashMap<Vec<u8>, Value>),
 
     /// A function.
     ///
