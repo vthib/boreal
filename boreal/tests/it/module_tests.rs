@@ -236,95 +236,13 @@ impl Module for Tests {
                     .into(),
                 ),
             ),
-            (
-                "fsum",
-                Value::function(
-                    Self::fsum,
-                    vec![
-                        vec![Type::Float, Type::Float],
-                        vec![Type::Float, Type::Float, Type::Float],
-                    ],
-                    Type::Float,
-                ),
-            ),
-            (
-                "length",
-                Value::function(Self::length, vec![vec![Type::Bytes]], Type::Integer),
-            ),
-            ("empty", Value::function(Self::empty, vec![], Type::Bytes)),
-            (
-                "foobar",
-                Value::function(Self::foobar, vec![vec![Type::Integer]], Type::Bytes),
-            ),
+            ("fsum", Value::Function(Self::fsum)),
+            ("length", Value::Function(Self::length)),
+            ("empty", Value::Function(Self::empty)),
+            ("foobar", Value::Function(Self::foobar)),
             // The rest is not in libyara
-            (
-                "lazy",
-                Value::function(
-                    Self::lazy,
-                    vec![],
-                    Type::object([
-                        ("one", Type::Integer),
-                        ("one_half", Type::Float),
-                        ("regex", Type::Regex),
-                        ("str", Type::Bytes),
-                        ("true", Type::Boolean),
-                        (
-                            "dict",
-                            Type::object([
-                                ("i", Type::Integer),
-                                ("s", Type::Bytes),
-                                // Declared here, but not exposed on evaluation
-                                ("oops", Type::Boolean),
-                            ]),
-                        ),
-                        ("str_array", Type::array(Type::Bytes)),
-                        (
-                            "isum",
-                            Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
-                        ),
-                        ("string_dict", Type::dict(Type::Bytes)),
-                        (
-                            "isum",
-                            Type::function(vec![vec![Type::Integer, Type::Integer]], Type::Integer),
-                        ),
-                        // Declared as a bool, but exposes an array
-                        ("fake_bool_to_array", Type::Boolean),
-                        // Declared as a bool, but exposes a dict
-                        ("fake_bool_to_dict", Type::Boolean),
-                        // Declared as a bool, but exposes a function
-                        ("fake_bool_to_fun", Type::Boolean),
-                        // Declared as an integer, but exposes a regex
-                        ("fake_int", Type::Integer),
-                        // Declare as a dict, but exposes a bool
-                        ("fake_dict_to_bool", Type::object([("i", Type::Integer)])),
-                        // Declare as an array, but exposes a bool
-                        ("fake_array_to_bool", Type::array(Type::Bytes)),
-                        // Declare as a function, but exposes a bool
-                        ("fake_fun_to_bool", Type::function(vec![], Type::Boolean)),
-                        // Lazy to lazy to int
-                        (
-                            "lazy",
-                            Type::function(
-                                vec![],
-                                Type::object([("lazy_int", Type::function(vec![], Type::Integer))]),
-                            ),
-                        ),
-                    ]),
-                ),
-            ),
-            (
-                "log",
-                Value::function(
-                    Self::log,
-                    vec![
-                        vec![Type::Integer],
-                        vec![Type::Boolean, Type::Regex, Type::Bytes],
-                        vec![Type::Boolean, Type::Regex],
-                        vec![Type::Integer, Type::Boolean],
-                    ],
-                    Type::Boolean,
-                ),
-            ),
+            ("lazy", Value::Function(Self::lazy)),
+            ("log", Value::Function(Self::log)),
         ]
         .into()
     }
@@ -416,39 +334,22 @@ impl Tests {
                     .into(),
                 ),
             ),
-            (
-                "isum",
-                Value::function(
-                    Self::isum,
-                    vec![vec![Type::Integer, Type::Integer]],
-                    Type::Integer,
-                ),
-            ),
+            ("isum", Value::Function(Self::isum)),
             ("fake_bool_to_array", Value::Array(vec![Value::Integer(2)])),
             ("fake_bool_to_dict", Value::object([])),
-            (
-                "fake_bool_to_fun",
-                Value::function(Self::empty, vec![], Type::Boolean),
-            ),
+            ("fake_bool_to_fun", Value::Function(Self::empty)),
             ("fake_int", Value::Regex(Regex::new("ht+p").unwrap())),
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),
             ("fake_fun_to_bool", Value::Boolean(false)),
-            (
-                "lazy",
-                Value::function(
-                    Self::lazy_lazy,
-                    vec![],
-                    Type::object([("lazy_int", Type::function(vec![], Type::Integer))]),
-                ),
-            ),
+            ("lazy", Value::Function(Self::lazy_lazy)),
         ]))
     }
 
     fn lazy_lazy(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::object([(
             "lazy_int",
-            Value::function(Self::lazy_lazy_int, vec![], Type::Integer),
+            Value::Function(Self::lazy_lazy_int),
         )]))
     }
 

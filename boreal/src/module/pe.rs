@@ -1223,22 +1223,8 @@ fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
             ("raw_data", raw.map(Into::into)),
             ("clear_data", clear.map(Into::into)),
             // TODO: get raw & unmask data from object
-            (
-                "version",
-                Some(Value::function(
-                    Pe::rich_signature_version,
-                    vec![vec![Type::Integer], vec![Type::Integer, Type::Integer]],
-                    Type::Integer,
-                )),
-            ),
-            (
-                "toolid",
-                Some(Value::function(
-                    Pe::rich_signature_toolid,
-                    vec![vec![Type::Integer], vec![Type::Integer, Type::Integer]],
-                    Type::Integer,
-                )),
-            ),
+            ("version", Some(Value::Function(Pe::rich_signature_version))),
+            ("toolid", Some(Value::Function(Pe::rich_signature_toolid))),
         ]
         .into_iter()
         .filter_map(|(k, v)| v.map(|v| (k, v)))

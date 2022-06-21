@@ -116,7 +116,7 @@ fn evaluate_value_operation(
             _ => None,
         },
         ValueOperation::FunctionCall(arguments) => match value {
-            ModuleValue::Function { fun, .. } => {
+            ModuleValue::Function(fun) => {
                 let arguments: Option<Vec<_>> = arguments
                     .iter()
                     .map(|expr| {

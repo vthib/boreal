@@ -228,8 +228,7 @@ pub enum Value {
     ///
     /// For example, if a module `foo` exports a function, then it can be accessed with the
     /// syntax `foo(arg1, arg2, ...)` in a rule.
-    // TODO: remove the typings? there should be no need for it.
-    Function {
+    Function(
         /// The function to call during scanning.
         ///
         /// The provided argument is a vec of the arguments evaluated during the scan. For example,
@@ -247,26 +246,8 @@ pub enum Value {
         ///     Value::Integer(x), // Number of matches of string $foo
         /// ]);
         /// ```
-        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
-
-        /// List of types of arguments.
-        ///
-        /// Each element of the list is a valid list of types that are accepted as arguments for
-        /// the function. This is used when compiling a rule, to check the typings are correct.
-        ///
-        /// For example: `[ [Type::Boolean], [Type::Bytes, Type::Integer] ]` accepts both:
-        /// - `fun(<boolean>)``
-        /// - `fun(<string>, <integer>)`
-        ///
-        /// Anything else will be rejected when compiling the rule.
-        ///
-        /// Please note that only primitive values can actually be received: integer, floats,
-        /// strings, regexes or booleans.
-        arguments_types: Vec<Vec<Type>>,
-
-        /// Type of the value returned by the function.
-        return_type: Type,
-    },
+        fn(&ScanContext, Vec<Value>) -> Option<Value>,
+    ),
 }
 
 // XXX: custom Debug impl needed because derive does not work with the fn fields.
@@ -287,16 +268,7 @@ impl std::fmt::Debug for Value {
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
             Self::Array(arg0) => f.debug_tuple("Array").field(arg0).finish(),
             Self::Dictionary(arg0) => f.debug_tuple("Dictionary").field(arg0).finish(),
-            Self::Function {
-                fun,
-                arguments_types,
-                return_type,
-            } => f
-                .debug_struct("Function")
-                .field("fun", &(*fun as usize))
-                .field("arguments_types", arguments_types)
-                .field("return_type", return_type)
-                .finish(),
+            Self::Function(arg0) => f.debug_tuple("Function").field(&(*arg0 as usize)).finish(),
         }
     }
 }
@@ -360,18 +332,6 @@ impl Value {
     #[must_use]
     pub fn object<const N: usize>(v: [(&'static str, Value); N]) -> Self {
         Self::Object(v.into())
-    }
-
-    pub fn function(
-        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
-        arguments_types: Vec<Vec<Type>>,
-        return_type: Type,
-    ) -> Self {
-        Self::Function {
-            fun,
-            arguments_types,
-            return_type,
-        }
     }
 }
 
