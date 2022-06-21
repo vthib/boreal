@@ -140,19 +140,20 @@ fn read_string(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> Option<
     let value_start = end - value_length;
 
     // We can now get the key: its end is at the start of the value.
-    // As it is possible padded, we need to rtrim null bytes, but
-    // keep at least one at it is a wide string.
+    // It is possibly padded, but the `unwide` helper will trim those.
     let key_start = offset + HEADER_SIZE;
-    let mut key_end = value_start - 1;
-    if key_end <= key_start || mem[key_end] != b'\0' {
+    let key_end = value_start;
+    if key_end <= key_start {
         return None;
     }
-    while key_end > key_start && mem[key_end] == b'\0' {
-        key_end -= 1;
-    }
 
-    // TODO properly handle those strings
-    let key = unwide(&mem[key_start..=key_end]);
+    // Those are windows wide strings. We should technically:
+    // - read it into a u16 slice
+    // - convert it to an OsString
+    // - convert it back to a String and thus a utf8 slice.
+    // But yara simply strips the second byte of every pair (expecting it to always be 0). We could
+    // differ here, but for the moment keep this broken behavior
+    let key = unwide(&mem[key_start..key_end]);
     let value = unwide(&mem[value_start..end]);
 
     out.push(VersionInfo { key, value });
