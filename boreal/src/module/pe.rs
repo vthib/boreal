@@ -769,6 +769,11 @@ impl Module for Pe {
                 "calculate_checksum",
                 StaticValue::function(Self::calculate_checksum, vec![], Type::Integer),
             ),
+            #[cfg(feature = "hash")]
+            (
+                "imphash",
+                StaticValue::function(Self::imphash, vec![], Type::Bytes),
+            ),
         ]
         .into()
     }
@@ -884,7 +889,6 @@ impl Module for Pe {
                     ),
                 ]),
             ),
-            // TODO: imphash
             ("number_of_imports", Type::Integer),
             ("number_of_imported_functions", Type::Integer),
             ("number_of_delayed_imports", Type::Integer),
@@ -1321,7 +1325,7 @@ fn add_thunk<Pe: ImageNtHeaders>(
         let ordinal = thunk.ordinal();
 
         data_functions.push(DataFunction {
-            name: vec![],
+            name: None,
             ordinal: Some(ordinal),
         });
         functions.push(Value::object([("ordinal", thunk.ordinal().into())]));
@@ -1332,7 +1336,7 @@ fn add_thunk<Pe: ImageNtHeaders>(
         };
 
         data_functions.push(DataFunction {
-            name: name.to_vec(),
+            name: Some(name.to_vec()),
             ordinal: None,
         });
         functions.push(Value::object([("name", name.to_vec().into())]));
@@ -1948,6 +1952,43 @@ impl Pe {
 
         res.try_into().ok()
     }
+
+    #[cfg(feature = "hash")]
+    fn imphash(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        use md5::{Digest, Md5};
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        let mut hasher = Md5::new();
+        let mut first = true;
+        for dll in &data.imports {
+            let mut dll_name = dll.dll_name.to_ascii_lowercase();
+            if dll_name.ends_with(b".ocx")
+                || dll_name.ends_with(b".sys")
+                || dll_name.ends_with(b".dll")
+            {
+                dll_name.truncate(dll_name.len() - 4);
+            }
+
+            for fun in &dll.functions {
+                let fun_name = match &fun.name {
+                    Some(name) => name,
+                    None => continue,
+                };
+                let fun_name = fun_name.to_ascii_lowercase();
+
+                if !first {
+                    hasher.update(&[b',']);
+                }
+                hasher.update(&dll_name);
+                hasher.update(&[b'.']);
+                hasher.update(fun_name);
+                first = false;
+            }
+        }
+
+        Some(Value::Bytes(hex::encode(hasher.finalize()).into_bytes()))
+    }
 }
 
 #[derive(Default)]
@@ -1971,7 +2012,7 @@ struct DataExport {
 }
 
 struct DataFunction {
-    name: Vec<u8>,
+    name: Option<Vec<u8>>,
     ordinal: Option<u16>,
 }
 
@@ -1992,7 +2033,11 @@ impl Data {
         self.imports
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
-            .and_then(|imp| imp.functions.iter().find(|f| f.name == fun_name))
+            .and_then(|imp| {
+                imp.functions
+                    .iter()
+                    .find(|f| f.name.as_ref().map_or(false, |name| fun_name == name))
+            })
             .is_some()
     }
 
@@ -2020,9 +2065,12 @@ impl Data {
         let mut nb_matches = 0;
 
         for imp in &self.imports {
-            if dll_regex.is_match(&imp.dll_name) {
-                for fun in &imp.functions {
-                    if fun_regex.is_match(&fun.name) {
+            if !dll_regex.is_match(&imp.dll_name) {
+                continue;
+            }
+            for fun in &imp.functions {
+                if let Some(name) = &fun.name {
+                    if fun_regex.is_match(name) {
                         nb_matches += 1;
                     }
                 }

@@ -359,16 +359,15 @@ fn test_pe() {
         true,
     );
 
-    // TODO: impash
-    /*
     check_file(
         "import \"pe\"
         rule test {
           condition:
             pe.imphash() == \"1720bf764274b7a4052bbef0a71adc0d\"
         }",
-        "assets/libyara/data/tiny", true);
-    */
+        "assets/libyara/data/tiny",
+        true,
+    );
 
     // TODO: thumbprint
     /*
