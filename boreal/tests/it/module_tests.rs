@@ -175,6 +175,26 @@ impl Module for Tests {
                     Type::Boolean,
                 ),
             ),
+            // Used for iterable tests
+            (
+                "simple_dict",
+                Type::dict(Type::object([
+                    ("array", Type::array(Type::dict(Type::Integer))),
+                    (
+                        "lazy_array",
+                        Type::function(
+                            vec![],
+                            Type::array(Type::object([(
+                                "another_array",
+                                Type::array(Type::object([(
+                                    "person",
+                                    Type::object([("name", Type::Bytes), ("age", Type::Integer)]),
+                                )])),
+                            )])),
+                        ),
+                    ),
+                ])),
+            ),
         ]
         .into()
     }
@@ -233,6 +253,55 @@ impl Module for Tests {
                         b"foo".to_vec(),
                         Value::object([("i", Value::Integer(1)), ("s", Value::bytes("foo"))]),
                     )]
+                    .into(),
+                ),
+            ),
+            (
+                "simple_dict",
+                Value::Dictionary(
+                    [
+                        (
+                            b"first".to_vec(),
+                            Value::object([
+                                (
+                                    "array",
+                                    Value::Array(vec![
+                                        Value::Dictionary(
+                                            [
+                                                (b"a".to_vec(), Value::Integer(1)),
+                                                (b"b".to_vec(), Value::Integer(2)),
+                                            ]
+                                            .into(),
+                                        ),
+                                        Value::Dictionary(
+                                            [
+                                                (b"c".to_vec(), Value::Integer(3)),
+                                                (b"d".to_vec(), Value::Integer(4)),
+                                            ]
+                                            .into(),
+                                        ),
+                                    ]),
+                                ),
+                                ("lazy_array", Value::Function(Self::lazy_array)),
+                            ]),
+                        ),
+                        (
+                            b"second".to_vec(),
+                            Value::object([
+                                (
+                                    "array",
+                                    Value::Array(vec![Value::Dictionary(
+                                        [
+                                            (b"y".to_vec(), Value::Integer(25)),
+                                            (b"z".to_vec(), Value::Integer(26)),
+                                        ]
+                                        .into(),
+                                    )]),
+                                ),
+                                ("lazy_array", Value::Function(Self::lazy_array)),
+                            ]),
+                        ),
+                    ]
                     .into(),
                 ),
             ),
@@ -355,5 +424,39 @@ impl Tests {
 
     fn lazy_lazy_int(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::Integer(3))
+    }
+
+    fn lazy_array(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        Some(Value::Array(vec![
+            Value::object([(
+                "another_array",
+                Value::Array(vec![
+                    Value::object([(
+                        "person",
+                        Value::object([
+                            ("name", Value::Bytes(b"alice".to_vec())),
+                            ("age", Value::Integer(57)),
+                        ]),
+                    )]),
+                    Value::object([(
+                        "person",
+                        Value::object([
+                            ("name", Value::Bytes(b"bob".to_vec())),
+                            ("age", Value::Integer(23)),
+                        ]),
+                    )]),
+                ]),
+            )]),
+            Value::object([(
+                "another_array",
+                Value::Array(vec![Value::object([(
+                    "person",
+                    Value::object([
+                        ("name", Value::Bytes(b"charlie".to_vec())),
+                        ("age", Value::Integer(15)),
+                    ]),
+                )])]),
+            )]),
+        ]))
     }
 }

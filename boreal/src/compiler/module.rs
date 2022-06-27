@@ -29,13 +29,22 @@ pub enum ValueOperation {
 
 /// Different type of expressions related to the use of a module.
 pub enum ModuleExpression {
-    /// Operations applied on a dynamic value.
-    DynamicValue {
+    /// Operations applied on a module value.
+    ModuleUse {
         /// Name of the module to use
         // TODO: optimize this
         module_name: String,
 
         /// List of operations to apply on the value returned by the function.
+        operations: Vec<ValueOperation>,
+    },
+
+    /// Operations on a bounded module value.
+    BoundedModuleValueUse {
+        /// Index on the stack of bounded identifiers that is populated during scanning.
+        index: usize,
+
+        /// List of operations to apply to the value to get the final value.
         operations: Vec<ValueOperation>,
     },
 
@@ -54,12 +63,17 @@ pub enum ModuleExpression {
 impl std::fmt::Debug for ModuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::DynamicValue {
+            Self::ModuleUse {
                 module_name,
                 operations,
             } => f
-                .debug_struct("DynamicValue")
+                .debug_struct("ModuleUse")
                 .field("module_name", module_name)
+                .field("operations", operations)
+                .finish(),
+            Self::BoundedModuleValueUse { index, operations } => f
+                .debug_struct("BoundedModuleValueUse")
+                .field("index", index)
                 .field("operations", operations)
                 .finish(),
             Self::Function {
@@ -94,7 +108,7 @@ pub(crate) fn compile_module<M: module::Module>(module: &M) -> Module {
     }
 }
 
-/// Compile the use of an identifier that is referring to an iteration value
+/// Compile the use of an bounded identifier.
 ///
 /// A for expression can generate an identifier that is referring to a partially resolved module
 /// value. This identifier can then be used to compute the value in full, which this function is
@@ -106,15 +120,14 @@ pub(crate) fn compile_module<M: module::Module>(module: &M) -> Module {
 /// for any section in pe.sections: (section.virtual_size == 0x00000224)
 /// ```
 ///
-/// `pe.sections` will be compiled by [`compile_module_identifier_as_iterator`], and
+/// `pe.sections` will be compiled by [`compile_identifier`], and
 /// `section.virtual_size` will be compiled by this function.
-pub(super) fn compile_module_identifier_used_in_iteration(
-    compiler: &mut RuleCompiler<'_>,
-    starting_type: &ValueType,
+pub(super) fn compile_bounded_identifier_use<'a, 'b>(
+    compiler: &'b mut RuleCompiler<'a>,
+    starting_type: &'b ValueType,
     identifier: parser::Identifier,
-    identifier_span: &Range<usize>,
     identifier_stack_index: usize,
-) -> Result<(Expression, Type), CompilationError> {
+) -> Result<ModuleUse<'a, 'b>, CompilationError> {
     let mut module_use = ModuleUse {
         module_name: None,
         compiler,
@@ -129,11 +142,7 @@ pub(super) fn compile_module_identifier_used_in_iteration(
         module_use.add_operation(op)?;
     }
 
-    module_use
-        .into_expression()
-        .ok_or_else(|| CompilationError::InvalidIdentifierUse {
-            span: identifier_span.clone(),
-        })
+    Ok(module_use)
 }
 
 /// Compile the use of an identifier referring to a module.
@@ -341,11 +350,11 @@ impl ModuleUse<'_, '_> {
             //   the Value retrieved from the stack.
             // Here, we are compiling the second one.
             None => match self.identifier_stack_index {
-                Some(index) => Expression::BoundedModuleIdentifier {
+                Some(index) => Expression::Module(ModuleExpression::BoundedModuleValueUse {
                     index,
                     operations: self.operations,
-                },
-                None => Expression::Module(ModuleExpression::DynamicValue {
+                }),
+                None => Expression::Module(ModuleExpression::ModuleUse {
                     module_name: self.module_name.unwrap().to_string(),
                     operations: self.operations,
                 }),
@@ -357,9 +366,16 @@ impl ModuleUse<'_, '_> {
 
     pub(super) fn into_iterator_expression(self) -> Option<(ModuleExpression, IteratorType)> {
         let ty = self.current_value.into_iterator_type()?;
-        let expr = ModuleExpression::DynamicValue {
-            module_name: self.module_name.unwrap().to_string(),
-            operations: self.operations,
+        // TODO: factorize this
+        let expr = match self.identifier_stack_index {
+            Some(index) => ModuleExpression::BoundedModuleValueUse {
+                index,
+                operations: self.operations,
+            },
+            None => ModuleExpression::ModuleUse {
+                module_name: self.module_name.unwrap().to_string(),
+                operations: self.operations,
+            },
         };
 
         Some((expr, ty))

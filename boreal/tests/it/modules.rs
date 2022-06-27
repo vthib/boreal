@@ -395,3 +395,34 @@ fn test_module_hash() {
     test("not defined hash.crc32(-1, 0)");
     test("not defined hash.crc32(100, 2)");
 }
+
+#[test]
+fn test_module_iterable_imbricated() {
+    check_ok(
+        r#"
+        for any k, v in tests.simple_dict: (
+            k == "second" and
+            for any v2 in v.array: (
+                for any k3, v3 in v2: (
+                    k3 == "y"
+                )
+                and for any k3, v3 in v2: (
+                    v3 == 26
+                )
+            )
+        )
+    "#,
+    );
+
+    check_ok(
+        r#"
+        for any k, v in tests.simple_dict: (
+            for all v2 in v.lazy_array(): (
+                for all v3 in v2.another_array: (
+                    v3.person.name >= "alice" and v3.person.age >= 15
+                )
+            )
+        )
+    "#,
+    );
+}

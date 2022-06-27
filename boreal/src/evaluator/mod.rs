@@ -581,17 +581,6 @@ impl Evaluator<'_, '_, '_> {
                     BoundedIdentifierValue::ModuleValue(_) => None,
                 }),
 
-            Expression::BoundedModuleIdentifier { index, operations } => self
-                .bounded_identifiers_stack
-                .get(*index)
-                .and_then(|v| match v {
-                    BoundedIdentifierValue::RawValue(_) => None,
-                    // TODO: find a way to avoid the clone
-                    BoundedIdentifierValue::ModuleValue(v) => Some((*v).clone()),
-                })
-                .and_then(|module_value| module::evaluate_ops(self, module_value, operations))
-                .and_then(module::module_value_to_expr_value),
-
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
             Expression::Bytes(v) => Some(Value::Bytes(v.clone())),

@@ -8,7 +8,7 @@ use regex::bytes::{Regex, RegexBuilder};
 use boreal_parser as parser;
 
 use super::{module, ModuleExpression};
-use super::{CompilationError, RuleCompiler, ValueOperation};
+use super::{CompilationError, RuleCompiler};
 use crate::module::Type as ModuleType;
 
 /// Type of a parsed expression
@@ -351,15 +351,6 @@ pub enum Expression {
     /// The value is the index on the stack of bounded identifiers that is populated during
     /// scanning.
     BoundedIdentifier(usize),
-
-    /// A bounded module identifier from a for expression.
-    BoundedModuleIdentifier {
-        /// Index on the stack of bounded identifiers that is populated during scanning.
-        index: usize,
-
-        /// List of operations to apply to the value to get the final value.
-        operations: Vec<ValueOperation>,
-    },
 
     /// A byte string.
     Bytes(Vec<u8>),
@@ -1158,13 +1149,18 @@ fn compile_identifier(
     if let Some((identifier_type, index)) = res.as_deref() {
         match identifier_type {
             BoundedIdentifierType::Module(module_type) => {
-                module::compile_module_identifier_used_in_iteration(
+                let module_use = module::compile_bounded_identifier_use(
                     compiler,
                     module_type,
                     identifier,
-                    identifier_span,
                     *index,
-                )
+                )?;
+
+                module_use
+                    .into_expression()
+                    .ok_or_else(|| CompilationError::InvalidIdentifierUse {
+                        span: identifier_span.clone(),
+                    })
             }
             BoundedIdentifierType::Type(typ) => {
                 if identifier.operations.is_empty() {
@@ -1208,17 +1204,21 @@ fn compile_identifier_as_iterator(
     identifier_span: &Range<usize>,
 ) -> Result<(ModuleExpression, module::IteratorType), CompilationError> {
     // First, try to resolve to a bound identifier.
-    if compiler.bounded_identifiers.get(&identifier.name).is_some() {
-        todo!()
+    let res = compiler.bounded_identifiers.get(&identifier.name).cloned();
+    let module_use = if let Some((identifier_type, index)) = res.as_deref() {
+        match identifier_type {
+            BoundedIdentifierType::Module(module_type) => {
+                module::compile_bounded_identifier_use(compiler, module_type, identifier, *index)?
+            }
+            BoundedIdentifierType::Type(_) => {
+                return Err(CompilationError::InvalidIdentifierUse {
+                    span: identifier_span.clone(),
+                });
+            }
+        }
     // Then, try to resolve to a module. This has precedence over rule names.
     } else if let Some(module) = compiler.namespace.imported_modules.get(&identifier.name) {
-        let module_use = module::compile_identifier(compiler, module, identifier, identifier_span)?;
-
-        module_use.into_iterator_expression().ok_or_else(|| {
-            CompilationError::NonIterableIdentifier {
-                span: identifier_span.clone(),
-            }
-        })
+        module::compile_identifier(compiler, module, identifier, identifier_span)?
     // Finally, try to resolve to an existing rule in the namespace.
     } else if compiler
         .namespace
@@ -1226,13 +1226,19 @@ fn compile_identifier_as_iterator(
         .get(&identifier.name)
         .is_some()
     {
-        Err(CompilationError::NonIterableIdentifier {
+        return Err(CompilationError::NonIterableIdentifier {
             span: identifier_span.clone(),
-        })
+        });
     } else {
-        Err(CompilationError::UnknownIdentifier {
+        return Err(CompilationError::UnknownIdentifier {
             name: identifier.name,
             span: identifier.name_span,
+        });
+    };
+
+    module_use
+        .into_iterator_expression()
+        .ok_or_else(|| CompilationError::NonIterableIdentifier {
+            span: identifier_span.clone(),
         })
-    }
 }
