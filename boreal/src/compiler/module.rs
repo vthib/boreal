@@ -94,43 +94,6 @@ pub(crate) fn compile_module<M: module::Module>(module: &M) -> Module {
     }
 }
 
-/// Compile the use of an identifier referring to a module.
-///
-/// This only accepts uses that yield valid expressions in the end. Therefore, the end value must
-/// not be a compound value, but one of integer, floating-point number, string, regex or boolean.
-pub(super) fn compile_module_identifier(
-    compiler: &mut RuleCompiler<'_>,
-    module: &Module,
-    identifier: parser::Identifier,
-    identifier_span: &Range<usize>,
-) -> Result<(Expression, Type), CompilationError> {
-    let module_use = compile_identifier(compiler, module, identifier, identifier_span)?;
-
-    module_use
-        .into_expression()
-        .ok_or_else(|| CompilationError::InvalidIdentifierUse {
-            span: identifier_span.clone(),
-        })
-}
-
-/// Compile the use of an identifier referring to a module, used as an iterator.
-///
-/// This only accepts uses that can acts as iterators, so arrays or dictionaries.
-pub(super) fn compile_module_identifier_as_iterator(
-    compiler: &mut RuleCompiler<'_>,
-    module: &Module,
-    identifier: parser::Identifier,
-    identifier_span: &Range<usize>,
-) -> Result<(ModuleExpression, IteratorType), CompilationError> {
-    let module_use = compile_identifier(compiler, module, identifier, identifier_span)?;
-
-    module_use
-        .into_iterator_expression()
-        .ok_or_else(|| CompilationError::NonIterableIdentifier {
-            span: identifier_span.clone(),
-        })
-}
-
 /// Compile the use of an identifier that is referring to an iteration value
 ///
 /// A for expression can generate an identifier that is referring to a partially resolved module
@@ -173,7 +136,12 @@ pub(super) fn compile_module_identifier_used_in_iteration(
         })
 }
 
-fn compile_identifier<'a, 'b>(
+/// Compile the use of an identifier referring to a module.
+///
+/// This returns an object that can generate either:
+/// - an expression and a type, if the use is to be transformed into an expression
+/// - a bounded value and an iterator type, if the use is for an iterable.
+pub(super) fn compile_identifier<'a, 'b>(
     compiler: &'b mut RuleCompiler<'a>,
     module: &'b Module,
     identifier: parser::Identifier,
@@ -244,7 +212,7 @@ fn compile_identifier<'a, 'b>(
 }
 
 #[derive(Debug)]
-struct ModuleUse<'a, 'b> {
+pub(super) struct ModuleUse<'a, 'b> {
     compiler: &'b mut RuleCompiler<'a>,
 
     // Last value to can be computed immediately (does not depend on a function to be called during
@@ -339,7 +307,7 @@ impl ModuleUse<'_, '_> {
         }
     }
 
-    fn into_expression(self) -> Option<(Expression, Type)> {
+    pub(super) fn into_expression(self) -> Option<(Expression, Type)> {
         let ty = self.current_value.into_expression_type()?;
         let expr = match self.last_immediate_value {
             // Those are all primitive values. This means there are no operations applied, and
@@ -387,7 +355,7 @@ impl ModuleUse<'_, '_> {
         Some((expr, ty))
     }
 
-    fn into_iterator_expression(self) -> Option<(ModuleExpression, IteratorType)> {
+    pub(super) fn into_iterator_expression(self) -> Option<(ModuleExpression, IteratorType)> {
         let ty = self.current_value.into_iterator_type()?;
         let expr = ModuleExpression::DynamicValue {
             module_name: self.module_name.unwrap().to_string(),

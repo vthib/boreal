@@ -1177,8 +1177,14 @@ fn compile_identifier(
             }
         }
     // Then, try to resolve to a module. This has precedence over rule names.
-    } else if let Some(v) = compiler.namespace.imported_modules.get(&identifier.name) {
-        module::compile_module_identifier(compiler, v, identifier, identifier_span)
+    } else if let Some(module) = compiler.namespace.imported_modules.get(&identifier.name) {
+        let module_use = module::compile_identifier(compiler, module, identifier, identifier_span)?;
+
+        module_use
+            .into_expression()
+            .ok_or_else(|| CompilationError::InvalidIdentifierUse {
+                span: identifier_span.clone(),
+            })
     // Finally, try to resolve to an existing rule in the namespace.
     } else if let Some(index) = compiler.namespace.rules_names.get(&identifier.name) {
         if identifier.operations.is_empty() {
@@ -1205,8 +1211,14 @@ fn compile_identifier_as_iterator(
     if compiler.bounded_identifiers.get(&identifier.name).is_some() {
         todo!()
     // Then, try to resolve to a module. This has precedence over rule names.
-    } else if let Some(v) = compiler.namespace.imported_modules.get(&identifier.name) {
-        module::compile_module_identifier_as_iterator(compiler, v, identifier, identifier_span)
+    } else if let Some(module) = compiler.namespace.imported_modules.get(&identifier.name) {
+        let module_use = module::compile_identifier(compiler, module, identifier, identifier_span)?;
+
+        module_use.into_iterator_expression().ok_or_else(|| {
+            CompilationError::NonIterableIdentifier {
+                span: identifier_span.clone(),
+            }
+        })
     // Finally, try to resolve to an existing rule in the namespace.
     } else if compiler
         .namespace
