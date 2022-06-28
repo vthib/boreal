@@ -316,57 +316,8 @@ impl ModuleUse<'_, '_> {
         }
     }
 
-    pub(super) fn into_expression(self) -> Option<(Expression, Type)> {
-        let ty = self.current_value.into_expression_type()?;
-        let expr = match self.last_immediate_value {
-            // Those are all primitive values. This means there are no operations applied, and
-            // we can directly generate a primitive expression.
-            Some(StaticValue::Integer(v)) => Expression::Number(*v),
-            Some(StaticValue::Float(v)) => Expression::Double(*v),
-            Some(StaticValue::Bytes(v)) => Expression::Bytes(v.clone()),
-            Some(StaticValue::Regex(v)) => Expression::Regex(v.clone()),
-            Some(StaticValue::Boolean(v)) => Expression::Boolean(*v),
-
-            Some(StaticValue::Object(_)) => return None,
-
-            Some(StaticValue::Function { fun, .. }) => {
-                let mut ops = self.operations.into_iter();
-                let arguments = if let Some(ValueOperation::FunctionCall(v)) = ops.next() {
-                    v
-                } else {
-                    return None;
-                };
-                Expression::Module(ModuleExpression::Function {
-                    fun: *fun,
-                    arguments,
-                    operations: ops.collect(),
-                })
-            }
-
-            // This is a two-step evaluation:
-            // - first one is during an iteration: a `Value` will be pushed in the identifier
-            //   stack.
-            // - second one is when the identifier is used: we need to apply the operations to
-            //   the Value retrieved from the stack.
-            // Here, we are compiling the second one.
-            None => match self.identifier_stack_index {
-                Some(index) => Expression::Module(ModuleExpression::BoundedModuleValueUse {
-                    index,
-                    operations: self.operations,
-                }),
-                None => Expression::Module(ModuleExpression::ModuleUse {
-                    module_name: self.module_name.unwrap().to_string(),
-                    operations: self.operations,
-                }),
-            },
-        };
-
-        Some((expr, ty))
-    }
-
-    pub(super) fn into_iterator_expression(self) -> Option<(ModuleExpression, IteratorType)> {
-        let ty = self.current_value.into_iterator_type()?;
-        // TODO: factorize this
+    fn into_module_expression(self) -> Option<(ModuleExpression, ValueType)> {
+        let ty = self.current_value.into_type()?;
         let expr = match self.identifier_stack_index {
             Some(index) => ModuleExpression::BoundedModuleValueUse {
                 index,
@@ -376,6 +327,65 @@ impl ModuleUse<'_, '_> {
                 module_name: self.module_name.unwrap().to_string(),
                 operations: self.operations,
             },
+        };
+        Some((expr, ty))
+    }
+
+    pub(super) fn into_expression(self) -> Option<(Expression, Type)> {
+        let (expr, ty) = match self.last_immediate_value {
+            Some(value) => {
+                let expr = match value {
+                    // Those are all primitive values. This means there are no operations applied, and
+                    // we can directly generate a primitive expression.
+                    StaticValue::Integer(v) => Expression::Number(*v),
+                    StaticValue::Float(v) => Expression::Double(*v),
+                    StaticValue::Bytes(v) => Expression::Bytes(v.clone()),
+                    StaticValue::Regex(v) => Expression::Regex(v.clone()),
+                    StaticValue::Boolean(v) => Expression::Boolean(*v),
+
+                    StaticValue::Object(_) => return None,
+
+                    StaticValue::Function { fun, .. } => {
+                        let mut ops = self.operations.into_iter();
+                        let arguments = if let Some(ValueOperation::FunctionCall(v)) = ops.next() {
+                            v
+                        } else {
+                            return None;
+                        };
+                        Expression::Module(ModuleExpression::Function {
+                            fun: *fun,
+                            arguments,
+                            operations: ops.collect(),
+                        })
+                    }
+                };
+                let ty = self.current_value.into_type()?;
+
+                (expr, ty)
+            }
+            None => {
+                let (module_expr, ty) = self.into_module_expression()?;
+                (Expression::Module(module_expr), ty)
+            }
+        };
+
+        let ty = match ty {
+            ValueType::Integer => Type::Integer,
+            ValueType::Float => Type::Float,
+            ValueType::Bytes => Type::Bytes,
+            ValueType::Regex => Type::Regex,
+            ValueType::Boolean => Type::Boolean,
+            _ => return None,
+        };
+        Some((expr, ty))
+    }
+
+    pub(super) fn into_iterator_expression(self) -> Option<(ModuleExpression, IteratorType)> {
+        let (expr, ty) = self.into_module_expression()?;
+        let ty = match ty {
+            ValueType::Array { value_type, .. } => IteratorType::Array(*value_type),
+            ValueType::Dictionary { value_type, .. } => IteratorType::Dictionary(*value_type),
+            _ => return None,
         };
 
         Some((expr, ty))
@@ -544,39 +554,17 @@ impl ValueOrType<'_> {
         .to_owned()
     }
 
-    fn into_expression_type(self) -> Option<Type> {
+    fn into_type(self) -> Option<ValueType> {
         match self {
             Self::Value(value) => match value {
-                StaticValue::Integer(_) => Some(Type::Integer),
-                StaticValue::Float(_) => Some(Type::Float),
-                StaticValue::Bytes(_) => Some(Type::Bytes),
-                StaticValue::Regex(_) => Some(Type::Regex),
-                StaticValue::Boolean(_) => Some(Type::Boolean),
+                StaticValue::Integer(_) => Some(ValueType::Integer),
+                StaticValue::Float(_) => Some(ValueType::Float),
+                StaticValue::Bytes(_) => Some(ValueType::Bytes),
+                StaticValue::Regex(_) => Some(ValueType::Regex),
+                StaticValue::Boolean(_) => Some(ValueType::Boolean),
                 _ => None,
             },
-            Self::Type(ty) => match ty {
-                ValueType::Integer => Some(Type::Integer),
-                ValueType::Float => Some(Type::Float),
-                ValueType::Bytes => Some(Type::Bytes),
-                ValueType::Regex => Some(Type::Regex),
-                ValueType::Boolean => Some(Type::Boolean),
-                _ => None,
-            },
-        }
-    }
-
-    fn into_iterator_type(self) -> Option<IteratorType> {
-        match self {
-            Self::Value(_) => None,
-            Self::Type(ty) => match ty {
-                ValueType::Array { value_type, .. } => {
-                    Some(IteratorType::Array((**value_type).clone()))
-                }
-                ValueType::Dictionary { value_type, .. } => {
-                    Some(IteratorType::Dictionary((**value_type).clone()))
-                }
-                _ => None,
-            },
+            Self::Type(ty) => Some(ty.clone()),
         }
     }
 }
