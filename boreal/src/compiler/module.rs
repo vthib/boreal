@@ -11,7 +11,7 @@ use crate::module::{self, ScanContext, StaticValue, Type as ValueType, Value};
 #[derive(Debug)]
 pub struct Module {
     /// Name of the module
-    pub name: String,
+    pub name: &'static str,
     /// Static values of the module, usable directly during compilation
     static_values: HashMap<&'static str, StaticValue>,
     /// Dynamic types for values computed during scanning.

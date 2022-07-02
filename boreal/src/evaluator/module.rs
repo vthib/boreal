@@ -16,7 +16,7 @@ pub(super) fn evaluate_expr(
         ModuleExpression::BoundedModuleValueUse { index, operations } => {
             let value = match index {
                 BoundedValueIndex::Module(index) => {
-                    evaluator.scan_data.module_values.get(*index)?
+                    &evaluator.scan_data.module_values.get(*index)?.1
                 }
                 BoundedValueIndex::BoundedStack(index) => {
                     evaluator.bounded_identifiers_stack.get(*index)?

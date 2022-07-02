@@ -10,8 +10,8 @@ use super::{Module, ScanContext, StaticValue, Type, Value};
 pub struct Time;
 
 impl Module for Time {
-    fn get_name(&self) -> String {
-        "time".to_owned()
+    fn get_name(&self) -> &'static str {
+        "time"
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {

@@ -26,8 +26,8 @@ enum ImportType {
 }
 
 impl Module for Pe {
-    fn get_name(&self) -> String {
-        "pe".to_owned()
+    fn get_name(&self) -> &'static str {
+        "pe"
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {

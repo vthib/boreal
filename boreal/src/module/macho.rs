@@ -16,8 +16,8 @@ use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 pub struct MachO;
 
 impl Module for MachO {
-    fn get_name(&self) -> String {
-        "macho".to_owned()
+    fn get_name(&self) -> &'static str {
+        "macho"
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {

@@ -26,11 +26,11 @@ impl Scanner {
     /// Returns a list of rules that matched on the given
     /// byte slice.
     #[must_use]
-    pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> Vec<MatchedRule<'scanner>> {
+    pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> ScanResult<'scanner> {
         let scan_data = ScanData::new(mem, &self.modules);
 
         // FIXME: this is pretty bad performance wise
-        let mut results = Vec::new();
+        let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
         for rule in &self.rules {
@@ -38,7 +38,7 @@ impl Scanner {
                 let (res, var_evals) =
                     evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
                 if res {
-                    results.push(MatchedRule {
+                    matched_rules.push(MatchedRule {
                         namespace: rule.namespace.as_deref(),
                         name: &rule.name,
                         matches: var_evals
@@ -61,11 +61,27 @@ impl Scanner {
             };
             previous_results.push(res);
         }
-        results
+
+        ScanResult {
+            matched_rules,
+            module_values: scan_data.module_values,
+        }
     }
 }
 
 // TODO: add tests on those results
+
+/// Result of a scan
+#[derive(Debug)]
+pub struct ScanResult<'scanner> {
+    /// List of rules that matched.
+    pub matched_rules: Vec<MatchedRule<'scanner>>,
+
+    /// On-scan values of all modules used in the scanner.
+    ///
+    /// First element is the module name, second one is the dynamic values produced by the module.
+    pub module_values: Vec<(&'static str, crate::module::Value)>,
+}
 
 /// Description of a rule that matched during a scan.
 #[derive(Debug)]

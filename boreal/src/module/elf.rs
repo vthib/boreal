@@ -17,8 +17,8 @@ use super::{Module, ScanContext, StaticValue, Type, Value};
 pub struct Elf;
 
 impl Module for Elf {
-    fn get_name(&self) -> String {
-        "elf".to_owned()
+    fn get_name(&self) -> &'static str {
+        "elf"
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {

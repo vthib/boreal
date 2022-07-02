@@ -59,10 +59,10 @@ impl Value {
 /// Data linked to the scan, shared by all rules.
 pub struct ScanData<'a> {
     // TODO: make this lazy?
-    module_values: Vec<ModuleValue>,
+    pub module_values: Vec<(&'static str, ModuleValue)>,
 
     // Context used when calling module functions
-    module_ctx: ScanContext<'a>,
+    pub module_ctx: ScanContext<'a>,
 }
 
 impl<'a> ScanData<'a> {
@@ -76,7 +76,10 @@ impl<'a> ScanData<'a> {
             module_values: modules
                 .iter()
                 .map(|module| {
-                    crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx))
+                    (
+                        module.get_name(),
+                        crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx)),
+                    )
                 })
                 .collect(),
             module_ctx,

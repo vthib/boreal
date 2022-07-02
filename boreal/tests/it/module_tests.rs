@@ -8,8 +8,8 @@ use boreal::module::{Module, ScanContext, StaticValue, Type, Value};
 pub struct Tests;
 
 impl Module for Tests {
-    fn get_name(&self) -> String {
-        "tests".to_owned()
+    fn get_name(&self) -> &'static str {
+        "tests"
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {

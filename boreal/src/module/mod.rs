@@ -36,7 +36,7 @@ pub use pe::Pe;
 ///   arrays such as `elf.sections`, or raw values such as `pe.machine`.
 pub trait Module {
     /// Name of the module, used in `import` clauses.
-    fn get_name(&self) -> String;
+    fn get_name(&self) -> &'static str;
 
     /// Static values exported by the module.
     ///
@@ -59,8 +59,8 @@ pub trait Module {
     /// struct Foo;
     ///
     /// impl Module for Foo {
-    ///     fn get_name(&self) -> String {
-    ///         "foo".to_owned()
+    ///     fn get_name(&self) -> &'static str {
+    ///         "foo"
     ///     }
     ///
     ///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
@@ -134,8 +134,8 @@ pub struct ScanContext<'a> {
     /// }
     ///
     /// impl Module for Foo {
-    ///     fn get_name(&self) -> String {
-    ///         "foo".to_owned()
+    ///     fn get_name(&self) -> &'static str {
+    ///         "foo"
     ///     }
     ///
     ///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {

@@ -84,7 +84,7 @@ impl Compiler {
         // Ignore the result: that would mean the same module is already registered.
         // FIXME: this is done to allow the double "import" in a rule, but this can be improved.
         let _res = self.available_modules.insert(
-            m.name.clone(),
+            m.name.to_owned(),
             Arc::new(AvailableModule {
                 module: m,
                 module_index,

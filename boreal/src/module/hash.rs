@@ -12,8 +12,8 @@ pub struct Hash;
 // TODO: yara has a cache for computed hashes. To be investigated if needed.
 
 impl Module for Hash {
-    fn get_name(&self) -> String {
-        "hash".to_owned()
+    fn get_name(&self) -> &'static str {
+        "hash"
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
