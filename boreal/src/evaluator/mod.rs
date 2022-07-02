@@ -128,7 +128,7 @@ struct Evaluator<'a, 'b, 'c> {
     currently_selected_variable_index: Option<usize>,
 
     // Stack of bounded identifiers to their integer values.
-    bounded_identifiers_stack: Vec<BoundedIdentifierValue>,
+    bounded_identifiers_stack: Vec<ModuleValue>,
 
     // Data only to the scan, independent of the rule.
     scan_data: &'b ScanData<'b>,
@@ -182,11 +182,6 @@ macro_rules! apply_cmp_op {
             _ => return None,
         }
     }
-}
-
-enum BoundedIdentifierValue {
-    RawValue(Value),
-    ModuleValue(ModuleValue),
 }
 
 impl Evaluator<'_, '_, '_> {
@@ -573,14 +568,6 @@ impl Evaluator<'_, '_, '_> {
                 .get(*index)
                 .map(|v| Value::Boolean(*v)),
 
-            Expression::BoundedIdentifier(index) => self
-                .bounded_identifiers_stack
-                .get(*index)
-                .and_then(|v| match v {
-                    BoundedIdentifierValue::RawValue(value) => Some((*value).clone()),
-                    BoundedIdentifierValue::ModuleValue(_) => None,
-                }),
-
             Expression::Number(v) => Some(Value::Number(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
             Expression::Bytes(v) => Some(Value::Bytes(v.clone())),
@@ -658,8 +645,7 @@ impl Evaluator<'_, '_, '_> {
                 match value {
                     ModuleValue::Array(array) => {
                         for value in array {
-                            self.bounded_identifiers_stack
-                                .push(BoundedIdentifierValue::ModuleValue(value));
+                            self.bounded_identifiers_stack.push(value);
                             let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
 
@@ -670,10 +656,8 @@ impl Evaluator<'_, '_, '_> {
                     }
                     ModuleValue::Dictionary(dict) => {
                         for (key, value) in dict {
-                            self.bounded_identifiers_stack
-                                .push(BoundedIdentifierValue::RawValue(Value::Bytes(key)));
-                            self.bounded_identifiers_stack
-                                .push(BoundedIdentifierValue::ModuleValue(value));
+                            self.bounded_identifiers_stack.push(ModuleValue::Bytes(key));
+                            self.bounded_identifiers_stack.push(value);
                             let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
 
@@ -697,7 +681,7 @@ impl Evaluator<'_, '_, '_> {
 
                 for value in from..=to {
                     self.bounded_identifiers_stack
-                        .push(BoundedIdentifierValue::RawValue(Value::Number(value)));
+                        .push(ModuleValue::Integer(value));
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
 
@@ -713,7 +697,7 @@ impl Evaluator<'_, '_, '_> {
                     let value = self.evaluate_expr(expr)?.unwrap_number()?;
 
                     self.bounded_identifiers_stack
-                        .push(BoundedIdentifierValue::RawValue(Value::Number(value)));
+                        .push(ModuleValue::Integer(value));
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
 

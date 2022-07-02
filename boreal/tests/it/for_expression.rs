@@ -105,6 +105,10 @@ fn test_for_identifiers_modules_errors() {
         "error: expressions have invalid types",
     );
     check_err(
+        &build_rule("for all k,v in tests.integer_dict: (k.d == 1)"),
+        "mem:12:45: error: invalid identifier type",
+    );
+    check_err(
         &build_rule(r#"for all k,v in tests.integer_dict: (v == "foo")"#),
         "error: expressions have invalid types",
     );

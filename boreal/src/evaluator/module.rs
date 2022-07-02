@@ -6,7 +6,7 @@ use crate::{
     module::{ScanContext, Value as ModuleValue},
 };
 
-use super::{BoundedIdentifierValue, Evaluator, Value};
+use super::{Evaluator, Value};
 
 pub(super) fn evaluate_expr(
     evaluator: &mut Evaluator,
@@ -22,14 +22,7 @@ pub(super) fn evaluate_expr(
             evaluate_ops(evaluator, value, operations)
         }
         ModuleExpression::BoundedModuleValueUse { index, operations } => {
-            let value = evaluator
-                .bounded_identifiers_stack
-                .get(*index)
-                .and_then(|v| match v {
-                    BoundedIdentifierValue::RawValue(_) => None,
-                    // TODO: find a way to avoid the clone
-                    BoundedIdentifierValue::ModuleValue(v) => Some((*v).clone()),
-                })?;
+            let value = evaluator.bounded_identifiers_stack.get(*index).cloned()?;
             evaluate_ops(evaluator, value, operations)
         }
         ModuleExpression::Function {
@@ -55,6 +48,7 @@ pub(super) fn evaluate_ops(
 }
 
 pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
+    eprintln!("returning {:?}", &value);
     match value {
         ModuleValue::Integer(v) => Some(Value::Number(v)),
         ModuleValue::Float(v) => Some(Value::Float(v)),

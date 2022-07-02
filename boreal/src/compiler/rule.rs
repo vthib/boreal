@@ -5,9 +5,10 @@ use std::{collections::HashMap, sync::Arc};
 use boreal_parser as parser;
 
 use super::{
-    compile_expression, compile_variable, BoundedIdentifierType, CompilationError, Expression,
-    Namespace, Variable, VariableIndex,
+    compile_expression, compile_variable, CompilationError, Expression, Namespace, Variable,
+    VariableIndex,
 };
+use crate::module::Type as ModuleType;
 
 /// A compiled scanning rule.
 #[derive(Debug)]
@@ -48,7 +49,7 @@ pub(super) struct RuleCompiler<'a> {
 
     /// Map of the name of a bounded identifier to its type and index in the bounded identifier
     /// stack.
-    pub bounded_identifiers: HashMap<String, Arc<(BoundedIdentifierType, usize)>>,
+    pub bounded_identifiers: HashMap<String, Arc<(ModuleType, usize)>>,
 
     /// List of rules wildcard used in for expressions.
     ///
@@ -146,7 +147,7 @@ impl<'a> RuleCompiler<'a> {
     pub(super) fn add_bounded_identifier(
         &mut self,
         name: &str,
-        typ: BoundedIdentifierType,
+        typ: ModuleType,
         span: &Range<usize>,
     ) -> Result<(), CompilationError> {
         let index = self.bounded_identifiers.len();
