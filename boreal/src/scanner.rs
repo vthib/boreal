@@ -1,7 +1,5 @@
 //! Provides the [`Scanner`] object which provides methods to scan
 //! files or memory on a set of rules.
-use std::collections::HashMap;
-
 use crate::{
     compiler::Rule,
     evaluator::{self, ScanData},
@@ -14,12 +12,12 @@ pub struct Scanner {
     rules: Vec<Rule>,
 
     // List of modules used during scanning.
-    modules: HashMap<String, Box<dyn Module>>,
+    modules: Vec<Box<dyn Module>>,
 }
 
 impl Scanner {
     #[must_use]
-    pub(crate) fn new(rules: Vec<Rule>, modules: HashMap<String, Box<dyn Module>>) -> Self {
+    pub(crate) fn new(rules: Vec<Rule>, modules: Vec<Box<dyn Module>>) -> Self {
         Self { rules, modules }
     }
 
@@ -37,7 +35,6 @@ impl Scanner {
 
         for rule in &self.rules {
             let res = {
-                // TODO: only get dynamic values for modules once for the mem, not once per rule.
                 let (res, var_evals) =
                     evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
                 if res {

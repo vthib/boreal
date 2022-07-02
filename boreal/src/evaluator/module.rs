@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    compiler::{Expression, ModuleExpression, ValueOperation},
+    compiler::{BoundedValueIndex, Expression, ModuleExpression, ValueOperation},
     module::{ScanContext, Value as ModuleValue},
 };
 
@@ -13,16 +13,17 @@ pub(super) fn evaluate_expr(
     expr: &ModuleExpression,
 ) -> Option<ModuleValue> {
     match expr {
-        ModuleExpression::ModuleUse {
-            module_name,
-            operations,
-        } => {
-            // FIXME: avoid this clone
-            let value = evaluator.scan_data.module_values.get(module_name)?.clone();
-            evaluate_ops(evaluator, value, operations)
-        }
         ModuleExpression::BoundedModuleValueUse { index, operations } => {
-            let value = evaluator.bounded_identifiers_stack.get(*index).cloned()?;
+            let value = match index {
+                BoundedValueIndex::Module(index) => {
+                    evaluator.scan_data.module_values.get(*index)?
+                }
+                BoundedValueIndex::BoundedStack(index) => {
+                    evaluator.bounded_identifiers_stack.get(*index)?
+                }
+            };
+            // FIXME: avoid this clone
+            let value = value.clone();
             evaluate_ops(evaluator, value, operations)
         }
         ModuleExpression::Function {

@@ -2,7 +2,9 @@ use std::{collections::HashMap, ops::Range};
 
 use boreal_parser as parser;
 
-use super::{compile_expression, CompilationError, Expression, RuleCompiler, Type};
+use super::{
+    compile_expression, AvailableModule, CompilationError, Expression, RuleCompiler, Type,
+};
 use crate::module::{self, ScanContext, StaticValue, Type as ValueType, Value};
 
 /// Module used during compilation
@@ -27,22 +29,24 @@ pub enum ValueOperation {
     FunctionCall(Vec<Expression>),
 }
 
+/// Index on a bounded value
+#[derive(Debug)]
+pub enum BoundedValueIndex {
+    /// Index on the list of module values.
+    ///
+    /// This means using the dynamic value produced by the module.
+    Module(usize),
+
+    /// Index on the bounded stack.
+    BoundedStack(usize),
+}
+
 /// Different type of expressions related to the use of a module.
 pub enum ModuleExpression {
-    /// Operations applied on a module value.
-    ModuleUse {
-        /// Name of the module to use
-        // TODO: optimize this
-        module_name: String,
-
-        /// List of operations to apply on the value returned by the function.
-        operations: Vec<ValueOperation>,
-    },
-
     /// Operations on a bounded module value.
     BoundedModuleValueUse {
-        /// Index on the stack of bounded identifiers that is populated during scanning.
-        index: usize,
+        /// Index of the bounded value.
+        index: BoundedValueIndex,
 
         /// List of operations to apply to the value to get the final value.
         operations: Vec<ValueOperation>,
@@ -63,14 +67,6 @@ pub enum ModuleExpression {
 impl std::fmt::Debug for ModuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ModuleUse {
-                module_name,
-                operations,
-            } => f
-                .debug_struct("ModuleUse")
-                .field("module_name", module_name)
-                .field("operations", operations)
-                .finish(),
             Self::BoundedModuleValueUse { index, operations } => f
                 .debug_struct("BoundedModuleValueUse")
                 .field("index", index)
@@ -129,13 +125,12 @@ pub(super) fn compile_bounded_identifier_use<'a, 'b>(
     identifier_stack_index: usize,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
     let mut module_use = ModuleUse {
-        module_name: None,
         compiler,
         last_immediate_value: None,
         current_value: ValueOrType::Type(starting_type),
         operations: Vec::with_capacity(identifier.operations.len()),
         current_span: identifier.name_span.clone(),
-        identifier_stack_index: Some(identifier_stack_index),
+        bounded_value_index: Some(BoundedValueIndex::BoundedStack(identifier_stack_index)),
     };
 
     for op in identifier.operations {
@@ -152,7 +147,7 @@ pub(super) fn compile_bounded_identifier_use<'a, 'b>(
 /// - a bounded value and an iterator type, if the use is for an iterable.
 pub(super) fn compile_identifier<'a, 'b>(
     compiler: &'b mut RuleCompiler<'a>,
-    module: &'b Module,
+    module: &'b AvailableModule,
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
@@ -187,27 +182,25 @@ pub(super) fn compile_identifier<'a, 'b>(
     };
 
     // First try to get from the static values
-    let mut module_use = match module.static_values.get(&**subfield) {
+    let mut module_use = match module.module.static_values.get(&**subfield) {
         Some(value) => ModuleUse {
-            module_name: Some(&module.name),
             compiler,
             last_immediate_value: Some(value),
             current_value: ValueOrType::Value(value),
             operations: Vec::with_capacity(nb_ops),
             current_span: identifier.name_span,
-            identifier_stack_index: None,
+            bounded_value_index: None,
         },
         None => {
             // otherwise, use dynamic types, and apply the first operation (so that it will be
             // applied on scan).
             let mut module_use = ModuleUse {
-                module_name: Some(&module.name),
                 compiler,
                 last_immediate_value: None,
-                current_value: ValueOrType::Type(&module.dynamic_types),
+                current_value: ValueOrType::Type(&module.module.dynamic_types),
                 operations: Vec::with_capacity(nb_ops),
                 current_span: identifier.name_span,
-                identifier_stack_index: None,
+                bounded_value_index: Some(BoundedValueIndex::Module(module.module_index)),
             };
             module_use.add_operation(first_op)?;
             module_use
@@ -237,11 +230,8 @@ pub(super) struct ModuleUse<'a, 'b> {
     // Current span of the module + added operations.
     current_span: Range<usize>,
 
-    // stack index for the identifier being compiled. Only set when compiling the use of
-    // a identifier bounded from a for expression.
-    identifier_stack_index: Option<usize>,
-    // TODO: this is WIP with the module rework
-    module_name: Option<&'b str>,
+    // Index for dynamic bounded value that will be used on evaluation.
+    bounded_value_index: Option<BoundedValueIndex>,
 }
 
 impl ModuleUse<'_, '_> {
@@ -318,15 +308,9 @@ impl ModuleUse<'_, '_> {
 
     fn into_module_expression(self) -> Option<(ModuleExpression, ValueType)> {
         let ty = self.current_value.into_type()?;
-        let expr = match self.identifier_stack_index {
-            Some(index) => ModuleExpression::BoundedModuleValueUse {
-                index,
-                operations: self.operations,
-            },
-            None => ModuleExpression::ModuleUse {
-                module_name: self.module_name.unwrap().to_string(),
-                operations: self.operations,
-            },
+        let expr = ModuleExpression::BoundedModuleValueUse {
+            index: self.bounded_value_index?,
+            operations: self.operations,
         };
         Some((expr, ty))
     }

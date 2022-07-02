@@ -37,11 +37,19 @@ pub struct Compiler {
     /// Modules declared in the scanner, added with [`Compiler::add_module`].
     ///
     /// These are modules that can be imported and used in the namespaces.
-    available_modules: HashMap<String, Arc<Module>>,
+    available_modules: HashMap<String, Arc<AvailableModule>>,
 
     /// List of modules passed to the scanner.
-    // TODO rework this
-    modules: HashMap<String, Box<dyn crate::module::Module>>,
+    modules: Vec<Box<dyn crate::module::Module>>,
+}
+
+#[derive(Debug)]
+struct AvailableModule {
+    /// Module available during compilation.
+    module: Module,
+
+    /// Index of the module, used to access the module dynamic values during scanning.
+    module_index: usize,
 }
 
 impl Compiler {
@@ -71,10 +79,17 @@ impl Compiler {
     /// Add a module
     pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) {
         let m = compile_module(&module);
-        let _res = self.modules.insert(m.name.clone(), Box::new(module));
+        let module_index = self.modules.len();
+        self.modules.push(Box::new(module));
         // Ignore the result: that would mean the same module is already registered.
         // FIXME: this is done to allow the double "import" in a rule, but this can be improved.
-        let _res = self.available_modules.insert(m.name.clone(), Arc::new(m));
+        let _res = self.available_modules.insert(
+            m.name.clone(),
+            Arc::new(AvailableModule {
+                module: m,
+                module_index,
+            }),
+        );
     }
 
     /// Add rules to the scanner from a string.
@@ -190,7 +205,8 @@ struct Namespace {
     /// Those modules have precedence in the namespace over rules. If a module `foo` is imported,
     /// and a rule named `foo` is added, this is not an error, but the identifier `foo` will refer
     /// to the module.
-    imported_modules: HashMap<String, Arc<Module>>,
+    ///
+    imported_modules: HashMap<String, Arc<AvailableModule>>,
 
     /// List of names prefixes that cannot be used anymore in this namespace.
     ///

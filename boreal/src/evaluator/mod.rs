@@ -9,8 +9,6 @@
 //! - etc
 //!
 //! The use of an `Option` is useful to propagate this poison value easily.
-use std::collections::HashMap;
-
 use memchr::memmem;
 use regex::bytes::Regex;
 
@@ -61,14 +59,14 @@ impl Value {
 /// Data linked to the scan, shared by all rules.
 pub struct ScanData<'a> {
     // TODO: make this lazy?
-    module_values: HashMap<String, ModuleValue>,
+    module_values: Vec<ModuleValue>,
 
     // Context used when calling module functions
     module_ctx: ScanContext<'a>,
 }
 
 impl<'a> ScanData<'a> {
-    pub fn new(mem: &'a [u8], modules: &HashMap<String, Box<dyn Module>>) -> Self {
+    pub fn new(mem: &'a [u8], modules: &[Box<dyn Module>]) -> Self {
         let mut module_ctx = ScanContext {
             mem,
             module_data: ModuleDataMap::default(),
@@ -77,11 +75,8 @@ impl<'a> ScanData<'a> {
         Self {
             module_values: modules
                 .iter()
-                .map(|(name, module)| {
-                    (
-                        name.to_string(),
-                        crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx)),
-                    )
+                .map(|module| {
+                    crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx))
                 })
                 .collect(),
             module_ctx,
