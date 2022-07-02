@@ -41,5 +41,5 @@ object = { version = "0.28", optional = true }
 
 [dev-dependencies]
 const_format = "0.2"
-yara = { version = "0.13", features = ["vendored"] }
+yara = { version = "0.15", features = ["vendored"] }
 base64 = "0.13"

@@ -4,6 +4,3 @@ members = [
     "boreal",
     "boreal-cli",
 ]
-
-[patch.crates-io]
-yara = { git = "https://github.com/ikrivosheev/yara-rust", branch = "feature/upgrade_yara" }
