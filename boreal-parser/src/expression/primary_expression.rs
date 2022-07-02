@@ -190,7 +190,7 @@ fn primary_expression_item(input: Input) -> ParseResult<Expression> {
         // double
         map_expr(number::double, ExpressionKind::Double),
         // number
-        map_expr(number::number, ExpressionKind::Number),
+        map_expr(number::number, ExpressionKind::Integer),
         // text string
         map_expr(string::quoted, ExpressionKind::Bytes),
         // regex
@@ -276,7 +276,7 @@ mod tests {
                 expr: Expr::ReadInteger {
                     ty: ReadIntegerType::Uint8,
                     addr: Box::new(Expression {
-                        expr: Expr::Number(3),
+                        expr: Expr::Integer(3),
                         span: 6..7,
                     }),
                 },
@@ -288,7 +288,7 @@ mod tests {
             "15  2",
             "2",
             Expression {
-                expr: Expr::Number(15),
+                expr: Expr::Integer(15),
                 span: 0..2,
             },
         );
@@ -327,7 +327,7 @@ mod tests {
                 expr: Expr::CountInRange {
                     variable_name: "foo".to_owned(),
                     from: Box::new(Expression {
-                        expr: Expr::Number(0),
+                        expr: Expr::Integer(0),
                         span: 9..10,
                     }),
                     to: Box::new(Expression {
@@ -346,7 +346,7 @@ mod tests {
                 expr: Expr::Offset {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: Expr::Number(1),
+                        expr: Expr::Integer(1),
                         span: 0..2,
                     }),
                 },
@@ -361,7 +361,7 @@ mod tests {
                 expr: Expr::Offset {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: Expr::Number(2),
+                        expr: Expr::Integer(2),
                         span: 5..6,
                     }),
                 },
@@ -376,7 +376,7 @@ mod tests {
                 expr: Expr::Length {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: Expr::Number(1),
+                        expr: Expr::Integer(1),
                         span: 0..2,
                     }),
                 },
@@ -391,7 +391,7 @@ mod tests {
                 expr: Expr::Length {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: Expr::Number(2),
+                        expr: Expr::Integer(2),
                         span: 5..6,
                     }),
                 },
@@ -463,18 +463,18 @@ mod tests {
                     Box::new(Expression {
                         expr: Expr::Add(
                             Box::new(Expression {
-                                expr: Expr::Number(1),
+                                expr: Expr::Integer(1),
                                 span: 0..1,
                             }),
                             Box::new(Expression {
-                                expr: Expr::Number(2),
+                                expr: Expr::Integer(2),
                                 span: 4..5,
                             }),
                         ),
                         span: 0..5,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(3),
+                        expr: Expr::Integer(3),
                         span: 8..9,
                     }),
                 ),
@@ -492,25 +492,25 @@ mod tests {
                             Box::new(Expression {
                                 expr: Expr::Div(
                                     Box::new(Expression {
-                                        expr: Expr::Number(1),
+                                        expr: Expr::Integer(1),
                                         span: 0..1,
                                     }),
                                     Box::new(Expression {
-                                        expr: Expr::Number(2),
+                                        expr: Expr::Integer(2),
                                         span: 4..5,
                                     }),
                                 ),
                                 span: 0..5,
                             }),
                             Box::new(Expression {
-                                expr: Expr::Number(3),
+                                expr: Expr::Integer(3),
                                 span: 8..9,
                             }),
                         ),
                         span: 0..9,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(4),
+                        expr: Expr::Integer(4),
                         span: 12..13,
                     }),
                 ),
@@ -528,25 +528,25 @@ mod tests {
                             Box::new(Expression {
                                 expr: Expr::ShiftLeft(
                                     Box::new(Expression {
-                                        expr: Expr::Number(1),
+                                        expr: Expr::Integer(1),
                                         span: 0..1,
                                     }),
                                     Box::new(Expression {
-                                        expr: Expr::Number(2),
+                                        expr: Expr::Integer(2),
                                         span: 5..6,
                                     }),
                                 ),
                                 span: 0..6,
                             }),
                             Box::new(Expression {
-                                expr: Expr::Number(3),
+                                expr: Expr::Integer(3),
                                 span: 10..11,
                             }),
                         ),
                         span: 0..11,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(4),
+                        expr: Expr::Integer(4),
                         span: 15..16,
                     }),
                 ),
@@ -562,18 +562,18 @@ mod tests {
                     Box::new(Expression {
                         expr: Expr::BitwiseAnd(
                             Box::new(Expression {
-                                expr: Expr::Number(1),
+                                expr: Expr::Integer(1),
                                 span: 0..1,
                             }),
                             Box::new(Expression {
-                                expr: Expr::Number(2),
+                                expr: Expr::Integer(2),
                                 span: 4..5,
                             }),
                         ),
                         span: 0..5,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(3),
+                        expr: Expr::Integer(3),
                         span: 8..9,
                     }),
                 ),
@@ -589,18 +589,18 @@ mod tests {
                     Box::new(Expression {
                         expr: Expr::BitwiseXor(
                             Box::new(Expression {
-                                expr: Expr::Number(1),
+                                expr: Expr::Integer(1),
                                 span: 0..1,
                             }),
                             Box::new(Expression {
-                                expr: Expr::Number(2),
+                                expr: Expr::Integer(2),
                                 span: 4..5,
                             }),
                         ),
                         span: 0..5,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(3),
+                        expr: Expr::Integer(3),
                         span: 8..9,
                     }),
                 ),
@@ -616,18 +616,18 @@ mod tests {
                     Box::new(Expression {
                         expr: Expr::BitwiseOr(
                             Box::new(Expression {
-                                expr: Expr::Number(1),
+                                expr: Expr::Integer(1),
                                 span: 0..1,
                             }),
                             Box::new(Expression {
-                                expr: Expr::Number(2),
+                                expr: Expr::Integer(2),
                                 span: 4..5,
                             }),
                         ),
                         span: 0..5,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(3),
+                        expr: Expr::Integer(3),
                         span: 8..9,
                     }),
                 ),
@@ -644,14 +644,14 @@ mod tests {
                 expr: Expr::Sub(
                     Box::new(Expression {
                         expr: Expr::Neg(Box::new(Expression {
-                            expr: Expr::Number(1),
+                            expr: Expr::Integer(1),
                             span: 1..2,
                         })),
                         span: 0..2,
                     }),
                     Box::new(Expression {
                         expr: Expr::Neg(Box::new(Expression {
-                            expr: Expr::Number(2),
+                            expr: Expr::Integer(2),
                             span: 4..5,
                         })),
                         span: 3..5,
@@ -668,14 +668,14 @@ mod tests {
                 expr: Expr::BitwiseXor(
                     Box::new(Expression {
                         expr: Expr::BitwiseNot(Box::new(Expression {
-                            expr: Expr::Number(1),
+                            expr: Expr::Integer(1),
                             span: 1..2,
                         })),
                         span: 0..2,
                     }),
                     Box::new(Expression {
                         expr: Expr::BitwiseNot(Box::new(Expression {
-                            expr: Expr::Number(2),
+                            expr: Expr::Integer(2),
                             span: 4..5,
                         })),
                         span: 3..5,
@@ -692,7 +692,7 @@ mod tests {
                 expr: Expr::Neg(Box::new(Expression {
                     expr: Expr::BitwiseNot(Box::new(Expression {
                         expr: Expr::Neg(Box::new(Expression {
-                            expr: Expr::Number(1),
+                            expr: Expr::Integer(1),
                             span: 3..4,
                         })),
                         span: 2..4,
@@ -725,20 +725,20 @@ mod tests {
                 Expression {
                     expr: lower_constructor(
                         Box::new(Expression {
-                            expr: Expr::Number(1),
+                            expr: Expr::Integer(1),
                             span: 0..1,
                         }),
                         Box::new(Expression {
                             expr: higher_constructor(
                                 Box::new(Expression {
-                                    expr: Expr::Number(2),
+                                    expr: Expr::Integer(2),
                                     span: Range {
                                         start: 3 + lower_op.len(),
                                         end: 4 + lower_op.len(),
                                     },
                                 }),
                                 Box::new(Expression {
-                                    expr: Expr::Number(3),
+                                    expr: Expr::Integer(3),
                                     span: Range {
                                         start: 6 + lower_op.len() + higher_op.len(),
                                         end: 7 + lower_op.len() + higher_op.len(),
@@ -821,17 +821,17 @@ mod tests {
                     Box::new(Expression {
                         expr: Expr::Add(
                             Box::new(Expression {
-                                expr: Expr::Number(1),
+                                expr: Expr::Integer(1),
                                 span: 0..1,
                             }),
                             Box::new(Expression {
                                 expr: Expr::Mul(
                                     Box::new(Expression {
-                                        expr: Expr::Number(2),
+                                        expr: Expr::Integer(2),
                                         span: 4..5,
                                     }),
                                     Box::new(Expression {
-                                        expr: Expr::Number(3),
+                                        expr: Expr::Integer(3),
                                         span: 8..9,
                                     }),
                                 ),
@@ -845,18 +845,18 @@ mod tests {
                             Box::new(Expression {
                                 expr: Expr::Mod(
                                     Box::new(Expression {
-                                        expr: Expr::Number(4),
+                                        expr: Expr::Integer(4),
                                         span: 12..13,
                                     }),
                                     Box::new(Expression {
-                                        expr: Expr::Number(5),
+                                        expr: Expr::Integer(5),
                                         span: 16..17,
                                     }),
                                 ),
                                 span: 12..17,
                             }),
                             Box::new(Expression {
-                                expr: Expr::Number(6),
+                                expr: Expr::Integer(6),
                                 span: 20..21,
                             }),
                         ),
@@ -877,11 +877,11 @@ mod tests {
             Expression {
                 expr: Expr::Add(
                     Box::new(Expression {
-                        expr: Expr::Number(1),
+                        expr: Expr::Integer(1),
                         span: 0..1,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(1),
+                        expr: Expr::Integer(1),
                         span: 4..5,
                     }),
                 ),
@@ -895,7 +895,7 @@ mod tests {
             Expression {
                 expr: Expr::Add(
                     Box::new(Expression {
-                        expr: Expr::Number(1),
+                        expr: Expr::Integer(1),
                         span: 0..1,
                     }),
                     Box::new(Expression {
@@ -917,7 +917,7 @@ mod tests {
                         span: 0..3,
                     }),
                     Box::new(Expression {
-                        expr: Expr::Number(1),
+                        expr: Expr::Integer(1),
                         span: 6..7,
                     }),
                 ),
@@ -931,7 +931,7 @@ mod tests {
             "",
             Expression {
                 expr: Expr::Neg(Box::new(Expression {
-                    expr: Expr::Number(1),
+                    expr: Expr::Integer(1),
                     span: 1..2,
                 })),
                 span: 0..2,

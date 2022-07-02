@@ -54,5 +54,5 @@ pub(super) fn evaluate_read_integer(
         ReadIntegerType::Int32BE => read_be!(i32, mem),
         ReadIntegerType::Uint32BE => read_be!(u32, mem),
     }?;
-    Some(Value::Number(v))
+    Some(Value::Integer(v))
 }

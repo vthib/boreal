@@ -23,7 +23,7 @@ use variable::VariableEvaluation;
 
 #[derive(Clone, Debug)]
 enum Value {
-    Number(i64),
+    Integer(i64),
     Float(f64),
     Bytes(Vec<u8>),
     Regex(Regex),
@@ -36,14 +36,14 @@ impl Value {
             Self::Boolean(b) => *b,
             Self::Bytes(s) => !s.is_empty(),
             Self::Float(a) => *a != 0.0,
-            Self::Number(n) => *n != 0,
+            Self::Integer(n) => *n != 0,
             Self::Regex(_) => true,
         }
     }
 
     fn unwrap_number(self) -> Option<i64> {
         match self {
-            Self::Number(v) => Some(v),
+            Self::Integer(v) => Some(v),
             _ => None,
         }
     }
@@ -151,12 +151,12 @@ macro_rules! arith_op_num_and_float {
         let left = $self.evaluate_expr($left)?;
         let right = $self.evaluate_expr($right)?;
         match (left, right) {
-            (Value::Number(n), Value::Number(m)) => Some(Value::Number(n.$wrapping_op(m))),
-            (Value::Float(a), Value::Number(n)) => {
+            (Value::Integer(n), Value::Integer(m)) => Some(Value::Integer(n.$wrapping_op(m))),
+            (Value::Float(a), Value::Integer(n)) => {
                 #[allow(clippy::cast_precision_loss)]
                 Some(Value::Float(a $op (n as f64)))
             },
-            (Value::Number(n), Value::Float(a)) => {
+            (Value::Integer(n), Value::Float(a)) => {
                 #[allow(clippy::cast_precision_loss)]
                 Some(Value::Float((n as f64) $op a))
             },
@@ -169,10 +169,10 @@ macro_rules! arith_op_num_and_float {
 macro_rules! apply_cmp_op {
     ($left:expr, $right:expr, $op:tt) => {
         match ($left, $right) {
-            (Value::Number(n), Value::Number(m)) => n $op m,
+            (Value::Integer(n), Value::Integer(m)) => n $op m,
             (Value::Float(a), Value::Float(b)) => a $op b,
-            (Value::Number(n), Value::Float(b)) => (n as f64) $op b,
-            (Value::Float(a), Value::Number(m)) => a $op (m as f64),
+            (Value::Integer(n), Value::Float(b)) => (n as f64) $op b,
+            (Value::Float(a), Value::Integer(m)) => a $op (m as f64),
             (Value::Bytes(a), Value::Bytes(b)) => a $op b,
             _ => return None,
         }
@@ -186,7 +186,7 @@ impl Evaluator<'_, '_, '_> {
 
     fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
         match expr {
-            Expression::Filesize => Some(Value::Number(self.mem.len() as i64)),
+            Expression::Filesize => Some(Value::Integer(self.mem.len() as i64)),
             Expression::Entrypoint => todo!(),
             Expression::ReadInteger { addr, ty } => evaluate_read_integer(self, addr, *ty),
 
@@ -204,7 +204,7 @@ impl Evaluator<'_, '_, '_> {
                     (Ok(from), Ok(to)) if from <= to => {
                         let count = var.count_matches_in(self.mem, from, to);
 
-                        i64::try_from(count).ok().map(Value::Number)
+                        i64::try_from(count).ok().map(Value::Integer)
                     }
                     _ => None,
                 }
@@ -214,7 +214,7 @@ impl Evaluator<'_, '_, '_> {
                 let var = &mut self.variables[index];
 
                 let count = var.count_matches(self.mem);
-                i64::try_from(count).ok().map(Value::Number)
+                i64::try_from(count).ok().map(Value::Integer)
             }
             Expression::Offset {
                 variable_index,
@@ -230,7 +230,7 @@ impl Evaluator<'_, '_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => var
                         .find_match_occurence(self.mem, v - 1)
-                        .map(|mat| Value::Number(mat.start as i64)),
+                        .map(|mat| Value::Integer(mat.start as i64)),
                     Ok(_) | Err(_) => None,
                 }
             }
@@ -248,7 +248,7 @@ impl Evaluator<'_, '_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => var
                         .find_match_occurence(self.mem, v - 1)
-                        .map(|mat| Value::Number(mat.len() as i64)),
+                        .map(|mat| Value::Integer(mat.len() as i64)),
                     Ok(_) | Err(_) => None,
                 }
             }
@@ -257,7 +257,7 @@ impl Evaluator<'_, '_, '_> {
                 let v = self.evaluate_expr(expr)?;
 
                 match v {
-                    Value::Number(n) => Some(Value::Number(-n)),
+                    Value::Integer(n) => Some(Value::Integer(-n)),
                     Value::Float(a) => Some(Value::Float(-a)),
                     _ => None,
                 }
@@ -275,19 +275,19 @@ impl Evaluator<'_, '_, '_> {
                 let left = self.evaluate_expr(left)?;
                 let right = self.evaluate_expr(right)?;
                 match (left, right) {
-                    (Value::Number(n), Value::Number(m)) => {
+                    (Value::Integer(n), Value::Integer(m)) => {
                         if m == 0 {
                             None
                         } else {
-                            Some(Value::Number(n.wrapping_div(m)))
+                            Some(Value::Integer(n.wrapping_div(m)))
                         }
                     }
-                    (Value::Float(a), Value::Number(n)) =>
+                    (Value::Float(a), Value::Integer(n)) =>
                     {
                         #[allow(clippy::cast_precision_loss)]
                         Some(Value::Float(a / (n as f64)))
                     }
-                    (Value::Number(n), Value::Float(a)) =>
+                    (Value::Integer(n), Value::Float(a)) =>
                     {
                         #[allow(clippy::cast_precision_loss)]
                         Some(Value::Float((n as f64) / a))
@@ -299,27 +299,27 @@ impl Evaluator<'_, '_, '_> {
             Expression::Mod(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Number(left % right))
+                Some(Value::Integer(left % right))
             }
 
             Expression::BitwiseXor(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Number(left ^ right))
+                Some(Value::Integer(left ^ right))
             }
             Expression::BitwiseAnd(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Number(left & right))
+                Some(Value::Integer(left & right))
             }
             Expression::BitwiseOr(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Number(left | right))
+                Some(Value::Integer(left | right))
             }
             Expression::BitwiseNot(expr) => {
                 let v = self.evaluate_expr(expr)?.unwrap_number()?;
-                Some(Value::Number(!v))
+                Some(Value::Integer(!v))
             }
             Expression::ShiftLeft(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
@@ -327,9 +327,9 @@ impl Evaluator<'_, '_, '_> {
                 if right < 0 {
                     None
                 } else if right >= 64 {
-                    Some(Value::Number(0))
+                    Some(Value::Integer(0))
                 } else {
-                    Some(Value::Number(left << right))
+                    Some(Value::Integer(left << right))
                 }
             }
             Expression::ShiftRight(left, right) => {
@@ -338,9 +338,9 @@ impl Evaluator<'_, '_, '_> {
                 if right < 0 {
                     None
                 } else if right >= 64 {
-                    Some(Value::Number(0))
+                    Some(Value::Integer(0))
                 } else {
-                    Some(Value::Number(left >> right))
+                    Some(Value::Integer(left >> right))
                 }
             }
 
@@ -380,10 +380,10 @@ impl Evaluator<'_, '_, '_> {
                 let left = self.evaluate_expr(left)?;
                 let right = self.evaluate_expr(right)?;
                 let res = match (left, right) {
-                    (Value::Number(n), Value::Number(m)) => n == m,
+                    (Value::Integer(n), Value::Integer(m)) => n == m,
                     (Value::Float(a), Value::Float(b)) => (a - b).abs() < f64::EPSILON,
                     #[allow(clippy::cast_precision_loss)]
-                    (Value::Number(n), Value::Float(a)) | (Value::Float(a), Value::Number(n)) => {
+                    (Value::Integer(n), Value::Float(a)) | (Value::Float(a), Value::Integer(n)) => {
                         (a - (n as f64)).abs() < f64::EPSILON
                     }
                     (Value::Bytes(a), Value::Bytes(b)) => a == b,
@@ -563,7 +563,7 @@ impl Evaluator<'_, '_, '_> {
                 .get(*index)
                 .map(|v| Value::Boolean(*v)),
 
-            Expression::Number(v) => Some(Value::Number(*v)),
+            Expression::Integer(v) => Some(Value::Integer(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
             Expression::Bytes(v) => Some(Value::Bytes(v.clone())),
             Expression::Regex(v) => Some(Value::Regex(v.clone())),

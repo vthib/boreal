@@ -127,7 +127,7 @@ mod tests {
                 name_span: 0..1,
                 operations: vec![IdentifierOperation {
                     op: IdentifierOperationType::Subscript(Box::new(Expression {
-                        expr: ExpressionKind::Number(2),
+                        expr: ExpressionKind::Integer(2),
                         span: 3..4,
                     })),
                     span: 2..6,
@@ -245,7 +245,7 @@ mod tests {
                     },
                     IdentifierOperation {
                         op: IdentifierOperationType::Subscript(Box::new(Expression {
-                            expr: ExpressionKind::Number(3),
+                            expr: ExpressionKind::Integer(3),
                             span: 28..29,
                         })),
                         span: 27..30,
@@ -260,7 +260,7 @@ mod tests {
                     },
                     IdentifierOperation {
                         op: IdentifierOperationType::Subscript(Box::new(Expression {
-                            expr: ExpressionKind::Number(1),
+                            expr: ExpressionKind::Integer(1),
                             span: 35..36,
                         })),
                         span: 34..37,

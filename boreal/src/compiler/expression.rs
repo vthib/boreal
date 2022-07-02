@@ -113,7 +113,7 @@ pub enum Expression {
     },
 
     /// A i64 value.
-    Number(i64),
+    Integer(i64),
 
     /// A f64 floating-point value.
     Double(f64),
@@ -374,8 +374,8 @@ pub(super) fn compile_expression(
             })
         }
 
-        parser::ExpressionKind::Number(v) => Ok(Expr {
-            expr: Expression::Number(v),
+        parser::ExpressionKind::Integer(v) => Ok(Expr {
+            expr: Expression::Integer(v),
             ty: Type::Integer,
             span,
         }),

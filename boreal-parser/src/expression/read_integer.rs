@@ -127,7 +127,7 @@ mod tests {
                 expr: ExpressionKind::ReadInteger {
                     ty: ReadIntegerType::Uint8,
                     addr: Box::new(Expression {
-                        expr: ExpressionKind::Number(3),
+                        expr: ExpressionKind::Integer(3),
                         span: 6..7,
                     }),
                 },

@@ -55,7 +55,7 @@ pub struct Rule {
 #[derive(Debug, PartialEq)]
 pub enum MetadataValue {
     Bytes(Vec<u8>),
-    Number(i64),
+    Integer(i64),
     Boolean(bool),
 }
 
@@ -211,9 +211,9 @@ fn meta_declaration(input: Input) -> ParseResult<Metadata> {
             rtrim(char('=')),
             alt((
                 map(string::quoted, MetadataValue::Bytes),
-                map(number::number, MetadataValue::Number),
+                map(number::number, MetadataValue::Integer),
                 map(preceded(rtrim(char('-')), number::number), |v| {
-                    MetadataValue::Number(-v)
+                    MetadataValue::Integer(-v)
                 }),
                 map(rtrim(ttag("true")), |_| MetadataValue::Boolean(true)),
                 map(rtrim(ttag("false")), |_| MetadataValue::Boolean(false)),
@@ -567,11 +567,11 @@ mod tests {
             vec![
                 Metadata {
                     name: "a".to_owned(),
-                    value: MetadataValue::Number(3),
+                    value: MetadataValue::Integer(3),
                 },
                 Metadata {
                     name: "b".to_owned(),
-                    value: MetadataValue::Number(-4),
+                    value: MetadataValue::Integer(-4),
                 },
                 Metadata {
                     name: "_".to_owned(),

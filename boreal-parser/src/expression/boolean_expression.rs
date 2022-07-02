@@ -277,20 +277,20 @@ mod tests {
             Expression {
                 expr: lower_constructor(
                     Box::new(Expression {
-                        expr: ExpressionKind::Number(0),
+                        expr: ExpressionKind::Integer(0),
                         span: 0..1,
                     }),
                     Box::new(Expression {
                         expr: higher_constructor(
                             Box::new(Expression {
-                                expr: ExpressionKind::Number(1),
+                                expr: ExpressionKind::Integer(1),
                                 span: Range {
                                     start: 3 + lower_op.len(),
                                     end: 4 + lower_op.len(),
                                 },
                             }),
                             Box::new(Expression {
-                                expr: ExpressionKind::Number(2),
+                                expr: ExpressionKind::Integer(2),
                                 span: Range {
                                     start: 6 + lower_op.len() + higher_op.len(),
                                     end: 7 + lower_op.len() + higher_op.len(),
@@ -321,7 +321,7 @@ mod tests {
                 expr: ExpressionKind::VariableAt {
                     variable_name: "a".to_owned(),
                     offset: Box::new(Expression {
-                        expr: ExpressionKind::Number(100),
+                        expr: ExpressionKind::Integer(100),
                         span: 6..9,
                     }),
                 },
@@ -336,11 +336,11 @@ mod tests {
                 expr: ExpressionKind::VariableIn {
                     variable_name: "_".to_owned(),
                     from: Box::new(Expression {
-                        expr: ExpressionKind::Number(0),
+                        expr: ExpressionKind::Integer(0),
                         span: 7..8,
                     }),
                     to: Box::new(Expression {
-                        expr: ExpressionKind::Number(50),
+                        expr: ExpressionKind::Integer(50),
                         span: 11..13,
                     }),
                 },
@@ -356,14 +356,14 @@ mod tests {
                     variable_name: "".to_owned(),
                     from: Box::new(Expression {
                         expr: ExpressionKind::Neg(Box::new(Expression {
-                            expr: ExpressionKind::Number(10),
+                            expr: ExpressionKind::Integer(10),
                             span: 7..9,
                         })),
                         span: 6..9,
                     }),
                     to: Box::new(Expression {
                         expr: ExpressionKind::Neg(Box::new(Expression {
-                            expr: ExpressionKind::Number(5),
+                            expr: ExpressionKind::Integer(5),
                             span: 12..13,
                         })),
                         span: 11..13,
@@ -751,7 +751,7 @@ mod tests {
             "5 b",
             "b",
             Expression {
-                expr: ExpressionKind::Number(5),
+                expr: ExpressionKind::Integer(5),
                 span: 0..1,
             },
         );
@@ -829,11 +829,11 @@ mod tests {
             Expression {
                 expr: ExpressionKind::Eq(
                     Box::new(Expression {
-                        expr: ExpressionKind::Number(0),
+                        expr: ExpressionKind::Integer(0),
                         span: 0..1,
                     }),
                     Box::new(Expression {
-                        expr: ExpressionKind::Number(0),
+                        expr: ExpressionKind::Integer(0),
                         span: 3..4,
                     }),
                 ),
@@ -848,11 +848,11 @@ mod tests {
                 expr: ExpressionKind::Not(Box::new(Expression {
                     expr: ExpressionKind::Eq(
                         Box::new(Expression {
-                            expr: ExpressionKind::Number(1),
+                            expr: ExpressionKind::Integer(1),
                             span: 0..1,
                         }),
                         Box::new(Expression {
-                            expr: ExpressionKind::Number(2),
+                            expr: ExpressionKind::Integer(2),
                             span: 3..4,
                         }),
                     ),

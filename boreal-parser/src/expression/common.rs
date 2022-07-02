@@ -44,11 +44,11 @@ mod tests {
             "b",
             (
                 Box::new(Expression {
-                    expr: ExpressionKind::Number(1),
+                    expr: ExpressionKind::Integer(1),
                     span: 1..2,
                 }),
                 Box::new(Expression {
-                    expr: ExpressionKind::Number(1),
+                    expr: ExpressionKind::Integer(1),
                     span: 4..5,
                 }),
             ),

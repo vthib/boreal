@@ -51,7 +51,7 @@ pub(super) fn evaluate_ops(
 pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
     eprintln!("returning {:?}", &value);
     match value {
-        ModuleValue::Integer(v) => Some(Value::Number(v)),
+        ModuleValue::Integer(v) => Some(Value::Integer(v)),
         ModuleValue::Float(v) => Some(Value::Float(v)),
         ModuleValue::Bytes(v) => Some(Value::Bytes(v)),
         ModuleValue::Regex(v) => Some(Value::Regex(v)),
@@ -141,7 +141,7 @@ fn evaluate_value_operation(
 
 fn expr_value_to_module_value(v: Value) -> ModuleValue {
     match v {
-        Value::Number(v) => ModuleValue::Integer(v),
+        Value::Integer(v) => ModuleValue::Integer(v),
         Value::Float(v) => ModuleValue::Float(v),
         Value::Bytes(v) => ModuleValue::Bytes(v),
         Value::Regex(v) => ModuleValue::Regex(v),

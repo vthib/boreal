@@ -321,7 +321,7 @@ impl ModuleUse<'_, '_> {
                 let expr = match value {
                     // Those are all primitive values. This means there are no operations applied, and
                     // we can directly generate a primitive expression.
-                    StaticValue::Integer(v) => Expression::Number(*v),
+                    StaticValue::Integer(v) => Expression::Integer(*v),
                     StaticValue::Float(v) => Expression::Double(*v),
                     StaticValue::Bytes(v) => Expression::Bytes(v.clone()),
                     StaticValue::Regex(v) => Expression::Regex(v.clone()),

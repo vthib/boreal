@@ -323,7 +323,7 @@ mod tests {
             "a",
             ForSelection::Expr {
                 expr: Box::new(Expression {
-                    expr: ExpressionKind::Number(1),
+                    expr: ExpressionKind::Integer(1),
                     span: 0..1,
                 }),
                 as_percent: false,
@@ -335,7 +335,7 @@ mod tests {
             "of",
             ForSelection::Expr {
                 expr: Box::new(Expression {
-                    expr: ExpressionKind::Number(50),
+                    expr: ExpressionKind::Integer(50),
                     span: 0..2,
                 }),
                 as_percent: true,
@@ -450,7 +450,7 @@ mod tests {
                 expr: ExpressionKind::For {
                     selection: ForSelection::Expr {
                         expr: Box::new(Expression {
-                            expr: ExpressionKind::Number(50),
+                            expr: ExpressionKind::Integer(50),
                             span: 0..2,
                         }),
                         as_percent: true,
@@ -469,7 +469,7 @@ mod tests {
                 expr: ExpressionKind::ForIn {
                     selection: ForSelection::Expr {
                         expr: Box::new(Expression {
-                            expr: ExpressionKind::Number(5),
+                            expr: ExpressionKind::Integer(5),
                             span: 0..1,
                         }),
                         as_percent: false,
@@ -478,7 +478,7 @@ mod tests {
                         elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
                     },
                     from: Box::new(Expression {
-                        expr: ExpressionKind::Number(100),
+                        expr: ExpressionKind::Integer(100),
                         span: 19..22,
                     }),
                     to: Box::new(Expression {
@@ -497,7 +497,7 @@ mod tests {
                 expr: ExpressionKind::ForRules {
                     selection: ForSelection::Expr {
                         expr: Box::new(Expression {
-                            expr: ExpressionKind::Number(2),
+                            expr: ExpressionKind::Integer(2),
                             span: 0..1,
                         }),
                         as_percent: true,
@@ -528,7 +528,7 @@ mod tests {
                 expr: ExpressionKind::For {
                     selection: ForSelection::Expr {
                         expr: Box::new(Expression {
-                            expr: ExpressionKind::Number(25),
+                            expr: ExpressionKind::Integer(25),
                             span: 4..6,
                         }),
                         as_percent: true,
@@ -571,11 +571,11 @@ mod tests {
                     identifiers_span: 8..9,
                     iterator: ForIterator::List(vec![
                         Expression {
-                            expr: ExpressionKind::Number(1),
+                            expr: ExpressionKind::Integer(1),
                             span: 14..15,
                         },
                         Expression {
-                            expr: ExpressionKind::Number(3),
+                            expr: ExpressionKind::Integer(3),
                             span: 17..18,
                         },
                     ]),
@@ -612,11 +612,11 @@ mod tests {
                         to: Box::new(Expression {
                             expr: ExpressionKind::Sub(
                                 Box::new(Expression {
-                                    expr: ExpressionKind::Number(5),
+                                    expr: ExpressionKind::Integer(5),
                                     span: 19..20,
                                 }),
                                 Box::new(Expression {
-                                    expr: ExpressionKind::Number(1),
+                                    expr: ExpressionKind::Integer(1),
                                     span: 23..24,
                                 }),
                             ),
@@ -703,7 +703,7 @@ mod tests {
             "b",
             (
                 ForIterator::List(vec![Expression {
-                    expr: ExpressionKind::Number(1),
+                    expr: ExpressionKind::Integer(1),
                     span: 1..2,
                 }]),
                 0..3,
@@ -716,11 +716,11 @@ mod tests {
             (
                 ForIterator::List(vec![
                     Expression {
-                        expr: ExpressionKind::Number(1),
+                        expr: ExpressionKind::Integer(1),
                         span: 1..2,
                     },
                     Expression {
-                        expr: ExpressionKind::Number(2),
+                        expr: ExpressionKind::Integer(2),
                         span: 4..5,
                     },
                     Expression {
@@ -738,7 +738,7 @@ mod tests {
             (
                 ForIterator::Range {
                     from: Box::new(Expression {
-                        expr: ExpressionKind::Number(1),
+                        expr: ExpressionKind::Integer(1),
                         span: 1..2,
                     }),
                     to: Box::new(Expression {

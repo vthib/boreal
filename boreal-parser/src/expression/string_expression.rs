@@ -57,7 +57,7 @@ pub(super) fn string_offset_expression(input: Input) -> ParseResult<Expression> 
         occurence_number: match expr {
             Some(v) => Box::new(v),
             None => Box::new(Expression {
-                expr: ExpressionKind::Number(1),
+                expr: ExpressionKind::Integer(1),
                 span: span.clone(),
             }),
         },
@@ -81,7 +81,7 @@ pub(super) fn string_length_expression(input: Input) -> ParseResult<Expression> 
         occurence_number: match expr {
             Some(v) => Box::new(v),
             None => Box::new(Expression {
-                expr: ExpressionKind::Number(1),
+                expr: ExpressionKind::Integer(1),
                 span: span.clone(),
             }),
         },
@@ -113,7 +113,7 @@ mod tests {
                 expr: ExpressionKind::CountInRange {
                     variable_name: "foo".to_owned(),
                     from: Box::new(Expression {
-                        expr: ExpressionKind::Number(0),
+                        expr: ExpressionKind::Integer(0),
                         span: 9..10,
                     }),
                     to: Box::new(Expression {
@@ -139,7 +139,7 @@ mod tests {
                 expr: ExpressionKind::Offset {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: ExpressionKind::Number(1),
+                        expr: ExpressionKind::Integer(1),
                         span: 0..2,
                     }),
                 },
@@ -154,7 +154,7 @@ mod tests {
                 expr: ExpressionKind::Offset {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: ExpressionKind::Number(2),
+                        expr: ExpressionKind::Integer(2),
                         span: 5..6,
                     }),
                 },
@@ -173,7 +173,7 @@ mod tests {
                 expr: ExpressionKind::Length {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: ExpressionKind::Number(1),
+                        expr: ExpressionKind::Integer(1),
                         span: 0..2,
                     }),
                 },
@@ -188,7 +188,7 @@ mod tests {
                 expr: ExpressionKind::Length {
                     variable_name: "a".to_owned(),
                     occurence_number: Box::new(Expression {
-                        expr: ExpressionKind::Number(2),
+                        expr: ExpressionKind::Integer(2),
                         span: 5..6,
                     }),
                 },

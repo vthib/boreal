@@ -51,7 +51,7 @@ pub struct Identifier {
     /// Operations on the identifier, stored in the order of operations.
     ///
     /// For example, `pe.sections[2].name` would give `pe` for the name, and
-    /// `[Subfield("sections"), Subscript(Expr::Number(2)), Subfield("name")]` for the operations.
+    /// `[Subfield("sections"), Subscript(Expr::Integer(2)), Subfield("name")]` for the operations.
     pub operations: Vec<IdentifierOperation>,
 }
 
@@ -98,7 +98,7 @@ pub enum ExpressionKind {
     },
 
     /// A i64 value.
-    Number(i64),
+    Integer(i64),
 
     /// A f64 floating-point value.
     Double(f64),
