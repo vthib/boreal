@@ -9,9 +9,9 @@ use codespan_reporting::{
 use nom::Finish;
 
 #[track_caller]
-pub fn parse<'a, F: 'a, O, O2>(f: F, input: &'a str, expected_rest_input: &str, expected_result: O2)
+pub fn parse<'a, F, O, O2>(f: F, input: &'a str, expected_rest_input: &str, expected_result: O2)
 where
-    F: FnOnce(Input<'a>) -> ParseResult<'a, O>,
+    F: FnOnce(Input<'a>) -> ParseResult<'a, O> + 'a,
     O: PartialEq + std::fmt::Debug + From<O2>,
 {
     let input = Input::new(input);

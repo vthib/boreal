@@ -15,9 +15,9 @@ use super::error::{Error, ErrorKind};
 use super::types::{Input, ParseResult};
 
 /// Right trim after the given parser.
-pub fn rtrim<'a, F: 'a, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
+pub fn rtrim<'a, F, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
-    F: Parser<Input<'a>, O, Error>,
+    F: Parser<Input<'a>, O, Error> + 'a,
 {
     move |input| {
         let (mut input, output) = inner.parse(input)?;
@@ -49,13 +49,13 @@ pub fn ltrim(mut input: Input) -> ParseResult<()> {
 }
 
 /// Accepts a first parser, only if the second one does not match afterwards
-pub fn not_followed<'a, F: 'a, G: 'a, OF, OG>(
+pub fn not_followed<'a, F, G, OF, OG>(
     mut f: F,
     mut g: G,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, OF>
 where
-    F: Parser<Input<'a>, OF, Error>,
-    G: Parser<Input<'a>, OG, Error>,
+    F: Parser<Input<'a>, OF, Error> + 'a,
+    G: Parser<Input<'a>, OG, Error> + 'a,
 {
     move |input| {
         let (input, output) = f.parse(input)?;
