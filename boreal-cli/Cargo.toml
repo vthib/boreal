@@ -7,7 +7,12 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 boreal = { path = "../boreal", version = "0.0.1" }
+
+# CLI arguments handling
 clap = { version = "3.2", features = ["derive"] }
 
 # Proper error reporting on parsing
 codespan-reporting = "0.11"
+
+# Display of bytes values
+hex = "0.4"
