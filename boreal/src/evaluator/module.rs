@@ -49,7 +49,6 @@ pub(super) fn evaluate_ops(
 }
 
 pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
-    eprintln!("returning {:?}", &value);
     match value {
         ModuleValue::Integer(v) => Some(Value::Integer(v)),
         ModuleValue::Float(v) => Some(Value::Float(v)),

@@ -86,7 +86,7 @@ fn main() -> Result<(), std::io::Error> {
 /// - print "\n..." for compound values
 fn print_module_value(value: &ModuleValue, indent: usize) {
     match value {
-        ModuleValue::Integer(i) => println!(" = {}", i),
+        ModuleValue::Integer(i) => println!(" = {} (0x{:x})", i, i),
         ModuleValue::Float(v) => println!(" = {}", v),
         ModuleValue::Bytes(bytes) => match std::str::from_utf8(bytes) {
             Ok(s) => println!(" = {:?}", s),
@@ -95,6 +95,11 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
         ModuleValue::Regex(regex) => println!(" = /{}/", regex.as_str()),
         ModuleValue::Boolean(b) => println!(" = {:?}", b),
         ModuleValue::Object(obj) => {
+            if obj.is_empty() {
+                println!(" = {{}}");
+                return;
+            }
+
             println!();
 
             // For improved readability, we sort the keys before printing. Cost is of no concern,
@@ -107,6 +112,11 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
             }
         }
         ModuleValue::Array(array) => {
+            if array.is_empty() {
+                println!(" = []");
+                return;
+            }
+
             println!();
             for (index, subval) in array.iter().enumerate() {
                 print!("{:indent$}[{}]", "", index);
@@ -114,6 +124,11 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
             }
         }
         ModuleValue::Dictionary(dict) => {
+            if dict.is_empty() {
+                println!(" = {{}}");
+                return;
+            }
+
             println!();
 
             // For improved readability, we sort the keys before printing. Cost is of no concern,

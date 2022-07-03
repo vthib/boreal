@@ -259,13 +259,31 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     let segments_entsize = u64::from(header.e_phentsize(e)).try_into().ok();
 
     let symtab = get_symbols(file, mem, elf::SHT_SYMTAB);
-    let symtab_len = symtab.as_ref().and_then(|v| v.len().try_into().ok());
+    let symtab_len = symtab.as_ref().and_then(|v| {
+        if v.is_empty() {
+            None
+        } else {
+            v.len().try_into().ok()
+        }
+    });
 
     let dynsym = get_symbols(file, mem, elf::SHT_DYNSYM);
-    let dynsym_len = dynsym.as_ref().and_then(|v| v.len().try_into().ok());
+    let dynsym_len = dynsym.as_ref().and_then(|v| {
+        if v.is_empty() {
+            None
+        } else {
+            v.len().try_into().ok()
+        }
+    });
 
     let dynamic = dynamic(file, mem);
-    let dynamic_len = dynamic.as_ref().and_then(|v| v.len().try_into().ok());
+    let dynamic_len = dynamic.as_ref().and_then(|v| {
+        if v.is_empty() {
+            None
+        } else {
+            v.len().try_into().ok()
+        }
+    });
 
     [
         ("type", Some(ty)),
