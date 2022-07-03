@@ -2,9 +2,7 @@ use std::{collections::HashMap, ops::Range};
 
 use boreal_parser as parser;
 
-use super::{
-    compile_expression, AvailableModule, CompilationError, Expression, RuleCompiler, Type,
-};
+use super::{compile_expression, CompilationError, Expression, ImportedModule, RuleCompiler, Type};
 use crate::module::{self, ScanContext, StaticValue, Type as ValueType, Value};
 
 /// Module used during compilation
@@ -147,7 +145,7 @@ pub(super) fn compile_bounded_identifier_use<'a, 'b>(
 /// - a bounded value and an iterator type, if the use is for an iterable.
 pub(super) fn compile_identifier<'a, 'b>(
     compiler: &'b mut RuleCompiler<'a>,
-    module: &'b AvailableModule,
+    module: &'b ImportedModule,
     identifier: parser::Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {

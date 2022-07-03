@@ -37,18 +37,36 @@ pub struct Compiler {
     /// Modules declared in the scanner, added with [`Compiler::add_module`].
     ///
     /// These are modules that can be imported and used in the namespaces.
-    available_modules: HashMap<String, Arc<AvailableModule>>,
+    available_modules: HashMap<String, AvailableModule>,
 
-    /// List of modules passed to the scanner.
-    modules: Vec<Box<dyn crate::module::Module>>,
+    /// List of imported modules, passed to the scanner.
+    imported_modules: Vec<Box<dyn crate::module::Module>>,
 }
 
 #[derive(Debug)]
 struct AvailableModule {
-    /// Module available during compilation.
-    module: Module,
+    /// The compiled module.
+    compiled_module: Arc<Module>,
 
-    /// Index of the module, used to access the module dynamic values during scanning.
+    /// The location of the module object
+    location: ModuleLocation,
+}
+
+#[derive(Debug)]
+enum ModuleLocation {
+    /// The module object.
+    Module(Box<dyn crate::module::Module>),
+    /// Index in the imported modules vec.
+    ImportedIndex(usize),
+}
+
+#[derive(Debug)]
+struct ImportedModule {
+    /// The imported module.
+    module: Arc<Module>,
+
+    /// Index of the module in the imported vec, used to access the module dynamic values during
+    /// scanning.
     module_index: usize,
 }
 
@@ -79,16 +97,15 @@ impl Compiler {
     /// Add a module
     pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) {
         let m = compile_module(&module);
-        let module_index = self.modules.len();
-        self.modules.push(Box::new(module));
+
         // Ignore the result: that would mean the same module is already registered.
         // FIXME: this is done to allow the double "import" in a rule, but this can be improved.
         let _res = self.available_modules.insert(
             m.name.to_owned(),
-            Arc::new(AvailableModule {
-                module: m,
-                module_index,
-            }),
+            AvailableModule {
+                compiled_module: Arc::new(m),
+                location: ModuleLocation::Module(Box::new(module)),
+            },
         );
     }
 
@@ -142,12 +159,34 @@ impl Compiler {
             match component {
                 parser::YaraFileComponent::Include(_) => todo!(),
                 parser::YaraFileComponent::Import(import) => {
-                    match self.available_modules.get(&import) {
+                    match self.available_modules.get_mut(&import) {
                         Some(module) => {
+                            // XXX: this is a bit ugly, but i haven't found a better way to get
+                            // ownership of the module.
+                            let loc = std::mem::replace(
+                                &mut module.location,
+                                ModuleLocation::ImportedIndex(0),
+                            );
+                            let module_index = match loc {
+                                ModuleLocation::ImportedIndex(i) => i,
+                                ModuleLocation::Module(m) => {
+                                    // Move the module into the imported modules vec, and keep
+                                    // the index.
+                                    let i = self.imported_modules.len();
+                                    self.imported_modules.push(m);
+                                    i
+                                }
+                            };
+                            module.location = ModuleLocation::ImportedIndex(module_index);
+
                             // Ignore result: if the import was already done, it's fine.
-                            let _r = namespace
-                                .imported_modules
-                                .insert(import.clone(), Arc::clone(module));
+                            let _r = namespace.imported_modules.insert(
+                                import.clone(),
+                                ImportedModule {
+                                    module: Arc::clone(&module.compiled_module),
+                                    module_index,
+                                },
+                            );
                         }
                         None => return Err(CompilationError::UnknownImport(import.clone())),
                     };
@@ -182,7 +221,7 @@ impl Compiler {
 
     #[must_use]
     pub fn into_scanner(self) -> Scanner {
-        Scanner::new(self.rules, self.modules)
+        Scanner::new(self.rules, self.imported_modules)
     }
 }
 
@@ -206,7 +245,7 @@ struct Namespace {
     /// and a rule named `foo` is added, this is not an error, but the identifier `foo` will refer
     /// to the module.
     ///
-    imported_modules: HashMap<String, Arc<AvailableModule>>,
+    imported_modules: HashMap<String, ImportedModule>,
 
     /// List of names prefixes that cannot be used anymore in this namespace.
     ///
