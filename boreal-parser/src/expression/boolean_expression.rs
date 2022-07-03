@@ -23,33 +23,59 @@ use super::{
 /// parse or operator
 pub fn boolean_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
-    let (mut input, mut res) = expression_and(input)?;
+    let (input, res) = expression_and(input)?;
 
-    while let Ok((i, _)) = rtrim(ttag("or"))(input) {
-        let (i2, right_elem) = cut(expression_and)(i)?;
-        input = i2;
-        res = Expression {
-            expr: ExpressionKind::Or(Box::new(res), Box::new(right_elem)),
-            span: input.get_span_from(start),
+    match rtrim(ttag("or"))(input) {
+        Ok((mut input, _)) => {
+            let mut ops = vec![res];
+            loop {
+                let (i2, elem) = cut(expression_and)(input)?;
+                ops.push(elem);
+                match rtrim(ttag("or"))(i2) {
+                    Ok((i3, _)) => input = i3,
+                    Err(_) => {
+                        return Ok((
+                            i2,
+                            Expression {
+                                expr: ExpressionKind::Or(ops),
+                                span: i2.get_span_from(start),
+                            },
+                        ))
+                    }
+                }
+            }
         }
+        Err(_) => Ok((input, res)),
     }
-    Ok((input, res))
 }
 
 /// parse and operator
 fn expression_and(input: Input) -> ParseResult<Expression> {
     let start = input;
-    let (mut input, mut res) = expression_not(input)?;
+    let (input, res) = expression_not(input)?;
 
-    while let Ok((i, _)) = rtrim(ttag("and"))(input) {
-        let (i2, right_elem) = cut(expression_not)(i)?;
-        input = i2;
-        res = Expression {
-            expr: ExpressionKind::And(Box::new(res), Box::new(right_elem)),
-            span: input.get_span_from(start),
+    match rtrim(ttag("and"))(input) {
+        Ok((mut input, _)) => {
+            let mut ops = vec![res];
+            loop {
+                let (i2, elem) = cut(expression_not)(input)?;
+                ops.push(elem);
+                match rtrim(ttag("and"))(i2) {
+                    Ok((i3, _)) => input = i3,
+                    Err(_) => {
+                        return Ok((
+                            i2,
+                            Expression {
+                                expr: ExpressionKind::And(ops),
+                                span: i2.get_span_from(start),
+                            },
+                        ))
+                    }
+                }
+            }
         }
+        Err(_) => Ok((input, res)),
     }
-    Ok((input, res))
 }
 
 /// parse not operator
@@ -395,16 +421,16 @@ mod tests {
             "true and false b",
             "b",
             Expression {
-                expr: ExpressionKind::And(
-                    Box::new(Expression {
+                expr: ExpressionKind::And(vec![
+                    Expression {
                         expr: ExpressionKind::Boolean(true),
                         span: 0..4,
-                    }),
-                    Box::new(Expression {
+                    },
+                    Expression {
                         expr: ExpressionKind::Boolean(false),
                         span: 9..14,
-                    }),
-                ),
+                    },
+                ]),
                 span: 0..14,
             },
         );
@@ -413,22 +439,22 @@ mod tests {
             "not true or defined $b",
             "",
             Expression {
-                expr: ExpressionKind::Or(
-                    Box::new(Expression {
+                expr: ExpressionKind::Or(vec![
+                    Expression {
                         expr: ExpressionKind::Not(Box::new(Expression {
                             expr: ExpressionKind::Boolean(true),
                             span: 4..8,
                         })),
                         span: 0..8,
-                    }),
-                    Box::new(Expression {
+                    },
+                    Expression {
                         expr: ExpressionKind::Defined(Box::new(Expression {
                             expr: ExpressionKind::Variable("b".to_owned()),
                             span: 20..22,
                         })),
                         span: 12..22,
-                    }),
-                ),
+                    },
+                ]),
                 span: 0..22,
             },
         );
@@ -656,34 +682,36 @@ mod tests {
             "not true or false and true",
             "",
             Expression {
-                expr: ExpressionKind::Or(
-                    Box::new(Expression {
+                expr: ExpressionKind::Or(vec![
+                    Expression {
                         expr: ExpressionKind::Not(Box::new(Expression {
                             expr: ExpressionKind::Boolean(true),
                             span: 4..8,
                         })),
                         span: 0..8,
-                    }),
-                    Box::new(Expression {
-                        expr: ExpressionKind::And(
-                            Box::new(Expression {
+                    },
+                    Expression {
+                        expr: ExpressionKind::And(vec![
+                            Expression {
                                 expr: ExpressionKind::Boolean(false),
                                 span: 12..17,
-                            }),
-                            Box::new(Expression {
+                            },
+                            Expression {
                                 expr: ExpressionKind::Boolean(true),
                                 span: 22..26,
-                            }),
-                        ),
+                            },
+                        ]),
                         span: 12..26,
-                    }),
-                ),
+                    },
+                ]),
                 span: 0..26,
             },
         );
 
         // Test precedence of over eq, etc over and
-        test_precedence("==", "and", ExpressionKind::Eq, ExpressionKind::And);
+        test_precedence("==", "and", ExpressionKind::Eq, |a, b| {
+            ExpressionKind::And(vec![*a, *b])
+        });
         test_precedence(
             "!=",
             "and",
@@ -693,7 +721,7 @@ mod tests {
                     span: 6..12,
                 }))
             },
-            ExpressionKind::And,
+            |a, b| ExpressionKind::And(vec![*a, *b]),
         );
     }
 

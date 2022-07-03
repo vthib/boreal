@@ -347,21 +347,29 @@ impl Evaluator<'_, '_, '_> {
                 }
             }
 
-            Expression::And(left, right) => {
+            Expression::And(ops) => {
                 // Do not rethrow None result for left & right => None is the "undefined" value,
                 // and the AND and OR operations are the only one not propagating this poisoned
                 // value, but forcing it to false.
-                let left = self.evaluate_expr(left).map_or(false, |v| v.to_bool());
-                let right = self.evaluate_expr(right).map_or(false, |v| v.to_bool());
-                Some(Value::Boolean(left && right))
+                for op in ops {
+                    let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
+                    if !res {
+                        return Some(Value::Boolean(false));
+                    }
+                }
+                Some(Value::Boolean(true))
             }
-            Expression::Or(left, right) => {
+            Expression::Or(ops) => {
                 // Do not rethrow None result for left & right => None is the "undefined" value,
                 // and the AND and OR operations are the only one not propagating this poisoned
                 // value, but forcing it to false.
-                let left = self.evaluate_expr(left).map_or(false, |v| v.to_bool());
-                let right = self.evaluate_expr(right).map_or(false, |v| v.to_bool());
-                Some(Value::Boolean(left || right))
+                for op in ops {
+                    let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
+                    if res {
+                        return Some(Value::Boolean(true));
+                    }
+                }
+                Some(Value::Boolean(false))
             }
             Expression::Cmp {
                 left,

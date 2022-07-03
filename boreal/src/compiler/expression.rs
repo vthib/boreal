@@ -184,9 +184,9 @@ pub enum Expression {
     ShiftRight(Box<Expression>, Box<Expression>),
 
     /// Boolean and operation.
-    And(Box<Expression>, Box<Expression>),
+    And(Vec<Expression>),
     /// Boolean or operation.
-    Or(Box<Expression>, Box<Expression>),
+    Or(Vec<Expression>),
 
     /// Boolean negation.
     Not(Box<Expression>),
@@ -344,6 +344,8 @@ pub enum Expression {
     Regex(Regex),
 }
 
+// TODO: have a limit to ensure we do not grow the stack too much. About 33 chained ANDs was
+// enough previously.
 pub(super) fn compile_expression(
     compiler: &mut RuleCompiler<'_>,
     expression: parser::Expression,
@@ -512,22 +514,26 @@ pub(super) fn compile_expression(
             compile_arith_binary_op(compiler, *left, *right, span, Expression::ShiftRight)
         }
 
-        parser::ExpressionKind::And(left, right) => {
-            let left = compile_expression(compiler, *left)?;
-            let right = compile_expression(compiler, *right)?;
+        parser::ExpressionKind::And(ops) => {
+            let ops = ops
+                .into_iter()
+                .map(|op| compile_expression(compiler, op).map(|e| e.expr))
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Expr {
-                expr: Expression::And(Box::new(left.expr), Box::new(right.expr)),
+                expr: Expression::And(ops),
                 ty: Type::Boolean,
                 span,
             })
         }
-        parser::ExpressionKind::Or(left, right) => {
-            let left = compile_expression(compiler, *left)?;
-            let right = compile_expression(compiler, *right)?;
+        parser::ExpressionKind::Or(ops) => {
+            let ops = ops
+                .into_iter()
+                .map(|op| compile_expression(compiler, op).map(|e| e.expr))
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Expr {
-                expr: Expression::Or(Box::new(left.expr), Box::new(right.expr)),
+                expr: Expression::Or(ops),
                 ty: Type::Boolean,
                 span,
             })

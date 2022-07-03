@@ -169,9 +169,9 @@ pub enum ExpressionKind {
     ShiftRight(Box<Expression>, Box<Expression>),
 
     /// Boolean and operation.
-    And(Box<Expression>, Box<Expression>),
+    And(Vec<Expression>),
     /// Boolean or operation.
-    Or(Box<Expression>, Box<Expression>),
+    Or(Vec<Expression>),
 
     /// Boolean negation.
     Not(Box<Expression>),
