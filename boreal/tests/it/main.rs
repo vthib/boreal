@@ -14,6 +14,7 @@ mod variables;
 // Tests related to modules
 mod elf;
 mod macho;
+mod pe;
 
 // utils to run tests both with boreal and with yara
 mod utils;

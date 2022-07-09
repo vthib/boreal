@@ -1,3 +1,6 @@
+use boreal::module::Value as ModuleValue;
+use boreal::Compiler;
+
 use crate::utils::{check, check_boreal, check_err};
 
 #[track_caller]
@@ -425,4 +428,98 @@ fn test_module_iterable_imbricated() {
         )
     "#,
     );
+}
+
+// Can be used to generate the conditions to use to build a coverage test for module values.
+#[test]
+#[ignore]
+fn test_generate_module_coverage_test() {
+    const MODULE_NAME: &str = "pe";
+    let input = std::fs::read("assets/libyara/data/tiny").unwrap();
+
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(&format!(
+            "import \"{}\" rule a {{ condition: true }}",
+            MODULE_NAME
+        ))
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let res = scanner.scan_mem(&input);
+
+    for (name, module_value) in res.module_values {
+        if name == MODULE_NAME {
+            generate_mapping(&module_value, name, 0);
+        }
+    }
+}
+
+fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
+    match module_value {
+        ModuleValue::Integer(i) => print!("{:indent$}{} == {}", "", name, i),
+        ModuleValue::Float(v) => print!("{:indent$}{} == {}", "", name, v),
+        ModuleValue::Bytes(bytes) => match std::str::from_utf8(bytes) {
+            Ok(s) => print!("{:indent$}{} == {:?}", "", name, s),
+            Err(_) => panic!("non utf8 bytes?"),
+        },
+        ModuleValue::Regex(regex) => print!("{:indent$}{} == /{}/", "", name, regex.as_str()),
+        ModuleValue::Boolean(b) => {
+            print!("{:indent$}{} == {:?}", "", name, b)
+        }
+        ModuleValue::Object(obj) => {
+            if obj.is_empty() {
+                print!("{:indent$}true", "");
+            }
+
+            // For improved readability, we sort the keys before printing. Cost is of no concern,
+            // this is only for CLI debugging.
+            let mut keys: Vec<_> = obj.keys().collect();
+            keys.sort_unstable();
+            let mut first = true;
+            for key in keys {
+                if !first {
+                    println!(" and");
+                }
+                generate_mapping(&obj[key], &format!("{}.{}", name, key), indent);
+                first = false;
+            }
+        }
+        ModuleValue::Array(array) => {
+            if array.is_empty() {
+                print!("{:indent$}true", "");
+                return;
+            }
+
+            println!("{:indent$}(", "");
+            for (index, subval) in array.iter().enumerate() {
+                if index != 0 {
+                    println!(" and");
+                }
+                generate_mapping(subval, &format!("{}[{}]", name, index), indent + 4);
+            }
+            println!("{:indent$})", "");
+        }
+        ModuleValue::Dictionary(dict) => {
+            if dict.is_empty() {
+                print!("{:indent$}true", "");
+            }
+
+            let mut keys: Vec<_> = dict.keys().collect();
+            keys.sort_unstable();
+            let mut first = true;
+            for key in keys {
+                if !first {
+                    println!(" and");
+                }
+                let subname = match std::str::from_utf8(key) {
+                    Ok(s) => format!("{}[\"{}\"]", name, s),
+                    Err(_) => panic!("non utf8 key?"),
+                };
+                generate_mapping(&dict[key], &subname, indent + 4);
+                first = false;
+            }
+        }
+        ModuleValue::Function(_) => println!("true"),
+    }
 }

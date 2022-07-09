@@ -1466,7 +1466,7 @@ fn sections_to_value(
                             Some(section.pointer_to_relocations.get(LE).into()),
                         ),
                         (
-                            "pointer_to_linenumbers",
+                            "pointer_to_line_numbers",
                             Some(section.pointer_to_linenumbers.get(LE).into()),
                         ),
                         (
@@ -1474,7 +1474,7 @@ fn sections_to_value(
                             Some(section.number_of_relocations.get(LE).into()),
                         ),
                         (
-                            "number_of_linenumbers",
+                            "number_of_line_numbers",
                             Some(section.number_of_linenumbers.get(LE).into()),
                         ),
                     ]
