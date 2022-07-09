@@ -37,7 +37,7 @@ sha1 = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
 
 # "object" feature
-object = { version = "0.28", optional = true }
+object = { version = "0.29", optional = true }
 
 [dev-dependencies]
 const_format = "0.2"
