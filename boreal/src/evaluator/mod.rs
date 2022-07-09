@@ -9,6 +9,8 @@
 //! - etc
 //!
 //! The use of an `Option` is useful to propagate this poison value easily.
+use std::sync::Arc;
+
 use memchr::memmem;
 use regex::bytes::Regex;
 
@@ -59,7 +61,7 @@ impl Value {
 /// Data linked to the scan, shared by all rules.
 pub struct ScanData<'a> {
     // TODO: make this lazy?
-    pub module_values: Vec<(&'static str, ModuleValue)>,
+    pub module_values: Vec<(&'static str, Arc<ModuleValue>)>,
 
     // Context used when calling module functions
     pub module_ctx: ScanContext<'a>,
@@ -78,7 +80,9 @@ impl<'a> ScanData<'a> {
                 .map(|module| {
                     (
                         module.get_name(),
-                        crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx)),
+                        Arc::new(crate::module::Value::Object(
+                            module.get_dynamic_values(&mut module_ctx),
+                        )),
                     )
                 })
                 .collect(),
@@ -126,7 +130,7 @@ struct Evaluator<'a, 'b, 'c> {
     currently_selected_variable_index: Option<usize>,
 
     // Stack of bounded identifiers to their integer values.
-    bounded_identifiers_stack: Vec<ModuleValue>,
+    bounded_identifiers_stack: Vec<Arc<ModuleValue>>,
 
     // Data only to the scan, independent of the rule.
     scan_data: &'b ScanData<'b>,
@@ -651,7 +655,7 @@ impl Evaluator<'_, '_, '_> {
                 match value {
                     ModuleValue::Array(array) => {
                         for value in array {
-                            self.bounded_identifiers_stack.push(value);
+                            self.bounded_identifiers_stack.push(Arc::new(value));
                             let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
 
@@ -662,8 +666,9 @@ impl Evaluator<'_, '_, '_> {
                     }
                     ModuleValue::Dictionary(dict) => {
                         for (key, value) in dict {
-                            self.bounded_identifiers_stack.push(ModuleValue::Bytes(key));
-                            self.bounded_identifiers_stack.push(value);
+                            self.bounded_identifiers_stack
+                                .push(Arc::new(ModuleValue::Bytes(key)));
+                            self.bounded_identifiers_stack.push(Arc::new(value));
                             let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
 
@@ -687,7 +692,7 @@ impl Evaluator<'_, '_, '_> {
 
                 for value in from..=to {
                     self.bounded_identifiers_stack
-                        .push(ModuleValue::Integer(value));
+                        .push(Arc::new(ModuleValue::Integer(value)));
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
 
@@ -703,7 +708,7 @@ impl Evaluator<'_, '_, '_> {
                     let value = self.evaluate_expr(expr)?.unwrap_number()?;
 
                     self.bounded_identifiers_stack
-                        .push(ModuleValue::Integer(value));
+                        .push(Arc::new(ModuleValue::Integer(value)));
                     let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
 

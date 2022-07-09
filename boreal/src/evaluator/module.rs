@@ -1,5 +1,5 @@
 //! Provides methods to evaluate module values during scanning.
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     compiler::{BoundedValueIndex, Expression, ModuleExpression, ValueOperation},
@@ -22,9 +22,8 @@ pub(super) fn evaluate_expr(
                     evaluator.bounded_identifiers_stack.get(*index)?
                 }
             };
-            // FIXME: avoid this clone
-            let value = value.clone();
-            evaluate_ops(evaluator, value, operations)
+            let value = Arc::clone(value);
+            evaluate_ops(evaluator, &*value, operations.iter())
         }
         ModuleExpression::Function {
             fun,
@@ -32,20 +31,56 @@ pub(super) fn evaluate_expr(
             operations,
         } => {
             let value = eval_function_op(evaluator, *fun, arguments)?;
-            evaluate_ops(evaluator, value, operations)
+            evaluate_ops(evaluator, &value, operations.iter())
         }
     }
 }
 
-pub(super) fn evaluate_ops(
+pub(super) fn evaluate_ops<'a, I>(
     evaluator: &mut Evaluator,
-    mut value: ModuleValue,
-    operations: &[ValueOperation],
-) -> Option<ModuleValue> {
-    for op in operations {
-        value = evaluate_value_operation(evaluator, value, op)?;
+    mut value: &ModuleValue,
+    mut operations: I,
+) -> Option<ModuleValue>
+where
+    I: Iterator<Item = &'a ValueOperation> + 'a,
+{
+    while let Some(op) = operations.next() {
+        match op {
+            ValueOperation::Subfield(subfield) => match value {
+                ModuleValue::Object(map) => {
+                    value = map.get(&**subfield)?;
+                }
+                _ => None?,
+            },
+            ValueOperation::Subscript(subscript) => match value {
+                ModuleValue::Array(array) => {
+                    value = eval_array_op(evaluator, subscript, array)?;
+                }
+                ModuleValue::Dictionary(dict) => {
+                    value = eval_dict_op(evaluator, subscript, dict)?;
+                }
+                _ => None?,
+            },
+            ValueOperation::FunctionCall(arguments) => match value {
+                ModuleValue::Function(fun) => {
+                    let arguments: Option<Vec<_>> = arguments
+                        .iter()
+                        .map(|expr| {
+                            evaluator
+                                .evaluate_expr(expr)
+                                .map(expr_value_to_module_value)
+                        })
+                        .collect();
+
+                    let new_value = fun(&evaluator.scan_data.module_ctx, arguments?)?;
+                    return evaluate_ops(evaluator, &new_value, operations);
+                }
+                _ => None?,
+            },
+        }
     }
-    Some(value)
+
+    Some(value.clone())
 }
 
 pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
@@ -60,32 +95,28 @@ pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
     }
 }
 
-fn eval_array_op(
+fn eval_array_op<'a>(
     evaluator: &mut Evaluator,
     subscript: &Expression,
-    mut array: Vec<ModuleValue>,
-) -> Option<ModuleValue> {
+    array: &'a [ModuleValue],
+) -> Option<&'a ModuleValue> {
     let index = evaluator.evaluate_expr(subscript)?.unwrap_number()?;
 
     if let Ok(i) = usize::try_from(index) {
-        if i < array.len() {
-            Some(array.remove(i))
-        } else {
-            None
-        }
+        array.get(i)
     } else {
         None
     }
 }
 
-fn eval_dict_op(
+fn eval_dict_op<'a>(
     evaluator: &mut Evaluator,
     subscript: &Expression,
-    mut dict: HashMap<Vec<u8>, ModuleValue>,
-) -> Option<ModuleValue> {
+    dict: &'a HashMap<Vec<u8>, ModuleValue>,
+) -> Option<&'a ModuleValue> {
     let val = evaluator.evaluate_expr(subscript)?.unwrap_bytes()?;
 
-    dict.remove(&val)
+    dict.get(&val)
 }
 
 fn eval_function_op(
@@ -103,39 +134,6 @@ fn eval_function_op(
         .collect();
 
     fun(&evaluator.scan_data.module_ctx, arguments?)
-}
-
-fn evaluate_value_operation(
-    evaluator: &mut Evaluator,
-    value: ModuleValue,
-    op: &ValueOperation,
-) -> Option<ModuleValue> {
-    match op {
-        ValueOperation::Subfield(subfield) => match value {
-            ModuleValue::Object(mut map) => map.remove(&**subfield),
-            _ => None,
-        },
-        ValueOperation::Subscript(subscript) => match value {
-            ModuleValue::Array(array) => eval_array_op(evaluator, subscript, array),
-            ModuleValue::Dictionary(dict) => eval_dict_op(evaluator, subscript, dict),
-            _ => None,
-        },
-        ValueOperation::FunctionCall(arguments) => match value {
-            ModuleValue::Function(fun) => {
-                let arguments: Option<Vec<_>> = arguments
-                    .iter()
-                    .map(|expr| {
-                        evaluator
-                            .evaluate_expr(expr)
-                            .map(expr_value_to_module_value)
-                    })
-                    .collect();
-
-                Some(fun(&evaluator.scan_data.module_ctx, arguments?)?)
-            }
-            _ => None,
-        },
-    }
 }
 
 fn expr_value_to_module_value(v: Value) -> ModuleValue {
