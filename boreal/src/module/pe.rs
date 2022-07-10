@@ -1688,6 +1688,10 @@ fn add_resources(
         }
     }
 
+    if let Ok(v) = i64::try_from(resources.len()) {
+        let _r = out.insert("number_of_resources", v.into());
+    }
+
     out.extend([
         (
             "resource_timestamp",

@@ -534,18 +534,17 @@ fn test_pe() {
      * parsing resources even if the RVA does not have a corresponding file
      * offset.
      */
-    // TODO: handle this
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.number_of_resources == 1 and
-    //       pe.resources[0].rva == 5462081 and
-    //       pe.resources[0].length == 888
-    //   }",
-    //     "assets/libyara/data/mtxex_modified_rsrc_rva.dll",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.number_of_resources == 1 and
+          pe.resources[0].rva == 5462081 and
+          pe.resources[0].length == 888
+      }",
+        "assets/libyara/data/mtxex_modified_rsrc_rva.dll",
+        true,
+    );
 
     // Make sure exports function is case insensitive (historically this has been
     // the case) and supports ordinals...
