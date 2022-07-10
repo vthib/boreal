@@ -4,3 +4,12 @@ members = [
     "boreal",
     "boreal-cli",
 ]
+
+[patch.crates-io]
+# Fork of object crate, for additional features, but also hacks that probably cannot
+# be pushed upstreamed, but are required to align with yara's behavior
+#
+# - Support for delay load table:
+#   - 6f6794a46bcbf1f709dcd7e8693b79aa7b8505e0
+#   - 4f986f227998660ce26ccfc459b3410a450622cd
+object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.29" }

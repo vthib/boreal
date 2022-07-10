@@ -2,10 +2,13 @@ use std::collections::HashMap;
 
 use object::{
     coff::{SectionTable, SymbolTable},
-    pe::{self, ImageDosHeader, ImageImportDescriptor, ImageNtHeaders32, ImageNtHeaders64},
+    pe::{
+        self, ImageDelayloadDescriptor, ImageDosHeader, ImageImportDescriptor, ImageNtHeaders32,
+        ImageNtHeaders64,
+    },
     read::pe::{
-        DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportTable,
-        ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
+        DataDirectories, DelayLoadImportTable, ImageNtHeaders, ImageOptionalHeader, ImageThunkData,
+        ImportTable, ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
     Bytes, FileKind, LittleEndian as LE, ReadRef, StringTable, U32,
 };
@@ -1152,6 +1155,7 @@ fn parse_file<Pe: ImageNtHeaders>(
 
     if let Some(sections) = sections.as_ref() {
         add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
+        add_delay_load_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
         add_exports(&data_dirs, mem, sections, data, &mut map);
         add_resources(&data_dirs, mem, sections, data, &mut map);
     }
@@ -1309,17 +1313,24 @@ fn import_functions<Pe: ImageNtHeaders>(
 
     let mut functions = Vec::new();
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
-        add_thunk::<Pe>(thunk, import_table, &mut functions, data_functions);
+        add_thunk::<Pe, _>(
+            thunk,
+            |hint| import_table.hint_name(hint).map(|(_, name)| name.to_vec()),
+            &mut functions,
+            data_functions,
+        );
     }
     Some(functions)
 }
 
-fn add_thunk<Pe: ImageNtHeaders>(
+fn add_thunk<Pe: ImageNtHeaders, F>(
     thunk: Pe::ImageThunkData,
-    import_table: &ImportTable,
+    hint_name: F,
     functions: &mut Vec<Value>,
     data_functions: &mut Vec<DataFunction>,
-) {
+) where
+    F: Fn(u32) -> object::Result<Vec<u8>>,
+{
     if thunk.is_ordinal() {
         // TODO: get name from ordinal
         let ordinal = thunk.ordinal();
@@ -1330,17 +1341,98 @@ fn add_thunk<Pe: ImageNtHeaders>(
         });
         functions.push(Value::object([("ordinal", thunk.ordinal().into())]));
     } else {
-        let name = match import_table.hint_name(thunk.address()) {
-            Ok((_, name)) => name,
+        let name = match hint_name(thunk.address()) {
+            Ok(name) => name,
             Err(_) => return,
         };
 
         data_functions.push(DataFunction {
-            name: Some(name.to_vec()),
+            name: Some(name.clone()),
             ordinal: None,
         });
-        functions.push(Value::object([("name", name.to_vec().into())]));
+        functions.push(Value::object([("name", name.into())]));
     }
+}
+
+fn add_delay_load_imports<Pe: ImageNtHeaders>(
+    data_dirs: &DataDirectories,
+    mem: &[u8],
+    sections: &SectionTable,
+    data: &mut Data,
+    out: &mut HashMap<&'static str, Value>,
+) {
+    let table = match data_dirs.delay_load_import_table(mem, sections) {
+        Ok(Some(table)) => table,
+        _ => return,
+    };
+    let mut descriptors = match table.descriptors() {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    let mut imports = Vec::new();
+    let mut nb_functions_total = 0;
+
+    // TODO: implement limits on nb imports & functions
+    while let Ok(Some(import_desc)) = descriptors.next() {
+        let library = match table.name(import_desc.dll_name_rva.get(LE)) {
+            Ok(name) => name.to_vec(),
+            Err(_) => continue,
+        };
+        let mut data_functions = Vec::new();
+        let functions = delay_load_import_functions::<Pe>(&table, import_desc, &mut data_functions);
+        let nb_functions = functions.as_ref().map(Vec::len);
+        if let Some(n) = nb_functions {
+            nb_functions_total += n;
+        }
+
+        data.delay_imports.push(DataImport {
+            dll_name: library.clone(),
+            functions: data_functions,
+        });
+
+        imports.push(Value::Object(
+            [
+                ("library_name", Some(library.into())),
+                (
+                    "number_of_functions",
+                    nb_functions.and_then(|v| v.try_into().ok()),
+                ),
+                ("functions", functions.map(Value::Array)),
+            ]
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k, v)))
+            .collect(),
+        ));
+    }
+
+    if let Ok(v) = nb_functions_total.try_into() {
+        let _r = out.insert("number_of_delayed_imported_functions", v);
+    }
+    if let Ok(v) = imports.len().try_into() {
+        let _r = out.insert("number_of_delayed_imports", v);
+    }
+    let _r = out.insert("delay_import_details", Value::Array(imports));
+}
+
+fn delay_load_import_functions<Pe: ImageNtHeaders>(
+    import_table: &DelayLoadImportTable,
+    desc: &ImageDelayloadDescriptor,
+    data_functions: &mut Vec<DataFunction>,
+) -> Option<Vec<Value>> {
+    let mut thunks = import_table
+        .thunks(desc.import_name_table_rva.get(LE))
+        .ok()?;
+
+    let mut functions = Vec::new();
+    while let Ok(Some(thunk)) = thunks.next::<Pe>() {
+        add_thunk::<Pe, _>(
+            thunk,
+            |hint| import_table.hint_name(hint).map(|(_, name)| name.to_vec()),
+            &mut functions,
+            data_functions,
+        );
+    }
+    Some(functions)
 }
 
 fn add_exports(
@@ -1829,7 +1921,6 @@ impl Pe {
             (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => {
                 Some(data.nb_functions_regex(&dll_name, &function_name).into())
             }
-            // TODO handle delayed imports
             (
                 Value::Integer(flags),
                 Some(Value::Bytes(dll_name)),
@@ -1994,6 +2085,7 @@ impl Pe {
 #[derive(Default)]
 pub struct Data {
     imports: Vec<DataImport>,
+    delay_imports: Vec<DataImport>,
     exports: Vec<DataExport>,
     sections: Vec<DataSection>,
     rich_entries: Vec<DataRichEntry>,

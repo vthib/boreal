@@ -526,8 +526,7 @@ dependencies = [
 [[package]]
 name = "object"
 version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21158b2c33aa6d4561f1c0a6ea283ca92bc54802a93b263e910746d679a7eb53"
+source = "git+https://github.com/vthib/boreal-object?branch=version-0.29#03a62d63081c4e181c563cf298c352ebf9400290"
 dependencies = [
  "flate2",
  "memchr",
