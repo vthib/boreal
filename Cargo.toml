@@ -12,4 +12,6 @@ members = [
 # - Support for delay load table:
 #   - 6f6794a46bcbf1f709dcd7e8693b79aa7b8505e0
 #   - 4f986f227998660ce26ccfc459b3410a450622cd
+# - Handling of FileAlignment on section's offset to raw data:
+#   - 57e46356d674420c628be876ac488170f5867aa1
 object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.29" }

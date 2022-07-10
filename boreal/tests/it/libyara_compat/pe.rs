@@ -12,16 +12,15 @@ fn test_pe() {
         true,
     );
 
-    // TODO: handle malformed section offsets */
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(\"KERNEL32.dll\", \"DeleteCriticalSection\")
-    //   }",
-    //     "assets/libyara/data/tiny-idata-51ff",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(\"KERNEL32.dll\", \"DeleteCriticalSection\")
+      }",
+        "assets/libyara/data/tiny-idata-51ff",
+        true,
+    );
 
     check_file(
         "import \"pe\"
@@ -85,16 +84,15 @@ fn test_pe() {
         true,
     );
 
-    // TODO: handle malformed section offsets */
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_STANDARD, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-    //   }",
-    //     "assets/libyara/data/tiny-idata-51ff",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_STANDARD, \"KERNEL32.dll\", \"DeleteCriticalSection\")
+      }",
+        "assets/libyara/data/tiny-idata-51ff",
+        true,
+    );
 
     check_file(
         "import \"pe\"
@@ -229,16 +227,15 @@ fn test_pe() {
         true,
     );
 
-    // TODO: handle malformed section offsets */
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-    //   }",
-    //     "assets/libyara/data/tiny-idata-51ff",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
+      }",
+        "assets/libyara/data/tiny-idata-51ff",
+        true,
+    );
 
     check_file(
         "import \"pe\"
