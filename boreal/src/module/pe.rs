@@ -1912,27 +1912,35 @@ impl Pe {
 
         match (first, second, third) {
             (Value::Bytes(dll_name), Some(Value::Bytes(function_name)), None) => Some(
-                bool_to_int_value(data.find_function(&dll_name, &function_name)),
+                bool_to_int_value(data.find_function(&dll_name, &function_name, false)),
             ),
             (Value::Bytes(dll_name), Some(Value::Integer(ordinal)), None) => Some(
-                bool_to_int_value(data.find_function_ordinal(&dll_name, ordinal)),
+                bool_to_int_value(data.find_function_ordinal(&dll_name, ordinal, false)),
             ),
-            (Value::Bytes(dll_name), None, None) => data.nb_functions(&dll_name).try_into().ok(),
-            (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => {
-                Some(data.nb_functions_regex(&dll_name, &function_name).into())
+            (Value::Bytes(dll_name), None, None) => {
+                data.nb_functions(&dll_name, false).try_into().ok()
             }
+            (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => Some(
+                data.nb_functions_regex(&dll_name, &function_name, false)
+                    .into(),
+            ),
             (
                 Value::Integer(flags),
                 Some(Value::Bytes(dll_name)),
                 Some(Value::Bytes(function_name)),
             ) => {
                 if flags & (ImportType::Standard as i64) != 0
-                    && data.find_function(&dll_name, &function_name)
+                    && data.find_function(&dll_name, &function_name, false)
                 {
-                    Some(Value::Integer(1))
-                } else {
-                    Some(Value::Integer(0))
+                    return Some(Value::Integer(1));
                 }
+                if flags & (ImportType::Delayed as i64) != 0
+                    && data.find_function(&dll_name, &function_name, true)
+                {
+                    return Some(Value::Integer(1));
+                }
+
+                Some(Value::Integer(0))
             }
             (
                 Value::Integer(flags),
@@ -1940,17 +1948,25 @@ impl Pe {
                 Some(Value::Integer(ordinal)),
             ) => {
                 if flags & (ImportType::Standard as i64) != 0
-                    && data.find_function_ordinal(&dll_name, ordinal)
+                    && data.find_function_ordinal(&dll_name, ordinal, false)
                 {
-                    Some(Value::Integer(1))
-                } else {
-                    Some(Value::Integer(0))
+                    return Some(Value::Integer(1));
                 }
+                if flags & (ImportType::Delayed as i64) != 0
+                    && data.find_function_ordinal(&dll_name, ordinal, true)
+                {
+                    return Some(Value::Integer(1));
+                }
+
+                Some(Value::Integer(0))
             }
             (Value::Integer(flags), Some(Value::Bytes(dll_name)), None) => {
                 let mut res = 0;
                 if flags & (ImportType::Standard as i64) != 0 {
-                    res += data.nb_functions(&dll_name);
+                    res += data.nb_functions(&dll_name, false);
+                }
+                if flags & (ImportType::Delayed as i64) != 0 {
+                    res += data.nb_functions(&dll_name, true);
                 }
                 res.try_into().ok()
             }
@@ -1961,7 +1977,10 @@ impl Pe {
             ) => {
                 let mut res = 0;
                 if flags & (ImportType::Standard as i64) != 0 {
-                    res += data.nb_functions_regex(&dll_name, &function_name);
+                    res += data.nb_functions_regex(&dll_name, &function_name, false);
+                }
+                if flags & (ImportType::Delayed as i64) != 0 {
+                    res += data.nb_functions_regex(&dll_name, &function_name, true);
                 }
                 res.try_into().ok()
             }
@@ -2121,8 +2140,16 @@ struct DataRichEntry {
 }
 
 impl Data {
-    fn find_function(&self, dll_name: &[u8], fun_name: &[u8]) -> bool {
-        self.imports
+    fn get_imports(&self, delayed: bool) -> &[DataImport] {
+        if delayed {
+            &self.delay_imports
+        } else {
+            &self.imports
+        }
+    }
+
+    fn find_function(&self, dll_name: &[u8], fun_name: &[u8], delayed: bool) -> bool {
+        self.get_imports(delayed)
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
             .and_then(|imp| {
@@ -2133,8 +2160,8 @@ impl Data {
             .is_some()
     }
 
-    fn find_function_ordinal(&self, dll_name: &[u8], ordinal: i64) -> bool {
-        self.imports
+    fn find_function_ordinal(&self, dll_name: &[u8], ordinal: i64, delayed: bool) -> bool {
+        self.get_imports(delayed)
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
             .and_then(|imp| {
@@ -2146,17 +2173,17 @@ impl Data {
             .is_some()
     }
 
-    fn nb_functions(&self, dll_name: &[u8]) -> usize {
-        self.imports
+    fn nb_functions(&self, dll_name: &[u8], delayed: bool) -> usize {
+        self.get_imports(delayed)
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
             .map_or(0, |imp| imp.functions.len())
     }
 
-    fn nb_functions_regex(&self, dll_regex: &Regex, fun_regex: &Regex) -> u32 {
+    fn nb_functions_regex(&self, dll_regex: &Regex, fun_regex: &Regex, delayed: bool) -> u32 {
         let mut nb_matches = 0;
 
-        for imp in &self.imports {
+        for imp in self.get_imports(delayed) {
             if !dll_regex.is_match(&imp.dll_name) {
                 continue;
             }

@@ -157,79 +157,79 @@ fn test_pe() {
         true,
     );
 
-    // TODO: handle delayed imports
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_DELAYED, \"USER32.dll\", \"MessageBoxA\")
-    //   }",
-    //     "assets/libyara/data/pe_imports",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_DELAYED, \"USER32.dll\", \"MessageBoxA\")
+      }",
+        "assets/libyara/data/pe_imports",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //         pe.imports(pe.IMPORT_DELAYED, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-    //   }",
-    //     "assets/libyara/data/pe_imports",
-    //     false,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+            pe.imports(pe.IMPORT_DELAYED, \"KERNEL32.dll\", \"DeleteCriticalSection\")
+      }",
+        "assets/libyara/data/pe_imports",
+        false,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_DELAYED, /.*/, /Message.*/) == 2
-    //   }",
-    //     "assets/libyara/data/pe_imports",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_DELAYED, /.*/, /Message.*/) == 2
+      }",
+        "assets/libyara/data/pe_imports",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_DELAYED, /USER32\\.dll/i, /.*BoxA/) == 1
-    //   }",
-    //     "assets/libyara/data/pe_imports",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_DELAYED, /USER32\\.dll/i, /.*BoxA/) == 1
+      }",
+        "assets/libyara/data/pe_imports",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_DELAYED, /.*/, /.*CriticalSection/)
-    //   }",
-    //     "assets/libyara/data/pe_imports",
-    //     false,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_DELAYED, /.*/, /.*CriticalSection/)
+      }",
+        "assets/libyara/data/pe_imports",
+        false,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.number_of_delayed_imports == 1 and
-    //       pe.number_of_delayed_imported_functions == 2
-    //   }",
-    //     "assets/libyara/data/pe_imports",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.number_of_delayed_imports == 1 and
+          pe.number_of_delayed_imported_functions == 2
+      }",
+        "assets/libyara/data/pe_imports",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\") and
-    //       pe.imports(pe.IMPORT_ANY, \"USER32.dll\", \"MessageBoxA\")
-    //   }",
-    //     "assets/libyara/data/pe_imports",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\") and
+          pe.imports(pe.IMPORT_ANY, \"USER32.dll\", \"MessageBoxA\")
+      }",
+        "assets/libyara/data/pe_imports",
+        true,
+    );
 
+    // TODO: handle malformed section offsets */
     // check_file(
     //     "import \"pe\"
     //   rule test {
@@ -240,55 +240,55 @@ fn test_pe() {
     //     true,
     // );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-    //   }",
-    //     "assets/libyara/data/tiny-idata-5200",
-    //     false,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
+      }",
+        "assets/libyara/data/tiny-idata-5200",
+        false,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/) == 4
-    //   }",
-    //     "assets/libyara/data/tiny",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/) == 4
+      }",
+        "assets/libyara/data/tiny",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_ANY, /kernel32\\.dll/i, /.*/) == 21
-    //   }",
-    //     "assets/libyara/data/tiny",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_ANY, /kernel32\\.dll/i, /.*/) == 21
+      }",
+        "assets/libyara/data/tiny",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_ANY, /.*/, /.*/)
-    //   }",
-    //     "assets/libyara/data/tiny-idata-5200",
-    //     true,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_ANY, /.*/, /.*/)
+      }",
+        "assets/libyara/data/tiny-idata-5200",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/)
-    //   }",
-    //     "assets/libyara/data/tiny-idata-5200",
-    //     false,
-    // );
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/)
+      }",
+        "assets/libyara/data/tiny-idata-5200",
+        false,
+    );
 
     check(
         "import \"pe\"
