@@ -16,6 +16,7 @@ use regex::bytes::Regex;
 
 use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
+mod ord;
 mod version_info;
 
 /// `pe` module. Allows inspecting PE inputs.
@@ -1230,7 +1231,6 @@ fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
             ("key", Some(info.xor_key.into())),
             ("raw_data", raw.map(Into::into)),
             ("clear_data", clear.map(Into::into)),
-            // TODO: get raw & unmask data from object
             ("version", Some(Value::Function(Pe::rich_signature_version))),
             ("toolid", Some(Value::Function(Pe::rich_signature_toolid))),
         ]
@@ -1265,7 +1265,7 @@ fn add_imports<Pe: ImageNtHeaders>(
             Err(_) => continue,
         };
         let mut data_functions = Vec::new();
-        let functions = import_functions::<Pe>(&table, import_desc, &mut data_functions);
+        let functions = import_functions::<Pe>(&table, import_desc, &library, &mut data_functions);
         let nb_functions = functions.as_ref().map(Vec::len);
         if let Some(n) = nb_functions {
             nb_functions_total += n;
@@ -1303,6 +1303,7 @@ fn add_imports<Pe: ImageNtHeaders>(
 fn import_functions<Pe: ImageNtHeaders>(
     import_table: &ImportTable,
     desc: &ImageImportDescriptor,
+    dll_name: &[u8],
     data_functions: &mut Vec<DataFunction>,
 ) -> Option<Vec<Value>> {
     let mut first_thunk = desc.original_first_thunk.get(LE);
@@ -1315,6 +1316,7 @@ fn import_functions<Pe: ImageNtHeaders>(
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
         add_thunk::<Pe, _>(
             thunk,
+            dll_name,
             |hint| import_table.hint_name(hint).map(|(_, name)| name.to_vec()),
             &mut functions,
             data_functions,
@@ -1325,6 +1327,7 @@ fn import_functions<Pe: ImageNtHeaders>(
 
 fn add_thunk<Pe: ImageNtHeaders, F>(
     thunk: Pe::ImageThunkData,
+    dll_name: &[u8],
     hint_name: F,
     functions: &mut Vec<Value>,
     data_functions: &mut Vec<DataFunction>,
@@ -1332,14 +1335,20 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
     F: Fn(u32) -> object::Result<Vec<u8>>,
 {
     if thunk.is_ordinal() {
-        // TODO: get name from ordinal
         let ordinal = thunk.ordinal();
+        let name = ord::ord_lookup(dll_name, ordinal).map(<[u8]>::to_vec);
 
         data_functions.push(DataFunction {
-            name: None,
+            name: name.clone(),
             ordinal: Some(ordinal),
         });
-        functions.push(Value::object([("ordinal", thunk.ordinal().into())]));
+
+        let ordinal = ordinal.into();
+        let obj = match name {
+            Some(name) => Value::object([("name", name.into()), ("ordinal", ordinal)]),
+            None => Value::object([("ordinal", ordinal)]),
+        };
+        functions.push(obj);
     } else {
         let name = match hint_name(thunk.address()) {
             Ok(name) => name,
@@ -1379,7 +1388,8 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
             Err(_) => continue,
         };
         let mut data_functions = Vec::new();
-        let functions = delay_load_import_functions::<Pe>(&table, import_desc, &mut data_functions);
+        let functions =
+            delay_load_import_functions::<Pe>(&table, import_desc, &library, &mut data_functions);
         let nb_functions = functions.as_ref().map(Vec::len);
         if let Some(n) = nb_functions {
             nb_functions_total += n;
@@ -1417,6 +1427,7 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
 fn delay_load_import_functions<Pe: ImageNtHeaders>(
     import_table: &DelayLoadImportTable,
     desc: &ImageDelayloadDescriptor,
+    dll_name: &[u8],
     data_functions: &mut Vec<DataFunction>,
 ) -> Option<Vec<Value>> {
     let mut thunks = import_table
@@ -1427,6 +1438,7 @@ fn delay_load_import_functions<Pe: ImageNtHeaders>(
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
         add_thunk::<Pe, _>(
             thunk,
+            dll_name,
             |hint| import_table.hint_name(hint).map(|(_, name)| name.to_vec()),
             &mut functions,
             data_functions,
