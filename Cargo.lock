@@ -526,7 +526,7 @@ dependencies = [
 [[package]]
 name = "object"
 version = "0.29.0"
-source = "git+https://github.com/vthib/boreal-object?branch=version-0.29#57e46356d674420c628be876ac488170f5867aa1"
+source = "git+https://github.com/vthib/boreal-object?branch=version-0.29#a5be655e9a7d662d485de3240f6dcdf1f0e92499"
 dependencies = [
  "flate2",
  "memchr",

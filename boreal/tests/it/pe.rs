@@ -1,7 +1,66 @@
 use crate::utils::check_file;
 
-// These are mostly coverage tests, ensuring all the fields are correctly set and have the same
-// values as in libyara
+#[test]
+fn test_rva_to_offset() {
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          // no section from 0 to 0x1000: as this va is before the first section, it is returned
+          // as is
+          pe.rva_to_offset(0) == 0 and
+          pe.rva_to_offset(0xFFF) == 0xFFF and
+
+          // .text, starting at 0x1000, virtual size is 0x1774, section raw data is at 0x1000 too
+          pe.rva_to_offset(0x1000) == 0x1000 and
+          pe.rva_to_offset(0x12f3) == 0x12f3 and
+          pe.rva_to_offset(0x2773) == 0x2773 and
+          not defined pe.rva_to_offset(0x2774) and
+
+          // .data, starting at 0x3000, virtual size is 0x30
+          pe.rva_to_offset(0x301f) == 0x301f and
+          not defined pe.rva_to_offset(0x3100) and
+
+          // .bss, starting at 0x5000, but empty
+          not defined pe.rva_to_offset(0x4fff) and
+          not defined pe.rva_to_offset(0x5000) and
+          not defined pe.rva_to_offset(0x5001) and
+
+          // .idata, starting at 0x6000, virtual size 0x590, raw addr is 0x51FF, aligned to 0x5000
+          pe.rva_to_offset(0x6000) == 0x5000 and
+          pe.rva_to_offset(0x6500) == 0x5500 and
+
+          // .tls starting at 0x8000, virtual size 0x20
+          pe.rva_to_offset(0x8012) == 0x7012 and
+          pe.rva_to_offset(0x801f) == 0x701f and
+          not defined pe.rva_to_offset(0x8020) and
+
+          not defined pe.rva_to_offset(0x7FFFFFFFFFFFFFFF) and
+          not defined pe.rva_to_offset(-1) and
+          not defined pe.rva_to_offset(-50) and
+
+          true
+      }",
+        "assets/libyara/data/tiny-idata-51ff",
+        true,
+    );
+
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          // Check that if raw size < virtual size, rva_to_offset uses the smaller one
+          // as the limit:
+          // .data at va 0x13000 has vsize 0x12DC and raw size 0xA00, raw data at 0x11800
+          pe.rva_to_offset(0x13000) == 0x11800 and
+          pe.rva_to_offset(0x139FF) == 0x121ff and
+          not defined pe.rva_to_offset(0x13A00) and
+          not defined pe.rva_to_offset(0x14200)
+      }",
+        "assets/libyara/data/pe_imports",
+        true,
+    );
+}
 
 #[test]
 fn test_coverage_pe_tiny() {

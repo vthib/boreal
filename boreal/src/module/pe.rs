@@ -779,6 +779,14 @@ impl Module for Pe {
                 "imphash",
                 StaticValue::function(Self::imphash, vec![], Type::Bytes),
             ),
+            (
+                "rva_to_offset",
+                StaticValue::function(
+                    Self::rva_to_offset,
+                    vec![vec![Type::Integer]],
+                    Type::Integer,
+                ),
+            ),
         ]
         .into()
     }
@@ -962,12 +970,6 @@ impl Module for Pe {
             ("pdb_path", Type::Bytes),
             // TODO: signatures
             ("number_of_signatures", Type::Integer),
-            //
-            (
-                // TODO: implement this
-                "rva_to_offset",
-                Type::function(vec![vec![Type::Integer]], Type::Integer),
-            ),
         ]
         .into()
     }
@@ -1730,16 +1732,17 @@ fn u16_slice_to_value(slice: &[u16]) -> Value {
 }
 
 fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<u32> {
-    for section in sections.iter() {
-        let section_va = section.virtual_address.get(LE);
-        let (section_offset, section_size) = section.pe_file_range();
+    if let Some((offset, _)) = sections.pe_file_range_at(va) {
+        return Some(offset);
+    }
 
-        let offset = va.checked_sub(section_va)?;
-        // Address must be within section (and not at its end).
-        if offset < section_size {
-            return section_offset.checked_add(offset).map(Into::into);
+    // Special behavior from libyara: if va is before the first section, it is returned as is.
+    if let Some(first_section_va) = sections.iter().map(|s| s.virtual_address.get(LE)).min() {
+        if va < first_section_va {
+            return Some(va);
         }
     }
+
     None
 }
 
@@ -2084,6 +2087,30 @@ impl Pe {
         }
 
         Some(Value::Bytes(hex::encode(hasher.finalize()).into_bytes()))
+    }
+
+    fn rva_to_offset(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let rva: i64 = args.into_iter().next()?.try_into().ok()?;
+        let rva: u32 = rva.try_into().ok()?;
+
+        // We cannot save the SectionTable in the data, because it is a no-copy struct borrowing on
+        // the scanned mem. Instead, we will reparse the mem and rebuild the SectionTable.
+        // This isn't that costly, and this function shouldn't be used that much anyway.
+        let dos_header = ImageDosHeader::parse(ctx.mem).ok()?;
+        let mut offset = dos_header.nt_headers_offset().into();
+        let section_table = match FileKind::parse(ctx.mem) {
+            Ok(FileKind::Pe32) => {
+                let (nt_headers, _) = ImageNtHeaders32::parse(ctx.mem, &mut offset).ok()?;
+                nt_headers.sections(ctx.mem, offset).ok()?
+            }
+            Ok(FileKind::Pe64) => {
+                let (nt_headers, _) = ImageNtHeaders64::parse(ctx.mem, &mut offset).ok()?;
+                nt_headers.sections(ctx.mem, offset).ok()?
+            }
+            _ => return None,
+        };
+
+        va_to_file_offset(&section_table, rva).map(Into::into)
     }
 }
 
