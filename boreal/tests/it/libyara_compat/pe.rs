@@ -467,14 +467,13 @@ fn test_pe() {
         true,
     );
 
-    // TODO: improve handling of debug directory
-    // check_file(
-    //   "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.pdb_path == \"/Users/runner/work/OpenCorePkg/OpenCorePkg/UDK/Build/OpenCorePkg/DEBUG_XCODE5/X64/OpenCorePkg/Application/ChipTune/ChipTune/DEBUG/ChipTune.dll\"
-    //   }",
-    //   "assets/libyara/data/ChipTune.efi", true);
+    check_file(
+      "import \"pe\"
+      rule test {
+        condition:
+          pe.pdb_path == \"/Users/runner/work/OpenCorePkg/OpenCorePkg/UDK/Build/OpenCorePkg/DEBUG_XCODE5/X64/OpenCorePkg/Application/ChipTune/ChipTune/DEBUG/ChipTune.dll\"
+      }",
+      "assets/libyara/data/ChipTune.efi", true);
 
     check_file(
         "import \"pe\"

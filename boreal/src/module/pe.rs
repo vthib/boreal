@@ -10,12 +10,13 @@ use object::{
         DataDirectories, DelayLoadImportTable, ImageNtHeaders, ImageOptionalHeader, ImageThunkData,
         ImportTable, ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
-    Bytes, FileKind, LittleEndian as LE, ReadRef, StringTable, U32,
+    FileKind, LittleEndian as LE, StringTable,
 };
 use regex::bytes::Regex;
 
 use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
+mod debug;
 mod ord;
 mod version_info;
 
@@ -963,6 +964,7 @@ impl Module for Pe {
             ("number_of_signatures", Type::Integer),
             //
             (
+                // TODO: implement this
                 "rva_to_offset",
                 Type::function(vec![vec![Type::Integer]], Type::Integer),
             ),
@@ -1142,7 +1144,7 @@ fn parse_file<Pe: ImageNtHeaders>(
             "pdb_path",
             sections
                 .as_ref()
-                .and_then(|sections| pdb_path(&data_dirs, mem, sections)),
+                .and_then(|sections| debug::pdb_path(&data_dirs, mem, sections)),
         ),
         (
             "rich_signature",
@@ -1162,40 +1164,8 @@ fn parse_file<Pe: ImageNtHeaders>(
     }
 
     // TODO: rich signature
-    // TODO: delay import details
     //
     Some(map)
-}
-
-fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable) -> Option<Value> {
-    let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_DEBUG)?;
-    let debug_data = Bytes(dir.data(mem, sections).ok()?);
-    let debug_dir = debug_data.read_at::<pe::ImageDebugDirectory>(0).ok()?;
-
-    // TODO: handle more debug types
-    if debug_dir.typ.get(LE) != pe::IMAGE_DEBUG_TYPE_CODEVIEW {
-        return None;
-    }
-
-    let info = mem
-        .read_slice_at::<u8>(
-            debug_dir.pointer_to_raw_data.get(LE).into(),
-            debug_dir.size_of_data.get(LE) as usize,
-        )
-        .ok()?;
-
-    let mut info = Bytes(info);
-
-    let sig = info.read_bytes(4).ok()?;
-    if sig.0 != b"RSDS" {
-        return None;
-    }
-
-    let _guid = info.read_bytes(16).ok()?;
-    let _age = info.read::<U32<LE>>().ok()?;
-    let path = info.read_string().ok()?;
-
-    Some(path.to_vec().into())
 }
 
 fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
