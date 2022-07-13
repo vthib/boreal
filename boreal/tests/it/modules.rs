@@ -461,7 +461,13 @@ fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
         ModuleValue::Float(v) => print!("{:indent$}{} == {}", "", name, v),
         ModuleValue::Bytes(bytes) => match std::str::from_utf8(bytes) {
             Ok(s) => print!("{:indent$}{} == {:?}", "", name, s),
-            Err(_) => panic!("non utf8 bytes?"),
+            Err(_) => {
+                print!("{:indent$}{} == \"", "", name);
+                for b in bytes {
+                    print!("\\x{:02x}", b);
+                }
+                print!("\"");
+            }
         },
         ModuleValue::Regex(regex) => print!("{:indent$}{} == /{}/", "", name, regex.as_str()),
         ModuleValue::Boolean(b) => {

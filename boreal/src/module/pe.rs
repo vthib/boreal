@@ -925,7 +925,7 @@ impl Module for Pe {
                 ])),
             ),
             (
-                "delay_import_details",
+                "delayed_import_details",
                 Type::array(Type::object([
                     ("library_name", Type::Bytes),
                     ("number_of_functions", Type::Integer),
@@ -1395,7 +1395,7 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
             nb_functions_total += n;
         }
 
-        data.delay_imports.push(DataImport {
+        data.delayed_imports.push(DataImport {
             dll_name: library.clone(),
             functions: data_functions,
         });
@@ -1421,7 +1421,7 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
     if let Ok(v) = imports.len().try_into() {
         let _r = out.insert("number_of_delayed_imports", v);
     }
-    let _r = out.insert("delay_import_details", Value::Array(imports));
+    let _r = out.insert("delayed_import_details", Value::Array(imports));
 }
 
 fn delay_load_import_functions<Pe: ImageNtHeaders>(
@@ -2120,7 +2120,7 @@ impl Pe {
 #[derive(Default)]
 pub struct Data {
     imports: Vec<DataImport>,
-    delay_imports: Vec<DataImport>,
+    delayed_imports: Vec<DataImport>,
     exports: Vec<DataExport>,
     sections: Vec<DataSection>,
     rich_entries: Vec<DataRichEntry>,
@@ -2158,7 +2158,7 @@ struct DataRichEntry {
 impl Data {
     fn get_imports(&self, delayed: bool) -> &[DataImport] {
         if delayed {
-            &self.delay_imports
+            &self.delayed_imports
         } else {
             &self.imports
         }
