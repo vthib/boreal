@@ -20,6 +20,11 @@ mod debug;
 mod ord;
 mod version_info;
 
+const MAX_PE_IMPORTS: usize = 16384;
+const MAX_PE_EXPORTS: usize = 8192;
+const MAX_EXPORT_NAME_LENGTH: usize = 512;
+const MAX_RESOURCES: usize = 65536;
+
 /// `pe` module. Allows inspecting PE inputs.
 #[derive(Debug)]
 pub struct Pe;
@@ -1234,18 +1239,20 @@ fn add_imports<Pe: ImageNtHeaders>(
     let mut imports = Vec::new();
     let mut nb_functions_total = 0;
 
-    // TODO: implement limits on nb imports & functions
     while let Ok(Some(import_desc)) = descriptors.next() {
         let library = match table.name(import_desc.name.get(LE)) {
             Ok(name) => name.to_vec(),
             Err(_) => continue,
         };
         let mut data_functions = Vec::new();
-        let functions = import_functions::<Pe>(&table, import_desc, &library, &mut data_functions);
+        let functions = import_functions::<Pe>(
+            &table,
+            import_desc,
+            &library,
+            &mut data_functions,
+            &mut nb_functions_total,
+        );
         let nb_functions = functions.as_ref().map(Vec::len);
-        if let Some(n) = nb_functions {
-            nb_functions_total += n;
-        }
 
         data.imports.push(DataImport {
             dll_name: library.clone(),
@@ -1281,6 +1288,7 @@ fn import_functions<Pe: ImageNtHeaders>(
     desc: &ImageImportDescriptor,
     dll_name: &[u8],
     data_functions: &mut Vec<DataFunction>,
+    nb_functions_total: &mut usize,
 ) -> Option<Vec<Value>> {
     let mut first_thunk = desc.original_first_thunk.get(LE);
     if first_thunk == 0 {
@@ -1290,6 +1298,11 @@ fn import_functions<Pe: ImageNtHeaders>(
 
     let mut functions = Vec::new();
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
+        if *nb_functions_total >= MAX_PE_IMPORTS {
+            return Some(functions);
+        }
+        *nb_functions_total += 1;
+
         add_thunk::<Pe, _>(
             thunk,
             dll_name,
@@ -1357,7 +1370,6 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
     let mut imports = Vec::new();
     let mut nb_functions_total = 0;
 
-    // TODO: implement limits on nb imports & functions
     while let Ok(Some(import_desc)) = descriptors.next() {
         let library = match table.name(import_desc.dll_name_rva.get(LE)) {
             Ok(name) => name.to_vec(),
@@ -1439,6 +1451,7 @@ fn add_exports(
     let addresses = table.addresses();
     let mut details: Vec<_> = addresses
         .iter()
+        .take(MAX_PE_EXPORTS)
         .enumerate()
         .map(|(i, address)| {
             let mut map = HashMap::with_capacity(4);
@@ -1448,7 +1461,10 @@ fn add_exports(
             }
 
             let address = address.get(LE);
-            if let Ok(Some(forward)) = table.forward_string(address) {
+            if let Ok(Some(mut forward)) = table.forward_string(address) {
+                if forward.len() > MAX_EXPORT_NAME_LENGTH {
+                    forward = &forward[..MAX_EXPORT_NAME_LENGTH];
+                }
                 let _r = map.insert("forward_name", Value::bytes(forward));
             } else if let Some(v) = va_to_file_offset(sections, address) {
                 let _r = map.insert("offset", v.into());
@@ -1465,10 +1481,13 @@ fn add_exports(
 
     // Now, add names
     for (name_pointer, ordinal_index) in table.name_iter() {
-        let name = match table.name_from_pointer(name_pointer) {
+        let mut name = match table.name_from_pointer(name_pointer) {
             Ok(v) => v,
             Err(_) => continue,
         };
+        if name.len() > MAX_EXPORT_NAME_LENGTH {
+            name = &name[..MAX_EXPORT_NAME_LENGTH];
+        }
         let ordinal_index = usize::from(ordinal_index);
 
         if let Some(Value::Object(map)) = details.get_mut(ordinal_index) {
@@ -1635,18 +1654,26 @@ fn add_resources(
                 };
 
                 if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
-                    // TODO: max sources limit
+                    let rva = entry_data.offset_to_data.get(LE);
+                    let offset = va_to_file_offset(sections, rva);
+                    if ty == pe::RT_VERSION.into() {
+                        if let Some(offset) = offset {
+                            add_version_infos(mem, offset, out);
+                        }
+                    }
+
+                    if resources.len() > MAX_RESOURCES {
+                        continue;
+                    }
 
                     data.resource_languages.push(lang);
 
-                    let rva = entry_data.offset_to_data.get(LE);
                     let mut obj: HashMap<_, _> = [
                         ("rva", rva.into()),
                         ("length", entry_data.size.get(LE).into()),
                     ]
                     .into();
 
-                    let offset = va_to_file_offset(sections, rva);
                     if let Some(offset) = offset {
                         let _r = obj.insert("offset", offset.into());
                     }
@@ -1665,12 +1692,6 @@ fn add_resources(
                     };
 
                     resources.push(Value::Object(obj));
-
-                    if ty == pe::RT_VERSION.into() {
-                        if let Some(offset) = offset {
-                            add_version_infos(mem, offset, out);
-                        }
-                    }
                 }
             }
         }
