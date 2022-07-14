@@ -63,6 +63,33 @@ fn test_rva_to_offset() {
 }
 
 #[test]
+fn test_is_dll() {
+    fn test_dll(file: &str, expected: bool) {
+        check_file(
+            &format!(
+                "import \"pe\" rule test {{ condition: pe.is_dll() == {} }}",
+                if expected {
+                    object::pe::IMAGE_FILE_DLL
+                } else {
+                    0
+                }
+            ),
+            file,
+            true,
+        );
+    }
+
+    test_dll("assets/libyara/data/pe_imports", false);
+    test_dll("assets/libyara/data/mtxex.dll", true);
+    test_dll("assets/libyara/data/ChipTune.efi", false);
+    test_dll("assets/libyara/data/tiny", false);
+    test_dll(
+        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
+}
+
+#[test]
 fn test_coverage_pe_tiny() {
     check_file(
         r#"import "pe"

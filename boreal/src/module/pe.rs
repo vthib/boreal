@@ -1020,6 +1020,10 @@ fn parse_file<Pe: ImageNtHeaders>(
 
     let ep = opt_hdr.address_of_entry_point();
 
+    let characteristics = hdr.characteristics.get(LE);
+    // libyara does not return a bool, but the result of the bitwise and...
+    data.is_dll = characteristics & pe::IMAGE_FILE_DLL;
+
     let mut map: HashMap<_, _> = [
         ("is_pe", Some(Value::Integer(1))),
         // File header
@@ -1041,7 +1045,7 @@ fn parse_file<Pe: ImageNtHeaders>(
             "size_of_optional_header",
             Some(hdr.size_of_optional_header.get(LE).into()),
         ),
-        ("characteristics", Some(hdr.characteristics.get(LE).into())),
+        ("characteristics", Some(characteristics.into())),
         //
         (
             "entry_point",
@@ -2001,9 +2005,9 @@ impl Pe {
         ))
     }
 
-    fn is_dll(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
-        let _args = args.into_iter();
-        todo!()
+    fn is_dll(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Self>()?;
+        Some(data.is_dll.into())
     }
 
     fn is_32bit(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
@@ -2123,6 +2127,7 @@ pub struct Data {
     rich_entries: Vec<DataRichEntry>,
     resource_languages: Vec<u32>,
     is_32bit: bool,
+    is_dll: u16,
 }
 
 struct DataImport {
