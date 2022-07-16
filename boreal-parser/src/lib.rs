@@ -1,10 +1,6 @@
 //! Parsing methods for .yar files.
 //!
 //! This module mainly intends to match the lexical patterns used in libyara.
-//!
-//! Missing features:
-//! - imports
-//! - includes
 
 // Deny most of allowed by default lints from rustc.
 #![deny(explicit_outlives_requirements)]
@@ -29,7 +25,6 @@
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
-#![allow(clippy::match_same_arms)]
 #![allow(clippy::range_plus_one)]
 #![allow(clippy::too_many_lines)]
 

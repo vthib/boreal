@@ -202,7 +202,6 @@ fn primary_expression_item(input: Input) -> ParseResult<Expression> {
         // string_length | string_length '[' primary_expression ']'
         string_expression::string_length_expression,
         // identifier
-        // TODO: wrong type
         map_expr(identifier::identifier, ExpressionKind::Identifier),
     ))(input)
 }
@@ -635,7 +634,6 @@ mod tests {
             },
         );
 
-        // FIXME: simplify this into a negative number
         parse(
             pe,
             "-1--2",

@@ -286,7 +286,6 @@ pub enum ExpressionKind {
     ///
     /// This is equivalent to a [`Self::For`] value, with a body
     /// set to `$ in (from..to)`.
-    // TODO: remove this to use `For` directly?
     ForIn {
         /// How many variables must match for this expresion to be true.
         selection: ForSelection,
@@ -381,7 +380,6 @@ pub enum ForSelection {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ForIterator {
     /// Identifier to pick values from.
-    // TODO: document which type of objects are accepted here
     Identifier(Identifier),
     /// Every value between two numbers
     Range {

@@ -107,8 +107,6 @@ fn expression_defined(input: Input) -> ParseResult<Expression> {
         Ok((
             input,
             Expression {
-                // FIXME: in libyara, _DEFINED_ takes a boolean expression. That
-                // does not look correct though, to investigate.
                 expr: ExpressionKind::Defined(Box::new(expr)),
                 span: input.get_span_from(start),
             },
