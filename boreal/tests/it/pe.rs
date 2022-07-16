@@ -90,6 +90,35 @@ fn test_is_dll() {
 }
 
 #[test]
+fn test_section_names() {
+    check_file(
+        r#"import "pe"
+rule test {
+    condition:
+        pe.sections[9].full_name == ".debug_aranges" and
+        pe.sections[9].name == "/4" and
+        pe.sections[10].full_name == ".debug_info" and
+        pe.sections[10].name == "/19" and
+        pe.sections[11].full_name == ".debug_abbrev" and
+        pe.sections[11].name == "/31" and
+        pe.sections[12].full_name == ".debug_line" and
+        pe.sections[12].name == "/45" and
+        pe.sections[13].full_name == ".debug_frame" and
+        pe.sections[13].name == "/57" and
+        pe.sections[14].full_name == ".debug_str" and
+        pe.sections[14].name == "/70" and
+        pe.sections[15].full_name == ".debug_loc" and
+        pe.sections[15].name == "/81" and
+        pe.sections[16].full_name == ".debug_ranges" and
+        pe.sections[16].name == "/92" and
+        true
+}"#,
+        "assets/libyara/data/pe_mingw",
+        true,
+    );
+}
+
+#[test]
 fn test_coverage_pe_tiny() {
     check_file(
         r#"import "pe"
@@ -528,8 +557,8 @@ pe.section_alignment == 4096 and
     pe.sections[2].virtual_address == 77824 and
     pe.sections[2].virtual_size == 4828 and
     pe.sections[3].characteristics == 1107296320 and
-    pe.sections[3].full_name == ".reloc" and
-    pe.sections[3].name == ".reloc" and
+    pe.sections[3].full_name == ".rel\x00c" and
+    pe.sections[3].name == ".rel\x00c" and
     pe.sections[3].number_of_line_numbers == 0 and
     pe.sections[3].number_of_relocations == 0 and
     pe.sections[3].pointer_to_line_numbers == 0 and

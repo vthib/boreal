@@ -1533,21 +1533,35 @@ fn sections_to_value(
         sections
             .iter()
             .map(|section| {
-                let full_name = strings.and_then(|strings| section.name(strings).ok());
-                // TODO: libyara does some rtrim of nul bytes here
-                let name = section.raw_name().to_vec();
+                let mut name = section.raw_name();
+                if let Some(last_non_zero_pos) = name
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find_map(|(i, v)| (*v != 0).then_some(i))
+                {
+                    name = &name[..=last_non_zero_pos];
+                }
+                let full_name = match (strings, section.name_offset()) {
+                    // Get full name from the strings table
+                    // TODO: yara rejects a full name that contains non isprint bytes. But why?
+                    (Some(strings), Ok(Some(offset))) => strings.get(offset).ok(),
+                    // No offset into string table, full name is the same as the name
+                    (_, Ok(None)) => Some(name),
+                    (_, _) => None,
+                };
                 let raw_data_offset = i64::from(section.pointer_to_raw_data.get(LE));
                 let raw_data_size = i64::from(section.size_of_raw_data.get(LE));
 
                 data.sections.push(DataSection {
-                    name: name.clone(),
+                    name: name.to_vec(),
                     raw_data_offset,
                     raw_data_size,
                 });
 
                 Value::Object(
                     [
-                        ("name", Some(name.into())),
+                        ("name", Some(name.to_vec().into())),
                         ("full_name", full_name.map(|v| v.to_vec().into())),
                         (
                             "characteristics",

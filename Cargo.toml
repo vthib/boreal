@@ -15,4 +15,6 @@ members = [
 # - Handling of FileAlignment on section's offset to raw data:
 #   - 57e46356d674420c628be876ac488170f5867aa1
 #   - a5be655e9a7d662d485de3240f6dcdf1f0e92499
+# - Retrieval of raw name for sections
+#   - b28e4e82dc8979225ca8c483c49ea2e127795db7
 object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.29" }
