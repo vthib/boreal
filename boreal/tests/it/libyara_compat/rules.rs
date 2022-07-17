@@ -3586,68 +3586,67 @@ fn test_meta() {
     );
 }
 
-// FIXME: enable when pe module is done
-// #[test]
-// fn test_defined() {
-//     check("rule t { condition: defined 1 }", b"", true);
-//
-//     check(
-//         "import \"pe\" \
-//       rule t { \
-//         condition: \
-//           defined pe.number_of_resources \
-//       }",
-//         b"",
-//         false,
-//     );
-//
-//     check(
-//         "import \"pe\" \
-//       rule t { \
-//         condition: \
-//           not defined pe.number_of_resources \
-//       }",
-//         b"",
-//         true,
-//     );
-//
-//     check(
-//         "import \"pe\" \
-//       rule t { \
-//         condition: \
-//           defined not pe.number_of_resources \
-//       }",
-//         b"",
-//         true,
-//     );
-//
-//     check(
-//         "import \"pe\" \
-//       rule t { \
-//         condition: \
-//           defined pe.number_of_resources and pe.number_of_resources == 0 \
-//       }",
-//         b"",
-//         true,
-//     );
-//
-//     check(
-//         "import \"pe\" \
-//       rule t { \
-//         condition: \
-//           defined (pe.number_of_resources and pe.number_of_resources == 0) \
-//       }",
-//         b"",
-//         true,
-//     );
-//
-//     check(
-//         "import \"pe\" \
-//       rule t { \
-//         condition: \
-//           defined \"foo\" contains \"f\" \
-//       }",
-//         b"",
-//         true,
-//     );
-// }
+#[test]
+fn test_defined() {
+    check("rule t { condition: defined 1 }", b"", true);
+
+    check(
+        "import \"pe\"
+      rule t {
+        condition:
+          defined pe.number_of_resources
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"pe\"
+      rule t {
+        condition:
+          not defined pe.number_of_resources
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"pe\"
+      rule t {
+        condition:
+          defined not pe.number_of_resources
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"pe\"
+      rule t {
+        condition:
+          defined pe.number_of_resources and pe.number_of_resources == 0
+      }",
+        b"",
+        false,
+    );
+
+    check(
+        "import \"pe\"
+      rule t {
+        condition:
+          defined (pe.number_of_resources and pe.number_of_resources == 0)
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"pe\"
+      rule t {
+        condition:
+          defined \"foo\" contains \"f\"
+      }",
+        b"",
+        true,
+    );
+}

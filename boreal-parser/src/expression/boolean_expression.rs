@@ -4,7 +4,7 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    combinator::{cut, opt, value},
+    combinator::{cut, value},
     sequence::preceded,
 };
 
@@ -78,42 +78,33 @@ fn expression_and(input: Input) -> ParseResult<Expression> {
     }
 }
 
-/// parse not operator
-fn expression_not(input: Input) -> ParseResult<Expression> {
-    let start = input;
-    let (input, not) = opt(rtrim(ttag("not")))(input)?;
-
-    if not.is_some() {
-        let (input, expr) = cut(expression_not)(input)?;
-        Ok((
-            input,
-            Expression {
-                expr: ExpressionKind::Not(Box::new(expr)),
-                span: input.get_span_from(start),
+/// parse defined & not operator
+fn expression_not(mut input: Input) -> ParseResult<Expression> {
+    let mut start = input;
+    let mut ops = Vec::new();
+    // Push ops into a vec, to prevent a possible stack overflow if we used recursion.
+    while let Ok((i, op)) = rtrim(alt((ttag("not"), ttag("defined"))))(input) {
+        ops.push((
+            if op == "not" {
+                ExpressionKind::Not
+            } else {
+                ExpressionKind::Defined
             },
-        ))
-    } else {
-        expression_defined(input)
+            start,
+        ));
+        input = i;
+        start = i;
     }
-}
 
-/// parse defined operator
-fn expression_defined(input: Input) -> ParseResult<Expression> {
-    let start = input;
-    let (input, defined) = opt(rtrim(ttag("defined")))(input)?;
-
-    if defined.is_some() {
-        let (input, expr) = cut(expression_item)(input)?;
-        Ok((
-            input,
-            Expression {
-                expr: ExpressionKind::Defined(Box::new(expr)),
-                span: input.get_span_from(start),
-            },
-        ))
-    } else {
-        expression_item(input)
+    let (input, mut expr) = expression_item(input)?;
+    while let Some((op, start)) = ops.pop() {
+        expr = Expression {
+            expr: op(Box::new(expr)),
+            span: input.get_span_from(start),
+        };
     }
+
+    Ok((input, expr))
 }
 
 /// parse rest of boolean expressions
@@ -766,6 +757,21 @@ mod tests {
                         span: 12..14,
                     })),
                     span: 4..14,
+                })),
+                span: 0..14,
+            },
+        );
+        parse(
+            boolean_expression,
+            "defined not $a  c",
+            "c",
+            Expression {
+                expr: ExpressionKind::Defined(Box::new(Expression {
+                    expr: ExpressionKind::Not(Box::new(Expression {
+                        expr: ExpressionKind::Variable("a".to_owned()),
+                        span: 12..14,
+                    })),
+                    span: 8..14,
                 })),
                 span: 0..14,
             },

@@ -154,6 +154,7 @@ fn primary_expression_neg(input: Input) -> ParseResult<Expression> {
     match op {
         None => primary_expression_item(input),
         Some(op) => {
+            // FIXME: do not use recursion here, this could lead to stack overflow
             let (input, expr) = cut(primary_expression_neg)(input)?;
             Ok((
                 input,
