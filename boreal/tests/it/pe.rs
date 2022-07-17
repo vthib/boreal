@@ -195,7 +195,7 @@ pe.image_version.minor == 0 and
  and
     pe.import_details[0].library_name == "KERNEL32.dll" and
     pe.import_details[0].number_of_functions == 21 and
- // FIXME: see https://github.com/VirusTotal/yara/pull/1747
+ // TODO: see https://github.com/VirusTotal/yara/pull/1747, need 4.3 release
  //   (
  //       pe.import_details[1].functions[0].name == "__dllonexit" and
  //       pe.import_details[1].functions[1].name == "__getmainargs" and
@@ -418,7 +418,7 @@ pe.image_version.minor == 0 and
  and
     pe.import_details[0].library_name == "WS2_32.dll" and
     pe.import_details[0].number_of_functions == 2 and
- // FIXME: see https://github.com/VirusTotal/yara/pull/1747
+ // TODO: see https://github.com/VirusTotal/yara/pull/1747, need 4.3 release
  //   (
  //       pe.import_details[1].functions[0].name == "GetCommandLineA" and
  //       pe.import_details[1].functions[1].name == "WriteConsoleW" and

@@ -325,7 +325,7 @@ fn test_for_expression_any() {
 }
 
 #[test]
-// FIXME: this is broken for libyara, not sure why
+// TODO: broken on libyara 4.2, fixed on master need 4.3 release
 #[ignore]
 fn test_for_expression_none() {
     let checker = Checker::new(&build_rule("none of them"));

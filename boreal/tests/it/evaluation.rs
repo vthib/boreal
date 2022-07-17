@@ -596,7 +596,7 @@ rule a {
         #a in (2..5) == 3
 }"#,
     );
-    // FIXME: this raises a FATAL_INTERNAL_ERROR in libyara
+    // TODO upgrade yara: this raises a FATAL_INTERNAL_ERROR in libyara 4.2, fixed on master
     checker.check_boreal(b"", false);
     checker.check_boreal(b"  abaabb", true);
     checker.check_boreal(b"  ababab", false);
@@ -634,9 +634,8 @@ rule a {
         b"",
         false,
     );
-    // FIXME: (tests.integer_array[5]..5) is not properly parsed as a range in boreal-parser
     check(
-        &build_rule("defined (#a0 in ((tests.integer_array[5])..5))"),
+        &build_rule("defined (#a0 in (tests.integer_array[5]..5))"),
         b"",
         false,
     );
