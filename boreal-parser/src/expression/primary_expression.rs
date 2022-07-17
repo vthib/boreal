@@ -147,31 +147,32 @@ fn primary_expression_mul(input: Input) -> ParseResult<Expression> {
 }
 
 /// parse ~, - operators
-fn primary_expression_neg(input: Input) -> ParseResult<Expression> {
-    let start = input;
-    let (input, op) = opt(alt((tag("~"), tag("-"))))(input)?;
-
-    match op {
-        None => primary_expression_item(input),
-        Some(op) => {
-            // FIXME: do not use recursion here, this could lead to stack overflow
-            let (input, expr) = cut(primary_expression_neg)(input)?;
-            Ok((
-                input,
-                match op.cursor() {
-                    "~" => Expression {
-                        expr: ExpressionKind::BitwiseNot(Box::new(expr)),
-                        span: input.get_span_from(start),
-                    },
-                    "-" => Expression {
-                        expr: ExpressionKind::Neg(Box::new(expr)),
-                        span: input.get_span_from(start),
-                    },
-                    _ => unreachable!(),
-                },
-            ))
-        }
+fn primary_expression_neg(mut input: Input) -> ParseResult<Expression> {
+    let mut start = input;
+    let mut ops = Vec::new();
+    // Push ops into a vec, to prevent a possible stack overflow if we used recursion.
+    while let Ok((i, op)) = rtrim(alt((char('~'), char('-'))))(input) {
+        ops.push((
+            if op == '~' {
+                ExpressionKind::BitwiseNot
+            } else {
+                ExpressionKind::Neg
+            },
+            start,
+        ));
+        input = i;
+        start = i;
     }
+
+    let (input, mut expr) = primary_expression_item(input)?;
+    while let Some((op, start)) = ops.pop() {
+        expr = Expression {
+            expr: op(Box::new(expr)),
+            span: input.get_span_from(start),
+        };
+    }
+
+    Ok((input, expr))
 }
 
 fn primary_expression_item(input: Input) -> ParseResult<Expression> {
