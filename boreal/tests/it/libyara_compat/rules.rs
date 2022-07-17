@@ -3616,6 +3616,7 @@ fn test_meta() {
 }
 
 #[test]
+#[cfg(feature = "object")]
 fn test_defined() {
     check("rule t { condition: defined 1 }", b"", true);
 
