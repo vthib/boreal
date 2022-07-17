@@ -530,7 +530,7 @@ pe.section_alignment == 4096 and
     pe.sections[0].number_of_relocations == 0 and
     pe.sections[0].pointer_to_line_numbers == 0 and
     pe.sections[0].pointer_to_relocations == 0 and
-    pe.sections[0].raw_data_offset == 1024 and
+    pe.sections[0].raw_data_offset == 1535 and
     pe.sections[0].raw_data_size == 47104 and
     pe.sections[0].virtual_address == 4096 and
     pe.sections[0].virtual_size == 46888 and

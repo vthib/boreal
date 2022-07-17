@@ -1700,9 +1700,8 @@ fn test_at() {
     );
 }
 
-// FIXME: implement entrypoint
-#[ignore]
 #[test]
+#[cfg(feature = "object")]
 fn test_in() {
     check(
         "rule test {
@@ -2977,7 +2976,37 @@ fn test_re() {
     );
 }
 
-// FIXME: add test_entrypoint
+#[test]
+#[cfg(feature = "object")]
+fn test_entrypoint() {
+    use super::util::{ELF32_FILE, ELF64_FILE};
+
+    check(
+        "rule test {
+        strings: $a = { 6a 2a 58 c3 }
+        condition: $a at entrypoint }",
+        PE32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { b8 01 00 00 00 bb 2a }
+        condition: $a at entrypoint }",
+        ELF32_FILE,
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { b8 01 00 00 00 bb 2a }
+        condition: $a at entrypoint }",
+        ELF64_FILE,
+        true,
+    );
+
+    check("rule test { condition: entrypoint >= 0 }", b"", false);
+}
 
 #[test]
 fn test_filesize() {

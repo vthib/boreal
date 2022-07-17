@@ -12,7 +12,8 @@ mod hash;
 pub use hash::Hash;
 
 #[cfg(feature = "object")]
-mod elf;
+// pub to allow use of the entry_point for the entrypoint expression.
+pub(crate) mod elf;
 #[cfg(feature = "object")]
 pub use elf::Elf;
 #[cfg(feature = "object")]

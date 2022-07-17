@@ -861,4 +861,26 @@ fn test_eval_filesize() {
     );
 }
 
+#[test]
+#[cfg(feature = "object")]
+fn test_eval_entrypoint() {
+    use crate::utils::check_file;
+
+    // Test the specific behavior of the entrypoing expression compared to the modules entrypoint
+    // values (which is tested in the tests for each module
+
+    // For this file, the section raw data containing the entry point as been modified to test
+    // the "realign" from the section alignment.
+    check_file(
+        r#"
+import "pe"
+rule b {
+    condition:
+        pe.entry_point == 3086 and entrypoint == 3597
+}"#,
+        "assets/pe/ord_and_delay.exe",
+        true,
+    );
+}
+
 // TODO: test count, offset, length with selected for variable

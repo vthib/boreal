@@ -18,6 +18,10 @@ use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 mod module;
+
+#[cfg(feature = "object")]
+mod entrypoint;
+
 mod read_integer;
 use read_integer::evaluate_read_integer;
 mod variable;
@@ -194,7 +198,12 @@ impl Evaluator<'_, '_, '_> {
     fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
         match expr {
             Expression::Filesize => Some(Value::Integer(self.mem.len() as i64)),
-            Expression::Entrypoint => todo!(),
+
+            #[cfg(feature = "object")]
+            Expression::Entrypoint => entrypoint::get_pe_or_elf_entry_point(self.mem),
+            #[cfg(not(feature = "object"))]
+            Expression::Entrypoint => None,
+
             Expression::ReadInteger { addr, ty } => evaluate_read_integer(self, addr, *ty),
 
             Expression::CountInRange {

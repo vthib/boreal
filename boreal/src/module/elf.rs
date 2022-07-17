@@ -288,7 +288,10 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     [
         ("type", Some(ty)),
         ("machine", Some(machine)),
-        ("entry_point", entry_point(file, mem)),
+        (
+            "entry_point",
+            entry_point(file, mem).and_then(|v| v.try_into().ok()),
+        ),
         ("number_of_sections", nb_sections),
         ("sh_offset", sh_offset),
         ("sh_entry_size", sections_entsize),
@@ -309,7 +312,7 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     .collect()
 }
 
-fn entry_point<Elf: FileHeader>(file: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
+pub(crate) fn entry_point<Elf: FileHeader>(file: &ElfFile<Elf>, mem: &[u8]) -> Option<u64> {
     let e = file.endian();
     let entrypoint = file.entry();
 
@@ -320,8 +323,7 @@ fn entry_point<Elf: FileHeader>(file: &ElfFile<Elf>, mem: &[u8]) -> Option<Value
             let addr = segment.p_vaddr(e).into();
             let size = segment.p_memsz(e).into();
             if (addr..addr.saturating_add(size)).contains(&entrypoint) {
-                let entrypoint = (entrypoint - addr).saturating_add(segment.p_offset(e).into());
-                entrypoint.try_into().ok()
+                Some((entrypoint - addr).saturating_add(segment.p_offset(e).into()))
             } else {
                 None
             }
@@ -339,9 +341,7 @@ fn entry_point<Elf: FileHeader>(file: &ElfFile<Elf>, mem: &[u8]) -> Option<Value
                 let addr = section.sh_addr(e).into();
                 let size = section.sh_size(e).into();
                 if (addr..addr.saturating_add(size)).contains(&entrypoint) {
-                    let entrypoint =
-                        (entrypoint - addr).saturating_add(section.sh_offset(e).into());
-                    entrypoint.try_into().ok()
+                    Some((entrypoint - addr).saturating_add(section.sh_offset(e).into()))
                 } else {
                     None
                 }
