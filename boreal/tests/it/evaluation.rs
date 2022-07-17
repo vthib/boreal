@@ -450,23 +450,30 @@ rule a {
     checker.check(b"a_b aa999b y zzz zzz", true);
     checker.check(b"a_b aa999b yy zz zzz", true);
 
-    // This alternation will always resolve to the shortest one.
-    // FIXME: fix this, test more complex alternations / masked bytes
-    if false {
-        let checker = Checker::new(
-            r#"
-    rule a {
-        strings:
-            $a = { AB ( ?F | FF [1-3] CD ) }
-            $b = { AB ( FF [1-3] CD | ?F ) }
-        condition:
-            !a == 2 and !b == 2
-    }"#,
+    // The alternatives are resolved in order, first one to match succeeds.
+    #[track_caller]
+    fn test_lengths(input: &[u8], a_len: usize, b_len: usize) {
+        check(
+            &format!(
+                r#"
+        rule a {{
+            strings:
+                $a = {{ AB ( FF | ?F [1-3] CD ) }}
+                $b = {{ AB ( ?F [1-3] CD | FF ) }}
+            condition:
+                !a == {} and !b == {}
+        }}"#,
+                a_len, b_len,
+            ),
+            input,
+            true,
         );
-        checker.check(b"\xab\xff", true);
-        checker.check(b"zz \xab\xff_\xcd", true);
-        checker.check(b"zz \xab\xffpad\xcd", true);
     }
+
+    test_lengths(b"\xab\xff", 2, 2);
+    test_lengths(b"zz \xab\xff_\xcd", 2, 4);
+    test_lengths(b"zz \xab\xffpad\xcd", 2, 6);
+    test_lengths(b"zz \xab\x5fpa\xcd\xcd", 5, 5);
 }
 
 #[test]
