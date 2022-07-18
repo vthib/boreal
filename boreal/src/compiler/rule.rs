@@ -32,6 +32,8 @@ pub struct Rule {
 
     /// Condition of the rule.
     pub(crate) condition: Expression,
+
+    pub is_private: bool,
 }
 
 /// Object used to compile a rule.
@@ -212,6 +214,7 @@ pub(super) fn compile_rule(
             .map(compile_variable)
             .collect::<Result<Vec<_>, _>>()?,
         condition: condition.expr,
+        is_private: rule.is_private,
     })
 
     // TODO: check for unused variables

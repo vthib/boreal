@@ -883,4 +883,27 @@ rule b {
     );
 }
 
+#[test]
+fn test_private_rule() {
+    let checker = Checker::new(
+        r#"
+private rule a { strings: $a0 = "a0" condition: $a0 }
+rule b { condition: a }
+rule c { strings: $a1 = "a1" condition: $a1 }
+private rule d { condition: c }
+private rule e { condition: true }
+private rule f { condition: false }
+"#,
+    );
+
+    // e matches, but is private
+    checker.check_rule_matches(b"", &[]);
+    // a and b matches, a is private
+    checker.check_rule_matches(b"a0", &["default:b"]);
+    // c and d matches, d is private
+    checker.check_rule_matches(b"a1", &["default:c"]);
+    // a, b, c, d matches
+    checker.check_rule_matches(b"a1a0", &["default:b", "default:c"]);
+}
+
 // TODO: test count, offset, length with selected for variable

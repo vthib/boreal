@@ -39,7 +39,7 @@ impl Scanner {
             let res = {
                 let (res, var_evals) =
                     evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
-                if res {
+                if res && !rule.is_private {
                     matched_rules.push(MatchedRule {
                         namespace: rule.namespace.as_deref(),
                         name: &rule.name,
