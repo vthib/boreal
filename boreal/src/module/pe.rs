@@ -20,6 +20,7 @@ mod debug;
 mod ord;
 mod version_info;
 
+const MAX_PE_SECTIONS: usize = 96;
 const MAX_PE_IMPORTS: usize = 16384;
 const MAX_PE_EXPORTS: usize = 8192;
 const MAX_EXPORT_NAME_LENGTH: usize = 512;
@@ -1532,6 +1533,7 @@ fn sections_to_value(
     Value::Array(
         sections
             .iter()
+            .take(MAX_PE_SECTIONS)
             .map(|section| {
                 let mut name = section.raw_name();
                 if let Some(last_non_zero_pos) = name
