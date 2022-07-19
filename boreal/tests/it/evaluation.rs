@@ -906,4 +906,66 @@ private rule f { condition: false }
     checker.check_rule_matches(b"a1a0", &["default:b", "default:c"]);
 }
 
+#[test]
+fn test_private_strings() {
+    // TODO: enable those tests with conformance.
+    // There was a bug in yara-rust for the handling of private strings:
+    // <https://github.com/Hugal31/yara-rust/pull/84>
+    let checker = Checker::new_without_yara(
+        r#"
+// rule with only private strings
+rule a {
+    strings:
+        $a0 = "a0" private
+        $a1 = /a1/ private
+        $a2 = { 61 32 } private // this is "a2"
+    // This is used to force computation of all matches
+    condition: for all of them: (# > 0) or any of them
+}
+// Mixed private & public
+rule b {
+    strings:
+        $b0 = "b0"
+        $b1 = "b1" private
+        $b2 = "b2"
+    condition: for all of them: (# > 0) or any of them
+}
+// Only public
+rule c {
+    strings:
+        $c0 = "c0"
+        $c1 = "c1"
+    condition: for all of them: (# > 0) or any of them
+}
+"#,
+    );
+
+    // Nothing matches
+    checker.check_str_matches(b"", vec![]);
+    // Match on a0, b0 and c0: private strings are not reported,
+    // independently on number of matches
+    checker.check_str_matches(
+        b"c0a0b0c0   c0",
+        vec![
+            ("default:a", vec![]),
+            ("default:b", vec![("b0", 1), ("b2", 0)]),
+            ("default:c", vec![("c0", 3), ("c1", 0)]),
+        ],
+    );
+    // Match on b1 only
+    checker.check_str_matches(b"b1", vec![("default:b", vec![("b0", 0), ("b2", 0)])]);
+    // Match on a0 a1 and a2
+    checker.check_str_matches(b"a0a2a1", vec![("default:a", vec![])]);
+
+    // match on all of them
+    checker.check_str_matches(
+        b"a0a1a2c2c1c0b2b0b1",
+        vec![
+            ("default:a", vec![]),
+            ("default:b", vec![("b0", 1), ("b2", 1)]),
+            ("default:c", vec![("c0", 1), ("c1", 1)]),
+        ],
+    );
+}
+
 // TODO: test count, offset, length with selected for variable

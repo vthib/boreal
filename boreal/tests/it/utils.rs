@@ -141,6 +141,55 @@ impl Checker {
         }
     }
 
+    // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", count), ...])]
+    #[track_caller]
+    pub fn check_str_matches(&self, mem: &[u8], expected_matches: Vec<(&str, Vec<(&str, usize)>)>) {
+        let expected: Vec<_> = expected_matches
+            .into_iter()
+            .map(|(a, b)| (a.to_string(), b))
+            .collect();
+        let res = self.scanner.scan_mem(mem);
+        let res: Vec<_> = res
+            .matched_rules
+            .into_iter()
+            .map(|v| {
+                let rule_name = if let Some(ns) = &v.namespace {
+                    format!("{}:{}", ns, v.name)
+                } else {
+                    format!("default:{}", v.name)
+                };
+                let str_matches: Vec<_> = v
+                    .matches
+                    .into_iter()
+                    .map(|str_match| (str_match.name, str_match.matches.len()))
+                    .collect();
+                (rule_name, str_matches)
+            })
+            .collect();
+        assert_eq!(res, expected, "test failed for boreal");
+
+        if let Some(rules) = &self.yara_rules {
+            let res = rules.scan_mem(mem, 1).unwrap();
+            let res: Vec<_> = res
+                .into_iter()
+                .map(|v| {
+                    let rule_name = format!("{}:{}", v.namespace, v.identifier);
+                    let str_matches: Vec<_> = v
+                        .strings
+                        .into_iter()
+                        .map(|str_match| {
+                            // The identifier from yara starts with '$', not us.
+                            // TODO: should we normalize this?
+                            (&str_match.identifier[1..], str_match.matches.len())
+                        })
+                        .collect();
+                    (rule_name, str_matches)
+                })
+                .collect();
+            assert_eq!(res, expected, "conformity test failed for libyara");
+        }
+    }
+
     #[track_caller]
     pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
         let res = self.scanner.scan_mem(mem);

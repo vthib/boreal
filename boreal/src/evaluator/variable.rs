@@ -203,7 +203,7 @@ impl<'a> VariableEvaluation<'a> {
 
 /// Check the match respects a possible fullword modifier for the variable.
 fn check_fullword(mat: &Match, mem: &[u8], var: &Variable) -> bool {
-    if !var.is_fullword {
+    if !var.is_fullword() {
         return true;
     }
 
@@ -212,7 +212,7 @@ fn check_fullword(mat: &Match, mem: &[u8], var: &Variable) -> bool {
     // A better way would be to know which alternation in the match was found.
     let mut match_is_wide = false;
 
-    if var.is_wide {
+    if var.is_wide() {
         match_is_wide = is_match_wide(mat, mem);
         if match_is_wide {
             if mat.start > 1 && mem[mat.start - 1] == b'\0' && is_ascii_alnum(mem[mat.start - 2]) {
@@ -224,7 +224,7 @@ fn check_fullword(mat: &Match, mem: &[u8], var: &Variable) -> bool {
             }
         }
     }
-    if var.is_ascii && !match_is_wide {
+    if var.is_ascii() && !match_is_wide {
         if mat.start > 0 && is_ascii_alnum(mem[mat.start - 1]) {
             return false;
         }

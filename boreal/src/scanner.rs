@@ -45,6 +45,7 @@ impl Scanner {
                         name: &rule.name,
                         matches: var_evals
                             .into_iter()
+                            .filter(|eval| !eval.var.is_private())
                             .map(|eval| StringMatches {
                                 name: &eval.var.name,
                                 matches: eval

@@ -17,10 +17,25 @@ pub struct Variable {
 
     pub matcher: VariableMatcher,
 
-    // Those three modifiers are used to handle fullword check on matches.
-    pub is_fullword: bool,
-    pub is_wide: bool,
-    pub is_ascii: bool,
+    flags: VariableFlags,
+}
+
+impl Variable {
+    pub fn is_ascii(&self) -> bool {
+        self.flags.contains(VariableFlags::ASCII)
+    }
+
+    pub fn is_fullword(&self) -> bool {
+        self.flags.contains(VariableFlags::FULLWORD)
+    }
+
+    pub fn is_private(&self) -> bool {
+        self.flags.contains(VariableFlags::PRIVATE)
+    }
+
+    pub fn is_wide(&self) -> bool {
+        self.flags.contains(VariableFlags::WIDE)
+    }
 }
 
 #[derive(Debug)]
@@ -36,9 +51,10 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         modifiers,
         span,
     } = decl;
-    let mut is_fullword = modifiers.flags.contains(VariableFlags::FULLWORD);
-    let mut is_wide = modifiers.flags.contains(VariableFlags::WIDE);
-    let is_ascii = !is_wide || modifiers.flags.contains(VariableFlags::ASCII);
+    let mut flags = modifiers.flags;
+    if !flags.contains(VariableFlags::WIDE) {
+        flags.insert(VariableFlags::ASCII);
+    }
 
     // TODO: handle private flag
     //
@@ -57,8 +73,8 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             hex_string_to_regex(hex_string, &mut regex);
 
             // Fullword and wide is not compatible with hex strings
-            is_fullword = false;
-            is_wide = false;
+            flags.remove(VariableFlags::FULLWORD);
+            flags.remove(VariableFlags::WIDE);
 
             let mut matcher = RegexMatcherBuilder::new();
             let matcher = matcher
@@ -79,9 +95,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     Ok(Variable {
         name,
         matcher,
-        is_fullword,
-        is_wide,
-        is_ascii,
+        flags,
     })
 }
 
