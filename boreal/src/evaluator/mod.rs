@@ -531,7 +531,13 @@ impl Evaluator<'_, '_, '_> {
                 set,
                 body,
             } => {
-                let selection = match self.evaluate_for_selection(selection) {
+                let nb_elements = if set.elements.is_empty() {
+                    self.variables.len()
+                } else {
+                    set.elements.len()
+                };
+
+                let selection = match self.evaluate_for_selection(selection, nb_elements) {
                     Some(ForSelectionEvaluation::Evaluator(e)) => e,
                     Some(ForSelectionEvaluation::Value(v)) => return Some(v),
                     None => return Some(Value::Boolean(false)),
@@ -554,7 +560,21 @@ impl Evaluator<'_, '_, '_> {
                 iterator,
                 body,
             } => {
-                let selection = match self.evaluate_for_selection(selection) {
+                if matches!(
+                    selection,
+                    ForSelection::Expr {
+                        as_percent: true,
+                        ..
+                    }
+                ) {
+                    // This is, as it stands, not possible to generate such an expression.
+                    // Add a debug assert just in case
+                    debug_assert!(false);
+                }
+
+                // XXX: giving a dummy value for the nb_elements is ok here, since it's only
+                // used for percent expr, which is not possible in this context.
+                let selection = match self.evaluate_for_selection(selection, 0) {
                     Some(ForSelectionEvaluation::Evaluator(e)) => e,
                     Some(ForSelectionEvaluation::Value(v)) => return Some(v),
                     None => return Some(Value::Boolean(false)),
@@ -564,7 +584,8 @@ impl Evaluator<'_, '_, '_> {
             }
 
             Expression::ForRules { selection, set } => {
-                let mut selection = match self.evaluate_for_selection(selection) {
+                let mut selection = match self.evaluate_for_selection(selection, set.elements.len())
+                {
                     Some(ForSelectionEvaluation::Evaluator(e)) => e,
                     Some(ForSelectionEvaluation::Value(v)) => return Some(v),
                     None => return Some(Value::Boolean(false)),
@@ -598,6 +619,7 @@ impl Evaluator<'_, '_, '_> {
     fn evaluate_for_selection(
         &mut self,
         selection: &ForSelection,
+        nb_elements: usize,
     ) -> Option<ForSelectionEvaluation> {
         use ForSelectionEvaluation as FSEvaluation;
         use ForSelectionEvaluator as FSEvaluator;
@@ -610,7 +632,7 @@ impl Evaluator<'_, '_, '_> {
                 let mut value = self.evaluate_expr(expr)?.unwrap_number()?;
                 #[allow(clippy::cast_precision_loss)]
                 if *as_percent {
-                    let nb_variables = self.variables.len() as f64;
+                    let nb_variables = nb_elements as f64;
 
                     let v = value as f64 / 100. * nb_variables;
                     #[allow(clippy::cast_possible_truncation)]

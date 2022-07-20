@@ -133,6 +133,7 @@ fn test_for_expression_rules() {
     compiler.add_rules("rule b0 { condition: 3 of (a*) }");
     compiler.add_rules("rule b1 { condition: all of (a1, a3) }");
     compiler.add_rules("rule b2 { condition: 4 of (a0, a*) }");
+    compiler.add_rules("rule b3 { condition: 50% of (a1, a2, a3) }");
 
     let checker = compiler.into_checker();
     checker.check_rule_matches(b"", &[]);
@@ -147,9 +148,13 @@ fn test_for_expression_rules() {
             "ns1:a2p",
             "default:b0",
             "default:b2",
+            "default:b3",
         ],
     );
-    checker.check_rule_matches(b"a1a3", &["default:a1", "default:a3", "default:b1"]);
+    checker.check_rule_matches(
+        b"a1a3",
+        &["default:a1", "default:a3", "default:b1", "default:b3"],
+    );
 }
 
 // Test the identifier is resolved to the import first, then the rule names

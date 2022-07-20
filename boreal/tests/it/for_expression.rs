@@ -459,6 +459,23 @@ fn test_for_expression_percent() {
     checker.check(b"a0a1a2b0b1", true);
     checker.check(b"a0a1a2b0b1c0", true);
 
+    let checker = Checker::new(&build_rule("50% of ($a*)"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
+    checker.check(b"a0b0b1c0", false);
+    checker.check(b"a0a1", true);
+    checker.check(b"a0a2", true);
+    checker.check(b"a1a2", true);
+
     // Gets rounded up to 4 of them
     let checker = Checker::new(&build_rule("51% of them"));
     checker.check(b"", false);
@@ -472,6 +489,23 @@ fn test_for_expression_percent() {
     checker.check(b"a0b1c0", false);
     checker.check(b"a0b0b1c0", true);
     checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a0a1a2b0b1c0", true);
+
+    let checker = Checker::new(&build_rule("51% of ($a0, $a1, $a2, $c0)"));
+    checker.check(b"", false);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0b0b1c0", false);
+    checker.check(b"a0a1b0b1c0", true);
+    checker.check(b"a0a1b0b1", false);
+    checker.check(b"a0a1a2b0b1", true);
+    checker.check(b"a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", true);
 
     let checker = Checker::new(&build_rule("100% of them"));
