@@ -584,12 +584,19 @@ impl Evaluator<'_, '_, '_> {
             }
 
             Expression::ForRules { selection, set } => {
-                let mut selection = match self.evaluate_for_selection(selection, set.elements.len())
-                {
+                let nb_elements = set.elements.len() + set.already_matched;
+
+                let mut selection = match self.evaluate_for_selection(selection, nb_elements) {
                     Some(ForSelectionEvaluation::Evaluator(e)) => e,
                     Some(ForSelectionEvaluation::Value(v)) => return Some(v),
                     None => return Some(Value::Boolean(false)),
                 };
+
+                for _ in 0..set.already_matched {
+                    if let Some(result) = selection.add_result_and_check(true) {
+                        return Some(Value::Boolean(result));
+                    }
+                }
 
                 for index in &set.elements {
                     let v = self.previous_rules_results.get(*index)?;

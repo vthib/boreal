@@ -90,6 +90,12 @@ pub struct RuleSet {
     ///
     /// The indexes are relative to the array of rule result.
     pub elements: Vec<usize>,
+
+    /// Number of already matched elements.
+    ///
+    /// This is set for global rules that are guaranteed to be matched, and have no indexes to
+    /// add in the elements vec.
+    pub already_matched: usize,
 }
 
 #[derive(Debug)]
@@ -983,18 +989,21 @@ fn compile_rule_set(
 ) -> Result<RuleSet, CompilationError> {
     // selected indexes.
     let mut indexes = Vec::new();
+    let mut already_matched = 0;
 
     for elem in set.elements {
         if elem.1 {
             let mut found = false;
 
             for (name, index) in &compiler.namespace.rules_indexes {
-                // FIXME: should we ignore global rules? what if the condition is on a number of
-                // matched rules in the rule set?
-                if let Some(index) = index {
-                    if name.starts_with(&elem.0) {
-                        found = true;
-                        indexes.push(*index);
+                if name.starts_with(&elem.0) {
+                    found = true;
+                    match index {
+                        // Normal rule, add it to the list of indexes to check
+                        Some(index) => indexes.push(*index),
+                        // Global rule: it is guaranteed to be matched, so add it to the already
+                        // matched counter
+                        None => already_matched += 1,
                     }
                 }
             }
@@ -1010,13 +1019,16 @@ fn compile_rule_set(
             // TODO: get better span
             match compiler.namespace.rules_indexes.get(&elem.0) {
                 Some(Some(index)) => indexes.push(*index),
-                // FIXME: what to do with global rules
-                _ => return Err(CompilationError::UnknownIdentifier { name: elem.0, span }),
+                Some(None) => already_matched += 1,
+                None => return Err(CompilationError::UnknownIdentifier { name: elem.0, span }),
             }
         }
     }
 
-    Ok(RuleSet { elements: indexes })
+    Ok(RuleSet {
+        elements: indexes,
+        already_matched,
+    })
 }
 
 /// Iterator for a 'for' expression over an identifier.

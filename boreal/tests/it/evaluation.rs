@@ -1011,4 +1011,103 @@ rule bar {
     checker.check_rule_matches(b"g1 g2", &["default:g1", "default:bar"]);
 }
 
+#[test]
+fn test_global_rules_in_rulesets() {
+    let checker = Checker::new(
+        r#"
+global private rule g1 {
+    strings:
+        $ = "g1"
+    condition: all of them
+}
+
+private global rule g2 {
+    strings:
+        $ = "g2"
+    condition: all of them
+}
+
+rule g3 {
+    strings:
+        $ = "g3"
+    condition: all of them
+}
+
+rule g4 {
+    strings:
+        $ = "g4"
+    condition: all of them
+}
+
+rule a {
+    condition: any of (g1, g2, g3)
+}
+
+rule b {
+    condition: all of (g1, g2, g3, g4)
+}
+
+rule c {
+    condition: 60% of (g*)
+}
+
+rule d {
+    condition: 20% of (g*)
+}
+
+rule e {
+    condition: 3 of (g*)
+}
+
+
+// TODO: re-enable this when the none bug in libyara is fixed
+// rule f {
+//     condition: none of (g*)
+// }
+"#,
+    );
+
+    checker.check_rule_matches(b"", &[]);
+    // Should make rule a and d match
+    checker.check_rule_matches(b"g1 g2", &["default:a", "default:d"]);
+
+    // Should make rule c and e match
+    checker.check_rule_matches(
+        b"g1 g2 g3",
+        &[
+            "default:g3",
+            "default:a",
+            "default:c",
+            "default:d",
+            "default:e",
+        ],
+    );
+    checker.check_rule_matches(
+        b"g1 g2 g4",
+        &[
+            "default:g4",
+            "default:a",
+            "default:c",
+            "default:d",
+            "default:e",
+        ],
+    );
+    checker.check_rule_matches(b"g1 g3 g4", &[]);
+    checker.check_rule_matches(b"g2 g3 g4", &[]);
+
+    // Should match rule b as well
+    checker.check_rule_matches(
+        b"g1 g2 g3 g4",
+        &[
+            "default:g3",
+            "default:g4",
+            "default:a",
+            "default:b",
+            "default:c",
+            "default:d",
+            "default:e",
+        ],
+    );
+}
+
 // TODO: test count, offset, length with selected for variable
