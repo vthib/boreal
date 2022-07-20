@@ -12,6 +12,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Scanner {
     rules: Vec<Rule>,
+    global_rules: Vec<Rule>,
 
     // List of modules used during scanning.
     modules: Vec<Box<dyn Module>>,
@@ -19,8 +20,16 @@ pub struct Scanner {
 
 impl Scanner {
     #[must_use]
-    pub(crate) fn new(rules: Vec<Rule>, modules: Vec<Box<dyn Module>>) -> Self {
-        Self { rules, modules }
+    pub(crate) fn new(
+        rules: Vec<Rule>,
+        global_rules: Vec<Rule>,
+        modules: Vec<Box<dyn Module>>,
+    ) -> Self {
+        Self {
+            rules,
+            global_rules,
+            modules,
+        }
     }
 
     /// Scan a byte slice.
@@ -35,30 +44,29 @@ impl Scanner {
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
+        // First, check global rules
+        for rule in &self.global_rules {
+            let (res, var_evals) =
+                evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
+            if !res {
+                matched_rules.clear();
+                return ScanResult {
+                    matched_rules,
+                    module_values: scan_data.module_values,
+                };
+            }
+            if !rule.is_private {
+                matched_rules.push(build_matched_rule(rule, var_evals, mem));
+            }
+        }
+
+        // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
             let res = {
                 let (res, var_evals) =
                     evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
                 if res && !rule.is_private {
-                    matched_rules.push(MatchedRule {
-                        namespace: rule.namespace.as_deref(),
-                        name: &rule.name,
-                        matches: var_evals
-                            .into_iter()
-                            .filter(|eval| !eval.var.is_private())
-                            .map(|eval| StringMatches {
-                                name: &eval.var.name,
-                                matches: eval
-                                    .matches
-                                    .iter()
-                                    .map(|mat| StringMatch {
-                                        offset: mat.start,
-                                        value: mem[mat.start..mat.end].to_vec(),
-                                    })
-                                    .collect(),
-                            })
-                            .collect(),
-                    });
+                    matched_rules.push(build_matched_rule(rule, var_evals, mem));
                 }
                 res
             };
@@ -69,6 +77,32 @@ impl Scanner {
             matched_rules,
             module_values: scan_data.module_values,
         }
+    }
+}
+
+fn build_matched_rule<'a>(
+    rule: &'a Rule,
+    var_evals: Vec<evaluator::VariableEvaluation<'a>>,
+    mem: &[u8],
+) -> MatchedRule<'a> {
+    MatchedRule {
+        namespace: rule.namespace.as_deref(),
+        name: &rule.name,
+        matches: var_evals
+            .into_iter()
+            .filter(|eval| !eval.var.is_private())
+            .map(|eval| StringMatches {
+                name: &eval.var.name,
+                matches: eval
+                    .matches
+                    .iter()
+                    .map(|mat| StringMatch {
+                        offset: mat.start,
+                        value: mem[mat.start..mat.end].to_vec(),
+                    })
+                    .collect(),
+            })
+            .collect(),
     }
 }
 

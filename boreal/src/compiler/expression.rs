@@ -988,10 +988,14 @@ fn compile_rule_set(
         if elem.1 {
             let mut found = false;
 
-            for (name, index) in &compiler.namespace.rules_names {
-                if name.starts_with(&elem.0) {
-                    found = true;
-                    indexes.push(*index);
+            for (name, index) in &compiler.namespace.rules_indexes {
+                // FIXME: should we ignore global rules? what if the condition is on a number of
+                // matched rules in the rule set?
+                if let Some(index) = index {
+                    if name.starts_with(&elem.0) {
+                        found = true;
+                        indexes.push(*index);
+                    }
                 }
             }
             if !found {
@@ -1004,9 +1008,10 @@ fn compile_rule_set(
             compiler.rule_wildcard_uses.push(elem.0);
         } else {
             // TODO: get better span
-            match compiler.namespace.rules_names.get(&elem.0) {
-                Some(index) => indexes.push(*index),
-                None => return Err(CompilationError::UnknownIdentifier { name: elem.0, span }),
+            match compiler.namespace.rules_indexes.get(&elem.0) {
+                Some(Some(index)) => indexes.push(*index),
+                // FIXME: what to do with global rules
+                _ => return Err(CompilationError::UnknownIdentifier { name: elem.0, span }),
             }
         }
     }
@@ -1149,9 +1154,15 @@ fn compile_identifier(
                 span: identifier_span.clone(),
             })
     // Finally, try to resolve to an existing rule in the namespace.
-    } else if let Some(index) = compiler.namespace.rules_names.get(&identifier.name) {
+    } else if let Some(index) = compiler.namespace.rules_indexes.get(&identifier.name) {
         if identifier.operations.is_empty() {
-            Ok((Expression::Rule(*index), Type::Boolean))
+            let expr = match index {
+                Some(index) => Expression::Rule(*index),
+                // The referenced rule is global. Since this rule can only be evaluated if all
+                // global rules pass, then this can be just replaced by true.
+                None => Expression::Boolean(true),
+            };
+            Ok((expr, Type::Boolean))
         } else {
             Err(CompilationError::InvalidIdentifierUse {
                 span: identifier_span.clone(),
@@ -1180,7 +1191,7 @@ fn compile_identifier_as_iterator(
     // Finally, try to resolve to an existing rule in the namespace.
     } else if compiler
         .namespace
-        .rules_names
+        .rules_indexes
         .get(&identifier.name)
         .is_some()
     {

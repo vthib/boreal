@@ -968,4 +968,47 @@ rule c {
     );
 }
 
+#[test]
+fn test_global_rules() {
+    let checker = Checker::new(
+        r#"
+global rule g1 {
+    strings:
+        $ = "g1"
+    condition: all of them
+}
+
+private global rule g2 {
+    strings:
+        $ = "g2"
+    condition: all of them
+}
+
+rule foo {
+    strings:
+        $ = "foo"
+    condition: all of them
+}
+
+rule bar {
+    condition: g1 or g2
+}
+"#,
+    );
+
+    // Nothing matches
+    checker.check_rule_matches(b"", &[]);
+
+    // Matching foo does not work without matching globals
+    checker.check_rule_matches(b"foo", &[]);
+
+    // Matching only one of the global rules does not work
+    checker.check_rule_matches(b"g1 foo", &[]);
+    checker.check_rule_matches(b"g2 foo", &[]);
+
+    // Matching both globals work
+    checker.check_rule_matches(b"g1 foo g2", &["default:g1", "default:foo", "default:bar"]);
+    checker.check_rule_matches(b"g1 g2", &["default:g1", "default:bar"]);
+}
+
 // TODO: test count, offset, length with selected for variable

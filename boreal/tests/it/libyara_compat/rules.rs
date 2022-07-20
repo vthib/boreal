@@ -3130,7 +3130,32 @@ fn test_matches_operator() {
     );
 }
 
-// FIXME: add test_global_rules
+#[test]
+fn test_global_rules() {
+    check(
+        "global private rule global_rule {
+        condition:
+          true
+      }
+      rule test {
+        condition: true
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "global private rule global_rule {
+        condition:
+          false
+      }
+      rule test {
+        condition: true
+      }",
+        b"",
+        false,
+    );
+}
 
 #[test]
 fn test_modules() {

@@ -28,6 +28,9 @@ pub struct Compiler {
     /// List of compiled rules.
     rules: Vec<Rule>,
 
+    /// List of compiled, global rules.
+    global_rules: Vec<Rule>,
+
     /// Default namespace, see [`Namespace`]
     default_namespace: Namespace,
 
@@ -202,16 +205,24 @@ impl Compiler {
                     }
 
                     let rule_name = rule.name.clone();
+                    let is_global = rule.is_global;
                     let rule = compile_rule(*rule, namespace)?;
 
                     // Check then insert, to avoid a double clone on the rule name. Maybe
                     // someday we'll get the raw entry API.
-                    if namespace.rules_names.contains_key(&rule_name) {
+                    if namespace.rules_indexes.contains_key(&rule_name) {
                         return Err(CompilationError::DuplicatedRuleName(rule_name));
                     }
-                    let _r = namespace.rules_names.insert(rule_name, self.rules.len());
 
-                    self.rules.push(rule);
+                    if is_global {
+                        let _r = namespace.rules_indexes.insert(rule_name, None);
+                        self.global_rules.push(rule);
+                    } else {
+                        let _r = namespace
+                            .rules_indexes
+                            .insert(rule_name, Some(self.rules.len()));
+                        self.rules.push(rule);
+                    }
                 }
             }
         }
@@ -221,7 +232,7 @@ impl Compiler {
 
     #[must_use]
     pub fn into_scanner(self) -> Scanner {
-        Scanner::new(self.rules, self.imported_modules)
+        Scanner::new(self.rules, self.global_rules, self.imported_modules)
     }
 }
 
@@ -237,7 +248,9 @@ struct Namespace {
     name: Option<String>,
 
     /// Map of a rule name to its index in the `rules` vector in [`Compiler`].
-    rules_names: HashMap<String, usize>,
+    ///
+    /// If the value is None, this means the rule is global.
+    rules_indexes: HashMap<String, Option<usize>>,
 
     /// Modules imported in the namespace.
     ///

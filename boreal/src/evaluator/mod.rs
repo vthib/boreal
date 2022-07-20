@@ -25,7 +25,7 @@ mod entrypoint;
 mod read_integer;
 use read_integer::evaluate_read_integer;
 mod variable;
-use variable::VariableEvaluation;
+pub(crate) use variable::VariableEvaluation;
 
 #[derive(Clone, Debug)]
 enum Value {
