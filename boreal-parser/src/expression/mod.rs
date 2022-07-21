@@ -191,8 +191,11 @@ pub enum ExpressionKind {
         can_be_equal: bool,
     },
 
-    /// Equality test
+    /// Equal
     Eq(Box<Expression>, Box<Expression>),
+
+    /// Not equal
+    NotEq(Box<Expression>, Box<Expression>),
 
     /// Does a string contains another string
     Contains {

@@ -164,13 +164,7 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
         input = i2;
         let expr = match op {
             "==" => ExpressionKind::Eq(Box::new(res), Box::new(right_elem)),
-            "!=" => {
-                // TODO: improve this generation
-                ExpressionKind::Not(Box::new(Expression {
-                    expr: ExpressionKind::Eq(Box::new(res), Box::new(right_elem)),
-                    span: input.get_span_from(start),
-                }))
-            }
+            "!=" => ExpressionKind::NotEq(Box::new(res), Box::new(right_elem)),
             "contains" | "icontains" => ExpressionKind::Contains {
                 haystack: Box::new(res),
                 needle: Box::new(right_elem),
@@ -500,12 +494,7 @@ mod tests {
         }
 
         test_op("==", ExpressionKind::Eq);
-        test_op("!=", |a, b| {
-            ExpressionKind::Not(Box::new(Expression {
-                expr: ExpressionKind::Eq(a, b),
-                span: 0..10,
-            }))
-        });
+        test_op("!=", ExpressionKind::NotEq);
         test_op("contains", |a, b| ExpressionKind::Contains {
             haystack: a,
             needle: b,
@@ -607,12 +596,7 @@ mod tests {
         test_precedence("<=", "==", build_cmp(true, true), ExpressionKind::Eq);
         test_precedence(">", "==", build_cmp(false, false), ExpressionKind::Eq);
         test_precedence(">=", "==", build_cmp(false, true), ExpressionKind::Eq);
-        test_precedence("<", "!=", build_cmp(true, false), |a, b| {
-            ExpressionKind::Not(Box::new(Expression {
-                expr: ExpressionKind::Eq(a, b),
-                span: 0..10,
-            }))
-        });
+        test_precedence("<", "!=", build_cmp(true, false), ExpressionKind::NotEq);
         test_precedence("<", "contains", build_cmp(true, false), |a, b| {
             ExpressionKind::Contains {
                 haystack: a,
@@ -701,17 +685,9 @@ mod tests {
         test_precedence("==", "and", ExpressionKind::Eq, |a, b| {
             ExpressionKind::And(vec![*a, *b])
         });
-        test_precedence(
-            "!=",
-            "and",
-            |a, b| {
-                ExpressionKind::Not(Box::new(Expression {
-                    expr: ExpressionKind::Eq(a, b),
-                    span: 6..12,
-                }))
-            },
-            |a, b| ExpressionKind::And(vec![*a, *b]),
-        );
+        test_precedence("!=", "and", ExpressionKind::NotEq, |a, b| {
+            ExpressionKind::And(vec![*a, *b])
+        });
     }
 
     #[test]
@@ -877,19 +853,16 @@ mod tests {
             "1!=2",
             "",
             Expression {
-                expr: ExpressionKind::Not(Box::new(Expression {
-                    expr: ExpressionKind::Eq(
-                        Box::new(Expression {
-                            expr: ExpressionKind::Integer(1),
-                            span: 0..1,
-                        }),
-                        Box::new(Expression {
-                            expr: ExpressionKind::Integer(2),
-                            span: 3..4,
-                        }),
-                    ),
-                    span: 0..4,
-                })),
+                expr: ExpressionKind::NotEq(
+                    Box::new(Expression {
+                        expr: ExpressionKind::Integer(1),
+                        span: 0..1,
+                    }),
+                    Box::new(Expression {
+                        expr: ExpressionKind::Integer(2),
+                        span: 3..4,
+                    }),
+                ),
                 span: 0..4,
             },
         );

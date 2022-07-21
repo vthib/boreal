@@ -400,22 +400,18 @@ impl Evaluator<'_, '_, '_> {
                 };
                 Some(Value::Boolean(res))
             }
+
             Expression::Eq(left, right) => {
                 let left = self.evaluate_expr(left)?;
                 let right = self.evaluate_expr(right)?;
-                let res = match (left, right) {
-                    (Value::Integer(n), Value::Integer(m)) => n == m,
-                    (Value::Float(a), Value::Float(b)) => (a - b).abs() < f64::EPSILON,
-                    #[allow(clippy::cast_precision_loss)]
-                    (Value::Integer(n), Value::Float(a)) | (Value::Float(a), Value::Integer(n)) => {
-                        (a - (n as f64)).abs() < f64::EPSILON
-                    }
-                    (Value::Bytes(a), Value::Bytes(b)) => a == b,
-                    (Value::Boolean(a), Value::Boolean(b)) => a == b,
-                    _ => return None,
-                };
-                Some(Value::Boolean(res))
+                eval_eq_values(left, right).map(Value::Boolean)
             }
+            Expression::NotEq(left, right) => {
+                let left = self.evaluate_expr(left)?;
+                let right = self.evaluate_expr(right)?;
+                eval_eq_values(left, right).map(|v| Value::Boolean(!v))
+            }
+
             Expression::Contains {
                 haystack,
                 needle,
@@ -757,6 +753,20 @@ impl Evaluator<'_, '_, '_> {
                 Some(Value::Boolean(selection.end()))
             }
         }
+    }
+}
+
+fn eval_eq_values(left: Value, right: Value) -> Option<bool> {
+    match (left, right) {
+        (Value::Integer(n), Value::Integer(m)) => Some(n == m),
+        (Value::Float(a), Value::Float(b)) => Some((a - b).abs() < f64::EPSILON),
+        #[allow(clippy::cast_precision_loss)]
+        (Value::Integer(n), Value::Float(a)) | (Value::Float(a), Value::Integer(n)) => {
+            Some((a - (n as f64)).abs() < f64::EPSILON)
+        }
+        (Value::Bytes(a), Value::Bytes(b)) => Some(a == b),
+        (Value::Boolean(a), Value::Boolean(b)) => Some(a == b),
+        _ => None,
     }
 }
 

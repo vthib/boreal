@@ -212,8 +212,11 @@ pub enum Expression {
         can_be_equal: bool,
     },
 
-    /// Equality test
+    /// Equal
     Eq(Box<Expression>, Box<Expression>),
+
+    /// Not Equal
+    NotEq(Box<Expression>, Box<Expression>),
 
     /// Does a string contains another string
     Contains {
@@ -580,6 +583,13 @@ pub(super) fn compile_expression(
 
         parser::ExpressionKind::Eq(left, right) => {
             let mut res = compile_primary_op(compiler, *left, *right, span, Expression::Eq, true)?;
+            res.ty = Type::Boolean;
+            Ok(res)
+        }
+
+        parser::ExpressionKind::NotEq(left, right) => {
+            let mut res =
+                compile_primary_op(compiler, *left, *right, span, Expression::NotEq, true)?;
             res.ty = Type::Boolean;
             Ok(res)
         }
