@@ -591,11 +591,11 @@ fn test_for_expression_overlap() {
 fn test_for_expression_err() {
     check_err(
         &build_rule("all of ($d)"),
-        "mem:12:9: error: unknown variable $d",
+        "mem:12:17: error: unknown variable $d",
     );
     check_err(
         &build_rule("all of ($d*)"),
-        "mem:12:9: error: unknown variable $d*",
+        "mem:12:17: error: unknown variable $d*",
     );
 
     check_err(

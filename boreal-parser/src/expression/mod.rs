@@ -398,9 +398,19 @@ pub struct VariableSet {
     /// Names of the variables in the set.
     ///
     /// If empty, the set is considered as containing *all* variables.
-    /// The associated boolean indicates if the name has a trailing
-    /// wildcard.
-    pub elements: Vec<(String, bool)>,
+    pub elements: Vec<VariableSetElement>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VariableSetElement {
+    /// Name of the element.
+    pub name: String,
+
+    /// Is the name a wildcard, i.e. the element is `name*`.
+    pub is_wildcard: bool,
+
+    /// Span for the element.
+    pub span: Range<usize>,
 }
 
 /// Set of multiple rules.

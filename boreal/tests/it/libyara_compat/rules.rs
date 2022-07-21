@@ -1940,7 +1940,7 @@ fn test_of() {
 
     check_err(
         "rule test { condition: all of ($a*) }",
-        "mem:1:24: error: unknown variable $a*",
+        "mem:1:32: error: unknown variable $a*",
     );
 
     check_err(

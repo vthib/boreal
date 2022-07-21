@@ -965,26 +965,24 @@ fn compile_variable_set(
     }
 
     for elem in set.elements {
-        if elem.1 {
+        if elem.is_wildcard {
             let mut found = false;
 
             for (index, var) in compiler.variables.iter_mut().enumerate() {
-                if var.name.starts_with(&elem.0) {
+                if var.name.starts_with(&elem.name) {
                     found = true;
                     var.used = true;
                     indexes.push(index);
                 }
             }
             if !found {
-                // TODO: get better span
                 return Err(CompilationError::UnknownVariable {
-                    variable_name: format!("{}*", elem.0),
-                    span,
+                    variable_name: format!("{}*", elem.name),
+                    span: elem.span,
                 });
             }
         } else {
-            // TODO: get better span
-            let index = compiler.find_named_variable(&elem.0, &span)?;
+            let index = compiler.find_named_variable(&elem.name, &elem.span)?;
             indexes.push(index);
         }
     }

@@ -23,7 +23,7 @@ use crate::{
 use super::{
     boolean_expression::boolean_expression, common::range, identifier::identifier,
     primary_expression::primary_expression, Expression, ExpressionKind, ForIterator, ForSelection,
-    RuleSet, VariableSet,
+    RuleSet, VariableSet, VariableSetElement,
 };
 
 // There is a very ugly hack in this file.
@@ -236,8 +236,22 @@ fn string_set(input: Input) -> ParseResult<VariableSet> {
 /// Parse an enumeration of variables.
 ///
 /// Equivalent to the `string_enumeration` pattern in grammar.y in libyara.
-fn string_enumeration(input: Input) -> ParseResult<Vec<(String, bool)>> {
-    separated_list1(rtrim(char(',')), string_identifier_with_wildcard)(input)
+fn string_enumeration(input: Input) -> ParseResult<Vec<VariableSetElement>> {
+    separated_list1(rtrim(char(',')), string_enum_element)(input)
+}
+
+fn string_enum_element(input: Input) -> ParseResult<VariableSetElement> {
+    let start = input;
+    let (input, (name, is_wildcard)) = string_identifier_with_wildcard(input)?;
+
+    Ok((
+        input,
+        VariableSetElement {
+            name,
+            is_wildcard,
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 /// Parse a list of identifiers to bind for a for expression.
@@ -367,27 +381,63 @@ mod tests {
 
     #[test]
     fn test_string_enumeration() {
-        parse(string_enumeration, "$a", "", vec![("a".to_owned(), false)]);
+        parse(
+            string_enumeration,
+            "$a",
+            "",
+            vec![VariableSetElement {
+                name: "a".to_owned(),
+                is_wildcard: false,
+                span: 0..2,
+            }],
+        );
         parse(
             string_enumeration,
             "$a, $b* $c",
             "$c",
-            vec![("a".to_owned(), false), ("b".to_owned(), true)],
+            vec![
+                VariableSetElement {
+                    name: "a".to_owned(),
+                    is_wildcard: false,
+                    span: 0..2,
+                },
+                VariableSetElement {
+                    name: "b".to_owned(),
+                    is_wildcard: true,
+                    span: 4..7,
+                },
+            ],
         );
         parse(
             string_enumeration,
             "$a*,b",
             ",b",
-            vec![("a".to_owned(), true)],
+            vec![VariableSetElement {
+                name: "a".to_owned(),
+                is_wildcard: true,
+                span: 0..3,
+            }],
         );
         parse(
             string_enumeration,
             "$foo*,$ , $bar)",
             ")",
             vec![
-                ("foo".to_owned(), true),
-                ("".to_owned(), false),
-                ("bar".to_owned(), false),
+                VariableSetElement {
+                    name: "foo".to_owned(),
+                    is_wildcard: true,
+                    span: 0..5,
+                },
+                VariableSetElement {
+                    name: "".to_owned(),
+                    is_wildcard: false,
+                    span: 6..7,
+                },
+                VariableSetElement {
+                    name: "bar".to_owned(),
+                    is_wildcard: false,
+                    span: 10..14,
+                },
             ],
         );
 
@@ -404,9 +454,21 @@ mod tests {
             "d",
             VariableSet {
                 elements: vec![
-                    ("a".to_owned(), true),
-                    ("foo".to_owned(), true),
-                    ("c".to_owned(), false),
+                    VariableSetElement {
+                        name: "a".to_owned(),
+                        is_wildcard: true,
+                        span: 2..5,
+                    },
+                    VariableSetElement {
+                        name: "foo".to_owned(),
+                        is_wildcard: true,
+                        span: 7..12,
+                    },
+                    VariableSetElement {
+                        name: "c".to_owned(),
+                        is_wildcard: false,
+                        span: 15..17,
+                    },
                 ],
             },
         );
@@ -415,7 +477,11 @@ mod tests {
             "($)",
             "",
             VariableSet {
-                elements: vec![("".to_owned(), false)],
+                elements: vec![VariableSetElement {
+                    name: "".to_owned(),
+                    is_wildcard: false,
+                    span: 1..2,
+                }],
             },
         );
 
@@ -475,7 +541,18 @@ mod tests {
                         as_percent: false,
                     },
                     set: VariableSet {
-                        elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
+                        elements: vec![
+                            VariableSetElement {
+                                name: "a".to_owned(),
+                                is_wildcard: false,
+                                span: 6..8,
+                            },
+                            VariableSetElement {
+                                name: "b".to_owned(),
+                                is_wildcard: true,
+                                span: 10..13,
+                            },
+                        ],
                     },
                     from: Box::new(Expression {
                         expr: ExpressionKind::Integer(100),
@@ -534,7 +611,11 @@ mod tests {
                         as_percent: true,
                     },
                     set: VariableSet {
-                        elements: vec![("foo".to_owned(), true)],
+                        elements: vec![VariableSetElement {
+                            name: "foo".to_owned(),
+                            is_wildcard: true,
+                            span: 12..17,
+                        }],
                     },
                     body: Some(Box::new(Expression {
                         expr: ExpressionKind::Variable("".to_owned()),
