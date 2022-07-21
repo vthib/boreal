@@ -11,9 +11,6 @@ mod string_expression;
 
 use crate::string::Regex;
 
-// TODO: not quite happy about how operator precedence has been implemented.
-// Maybe implementing Shunting-Yard would be better, to bench and test.
-
 /// Integer read type, see [`ExpressionKind::ReadInteger`].
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ReadIntegerType {

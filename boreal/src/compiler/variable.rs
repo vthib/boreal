@@ -56,8 +56,6 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         flags.insert(VariableFlags::ASCII);
     }
 
-    // TODO: handle private flag
-    //
     let matcher = match value {
         VariableDeclarationValue::Bytes(s) => build_string_matcher(s, &modifiers),
         VariableDeclarationValue::Regex(regex) => {
@@ -482,6 +480,7 @@ impl std::fmt::Display for VariableCompilationError {
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,7 +516,6 @@ mod tests {
             r"\xAB[\x0D\x1D\x2D\x3D\x4D\x5D\x6D\x7D\x8D\x9D\xAD\xBD\xCD\xDD\xED\xFD]\x01",
         );
         test("{ C7 [-] ?? }", r"\xC7.{0,}?.");
-        // TODO: replacing [2-4] by [-] leads to a failed nom parsing? to investigate
         test(
             "{ C7 [3-] 5? 03 [-6] C7 ( FF 15 | E8 ) [4] 6A ( FF D? | E8 [2-4] ??) }",
             r"\xC7.{3,}?[\x50-\x5F]\x03.{0,6}?\xC7((\xFF\x15)|(\xE8)).{4}?\x6A((\xFF[\xD0-\xDF])|(\xE8.{2,4}?.))",

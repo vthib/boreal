@@ -1,4 +1,5 @@
 //! Compilation of a parsed expression into an optimized one.
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -84,32 +85,36 @@ impl Compiler {
     pub fn new() -> Self {
         let mut this = Self::default();
 
-        this.add_module(crate::module::Time);
+        let _r = this.add_module(crate::module::Time);
         #[cfg(feature = "hash")]
-        this.add_module(crate::module::Hash);
+        let _r = this.add_module(crate::module::Hash);
         #[cfg(feature = "object")]
-        this.add_module(crate::module::Elf);
+        let _r = this.add_module(crate::module::Elf);
         #[cfg(feature = "object")]
-        this.add_module(crate::module::MachO);
+        let _r = this.add_module(crate::module::MachO);
         #[cfg(feature = "object")]
-        this.add_module(crate::module::Pe);
+        let _r = this.add_module(crate::module::Pe);
 
         this
     }
 
-    /// Add a module
-    pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) {
+    /// Add a module.
+    ///
+    /// Returns false if a module with the same name is already registered, and the module
+    /// was not added.
+    pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) -> bool {
         let m = compile_module(&module);
 
-        // Ignore the result: that would mean the same module is already registered.
-        // FIXME: this is done to allow the double "import" in a rule, but this can be improved.
-        let _res = self.available_modules.insert(
-            m.name.to_owned(),
-            AvailableModule {
-                compiled_module: Arc::new(m),
-                location: ModuleLocation::Module(Box::new(module)),
-            },
-        );
+        match self.available_modules.entry(m.name.to_owned()) {
+            Entry::Occupied(_) => false,
+            Entry::Vacant(v) => {
+                let _r = v.insert(AvailableModule {
+                    compiled_module: Arc::new(m),
+                    location: ModuleLocation::Module(Box::new(module)),
+                });
+                true
+            }
+        }
     }
 
     /// Add rules to the scanner from a string.

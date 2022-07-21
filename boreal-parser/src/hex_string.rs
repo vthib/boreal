@@ -54,7 +54,6 @@ pub struct Jump {
     pub to: Option<u32>,
 }
 
-// TODO: handle this limit in some way
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
 
 /// Parse an hex-digit, and return its value in [0-15].
