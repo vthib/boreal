@@ -101,15 +101,15 @@ fn test_rule_dependencies() {
 fn test_for_expression_rules_err() {
     check_err(
         "rule a { condition: all of (b) }",
-        "mem:1:21: error: unknown identifier \"b\"",
+        "mem:1:29: error: unknown identifier \"b\"",
     );
     check_err(
         "rule a { condition: all of (b*) }",
-        "mem:1:21: error: unknown identifier \"b*\"",
+        "mem:1:29: error: unknown identifier \"b*\"",
     );
     check_err(
         "rule a { condition: true } rule c { condition: all of (a, b) }",
-        "mem:1:48: error: unknown identifier \"b\"",
+        "mem:1:59: error: unknown identifier \"b\"",
     );
     check_err(
         "rule a0 { condition: true }

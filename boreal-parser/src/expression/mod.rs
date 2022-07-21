@@ -398,11 +398,11 @@ pub struct VariableSet {
     /// Names of the variables in the set.
     ///
     /// If empty, the set is considered as containing *all* variables.
-    pub elements: Vec<VariableSetElement>,
+    pub elements: Vec<SetElement>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct VariableSetElement {
+pub struct SetElement {
     /// Name of the element.
     pub name: String,
 
@@ -420,7 +420,7 @@ pub struct RuleSet {
     ///
     /// The associated boolean indicates if the name has a trailing
     /// wildcard.
-    pub elements: Vec<(String, bool)>,
+    pub elements: Vec<SetElement>,
 }
 
 /// A parsed expression with associated span

@@ -1843,7 +1843,7 @@ fn test_rule_of() {
 
     check_err(
         "rule a { condition: all of (b*) }",
-        "mem:1:21: error: unknown identifier \"b*\"",
+        "mem:1:29: error: unknown identifier \"b*\"",
     );
 
     check_err(

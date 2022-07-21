@@ -11,7 +11,7 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt},
     multi::separated_list1,
-    sequence::{delimited, pair, preceded, terminated},
+    sequence::{delimited, preceded, terminated},
 };
 
 use crate::{
@@ -23,7 +23,7 @@ use crate::{
 use super::{
     boolean_expression::boolean_expression, common::range, identifier::identifier,
     primary_expression::primary_expression, Expression, ExpressionKind, ForIterator, ForSelection,
-    RuleSet, VariableSet, VariableSetElement,
+    RuleSet, SetElement, VariableSet,
 };
 
 // There is a very ugly hack in this file.
@@ -236,17 +236,17 @@ fn string_set(input: Input) -> ParseResult<VariableSet> {
 /// Parse an enumeration of variables.
 ///
 /// Equivalent to the `string_enumeration` pattern in grammar.y in libyara.
-fn string_enumeration(input: Input) -> ParseResult<Vec<VariableSetElement>> {
+fn string_enumeration(input: Input) -> ParseResult<Vec<SetElement>> {
     separated_list1(rtrim(char(',')), string_enum_element)(input)
 }
 
-fn string_enum_element(input: Input) -> ParseResult<VariableSetElement> {
+fn string_enum_element(input: Input) -> ParseResult<SetElement> {
     let start = input;
     let (input, (name, is_wildcard)) = string_identifier_with_wildcard(input)?;
 
     Ok((
         input,
-        VariableSetElement {
+        SetElement {
             name,
             is_wildcard,
             span: input.get_span_from(start),
@@ -304,14 +304,23 @@ fn rule_set(input: Input) -> ParseResult<RuleSet> {
 /// Parse an enumeration of rules.
 ///
 /// Equivalent to the `rule_enumeration` pattern in grammar.y in libyara.
-fn rule_enumeration(input: Input) -> ParseResult<Vec<(String, bool)>> {
-    separated_list1(
-        rtrim(char(',')),
-        pair(
-            string::identifier,
-            map(opt(rtrim(char('*'))), |v| v.is_some()),
-        ),
-    )(input)
+fn rule_enumeration(input: Input) -> ParseResult<Vec<SetElement>> {
+    separated_list1(rtrim(char(',')), rule_enum_element)(input)
+}
+
+fn rule_enum_element(input: Input) -> ParseResult<SetElement> {
+    let start = input;
+    let (input, name) = string::identifier(input)?;
+    let (input, is_wildcard) = map(opt(rtrim(char('*'))), |v| v.is_some())(input)?;
+
+    Ok((
+        input,
+        SetElement {
+            name,
+            is_wildcard,
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -385,7 +394,7 @@ mod tests {
             string_enumeration,
             "$a",
             "",
-            vec![VariableSetElement {
+            vec![SetElement {
                 name: "a".to_owned(),
                 is_wildcard: false,
                 span: 0..2,
@@ -396,12 +405,12 @@ mod tests {
             "$a, $b* $c",
             "$c",
             vec![
-                VariableSetElement {
+                SetElement {
                     name: "a".to_owned(),
                     is_wildcard: false,
                     span: 0..2,
                 },
-                VariableSetElement {
+                SetElement {
                     name: "b".to_owned(),
                     is_wildcard: true,
                     span: 4..7,
@@ -412,7 +421,7 @@ mod tests {
             string_enumeration,
             "$a*,b",
             ",b",
-            vec![VariableSetElement {
+            vec![SetElement {
                 name: "a".to_owned(),
                 is_wildcard: true,
                 span: 0..3,
@@ -423,17 +432,17 @@ mod tests {
             "$foo*,$ , $bar)",
             ")",
             vec![
-                VariableSetElement {
+                SetElement {
                     name: "foo".to_owned(),
                     is_wildcard: true,
                     span: 0..5,
                 },
-                VariableSetElement {
+                SetElement {
                     name: "".to_owned(),
                     is_wildcard: false,
                     span: 6..7,
                 },
-                VariableSetElement {
+                SetElement {
                     name: "bar".to_owned(),
                     is_wildcard: false,
                     span: 10..14,
@@ -454,17 +463,17 @@ mod tests {
             "d",
             VariableSet {
                 elements: vec![
-                    VariableSetElement {
+                    SetElement {
                         name: "a".to_owned(),
                         is_wildcard: true,
                         span: 2..5,
                     },
-                    VariableSetElement {
+                    SetElement {
                         name: "foo".to_owned(),
                         is_wildcard: true,
                         span: 7..12,
                     },
-                    VariableSetElement {
+                    SetElement {
                         name: "c".to_owned(),
                         is_wildcard: false,
                         span: 15..17,
@@ -477,7 +486,7 @@ mod tests {
             "($)",
             "",
             VariableSet {
-                elements: vec![VariableSetElement {
+                elements: vec![SetElement {
                     name: "".to_owned(),
                     is_wildcard: false,
                     span: 1..2,
@@ -542,12 +551,12 @@ mod tests {
                     },
                     set: VariableSet {
                         elements: vec![
-                            VariableSetElement {
+                            SetElement {
                                 name: "a".to_owned(),
                                 is_wildcard: false,
                                 span: 6..8,
                             },
-                            VariableSetElement {
+                            SetElement {
                                 name: "b".to_owned(),
                                 is_wildcard: true,
                                 span: 10..13,
@@ -580,7 +589,18 @@ mod tests {
                         as_percent: true,
                     },
                     set: RuleSet {
-                        elements: vec![("a".to_owned(), false), ("b".to_owned(), true)],
+                        elements: vec![
+                            SetElement {
+                                name: "a".to_owned(),
+                                is_wildcard: false,
+                                span: 7..8,
+                            },
+                            SetElement {
+                                name: "b".to_owned(),
+                                is_wildcard: true,
+                                span: 10..12,
+                            },
+                        ],
                     },
                 },
                 span: 0..13,
@@ -611,7 +631,7 @@ mod tests {
                         as_percent: true,
                     },
                     set: VariableSet {
-                        elements: vec![VariableSetElement {
+                        elements: vec![SetElement {
                             name: "foo".to_owned(),
                             is_wildcard: true,
                             span: 12..17,

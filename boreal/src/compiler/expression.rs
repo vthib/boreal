@@ -817,7 +817,7 @@ pub(super) fn compile_expression(
         parser::ExpressionKind::ForRules { selection, set } => Ok(Expr {
             expr: Expression::ForRules {
                 selection: compile_for_selection(compiler, selection)?,
-                set: compile_rule_set(compiler, set, span.clone())?,
+                set: compile_rule_set(compiler, set)?,
             },
             ty: Type::Boolean,
             span,
@@ -993,18 +993,17 @@ fn compile_variable_set(
 fn compile_rule_set(
     compiler: &mut RuleCompiler<'_>,
     set: parser::RuleSet,
-    span: Range<usize>,
 ) -> Result<RuleSet, CompilationError> {
     // selected indexes.
     let mut indexes = Vec::new();
     let mut already_matched = 0;
 
     for elem in set.elements {
-        if elem.1 {
+        if elem.is_wildcard {
             let mut found = false;
 
             for (name, index) in &compiler.namespace.rules_indexes {
-                if name.starts_with(&elem.0) {
+                if name.starts_with(&elem.name) {
                     found = true;
                     match index {
                         // Normal rule, add it to the list of indexes to check
@@ -1016,19 +1015,22 @@ fn compile_rule_set(
                 }
             }
             if !found {
-                // TODO: get better span
                 return Err(CompilationError::UnknownIdentifier {
-                    name: format!("{}*", elem.0),
-                    span,
+                    name: format!("{}*", elem.name),
+                    span: elem.span,
                 });
             }
-            compiler.rule_wildcard_uses.push(elem.0);
+            compiler.rule_wildcard_uses.push(elem.name);
         } else {
-            // TODO: get better span
-            match compiler.namespace.rules_indexes.get(&elem.0) {
+            match compiler.namespace.rules_indexes.get(&elem.name) {
                 Some(Some(index)) => indexes.push(*index),
                 Some(None) => already_matched += 1,
-                None => return Err(CompilationError::UnknownIdentifier { name: elem.0, span }),
+                None => {
+                    return Err(CompilationError::UnknownIdentifier {
+                        name: elem.name,
+                        span: elem.span,
+                    })
+                }
             }
         }
     }
