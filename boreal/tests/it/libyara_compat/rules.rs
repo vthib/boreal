@@ -3421,8 +3421,9 @@ fn test_modules() {
         false,
     );
 
-    check_err("import \"\\x00\"", "error: unknown import");
+    check_err("import \"\\x00\"", "mem:1:1: error: unknown import");
 
+    // TODO: improve the span? why is it so bad?
     check_err("import \"\"", "mem:1:1: error: syntax error");
 }
 

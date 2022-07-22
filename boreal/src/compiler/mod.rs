@@ -167,7 +167,7 @@ impl Compiler {
             match component {
                 parser::YaraFileComponent::Include(_) => todo!(),
                 parser::YaraFileComponent::Import(import) => {
-                    match self.available_modules.get_mut(&import) {
+                    match self.available_modules.get_mut(&import.name) {
                         Some(module) => {
                             // XXX: this is a bit ugly, but i haven't found a better way to get
                             // ownership of the module.
@@ -189,14 +189,19 @@ impl Compiler {
 
                             // Ignore result: if the import was already done, it's fine.
                             let _r = namespace.imported_modules.insert(
-                                import.clone(),
+                                import.name.clone(),
                                 ImportedModule {
                                     module: Arc::clone(&module.compiled_module),
                                     module_index,
                                 },
                             );
                         }
-                        None => return Err(CompilationError::UnknownImport(import.clone())),
+                        None => {
+                            return Err(CompilationError::UnknownImport {
+                                name: import.name,
+                                span: import.span,
+                            })
+                        }
                     };
                 }
                 parser::YaraFileComponent::Rule(rule) => {

@@ -199,8 +199,12 @@ pub enum CompilationError {
     /// Unknown import used in a file.
     ///
     /// The value is the name of the import that did not match any known module.
-    // TODO: add span
-    UnknownImport(String),
+    UnknownImport {
+        /// The name being imported.
+        name: String,
+        /// The span covering the import.
+        span: Range<usize>,
+    },
 
     /// Unknown field used in a identifier.
     UnknownIdentifierField {
@@ -373,9 +377,9 @@ impl CompilationError {
                 .with_message(format!("unknown identifier \"{}\"", name))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
-            Self::UnknownImport(name) => {
-                Diagnostic::error().with_message(format!("unknown import {}", name))
-            }
+            Self::UnknownImport { name, span } => Diagnostic::error()
+                .with_message(format!("unknown import {}", name))
+                .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnknownIdentifierField { field_name, span } => Diagnostic::error()
                 .with_message(format!("unknown field \"{}\"", field_name))
@@ -392,7 +396,6 @@ impl CompilationError {
                 .with_message(format!("variable ${} is unused", name))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
-            // TODO: need span for variable
             Self::VariableCompilation {
                 variable_name,
                 span,

@@ -1,4 +1,6 @@
 //! Parse yara rules.
+use std::ops::Range;
+
 use nom::bytes::complete::take_till1;
 use nom::character::complete::char;
 use nom::combinator::map;
@@ -31,9 +33,18 @@ pub enum YaraFileComponent {
     /// A Yara rule
     Rule(Box<Rule>),
     /// A module import
-    Import(String),
+    Import(Import),
     /// An include of another file
     Include(String),
+}
+
+/// An import inside a Yara file.
+#[derive(Debug, PartialEq)]
+pub struct Import {
+    /// The name being imported
+    pub name: String,
+    /// The span covering the whole import, ie `import "foo"`
+    pub span: Range<usize>,
 }
 
 /// Parse a full YARA file.
@@ -79,15 +90,25 @@ fn include_file(input: Input) -> ParseResult<String> {
 }
 
 /// Parse an import declaration
-fn import(input: Input) -> ParseResult<String> {
-    rtrim(preceded(
+fn import(input: Input) -> ParseResult<Import> {
+    let start = input;
+
+    let (input, name) = rtrim(preceded(
         rtrim(ttag("import")),
         cut(delimited(
             char('"'),
             map(take_till1(|c| c == '"'), |v: Input| v.to_string()),
             char('"'),
         )),
-    ))(input)
+    ))(input)?;
+
+    Ok((
+        input,
+        Import {
+            name,
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -132,7 +153,10 @@ mod tests {
             "",
             YaraFile {
                 components: vec![
-                    YaraFileComponent::Import("pe".to_owned()),
+                    YaraFileComponent::Import(Import {
+                        name: "pe".to_owned(),
+                        span: 1..12,
+                    }),
                     YaraFileComponent::Rule(Box::new(Rule {
                         name: "c".to_owned(),
                         name_span: 41..42,
@@ -146,8 +170,14 @@ mod tests {
                         is_private: false,
                         is_global: true,
                     })),
-                    YaraFileComponent::Import("foo".to_owned()),
-                    YaraFileComponent::Import("quux".to_owned()),
+                    YaraFileComponent::Import(Import {
+                        name: "foo".to_owned(),
+                        span: 80..92,
+                    }),
+                    YaraFileComponent::Import(Import {
+                        name: "quux".to_owned(),
+                        span: 109..122,
+                    }),
                     YaraFileComponent::Rule(Box::new(Rule {
                         name: "d".to_owned(),
                         name_span: 144..145,

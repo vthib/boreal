@@ -220,6 +220,4 @@ pub(super) fn compile_rule(
         condition: condition.expr,
         is_private: rule.is_private,
     })
-
-    // TODO: check for unused variables
 }

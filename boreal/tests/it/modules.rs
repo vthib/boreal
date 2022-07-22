@@ -39,7 +39,7 @@ fn test_imports() {
     check_err(
         r#"import "a"
 rule foo { condition: true }"#,
-        "error: unknown import a",
+        "mem:1:1: error: unknown import a",
     );
 
     check_err(
