@@ -117,7 +117,7 @@ fn test_for_expression_rules_err() {
          rule b1 { condition: true }
          rule b2 { condition: all of (b*) }
          rule b3 { condition: true }",
-        r#"error: rule "b3" matches a previous rule set "b*""#,
+        r#"mem:5:15: error: rule "b3" matches a previous rule set "b*""#,
     );
 }
 

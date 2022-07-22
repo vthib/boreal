@@ -1850,7 +1850,7 @@ fn test_rule_of() {
         "rule a0 { condition: true }
          rule b { condition: 1 of (a*) }
          rule a1 { condition: true } ",
-        r#"error: rule "a1" matches a previous rule set "a*""#,
+        r#"mem:3:15: error: rule "a1" matches a previous rule set "a*""#,
     );
 
     // Make sure repeating the rule set works

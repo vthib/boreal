@@ -204,6 +204,7 @@ impl Compiler {
                         if rule.name.starts_with(prefix) {
                             return Err(CompilationError::MatchOnWildcardRuleSet {
                                 rule_name: rule.name,
+                                name_span: rule.name_span,
                                 rule_set: format!("{}*", prefix),
                             });
                         }

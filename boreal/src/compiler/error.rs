@@ -174,6 +174,8 @@ pub enum CompilationError {
     MatchOnWildcardRuleSet {
         /// The name of the rule being rejected
         rule_name: String,
+        /// The span for the name of the rule being rejected.
+        name_span: Range<usize>,
         /// The corresponding wildcard rule set previously used in the namespace.
         rule_set: String,
     },
@@ -352,14 +354,16 @@ impl CompilationError {
                 .with_message("wrong use of identifier")
                 .with_labels(vec![Label::primary((), span.clone())]),
 
-            // TODO: add span on rule name
             Self::MatchOnWildcardRuleSet {
                 rule_name,
+                name_span,
                 rule_set,
-            } => Diagnostic::error().with_message(format!(
-                "rule \"{}\" matches a previous rule set \"{}\"",
-                rule_name, rule_set
-            )),
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "rule \"{}\" matches a previous rule set \"{}\"",
+                    rule_name, rule_set
+                ))
+                .with_labels(vec![Label::primary((), name_span.clone())]),
 
             Self::NonIterableIdentifier { span } => Diagnostic::error()
                 .with_message("identifier is not iterable")
