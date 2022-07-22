@@ -186,10 +186,14 @@ pub(super) fn compile_rule(
     }
 
     // Check duplication of tags
-    let mut tags_set = HashSet::new();
-    for tag in &rule.tags {
-        if !tags_set.insert(tag) {
-            return Err(CompilationError::DuplicatedRuleTag(tag.to_string()));
+    let mut tags_spans = HashMap::with_capacity(rule.tags.len());
+    for v in &rule.tags {
+        if let Some(span1) = tags_spans.insert(&v.tag, v.span.clone()) {
+            return Err(CompilationError::DuplicatedRuleTag {
+                tag: v.tag.clone(),
+                span1,
+                span2: v.span.clone(),
+            });
         }
     }
 
@@ -206,7 +210,7 @@ pub(super) fn compile_rule(
     Ok(Rule {
         name: rule.name,
         namespace: namespace.name.clone(),
-        tags: rule.tags,
+        tags: rule.tags.into_iter().map(|v| v.tag).collect(),
         metadatas: rule.metadatas,
         variables: rule
             .variables

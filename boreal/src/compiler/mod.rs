@@ -211,12 +211,16 @@ impl Compiler {
 
                     let rule_name = rule.name.clone();
                     let is_global = rule.is_global;
+                    let name_span = rule.name_span.clone();
                     let rule = compile_rule(*rule, namespace)?;
 
                     // Check then insert, to avoid a double clone on the rule name. Maybe
                     // someday we'll get the raw entry API.
                     if namespace.rules_indexes.contains_key(&rule_name) {
-                        return Err(CompilationError::DuplicatedRuleName(rule_name));
+                        return Err(CompilationError::DuplicatedRuleName {
+                            name: rule_name,
+                            span: name_span,
+                        });
                     }
 
                     if is_global {

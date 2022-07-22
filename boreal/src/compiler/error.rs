@@ -44,12 +44,25 @@ pub enum CompilationError {
     },
 
     /// Duplicated rule name in a namespace.
-    // TODO: add span
-    DuplicatedRuleName(String),
+    DuplicatedRuleName {
+        /// Name for the rule
+        name: String,
+
+        /// Span covering the rule name
+        span: Range<usize>,
+    },
 
     /// Duplicated tag in a rule.
-    // TODO: add span
-    DuplicatedRuleTag(String),
+    DuplicatedRuleTag {
+        /// Name for the duplicated tag
+        tag: String,
+
+        /// Span of the first occurrence for the tag.
+        span1: Range<usize>,
+
+        /// Span of the second occurrence for the tag.
+        span2: Range<usize>,
+    },
 
     /// Duplicated binding on an identifier.
     ///
@@ -257,14 +270,19 @@ impl CompilationError {
                         .with_message(format!("this has type {}", right_type)),
                 ]),
 
-            Self::DuplicatedRuleName(name) => Diagnostic::error().with_message(format!(
-                "rule `{}` is already declared in this namespace",
-                name
-            )),
+            Self::DuplicatedRuleName { name, span } => Diagnostic::error()
+                .with_message(format!(
+                    "rule `{}` is already declared in this namespace",
+                    name
+                ))
+                .with_labels(vec![Label::primary((), span.clone())]),
 
-            Self::DuplicatedRuleTag(tag) => {
-                Diagnostic::error().with_message(format!("tag `{}` specified multiple times", tag))
-            }
+            Self::DuplicatedRuleTag { tag, span1, span2 } => Diagnostic::error()
+                .with_message(format!("tag `{}` specified multiple times", tag))
+                .with_labels(vec![
+                    Label::secondary((), span1.clone()).with_message("first occurrence"),
+                    Label::secondary((), span2.clone()).with_message("second occurrence"),
+                ]),
 
             Self::DuplicatedVariable { name, span } => Diagnostic::error()
                 .with_message(format!("variable ${} is declared more than once", name))

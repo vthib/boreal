@@ -107,6 +107,7 @@ mod tests {
             YaraFile {
                 components: vec![YaraFileComponent::Rule(Box::new(Rule {
                     name: "c".to_owned(),
+                    name_span: 14..15,
                     condition: Expression {
                         expr: ExpressionKind::Boolean(false),
                         span: 29..34,
@@ -134,6 +135,7 @@ mod tests {
                     YaraFileComponent::Import("pe".to_owned()),
                     YaraFileComponent::Rule(Box::new(Rule {
                         name: "c".to_owned(),
+                        name_span: 41..42,
                         condition: Expression {
                             expr: ExpressionKind::Boolean(false),
                             span: 56..61,
@@ -148,6 +150,7 @@ mod tests {
                     YaraFileComponent::Import("quux".to_owned()),
                     YaraFileComponent::Rule(Box::new(Rule {
                         name: "d".to_owned(),
+                        name_span: 144..145,
                         condition: Expression {
                             expr: ExpressionKind::Boolean(true),
                             span: 159..163,

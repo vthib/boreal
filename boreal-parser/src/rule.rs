@@ -26,8 +26,11 @@ pub struct Rule {
     /// Name of the rule.
     pub name: String,
 
-    /// Tags associated with the rule
-    pub tags: Vec<String>,
+    /// Span for the rule name.
+    pub name_span: Range<usize>,
+
+    /// Tags associated with the rule.
+    pub tags: Vec<RuleTag>,
 
     /// Metadata associated with the rule.
     pub metadatas: Vec<Metadata>,
@@ -49,6 +52,16 @@ pub struct Rule {
     pub is_private: bool,
     /// Is the rule global.
     pub is_global: bool,
+}
+
+/// Tag for a rule.
+#[derive(Debug, PartialEq)]
+pub struct RuleTag {
+    /// The tag name.
+    pub tag: String,
+
+    /// Span covering the tag.
+    pub span: Range<usize>,
 }
 
 /// Value associated with a metadata key.
@@ -160,7 +173,7 @@ pub fn rule(mut input: Input) -> ParseResult<Rule> {
 
     map(
         tuple((
-            string::identifier,
+            rule_name,
             opt(tags),
             delimited(
                 rtrim(char('{')),
@@ -168,8 +181,9 @@ pub fn rule(mut input: Input) -> ParseResult<Rule> {
                 rtrim(char('}')),
             ),
         )),
-        move |(name, tags, (meta, strings, condition))| Rule {
+        move |((name, name_span), tags, (meta, strings, condition))| Rule {
             name,
+            name_span,
             tags: tags.unwrap_or_default(),
             metadatas: meta.unwrap_or_default(),
             variables: strings.unwrap_or_default(),
@@ -180,14 +194,34 @@ pub fn rule(mut input: Input) -> ParseResult<Rule> {
     )(input)
 }
 
+fn rule_name(input: Input) -> ParseResult<(String, Range<usize>)> {
+    let start = input;
+    let (input, name) = string::identifier(input)?;
+
+    Ok((input, (name, input.get_span_from(start))))
+}
+
 /// Parse a list of tags
 ///
 /// This roughly parses `: identifier1 identifier2 ...`
 /// and returns a list of the identifiers.
-fn tags(input: Input) -> ParseResult<Vec<String>> {
+fn tags(input: Input) -> ParseResult<Vec<RuleTag>> {
     let (input, _) = rtrim(char(':'))(input)?;
 
-    cut(many1(string::identifier))(input)
+    cut(many1(tag))(input)
+}
+
+fn tag(input: Input) -> ParseResult<RuleTag> {
+    let start = input;
+    let (input, tag) = string::identifier(input)?;
+
+    Ok((
+        input,
+        RuleTag {
+            tag,
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 /// Parse the "meta:" section in a rule.
@@ -549,9 +583,30 @@ mod tests {
             tags,
             ": a _ a8 {",
             "{",
-            vec!["a".to_owned(), "_".to_owned(), "a8".to_owned()],
+            vec![
+                RuleTag {
+                    tag: "a".to_owned(),
+                    span: 2..3,
+                },
+                RuleTag {
+                    tag: "_".to_owned(),
+                    span: 4..5,
+                },
+                RuleTag {
+                    tag: "a8".to_owned(),
+                    span: 6..8,
+                },
+            ],
         );
-        parse(tags, ": b 8", "8", vec!["b".to_owned()]);
+        parse(
+            tags,
+            ": b 8",
+            "8",
+            vec![RuleTag {
+                tag: "b".to_owned(),
+                span: 2..3,
+            }],
+        );
 
         parse_err(tags, "");
         parse_err(tags, ":");
@@ -864,6 +919,7 @@ mod tests {
             "",
             Rule {
                 name: "a".to_owned(),
+                name_span: 5..6,
                 condition: Expression {
                     expr: ExpressionKind::Boolean(false),
                     span: 20..25,
@@ -881,7 +937,8 @@ mod tests {
             "",
             Rule {
                 name: "b".to_owned(),
-                tags: vec!["tag1".to_owned(), "tag2".to_owned()],
+                name_span: 20..21,
+                tags: vec![RuleTag { tag: "tag1".to_owned(), span: 24..28 }, RuleTag { tag: "tag2".to_owned(), span: 29..33 }],
                 metadatas: vec![
                     Metadata { name: "a".to_owned(), value: MetadataValue::Boolean(true) }
                 ],
@@ -915,6 +972,7 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
+                name_span: 20..21,
                 condition: Expression {
                     expr: ExpressionKind::Boolean(false),
                     span: 35..40,
@@ -932,6 +990,7 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
+                name_span: 13..14,
                 condition: Expression {
                     expr: ExpressionKind::Boolean(false),
                     span: 28..33,
@@ -949,6 +1008,7 @@ mod tests {
             "",
             Rule {
                 name: "c".to_owned(),
+                name_span: 12..13,
                 condition: Expression {
                     expr: ExpressionKind::Boolean(false),
                     span: 27..32,

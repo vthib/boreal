@@ -53,7 +53,7 @@ fn test_namespaces_errors() {
     compiler.add_rules("rule a { condition: true }");
     compiler.check_add_rules_err(
         "rule a { condition: true }",
-        "error: rule `a` is already declared in this namespace",
+        "mem:1:6: error: rule `a` is already declared in this namespace",
     );
 
     // Multiple rules can have the same name in different namespaces
