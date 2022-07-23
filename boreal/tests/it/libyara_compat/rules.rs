@@ -222,7 +222,7 @@ fn test_arithmetic_operators() {
 
     check_err(
         "rule test { condition: 9223372036854775808 > 0 }",
-        "mem:1:24: error: syntax error\n",
+        "mem:1:24: error: error converting to integer",
     );
 
     check_err(
@@ -239,13 +239,13 @@ fn test_arithmetic_operators() {
     check_err(
         // integer too long
         "rule test { condition: 0x8000000000000000 > 0 }",
-        "mem:1:26: error: error converting hexadecimal notation to integer",
+        "mem:1:24: error: error converting hexadecimal notation to integer",
     );
 
     check_err(
         // integer too long
         "rule test { condition: 0o1000000000000000000000 > 0 }",
-        "mem:1:26: error: error converting octal notation to integer",
+        "mem:1:24: error: error converting octal notation to integer",
     );
 }
 

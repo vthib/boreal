@@ -140,7 +140,7 @@ where
         let (input, o1) = parser.parse(input)?;
         match f(o1) {
             Ok(o2) => Ok((input, o2)),
-            Err(kind) => Err(nom::Err::Error(Error::new(
+            Err(kind) => Err(nom::Err::Failure(Error::new(
                 input.get_span_from(start),
                 kind,
             ))),

@@ -6,11 +6,11 @@ use nom::{
     bytes::complete::tag,
     character::complete::{char, digit1, hex_digit1, oct_digit1},
     combinator::{cut, opt, recognize},
-    sequence::{pair, tuple},
+    sequence::{pair, preceded, tuple},
 };
 
 use super::error::{Error, ErrorKind};
-use super::nom_recipes::{map_res, rtrim, textual_tag as ttag};
+use super::nom_recipes::{rtrim, textual_tag as ttag};
 use super::types::{Input, ParseResult};
 
 /// Parse a decimal number.
@@ -18,12 +18,17 @@ use super::types::{Input, ParseResult};
 /// This function matches the pattern `/\d+(MB|KB)?`/.
 fn decimal_number(input: Input) -> ParseResult<i64> {
     let start = input;
-    let (input, (n, suffix)) = rtrim(pair(
-        map_res(digit1, |v: Input| {
-            str::parse::<i64>(v.cursor()).map_err(ErrorKind::StrToIntError)
-        }),
-        opt(alt((ttag("MB"), ttag("KB")))),
-    ))(input)?;
+    let (input, (n, suffix)) = rtrim(pair(digit1, opt(alt((ttag("MB"), ttag("KB"))))))(input)?;
+
+    let n = match str::parse::<i64>(&n) {
+        Ok(n) => n,
+        Err(e) => {
+            return Err(nom::Err::Failure(Error::new(
+                input.get_span_from(start),
+                ErrorKind::StrToIntError(e),
+            )))
+        }
+    };
 
     let coef = match suffix {
         Some("MB") => 1024 * 1024,
@@ -46,22 +51,40 @@ fn decimal_number(input: Input) -> ParseResult<i64> {
 ///
 /// This function matches the pattern `/0x\d+`/.
 fn hexadecimal_number(input: Input) -> ParseResult<i64> {
-    let (input, _) = tag("0x")(input)?;
+    let start = input;
+    let (input, n) = preceded(tag("0x"), cut(rtrim(hex_digit1)))(input)?;
 
-    cut(map_res(rtrim(hex_digit1), |v| {
-        i64::from_str_radix(v.cursor(), 16).map_err(ErrorKind::StrToHexIntError)
-    }))(input)
+    let n = match i64::from_str_radix(&n, 16) {
+        Ok(n) => n,
+        Err(e) => {
+            return Err(nom::Err::Failure(Error::new(
+                input.get_span_from(start),
+                ErrorKind::StrToHexIntError(e),
+            )))
+        }
+    };
+
+    Ok((input, n))
 }
 
 /// Parse an octal number.
 ///
 /// This function matches the pattern `/0o\d+`/.
 fn octal_number(input: Input) -> ParseResult<i64> {
-    let (input, _) = tag("0o")(input)?;
+    let start = input;
+    let (input, n) = preceded(tag("0o"), cut(rtrim(oct_digit1)))(input)?;
 
-    cut(map_res(rtrim(oct_digit1), |v| {
-        i64::from_str_radix(v.cursor(), 8).map_err(ErrorKind::StrToOctIntError)
-    }))(input)
+    let n = match i64::from_str_radix(&n, 8) {
+        Ok(n) => n,
+        Err(e) => {
+            return Err(nom::Err::Failure(Error::new(
+                input.get_span_from(start),
+                ErrorKind::StrToOctIntError(e),
+            )))
+        }
+    };
+
+    Ok((input, n))
 }
 
 /// Parse a number (integer).
