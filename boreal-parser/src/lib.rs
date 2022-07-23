@@ -72,16 +72,7 @@ pub fn parse_str(input: &str) -> Result<YaraFile, Error> {
     use nom::Finish;
 
     let input = types::Input::new(input);
-    let (input, rules) = file::parse_yara_file(input).finish()?;
-
-    if !input.cursor().is_empty() {
-        let pos = input.get_position();
-
-        return Err(error::Error::new(
-            pos..(pos + 1),
-            error::ErrorKind::HasTrailingData,
-        ));
-    }
+    let (_, rules) = file::parse_yara_file(input).finish()?;
 
     Ok(rules)
 }
