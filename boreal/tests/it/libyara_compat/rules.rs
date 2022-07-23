@@ -874,7 +874,7 @@ fn test_strings() {
       condition:
         $a
     }",
-        "mem:3:19: error: string modifier XOR appears multiple times",
+        "mem:3:23: error: string modifier XOR appears multiple times",
     );
 
     // We should have no matches here because we are not generating the wide
@@ -1021,7 +1021,7 @@ fn test_strings() {
         $a = \"ab\" base64 base64wide(\"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ,.\")
       condition:
         true
-    }", "mem:3:19: error: alphabets used for base64 and base64wide must be identical");
+    }", "mem:3:26: error: alphabets used for base64 and base64wide must be identical");
 
     // Be specific about the offsets in these tests to make sure we are matching
     // the correct strings. Also be specific about the length because we want to

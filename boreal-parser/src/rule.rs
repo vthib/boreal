@@ -7,7 +7,7 @@ use nom::{
     character::complete::char,
     combinator::{cut, map, opt},
     multi::many1,
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
 
 use super::{
@@ -317,30 +317,31 @@ fn accumulate_modifiers<F>(parser: F, mut input: Input) -> ParseResult<VariableM
 where
     F: Fn(Input) -> ParseResult<Modifier>,
 {
+    let add_flag =
+        |modifiers: &mut VariableModifiers, start: Input, input: Input, flag: VariableFlags| {
+            if modifiers.flags.contains(flag) {
+                return Err(nom::Err::Failure(Error::new(
+                    input.get_span_from(start),
+                    ErrorKind::ModifiersDuplicated {
+                        modifier_name: format!("{:?}", flag),
+                    },
+                )));
+            }
+            modifiers.flags |= flag;
+            Ok(())
+        };
+
     let mut modifiers = VariableModifiers::default();
     let start = input;
-
-    let add_flag = |modifiers: &mut VariableModifiers, input: Input, flag: VariableFlags| {
-        if modifiers.flags.contains(flag) {
-            return Err(nom::Err::Failure(Error::new(
-                input.get_span_from(start),
-                ErrorKind::ModifiersDuplicated {
-                    modifier_name: format!("{:?}", flag),
-                },
-            )));
-        }
-        modifiers.flags |= flag;
-        Ok(())
-    };
-
     let mut parser = opt(parser);
+
     while let (i, Some(modifier)) = parser(input)? {
         match modifier {
             Modifier::Flag(flag) => {
-                add_flag(&mut modifiers, input, flag)?;
+                add_flag(&mut modifiers, input, i, flag)?;
             }
             Modifier::Xor(from, to) => {
-                add_flag(&mut modifiers, input, VariableFlags::XOR)?;
+                add_flag(&mut modifiers, input, i, VariableFlags::XOR)?;
                 modifiers.xor_range = (from, to);
             }
             Modifier::Base64(alphabet) => {
@@ -348,11 +349,11 @@ where
                     && modifiers.base64_alphabet != alphabet
                 {
                     return Err(nom::Err::Failure(Error::new(
-                        input.get_span_from(start),
+                        i.get_span_from(input),
                         ErrorKind::Base64AlphabetIncompatible,
                     )));
                 }
-                add_flag(&mut modifiers, input, VariableFlags::BASE64)?;
+                add_flag(&mut modifiers, input, i, VariableFlags::BASE64)?;
                 modifiers.base64_alphabet = alphabet;
             }
             Modifier::Base64Wide(alphabet) => {
@@ -360,11 +361,11 @@ where
                     && modifiers.base64_alphabet != alphabet
                 {
                     return Err(nom::Err::Failure(Error::new(
-                        input.get_span_from(start),
+                        i.get_span_from(input),
                         ErrorKind::Base64AlphabetIncompatible,
                     )));
                 }
-                add_flag(&mut modifiers, input, VariableFlags::BASE64WIDE)?;
+                add_flag(&mut modifiers, input, i, VariableFlags::BASE64WIDE)?;
                 modifiers.base64_alphabet = alphabet;
             }
         }
@@ -448,17 +449,23 @@ fn hex_string_modifiers(input: Input) -> ParseResult<VariableModifiers> {
 }
 
 fn string_modifier(input: Input) -> ParseResult<Modifier> {
-    rtrim(alt((
-        map(ttag("wide"), |_| Modifier::Flag(VariableFlags::WIDE)),
-        map(ttag("ascii"), |_| Modifier::Flag(VariableFlags::ASCII)),
-        map(ttag("nocase"), |_| Modifier::Flag(VariableFlags::NOCASE)),
-        map(ttag("fullword"), |_| {
+    alt((
+        map(rtrim(ttag("wide")), |_| Modifier::Flag(VariableFlags::WIDE)),
+        map(rtrim(ttag("ascii")), |_| {
+            Modifier::Flag(VariableFlags::ASCII)
+        }),
+        map(rtrim(ttag("nocase")), |_| {
+            Modifier::Flag(VariableFlags::NOCASE)
+        }),
+        map(rtrim(ttag("fullword")), |_| {
             Modifier::Flag(VariableFlags::FULLWORD)
         }),
-        map(ttag("private"), |_| Modifier::Flag(VariableFlags::PRIVATE)),
+        map(rtrim(ttag("private")), |_| {
+            Modifier::Flag(VariableFlags::PRIVATE)
+        }),
         xor_modifier,
         base64_modifier,
-    )))(input)
+    ))(input)
 }
 
 fn regex_modifier(input: Input) -> ParseResult<Modifier> {
@@ -494,27 +501,21 @@ fn xor_modifier(input: Input) -> ParseResult<Modifier> {
 
     let (input, from) = cut(map_res(number::number, number_to_u8))(input)?;
 
-    let (input, to) = cut(terminated(
-        opt(preceded(
-            rtrim(char('-')),
-            map_res(number::number, number_to_u8),
-        )),
-        rtrim(char(')')),
-    ))(input)?;
-
-    let res = match to {
-        Some(to) => {
-            if to < from {
-                return Err(nom::Err::Failure(Error::new(
-                    input.get_span_from(start),
-                    ErrorKind::XorRangeInvalid { from, to },
-                )));
-            }
-            Modifier::Xor(from, to)
-        }
-        None => Modifier::Xor(from, from),
+    let (input, to) = match rtrim(char('-'))(input) {
+        Ok((input, _)) => cut(map_res(number::number, number_to_u8))(input)?,
+        Err(_) => (input, from),
     };
-    Ok((input, res))
+
+    let (input, _) = cut(rtrim(char(')')))(input)?;
+
+    if to < from {
+        Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            ErrorKind::XorRangeInvalid { from, to },
+        )))
+    } else {
+        Ok((input, Modifier::Xor(from, to)))
+    }
 }
 
 /// Parse a base64 modifier, ie:
