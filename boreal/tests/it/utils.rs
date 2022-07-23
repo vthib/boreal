@@ -60,7 +60,10 @@ impl Compiler {
 
         // Check libyara also rejects it
         if let Some(compiler) = self.yara_compiler.take() {
-            assert!(compiler.add_rules_str(rules).is_err());
+            assert!(
+                compiler.add_rules_str(rules).is_err(),
+                "conformity test failed for libyara"
+            );
         }
     }
 

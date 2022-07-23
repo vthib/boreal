@@ -4,6 +4,9 @@ mod libyara_compat;
 // Custom module "tests"
 mod module_tests;
 
+// Tests related to errors in rules
+mod error;
+
 // Tests related to evaluation of rules
 mod evaluation;
 mod for_expression;

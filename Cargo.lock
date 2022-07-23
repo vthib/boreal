@@ -87,6 +87,7 @@ dependencies = [
  "codespan-reporting",
  "const_format",
  "crc32fast",
+ "glob",
  "grep-matcher",
  "grep-regex",
  "hex",

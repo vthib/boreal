@@ -1,0 +1,3 @@
+rule a {
+    condition: foo
+}
