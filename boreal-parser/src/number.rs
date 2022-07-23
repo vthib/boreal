@@ -5,7 +5,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, digit1, hex_digit1, oct_digit1},
-    combinator::{cut, opt, recognize, success},
+    combinator::{cut, opt, recognize},
     sequence::{pair, tuple},
 };
 
@@ -84,9 +84,10 @@ pub fn number(input: Input) -> ParseResult<i64> {
 pub fn double(input: Input) -> ParseResult<f64> {
     let (input, payload) = rtrim(recognize(tuple((digit1, char('.'), digit1))))(input)?;
 
-    cut(map_res(success(payload), |v| {
-        str::parse::<f64>(v.cursor()).map_err(ErrorKind::StrToFloatError)
-    }))(input)
+    // Safety: this cannot fail, we are parsing `[0-9]+ '.' [0-9]+` which is guaranteed to
+    // be valid, see <https://doc.rust-lang.org/std/primitive.f64.html#impl-FromStr>
+    let v = str::parse::<f64>(&payload).unwrap();
+    Ok((input, v))
 }
 
 #[cfg(test)]

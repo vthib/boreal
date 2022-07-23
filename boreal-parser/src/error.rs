@@ -1,4 +1,4 @@
-use std::num::{ParseFloatError, ParseIntError};
+use std::num::ParseIntError;
 use std::ops::Range;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -100,10 +100,6 @@ impl Error {
                 // At least, on tag and char errors, it would be great to indicate
                 // which char and tag was expected.
                 .with_message("syntax error")
-                .with_labels(vec![Label::primary((), self.span.clone())]),
-
-            ErrorKind::StrToFloatError(err) => Diagnostic::error()
-                .with_message(format!("error converting to float: {}", err))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::StrToIntError(err) => Diagnostic::error()
@@ -208,9 +204,6 @@ pub enum ErrorKind {
 
     /// Generic error on nom parsing utilities
     NomError(NomErrorKind),
-
-    /// Error converting a string to an float
-    StrToFloatError(ParseFloatError),
 
     /// Error converting a string to an integer
     StrToIntError(ParseIntError),
