@@ -10,7 +10,7 @@ use nom::{
     sequence::{pair, preceded, terminated, tuple},
 };
 
-use super::error::{Error, ErrorKind};
+use super::error::Error;
 use super::nom_recipes::{rtrim, take_one};
 use super::types::{Input, ParseResult};
 
@@ -192,13 +192,6 @@ pub fn regex(input: Input) -> ParseResult<Regex> {
     let (input, expr) = cut(terminated(regex_contents, char('/')))(input)?;
     let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
 
-    if expr.is_empty() {
-        return Err(nom::Err::Error(Error::new(
-            input.get_span_from(start),
-            ErrorKind::EmptyRegex,
-        )));
-    }
-
     Ok((
         input,
         Regex {
@@ -355,7 +348,6 @@ mod tests {
 
         parse_err(regex, "");
         parse_err(regex, "/");
-        parse_err(regex, "//");
         parse_err(regex, "/\n/");
         parse_err(regex, "/a{2}");
     }

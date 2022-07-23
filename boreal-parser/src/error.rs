@@ -43,10 +43,6 @@ impl Error {
                 .with_message("alphabets used for base64 and base64wide must be identical")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
-            ErrorKind::EmptyRegex => Diagnostic::error()
-                .with_message("regexes cannot be empty")
-                .with_labels(vec![Label::primary((), self.span.clone())]),
-
             ErrorKind::JumpAtBound => Diagnostic::error()
                 .with_message("a list of tokens cannot start or end with a jump")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
@@ -156,9 +152,6 @@ pub enum ErrorKind {
 
     /// Alphabets used for base64 and base64wide for the same string are not identical.
     Base64AlphabetIncompatible,
-
-    /// Empty regex declaration, forbidden
-    EmptyRegex,
 
     /// A jump is not allowed at the beginning or end of hex tokens
     JumpAtBound,
