@@ -59,7 +59,7 @@ fn test_macho() {
     check_file(
         "import \"macho\" rule test { condition:
     macho.number_of_segments == 1 }",
-        "assets/libyara/data/tiny-macho",
+        "tests/assets/libyara/data/tiny-macho",
         true,
     );
 
@@ -260,7 +260,7 @@ fn test_macho() {
     check_file(
         "import \"macho\" rule test { condition:
     macho.fat_magic == macho.FAT_MAGIC and macho.nfat_arch == 2 }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -272,7 +272,7 @@ fn test_macho() {
     macho.fat_arch[1].cputype == macho.CPU_TYPE_X86_64 and
     macho.fat_arch[1].cpusubtype == macho.CPU_SUBTYPE_X86_64_ALL |
     macho.CPU_SUBTYPE_LIB64 and macho.fat_arch[1].align == 12 }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -280,7 +280,7 @@ fn test_macho() {
         "import \"macho\" rule test { condition:
     macho.file[0].cputype == macho.fat_arch[0].cputype and
     macho.file[1].cputype == macho.fat_arch[1].cputype }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -290,7 +290,7 @@ fn test_macho() {
         "import \"macho\" rule test {
     strings: $1 = { 55 89 e5 56 83 ec 34 }
     condition: $1 at macho.file[0].entry_point + macho.fat_arch[0].offset }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -298,7 +298,7 @@ fn test_macho() {
         "import \"macho\" rule test {
     strings: $1 = { 55 48 89 e5 48 83 ec 20 }
     condition: $1 at macho.file[1].entry_point + macho.fat_arch[1].offset }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -308,14 +308,14 @@ fn test_macho() {
         "import \"macho\" rule test { condition:
     macho.file[macho.file_index_for_arch(macho.CPU_TYPE_I386)].entry_point ==
     macho.file[0].entry_point }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
     check_file(
         "import \"macho\" rule test { condition:
     macho.file[macho.file_index_for_arch(macho.CPU_TYPE_X86_64)].entry_point ==
     macho.file[1].entry_point }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -324,7 +324,7 @@ fn test_macho() {
     macho.file[macho.file_index_for_arch(macho.CPU_TYPE_I386,
                macho.CPU_SUBTYPE_I386_ALL)].entry_point ==
     macho.file[0].entry_point }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -334,7 +334,7 @@ fn test_macho() {
                macho.CPU_SUBTYPE_X86_64_ALL |
                macho.CPU_SUBTYPE_LIB64)].entry_point ==
     macho.file[1].entry_point }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -345,7 +345,7 @@ fn test_macho() {
     strings: $1 = { 55 89 e5 56 83 ec 34 }
     condition: $1 at macho.entry_point_for_arch(macho.CPU_TYPE_I386,
                                        macho.CPU_SUBTYPE_I386_ALL) }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 
@@ -353,7 +353,7 @@ fn test_macho() {
         "import \"macho\" rule test {
     strings: $1 = { 55 48 89 e5 48 83 ec 20 }
     condition: $1 at macho.entry_point_for_arch(macho.CPU_TYPE_X86_64) }",
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 }

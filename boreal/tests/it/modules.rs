@@ -435,7 +435,7 @@ fn test_module_iterable_imbricated() {
 #[ignore]
 fn test_generate_module_coverage_test() {
     const MODULE_NAME: &str = "pe";
-    let input = std::fs::read("assets/libyara/data/tiny").unwrap();
+    let input = std::fs::read("tests/assets/libyara/data/tiny").unwrap();
 
     let mut compiler = Compiler::new();
     compiler

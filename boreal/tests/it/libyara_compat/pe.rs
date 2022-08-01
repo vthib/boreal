@@ -8,7 +8,7 @@ fn test_pe() {
         condition:
           pe.imports(\"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -18,7 +18,7 @@ fn test_pe() {
         condition:
           pe.imports(\"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny-idata-51ff",
+        "tests/assets/libyara/data/tiny-idata-51ff",
         true,
     );
 
@@ -28,7 +28,7 @@ fn test_pe() {
         condition:
           pe.imports(\"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         false,
     );
 
@@ -38,7 +38,7 @@ fn test_pe() {
         condition:
           pe.imports(/.*/, /.*CriticalSection/) == 4
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -48,7 +48,7 @@ fn test_pe() {
         condition:
           pe.imports(/kernel32\\.dll/i, /.*/) == 21
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -58,7 +58,7 @@ fn test_pe() {
         condition:
           pe.imports(/.*/, /.*/)
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         true,
     );
 
@@ -68,7 +68,7 @@ fn test_pe() {
         condition:
           pe.imports(/.*/, /.*CriticalSection/)
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         false,
     );
 
@@ -80,7 +80,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_STANDARD, \"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -90,7 +90,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_STANDARD, \"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny-idata-51ff",
+        "tests/assets/libyara/data/tiny-idata-51ff",
         true,
     );
 
@@ -100,7 +100,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_STANDARD, \"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         false,
     );
 
@@ -110,7 +110,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_STANDARD, /.*/, /.*CriticalSection/) == 4
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -120,7 +120,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_STANDARD, /kernel32\\.dll/i, /.*/) == 21
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -130,7 +130,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_STANDARD, /.*/, /.*/)
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         true,
     );
 
@@ -140,7 +140,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_STANDARD, /.*/, /.*CriticalSection/)
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         false,
     );
 
@@ -151,7 +151,7 @@ fn test_pe() {
           pe.number_of_imports == 2 and
           pe.number_of_imported_functions == 48
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -161,7 +161,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_DELAYED, \"USER32.dll\", \"MessageBoxA\")
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         true,
     );
 
@@ -171,7 +171,7 @@ fn test_pe() {
         condition:
             pe.imports(pe.IMPORT_DELAYED, \"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         false,
     );
 
@@ -181,7 +181,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_DELAYED, /.*/, /Message.*/) == 2
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         true,
     );
 
@@ -191,7 +191,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_DELAYED, /USER32\\.dll/i, /.*BoxA/) == 1
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         true,
     );
 
@@ -201,7 +201,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_DELAYED, /.*/, /.*CriticalSection/)
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         false,
     );
 
@@ -212,7 +212,7 @@ fn test_pe() {
           pe.number_of_delayed_imports == 1 and
           pe.number_of_delayed_imported_functions == 2
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         true,
     );
 
@@ -223,7 +223,7 @@ fn test_pe() {
           pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\") and
           pe.imports(pe.IMPORT_ANY, \"USER32.dll\", \"MessageBoxA\")
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         true,
     );
 
@@ -233,7 +233,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny-idata-51ff",
+        "tests/assets/libyara/data/tiny-idata-51ff",
         true,
     );
 
@@ -243,7 +243,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         false,
     );
 
@@ -253,7 +253,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/) == 4
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -263,7 +263,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_ANY, /kernel32\\.dll/i, /.*/) == 21
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -273,7 +273,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_ANY, /.*/, /.*/)
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         true,
     );
 
@@ -283,7 +283,7 @@ fn test_pe() {
         condition:
           pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/)
       }",
-        "assets/libyara/data/tiny-idata-5200",
+        "tests/assets/libyara/data/tiny-idata-5200",
         false,
     );
 
@@ -305,7 +305,7 @@ fn test_pe() {
         condition:
           pe.number_of_sections == 7
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -315,7 +315,7 @@ fn test_pe() {
         condition:
           pe.entry_point == 0x14E0
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -325,7 +325,7 @@ fn test_pe() {
         condition:
           pe.entry_point_raw == 0x1380
       }",
-        "assets/libyara/data/mtxex.dll",
+        "tests/assets/libyara/data/mtxex.dll",
         true,
     );
 
@@ -336,7 +336,7 @@ fn test_pe() {
           pe.linker_version.major == 2 and
           pe.linker_version.minor == 26
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -352,7 +352,7 @@ fn test_pe() {
           pe.sections[5].name == \".CRT\" and
           pe.sections[6].name == \".tls\"
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -362,7 +362,7 @@ fn test_pe() {
           condition:
             pe.imphash() == \"1720bf764274b7a4052bbef0a71adc0d\"
         }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -376,7 +376,7 @@ fn test_pe() {
             pe.signatures[0].thumbprint == \"c1bf1b8f751bf97626ed77f755f0a393106f2454\" and
             pe.signatures[0].subject == \"/C=US/ST=California/L=Menlo Park/O=Quicken, Inc./OU=Operations/CN=Quicken, Inc.\"
         }",
-        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
 
     check_file(
         "import \"pe\"
@@ -384,7 +384,7 @@ fn test_pe() {
           condition:
             pe.number_of_signatures == 2
         }",
-        "assets/libyara/data/3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c", true);
+        "tests/assets/libyara/data/3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c", true);
       */
 
     check_file(
@@ -393,7 +393,7 @@ fn test_pe() {
         condition:
           pe.section_index(\".text\") == 0
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -403,7 +403,7 @@ fn test_pe() {
         condition:
           pe.section_index(pe.entry_point) == 0
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -413,7 +413,7 @@ fn test_pe() {
         condition:
           pe.is_32bit() and not pe.is_64bit()
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -423,7 +423,7 @@ fn test_pe() {
         condition:
           pe.checksum == 0xA8DC
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -433,7 +433,7 @@ fn test_pe() {
         condition:
           pe.checksum == pe.calculate_checksum()
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -443,7 +443,7 @@ fn test_pe() {
         condition:
           pe.overlay.offset == 0x8000 and pe.overlay.size == 7
       }",
-        "assets/libyara/data/tiny-overlay",
+        "tests/assets/libyara/data/tiny-overlay",
         true,
     );
 
@@ -453,7 +453,7 @@ fn test_pe() {
         condition:
           pe.overlay.offset == 0 and pe.overlay.size == 0
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -463,7 +463,7 @@ fn test_pe() {
         condition:
           pe.pdb_path == "D:\\workspace\\2018_R9_RelBld\\target\\checkout\\custprof\\Release\\custprof.pdb"
       }"#,
-        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
         true,
     );
 
@@ -473,7 +473,7 @@ fn test_pe() {
         condition:
           pe.pdb_path == \"/Users/runner/work/OpenCorePkg/OpenCorePkg/UDK/Build/OpenCorePkg/DEBUG_XCODE5/X64/OpenCorePkg/Application/ChipTune/ChipTune/DEBUG/ChipTune.dll\"
       }",
-      "assets/libyara/data/ChipTune.efi", true);
+      "tests/assets/libyara/data/ChipTune.efi", true);
 
     check_file(
         "import \"pe\"
@@ -481,7 +481,7 @@ fn test_pe() {
         condition:
           pe.checksum == pe.calculate_checksum()
       }",
-        "assets/libyara/data/tiny-idata-51ff",
+        "tests/assets/libyara/data/tiny-idata-51ff",
         false,
     );
 
@@ -523,7 +523,7 @@ fn test_pe() {
           pe.export_details[0].ordinal == 1 and
           pe.export_details[1].forward_name == \"COMSVCS.GetObjectContext\"
       }",
-        "assets/libyara/data/mtxex.dll",
+        "tests/assets/libyara/data/mtxex.dll",
         true,
     );
     /*
@@ -541,7 +541,7 @@ fn test_pe() {
           pe.resources[0].rva == 5462081 and
           pe.resources[0].length == 888
       }",
-        "assets/libyara/data/mtxex_modified_rsrc_rva.dll",
+        "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll",
         true,
     );
 
@@ -555,7 +555,7 @@ fn test_pe() {
           pe.exports(4) and
           pe.exports(/mtscreateactivity/i)
       }",
-        "assets/libyara/data/mtxex.dll",
+        "tests/assets/libyara/data/mtxex.dll",
         true,
     );
 
@@ -567,7 +567,7 @@ fn test_pe() {
           pe.exports_index(3) == 2 and
           pe.exports_index(/mtscreateactivity/i) == 2
       }",
-        "assets/libyara/data/mtxex.dll",
+        "tests/assets/libyara/data/mtxex.dll",
         true,
     );
 
@@ -577,7 +577,7 @@ fn test_pe() {
         condition:
           pe.export_details[0].name == \"CP_PutItem\"
       }",
-        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx",
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx",
         true,
     );
 
@@ -590,7 +590,7 @@ fn test_pe() {
           pe.rich_signature.version(30319) and
           pe.rich_signature.version(40219, 170) == 11
       }",
-        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
         true,
     );
 
@@ -609,7 +609,7 @@ fn test_pe() {
 \\x00\\x01\\x00\\x00\\x00\\x09x\\x83\\x00\\x05\\x00\\x00\\x00\\x09x\\x94\\x00\\x01\\x00\\x00\\x00\
 \\x09x\\x91\\x00\\x01\\x00\\x00\\x00\"
       }",
-        "assets/libyara/data/weird_rich",
+        "tests/assets/libyara/data/weird_rich",
         true,
     );
 
@@ -619,7 +619,7 @@ fn test_pe() {
         condition:
           pe.language(0x09) and pe.locale(0x0409)
       }",
-        "assets/libyara/data/mtxex.dll",
+        "tests/assets/libyara/data/mtxex.dll",
         true,
     );
 
@@ -634,7 +634,7 @@ fn test_pe() {
               version.value == \"27.1.9.33\"
           )
       }",
-        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
         true,
     );
 
@@ -645,7 +645,7 @@ fn test_pe() {
           pe.sections[0].name != \".TEXT\" and
           pe.sections[0].name iequals \".TEXT\"
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -662,7 +662,7 @@ fn test_pe() {
                 )
             )
       }",
-        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
         true,
     );
 
@@ -679,7 +679,7 @@ fn test_pe() {
             pe.version_info[\"PrivateBuild\"] == \"\" and
             pe.version_info[\"SpecialBuild\"] == \"\"
       }",
-        "assets/libyara/data/ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386",
+        "tests/assets/libyara/data/ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386",
         true,
     );
 
@@ -691,7 +691,7 @@ fn test_pe() {
               section.name == section.full_name
           )
       }",
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 
@@ -704,7 +704,7 @@ fn test_pe() {
               section.full_name == \".debug_aranges\"
           )
       }",
-        "assets/libyara/data/pe_mingw",
+        "tests/assets/libyara/data/pe_mingw",
         true,
     );
 }

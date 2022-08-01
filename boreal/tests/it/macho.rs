@@ -640,7 +640,7 @@ rule test {
             )
         )
 }"#,
-        "assets/libyara/data/tiny-universal",
+        "tests/assets/libyara/data/tiny-universal",
         true,
     );
 }

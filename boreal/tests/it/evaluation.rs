@@ -878,7 +878,7 @@ rule b {
     condition:
         pe.entry_point == 3086 and entrypoint == 3597
 }"#,
-        "assets/pe/ord_and_delay.exe",
+        "tests/assets/pe/ord_and_delay.exe",
         true,
     );
 }

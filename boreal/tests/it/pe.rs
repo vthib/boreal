@@ -41,7 +41,7 @@ fn test_rva_to_offset() {
 
           true
       }",
-        "assets/libyara/data/tiny-idata-51ff",
+        "tests/assets/libyara/data/tiny-idata-51ff",
         true,
     );
 
@@ -57,7 +57,7 @@ fn test_rva_to_offset() {
           not defined pe.rva_to_offset(0x13A00) and
           not defined pe.rva_to_offset(0x14200)
       }",
-        "assets/libyara/data/pe_imports",
+        "tests/assets/libyara/data/pe_imports",
         true,
     );
 }
@@ -79,12 +79,12 @@ fn test_is_dll() {
         );
     }
 
-    test_dll("assets/libyara/data/pe_imports", false);
-    test_dll("assets/libyara/data/mtxex.dll", true);
-    test_dll("assets/libyara/data/ChipTune.efi", false);
-    test_dll("assets/libyara/data/tiny", false);
+    test_dll("tests/assets/libyara/data/pe_imports", false);
+    test_dll("tests/assets/libyara/data/mtxex.dll", true);
+    test_dll("tests/assets/libyara/data/ChipTune.efi", false);
+    test_dll("tests/assets/libyara/data/tiny", false);
     test_dll(
-        "assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
         true,
     );
 }
@@ -113,7 +113,7 @@ rule test {
         pe.sections[16].name == "/92" and
         true
 }"#,
-        "assets/libyara/data/pe_mingw",
+        "tests/assets/libyara/data/pe_mingw",
         true,
     );
 }
@@ -341,7 +341,7 @@ pe.subsystem_version.minor == 0 and
 pe.timestamp == 1459377848 and
 pe.win32_version_value == 0
 }"#,
-        "assets/libyara/data/tiny",
+        "tests/assets/libyara/data/tiny",
         true,
     );
 }
@@ -584,7 +584,7 @@ pe.subsystem_version.minor == 0 and
 pe.timestamp == 1657579306 and
 pe.win32_version_value == 0
 }"#,
-        "assets/pe/ord_and_delay.exe",
+        "tests/assets/pe/ord_and_delay.exe",
         true,
     );
 }

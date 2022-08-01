@@ -746,7 +746,7 @@ fn test_strings() {
       condition:
         #a == 256
     }",
-        "assets/libyara/data/xor.out",
+        "tests/assets/libyara/data/xor.out",
         true,
     );
 
@@ -758,7 +758,7 @@ fn test_strings() {
       condition:
         #a == 256
     }",
-        "assets/libyara/data/xor.out",
+        "tests/assets/libyara/data/xor.out",
         true,
     );
 
@@ -769,7 +769,7 @@ fn test_strings() {
       condition:
         #a == 16
     }",
-        "assets/libyara/data/xor.out",
+        "tests/assets/libyara/data/xor.out",
         true,
     );
 
@@ -782,7 +782,7 @@ fn test_strings() {
       condition:
         #a == 0
     }",
-        "assets/libyara/data/xor.out",
+        "tests/assets/libyara/data/xor.out",
         true,
     );
 
@@ -794,7 +794,7 @@ fn test_strings() {
       condition:
         #a == 256
     }",
-        "assets/libyara/data/xorwide.out",
+        "tests/assets/libyara/data/xorwide.out",
         true,
     );
 
@@ -806,7 +806,7 @@ fn test_strings() {
       condition:
         #a == 16
     }",
-        "assets/libyara/data/xorwide.out",
+        "tests/assets/libyara/data/xorwide.out",
         true,
     );
 
@@ -818,7 +818,7 @@ fn test_strings() {
       condition:
         #a == 1 and @a == 0x2f
     }",
-        "assets/libyara/data/xorwide.out",
+        "tests/assets/libyara/data/xorwide.out",
         true,
     );
 
@@ -886,7 +886,7 @@ fn test_strings() {
       condition:
         #a == 0
     }",
-        "assets/libyara/data/xorwide.out",
+        "tests/assets/libyara/data/xorwide.out",
         true,
     );
 
@@ -899,7 +899,7 @@ fn test_strings() {
       condition:
         #a == 512
     }",
-        "assets/libyara/data/xorwideandascii.out",
+        "tests/assets/libyara/data/xorwideandascii.out",
         true,
     );
 
@@ -910,7 +910,7 @@ fn test_strings() {
       condition:
         #a == 2
     }",
-        "assets/libyara/data/xorwideandascii.out",
+        "tests/assets/libyara/data/xorwideandascii.out",
         true,
     );
 
@@ -1046,7 +1046,7 @@ fn test_strings() {
           @a[6] == 0x109 and
           !a[6] == 25
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1071,7 +1071,7 @@ fn test_strings() {
           @a[6] == 0x109 and
           !a[6] == 25
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1096,7 +1096,7 @@ fn test_strings() {
           @a[6] == 0x311 and
           !a[6] == 50
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1109,7 +1109,7 @@ fn test_strings() {
         condition:
           #a == 12
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1126,7 +1126,7 @@ fn test_strings() {
           @b[15] == 0x6f7 and
           @b[16] == 0x711
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1141,7 +1141,7 @@ fn test_strings() {
           @a[1] == 0xa2 and
           @a[2] == 0xbd
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1159,7 +1159,7 @@ fn test_strings() {
           @a[3] == 0x3f1 and
           !a[3] == 50
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1178,7 +1178,7 @@ fn test_strings() {
           @a[3] == 0x3f1 and
           !a[3] == 50
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1196,7 +1196,7 @@ fn test_strings() {
           @a[3] == 0x530 and
           !a[3] == 100
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1220,7 +1220,7 @@ fn test_strings() {
           @a[6] == 0x530 and
           !a[6] == 100
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1250,7 +1250,7 @@ fn test_strings() {
           @a[9] == 0x3f1 and
           !a[9] == 50
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1263,7 +1263,7 @@ fn test_strings() {
         condition:
           #a == 9
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1275,7 +1275,7 @@ fn test_strings() {
         condition:
           #a == 9
       }",
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 
@@ -1292,7 +1292,7 @@ fn test_strings() {
           @a[3] == 0x656 and
           !a[3] == 25
       }"#,
-        "assets/libyara/data/base64",
+        "tests/assets/libyara/data/base64",
         true,
     );
 }
