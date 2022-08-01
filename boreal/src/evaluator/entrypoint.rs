@@ -43,9 +43,9 @@ fn parse_pe<Pe: ImageNtHeaders>(mem: &[u8]) -> Option<Value> {
 
     let ep = opt_hdr.address_of_entry_point();
 
-    dbg!(Some(Value::Integer(
+    Some(Value::Integer(
         pe_rva_to_file_offset(&sections, ep).unwrap_or(0),
-    )))
+    ))
 }
 
 // This reimplements the `yr_pe_rva_to_offset` function from libyara.

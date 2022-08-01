@@ -337,7 +337,7 @@ impl CompilationError {
                         },
                     ),
                     Label::secondary((), identifiers_span.clone())
-                        .with_message(format!("only {} identifiers being bound", actual_number)),
+                        .with_message(format!("{} identifier(s) being bound", actual_number)),
                     Label::secondary((), iterator_span.clone()).with_message(format!(
                         "this yields {} elements on every iteration",
                         expected_number

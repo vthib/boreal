@@ -412,6 +412,7 @@ pub(super) fn compile_expression(
             from,
             to,
         } => {
+            // TODO: add span for variable name
             let variable_index = compiler.find_variable(&variable_name, &span)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
@@ -705,6 +706,7 @@ pub(super) fn compile_expression(
             variable_name,
             offset,
         } => {
+            // TODO: add span for variable name
             let variable_index = compiler.find_variable(&variable_name, &span)?;
             let offset = compile_expression(compiler, *offset)?;
 
