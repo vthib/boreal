@@ -409,11 +409,11 @@ pub(super) fn compile_expression(
 
         parser::ExpressionKind::CountInRange {
             variable_name,
+            variable_name_span,
             from,
             to,
         } => {
-            // TODO: add span for variable name
-            let variable_index = compiler.find_variable(&variable_name, &span)?;
+            let variable_index = compiler.find_variable(&variable_name, &variable_name_span)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
 
@@ -704,10 +704,10 @@ pub(super) fn compile_expression(
 
         parser::ExpressionKind::VariableAt {
             variable_name,
+            variable_name_span,
             offset,
         } => {
-            // TODO: add span for variable name
-            let variable_index = compiler.find_variable(&variable_name, &span)?;
+            let variable_index = compiler.find_variable(&variable_name, &variable_name_span)?;
             let offset = compile_expression(compiler, *offset)?;
 
             Ok(Expr {
@@ -722,10 +722,11 @@ pub(super) fn compile_expression(
 
         parser::ExpressionKind::VariableIn {
             variable_name,
+            variable_name_span,
             from,
             to,
         } => {
-            let variable_index = compiler.find_variable(&variable_name, &span)?;
+            let variable_index = compiler.find_variable(&variable_name, &variable_name_span)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
 

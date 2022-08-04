@@ -327,6 +327,7 @@ mod tests {
             Expression {
                 expr: Expr::CountInRange {
                     variable_name: "foo".to_owned(),
+                    variable_name_span: 0..4,
                     from: Box::new(Expression {
                         expr: Expr::Integer(0),
                         span: 9..10,

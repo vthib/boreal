@@ -221,28 +221,30 @@ fn variable_expression(input: Input) -> ParseResult<Expression> {
     let (input, variable_name) = string_identifier(input)?;
 
     // string_identifier 'at' primary_expression
-    if let Ok((input, expr)) = preceded(rtrim(ttag("at")), primary_expression)(input) {
+    if let Ok((input2, expr)) = preceded(rtrim(ttag("at")), primary_expression)(input) {
         Ok((
-            input,
+            input2,
             Expression {
                 expr: ExpressionKind::VariableAt {
                     variable_name,
+                    variable_name_span: input.get_span_from(start),
                     offset: Box::new(expr),
                 },
-                span: input.get_span_from(start),
+                span: input2.get_span_from(start),
             },
         ))
     // string_identifier 'in' range
-    } else if let Ok((input, (from, to))) = preceded(rtrim(tag("in")), range)(input) {
+    } else if let Ok((input2, (from, to))) = preceded(rtrim(tag("in")), range)(input) {
         Ok((
-            input,
+            input2,
             Expression {
                 expr: ExpressionKind::VariableIn {
                     variable_name,
+                    variable_name_span: input.get_span_from(start),
                     from,
                     to,
                 },
-                span: input.get_span_from(start),
+                span: input2.get_span_from(start),
             },
         ))
     // string_identifier
@@ -329,6 +331,7 @@ mod tests {
             Expression {
                 expr: ExpressionKind::VariableAt {
                     variable_name: "a".to_owned(),
+                    variable_name_span: 0..2,
                     offset: Box::new(Expression {
                         expr: ExpressionKind::Integer(100),
                         span: 6..9,
@@ -344,6 +347,7 @@ mod tests {
             Expression {
                 expr: ExpressionKind::VariableIn {
                     variable_name: "_".to_owned(),
+                    variable_name_span: 0..2,
                     from: Box::new(Expression {
                         expr: ExpressionKind::Integer(0),
                         span: 7..8,
@@ -363,6 +367,7 @@ mod tests {
             Expression {
                 expr: ExpressionKind::VariableIn {
                     variable_name: "".to_owned(),
+                    variable_name_span: 0..1,
                     from: Box::new(Expression {
                         expr: ExpressionKind::Neg(Box::new(Expression {
                             expr: ExpressionKind::Integer(10),

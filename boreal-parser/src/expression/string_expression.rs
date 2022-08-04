@@ -19,8 +19,8 @@ use crate::{
 /// Parse a `string_count ( 'in' range )` expression
 pub(super) fn string_count_expression(input: Input) -> ParseResult<Expression> {
     let start = input;
-    let (input, variable_name) = string::count(input)?;
-    let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input)?;
+    let (input_after_count, variable_name) = string::count(input)?;
+    let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input_after_count)?;
 
     let expr = match range {
         // string_count
@@ -28,6 +28,7 @@ pub(super) fn string_count_expression(input: Input) -> ParseResult<Expression> {
         // string_count 'in' range
         Some((from, to)) => ExpressionKind::CountInRange {
             variable_name,
+            variable_name_span: input_after_count.get_span_from(start),
             from,
             to,
         },
@@ -112,6 +113,7 @@ mod tests {
             Expression {
                 expr: ExpressionKind::CountInRange {
                     variable_name: "foo".to_owned(),
+                    variable_name_span: 0..4,
                     from: Box::new(Expression {
                         expr: ExpressionKind::Integer(0),
                         span: 9..10,

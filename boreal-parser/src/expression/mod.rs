@@ -107,6 +107,8 @@ pub enum ExpressionKind {
     CountInRange {
         /// Name of the variable being counted
         variable_name: String,
+        /// Span for the name of the variable
+        variable_name_span: Range<usize>,
         /// Starting offset, included.
         from: Box<Expression>,
         /// Ending offset, included.
@@ -246,6 +248,8 @@ pub enum ExpressionKind {
     VariableAt {
         /// Name of the variable
         variable_name: String,
+        /// Span for the name of the variable
+        variable_name_span: Range<usize>,
         /// Offset
         offset: Box<Expression>,
     },
@@ -254,6 +258,8 @@ pub enum ExpressionKind {
     VariableIn {
         /// Name of the variable.
         variable_name: String,
+        /// Span for the name of the variable
+        variable_name_span: Range<usize>,
         /// Starting offset, included.
         from: Box<Expression>,
         /// Ending offset, included.
