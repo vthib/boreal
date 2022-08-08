@@ -242,11 +242,14 @@ fn hex_token_to_regex(token: HexToken, regex: &mut String) {
                 }
             }
         },
-        HexToken::Alternatives(left, right) => {
+        HexToken::Alternatives(elems) => {
             regex.push_str("((");
-            hex_string_to_regex(left, regex);
-            regex.push_str(")|(");
-            hex_string_to_regex(right, regex);
+            for (i, e) in elems.into_iter().enumerate() {
+                if i > 0 {
+                    regex.push_str(")|(");
+                }
+                hex_string_to_regex(e, regex);
+            }
             regex.push_str("))");
         }
     }

@@ -44,7 +44,7 @@ use glob as _;
 use yara as _;
 
 mod compiler;
-pub use compiler::{AddRuleError, Compiler};
+pub use compiler::{AddRuleError, CompilationError, Compiler};
 mod evaluator;
 pub mod module;
 mod scanner;
