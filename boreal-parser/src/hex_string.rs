@@ -29,7 +29,7 @@ pub enum HexToken {
 }
 
 /// Mask on a byte.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Mask {
     /// The left part is masked, ie ?X
     Left,
@@ -46,7 +46,7 @@ pub enum Mask {
 /// - `[a-]` means `a` or more.
 /// - `[-]` is equivalent to `[0-]`.
 /// - `[a]` is equivalent to `[a-a]`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Jump {
     /// Beginning of the range, included.
     pub from: u32,

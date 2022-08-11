@@ -12,7 +12,7 @@ mod string_expression;
 use crate::string::Regex;
 
 /// Integer read type, see [`ExpressionKind::ReadInteger`].
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ReadIntegerType {
     /// 8 bits, signed
     Int8,
@@ -399,7 +399,7 @@ pub enum ForIterator {
 }
 
 /// Set of multiple variables.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableSet {
     /// Names of the variables in the set.
     ///
@@ -407,7 +407,7 @@ pub struct VariableSet {
     pub elements: Vec<SetElement>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SetElement {
     /// Name of the element.
     pub name: String,
@@ -420,7 +420,7 @@ pub struct SetElement {
 }
 
 /// Set of multiple rules.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuleSet {
     /// Names of the rules in the set.
     ///

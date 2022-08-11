@@ -55,7 +55,7 @@ pub struct Rule {
 }
 
 /// Tag for a rule.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RuleTag {
     /// The tag name.
     pub tag: String,
@@ -65,7 +65,7 @@ pub struct RuleTag {
 }
 
 /// Value associated with a metadata key.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MetadataValue {
     Bytes(Vec<u8>),
     Integer(i64),
@@ -73,7 +73,7 @@ pub enum MetadataValue {
 }
 
 /// A metadata key-value, associated with a rule.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Metadata {
     /// Name of the metadata.
     pub name: String,
@@ -116,7 +116,7 @@ pub enum VariableDeclarationValue {
 }
 
 /// Modifiers applicable on a string.
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub struct VariableModifiers {
     /// Bitflags of possibles flags modifying the string.
     pub flags: VariableFlags,

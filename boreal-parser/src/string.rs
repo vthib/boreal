@@ -15,7 +15,7 @@ use super::nom_recipes::{rtrim, take_one};
 use super::types::{Input, ParseResult};
 
 /// A regular expression.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Regex {
     /// The regular expression parsed inside the `/` delimiters.
     pub expr: String,

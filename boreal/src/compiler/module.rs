@@ -162,7 +162,7 @@ pub(super) fn compile_identifier<'a, 'b>(
         }
     };
     let subfield = match &first_op.op {
-        parser::IdentifierOperationType::Subfield(subfield) => &*subfield,
+        parser::IdentifierOperationType::Subfield(subfield) => subfield,
         parser::IdentifierOperationType::Subscript(_) => {
             return Err(CompilationError::InvalidIdentifierType {
                 actual_type: "object".to_string(),
@@ -409,7 +409,7 @@ impl ValueOrType<'_> {
         match self {
             Self::Value(value) => {
                 if let StaticValue::Object(map) = value {
-                    match map.get(&*subfield) {
+                    match map.get(subfield) {
                         Some(v) => {
                             *self = Self::Value(v);
                             return Ok(());
@@ -420,7 +420,7 @@ impl ValueOrType<'_> {
             }
             Self::Type(ty) => {
                 if let ValueType::Object(map) = ty {
-                    match map.get(&*subfield) {
+                    match map.get(subfield) {
                         Some(v) => {
                             *self = Self::Type(v);
                             return Ok(());

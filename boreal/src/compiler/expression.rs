@@ -74,7 +74,7 @@ impl Expr {
 pub struct VariableIndex(pub Option<usize>);
 
 /// Set of multiple variables.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableSet {
     /// Indexes of the variables selected in the set.
     ///
@@ -84,7 +84,7 @@ pub struct VariableSet {
 }
 
 /// Set of multiple rules.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuleSet {
     /// Indexes of the rules selected in the set.
     ///

@@ -39,7 +39,7 @@ pub enum YaraFileComponent {
 }
 
 /// An import inside a Yara file.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Import {
     /// The name being imported
     pub name: String,
