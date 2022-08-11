@@ -6,6 +6,10 @@ use regex::bytes::Regex;
 mod time;
 pub use time::Time;
 
+#[allow(clippy::cast_precision_loss)]
+mod math;
+pub use math::Math;
+
 #[cfg(feature = "hash")]
 mod hash;
 #[cfg(feature = "hash")]
