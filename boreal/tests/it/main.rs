@@ -19,6 +19,7 @@ mod variables;
 mod elf;
 #[cfg(feature = "object")]
 mod macho;
+mod math;
 #[cfg(feature = "object")]
 mod pe;
 

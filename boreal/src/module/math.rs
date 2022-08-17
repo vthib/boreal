@@ -127,6 +127,7 @@ impl Module for Math {
 fn get_mem_slice<'a>(ctx: &ScanContext<'a>, offset: i64, length: i64) -> Option<&'a [u8]> {
     let start: usize = offset.try_into().ok()?;
     let end = start.checked_add(length.try_into().ok()?)?;
+    let end = std::cmp::min(end, ctx.mem.len());
 
     ctx.mem.get(start..end)
 }
@@ -166,7 +167,7 @@ impl Math {
 
     fn mean(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
-        let deviation = match args.next()? {
+        let mean = match args.next()? {
             Value::Bytes(bytes) => compute_mean(&bytes),
             Value::Integer(offset) => {
                 let length: i64 = args.next()?.try_into().ok()?;
@@ -176,7 +177,7 @@ impl Math {
             _ => return None,
         };
 
-        Some(Value::Float(deviation))
+        Some(Value::Float(mean))
     }
 
     fn serial_correlation(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
@@ -302,7 +303,8 @@ impl Math {
         };
 
         // Find the index of the most common byte
-        let most_common = dist.iter().enumerate().max_by_key(|(_, n)| *n)?.0;
+        // Reverse to return the first index of the maximum value and not the last one.
+        let most_common = dist.iter().enumerate().rev().max_by_key(|(_, n)| *n)?.0;
         most_common.try_into().ok().map(Value::Integer)
     }
 }
@@ -365,7 +367,7 @@ fn compute_serial_correlation(bytes: &[u8]) -> f64 {
     // Yes, this breaks the formula for len <= 2. But its how those implementations basically
     // handle this...
     if !bytes.is_empty() {
-        scct1 += f64::from(bytes[0] * bytes[bytes.len() - 1]);
+        scct1 += f64::from(u32::from(bytes[0]) * u32::from(bytes[bytes.len() - 1]));
     }
     scct2 *= scct2;
 

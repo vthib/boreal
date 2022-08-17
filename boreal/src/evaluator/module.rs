@@ -86,7 +86,13 @@ where
 pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
     match value {
         ModuleValue::Integer(v) => Some(Value::Integer(v)),
-        ModuleValue::Float(v) => Some(Value::Float(v)),
+        ModuleValue::Float(v) => {
+            if v.is_nan() {
+                None
+            } else {
+                Some(Value::Float(v))
+            }
+        }
         ModuleValue::Bytes(v) => Some(Value::Bytes(v)),
         ModuleValue::Regex(v) => Some(Value::Regex(v)),
         ModuleValue::Boolean(v) => Some(Value::Boolean(v)),
