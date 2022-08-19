@@ -3,13 +3,12 @@
 //! This module contains all types describing a rule condition, built from the parsed AST.
 use std::ops::Range;
 
-use regex::bytes::{Regex, RegexBuilder};
-
 use boreal_parser as parser;
 
 use super::{module, ModuleExpression};
 use super::{CompilationError, RuleCompiler};
 use crate::module::Type as ModuleType;
+use crate::regex::Regex;
 
 /// Type of a parsed expression
 ///
@@ -349,6 +348,7 @@ pub enum Expression {
 
     /// A byte string.
     Bytes(Vec<u8>),
+
     /// A regex.
     Regex(Regex),
 }
@@ -1145,12 +1145,11 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         span,
     } = regex;
 
-    RegexBuilder::new(&expr)
-        .unicode(false)
-        .case_insensitive(case_insensitive)
-        .dot_matches_new_line(dot_all)
-        .build()
-        .map_err(|error| CompilationError::RegexError { expr, error, span })
+    Regex::new(&expr, case_insensitive, dot_all).map_err(|error| CompilationError::RegexError {
+        expr,
+        error,
+        span,
+    })
 }
 
 fn compile_identifier(

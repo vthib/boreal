@@ -47,5 +47,6 @@ mod compiler;
 pub use compiler::{AddRuleError, CompilationError, Compiler};
 mod evaluator;
 pub mod module;
+pub mod regex;
 mod scanner;
 pub use scanner::Scanner;

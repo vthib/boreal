@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::regex::Regex;
 use object::{
     coff::{SectionTable, SymbolTable},
     pe::{
@@ -12,7 +13,6 @@ use object::{
     },
     FileKind, LittleEndian as LE, StringTable,
 };
-use regex::bytes::Regex;
 
 use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
@@ -1885,7 +1885,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| function_name_regex.is_match(name))
+                    .map_or(false, |name| function_name_regex.as_regex().is_match(name))
             }),
             _ => return None,
         };
@@ -1924,7 +1924,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| function_name_regex.is_match(name))
+                    .map_or(false, |name| function_name_regex.as_regex().is_match(name))
             })?,
             _ => return None,
         };
@@ -2239,12 +2239,12 @@ impl Data {
         let mut nb_matches = 0;
 
         for imp in self.get_imports(delayed) {
-            if !dll_regex.is_match(&imp.dll_name) {
+            if !dll_regex.as_regex().is_match(&imp.dll_name) {
                 continue;
             }
             for fun in &imp.functions {
                 if let Some(name) = &fun.name {
-                    if fun_regex.is_match(name) {
+                    if fun_regex.as_regex().is_match(name) {
                         nb_matches += 1;
                     }
                 }

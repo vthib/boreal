@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use regex::bytes::Regex;
-
 use boreal::module::{Module, ScanContext, StaticValue, Type, Value};
+use boreal::regex::Regex;
 
 #[derive(Debug)]
 pub struct Tests;
@@ -23,7 +22,10 @@ impl Module for Tests {
                     ("empty", StaticValue::bytes("")),
                     // Not libyara
                     ("one_half", StaticValue::Float(0.5)),
-                    ("regex", StaticValue::Regex(Regex::new("<a.b>").unwrap())),
+                    (
+                        "regex",
+                        StaticValue::Regex(Regex::new("<a.b>", false, false).unwrap()),
+                    ),
                     ("str", StaticValue::bytes("str")),
                     ("true", StaticValue::Boolean(true)),
                 ]),
@@ -367,7 +369,7 @@ impl Tests {
         let regex: Regex = args.next()?.try_into().ok()?;
         let s: Vec<u8> = args.next()?.try_into().ok()?;
 
-        Some(Value::Integer(match regex.find(&s) {
+        Some(Value::Integer(match regex.as_regex().find(&s) {
             Some(m) => m.range().len() as i64,
             None => -1,
         }))
@@ -377,7 +379,10 @@ impl Tests {
         Some(Value::object([
             ("one", Value::Integer(1)),
             ("one_half", Value::Float(0.5)),
-            ("regex", Value::Regex(Regex::new("<a.b>").unwrap())),
+            (
+                "regex",
+                Value::Regex(Regex::new("<a.b>", false, false).unwrap()),
+            ),
             ("str", Value::bytes("str")),
             ("true", Value::Boolean(true)),
             (
@@ -407,7 +412,10 @@ impl Tests {
             ("fake_bool_to_array", Value::Array(vec![Value::Integer(2)])),
             ("fake_bool_to_dict", Value::object([])),
             ("fake_bool_to_fun", Value::Function(Self::empty)),
-            ("fake_int", Value::Regex(Regex::new("ht+p").unwrap())),
+            (
+                "fake_int",
+                Value::Regex(Regex::new("ht+p", false, false).unwrap()),
+            ),
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),
             ("fake_fun_to_bool", Value::Boolean(false)),

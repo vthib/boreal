@@ -11,8 +11,8 @@
 //! The use of an `Option` is useful to propagate this poison value easily.
 use std::sync::Arc;
 
+use crate::regex::Regex;
 use memchr::memmem;
-use regex::bytes::Regex;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
@@ -453,7 +453,7 @@ impl Evaluator<'_, '_, '_> {
             }
             Expression::Matches(expr, regex) => {
                 let s = self.evaluate_expr(expr)?.unwrap_bytes()?;
-                Some(Value::Boolean(regex.is_match(&s)))
+                Some(Value::Boolean(regex.as_regex().is_match(&s)))
             }
             Expression::Defined(expr) => {
                 let expr = self.evaluate_expr(expr);

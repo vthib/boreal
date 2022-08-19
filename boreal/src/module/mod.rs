@@ -1,7 +1,7 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
-use regex::bytes::Regex;
+use crate::regex::Regex;
 
 mod time;
 pub use time::Time;

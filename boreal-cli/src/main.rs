@@ -92,7 +92,7 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
             Ok(s) => println!(" = {:?}", s),
             Err(_) => println!(" = {{ {} }}", hex::encode(bytes)),
         },
-        ModuleValue::Regex(regex) => println!(" = /{}/", regex.as_str()),
+        ModuleValue::Regex(regex) => println!(" = /{}/", regex.as_regex().as_str()),
         ModuleValue::Boolean(b) => println!(" = {:?}", b),
         ModuleValue::Object(obj) => {
             if obj.is_empty() {

@@ -469,7 +469,9 @@ fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
                 print!("\"");
             }
         },
-        ModuleValue::Regex(regex) => print!("{:indent$}{} == /{}/", "", name, regex.as_str()),
+        ModuleValue::Regex(regex) => {
+            print!("{:indent$}{} == /{}/", "", name, regex.as_regex().as_str())
+        }
         ModuleValue::Boolean(b) => {
             print!("{:indent$}{} == {:?}", "", name, b)
         }
