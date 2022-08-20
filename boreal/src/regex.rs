@@ -22,7 +22,9 @@ impl Regex {
     }
 
     fn new_inner(expr: &str, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
-        RegexBuilder::new(expr)
+        let expr = normalize_regex(expr);
+
+        RegexBuilder::new(&expr)
             .unicode(false)
             .case_insensitive(case_insensitive)
             .dot_matches_new_line(dot_all)
@@ -36,6 +38,31 @@ impl Regex {
     pub fn as_regex(&self) -> &regex::bytes::Regex {
         &self.0
     }
+}
+
+/// Convert a yara regex into a rust one.
+///
+/// Here is a list of the differences to handle:
+///
+/// - While the regex might be a string, it gets matched as a byte string by Yara. This leads
+///   to some confusing behavior, for example `/é+/` will match `\xC3\xA9` (é in unicode) but will
+///   match `\xC3\xA9\xA9` and not match `\xC3\xA9\xC3\xA9`.
+pub(crate) fn normalize_regex(expr: &str) -> String {
+    use std::fmt::Write;
+
+    let mut res = String::with_capacity(expr.len());
+
+    // Decompose non ascii chars into their utf-8 encoding, as the yara regex
+    // engine would consider them.
+    for b in expr.as_bytes() {
+        if b.is_ascii() {
+            res.push(char::from(*b));
+        } else {
+            let _ = write!(res, r"\x{:2x}", b);
+        }
+    }
+
+    res
 }
 
 #[derive(Clone, Debug)]

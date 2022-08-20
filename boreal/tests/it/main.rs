@@ -7,6 +7,9 @@ mod module_tests;
 // Tests related to errors in rules
 mod error;
 
+// Tests related to conversions of YARA regexes into rust ones.
+mod regex;
+
 // Tests related to evaluation of rules
 mod evaluation;
 mod for_expression;

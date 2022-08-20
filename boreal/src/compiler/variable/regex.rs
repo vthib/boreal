@@ -3,6 +3,8 @@ use grep_regex::RegexMatcherBuilder;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
+use crate::regex::normalize_regex;
+
 use super::{VariableCompilationError, VariableMatcher};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -12,11 +14,13 @@ pub fn build_regex_matcher(
 ) -> Result<VariableMatcher, VariableCompilationError> {
     let mut matcher = RegexMatcherBuilder::new();
     let Regex {
-        mut expr,
+        expr,
         mut case_insensitive,
         dot_all,
         span: _,
     } = regex;
+
+    let mut expr = normalize_regex(&expr);
 
     if modifiers.flags.contains(VariableFlags::NOCASE) {
         case_insensitive = true;
