@@ -229,7 +229,20 @@ impl Math {
         let a: i64 = args.next()?.try_into().ok()?;
         let b: i64 = args.next()?.try_into().ok()?;
 
-        Some(if a < b { a.into() } else { b.into() })
+        // libyara cast those as u64, which can lead to very confusing behavior on negative
+        // numbers...
+        #[allow(clippy::cast_sign_loss)]
+        {
+            let a = a as u64;
+            let b = b as u64;
+
+            #[allow(clippy::cast_possible_wrap)]
+            Some(if a < b {
+                (a as i64).into()
+            } else {
+                (b as i64).into()
+            })
+        }
     }
 
     fn max(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
@@ -237,7 +250,20 @@ impl Math {
         let a: i64 = args.next()?.try_into().ok()?;
         let b: i64 = args.next()?.try_into().ok()?;
 
-        Some(if a > b { a.into() } else { b.into() })
+        // libyara cast those as u64, which can lead to very confusing behavior on negative
+        // numbers...
+        #[allow(clippy::cast_sign_loss)]
+        {
+            let a = a as u64;
+            let b = b as u64;
+
+            #[allow(clippy::cast_possible_wrap)]
+            Some(if a > b {
+                (a as i64).into()
+            } else {
+                (b as i64).into()
+            })
+        }
     }
 
     fn to_number(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
@@ -257,7 +283,10 @@ impl Math {
     fn count(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let byte: i64 = args.next()?.try_into().ok()?;
-        let byte: usize = byte.try_into().ok()?;
+        // libyara type cast this to a byte directly.
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
+        let byte: u8 = byte as u8;
 
         let dist = match (args.next(), args.next()) {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
@@ -267,7 +296,7 @@ impl Math {
             _ => return None,
         };
 
-        dist.get(byte)
+        dist.get(byte as usize)
             .and_then(|v| i64::try_from(*v).ok())
             .map(Value::Integer)
     }

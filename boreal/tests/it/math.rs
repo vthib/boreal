@@ -38,9 +38,12 @@ fn test_math_in_range() {
 fn test_math_max_min() {
     test("math.max(5, 6) == 6", b"");
     test("math.min(5, 6) == 5", b"");
-    // TODO: fix needed, libyara cast those to unsigned integers...
-    // test("math.max(7, -2) == 7", b"");
-    // test("math.min(7, -2) == -2", b"");
+
+    // Yes, this is "working as expected". libyara defines those operators as operating
+    // on uint64 values, and if those values are negative, undefined is not returned, but values
+    // are type casted to and from uint64
+    test("math.max(7, -2) == -2", b"");
+    test("math.min(7, -2) == 7", b"");
 }
 
 #[test]
@@ -234,9 +237,10 @@ fn test_math_count() {
     test("math.count(0, 150, 250) == 158", ELF32_MIPS_FILE);
     test("math.count(115) == 112", ELF32_MIPS_FILE);
 
-    // FIXME: yara cast the number as a byte...
-    // test("not defined math.count(-5)", b"");
-    // test("not defined math.count(256)", b"");
+    // Value is casted to a u8
+    test("math.count(-1) == 1", b"\xFF");
+    test("math.count(258) == 1", b"\x02");
+
     test("not defined math.count(0, -1, 5)", b"");
     test("not defined math.count(0, 0, -2)", b"");
     test("not defined math.count(0, 1, 5)", b"");
@@ -278,9 +282,6 @@ fn test_math_percentage() {
         ELF32_MIPS_FILE,
     );
 
-    // FIXME: yara cast the number as a byte...
-    // test("not defined math.percentage(-5)", b"");
-    // test("not defined math.percentage(256)", b"");
     test("not defined math.percentage(0, -1, 5)", b"");
     test("not defined math.percentage(0, 0, -2)", b"");
     test("not defined math.percentage(0, 1, 5)", b"");
@@ -306,9 +307,6 @@ fn test_math_mode() {
     test("math.mode() == 0", ELF32_MIPS_FILE);
     test("math.mode(5216, 160) == 45", ELF32_MIPS_FILE);
 
-    // FIXME: yara cast the number as a byte...
-    // test("not defined math.mode(-5)", b"");
-    // test("not defined math.mode(256)", b"");
     test("not defined math.mode(-1, 5)", b"");
     test("not defined math.mode(0, -2)", b"");
 
