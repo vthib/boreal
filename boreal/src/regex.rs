@@ -53,7 +53,29 @@ impl Regex {
 ///   backslash was not present.
 pub(crate) fn normalize_regex(expr: &str) -> String {
     let expr = decompose_unicode_bytes(expr);
-    remove_unneeded_escapes(&expr)
+    // Order is important here. Yara handles those escapes during lexing, and thus before
+    // interpreting the string. This is the different between `{\,2}` being valid or not.
+    let expr = remove_unneeded_escapes(&expr);
+    fix_at_most_repetitions(&expr)
+}
+
+/// Find uses of the `{,N}` syntax, and replace with `{0,N}`
+fn fix_at_most_repetitions(expr: &str) -> String {
+    let mut res = String::with_capacity(expr.len());
+    let mut prev_is_escape = false;
+    let mut starting_repetition = false;
+
+    for c in expr.chars() {
+        if c == ',' && starting_repetition {
+            res.push('0');
+        }
+
+        res.push(c);
+        starting_repetition = c == '{' && !starting_repetition && !prev_is_escape;
+        prev_is_escape = c == '\\' && !prev_is_escape;
+    }
+
+    res
 }
 
 fn remove_unneeded_escapes(expr: &str) -> String {

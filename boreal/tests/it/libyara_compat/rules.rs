@@ -2605,9 +2605,8 @@ fn test_re() {
     check_regex_match("ab{1,1}c", b"abc", b"abc");
     check_regex_match("ab{0,}c", b"abbbc", b"abbbc");
 
-    // TODO: handle this syntax
-    // check_regex_match("ab{,3}c", b"abbbc", b"abbbc");
-    // check(&build_regex_rule("ab{,2}c"), b"abbbc", false);
+    check_regex_match("ab{,3}c", b"abbbc", b"abbbc");
+    check(&build_regex_rule("ab{,2}c"), b"abbbc", false);
 
     check(&build_regex_rule("ab{4,5}bc"), b"abbbbc", false);
     check(&build_regex_rule("ab{3}c"), b"abbbbc", false); // Issue #817
@@ -2739,8 +2738,7 @@ fn test_re() {
     check(&build_regex_rule("[\\x00-\\x02]+"), b"\x03\x04\x05", false);
     check_regex_match("[\\x5D]", b"]", b"]");
 
-    // TODO: not sure how this is supposed to work.
-    // check_regex_match("[\\0x5A-\\x5D]", b"\x5B", b"\x5B");
+    check_regex_match("[\\0x5A-\\x5D]", b"\x5B", b"\x5B");
 
     check_regex_match("[\\x5D-\\x5F]", b"\x5E", b"\x5E");
     check_regex_match("[\\x5C-\\x5F]", b"\x5E", b"\x5E");

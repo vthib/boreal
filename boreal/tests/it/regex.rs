@@ -96,3 +96,44 @@ fn test_regex_unneeded_escapes() {
     checker.check(b"]", true);
     checker.check(b"^", false);
 }
+
+#[test]
+fn test_regex_at_most_repetitions() {
+    let checker = Checker::new(&build_rule(r"/<a{,2}>/"));
+    checker.check(b"<>", true);
+    checker.check(b"<a>", true);
+    checker.check(b"<aa>", true);
+    checker.check(b"<aaa>", false);
+
+    let checker = Checker::new(&build_rule(r"/<a\{,2}>/"));
+    checker.check(b"<>", false);
+    checker.check(b"<a>", false);
+    checker.check(b"<a{,2}>", true);
+
+    let checker = Checker::new(&build_rule(r"/<\\{,2}>/"));
+    checker.check(br"<>", true);
+    checker.check(br"<\>", true);
+    checker.check(br"<\\>", true);
+    checker.check(br"<\\\>", false);
+
+    // TODO: This is tricky: yara will not lex this as a repetition, but as literals, and the
+    // escape will be stripped. For us, this is painful to handle...
+    // let checker = Checker::new(&build_rule(r"/<a{\,2}>/"));
+    // checker.check(br"<>", true);
+    // checker.check(br"<a>", true);
+    // checker.check(br"<aa>", true);
+    // checker.check(br"<aaa>", false);
+
+    // TODO: idem, same issue
+    // let checker = Checker::new(&build_rule(r"/<a{{,2}>/"));
+    // checker.check(br"<a>", true);
+    // checker.check(br"<a{>", true);
+    // checker.check(br"<a{{>", true);
+    // checker.check(br"<a{{{>", false);
+
+    let checker = Checker::new(&build_rule(r"/<\{{,2}>/"));
+    checker.check(br"<>", true);
+    checker.check(br"<{>", true);
+    checker.check(br"<{{>", true);
+    checker.check(br"<{{{>", false);
+}
