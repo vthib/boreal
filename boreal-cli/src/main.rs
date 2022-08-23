@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use boreal::module::Value as ModuleValue;
 use boreal::Compiler;
+use boreal::{module::Value as ModuleValue, Scanner};
 
 use clap::Parser;
 use codespan_reporting::{
@@ -12,6 +12,7 @@ use codespan_reporting::{
         termcolor::{ColorChoice, StandardStream},
     },
 };
+use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
 #[clap(version, about)]
@@ -20,13 +21,17 @@ struct Args {
     #[clap(value_parser)]
     rules_file: PathBuf,
 
-    /// Input to scan.
+    /// File or directory to scan.
     #[clap(value_parser)]
-    file: PathBuf,
+    input: PathBuf,
 
-    /// Print module data.
+    /// Print module data
     #[clap(short = 'D', long, value_parser)]
     print_module_data: bool,
+
+    /// Recursively search directories
+    #[clap(short = 'r', long, value_parser)]
+    recursive: bool,
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -52,7 +57,23 @@ fn main() -> Result<(), std::io::Error> {
         compiler.into_scanner()
     };
 
-    let file_contents = std::fs::read(&args.file)?;
+    let mut walker = WalkDir::new(&args.input).follow_links(true);
+    if !args.recursive {
+        walker = walker.max_depth(1);
+    }
+
+    for entry in walker {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            scan_file(&scanner, entry.path(), &args)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn scan_file(scanner: &Scanner, path: &Path, args: &Args) -> std::io::Result<()> {
+    let file_contents = std::fs::read(&path)?;
     let res = scanner.scan_mem(&file_contents);
 
     if args.print_module_data {
@@ -69,7 +90,7 @@ fn main() -> Result<(), std::io::Error> {
         }
     }
     for rule in res.matched_rules {
-        println!("{} {}", &rule.name, args.file.display());
+        println!("{} {}", &rule.name, path.display());
     }
 
     Ok(())

@@ -109,6 +109,7 @@ dependencies = [
  "clap",
  "codespan-reporting",
  "hex",
+ "walkdir",
 ]
 
 [[package]]

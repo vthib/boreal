@@ -16,3 +16,6 @@ codespan-reporting = "0.11"
 
 # Display of bytes values
 hex = "0.4"
+
+# Walking through directories
+walkdir = "2.3"
