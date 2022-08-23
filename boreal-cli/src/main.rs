@@ -36,6 +36,10 @@ struct Args {
     /// Recursively search directories
     #[clap(short = 'r', long, value_parser)]
     recursive: bool,
+
+    /// Skip files larger than the given size when scanning a directory
+    #[clap(short = 'z', long, value_parser, value_name = "MAX_SIZE")]
+    skip_larger: Option<u64>,
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -68,9 +72,27 @@ fn main() -> Result<(), std::io::Error> {
 
     for entry in walker {
         let entry = entry?;
-        if entry.file_type().is_file() {
-            scan_file(&scanner, entry.path(), &args)?;
+
+        if !entry.file_type().is_file() {
+            continue;
         }
+
+        if let Some(max_size) = args.skip_larger {
+            if max_size > 0 && entry.depth() > 0 {
+                let meta = entry.metadata()?;
+                if meta.len() >= max_size {
+                    eprintln!(
+                        "skipping {} ({} bytes) because it's larger than {} bytes.",
+                        entry.path().display(),
+                        meta.len(),
+                        max_size
+                    );
+                    continue;
+                }
+            }
+        }
+
+        scan_file(&scanner, entry.path(), &args)?;
     }
 
     Ok(())
