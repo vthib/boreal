@@ -25,6 +25,10 @@ struct Args {
     #[clap(value_parser)]
     input: PathBuf,
 
+    /// Do not follow symlinks when scanning
+    #[clap(short = 'N', long, value_parser)]
+    no_follow_symlinks: bool,
+
     /// Print module data
     #[clap(short = 'D', long, value_parser)]
     print_module_data: bool,
@@ -57,7 +61,7 @@ fn main() -> Result<(), std::io::Error> {
         compiler.into_scanner()
     };
 
-    let mut walker = WalkDir::new(&args.input).follow_links(true);
+    let mut walker = WalkDir::new(&args.input).follow_links(!args.no_follow_symlinks);
     if !args.recursive {
         walker = walker.max_depth(1);
     }
