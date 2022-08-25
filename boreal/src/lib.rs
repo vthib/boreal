@@ -43,6 +43,10 @@ use glob as _;
 #[cfg(test)]
 use yara as _;
 
+// Used in benches
+#[cfg(test)]
+use criterion as _;
+
 mod compiler;
 pub use compiler::{AddRuleError, CompilationError, Compiler};
 mod evaluator;

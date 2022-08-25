@@ -1672,7 +1672,7 @@ fn add_resources(
                 if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
                     let rva = entry_data.offset_to_data.get(LE);
                     let offset = va_to_file_offset(sections, rva);
-                    if ty == pe::RT_VERSION.into() {
+                    if ty == u32::from(pe::RT_VERSION) {
                         if let Some(offset) = offset {
                             add_version_infos(mem, offset, out);
                         }
