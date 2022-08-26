@@ -89,8 +89,6 @@ dependencies = [
  "crc32fast",
  "criterion",
  "glob",
- "grep-matcher",
- "grep-regex",
  "hex",
  "md-5",
  "memchr",
@@ -479,30 +477,6 @@ dependencies = [
  "bitflags",
  "ignore",
  "walkdir",
-]
-
-[[package]]
-name = "grep-matcher"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d27563c33062cd33003b166ade2bb4fd82db1fd6a86db764dfdad132d46c1cc"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "grep-regex"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "121553c9768c363839b92fc2d7cdbbad44a3b70e8d6e7b1b72b05c977527bd06"
-dependencies = [
- "aho-corasick",
- "bstr",
- "grep-matcher",
- "log",
- "regex",
- "regex-syntax",
- "thread_local",
 ]
 
 [[package]]

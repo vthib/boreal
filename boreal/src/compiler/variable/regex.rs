@@ -1,5 +1,5 @@
 use boreal_parser::{Regex, VariableFlags, VariableModifiers};
-use grep_regex::RegexMatcherBuilder;
+use regex::bytes::RegexBuilder;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
@@ -12,7 +12,6 @@ pub fn build_regex_matcher(
     regex: Regex,
     modifiers: &VariableModifiers,
 ) -> Result<VariableMatcher, VariableCompilationError> {
-    let mut matcher = RegexMatcherBuilder::new();
     let Regex {
         expr,
         mut case_insensitive,
@@ -37,15 +36,15 @@ pub fn build_regex_matcher(
         }
     }
 
-    matcher
+    RegexBuilder::new(&expr)
         .unicode(false)
         .octal(false)
         .case_insensitive(case_insensitive)
         .multi_line(dot_all)
         .dot_matches_new_line(dot_all)
-        .build(&expr)
+        .build()
         .map(VariableMatcher::Regex)
-        .map_err(VariableCompilationError::GrepRegex)
+        .map_err(VariableCompilationError::Regex)
 }
 
 /// Convert a regex expression into a HIR.

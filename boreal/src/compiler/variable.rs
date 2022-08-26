@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
+use ::regex::bytes::{Regex, RegexBuilder};
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
-use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 
 use boreal_parser::{HexMask, HexToken, VariableFlags, VariableModifiers};
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
@@ -40,8 +40,8 @@ impl Variable {
 
 #[derive(Debug)]
 pub enum VariableMatcher {
-    Regex(RegexMatcher),
-    AhoCorasick(AhoCorasick),
+    Regex(Regex),
+    AhoCorasick(Box<AhoCorasick>),
 }
 
 pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, CompilationError> {
@@ -74,17 +74,16 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             flags.remove(VariableFlags::FULLWORD);
             flags.remove(VariableFlags::WIDE);
 
-            let mut matcher = RegexMatcherBuilder::new();
-            let matcher = matcher
+            let compiled_regex = RegexBuilder::new(&regex)
                 .unicode(false)
                 .octal(false)
                 .dot_matches_new_line(true)
-                .build(&regex);
-            VariableMatcher::Regex(matcher.map_err(|error| {
+                .build();
+            VariableMatcher::Regex(compiled_regex.map_err(|error| {
                 CompilationError::VariableCompilation {
                     variable_name: name.clone(),
                     span,
-                    error: VariableCompilationError::GrepRegex(error),
+                    error: VariableCompilationError::Regex(error),
                 }
             })?)
         }
@@ -125,7 +124,9 @@ fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> Variab
             }
         }
         let literals = new_literals;
-        return VariableMatcher::AhoCorasick(builder.auto_configure(&literals).build(&literals));
+        return VariableMatcher::AhoCorasick(Box::new(
+            builder.auto_configure(&literals).build(&literals),
+        ));
     }
 
     if modifiers.flags.contains(VariableFlags::BASE64)
@@ -156,12 +157,12 @@ fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> Variab
         }
     }
 
-    VariableMatcher::AhoCorasick(
+    VariableMatcher::AhoCorasick(Box::new(
         builder
             .ascii_case_insensitive(case_insensitive)
             .auto_configure(&literals)
             .build(&literals),
-    )
+    ))
 }
 
 /// Convert an ascii string to a wide string
@@ -220,9 +221,9 @@ fn hex_token_to_regex(token: HexToken, regex: &mut String) {
 /// Error during the compilation of a variable.
 #[derive(Debug)]
 pub enum VariableCompilationError {
-    /// Error returned by [`grep_regex`] when compiling a variable
+    /// Error returned by [`::regex`] when compiling a variable
     // TODO: this should not be part of the public API
-    GrepRegex(grep_regex::Error),
+    Regex(::regex::Error),
 
     /// Regexes with boundaries cannot use the `wide` modifier
     WideWithBoundary,
@@ -237,7 +238,7 @@ pub enum VariableCompilationError {
 impl std::fmt::Display for VariableCompilationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::GrepRegex(e) => e.fmt(f),
+            Self::Regex(e) => e.fmt(f),
             Self::WideWithBoundary => write!(
                 f,
                 "wide modifier cannot be applied on regexes containing boundaries"

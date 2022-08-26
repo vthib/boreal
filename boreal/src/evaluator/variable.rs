@@ -1,8 +1,6 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use grep_matcher::Matcher;
-
 use crate::compiler::{Variable, VariableMatcher};
 
 /// Variable evaluation context.
@@ -178,8 +176,8 @@ impl<'a> VariableEvaluation<'a> {
                 VariableMatcher::Regex(matcher) => {
                     // The assignement is simply to typecheck that the error is "NoError",
                     // so we can unwrap it.
-                    let res: Result<_, grep_matcher::NoError> = matcher.find_at(mem, offset);
-                    res.unwrap().map(|m| m.start()..m.end())
+                    let res = matcher.find_at(mem, offset);
+                    res.map(|m| m.start()..m.end())
                 }
                 VariableMatcher::AhoCorasick(matcher) => {
                     matcher.find(&mem[offset..]).map(|m| Match {
