@@ -58,34 +58,27 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
 
     let matcher = match value {
         VariableDeclarationValue::Bytes(s) => build_string_matcher(s, &modifiers),
-        VariableDeclarationValue::Regex(regex) => {
-            let matcher = regex::build_regex_matcher(regex, &modifiers);
-            matcher.map_err(|error| CompilationError::VariableCompilation {
+        VariableDeclarationValue::Regex(regex) => regex::apply_modifiers(regex, &modifiers)
+            .and_then(|regex| build_regex_matcher(&regex))
+            .map_err(|error| CompilationError::VariableCompilation {
                 variable_name: name.clone(),
                 span,
                 error,
-            })?
-        }
+            })?,
         VariableDeclarationValue::HexString(hex_string) => {
             let mut regex = String::new();
+            regex.push_str("(?s)");
             hex_string_to_regex(hex_string, &mut regex);
 
             // Fullword and wide is not compatible with hex strings
             flags.remove(VariableFlags::FULLWORD);
             flags.remove(VariableFlags::WIDE);
 
-            let compiled_regex = RegexBuilder::new(&regex)
-                .unicode(false)
-                .octal(false)
-                .dot_matches_new_line(true)
-                .build();
-            VariableMatcher::Regex(compiled_regex.map_err(|error| {
-                CompilationError::VariableCompilation {
-                    variable_name: name.clone(),
-                    span,
-                    error: VariableCompilationError::Regex(error),
-                }
-            })?)
+            build_regex_matcher(&regex).map_err(|error| CompilationError::VariableCompilation {
+                variable_name: name.clone(),
+                span,
+                error,
+            })?
         }
     };
 
@@ -94,6 +87,15 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         matcher,
         flags,
     })
+}
+
+fn build_regex_matcher(expr: &str) -> Result<VariableMatcher, VariableCompilationError> {
+    RegexBuilder::new(expr)
+        .unicode(false)
+        .octal(false)
+        .build()
+        .map(VariableMatcher::Regex)
+        .map_err(VariableCompilationError::Regex)
 }
 
 fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> VariableMatcher {

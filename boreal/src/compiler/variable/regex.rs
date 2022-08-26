@@ -1,17 +1,16 @@
 use boreal_parser::{Regex, VariableFlags, VariableModifiers};
-use regex::bytes::RegexBuilder;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
 use crate::regex::normalize_regex;
 
-use super::{VariableCompilationError, VariableMatcher};
+use super::VariableCompilationError;
 
 /// Build a matcher for the given regex and string modifiers.
-pub fn build_regex_matcher(
+pub fn apply_modifiers(
     regex: Regex,
     modifiers: &VariableModifiers,
-) -> Result<VariableMatcher, VariableCompilationError> {
+) -> Result<String, VariableCompilationError> {
     let Regex {
         expr,
         mut case_insensitive,
@@ -26,7 +25,7 @@ pub fn build_regex_matcher(
     }
 
     if modifiers.flags.contains(VariableFlags::WIDE) {
-        let hir = expr_to_hir(&expr, case_insensitive, dot_all).unwrap();
+        let hir = expr_to_hir(&expr).unwrap();
         let wide_hir = hir_to_wide(&hir)?;
 
         if modifiers.flags.contains(VariableFlags::ASCII) {
@@ -36,30 +35,25 @@ pub fn build_regex_matcher(
         }
     }
 
-    RegexBuilder::new(&expr)
-        .unicode(false)
-        .octal(false)
-        .case_insensitive(case_insensitive)
-        .multi_line(dot_all)
-        .dot_matches_new_line(dot_all)
-        .build()
-        .map(VariableMatcher::Regex)
-        .map_err(VariableCompilationError::Regex)
+    let mods = match (case_insensitive, dot_all) {
+        (true, true) => "ism",
+        (false, true) => "sm",
+        (true, false) => "i",
+        (false, false) => "",
+    };
+    if !mods.is_empty() {
+        expr = format!("(?{}){}", mods, expr);
+    }
+
+    Ok(expr)
 }
 
 /// Convert a regex expression into a HIR.
-fn expr_to_hir(
-    expr: &str,
-    case_insensitive: bool,
-    dot_all: bool,
-) -> Result<Hir, regex_syntax::Error> {
+fn expr_to_hir(expr: &str) -> Result<Hir, regex_syntax::Error> {
     ParserBuilder::new()
         .octal(false)
         .unicode(false)
         .allow_invalid_utf8(true)
-        .case_insensitive(case_insensitive)
-        .multi_line(dot_all)
-        .dot_matches_new_line(dot_all)
         .build()
         .parse(expr)
 }
