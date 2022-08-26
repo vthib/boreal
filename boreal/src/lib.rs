@@ -44,7 +44,7 @@ use glob as _;
 use yara as _;
 
 // Used in benches
-#[cfg(test)]
+#[cfg(feature = "bench")]
 use criterion as _;
 
 mod compiler;
