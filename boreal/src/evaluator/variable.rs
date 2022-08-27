@@ -1,7 +1,7 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use crate::compiler::{Variable, VariableMatcher};
+use crate::compiler::Variable;
 
 /// Variable evaluation context.
 ///
@@ -172,20 +172,11 @@ impl<'a> VariableEvaluation<'a> {
     /// Run the variable matcher at the given offset until a match is found.
     fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Match> {
         while offset < mem.len() {
-            let mat = match &self.var.matcher {
-                VariableMatcher::Regex(matcher) => {
-                    // The assignement is simply to typecheck that the error is "NoError",
-                    // so we can unwrap it.
-                    let res = matcher.find_at(mem, offset);
-                    res.map(|m| m.start()..m.end())
-                }
-                VariableMatcher::AhoCorasick(matcher) => {
-                    matcher.find(&mem[offset..]).map(|m| Match {
-                        start: offset + m.start(),
-                        end: offset + m.end(),
-                    })
-                }
-            }?;
+            let mat = self
+                .var
+                .regex
+                .find_at(mem, offset)
+                .map(|m| m.start()..m.end())?;
 
             // TODO: this works, but is probably not ideal performance-wise. benchmark/improve
             // this.

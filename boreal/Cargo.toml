@@ -27,7 +27,6 @@ regex-syntax = { version = "0.6", default-features = false }
 codespan-reporting = "0.11"
 
 # Scanning for bytes
-aho-corasick = "0.7"
 memchr = "2.4"
 
 # "hash" feature

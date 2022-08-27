@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
 use ::regex::bytes::{Regex, RegexBuilder};
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
 use boreal_parser::{HexMask, HexToken, VariableFlags, VariableModifiers};
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
@@ -15,7 +14,8 @@ mod regex;
 pub struct Variable {
     pub name: String,
 
-    pub matcher: VariableMatcher,
+    pub regex_expr: String,
+    pub regex: Regex,
 
     flags: VariableFlags,
 }
@@ -38,12 +38,6 @@ impl Variable {
     }
 }
 
-#[derive(Debug)]
-pub enum VariableMatcher {
-    Regex(Regex),
-    AhoCorasick(Box<AhoCorasick>),
-}
-
 pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, CompilationError> {
     let VariableDeclaration {
         name,
@@ -56,50 +50,46 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         flags.insert(VariableFlags::ASCII);
     }
 
-    let matcher = match value {
-        VariableDeclarationValue::Bytes(s) => build_string_matcher(s, &modifiers),
-        VariableDeclarationValue::Regex(regex) => regex::apply_modifiers(regex, &modifiers)
-            .and_then(|regex| build_regex_matcher(&regex))
-            .map_err(|error| CompilationError::VariableCompilation {
-                variable_name: name.clone(),
-                span,
-                error,
-            })?,
+    let regex_expr = match value {
+        VariableDeclarationValue::Bytes(s) => Ok(build_string_matcher(s, &modifiers)),
+        VariableDeclarationValue::Regex(regex) => regex::apply_modifiers(regex, &modifiers),
         VariableDeclarationValue::HexString(hex_string) => {
-            let mut regex = String::new();
-            regex.push_str("(?s)");
-            hex_string_to_regex(hex_string, &mut regex);
-
             // Fullword and wide is not compatible with hex strings
             flags.remove(VariableFlags::FULLWORD);
             flags.remove(VariableFlags::WIDE);
 
-            build_regex_matcher(&regex).map_err(|error| CompilationError::VariableCompilation {
-                variable_name: name.clone(),
-                span,
-                error,
-            })?
+            let mut expr = String::new();
+            expr.push_str("(?s)");
+            hex_string_to_regex(hex_string, &mut expr);
+            Ok(expr)
         }
     };
 
+    let regex_expr = regex_expr.map_err(|error| CompilationError::VariableCompilation {
+        variable_name: name.clone(),
+        span: span.clone(),
+        error,
+    })?;
+
+    let regex = RegexBuilder::new(&regex_expr)
+        .unicode(false)
+        .octal(false)
+        .build()
+        .map_err(|error| CompilationError::VariableCompilation {
+            variable_name: name.clone(),
+            span,
+            error: VariableCompilationError::Regex(error),
+        })?;
+
     Ok(Variable {
         name,
-        matcher,
+        regex_expr,
+        regex,
         flags,
     })
 }
 
-fn build_regex_matcher(expr: &str) -> Result<VariableMatcher, VariableCompilationError> {
-    RegexBuilder::new(expr)
-        .unicode(false)
-        .octal(false)
-        .build()
-        .map(VariableMatcher::Regex)
-        .map_err(VariableCompilationError::Regex)
-}
-
-fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> VariableMatcher {
-    let mut builder = AhoCorasickBuilder::new();
+fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> String {
     let mut literals = Vec::with_capacity(2);
 
     let case_insensitive = modifiers.flags.contains(VariableFlags::NOCASE);
@@ -125,10 +115,7 @@ fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> Variab
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        let literals = new_literals;
-        return VariableMatcher::AhoCorasick(Box::new(
-            builder.auto_configure(&literals).build(&literals),
-        ));
+        return literals_to_regex_expr(&new_literals, case_insensitive);
     }
 
     if modifiers.flags.contains(VariableFlags::BASE64)
@@ -159,12 +146,25 @@ fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> Variab
         }
     }
 
-    VariableMatcher::AhoCorasick(Box::new(
-        builder
-            .ascii_case_insensitive(case_insensitive)
-            .auto_configure(&literals)
-            .build(&literals),
-    ))
+    literals_to_regex_expr(&literals, case_insensitive)
+}
+
+fn literals_to_regex_expr(lits: &[Vec<u8>], case_insensitive: bool) -> String {
+    let mut expr = String::new();
+
+    if case_insensitive {
+        expr.push_str("(?i)");
+    }
+    for (i, lit) in lits.iter().enumerate() {
+        if i > 0 {
+            expr.push('|');
+        }
+        for b in lit {
+            let _ = write!(expr, r"\x{:02x}", *b);
+        }
+    }
+
+    expr
 }
 
 /// Convert an ascii string to a wide string
