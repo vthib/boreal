@@ -444,7 +444,7 @@ fn test_generate_module_coverage_test() {
             MODULE_NAME
         ))
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.into_scanner().unwrap();
 
     let res = scanner.scan_mem(&input);
 

@@ -2,8 +2,10 @@
 //! files or memory on a set of rules.
 use std::sync::Arc;
 
+use regex::bytes::{RegexSet, RegexSetBuilder};
+
 use crate::{
-    compiler::Rule,
+    compiler::{CompilationError, Rule},
     evaluator::{self, ScanData},
     module::Module,
 };
@@ -11,25 +13,53 @@ use crate::{
 /// Holds a list of rules, and provides methods to run them on files or bytes.
 #[derive(Debug)]
 pub struct Scanner {
+    /// List of compiled rules.
+    ///
+    /// Order is important, as rules can depend on other rules, and uses indexes into this array
+    /// to retrieve the truth value of rules it depends upon.
     rules: Vec<Rule>,
+
+    /// Compiled global rules.
+    ///
+    /// Those rules are interpreted first. If any of them is false, the other rules are not
+    /// evaluated.
     global_rules: Vec<Rule>,
 
-    // List of modules used during scanning.
+    /// Regex set of all variables used in the rules.
+    ///
+    /// This is used to scan the memory in one go, and find which variables are found. This
+    /// is usually sufficient for most rules. Other rules that depend on the number or length of
+    /// matches will scan the memory during their evaluation.
+    variables_set: RegexSet,
+
+    /// List of modules used during scanning.
     modules: Vec<Box<dyn Module>>,
 }
 
 impl Scanner {
-    #[must_use]
     pub(crate) fn new(
         rules: Vec<Rule>,
         global_rules: Vec<Rule>,
         modules: Vec<Box<dyn Module>>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, CompilationError> {
+        let regex_exprs: Vec<_> = global_rules
+            .iter()
+            .chain(rules.iter())
+            .flat_map(|rule| rule.variables.iter().map(|v| &v.regex_expr))
+            .collect();
+
+        let variables_set = RegexSetBuilder::new(regex_exprs)
+            .unicode(false)
+            .octal(false)
+            .build()
+            .map_err(|error| CompilationError::VariableSetError { error })?;
+
+        Ok(Self {
             rules,
             global_rules,
+            variables_set,
             modules,
-        }
+        })
     }
 
     /// Scan a byte slice.
@@ -38,16 +68,30 @@ impl Scanner {
     /// byte slice.
     #[must_use]
     pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> ScanResult<'scanner> {
-        let scan_data = ScanData::new(mem, &self.modules);
+        // First, run the regex set on the memory. This does a single pass on it, finding out
+        // which variables have no miss at all.
+        //
+        // TODO: this is not optimal w.r.t. global rules. I imagine people can use global rules
+        // that do not have variables, and attempt to avoid the cost of scanning if those rules do
+        // not match.
+        // A better solution would be:
+        // - evaluate global rules that have no variables first
+        // - then scan the set
+        // - then evaluate rest of global rules first, then rules
+        let variables_matches = self.variables_set.matches(mem);
 
-        // FIXME: this is pretty bad performance wise
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
+        let scan_data = ScanData::new(mem, variables_matches, &self.modules);
+
         // First, check global rules
+        let mut set_index_offset = 0;
         for rule in &self.global_rules {
             let (res, var_evals) =
-                evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
+                evaluator::evaluate_rule(rule, &scan_data, set_index_offset, &previous_results);
+            set_index_offset += rule.variables.len();
+
             if !res {
                 matched_rules.clear();
                 return ScanResult {
@@ -64,7 +108,10 @@ impl Scanner {
         for rule in &self.rules {
             let res = {
                 let (res, var_evals) =
-                    evaluator::evaluate_rule(rule, &scan_data, mem, &previous_results);
+                    evaluator::evaluate_rule(rule, &scan_data, set_index_offset, &previous_results);
+
+                set_index_offset += rule.variables.len();
+
                 if res && !rule.is_private {
                     matched_rules.push(build_matched_rule(rule, var_evals, mem));
                 }

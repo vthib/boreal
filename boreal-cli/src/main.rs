@@ -5,6 +5,7 @@ use boreal::Compiler;
 use boreal::{module::Value as ModuleValue, Scanner};
 
 use clap::Parser;
+use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::{
     files::SimpleFile,
     term::{
@@ -42,6 +43,18 @@ struct Args {
     skip_larger: Option<u64>,
 }
 
+fn display_diag_and_exit(path: &Path, contents: &str, diagnostic: Diagnostic<()>) -> ! {
+    let writer = StandardStream::stderr(ColorChoice::Always);
+    let config = codespan_reporting::term::Config::default();
+
+    let path = path.display().to_string();
+    let files = SimpleFile::new(&path, contents);
+    if let Err(e) = term::emit(&mut writer.lock(), &config, &files, &diagnostic) {
+        eprintln!("cannot emit diagnostics: {}", e);
+    }
+    exit(2);
+}
+
 fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
 
@@ -50,19 +63,15 @@ fn main() -> Result<(), std::io::Error> {
 
         let mut compiler = Compiler::new();
         if let Err(err) = compiler.add_rules_str(&rules_contents) {
-            let writer = StandardStream::stderr(ColorChoice::Always);
-            let config = codespan_reporting::term::Config::default();
-
-            let path = args.rules_file.display().to_string();
-            let files = SimpleFile::new(&path, &rules_contents);
-            let diag = err.to_diagnostic();
-            if let Err(e) = term::emit(&mut writer.lock(), &config, &files, &diag) {
-                eprintln!("cannot emit diagnostics: {}", e);
-            }
-            exit(2);
+            display_diag_and_exit(&args.rules_file, &rules_contents, err.to_diagnostic());
         }
 
-        compiler.into_scanner()
+        match compiler.into_scanner() {
+            Ok(v) => v,
+            Err(err) => {
+                display_diag_and_exit(&args.rules_file, &rules_contents, err.to_diagnostic())
+            }
+        }
     };
 
     let mut walker = WalkDir::new(&args.input).follow_links(!args.no_follow_symlinks);

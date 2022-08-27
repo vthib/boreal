@@ -43,7 +43,7 @@ fn bench_scan_nul_file(c: &mut Criterion) {
 
             let mut compiler = boreal::Compiler::new();
             compiler.add_rules_str(&rules).unwrap();
-            let boreal_scanner = compiler.into_scanner();
+            let boreal_scanner = compiler.into_scanner().unwrap();
 
             let compiler = yara::Compiler::new().unwrap();
             let compiler = compiler.add_rules_str(&rules).unwrap();

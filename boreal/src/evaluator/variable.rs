@@ -32,6 +32,16 @@ impl<'a> VariableEvaluation<'a> {
         }
     }
 
+    /// Does the variable need a full match details or not.
+    ///
+    /// When scanning, an optimization consists of running a ``RegexSet`` of all variables to find
+    /// if variables match or not. This is however a "no match/had a match" boolean, and some
+    /// variables require the details of the matches to validate it. Those variables must return
+    /// true here.
+    pub fn need_full_matches(&self) -> bool {
+        self.var.is_fullword()
+    }
+
     /// Search occurrence of a variable in bytes
     pub fn find(&mut self, mem: &[u8]) -> Option<Match> {
         self.matches

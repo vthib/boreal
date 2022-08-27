@@ -243,11 +243,18 @@ pub enum CompilationError {
         /// Type of error
         error: VariableCompilationError,
     },
+
+    /// Error when generating a RegexSet containing all variables.
+    VariableSetError {
+        /// Error returned by [`::regex`] when compiling a variable
+        // TODO: this should not be part of the public API
+        error: ::regex::Error,
+    },
 }
 
 impl CompilationError {
     #[must_use]
-    pub(crate) fn to_diagnostic(&self) -> Diagnostic<()> {
+    pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
             Self::RegexError { expr, error, span } => Diagnostic::error()
                 .with_message(format!("regex `{}` failed to build: {:?}", expr, error))
@@ -406,6 +413,9 @@ impl CompilationError {
                     variable_name, error
                 ))
                 .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::VariableSetError { error } => Diagnostic::error()
+                .with_message(format!("cannot generate a set of all variables: {}", error)),
         }
     }
 }

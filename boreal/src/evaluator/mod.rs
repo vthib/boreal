@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use crate::regex::Regex;
 use memchr::memmem;
+use regex::bytes::SetMatches;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
@@ -64,21 +65,29 @@ impl Value {
 
 /// Data linked to the scan, shared by all rules.
 pub struct ScanData<'a> {
+    mem: &'a [u8],
+
     // TODO: make this lazy?
     pub module_values: Vec<(&'static str, Arc<ModuleValue>)>,
 
+    // List of "no match/has at least one match" results for all variables.
+    variables_matches: SetMatches,
+
+    // Index offset into `variables_matches`.
+    //
     // Context used when calling module functions
-    pub module_ctx: ScanContext<'a>,
+    module_ctx: ScanContext<'a>,
 }
 
 impl<'a> ScanData<'a> {
-    pub fn new(mem: &'a [u8], modules: &[Box<dyn Module>]) -> Self {
+    pub fn new(mem: &'a [u8], variables_matches: SetMatches, modules: &[Box<dyn Module>]) -> Self {
         let mut module_ctx = ScanContext {
             mem,
             module_data: ModuleDataMap::default(),
         };
 
         Self {
+            mem,
             module_values: modules
                 .iter()
                 .map(|module| {
@@ -90,6 +99,7 @@ impl<'a> ScanData<'a> {
                     )
                 })
                 .collect(),
+            variables_matches,
             module_ctx,
         }
     }
@@ -102,16 +112,17 @@ impl<'a> ScanData<'a> {
 pub(crate) fn evaluate_rule<'rule>(
     rule: &'rule Rule,
     scan_data: &ScanData,
-    mem: &[u8],
+    set_index_offset: usize,
     previous_rules_results: &[bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
     let mut evaluator = Evaluator {
         variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
-        mem,
+        mem: scan_data.mem,
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
         scan_data,
+        set_index_offset,
     };
     let res = evaluator
         .evaluate_expr(&rule.condition)
@@ -138,6 +149,9 @@ struct Evaluator<'a, 'b, 'c> {
 
     // Data only to the scan, independent of the rule.
     scan_data: &'b ScanData<'b>,
+
+    // Offset into the variables_matches for the variables of this rule.
+    set_index_offset: usize,
 }
 
 macro_rules! bytes_op {
@@ -467,13 +481,24 @@ impl Evaluator<'_, '_, '_> {
             }
 
             Expression::Variable(variable_index) => {
+                // For this expression, we can use the variables set to retrieve the truth value,
+                // no need to rescan.
                 let index = self.get_variable_index(*variable_index)?;
+
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
                 // - retrieve from the currently selected variable, and thus valid.
                 let var = &mut self.variables[index];
 
-                Some(Value::Boolean(var.find(self.mem).is_some()))
+                let res = if var.need_full_matches() {
+                    var.find(self.mem).is_some()
+                } else {
+                    self.scan_data
+                        .variables_matches
+                        .matched(self.set_index_offset + index)
+                };
+
+                Some(Value::Boolean(res))
             }
 
             Expression::VariableAt {

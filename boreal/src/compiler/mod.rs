@@ -249,8 +249,12 @@ impl Compiler {
         Ok(())
     }
 
-    #[must_use]
-    pub fn into_scanner(self) -> Scanner {
+    /// Finalize the compiler and generate a [`Scanner`].
+    ///
+    /// # Errors
+    ///
+    /// Can fail if generating a set of all rules variables is not possible.
+    pub fn into_scanner(self) -> Result<Scanner, CompilationError> {
         Scanner::new(self.rules, self.global_rules, self.imported_modules)
     }
 }
