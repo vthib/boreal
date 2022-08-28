@@ -225,6 +225,12 @@ rule a {
     checker.check(b"", false);
     checker.check(b"abc", false);
     checker.check(b"abcabc", false);
+
+    // invalid occurence number is undefined
+    check_boreal(&build_rule("defined !a1[0]"), b"", false);
+    check_boreal(&build_rule("defined !a1[0]"), b"a1", false);
+    check_boreal(&build_rule("defined !a1[-1]"), b"", false);
+    check_boreal(&build_rule("defined !a1[-1]"), b"a1", false);
 }
 
 #[test]
@@ -264,6 +270,12 @@ rule a {
     checker.check(b"abc abc yy zzzz", false);
     checker.check(b"abcabcabc yy zzzzzz", true);
     checker.check(b"abcabcabc yy zzzzzzz", false);
+
+    // invalid occurence number is undefined
+    check_boreal(&build_rule("defined @a1[0]"), b"", false);
+    check_boreal(&build_rule("defined @a1[0]"), b"a1", false);
+    check_boreal(&build_rule("defined @a1[-1]"), b"", false);
+    check_boreal(&build_rule("defined @a1[-1]"), b"a1", false);
 }
 
 #[test]
