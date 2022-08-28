@@ -116,7 +116,7 @@ fn quoted_no_rtrim(input: Input) -> ParseResult<Vec<u8>> {
     let mut index = 0;
     let mut res = Vec::new();
 
-    let mut chars = input.cursor().chars().enumerate();
+    let mut chars = input.cursor().char_indices();
 
     while let Some((i, c)) = chars.next() {
         index = i;
@@ -276,6 +276,8 @@ mod tests {
         parse(quoted, r#""\x00 \xFF""#, "", [0, b' ', 255]);
 
         parse(quoted, r#""\xc3\x0f]\x00""#, "", [0xc3, 0x0f, b']', 0x00]);
+
+        parse(quoted, r#""é"a"#, "a", [0xc3, 0xa9]);
 
         parse_err(quoted, "a");
         parse_err(quoted, r#"""#);
