@@ -96,6 +96,7 @@ dependencies = [
  "regex-syntax",
  "sha1",
  "sha2",
+ "walkdir",
  "yara",
 ]
 
