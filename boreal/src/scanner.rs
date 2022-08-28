@@ -2,13 +2,14 @@
 //! files or memory on a set of rules.
 use std::sync::Arc;
 
-use regex::bytes::{RegexSet, RegexSetBuilder};
-
 use crate::{
     compiler::{CompilationError, Rule},
     evaluator::{self, ScanData},
     module::Module,
 };
+
+mod variable_set;
+pub(crate) use variable_set::{VariableSet, VariableSetMatches};
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
 #[derive(Debug)]
@@ -30,7 +31,7 @@ pub struct Scanner {
     /// This is used to scan the memory in one go, and find which variables are found. This
     /// is usually sufficient for most rules. Other rules that depend on the number or length of
     /// matches will scan the memory during their evaluation.
-    variables_set: RegexSet,
+    variable_set: VariableSet,
 
     /// List of modules used during scanning.
     modules: Vec<Box<dyn Module>>,
@@ -45,19 +46,15 @@ impl Scanner {
         let regex_exprs: Vec<_> = global_rules
             .iter()
             .chain(rules.iter())
-            .flat_map(|rule| rule.variables.iter().map(|v| &v.regex_expr))
+            .flat_map(|rule| rule.variables.iter().map(|v| &*v.regex_expr))
             .collect();
 
-        let variables_set = RegexSetBuilder::new(regex_exprs)
-            .unicode(false)
-            .octal(false)
-            .build()
-            .map_err(|error| CompilationError::VariableSetError { error })?;
+        let variable_set = VariableSet::new(&regex_exprs)?;
 
         Ok(Self {
             rules,
             global_rules,
-            variables_set,
+            variable_set,
             modules,
         })
     }
@@ -78,12 +75,12 @@ impl Scanner {
         // - evaluate global rules that have no variables first
         // - then scan the set
         // - then evaluate rest of global rules first, then rules
-        let variables_matches = self.variables_set.matches(mem);
+        let variable_set_matches = self.variable_set.matches(mem);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
-        let scan_data = ScanData::new(mem, variables_matches, &self.modules);
+        let scan_data = ScanData::new(mem, variable_set_matches, &self.modules);
 
         // First, check global rules
         let mut set_index_offset = 0;
