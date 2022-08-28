@@ -209,6 +209,12 @@ impl Evaluator<'_, '_, '_> {
         var_index.0.or(self.currently_selected_variable_index)
     }
 
+    fn variable_has_set_match(&self, var_index: usize) -> bool {
+        self.scan_data
+            .variables_matches
+            .matched(self.set_index_offset + var_index)
+    }
+
     fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
         match expr {
             Expression::Filesize => Some(Value::Integer(self.mem.len() as i64)),
@@ -227,11 +233,15 @@ impl Evaluator<'_, '_, '_> {
             } => {
                 let from = self.evaluate_expr(from)?.unwrap_number()?;
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
-                let index = self.get_variable_index(*variable_index)?;
-                let var = &mut self.variables[index];
 
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
+                        let index = self.get_variable_index(*variable_index)?;
+                        if !self.variable_has_set_match(index) {
+                            return Some(Value::Integer(0));
+                        }
+
+                        let var = &mut self.variables[index];
                         let count = var.count_matches_in(self.mem, from, to);
 
                         i64::try_from(count).ok().map(Value::Integer)
@@ -241,6 +251,10 @@ impl Evaluator<'_, '_, '_> {
             }
             Expression::Count(variable_index) => {
                 let index = self.get_variable_index(*variable_index)?;
+                if !self.variable_has_set_match(index) {
+                    return Some(Value::Integer(0));
+                }
+
                 let var = &mut self.variables[index];
 
                 let count = var.count_matches(self.mem);
@@ -251,16 +265,22 @@ impl Evaluator<'_, '_, '_> {
                 occurence_number,
             } => {
                 let occurence_number = self.evaluate_expr(occurence_number)?.unwrap_number()?;
-                let index = self.get_variable_index(*variable_index)?;
-                // Safety: index has been either:
-                // - generated during compilation and is thus valid.
-                // - retrieve from the currently selected variable, and thus valid.
-                let var = &mut self.variables[index];
 
                 match usize::try_from(occurence_number) {
-                    Ok(v) if v != 0 => var
-                        .find_match_occurence(self.mem, v - 1)
-                        .map(|mat| Value::Integer(mat.start as i64)),
+                    Ok(v) if v != 0 => {
+                        let index = self.get_variable_index(*variable_index)?;
+                        if !self.variable_has_set_match(index) {
+                            return None;
+                        }
+
+                        // Safety: index has been either:
+                        // - generated during compilation and is thus valid.
+                        // - retrieve from the currently selected variable, and thus valid.
+                        let var = &mut self.variables[index];
+
+                        var.find_match_occurence(self.mem, v - 1)
+                            .map(|mat| Value::Integer(mat.start as i64))
+                    }
                     Ok(_) | Err(_) => None,
                 }
             }
@@ -269,16 +289,22 @@ impl Evaluator<'_, '_, '_> {
                 occurence_number,
             } => {
                 let occurence_number = self.evaluate_expr(occurence_number)?.unwrap_number()?;
-                let index = self.get_variable_index(*variable_index)?;
-                // Safety: index has been either:
-                // - generated during compilation and is thus valid.
-                // - retrieve from the currently selected variable, and thus valid.
-                let var = &mut self.variables[index];
 
                 match usize::try_from(occurence_number) {
-                    Ok(v) if v != 0 => var
-                        .find_match_occurence(self.mem, v - 1)
-                        .map(|mat| Value::Integer(mat.len() as i64)),
+                    Ok(v) if v != 0 => {
+                        let index = self.get_variable_index(*variable_index)?;
+                        if !self.variable_has_set_match(index) {
+                            return None;
+                        }
+
+                        // Safety: index has been either:
+                        // - generated during compilation and is thus valid.
+                        // - retrieve from the currently selected variable, and thus valid.
+                        let var = &mut self.variables[index];
+
+                        var.find_match_occurence(self.mem, v - 1)
+                            .map(|mat| Value::Integer(mat.len() as i64))
+                    }
                     Ok(_) | Err(_) => None,
                 }
             }
@@ -484,18 +510,18 @@ impl Evaluator<'_, '_, '_> {
                 // For this expression, we can use the variables set to retrieve the truth value,
                 // no need to rescan.
                 let index = self.get_variable_index(*variable_index)?;
+                if !self.variable_has_set_match(index) {
+                    return Some(Value::Boolean(false));
+                }
 
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
                 // - retrieve from the currently selected variable, and thus valid.
                 let var = &mut self.variables[index];
-
                 let res = if var.need_full_matches() {
                     var.find(self.mem).is_some()
                 } else {
-                    self.scan_data
-                        .variables_matches
-                        .matched(self.set_index_offset + index)
+                    true
                 };
 
                 Some(Value::Boolean(res))
@@ -513,6 +539,9 @@ impl Evaluator<'_, '_, '_> {
                     None => return Some(Value::Boolean(false)),
                 };
                 let index = self.get_variable_index(*variable_index)?;
+                if !self.variable_has_set_match(index) {
+                    return Some(Value::Boolean(false));
+                }
 
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
@@ -534,6 +563,10 @@ impl Evaluator<'_, '_, '_> {
                 let from = self.evaluate_expr(from)?.unwrap_number()?;
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
                 let index = self.get_variable_index(*variable_index)?;
+                if !self.variable_has_set_match(index) {
+                    return Some(Value::Boolean(false));
+                }
+
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
                 // - retrieve from the currently selected variable, and thus valid.
