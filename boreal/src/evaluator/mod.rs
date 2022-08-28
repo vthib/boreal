@@ -13,10 +13,10 @@ use std::sync::Arc;
 
 use crate::regex::Regex;
 use memchr::memmem;
-use regex::bytes::SetMatches;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
+use crate::scanner::VariableSetMatches;
 
 mod module;
 
@@ -71,7 +71,7 @@ pub struct ScanData<'a> {
     pub module_values: Vec<(&'static str, Arc<ModuleValue>)>,
 
     // List of "no match/has at least one match" results for all variables.
-    variables_matches: SetMatches,
+    variable_set_matches: VariableSetMatches,
 
     // Index offset into `variables_matches`.
     //
@@ -80,7 +80,11 @@ pub struct ScanData<'a> {
 }
 
 impl<'a> ScanData<'a> {
-    pub fn new(mem: &'a [u8], variables_matches: SetMatches, modules: &[Box<dyn Module>]) -> Self {
+    pub(crate) fn new(
+        mem: &'a [u8],
+        variable_set_matches: VariableSetMatches,
+        modules: &[Box<dyn Module>],
+    ) -> Self {
         let mut module_ctx = ScanContext {
             mem,
             module_data: ModuleDataMap::default(),
@@ -99,7 +103,7 @@ impl<'a> ScanData<'a> {
                     )
                 })
                 .collect(),
-            variables_matches,
+            variable_set_matches,
             module_ctx,
         }
     }
@@ -211,7 +215,7 @@ impl Evaluator<'_, '_, '_> {
 
     fn variable_has_set_match(&self, var_index: usize) -> bool {
         self.scan_data
-            .variables_matches
+            .variable_set_matches
             .matched(self.set_index_offset + var_index)
     }
 
