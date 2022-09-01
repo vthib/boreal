@@ -1,4 +1,5 @@
 use boreal_parser::{Regex, VariableFlags, VariableModifiers};
+use regex::bytes::RegexBuilder;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
@@ -7,10 +8,15 @@ use crate::regex::normalize_regex;
 use super::VariableCompilationError;
 
 /// Build a matcher for the given regex and string modifiers.
-pub fn apply_modifiers(
+///
+/// This function returns two values:
+/// - The regex expression to use to match on this variable
+/// - An optional expr used to validate matches, only set in the specific case of a widen regex
+///   containing word boundaries.
+pub fn compile_regex(
     regex: Regex,
     modifiers: &VariableModifiers,
-) -> Result<String, VariableCompilationError> {
+) -> Result<(String, Option<regex::bytes::Regex>), VariableCompilationError> {
     let Regex {
         expr,
         mut case_insensitive,
@@ -24,9 +30,26 @@ pub fn apply_modifiers(
         case_insensitive = true;
     }
 
+    let mut non_wide_regex = None;
+
+    let mods = match (case_insensitive, dot_all) {
+        (true, true) => "ism",
+        (false, true) => "sm",
+        (true, false) => "i",
+        (false, false) => "",
+    };
+
     if modifiers.flags.contains(VariableFlags::WIDE) {
         let hir = expr_to_hir(&expr).unwrap();
-        let wide_hir = hir_to_wide(&hir)?;
+        let (wide_hir, has_word_boundaries) = hir_to_wide(&hir)?;
+        if has_word_boundaries {
+            let builder = if mods.is_empty() {
+                RegexBuilder::new(&expr)
+            } else {
+                RegexBuilder::new(&format!("(?{}){}", mods, expr))
+            };
+            non_wide_regex = Some(builder.build().map_err(VariableCompilationError::Regex)?);
+        }
 
         if modifiers.flags.contains(VariableFlags::ASCII) {
             expr = Hir::alternation(vec![hir, wide_hir]).to_string();
@@ -35,17 +58,11 @@ pub fn apply_modifiers(
         }
     }
 
-    let mods = match (case_insensitive, dot_all) {
-        (true, true) => "ism",
-        (false, true) => "sm",
-        (true, false) => "i",
-        (false, false) => "",
-    };
     if !mods.is_empty() {
         expr = format!("(?{}){}", mods, expr);
     }
 
-    Ok(expr)
+    Ok((expr, non_wide_regex))
 }
 
 /// Convert a regex expression into a HIR.
@@ -65,7 +82,7 @@ fn expr_to_hir(expr: &str) -> Result<Hir, regex_syntax::Error> {
 ///
 /// This means translating every match on a literal or class into this literal/class followed by a
 /// nul byte. See the implementation of the [`Visitor`] trait on [`HirWidener`] for more details.
-fn hir_to_wide(hir: &Hir) -> Result<Hir, VariableCompilationError> {
+fn hir_to_wide(hir: &Hir) -> Result<(Hir, bool), VariableCompilationError> {
     visit(hir, HirWidener::new())
 }
 
@@ -81,6 +98,9 @@ struct HirWidener {
     /// to the stack. Then when we finish visiting the compound value, the level will be pop-ed,
     /// and the new compound HIR value built.
     stack: Vec<StackLevel>,
+
+    /// Does the regex contains word boundaries
+    has_word_boundaries: bool,
 }
 
 #[derive(Debug)]
@@ -110,6 +130,7 @@ impl HirWidener {
         Self {
             hir: None,
             stack: Vec::new(),
+            has_word_boundaries: false,
         }
     }
 
@@ -157,11 +178,14 @@ impl HirWidener {
 }
 
 impl Visitor for HirWidener {
-    type Output = Hir;
+    type Output = (Hir, bool);
     type Err = VariableCompilationError;
 
-    fn finish(self) -> Result<Hir, Self::Err> {
-        self.hir.ok_or(VariableCompilationError::WidenError)
+    fn finish(self) -> Result<(Hir, bool), Self::Err> {
+        match self.hir {
+            Some(v) => Ok((v, self.has_word_boundaries)),
+            None => Err(VariableCompilationError::WidenError),
+        }
     }
 
     fn visit_pre(&mut self, hir: &Hir) -> Result<(), Self::Err> {
@@ -201,11 +225,23 @@ impl Visitor for HirWidener {
             // - \t\0a\0, a\0\t\0 matches
             // - a\0b\0, \t\0\b\0 does not match
             //
-            // This can be handled if the boundary is the very start or end of the regex.
-            // However, if it is in the middle, it is not really possible to translate it.
-            // For the moment, reject it, handling it at the start/end of the regex
-            // can be implemented without too much issue in the near future.
-            HirKind::WordBoundary(_) => Err(VariableCompilationError::WideWithBoundary),
+            // This cannot be transformed properly. Instead, we have two possibilities:
+            // - Unwide the input, and run the regex on it.
+            // - widen the regex but without the word boundaries. On matches, unwide the match,
+            //   then use the non wide regex to check if the match is valid.
+            //
+            // We use the second solution. Note that there are some differences in results
+            // depending on which solution is picked. Those are mostly edge cases on carefully
+            // crafted regexes, so it should not matter, but the test
+            // `test_variable_regex_word_boundaries_edge_cases` tests some of those.
+            //
+            // TODO: test and bench the first solution, to build an iterator on all the wide
+            // slices that can be found in the input, and run the raw on those unwidden
+            // slices.
+            HirKind::WordBoundary(_) => {
+                self.has_word_boundaries = true;
+                self.add(Hir::empty())
+            }
 
             HirKind::Repetition(repetition) => {
                 let hir = self

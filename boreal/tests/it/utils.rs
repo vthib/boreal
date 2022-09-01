@@ -98,11 +98,7 @@ impl Checker {
     #[track_caller]
     pub fn check(&self, mem: &[u8], expected_res: bool) {
         self.check_boreal(mem, expected_res);
-
-        if let Some(rules) = &self.yara_rules {
-            let res = !rules.scan_mem(mem, 1).unwrap().is_empty();
-            assert_eq!(res, expected_res, "conformity test failed for libyara");
-        }
+        self.check_libyara(mem, expected_res);
     }
 
     #[track_caller]
@@ -198,6 +194,14 @@ impl Checker {
         let res = self.scanner.scan_mem(mem);
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
+    }
+
+    #[track_caller]
+    pub fn check_libyara(&self, mem: &[u8], expected_res: bool) {
+        if let Some(rules) = &self.yara_rules {
+            let res = !rules.scan_mem(mem, 1).unwrap().is_empty();
+            assert_eq!(res, expected_res, "conformity test failed for libyara");
+        }
     }
 
     #[track_caller]

@@ -2467,72 +2467,71 @@ fn test_re() {
         true,
     );
 
-    // TODO: handle boundaries and wide modifier
-    // check(
-    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /\\babc/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "\0a\0b\0c\0").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /\\babc/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "\0a\0b\0c\0").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "\ta\0b\0c\0").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /\\babc/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "\ta\0b\0c\0").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0").as_bytes(),
-    //     false,
-    // );
+    check(
+        "rule test { strings: $a = /\\babc/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0").as_bytes(),
+        false,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /\\babc/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "x\ta\0b\0c\0").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /\\babc/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "x\ta\0b\0c\0").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\0").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\0").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\t").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\t").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0x\0").as_bytes(),
-    //     false,
-    // );
+    check(
+        "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0x\0").as_bytes(),
+        false,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "a\0b\0c\0b\t").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test { strings: $a = /abc\\b/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0b\t").as_bytes(),
+        true,
+    );
 
-    // check(
-    //     "rule test { strings: $a = /\\b/ wide condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "abc").as_bytes(),
-    //     false,
-    // );
+    check(
+        "rule test { strings: $a = /\\b/ wide condition: $a }",
+        concatcp!(TEXT_1024_BYTES, "abc").as_bytes(),
+        false,
+    );
 
     check_err(
         &build_regex_rule(")"),

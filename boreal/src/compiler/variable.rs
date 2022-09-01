@@ -17,6 +17,12 @@ pub struct Variable {
     pub regex_expr: String,
     pub regex: Regex,
 
+    // This is only set for the specific case of a regex variable, with a wide modifier, that
+    // contains word boundaries.
+    // In this case, the regex expression cannot be "widened", and this regex is used to post
+    // check matches.
+    pub non_wide_regex: Option<Regex>,
+
     flags: VariableFlags,
 }
 
@@ -50,9 +56,16 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         flags.insert(VariableFlags::ASCII);
     }
 
+    let mut non_wide_regex = None;
+
     let regex_expr = match value {
         VariableDeclarationValue::Bytes(s) => Ok(build_string_matcher(s, &modifiers)),
-        VariableDeclarationValue::Regex(regex) => regex::apply_modifiers(regex, &modifiers),
+        VariableDeclarationValue::Regex(regex) => {
+            regex::compile_regex(regex, &modifiers).map(|(expr, v)| {
+                non_wide_regex = v;
+                expr
+            })
+        }
         VariableDeclarationValue::HexString(hex_string) => {
             // Fullword and wide is not compatible with hex strings
             flags.remove(VariableFlags::FULLWORD);
@@ -85,6 +98,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         name,
         regex_expr,
         regex,
+        non_wide_regex,
         flags,
     })
 }
@@ -227,9 +241,6 @@ pub enum VariableCompilationError {
     // TODO: this should not be part of the public API
     Regex(::regex::Error),
 
-    /// Regexes with boundaries cannot use the `wide` modifier
-    WideWithBoundary,
-
     /// Structural error when applying the `wide` modifier to a regex.
     ///
     /// This really should not happen, and indicates a bug in the code
@@ -241,10 +252,6 @@ impl std::fmt::Display for VariableCompilationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Regex(e) => e.fmt(f),
-            Self::WideWithBoundary => write!(
-                f,
-                "wide modifier cannot be applied on regexes containing boundaries"
-            ),
             // This should not happen. Please report it upstream if it does.
             Self::WidenError => write!(f, "unable to apply the wide modifier to the regex"),
         }

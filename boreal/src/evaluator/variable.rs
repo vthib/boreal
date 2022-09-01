@@ -39,7 +39,7 @@ impl<'a> VariableEvaluation<'a> {
     /// variables require the details of the matches to validate it. Those variables must return
     /// true here.
     pub fn need_full_matches(&self) -> bool {
-        self.var.is_fullword()
+        self.var.is_fullword() || self.var.non_wide_regex.is_some()
     }
 
     /// Search occurrence of a variable in bytes
@@ -182,15 +182,11 @@ impl<'a> VariableEvaluation<'a> {
     /// Run the variable matcher at the given offset until a match is found.
     fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Match> {
         while offset < mem.len() {
-            let mat = self
-                .var
-                .regex
-                .find_at(mem, offset)
-                .map(|m| m.start()..m.end())?;
+            let mut mat = self.var.regex.find_at(mem, offset).map(|m| m.range())?;
 
-            // TODO: this works, but is probably not ideal performance-wise. benchmark/improve
-            // this.
-            if !check_fullword(&mat, mem, self.var) {
+            if !apply_wide_word_boundaries(&mut mat, mem, self.var)
+                || !check_fullword(&mat, mem, self.var)
+            {
                 offset = mat.start + 1;
                 continue;
             }
@@ -198,6 +194,62 @@ impl<'a> VariableEvaluation<'a> {
         }
         None
     }
+}
+
+/// Check the match respects the word boundaries inside the variable.
+fn apply_wide_word_boundaries(mat: &mut Match, mem: &[u8], var: &Variable) -> bool {
+    let regex = match var.non_wide_regex.as_ref() {
+        Some(v) => v,
+        None => return true,
+    };
+
+    // The match can be on a non wide regex, if the variable was both ascii and wide. Make sure
+    // the match is wide.
+    if !is_match_wide(mat, mem) {
+        return true;
+    }
+
+    // Take the previous and next byte, so that word boundaries placed at the beginning or end of
+    // the regex can be checked.
+    // Note that we must check that the previous/next byte is "wide" as well, otherwise it is not
+    // valid.
+    let start = if mat.start >= 2 && mem[mat.start - 1] == b'\0' {
+        mat.start - 2
+    } else {
+        mat.start
+    };
+
+    // Remove the wide bytes, and then use the non wide regex to check for word boundaries.
+    // Since when checking word boundaries, we might match more than the initial match (because of
+    // non greedy repetitions bounded by word boundaries), we need to add more data at the end.
+    // How much? We cannot know, but including too much would be too much of a performance tank.
+    // This is arbitrarily capped at 500 for the moment (or until the string is no longer wide)...
+    // TODO bench this
+    let unwiden_mem = unwide(&mem[start..std::cmp::min(mem.len(), mat.end + 500)]);
+
+    let expected_start = if start < mat.start { 1 } else { 0 };
+    match regex.find(&unwiden_mem) {
+        Some(m) if m.start() == expected_start => {
+            // Modify the match end. This is needed because the application of word boundary
+            // may modify the match. Since we matched on non wide mem though, double the size.
+            mat.end = mat.start + 2 * (m.end() - m.start());
+            true
+        }
+        _ => false,
+    }
+}
+
+fn unwide(mem: &[u8]) -> Vec<u8> {
+    let mut res = Vec::new();
+
+    for b in mem.chunks_exact(2) {
+        if b[1] != b'\0' {
+            break;
+        }
+        res.push(b[0]);
+    }
+
+    res
 }
 
 /// Check the match respects a possible fullword modifier for the variable.
@@ -239,6 +291,9 @@ fn check_fullword(mat: &Match, mem: &[u8], var: &Variable) -> bool {
 fn is_match_wide(mat: &Match, mem: &[u8]) -> bool {
     if (mat.end - mat.start) % 2 != 0 {
         return false;
+    }
+    if mat.is_empty() {
+        return true;
     }
 
     !mem[(mat.start + 1)..mat.end]

@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_err, Checker, Compiler};
+use crate::utils::{build_rule, check, check_err, Checker};
 
 #[test]
 fn test_variable() {
@@ -137,22 +137,33 @@ rule a {
     checker.check(b"a| yay |a", true);
 }
 
-#[test]
-fn test_variable_regex_wide() {
-    let build_checker = |regex: &str| {
-        Checker::new(&format!(
-            r#"
+fn build_checker(regex: &str, modifiers: &str) -> Checker {
+    Checker::new(&format!(
+        r#"
 rule a {{
     strings:
-        $a = /{}/ wide
+        $a = /{}/ {}
     condition:
         $a
 }}"#,
-            regex
-        ))
-    };
+        regex, modifiers
+    ))
+}
 
-    let checker = build_checker("abc");
+fn to_wide(e: &[u8]) -> Vec<u8> {
+    let mut ret = Vec::new();
+
+    for c in e {
+        ret.push(*c);
+        ret.push(b'\0');
+    }
+
+    ret
+}
+
+#[test]
+fn test_variable_regex_wide() {
+    let checker = build_checker("abc", "wide");
     checker.check(b"abc", false);
     checker.check(b"a\0b\0c\0", true);
     checker.check(b"a\0b\0c", false);
@@ -160,7 +171,7 @@ rule a {{
     checker.check(b"\0a\0b\0c\0", true);
     checker.check(b"\0a\0b\0c", false);
 
-    let checker = build_checker("a+b|cd{2,}");
+    let checker = build_checker("a+b|cd{2,}", "wide");
     checker.check(b"ab", false);
     checker.check(b"aaab", false);
     checker.check(b"abcd", false);
@@ -174,7 +185,7 @@ rule a {{
     checker.check(b"c\0d\0d\0", true);
     checker.check(b"c\0d\0d\0d\0d\0", true);
 
-    let checker = build_checker("<[a-z][0-9]*>");
+    let checker = build_checker("<[a-z][0-9]*>", "wide");
     checker.check(b"<a>", false);
     checker.check(b"<\x00a\x00>\x00", true);
     checker.check(b"<\x00a>\x00", false);
@@ -187,7 +198,7 @@ rule a {{
     checker.check(b"<\x00a\x009\x00d\x00>\x00", false);
     checker.check(b"a\x009\x00", false);
 
-    let checker = build_checker(r#"\d[^abc]d$"#);
+    let checker = build_checker(r#"\d[^abc]d$"#, "wide");
     checker.check(b"13d", false);
     checker.check(b"1\x003\x00d\x00", true);
     checker.check(b"1\x003\x00d", false);
@@ -197,15 +208,7 @@ rule a {{
     checker.check(b"1\x00d\x00e\x00", false);
     checker.check(b"1\x00d\x00d\x00", true);
 
-    let checker = Checker::new(
-        r#"
-rule a {
-    strings:
-        $a = /a(b|c+)[def][^g]/ wide ascii
-    condition:
-        $a
-}"#,
-    );
+    let checker = build_checker(r"a(b|c+)[def][^g]", "wide ascii");
     checker.check(b"abdf", true);
     checker.check(b"a\0b\0d\0f\0", true);
     checker.check(b"a\0b\0d\0f", false);
@@ -214,15 +217,180 @@ rule a {
     checker.check(b"acccf\0", true);
     checker.check(b"a\0c\0c\0c\0f\0\0\0", true);
     checker.check(b"a\0c\0c\0c\0f\0\0", false);
+}
 
-    // Boundaries are not handled with the wide modifier
-    // TODO: This is handled by libyara, would be nice to find a solution
-    let compiler = Compiler::new_without_yara();
-    compiler.check_add_rules_err(
-        r#"rule a { strings: $a = /\bab/ wide condition: $a }"#,
-        "mem:1:19: error: variable $a cannot be compiled: wide modifier cannot be applied \
-        on regexes containing boundaries",
-    );
+// Test wide regex with word boundaries
+#[test]
+fn test_variable_regex_wide_word_boundaries() {
+    // Test regex consisting of a single word boundary. No-one will ever use this regex, but
+    // it helps comparing with libyara
+    let checker = build_checker(r"\b", "wide");
+    checker.check(b"", false);
+    checker.check(b"\0", false);
+    // This one has different behavior from libyara. Does it matter? no, no-one will every use
+    // this regex.
+    checker.check_boreal(b"a\0", true);
+    checker.check_libyara(b"a\0", false);
+    checker.check(b"\0a", false);
+
+    let checker = build_checker(r"\B", "wide");
+    checker.check(b"", false);
+    // These ones have different behavior from libyara. Does it matter? no, no-one will every use
+    // this regex.
+    checker.check_boreal(b"\0", true);
+    checker.check_libyara(b"\0", false);
+    checker.check_boreal(b"a\0", true);
+    checker.check_libyara(b"a\0", false);
+    checker.check_boreal(b"\0a", true);
+    checker.check_libyara(b"\0a", false);
+
+    // Check word boundary at start
+    let checker = build_checker(r"\ba", "wide");
+    checker.check(b"", false);
+    checker.check(b"a", false);
+    checker.check(b"a\0", true);
+    checker.check(b"a\0b", true);
+    checker.check(b"a\0b\0", true);
+    checker.check(b"a\0>\0", true);
+    checker.check(b"ba\0", true);
+    checker.check(b"\0a\0", true);
+    checker.check(b"b\0a\0", false);
+    checker.check(b"[\0a\0", true);
+    checker.check(b"b\ra\0", true);
+    let checker = build_checker(r"\Ba", "wide");
+    checker.check(b"", false);
+    checker.check(b"a", false);
+    checker.check(b"a\0", false);
+    checker.check(b"a\0b", false);
+    checker.check(b"a\0b\0", false);
+    checker.check(b"a\0>\0", false);
+    checker.check(b"ba\0", false);
+    checker.check(b"\0a\0", false);
+    checker.check(b"b\0a\0", true);
+    checker.check(b"[\0a\0", false);
+    checker.check(b"b\ra\0", false);
+
+    // Check word boundary at end
+    let checker = build_checker(r"a\b", "wide");
+    checker.check(b"", false);
+    checker.check(b"a", false);
+    checker.check(b"a\0", true);
+    checker.check(b"a\0b", true);
+    checker.check(b"a\0b\0", false);
+    checker.check(b"a\0>\0", true);
+    checker.check(b"ba\0", true);
+    checker.check(b"\0a\0", true);
+    checker.check(b"b\0a\0", true);
+    checker.check(b"[\0a\0", true);
+    checker.check(b"b\ra\0", true);
+    let checker = build_checker(r"a\B", "wide");
+    checker.check(b"", false);
+    checker.check(b"a", false);
+    checker.check(b"a\0", false);
+    checker.check(b"a\0b", false);
+    checker.check(b"a\0b\0", true);
+    checker.check(b"a\0>\0", false);
+    checker.check(b"ba\0", false);
+    checker.check(b"\0a\0", false);
+    checker.check(b"b\0a\0", false);
+    checker.check(b"[\0a\0", false);
+    checker.check(b"b\ra\0", false);
+
+    // Check word boundary in the middle
+    let checker = build_checker(r"<.+\bA\b.+>", "wide");
+    checker.check(&to_wide(b""), false);
+    checker.check(&to_wide(b"<>"), false);
+    checker.check(&to_wide(b"<A>"), false);
+    checker.check(&to_wide(b"<[A]>"), true);
+    checker.check(&to_wide(b"<[aAa]>"), false);
+    checker.check(&to_wide(b"<a[A]a>"), true);
+    checker.check(&to_wide(b"<aaA]a>"), false);
+    // Lets check more complex cases
+    checker.check(&to_wide(b"<aAAAAa>"), false);
+    checker.check(&to_wide(b"<a[AA]>"), false);
+    checker.check(&to_wide(b"<a[AAA.A!AA]>"), true);
+    checker.check(&to_wide(b"<a[A.AAA]>"), true);
+    checker.check(&to_wide(b"<a[AA.AAA]>"), false);
+    checker.check(&to_wide(b"<a[AA>A.>"), true);
+    checker.check(&to_wide(b"<a[AA>AA.>"), false);
+    let checker = build_checker(r"<.+\BA\B.+>", "wide");
+    checker.check(&to_wide(b""), false);
+    checker.check(&to_wide(b"<>"), false);
+    checker.check(&to_wide(b"<A>"), false);
+    checker.check(&to_wide(b"<[A]>"), false);
+    checker.check(&to_wide(b"<[aAa]>"), true);
+    checker.check(&to_wide(b"<a[A]a>"), false);
+    checker.check(&to_wide(b"<a[Aa>"), false);
+    // Lets check more complex cases
+    checker.check(&to_wide(b"<aAAAAa>"), true);
+    checker.check(&to_wide(b"<a[AA]>"), false);
+    checker.check(&to_wide(b"<a[AAA.A!AA]>"), true);
+    checker.check(&to_wide(b"<a[A.AAA]>"), true);
+    checker.check(&to_wide(b"<a[AA.AAA]>"), true);
+    checker.check(&to_wide(b"<a[AA>A.>"), false);
+    checker.check(&to_wide(b"<a[AA>AA.>"), false);
+}
+
+#[test]
+fn test_variable_regex_word_boundaries_edge_cases() {
+    let build_checker = |regex: &str, modifiers: &str| {
+        Checker::new(&format!(
+            r#"
+rule a {{
+    strings:
+        $a = /{}/ {}
+        $z = "z"
+    condition:
+        (#z == 0 and #a == 0) or (!a == #z)
+}}"#,
+            regex, modifiers,
+        ))
+    };
+
+    // The difference between a regex with a boundary, and one without it with post match checking,
+    // is that the boundary does not factor in the resolution of repetitions.
+
+    // This works, because we recheck after the initial match, and the repetition is greedy, hence
+    // the post match will only reduce the match.
+    let checker = build_checker(r"a.{0,4}\b", "");
+    checker.check(b"z a", true);
+    checker.check(b"zz a1", true);
+    checker.check(b"zzz a12", true);
+    checker.check(b"zzzzz a1234", true);
+    checker.check(b"a12345", true);
+    checker.check(b"zzzzz a1234>", true);
+    checker.check(b"zzzz a12>34", true);
+    checker.check(b"zzzz a>>>34", true);
+    let checker = build_checker(r"a.{0,4}\b", "wide");
+    checker.check(&to_wide(b"zz a"), true);
+    checker.check(&to_wide(b"zzzz a1"), true);
+    checker.check(&to_wide(b"zzzzzz a12"), true);
+    checker.check(&to_wide(b"zzzzzzzzzz a1234"), true);
+    checker.check(&to_wide(b"a12345"), true);
+    checker.check(&to_wide(b"zzzzzzzzzz a1234>"), true);
+    checker.check(&to_wide(b"zzzzzzzz a12>34"), true);
+    checker.check(&to_wide(b"zzzzzzzz a>>>34"), true);
+
+    // This works, because we include mmore than the initial match, so the post check can improve
+    // the non greedy repetition until it finds a boundary.
+    let checker = build_checker(r"a.{0,4}?\b", "");
+    checker.check(b"z a", true);
+    checker.check(b"zz a1", true);
+    checker.check(b"zzz a12", true);
+    checker.check(b"zzzzz a1234", true);
+    checker.check(b"a12345", true);
+    checker.check(b"zzzzz a1234>", true);
+    checker.check(b"zzz a12>34", true);
+    checker.check(b"z a>>>34", true);
+    let checker = build_checker(r"a.{0,4}?\b", "wide");
+    checker.check(&to_wide(b"zz a"), true);
+    checker.check(&to_wide(b"zzzz a1"), true);
+    checker.check(&to_wide(b"zzzzzz a12"), true);
+    checker.check(&to_wide(b"zzzzzzzzzz a1234"), true);
+    checker.check(&to_wide(b"a12345"), true);
+    checker.check(&to_wide(b"zzzzzzzzzz a1234>"), true);
+    checker.check(&to_wide(b"zzzzzz a12>34"), true);
+    checker.check(&to_wide(b"zz a>>>34"), true);
 }
 
 #[test]
