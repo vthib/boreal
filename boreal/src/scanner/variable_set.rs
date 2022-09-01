@@ -24,18 +24,26 @@ impl VariableSet {
     }
 
     pub(crate) fn matches(&self, mem: &[u8]) -> VariableSetMatches {
-        VariableSetMatches {
-            matches: self.set.matches(mem),
-        }
+        // For very small mem, it's not worth it to use a regex set.
+        // TODO: find the right size for this
+        // TODO: this basically bypasses this optim for all the integration tests, find a way
+        // to improve this.
+        let matches = if mem.len() < 4096 {
+            None
+        } else {
+            Some(self.set.matches(mem))
+        };
+
+        VariableSetMatches { matches }
     }
 }
 
 pub(crate) struct VariableSetMatches {
-    matches: SetMatches,
+    matches: Option<SetMatches>,
 }
 
 impl VariableSetMatches {
-    pub(crate) fn matched(&self, index: usize) -> bool {
-        self.matches.matched(index)
+    pub(crate) fn matched(&self, index: usize) -> Option<bool> {
+        self.matches.as_ref().map(|m| m.matched(index))
     }
 }

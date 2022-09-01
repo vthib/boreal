@@ -213,7 +213,7 @@ impl Evaluator<'_, '_, '_> {
         var_index.0.or(self.currently_selected_variable_index)
     }
 
-    fn variable_has_set_match(&self, var_index: usize) -> bool {
+    fn variable_has_set_match(&self, var_index: usize) -> Option<bool> {
         self.scan_data
             .variable_set_matches
             .matched(self.set_index_offset + var_index)
@@ -241,7 +241,7 @@ impl Evaluator<'_, '_, '_> {
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
                         let index = self.get_variable_index(*variable_index)?;
-                        if !self.variable_has_set_match(index) {
+                        if self.variable_has_set_match(index) == Some(false) {
                             return Some(Value::Integer(0));
                         }
 
@@ -255,7 +255,7 @@ impl Evaluator<'_, '_, '_> {
             }
             Expression::Count(variable_index) => {
                 let index = self.get_variable_index(*variable_index)?;
-                if !self.variable_has_set_match(index) {
+                if self.variable_has_set_match(index) == Some(false) {
                     return Some(Value::Integer(0));
                 }
 
@@ -273,7 +273,7 @@ impl Evaluator<'_, '_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let index = self.get_variable_index(*variable_index)?;
-                        if !self.variable_has_set_match(index) {
+                        if self.variable_has_set_match(index) == Some(false) {
                             return None;
                         }
 
@@ -297,7 +297,7 @@ impl Evaluator<'_, '_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let index = self.get_variable_index(*variable_index)?;
-                        if !self.variable_has_set_match(index) {
+                        if self.variable_has_set_match(index) == Some(false) {
                             return None;
                         }
 
@@ -514,18 +514,18 @@ impl Evaluator<'_, '_, '_> {
                 // For this expression, we can use the variables set to retrieve the truth value,
                 // no need to rescan.
                 let index = self.get_variable_index(*variable_index)?;
-                if !self.variable_has_set_match(index) {
-                    return Some(Value::Boolean(false));
-                }
+                let has_set_match = self.variable_has_set_match(index);
 
                 // Safety: index has been either:
                 // - generated during compilation and is thus valid.
                 // - retrieve from the currently selected variable, and thus valid.
                 let var = &mut self.variables[index];
-                let res = if var.need_full_matches() {
-                    var.find(self.mem).is_some()
-                } else {
-                    true
+
+                let res = match has_set_match {
+                    Some(false) => false,
+                    Some(true) if var.need_full_matches() => var.find(self.mem).is_some(),
+                    Some(true) => true,
+                    None => var.find(self.mem).is_some(),
                 };
 
                 Some(Value::Boolean(res))
@@ -543,7 +543,7 @@ impl Evaluator<'_, '_, '_> {
                     None => return Some(Value::Boolean(false)),
                 };
                 let index = self.get_variable_index(*variable_index)?;
-                if !self.variable_has_set_match(index) {
+                if self.variable_has_set_match(index) == Some(false) {
                     return Some(Value::Boolean(false));
                 }
 
@@ -567,7 +567,7 @@ impl Evaluator<'_, '_, '_> {
                 let from = self.evaluate_expr(from)?.unwrap_number()?;
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
                 let index = self.get_variable_index(*variable_index)?;
-                if !self.variable_has_set_match(index) {
+                if self.variable_has_set_match(index) == Some(false) {
                     return Some(Value::Boolean(false));
                 }
 
