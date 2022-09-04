@@ -13,7 +13,7 @@ use nom::{
 use super::{expression, identifier, read_integer, string_expression, Expression, ExpressionKind};
 use crate::{
     nom_recipes::{rtrim, textual_tag as ttag},
-    number, string,
+    number, regex, string,
     types::{Input, ParseResult},
 };
 
@@ -196,7 +196,7 @@ fn primary_expression_item(input: Input) -> ParseResult<Expression> {
         // text string
         map_expr(string::quoted, ExpressionKind::Bytes),
         // regex
-        map_expr(string::regex, ExpressionKind::Regex),
+        map_expr(regex::regex, ExpressionKind::Regex),
         // string_count | string_count 'in' range
         string_expression::string_count_expression,
         // string_offset | string_offset '[' primary_expression ']'
@@ -235,7 +235,7 @@ mod tests {
     use super::{primary_expression as pe, Expression, ExpressionKind as Expr};
     use crate::{
         expression::ReadIntegerType,
-        string::Regex,
+        regex::Regex,
         tests::{parse, parse_check, parse_err},
     };
     use std::ops::Range;

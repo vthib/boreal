@@ -52,12 +52,13 @@ mod hex_string;
 pub use hex_string::{HexToken, Jump as HexJump, Mask as HexMask};
 mod nom_recipes;
 mod number;
+mod regex;
+pub use regex::Regex;
 mod rule;
 pub use rule::{
     Metadata, Rule, VariableDeclaration, VariableDeclarationValue, VariableFlags, VariableModifiers,
 };
 mod string;
-pub use string::Regex;
 mod types;
 
 /// Parse a YARA file.

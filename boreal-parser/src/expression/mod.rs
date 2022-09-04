@@ -9,7 +9,7 @@ mod primary_expression;
 mod read_integer;
 mod string_expression;
 
-use crate::string::Regex;
+use crate::regex::Regex;
 
 /// Integer read type, see [`ExpressionKind::ReadInteger`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

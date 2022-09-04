@@ -15,7 +15,7 @@ use super::{
     expression::{self, Expression},
     hex_string,
     nom_recipes::{map_res, rtrim, textual_tag as ttag},
-    number, string,
+    number, regex, string,
     types::{Input, ParseResult},
     Regex,
 };
@@ -281,7 +281,7 @@ fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
                 string_modifiers,
             ),
             pair(
-                map(string::regex, VariableDeclarationValue::Regex),
+                map(regex::regex, VariableDeclarationValue::Regex),
                 regex_modifiers,
             ),
             pair(

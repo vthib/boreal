@@ -11,7 +11,8 @@ use nom::{
 use super::{
     super::{
         nom_recipes::{rtrim, textual_tag as ttag},
-        string::{regex, string_identifier},
+        regex::regex,
+        string::string_identifier,
         types::{Input, ParseResult},
     },
     common::range,
@@ -264,7 +265,7 @@ mod tests {
     use super::*;
     use crate::{
         expression::Identifier,
-        string::Regex,
+        regex::Regex,
         tests::{parse, parse_check, parse_err},
     };
     use std::ops::Range;
