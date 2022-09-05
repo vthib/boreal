@@ -265,7 +265,7 @@ mod tests {
     use super::*;
     use crate::{
         expression::Identifier,
-        regex::Regex,
+        regex::{self, Regex},
         tests::{parse, parse_check, parse_err},
     };
     use std::ops::Range;
@@ -572,7 +572,7 @@ mod tests {
                         span: 0..3,
                     }),
                     Regex {
-                        expr: "b".to_owned(),
+                        ast: regex::Node::Literal(b'b'),
                         case_insensitive: true,
                         dot_all: false,
                         span: 12..16,

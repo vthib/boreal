@@ -1139,17 +1139,14 @@ fn compile_for_iterator(
 
 fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
     let parser::Regex {
-        expr,
+        ast,
         case_insensitive,
         dot_all,
         span,
     } = regex;
 
-    Regex::new(&expr, case_insensitive, dot_all).map_err(|error| CompilationError::RegexError {
-        expr,
-        error,
-        span,
-    })
+    Regex::new(ast, case_insensitive, dot_all)
+        .map_err(|error| CompilationError::RegexError { error, span })
 }
 
 fn compile_identifier(

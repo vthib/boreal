@@ -2533,10 +2533,7 @@ fn test_re() {
         false,
     );
 
-    check_err(
-        &build_regex_rule(")"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
-    );
+    check_err(&build_regex_rule(")"), "mem:1:28: error: syntax error");
     check_regex_match("abc", b"abc", b"abc");
     check(&build_regex_rule("abc"), b"xbc", false);
     check(&build_regex_rule("abc"), b"axc", false);
@@ -2680,20 +2677,11 @@ fn test_re() {
 
     check_err(
         &build_regex_rule("[b-a]"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
+        "mem:1:29: error: invalid regex class range, start must be <= to end",
     );
-    check_err(
-        &build_regex_rule("(abc"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
-    );
-    check_err(
-        &build_regex_rule("abc)"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
-    );
-    check_err(
-        &build_regex_rule("a[]b"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
-    );
+    check_err(&build_regex_rule("(abc"), "mem:1:28: error: syntax error");
+    check_err(&build_regex_rule("abc)"), "mem:1:31: error: syntax error");
+    check_err(&build_regex_rule("a[]b"), "mem:1:32: error: syntax error");
     check_regex_match("a[\\-b]", b"a-", b"a-");
     check_regex_match("a[\\-b]", b"ab", b"ab");
     check_regex_match("a]", b"a]", b"a]");
@@ -2706,10 +2694,7 @@ fn test_re() {
     check(&build_regex_rule("a[^]b]c"), b"a]c", false);
     check_regex_match("a[^]b]c", b"adc", b"adc");
     check_regex_match("[^ab]*", b"cde", b"cde");
-    check_err(
-        &build_regex_rule(")("),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
-    );
+    check_err(&build_regex_rule(")("), "mem:1:28: error: syntax error");
     check_regex_match("a\\sb", b"a b", b"a b");
     check_regex_match("a\\sb", b"a\tb", b"a\tb");
     check_regex_match("a\\sb", b"a\rb", b"a\rb");
@@ -2820,11 +2805,11 @@ fn test_re() {
     // Test case for issue #503, \x without two following hex-digits
     check_err(
         &build_regex_rule("\\x0"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
+        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string"
     );
     check_err(
         &build_regex_rule("\\x"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
+        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string"
     );
 
     // XXX: not allowed by libyara, ok for us, this is fine
@@ -2833,7 +2818,7 @@ fn test_re() {
 
     check_err(
         &build_regex_rule("\\xxy"),
-        "mem:1:22: error: variable $a cannot be compiled: regex parse error",
+        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string"
     );
 
     // Test case for issue #682
@@ -2889,7 +2874,7 @@ fn test_re() {
     // Test case for issue #996
     check_err(
         "rule test {strings:$=/.{,}? /",
-        "mem:1:30: error: syntax error",
+        "mem:1:24: error: regex range must have at least one number specified",
     );
 
     check(

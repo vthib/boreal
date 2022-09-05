@@ -3,10 +3,9 @@ use std::ops::Range;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take},
+    bytes::complete::{tag, take},
     character::complete::{anychar, char, digit0, digit1, none_of},
     combinator::{cut, map, opt},
-    error::{ErrorKind as NomErrorKind, ParseError},
     multi::many0,
     sequence::{delimited, separated_pair, terminated, tuple},
 };
@@ -20,8 +19,8 @@ use super::types::{Input, ParseResult};
 /// A regular expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Regex {
-    /// The regular expression parsed inside the `/` delimiters.
-    pub expr: String,
+    /// The AST of the regular expression parsed inside the `/` delimiters.
+    pub ast: Node,
     /// case insensitive (`i` flag).
     pub case_insensitive: bool,
     /// `.` matches `\n` (`s` flag).
@@ -29,86 +28,6 @@ pub struct Regex {
 
     /// The span of the regex expression
     pub span: Range<usize>,
-}
-
-/// Parse a regular expression.
-///
-/// Equivalent to the _REGEX_ lexical pattern in libyara.
-/// This is roughly equivalent to the pattern `/\/"[^/\n]+\//i?s?`, with:
-/// - `\/` replaced by `/`.
-/// - `\<anything>` unmodified.
-///
-/// XXX: There is change of behavior from libyara. `\<nul_byte>` was forbidden,
-/// but we do not have an issue about this (we do not save the regular expression
-/// as a C string). See [Issue #576 in Yara](https://github.com/VirusTotal/yara/issues/576).
-pub fn regex(input: Input) -> ParseResult<Regex> {
-    let start = input;
-    let (input, _) = char('/')(input)?;
-
-    // We cannot use escaped_transform, as it is not an error to use
-    // the control character with any char other than `/`.
-    let (input, expr) = cut(terminated(regex_contents, char('/')))(input)?;
-    let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
-
-    Ok((
-        input,
-        Regex {
-            expr,
-            case_insensitive: no_case.is_some(),
-            dot_all: dot_all.is_some(),
-            span: input.get_span_from(start),
-        },
-    ))
-}
-
-/// Parsed the contents between the '/' chars delimiting a regex.
-/// See [`regex`] for details.
-fn regex_contents(mut input: Input) -> ParseResult<String> {
-    // This is mostly inspired by the impl of
-    // [`nom::bytes::complete::escaped_transform`].
-
-    let mut res = String::new();
-    let normal = is_not("/\\\n");
-
-    while !input.cursor().is_empty() {
-        match normal(input) {
-            Ok((new_input, o)) => {
-                res.push_str(o.cursor());
-                if new_input.cursor().is_empty() {
-                    return Ok((new_input, res));
-                } else if new_input.cursor().len() == input.cursor().len() {
-                    return Ok((input, res));
-                }
-                input = new_input;
-            }
-            Err(nom::Err::Error(_)) => {
-                // access [0] is safe since input.len() > 0.
-                if input.cursor().as_bytes()[0] == b'\\' {
-                    if input.cursor().len() <= 1 {
-                        input.advance(1);
-                        return Err(nom::Err::Error(Error::from_error_kind(
-                            input,
-                            NomErrorKind::EscapedTransform,
-                        )));
-                    }
-                    match input.cursor().as_bytes()[1] {
-                        b'/' => {
-                            res.push('/');
-                        }
-                        c => {
-                            res.push('\\');
-                            res.push(c as char);
-                        }
-                    }
-                    input.advance(2);
-                } else {
-                    return Ok((input, res));
-                }
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    Ok((input, res))
 }
 
 /// AST node of a regular expression.
@@ -161,9 +80,9 @@ pub enum ClassKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PerlClass {
     /// Class kind.
-    kind: PerlClassKind,
+    pub kind: PerlClassKind,
     /// Is the class negated.
-    negated: bool,
+    pub negated: bool,
 }
 
 /// Kind of PERL style class.
@@ -181,9 +100,9 @@ pub enum PerlClassKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BracketedClass {
     /// List of items in the class.
-    items: Vec<BracketedClassItem>,
+    pub items: Vec<BracketedClassItem>,
     /// Is the class negated.
-    negated: bool,
+    pub negated: bool,
 }
 
 /// Item in a bracketed class.
@@ -232,6 +151,34 @@ pub enum AssertionKind {
     WordBoundary,
     /// Non word boundary, i.e. `\B`.
     NonWordBoundary,
+}
+
+/// Parse a regular expression.
+///
+/// Similar to the _REGEX_ lexical pattern in libyara. but the parsing of the AST is done
+/// directly.
+///
+/// XXX: There is change of behavior from libyara. `\<nul_byte>` was forbidden,
+/// but we do not have an issue about this (we do not save the regular expression
+/// as a C string). See [Issue #576 in Yara](https://github.com/VirusTotal/yara/issues/576).
+pub(crate) fn regex(input: Input) -> ParseResult<Regex> {
+    let start = input;
+    let (input, _) = char('/')(input)?;
+
+    // We cannot use escaped_transform, as it is not an error to use
+    // the control character with any char other than `/`.
+    let (input, ast) = cut(terminated(alternative, char('/')))(input)?;
+    let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
+
+    Ok((
+        input,
+        Regex {
+            ast,
+            case_insensitive: no_case.is_some(),
+            dot_all: dot_all.is_some(),
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 fn alternative(mut input: Input) -> ParseResult<Node> {
@@ -414,7 +361,11 @@ fn bracketed_class_literal(input: Input) -> ParseResult<u8> {
 
 fn bracketed_class_char(input: Input) -> ParseResult<u8> {
     let start = input;
-    let (input, b) = none_of("]")(input)?;
+
+    // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
+    // and newlines are not allowed
+    // ] is disallowed because it indicates the end of the class
+    let (input, b) = none_of("/\n]")(input)?;
     let b = char_to_u8(b)
         .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from(start), kind)))?;
 
@@ -423,7 +374,11 @@ fn bracketed_class_char(input: Input) -> ParseResult<u8> {
 
 fn literal(input: Input) -> ParseResult<u8> {
     let start = input;
-    let (input, b) = none_of(r"()[\|.$^+*?")(input)?;
+
+    // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
+    // and newlines are not allowed
+    // rest is disallowed because they have specific meaning.
+    let (input, b) = none_of("/\n()[\\|.$^+*?")(input)?;
     let b = char_to_u8(b)
         .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from(start), kind)))?;
 
@@ -562,7 +517,7 @@ mod tests {
             "/a/i",
             "",
             Regex {
-                expr: "a".to_owned(),
+                ast: Node::Literal(b'a'),
                 case_insensitive: true,
                 dot_all: false,
                 span: 0..4,
@@ -573,7 +528,14 @@ mod tests {
             "/[^0-9]+/a",
             "a",
             Regex {
-                expr: "[^0-9]+".to_owned(),
+                ast: Node::Repetition {
+                    node: Box::new(Node::Class(ClassKind::Bracketed(BracketedClass {
+                        items: vec![BracketedClassItem::Range(b'0', b'9')],
+                        negated: true,
+                    }))),
+                    kind: RepetitionKind::OneOrMore,
+                    greedy: true,
+                },
                 case_insensitive: false,
                 dot_all: false,
                 span: 0..9,
@@ -584,7 +546,13 @@ mod tests {
             r#"/a\/b\cd/isb"#,
             "b",
             Regex {
-                expr: "a/b\\cd".to_owned(),
+                ast: Node::Concat(vec![
+                    Node::Literal(b'a'),
+                    Node::Literal(b'/'),
+                    Node::Literal(b'b'),
+                    Node::Literal(b'c'),
+                    Node::Literal(b'd'),
+                ]),
                 case_insensitive: true,
                 dot_all: true,
                 span: 0..11,
@@ -595,7 +563,11 @@ mod tests {
             r#"/.{2}/si c"#,
             "i c",
             Regex {
-                expr: ".{2}".to_owned(),
+                ast: Node::Repetition {
+                    node: Box::new(Node::Dot),
+                    kind: RepetitionKind::Range(RepetitionRange::Exactly(2)),
+                    greedy: true,
+                },
                 case_insensitive: false,
                 dot_all: true,
                 span: 0..7,
@@ -606,7 +578,7 @@ mod tests {
             "/\0\\\0/ c",
             "c",
             Regex {
-                expr: "\0\\\0".to_owned(),
+                ast: Node::Concat(vec![Node::Literal(b'\0'), Node::Literal(b'\0')]),
                 case_insensitive: false,
                 dot_all: false,
                 span: 0..5,

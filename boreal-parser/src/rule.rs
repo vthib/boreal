@@ -881,7 +881,14 @@ mod tests {
                 VariableDeclaration {
                     name: "b".to_owned(),
                     value: VariableDeclarationValue::Regex(Regex {
-                        expr: "a?b".to_owned(),
+                        ast: regex::Node::Concat(vec![
+                            regex::Node::Repetition {
+                                node: Box::new(regex::Node::Literal(b'a')),
+                                kind: regex::RepetitionKind::ZeroOrOne,
+                                greedy: true,
+                            },
+                            regex::Node::Literal(b'b'),
+                        ]),
                         case_insensitive: false,
                         dot_all: false,
                         span: 38..43,

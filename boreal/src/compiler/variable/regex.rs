@@ -3,7 +3,7 @@ use regex::bytes::RegexBuilder;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
-use crate::regex::normalize_regex;
+use crate::regex::ast_to_rust_expr;
 
 use super::VariableCompilationError;
 
@@ -18,13 +18,13 @@ pub fn compile_regex(
     modifiers: &VariableModifiers,
 ) -> Result<(String, Option<regex::bytes::Regex>), VariableCompilationError> {
     let Regex {
-        expr,
+        ast,
         mut case_insensitive,
         dot_all,
         span: _,
     } = regex;
 
-    let mut expr = normalize_regex(&expr);
+    let mut expr = ast_to_rust_expr(ast);
 
     if modifiers.flags.contains(VariableFlags::NOCASE) {
         case_insensitive = true;

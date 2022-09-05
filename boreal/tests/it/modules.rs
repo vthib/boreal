@@ -119,10 +119,6 @@ fn test_value_wrong_op() {
         "tests.struct_array()",
         "mem:3:16: error: invalid identifier type",
     );
-    check_tests_err(
-        "tests.constants.regex(2, 3)",
-        "mem:3:16: error: invalid identifier type",
-    );
 
     // Cannot use compound values as expressions
     check_tests_err(
@@ -173,14 +169,12 @@ fn test_value_wrong_type() {
     check_invalid_types("tests.constants.one == \"foo\"");
     check_invalid_types("tests.constants.one_half == \"foo\"");
     check_invalid_types("tests.constants.str + 1 > 0");
-    check_invalid_types("tests.constants.regex + 1 > 0");
     check_invalid_types("tests.constants.true + 1 > 0");
 
     // Check lazy values
     check_invalid_types("tests.lazy().one == \"foo\"");
     check_invalid_types("tests.lazy().one_half == \"foo\"");
     check_invalid_types("tests.lazy().str + 1 > 0");
-    check_invalid_types("tests.lazy().regex + 1 > 0");
     check_invalid_types("tests.lazy().true + 1 > 0");
 }
 

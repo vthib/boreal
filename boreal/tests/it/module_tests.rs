@@ -22,10 +22,6 @@ impl Module for Tests {
                     ("empty", StaticValue::bytes("")),
                     // Not libyara
                     ("one_half", StaticValue::Float(0.5)),
-                    (
-                        "regex",
-                        StaticValue::Regex(Regex::new("<a.b>", false, false).unwrap()),
-                    ),
                     ("str", StaticValue::bytes("str")),
                     ("true", StaticValue::Boolean(true)),
                 ]),
@@ -116,7 +112,6 @@ impl Module for Tests {
                     Type::object([
                         ("one", Type::Integer),
                         ("one_half", Type::Float),
-                        ("regex", Type::Regex),
                         ("str", Type::Bytes),
                         ("true", Type::Boolean),
                         (
@@ -144,7 +139,7 @@ impl Module for Tests {
                         ("fake_bool_to_dict", Type::Boolean),
                         // Declared as a bool, but exposes a function
                         ("fake_bool_to_fun", Type::Boolean),
-                        // Declared as an integer, but exposes a regex
+                        // Declared as an integer, but exposes a string
                         ("fake_int", Type::Integer),
                         // Declare as a dict, but exposes a bool
                         ("fake_dict_to_bool", Type::object([("i", Type::Integer)])),
@@ -379,10 +374,6 @@ impl Tests {
         Some(Value::object([
             ("one", Value::Integer(1)),
             ("one_half", Value::Float(0.5)),
-            (
-                "regex",
-                Value::Regex(Regex::new("<a.b>", false, false).unwrap()),
-            ),
             ("str", Value::bytes("str")),
             ("true", Value::Boolean(true)),
             (
@@ -412,10 +403,7 @@ impl Tests {
             ("fake_bool_to_array", Value::Array(vec![Value::Integer(2)])),
             ("fake_bool_to_dict", Value::object([])),
             ("fake_bool_to_fun", Value::Function(Self::empty)),
-            (
-                "fake_int",
-                Value::Regex(Regex::new("ht+p", false, false).unwrap()),
-            ),
+            ("fake_int", Value::bytes("ht+p")),
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),
             ("fake_fun_to_bool", Value::Boolean(false)),

@@ -233,6 +233,7 @@ where
 mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression, ExpressionKind as Expr};
+    use crate::regex::{AssertionKind, Node, RepetitionKind};
     use crate::{
         expression::ReadIntegerType,
         regex::Regex,
@@ -433,7 +434,15 @@ mod tests {
             "c",
             Expression {
                 expr: Expr::Regex(Regex {
-                    expr: "a*b$".to_owned(),
+                    ast: Node::Concat(vec![
+                        Node::Repetition {
+                            node: Box::new(Node::Literal(b'a')),
+                            kind: RepetitionKind::ZeroOrMore,
+                            greedy: true,
+                        },
+                        Node::Literal(b'b'),
+                        Node::Assertion(AssertionKind::EndLine),
+                    ]),
                     case_insensitive: true,
                     dot_all: false,
                     span: 0..7,
