@@ -2650,8 +2650,7 @@ fn test_re() {
     check_regex_match("x{1,2}abcd", b"xxxxabcd", b"xxabcd");
     check_regex_match("x{1,2}abcd", b"xxxxabcd", b"xxabcd");
 
-    // TODO: this is not supported by the regex crate
-    // check_regex_match("ab{.*}", b"ab{c}", b"ab{c}");
+    check_regex_match("ab{.*}", b"ab{c}", b"ab{c}");
 
     check_regex_match(".(aa){1,2}", b"aaaaaaaaaa", b"aaaaa");
     check_regex_match("a.(bc.){2}", b"aabcabca", b"aabcabca");

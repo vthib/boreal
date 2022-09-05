@@ -1,4 +1,4 @@
-use crate::utils::{check, Checker};
+use crate::utils::{check, check_err, Checker};
 
 fn build_rule(var: &str) -> String {
     format!(
@@ -14,29 +14,18 @@ rule a {{
 }
 
 #[test]
-// FIXME
-#[ignore]
 fn test_regex_unicode_handling() {
-    // The '+' will apply on the last byte of the 'é' utf-8 char, not on the char itself,
-    // so this is: `<\xC3\xA9+>`.
-    let checker = Checker::new(
-        r#"
-rule a {
-    strings:
-        $a = /<é+>/
-    condition:
-        $a
-}"#,
+    // Unicode characters are rejected inside a regex.
+    // TODO: this is broken in libyara: see https://github.com/VirusTotal/yara/pull/1770
+    // To re-enable once updated to 4.3
+    // check_err(
+    //     "rule a { strings: $a = /<é+>/ condition: $a }",
+    //     "mem:1:26: error: regex should only contain ascii bytes",
+    // );
+    check_err(
+        "rule a { strings: $a = /[é]/ condition: $a }",
+        "mem:1:26: error: regex should only contain ascii bytes",
     );
-    checker.check(b"", false);
-    checker.check("é".as_bytes(), false);
-    checker.check("<é>".as_bytes(), true);
-    checker.check(b"<\xC3\xA9>", true);
-    checker.check("<éé>".as_bytes(), false);
-    checker.check(b"<\xC3\xA9\xA9>", true);
-    checker.check(b"<\xC3\xA9\xA9\xA9\xA9>", true);
-    checker.check(b"<\xC3\xA9\xA9\xA9\xA9", false);
-    checker.check(b"\xC3\xA9\xA9\xA9\xA9>", false);
 }
 
 #[test]
@@ -118,20 +107,19 @@ fn test_regex_at_most_repetitions() {
     checker.check(br"<\\>", true);
     checker.check(br"<\\\>", false);
 
-    // TODO: This is tricky: yara will not lex this as a repetition, but as literals, and the
-    // escape will be stripped. For us, this is painful to handle...
-    // let checker = Checker::new(&build_rule(r"/<a{\,2}>/"));
-    // checker.check(br"<>", true);
-    // checker.check(br"<a>", true);
-    // checker.check(br"<aa>", true);
-    // checker.check(br"<aaa>", false);
+    let checker = Checker::new(&build_rule(r"/<a{\,2}>/"));
+    checker.check(br"<>", false);
+    checker.check(br"<a>", false);
+    checker.check(br"<aa>", false);
+    checker.check(br"<aaa>", false);
+    checker.check(br"<a{,2}>", true);
 
-    // TODO: idem, same issue
-    // let checker = Checker::new(&build_rule(r"/<a{{,2}>/"));
-    // checker.check(br"<a>", true);
-    // checker.check(br"<a{>", true);
-    // checker.check(br"<a{{>", true);
-    // checker.check(br"<a{{{>", false);
+    let checker = Checker::new(&build_rule(r"/<a{{,2}>/"));
+    checker.check(br"<a>", true);
+    checker.check(br"<a{>", true);
+    checker.check(br"<a{{>", true);
+    checker.check(br"<a{{{>", false);
+    checker.check(br"<a{{,2}>", false);
 
     let checker = Checker::new(&build_rule(r"/<\{{,2}>/"));
     checker.check(br"<>", true);
