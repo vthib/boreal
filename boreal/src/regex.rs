@@ -56,14 +56,12 @@ pub(crate) fn ast_to_rust_expr(ast: Node) -> String {
 fn push_ast(node: Node, out: &mut String) {
     match node {
         Node::Alternation(nodes) => {
-            out.push('(');
             for (i, n) in nodes.into_iter().enumerate() {
                 if i != 0 {
                     out.push('|');
                 }
                 push_ast(n, out);
             }
-            out.push(')');
         }
         Node::Assertion(AssertionKind::StartLine) => out.push('^'),
         Node::Assertion(AssertionKind::EndLine) => out.push('$'),
@@ -72,15 +70,18 @@ fn push_ast(node: Node, out: &mut String) {
         Node::Class(ClassKind::Perl(p)) => push_perl_class(&p, out),
         Node::Class(ClassKind::Bracketed(c)) => push_bracketed_class(c, out),
         Node::Concat(nodes) => {
-            out.push('(');
             for n in nodes {
                 push_ast(n, out);
             }
-            out.push(')');
         }
         Node::Dot => out.push('.'),
         Node::Empty => (),
         Node::Literal(b) => push_literal(b, out),
+        Node::Group(n) => {
+            out.push('(');
+            push_ast(*n, out);
+            out.push(')');
+        }
         Node::Repetition { node, kind, greedy } => {
             push_ast(*node, out);
             match kind {

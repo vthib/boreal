@@ -54,6 +54,9 @@ pub enum Node {
     /// Literal byte.
     Literal(u8),
 
+    /// A group, i.e. (...).
+    Group(Box<Node>),
+
     /// Repetition of an expression.
     Repetition {
         /// Expression to repeat.
@@ -264,7 +267,9 @@ fn repetition(input: Input) -> ParseResult<(RepetitionKind, bool)> {
 
 fn single(input: Input) -> ParseResult<Node> {
     alt((
-        delimited(char('('), alternative, char(')')),
+        map(delimited(char('('), alternative, char(')')), |node| {
+            Node::Group(Box::new(node))
+        }),
         map(char('.'), |_| Node::Dot),
         map(perl_class, |p| Node::Class(ClassKind::Perl(p))),
         map(bracketed_class, |p| Node::Class(ClassKind::Bracketed(p))),
@@ -730,12 +735,15 @@ mod tests {
     #[test]
     fn test_single() {
         parse(single, ".a", "a", Node::Dot);
-        parse(single, "()a", "a", Node::Empty);
+        parse(single, "()a", "a", Node::Group(Box::new(Node::Empty)));
         parse(
             single,
             "(ab)a",
             "a",
-            Node::Concat(vec![Node::Literal(b'a'), Node::Literal(b'b')]),
+            Node::Group(Box::new(Node::Concat(vec![
+                Node::Literal(b'a'),
+                Node::Literal(b'b'),
+            ]))),
         );
         parse(
             single,
