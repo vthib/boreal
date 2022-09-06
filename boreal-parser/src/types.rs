@@ -73,6 +73,20 @@ impl<'a> Input<'a> {
             end: self.cursor_before_last_rtrim.as_ptr() as usize - input,
         }
     }
+
+    /// Generate a span from a starting position, without considering rtrims.
+    ///
+    /// The given input is the start of the span.
+    /// The end of the span is the current position of the cursor.
+    pub fn get_span_from_no_rtrim(&self, start: Self) -> Range<usize> {
+        debug_assert!(self.input == start.input);
+        let input = self.input.as_ptr() as usize;
+
+        Range {
+            start: start.cursor().as_ptr() as usize - input,
+            end: self.cursor.as_ptr() as usize - input,
+        }
+    }
 }
 
 impl<'a> InputIter for Input<'a> {

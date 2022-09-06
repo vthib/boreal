@@ -1,34 +1,15 @@
 //! Parsing related to strings, regexes and identifiers.
-use std::ops::Range;
-
 use nom::{
     branch::alt,
     bytes::complete::{tag, take},
     character::complete::{anychar, char, digit0, digit1, none_of},
     combinator::{cut, map, opt},
     multi::many0,
-    sequence::{delimited, separated_pair, terminated, tuple},
+    sequence::{delimited, separated_pair},
 };
 
-use crate::error::ErrorKind;
-
-use super::error::Error;
-use super::nom_recipes::rtrim;
-use super::types::{Input, ParseResult};
-
-/// A regular expression.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Regex {
-    /// The AST of the regular expression parsed inside the `/` delimiters.
-    pub ast: Node,
-    /// case insensitive (`i` flag).
-    pub case_insensitive: bool,
-    /// `.` matches `\n` (`s` flag).
-    pub dot_all: bool,
-
-    /// The span of the regex expression
-    pub span: Range<usize>,
-}
+use crate::error::{Error, ErrorKind};
+use crate::types::{Input, ParseResult};
 
 /// AST node of a regular expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -156,35 +137,7 @@ pub enum AssertionKind {
     NonWordBoundary,
 }
 
-/// Parse a regular expression.
-///
-/// Similar to the _REGEX_ lexical pattern in libyara. but the parsing of the AST is done
-/// directly.
-///
-/// XXX: There is change of behavior from libyara. `\<nul_byte>` was forbidden,
-/// but we do not have an issue about this (we do not save the regular expression
-/// as a C string). See [Issue #576 in Yara](https://github.com/VirusTotal/yara/issues/576).
-pub(crate) fn regex(input: Input) -> ParseResult<Regex> {
-    let start = input;
-    let (input, _) = char('/')(input)?;
-
-    // We cannot use escaped_transform, as it is not an error to use
-    // the control character with any char other than `/`.
-    let (input, ast) = cut(terminated(alternative, char('/')))(input)?;
-    let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
-
-    Ok((
-        input,
-        Regex {
-            ast,
-            case_insensitive: no_case.is_some(),
-            dot_all: dot_all.is_some(),
-            span: input.get_span_from(start),
-        },
-    ))
-}
-
-fn alternative(mut input: Input) -> ParseResult<Node> {
+pub(super) fn alternative(mut input: Input) -> ParseResult<Node> {
     let mut alts = Vec::new();
 
     loop {
@@ -349,7 +302,7 @@ fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassI
             let (input3, lit2) = opt(bracketed_class_literal)(input2)?;
             match lit2 {
                 Some(lit2) if lit2 < lit => Err(nom::Err::Failure(Error::new(
-                    input3.get_span_from_no_rtrim(start),
+                    input.get_span_from(start),
                     ErrorKind::RegexClassRangeInvalid,
                 ))),
                 Some(lit2) => Ok((input3, BracketedClassItem::Range(lit, lit2))),
@@ -372,7 +325,7 @@ fn bracketed_class_char(input: Input) -> ParseResult<u8> {
     // ] is disallowed because it indicates the end of the class
     let (input, b) = none_of("/\n]")(input)?;
     let b = char_to_u8(b)
-        .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from_no_rtrim(start), kind)))?;
+        .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from(start), kind)))?;
 
     Ok((input, b))
 }
@@ -385,7 +338,7 @@ fn literal(input: Input) -> ParseResult<u8> {
     // rest is disallowed because they have specific meaning.
     let (input, b) = none_of("/\n()[\\|.$^+*?")(input)?;
     let b = char_to_u8(b)
-        .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from_no_rtrim(start), kind)))?;
+        .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from(start), kind)))?;
 
     Ok((input, b))
 }
@@ -408,16 +361,15 @@ fn escaped_char(input: Input) -> ParseResult<u8> {
                 Ok(n) => n,
                 Err(e) => {
                     return Err(nom::Err::Failure(Error::new(
-                        input.get_span_from_no_rtrim(start),
+                        input.get_span_from(start),
                         ErrorKind::StrToHexIntError(e),
                     )));
                 }
             };
             return Ok((input, n));
         }
-        _ => char_to_u8(b).map_err(|kind| {
-            nom::Err::Failure(Error::new(input.get_span_from_no_rtrim(input2), kind))
-        })?,
+        _ => char_to_u8(b)
+            .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from(input2), kind)))?,
     };
 
     Ok((input, c))
@@ -453,12 +405,17 @@ fn range_multi(input: Input) -> ParseResult<RepetitionRange> {
     )(input)?;
 
     let range = match (from, to) {
-        (None, None) => RepetitionRange::AtLeast(0),
+        (None, None) => {
+            return Err(nom::Err::Failure(Error::new(
+                input.get_span_from(start),
+                ErrorKind::RegexRangeEmpty,
+            )))
+        }
         (Some(from), None) => RepetitionRange::AtLeast(from),
         (None, Some(to)) => RepetitionRange::Bounded(0, to),
         (Some(from), Some(to)) if to < from => {
             return Err(nom::Err::Failure(Error::new(
-                input.get_span_from_no_rtrim(start),
+                input.get_span_from(start),
                 ErrorKind::RegexRangeInvalid,
             )))
         }
@@ -476,7 +433,7 @@ fn parse_u32(input: Input) -> ParseResult<u32> {
         Ok(n) => n,
         Err(e) => {
             return Err(nom::Err::Failure(Error::new(
-                input.get_span_from_no_rtrim(start),
+                input.get_span_from(start),
                 ErrorKind::StrToIntError(e),
             )))
         }
@@ -497,7 +454,7 @@ fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
         Ok(n) => n,
         Err(e) => {
             return Err(nom::Err::Failure(Error::new(
-                input.get_span_from_no_rtrim(start),
+                input.get_span_from(start),
                 ErrorKind::StrToIntError(e),
             )))
         }
@@ -510,87 +467,6 @@ fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
 mod tests {
     use super::*;
     use crate::tests::{parse, parse_err};
-
-    #[test]
-    fn test_parse_regex() {
-        parse(
-            regex,
-            "/a/i",
-            "",
-            Regex {
-                ast: Node::Literal(b'a'),
-                case_insensitive: true,
-                dot_all: false,
-                span: 0..4,
-            },
-        );
-        parse(
-            regex,
-            "/[^0-9]+/a",
-            "a",
-            Regex {
-                ast: Node::Repetition {
-                    node: Box::new(Node::Class(ClassKind::Bracketed(BracketedClass {
-                        items: vec![BracketedClassItem::Range(b'0', b'9')],
-                        negated: true,
-                    }))),
-                    kind: RepetitionKind::OneOrMore,
-                    greedy: true,
-                },
-                case_insensitive: false,
-                dot_all: false,
-                span: 0..9,
-            },
-        );
-        parse(
-            regex,
-            r#"/a\/b\cd/isb"#,
-            "b",
-            Regex {
-                ast: Node::Concat(vec![
-                    Node::Literal(b'a'),
-                    Node::Literal(b'/'),
-                    Node::Literal(b'b'),
-                    Node::Literal(b'c'),
-                    Node::Literal(b'd'),
-                ]),
-                case_insensitive: true,
-                dot_all: true,
-                span: 0..11,
-            },
-        );
-        parse(
-            regex,
-            r#"/.{2}/si c"#,
-            "i c",
-            Regex {
-                ast: Node::Repetition {
-                    node: Box::new(Node::Dot),
-                    kind: RepetitionKind::Range(RepetitionRange::Exactly(2)),
-                    greedy: true,
-                },
-                case_insensitive: false,
-                dot_all: true,
-                span: 0..7,
-            },
-        );
-        parse(
-            regex,
-            "/\0\\\0/ c",
-            "c",
-            Regex {
-                ast: Node::Concat(vec![Node::Literal(b'\0'), Node::Literal(b'\0')]),
-                case_insensitive: false,
-                dot_all: false,
-                span: 0..5,
-            },
-        );
-
-        parse_err(regex, "");
-        parse_err(regex, "/");
-        parse_err(regex, "/\n/");
-        parse_err(regex, "/a{2}");
-    }
 
     #[test]
     fn test_alternative() {
@@ -1106,9 +982,9 @@ mod tests {
         parse(range_multi, "{5,}a", "a", RepetitionRange::AtLeast(5));
         parse(range_multi, "{5,10}a", "a", RepetitionRange::Bounded(5, 10));
         parse(range_multi, "{0,0} a", " a", RepetitionRange::Bounded(0, 0));
-        parse(range_multi, "{,}", "", RepetitionRange::AtLeast(0));
 
         parse_err(range_multi, "{");
+        parse_err(range_multi, "{,}");
         parse_err(range_multi, "{,5");
         parse_err(range_multi, "{,-5}");
         parse_err(range_multi, "{-5,}");
