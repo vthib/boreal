@@ -96,6 +96,14 @@ fn test_regex_at_most_repetitions() {
     checker.check(b"<aa>", true);
     checker.check(b"<aaa>", false);
 
+    // Empty means {0,}, so same as *
+    let checker = Checker::new(&build_rule(r"/<a{,}>/"));
+    checker.check(b"<>", true);
+    checker.check(b"<a>", true);
+    checker.check(b"<aaaaaaaaaaaaaaaaaa>", true);
+    checker.check(b"<", false);
+    checker.check(b">", false);
+
     let checker = Checker::new(&build_rule(r"/<a\{,2}>/"));
     checker.check(b"<>", false);
     checker.check(b"<a>", false);

@@ -51,10 +51,6 @@ impl Error {
                 .with_message("regex should only contain ascii bytes")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
-            ErrorKind::RegexRangeEmpty => Diagnostic::error()
-                .with_message("regex range must have at least one number specified")
-                .with_labels(vec![Label::primary((), self.span.clone())]),
-
             ErrorKind::RegexRangeInvalid => Diagnostic::error()
                 .with_message("invalid regex range, start must be <= to end")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
@@ -212,9 +208,6 @@ pub enum ErrorKind {
 
     /// Regex contains a non ascii byte, this is not allowed.
     RegexNonAsciiByte,
-
-    /// Missing numbers in regex range.
-    RegexRangeEmpty,
 
     /// Invalid range in a regex, from > to.
     RegexRangeInvalid,

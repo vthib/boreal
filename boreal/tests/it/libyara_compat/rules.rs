@@ -2873,7 +2873,7 @@ fn test_re() {
     // Test case for issue #996
     check_err(
         "rule test {strings:$=/.{,}? /",
-        "mem:1:24: error: regex range must have at least one number specified",
+        "mem:1:30: error: syntax error",
     );
 
     check(

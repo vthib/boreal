@@ -452,12 +452,7 @@ fn range_multi(input: Input) -> ParseResult<RepetitionRange> {
     )(input)?;
 
     let range = match (from, to) {
-        (None, None) => {
-            return Err(nom::Err::Failure(Error::new(
-                input.get_span_from(start),
-                ErrorKind::RegexRangeEmpty,
-            )))
-        }
+        (None, None) => RepetitionRange::AtLeast(0),
         (Some(from), None) => RepetitionRange::AtLeast(from),
         (None, Some(to)) => RepetitionRange::Bounded(0, to),
         (Some(from), Some(to)) if to < from => {
@@ -1110,9 +1105,9 @@ mod tests {
         parse(range_multi, "{5,}a", "a", RepetitionRange::AtLeast(5));
         parse(range_multi, "{5,10}a", "a", RepetitionRange::Bounded(5, 10));
         parse(range_multi, "{0,0} a", " a", RepetitionRange::Bounded(0, 0));
+        parse(range_multi, "{,}", "", RepetitionRange::AtLeast(0));
 
         parse_err(range_multi, "{");
-        parse_err(range_multi, "{,}");
         parse_err(range_multi, "{,5");
         parse_err(range_multi, "{,-5}");
         parse_err(range_multi, "{-5,}");
