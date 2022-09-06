@@ -695,6 +695,7 @@ impl Evaluator<'_, '_, '_> {
             ForSelection::None => Some(FSEvaluation::Evaluator(FSEvaluator::None)),
             ForSelection::Expr { expr, as_percent } => {
                 let mut value = self.evaluate_expr(expr)?.unwrap_number()?;
+
                 #[allow(clippy::cast_precision_loss)]
                 if *as_percent {
                     let nb_variables = nb_elements as f64;
@@ -704,6 +705,9 @@ impl Evaluator<'_, '_, '_> {
                     {
                         value = v.ceil() as i64;
                     }
+                } else if value == 0 {
+                    // Special case: 0 without percent is treated as None
+                    return Some(FSEvaluation::Evaluator(FSEvaluator::None));
                 }
 
                 if value <= 0 {

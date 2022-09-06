@@ -47,7 +47,7 @@ criterion = { version = "0.3", features = ["html_reports"], optional = true }
 base64 = "0.13"
 const_format = "0.2"
 glob = "0.3.0"
-yara = { version = "0.15", features = ["vendored"] }
+yara = { version = "0.16", features = ["vendored"] }
 
 [[bench]]
 name = "benches"

@@ -920,10 +920,7 @@ private rule f { condition: false }
 
 #[test]
 fn test_private_strings() {
-    // TODO: enable those tests with conformance.
-    // There was a bug in yara-rust for the handling of private strings:
-    // <https://github.com/Hugal31/yara-rust/pull/84>
-    let checker = Checker::new_without_yara(
+    let checker = Checker::new(
         r#"
 // rule with only private strings
 rule a {

@@ -325,8 +325,6 @@ fn test_for_expression_any() {
 }
 
 #[test]
-// TODO: broken on libyara 4.2, fixed on master need 4.3 release
-#[ignore]
 fn test_for_expression_none() {
     let checker = Checker::new(&build_rule("none of them"));
     checker.check(b"", true);
@@ -370,16 +368,16 @@ fn test_for_expression_number() {
 
     let checker = Checker::new(&build_rule("0 of them"));
     checker.check(b"", true);
-    checker.check(b"a0", true);
-    checker.check(b"a1", true);
-    checker.check(b"a2", true);
-    checker.check(b"b0", true);
-    checker.check(b"b1", true);
-    checker.check(b"c0", true);
-    checker.check(b"a0b1", true);
-    checker.check(b"a0b1c0", true);
-    checker.check(b"a0a1a2b0b1", true);
-    checker.check(b"a0a1a2b0b1c0", true);
+    checker.check(b"a0", false);
+    checker.check(b"a1", false);
+    checker.check(b"a2", false);
+    checker.check(b"b0", false);
+    checker.check(b"b1", false);
+    checker.check(b"c0", false);
+    checker.check(b"a0b1", false);
+    checker.check(b"a0b1c0", false);
+    checker.check(b"a0a1a2b0b1", false);
+    checker.check(b"a0a1a2b0b1c0", false);
 
     let checker = Checker::new(&build_rule("3 of them"));
     checker.check(b"", false);

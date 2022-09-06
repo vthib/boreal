@@ -143,7 +143,7 @@ impl Checker {
     // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", count), ...])]
     #[track_caller]
     pub fn check_str_matches(&self, mem: &[u8], expected_matches: Vec<(&str, Vec<(&str, usize)>)>) {
-        let expected: Vec<_> = expected_matches
+        let mut expected: Vec<_> = expected_matches
             .into_iter()
             .map(|(a, b)| (a.to_string(), b))
             .collect();
@@ -169,7 +169,7 @@ impl Checker {
 
         if let Some(rules) = &self.yara_rules {
             let res = rules.scan_mem(mem, 1).unwrap();
-            let res: Vec<_> = res
+            let mut res: Vec<_> = res
                 .into_iter()
                 .map(|v| {
                     let rule_name = format!("{}:{}", v.namespace, v.identifier);
@@ -185,6 +185,15 @@ impl Checker {
                     (rule_name, str_matches)
                 })
                 .collect();
+            // Yara still reports private strings, however they will always have zero matches.
+            // We do not list private strings, so to really compare both, we need to clean up all 0
+            // matches in the yara results & expected results
+            for s in &mut res {
+                s.1.retain(|m| m.1 != 0);
+            }
+            for s in &mut expected {
+                s.1.retain(|m| m.1 != 0);
+            }
             assert_eq!(res, expected, "conformity test failed for libyara");
         }
     }

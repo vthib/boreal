@@ -52,8 +52,6 @@ fn test_variable_err() {
 #[test]
 fn test_variable_regex_modifiers() {
     // \x76 is 'v'
-    //
-    // FIXME: {,2} is OK for yara, not for us...
     let checker = Checker::new(
         r#"
 rule a {
@@ -61,7 +59,7 @@ rule a {
         $a = /f[aF]T[d-g]\x76/ nocase
         $b = /foo/ fullword
         $c = /bar.{0,3}/ fullword nocase
-        $d = /.{0,2}quu/ nocase fullword
+        $d = /.{,2}quu/ nocase fullword
     condition:
         any of them
 }"#,
@@ -1008,8 +1006,8 @@ fn test_variable_find_at_invalid() {
     check(&build_rule("$a0 at (#a0-10)"), b"", false);
 
     // Undefined value
-    // FIXME: libyara actually returns "false" for a FOUND_AT operation with an undefined
-    // param, inconsistently with FOUND_IN for example. To report
+    // TODO: update this when updating to yara 4.3
+    // See https://github.com/VirusTotal/yara/pull/1759
     check(
         &build_rule("defined ($a0 at tests.integer_array[5])"),
         b"",
