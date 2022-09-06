@@ -173,3 +173,74 @@ impl std::error::Error for Error {
         Some(&self.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
+
+    #[test]
+    fn test_regex_conversion() {
+        fn test(expr: &str, expected_res: Option<&str>) {
+            // Build a rule with a variable using the given regex expr. This gives us the AST for
+            // the regex, which we convert back to a rust regex expr.
+            let rule = format!(
+                "rule a {{ strings: $ = /{}/ condition: any of them }}",
+                expr
+            );
+            let mut file = boreal_parser::parse_str(&rule).unwrap();
+            let mut rule = match file.components.pop() {
+                Some(boreal_parser::YaraFileComponent::Rule(r)) => r,
+                _ => unreachable!(),
+            };
+            let regex = match rule.variables.pop() {
+                Some(VariableDeclaration {
+                    value: VariableDeclarationValue::Regex(regex),
+                    ..
+                }) => regex,
+                _ => unreachable!(),
+            };
+            let ast = regex.ast;
+            assert_eq!(&ast_to_rust_expr(ast), expected_res.unwrap_or(expr));
+        }
+
+        // Syntaxes that matches between yara and rust regexes.
+        test("^a.d+$", None);
+        test(r"\s?\S??\w*(\W*?\d+?\D\b)+", None);
+        test(r"\ba\B[a\w]|a(b|cd)t[^a-z]", None);
+
+        // Syntaxes that are modified to avoid issues
+        test(
+            r"[]] [^].[^] [!---]",
+            Some(r"[\x5d] [^\x2e\x5b\x5e\x5d] [!-\x2d\x2d]"),
+        );
+        test(
+            r"[|\\.+*?()\]{}^$#&\-~]",
+            Some(r"[\x7c\x5c\x2e\x2b\x2a\x3f\x28\x29\x5d\x7b\x7d\x5e\x24\x23\x26\x2d\x7e]"),
+        );
+        // Most of those do not need to be escaped in a class, escaping them does not do anythin.
+        // We still convert them to avoid issues.
+        test(
+            r"[\|\\\.\+\*\?\(\)\]\{\}\^\$\#\&\-\~]",
+            Some(r"[\x7c\x5c\x2e\x2b\x2a\x3f\x28\x29\x5d\x7b\x7d\x5e\x24\x23\x26\x2d\x7e]"),
+        );
+        test(
+            r"\|\\\.\+\*\?\(\)\]\{\}\^\$\#\&\-\~\[",
+            Some(r"\x7c\x5c\x2e\x2b\x2a\x3f\x28\x29\x5d\x7b\x7d\x5e\x24\x23\x26\x2d\x7e\x5b"),
+        );
+        // Escaping chars that are not meta do not do anythin.
+        test(r#"\k\i\z\p\P\"\A\z"#, Some(r#"kizpP"Az"#));
+        // Range repetitions are only parsed if valid, and the {,N} is normalized
+        test(
+            r"a{0} b{1,} c{,2} d{3,4} e{} f{*} g{1,h}",
+            Some(r"a{0} b{1,} c{0,2} d{3,4} e\x7b\x7d f\x7b*\x7d g\x7b1,h\x7d"),
+        );
+        // Regex from the signature-base repository
+        test(
+            r#"{"Hosts":\[".{10,512}"\],"Proxy":".{0,512}","Version":".{1,32}","Guid":""#,
+            Some(
+                r#"\x7b"Hosts":\x5b".{10,512}"\x5d,"Proxy":".{0,512}","Version":".{1,32}","Guid":""#,
+            ),
+        );
+    }
+}
