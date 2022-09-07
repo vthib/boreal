@@ -1,6 +1,7 @@
 //! Parse yara rules.
 use std::ops::Range;
 
+use nom::branch::alt;
 use nom::bytes::complete::take_till1;
 use nom::character::complete::char;
 use nom::combinator::map;
@@ -60,18 +61,13 @@ pub fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
         components: Vec::new(),
     };
     while !input.is_empty() {
-        if let Ok((i, v)) = include_file(input) {
-            file.components.push(YaraFileComponent::Include(v));
-            input = i;
-        } else if let Ok((i, v)) = import(input) {
-            file.components.push(YaraFileComponent::Import(v));
-            input = i;
-        } else {
-            let (i, rule) = rule(input)?;
-            file.components
-                .push(YaraFileComponent::Rule(Box::new(rule)));
-            input = i;
-        }
+        let (i, component) = alt((
+            map(include_file, YaraFileComponent::Include),
+            map(import, YaraFileComponent::Import),
+            map(rule, |r| YaraFileComponent::Rule(Box::new(r))),
+        ))(input)?;
+        file.components.push(component);
+        input = i;
     }
 
     Ok((input, file))
