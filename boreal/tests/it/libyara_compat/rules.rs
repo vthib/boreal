@@ -713,6 +713,32 @@ fn test_strings() {
         true,
     );
 
+    // https://github.com/VirusTotal/yara/issues/1695
+    check(
+        "rule test {
+           strings:
+               $a = \"AXS\"
+               $b = \"ERS\"
+           condition:
+               none of them in (0..10)
+         }",
+        concatcp!("AXSERS", TEXT_1024_BYTES).as_bytes(),
+        false,
+    );
+
+    // https://github.com/VirusTotal/yara/issues/1757
+    check(
+        "rule test {
+           strings:
+               $a = \"foo\"
+               $b = \"foo\"
+           condition:
+               none of them in (0..1)
+         }",
+        b"foo",
+        false,
+    );
+
     // https://github.com/VirusTotal/yara/issues/1660
     check(
         "rule test {
@@ -2025,6 +2051,32 @@ fn test_of() {
         b"mississippi",
         false,
     );
+
+    // If one of the bounds can not be determined statically it isn't an error.
+    check(
+        "rule test {
+      strings:
+        $a = \"AXSERS\"
+      condition:
+        true or any of them in (0..filesize-100)
+    }",
+        TEXT_1024_BYTES.as_bytes(),
+        true,
+    );
+
+    // Make sure that an undefined range boundary returns an undefined value,
+    // which translates to false.
+    check(
+        "import \"tests\"
+        rule test {
+                     strings:
+                             $a = \"missi\"
+                     condition:
+                             any of them in (0..tests.undefined.i)
+           }",
+        b"mississippi",
+        false,
+    );
 }
 
 #[test]
@@ -2291,6 +2343,18 @@ fn test_for() {
       }",
         b"",
         false,
+    );
+
+    // Test case for https://github.com/VirusTotal/yara/issues/1729
+    check(
+        "rule test {
+        strings:
+          $a = \"abcde\"
+        condition:
+          for any n in (1..10) : ( n of ($a*) )
+      }",
+        b"abcde",
+        true,
     );
 }
 
@@ -2685,6 +2749,11 @@ fn test_re() {
     check_regex_match("a[\\-b]", b"ab", b"ab");
     check_regex_match("a]", b"a]", b"a]");
     check_regex_match("a[]]b", b"a]b", b"a]b");
+    check_regex_match("[a-z]-b", b"c-b-c", b"c-b"); // Issue #1690
+    check_regex_match("a[]-]b", b"a]b", b"a]b");
+    check_regex_match("a[]-]b", b"a-b", b"a-b");
+    check_regex_match("[\\.-z]*", b"...abc", b"...abc");
+    check_regex_match("[\\.-]*", b"...abc", b"...");
     check_regex_match("a[\\]]b", b"a]b", b"a]b");
     check_regex_match("a[^bc]d", b"aed", b"aed");
     check(&build_regex_rule("a[^bc]d"), b"abd", false);
