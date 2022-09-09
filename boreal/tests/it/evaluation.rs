@@ -566,6 +566,24 @@ fn test_eval_defined() {
 }
 
 #[test]
+fn test_eval_not() {
+    check(&build_empty_rule("not 0"), &[], true);
+    check(&build_empty_rule("not 1"), &[], false);
+    check(&build_empty_rule("not 0.0"), &[], true);
+    check(&build_empty_rule("not 0.1"), &[], false);
+    check(&build_empty_rule("not \"\""), &[], true);
+    check(&build_empty_rule("not \"a\""), &[], false);
+    check(&build_empty_rule("not /a/"), &[], false);
+    check(&build_empty_rule("not false"), &[], true);
+
+    check(
+        &build_rule("defined not tests.integer_array[5]"),
+        &[],
+        false,
+    );
+}
+
+#[test]
 fn test_eval_matches() {
     check(&build_rule("\"az\" matches /a.+z/"), &[], false);
     check(&build_rule("\"a<>z\" matches /a.+z/"), &[], true);

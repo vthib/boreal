@@ -505,7 +505,6 @@ impl Evaluator<'_, '_, '_> {
                 Some(Value::Boolean(expr.is_some()))
             }
             Expression::Not(expr) => {
-                // TODO: handle other types?
                 let v = self.evaluate_expr(expr)?.to_bool();
                 Some(Value::Boolean(!v))
             }
