@@ -48,7 +48,11 @@ pub fn compile_regex(
             } else {
                 RegexBuilder::new(&format!("(?{}){}", mods, expr))
             };
-            non_wide_regex = Some(builder.build().map_err(VariableCompilationError::Regex)?);
+            non_wide_regex = Some(
+                builder
+                    .build()
+                    .map_err(|err| VariableCompilationError::Regex(err.to_string()))?,
+            );
         }
 
         if modifiers.flags.contains(VariableFlags::ASCII) {

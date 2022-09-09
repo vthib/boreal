@@ -243,11 +243,7 @@ pub enum CompilationError {
     },
 
     /// Error when generating a RegexSet containing all variables.
-    VariableSetError {
-        /// Error returned by [`::regex`] when compiling a variable
-        // TODO: this should not be part of the public API
-        error: ::regex::Error,
-    },
+    VariableSetError(String),
 }
 
 impl CompilationError {
@@ -412,7 +408,7 @@ impl CompilationError {
                 ))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
-            Self::VariableSetError { error } => Diagnostic::error()
+            Self::VariableSetError(error) => Diagnostic::error()
                 .with_message(format!("cannot generate a set of all variables: {}", error)),
         }
     }

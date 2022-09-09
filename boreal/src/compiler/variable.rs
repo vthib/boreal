@@ -91,7 +91,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         .map_err(|error| CompilationError::VariableCompilation {
             variable_name: name.clone(),
             span,
-            error: VariableCompilationError::Regex(error),
+            error: VariableCompilationError::Regex(error.to_string()),
         })?;
 
     Ok(Variable {
@@ -237,9 +237,8 @@ fn hex_token_to_regex(token: HexToken, regex: &mut String) {
 /// Error during the compilation of a variable.
 #[derive(Debug)]
 pub enum VariableCompilationError {
-    /// Error returned by [`::regex`] when compiling a variable
-    // TODO: this should not be part of the public API
-    Regex(::regex::Error),
+    /// Error when compiling a regex variable.
+    Regex(String),
 
     /// Structural error when applying the `wide` modifier to a regex.
     ///

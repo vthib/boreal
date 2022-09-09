@@ -198,7 +198,6 @@ impl Module for Tests {
 
     fn get_dynamic_values(&self, _ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
         [
-            // TODO: missing module_data
             (
                 "integer_array",
                 Value::Array(vec![

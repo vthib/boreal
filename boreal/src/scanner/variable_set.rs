@@ -18,7 +18,7 @@ impl VariableSet {
             .octal(false)
             .size_limit(50 * 1024 * 1024)
             .build()
-            .map_err(|error| CompilationError::VariableSetError { error })?;
+            .map_err(|error| CompilationError::VariableSetError(error.to_string()))?;
 
         Ok(Self { set })
     }
