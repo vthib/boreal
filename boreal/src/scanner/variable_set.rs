@@ -8,19 +8,26 @@ use crate::compiler::CompilationError;
 /// Used to minimize the number of passes on the scanned memory.
 #[derive(Debug)]
 pub(crate) struct VariableSet {
-    set: RegexSet,
+    sets: Vec<RegexSet>,
 }
 
 impl VariableSet {
     pub(crate) fn new(exprs: &[&str]) -> Result<Self, CompilationError> {
-        let set = RegexSetBuilder::new(exprs)
-            .unicode(false)
-            .octal(false)
-            .size_limit(50 * 1024 * 1024)
-            .build()
-            .map_err(|error| CompilationError::VariableSetError(error.to_string()))?;
-
-        Ok(Self { set })
+        Ok(Self {
+            // Build RegexSet containing max 200 expressions. This is attempting to strike a
+            // balance between grouping expressions in a single mem scan, and not having the set
+            // grow too big or scan too slowly.
+            sets: exprs
+                .chunks(200)
+                .map(|exprs| {
+                    RegexSetBuilder::new(exprs)
+                        .unicode(false)
+                        .octal(false)
+                        .build()
+                        .map_err(|error| CompilationError::VariableSetError(error.to_string()))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        })
     }
 
     pub(crate) fn matches(&self, mem: &[u8]) -> VariableSetMatches {
@@ -31,7 +38,7 @@ impl VariableSet {
         let matches = if mem.len() < 4096 {
             None
         } else {
-            Some(self.set.matches(mem))
+            Some(self.sets.iter().map(|v| v.matches(mem)).collect())
         };
 
         VariableSetMatches { matches }
@@ -39,11 +46,20 @@ impl VariableSet {
 }
 
 pub(crate) struct VariableSetMatches {
-    matches: Option<SetMatches>,
+    matches: Option<Vec<SetMatches>>,
 }
 
 impl VariableSetMatches {
-    pub(crate) fn matched(&self, index: usize) -> Option<bool> {
-        self.matches.as_ref().map(|m| m.matched(index))
+    pub(crate) fn matched(&self, mut index: usize) -> Option<bool> {
+        self.matches.as_ref().and_then(|vec| {
+            for matches in vec {
+                if index < matches.len() {
+                    return Some(matches.matched(index));
+                }
+                index -= matches.len();
+            }
+            debug_assert!(false);
+            None
+        })
     }
 }
