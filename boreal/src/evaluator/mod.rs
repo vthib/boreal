@@ -113,11 +113,11 @@ impl<'a> ScanData<'a> {
 ///
 /// Returns true if the expression (with the associated variables) matches on the given
 /// byte slice, false otherwise.
-pub(crate) fn evaluate_rule<'rule>(
+pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
-    scan_data: &ScanData,
+    scan_data: &'scan ScanData,
     set_index_offset: usize,
-    previous_rules_results: &[bool],
+    previous_rules_results: &'scan [bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
     let mut evaluator = Evaluator {
         variables: rule.variables.iter().map(VariableEvaluation::new).collect(),
@@ -134,14 +134,14 @@ pub(crate) fn evaluate_rule<'rule>(
     (res, evaluator.variables)
 }
 
-struct Evaluator<'a, 'b, 'c> {
-    variables: Vec<VariableEvaluation<'a>>,
-    mem: &'b [u8],
+struct Evaluator<'scan, 'rule> {
+    variables: Vec<VariableEvaluation<'rule>>,
+    mem: &'scan [u8],
 
     // Array of previous rules results.
     //
     // This only stores results of rules that are depended upon, not all rules.
-    previous_rules_results: &'c [bool],
+    previous_rules_results: &'scan [bool],
 
     // Index of the currently selected variable.
     //
@@ -152,7 +152,7 @@ struct Evaluator<'a, 'b, 'c> {
     bounded_identifiers_stack: Vec<Arc<ModuleValue>>,
 
     // Data only to the scan, independent of the rule.
-    scan_data: &'b ScanData<'b>,
+    scan_data: &'scan ScanData<'scan>,
 
     // Offset into the variables_matches for the variables of this rule.
     set_index_offset: usize,
@@ -208,7 +208,7 @@ macro_rules! apply_cmp_op {
     }
 }
 
-impl Evaluator<'_, '_, '_> {
+impl Evaluator<'_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Option<usize> {
         var_index.0.or(self.currently_selected_variable_index)
     }
