@@ -45,21 +45,38 @@ impl VariableSet {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct VariableSetMatches {
     matches: Option<Vec<SetMatches>>,
 }
 
+/// Result of a `VariableSet` scan for a given variable.
+pub(crate) enum SetResult {
+    /// Variable has no match.
+    NotFound,
+    /// Unknown, must scan for the variable on its own.
+    Unknown,
+    /// Found at least one match.
+    Found,
+}
+
 impl VariableSetMatches {
-    pub(crate) fn matched(&self, mut index: usize) -> Option<bool> {
-        self.matches.as_ref().and_then(|vec| {
-            for matches in vec {
-                if index < matches.len() {
-                    return Some(matches.matched(index));
+    pub(crate) fn matched(&self, mut index: usize) -> SetResult {
+        match self.matches.as_ref() {
+            None => SetResult::Unknown,
+            Some(vec) => {
+                for matches in vec {
+                    if index < matches.len() {
+                        if matches.matched(index) {
+                            return SetResult::Found;
+                        }
+                        return SetResult::NotFound;
+                    }
+                    index -= matches.len();
                 }
-                index -= matches.len();
+                debug_assert!(false);
+                SetResult::Unknown
             }
-            debug_assert!(false);
-            None
-        })
+        }
     }
 }

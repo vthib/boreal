@@ -20,7 +20,7 @@ pub(crate) struct VariableEvaluation<'a> {
     next_offset: Option<usize>,
 }
 
-type Match = std::ops::Range<usize>;
+pub type Match = std::ops::Range<usize>;
 
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.

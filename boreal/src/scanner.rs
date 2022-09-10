@@ -9,7 +9,7 @@ use crate::{
 };
 
 mod variable_set;
-pub(crate) use variable_set::{VariableSet, VariableSetMatches};
+pub(crate) use variable_set::{SetResult, VariableSet, VariableSetMatches};
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
 #[derive(Debug)]
