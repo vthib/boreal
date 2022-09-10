@@ -25,7 +25,8 @@ impl Regex {
     }
 
     fn new_inner(ast: Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
-        let expr = ast_to_rust_expr(ast);
+        let mut expr = String::new();
+        add_ast_to_string(ast, &mut expr);
 
         RegexBuilder::new(&expr)
             .unicode(false)
@@ -44,13 +45,9 @@ impl Regex {
 }
 
 /// Convert a yara regex AST into a rust regex expression.
-pub(crate) fn ast_to_rust_expr(ast: Node) -> String {
-    let mut expr = String::new();
-
+pub(crate) fn add_ast_to_string(ast: Node, out: &mut String) {
     // TODO avoid recursion here.
-    push_ast(ast, &mut expr);
-
-    expr
+    push_ast(ast, out);
 }
 
 fn push_ast(node: Node, out: &mut String) {
@@ -104,7 +101,12 @@ fn push_ast(node: Node, out: &mut String) {
 }
 
 fn push_literal(lit: u8, out: &mut String) {
-    if lit.is_ascii() && !regex_syntax::is_meta_character(char::from(lit)) {
+    if (lit.is_ascii_alphanumeric()
+        || lit.is_ascii_graphic()
+        || lit.is_ascii_punctuation()
+        || lit == b' ')
+        && !regex_syntax::is_meta_character(char::from(lit))
+    {
         out.push(char::from(lit));
     } else {
         let _r = write!(out, r"\x{:02x}", lit);
@@ -201,7 +203,9 @@ mod tests {
                 _ => unreachable!(),
             };
             let ast = regex.ast;
-            assert_eq!(&ast_to_rust_expr(ast), expected_res.unwrap_or(expr));
+            let mut res = String::new();
+            add_ast_to_string(ast, &mut res);
+            assert_eq!(&res, expected_res.unwrap_or(expr));
         }
 
         // Syntaxes that matches between yara and rust regexes.

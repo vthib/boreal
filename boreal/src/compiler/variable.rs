@@ -2,8 +2,13 @@ use std::fmt::Write;
 
 use ::regex::bytes::{Regex, RegexBuilder};
 
+use boreal_parser::regex::{
+    BracketedClass, BracketedClassItem, ClassKind, Node, RepetitionKind, RepetitionRange,
+};
 use boreal_parser::{HexMask, HexToken, VariableFlags, VariableModifiers};
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
+
+use crate::regex::add_ast_to_string;
 
 use super::base64::encode_base64;
 use super::CompilationError;
@@ -71,9 +76,10 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             flags.remove(VariableFlags::FULLWORD);
             flags.remove(VariableFlags::WIDE);
 
+            let ast = hex_string_to_ast(hex_string);
             let mut expr = String::new();
             expr.push_str("(?s)");
-            hex_string_to_regex(hex_string, &mut expr);
+            add_ast_to_string(ast, &mut expr);
             Ok(expr)
         }
     };
@@ -191,46 +197,43 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
     res
 }
 
-fn hex_string_to_regex(hex_string: Vec<HexToken>, regex: &mut String) {
-    for token in hex_string {
-        hex_token_to_regex(token, regex);
-    }
+fn hex_string_to_ast(hex_string: Vec<HexToken>) -> Node {
+    Node::Concat(hex_string.into_iter().map(hex_token_to_ast).collect())
 }
 
-fn hex_token_to_regex(token: HexToken, regex: &mut String) {
+fn hex_token_to_ast(token: HexToken) -> Node {
     match token {
-        HexToken::Byte(b) => write!(regex, "\\x{:02X}", b).unwrap(),
+        HexToken::Byte(b) => Node::Literal(b),
         HexToken::MaskedByte(b, mask) => match mask {
-            HexMask::Left => {
-                regex.push('[');
-                for i in 0..=0xF {
-                    write!(regex, "\\x{:1X}{:1X}", i, b).unwrap();
-                }
-                regex.push(']');
+            HexMask::Left => Node::Class(ClassKind::Bracketed(BracketedClass {
+                items: (0..=0xF)
+                    .map(|i| BracketedClassItem::Literal((i << 4) + b))
+                    .collect(),
+                negated: false,
+            })),
+            HexMask::Right => {
+                let b = b << 4;
+                Node::Class(ClassKind::Bracketed(BracketedClass {
+                    items: vec![BracketedClassItem::Range(b, b + 0x0F)],
+                    negated: false,
+                }))
             }
-            HexMask::Right => write!(regex, "[\\x{:1X}0-\\x{:1X}F]", b, b).unwrap(),
-            HexMask::All => regex.push('.'),
+            HexMask::All => Node::Dot,
         },
-        HexToken::Jump(jump) => match (jump.from, jump.to) {
-            (from, None) => write!(regex, ".{{{},}}?", from).unwrap(),
-            (from, Some(to)) => {
-                if from == to {
-                    write!(regex, ".{{{}}}?", from).unwrap();
-                } else {
-                    write!(regex, ".{{{},{}}}?", from, to).unwrap();
-                }
+        HexToken::Jump(jump) => {
+            let kind = match (jump.from, jump.to) {
+                (from, None) => RepetitionKind::Range(RepetitionRange::AtLeast(from)),
+                (from, Some(to)) => RepetitionKind::Range(RepetitionRange::Bounded(from, to)),
+            };
+            Node::Repetition {
+                node: Box::new(Node::Dot),
+                kind,
+                greedy: false,
             }
-        },
-        HexToken::Alternatives(elems) => {
-            regex.push_str("((");
-            for (i, e) in elems.into_iter().enumerate() {
-                if i > 0 {
-                    regex.push_str(")|(");
-                }
-                hex_string_to_regex(e, regex);
-            }
-            regex.push_str("))");
         }
+        HexToken::Alternatives(elems) => Node::Group(Box::new(Node::Alternation(
+            elems.into_iter().map(hex_string_to_ast).collect(),
+        ))),
     }
 }
 
@@ -280,8 +283,9 @@ mod tests {
             _ => panic!(),
         };
 
+        let ast = hex_string_to_ast(hex_string);
         let mut regex = String::new();
-        hex_string_to_regex(hex_string, &mut regex);
+        add_ast_to_string(ast, &mut regex);
         assert_eq!(regex, expected_regex);
     }
 
@@ -289,12 +293,12 @@ mod tests {
     fn test_hex_string_to_regex() {
         test(
             "{ AB ?D 01 }",
-            r"\xAB[\x0D\x1D\x2D\x3D\x4D\x5D\x6D\x7D\x8D\x9D\xAD\xBD\xCD\xDD\xED\xFD]\x01",
+            r"\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
         );
-        test("{ C7 [-] ?? }", r"\xC7.{0,}?.");
+        test("{ C7 [-] ?? }", r"\xc7.{0,}?.");
         test(
             "{ C7 [3-] 5? 03 [-6] C7 ( FF 15 | E8 ) [4] 6A ( FF D? | E8 [2-4] ??) }",
-            r"\xC7.{3,}?[\x50-\x5F]\x03.{0,6}?\xC7((\xFF\x15)|(\xE8)).{4}?\x6A((\xFF[\xD0-\xDF])|(\xE8.{2,4}?.))",
+            r"\xc7.{3,}?[P-_]\x03.{0,6}?\xc7(\xff\x15|\xe8).{4,4}?j(\xff[\xd0-\xdf]|\xe8.{2,4}?.)",
         );
     }
 }

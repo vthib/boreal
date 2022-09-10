@@ -3,7 +3,7 @@ use regex::bytes::RegexBuilder;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
-use crate::regex::ast_to_rust_expr;
+use crate::regex::add_ast_to_string;
 
 use super::VariableCompilationError;
 
@@ -24,7 +24,8 @@ pub fn compile_regex(
         span: _,
     } = regex;
 
-    let mut expr = ast_to_rust_expr(ast);
+    let mut expr = String::new();
+    add_ast_to_string(ast, &mut expr);
 
     if modifiers.flags.contains(VariableFlags::NOCASE) {
         case_insensitive = true;
