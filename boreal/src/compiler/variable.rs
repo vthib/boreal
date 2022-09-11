@@ -111,11 +111,18 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             flags.remove(VariableFlags::FULLWORD);
             flags.remove(VariableFlags::WIDE);
 
-            let ast = hex_string_to_ast(hex_string);
-            let mut expr = String::new();
-            expr.push_str("(?s)");
-            add_ast_to_string(ast, &mut expr);
-            VariableExpr::Regex(expr)
+            if let Some(literals) = hex_string_to_literals(&hex_string) {
+                VariableExpr::Literals {
+                    literals: vec![literals],
+                    case_insensitive: false,
+                }
+            } else {
+                let ast = hex_string_to_ast(hex_string);
+                let mut expr = String::new();
+                expr.push_str("(?s)");
+                add_ast_to_string(ast, &mut expr);
+                VariableExpr::Regex(expr)
+            }
         }
     };
 
@@ -228,6 +235,22 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
         res.push(b'\0');
     }
     res
+}
+
+fn hex_string_to_literals(hex_string: &[HexToken]) -> Option<Vec<u8>> {
+    let mut literals = Vec::new();
+
+    for token in hex_string {
+        match token {
+            HexToken::Byte(b) => literals.push(*b),
+            HexToken::Jump(_) => return None,
+            // TODO: both of those could be handled
+            HexToken::MaskedByte(_, _) => return None,
+            HexToken::Alternatives(_) => return None,
+        }
+    }
+
+    Some(literals)
 }
 
 fn hex_string_to_ast(hex_string: Vec<HexToken>) -> Node {
