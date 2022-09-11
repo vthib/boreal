@@ -5,7 +5,7 @@ use regex_syntax::ParserBuilder;
 
 use crate::regex::add_ast_to_string;
 
-use super::VariableCompilationError;
+use super::{VariableCompilationError, VariableExpr};
 
 /// Build a matcher for the given regex and string modifiers.
 ///
@@ -16,7 +16,7 @@ use super::VariableCompilationError;
 pub fn compile_regex(
     regex: Regex,
     modifiers: &VariableModifiers,
-) -> Result<(String, Option<regex::bytes::Regex>), VariableCompilationError> {
+) -> Result<(VariableExpr, Option<regex::bytes::Regex>), VariableCompilationError> {
     let Regex {
         ast,
         mut case_insensitive,
@@ -67,7 +67,7 @@ pub fn compile_regex(
         expr = format!("(?{}){}", mods, expr);
     }
 
-    Ok((expr, non_wide_regex))
+    Ok((VariableExpr::Regex(expr), non_wide_regex))
 }
 
 /// Convert a regex expression into a HIR.

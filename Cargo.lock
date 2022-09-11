@@ -81,6 +81,7 @@ dependencies = [
 name = "boreal"
 version = "0.0.1"
 dependencies = [
+ "aho-corasick",
  "base64",
  "boreal-parser",
  "codespan-reporting",

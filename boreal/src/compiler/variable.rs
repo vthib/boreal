@@ -1,6 +1,5 @@
-use std::fmt::Write;
-
 use ::regex::bytes::{Regex, RegexBuilder};
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
 use boreal_parser::regex::{
     BracketedClass, BracketedClassItem, ClassKind, Node, RepetitionKind, RepetitionRange,
@@ -15,20 +14,52 @@ use super::CompilationError;
 
 mod regex;
 
+/// A compiled variable used in a rule.
 #[derive(Debug)]
 pub struct Variable {
+    /// Name of the variable, without the '$'.
+    ///
+    /// Anonymous variables are just named "".
     pub name: String,
 
-    pub regex_expr: String,
-    pub regex: Regex,
+    /// Final expression of the variable.
+    pub expr: VariableExpr,
 
-    // This is only set for the specific case of a regex variable, with a wide modifier, that
-    // contains word boundaries.
-    // In this case, the regex expression cannot be "widened", and this regex is used to post
-    // check matches.
+    /// Matcher that can be used to scan for the variable.
+    pub matcher: VariableMatcher,
+
+    /// Regex of the non wide version of the regex.
+    ///
+    /// This is only set for the specific case of a regex variable, with a wide modifier, that
+    /// contains word boundaries.
+    /// In this case, the regex expression cannot be "widened", and this regex is used to post
+    /// check matches.
     pub non_wide_regex: Option<Regex>,
 
+    /// Flags related to variable modifiers, which are needed during scanning.
     flags: VariableFlags,
+}
+
+/// Final expression of a variable.
+///
+/// This is the final result of the compilation, usable as inputs of scanning utilities, such as
+/// regexes, set regexes or aho-corasick algorithms.
+#[derive(Debug)]
+pub enum VariableExpr {
+    /// regex expression.
+    Regex(String),
+    /// Set of bytes literal.
+    Literals {
+        literals: Vec<Vec<u8>>,
+        case_insensitive: bool,
+    },
+}
+
+/// Matcher for a variable.
+#[derive(Debug)]
+pub enum VariableMatcher {
+    Regex(Regex),
+    AhoCorasick(Box<AhoCorasick>),
 }
 
 impl Variable {
@@ -63,14 +94,18 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
 
     let mut non_wide_regex = None;
 
-    let regex_expr = match value {
-        VariableDeclarationValue::Bytes(s) => Ok(build_string_matcher(s, &modifiers)),
-        VariableDeclarationValue::Regex(regex) => {
-            regex::compile_regex(regex, &modifiers).map(|(expr, v)| {
+    let expr = match value {
+        VariableDeclarationValue::Bytes(s) => compile_bytes(s, &modifiers),
+        VariableDeclarationValue::Regex(regex) => regex::compile_regex(regex, &modifiers)
+            .map(|(expr, v)| {
                 non_wide_regex = v;
                 expr
             })
-        }
+            .map_err(|error| CompilationError::VariableCompilation {
+                variable_name: name.clone(),
+                span: span.clone(),
+                error,
+            })?,
         VariableDeclarationValue::HexString(hex_string) => {
             // Fullword and wide is not compatible with hex strings
             flags.remove(VariableFlags::FULLWORD);
@@ -80,36 +115,46 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             let mut expr = String::new();
             expr.push_str("(?s)");
             add_ast_to_string(ast, &mut expr);
-            Ok(expr)
+            VariableExpr::Regex(expr)
         }
     };
 
-    let regex_expr = regex_expr.map_err(|error| CompilationError::VariableCompilation {
+    let matcher = build_matcher(&expr).map_err(|error| CompilationError::VariableCompilation {
         variable_name: name.clone(),
-        span: span.clone(),
+        span,
         error,
     })?;
 
-    let regex = RegexBuilder::new(&regex_expr)
-        .unicode(false)
-        .octal(false)
-        .build()
-        .map_err(|error| CompilationError::VariableCompilation {
-            variable_name: name.clone(),
-            span,
-            error: VariableCompilationError::Regex(error.to_string()),
-        })?;
-
     Ok(Variable {
         name,
-        regex_expr,
-        regex,
+        expr,
+        matcher,
         non_wide_regex,
         flags,
     })
 }
 
-fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> String {
+fn build_matcher(expr: &VariableExpr) -> Result<VariableMatcher, VariableCompilationError> {
+    match expr {
+        VariableExpr::Regex(e) => RegexBuilder::new(e)
+            .unicode(false)
+            .octal(false)
+            .build()
+            .map(VariableMatcher::Regex)
+            .map_err(|err| VariableCompilationError::Regex(err.to_string())),
+        VariableExpr::Literals {
+            literals,
+            case_insensitive,
+        } => Ok(VariableMatcher::AhoCorasick(Box::new(
+            AhoCorasickBuilder::new()
+                .ascii_case_insensitive(*case_insensitive)
+                .auto_configure(literals)
+                .build(literals),
+        ))),
+    }
+}
+
+fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> VariableExpr {
     let mut literals = Vec::with_capacity(2);
 
     let case_insensitive = modifiers.flags.contains(VariableFlags::NOCASE);
@@ -135,7 +180,10 @@ fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> String
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        return literals_to_regex_expr(&new_literals, case_insensitive);
+        return VariableExpr::Literals {
+            literals: new_literals,
+            case_insensitive,
+        };
     }
 
     if modifiers.flags.contains(VariableFlags::BASE64)
@@ -166,25 +214,10 @@ fn build_string_matcher(value: Vec<u8>, modifiers: &VariableModifiers) -> String
         }
     }
 
-    literals_to_regex_expr(&literals, case_insensitive)
-}
-
-fn literals_to_regex_expr(lits: &[Vec<u8>], case_insensitive: bool) -> String {
-    let mut expr = String::new();
-
-    if case_insensitive {
-        expr.push_str("(?i)");
+    VariableExpr::Literals {
+        literals,
+        case_insensitive,
     }
-    for (i, lit) in lits.iter().enumerate() {
-        if i > 0 {
-            expr.push('|');
-        }
-        for b in lit {
-            let _ = write!(expr, r"\x{:02x}", *b);
-        }
-    }
-
-    expr
 }
 
 /// Convert an ascii string to a wide string

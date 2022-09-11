@@ -1,32 +1,95 @@
 //! Provides the [`VariableSet`] object.
-use regex::bytes::{RegexSet, RegexSetBuilder, SetMatches};
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use regex::bytes::{RegexSet, RegexSetBuilder};
 
-use crate::compiler::CompilationError;
+use crate::compiler::{CompilationError, VariableExpr};
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
 /// Used to minimize the number of passes on the scanned memory.
 #[derive(Debug)]
 pub(crate) struct VariableSet {
-    sets: Vec<RegexSet>,
+    /// Aho Corasick for variables that are literals.
+    aho: AhoCorasick,
+    /// Number of literals in the
+    /// Aho Corasick for variables that are literals, and are case insensitive.
+    aho_ci: AhoCorasick,
+    /// Regex sets for regexes.
+    regex_sets: Vec<RegexSet>,
+
+    /// Number of variables in the set.
+    nb_vars: usize,
+
+    /// Map from a aho pattern index to a var set index.
+    aho_index_to_var_index: Vec<usize>,
+
+    /// Map from a aho ci pattern index to a var set index.
+    aho_ci_index_to_var_index: Vec<usize>,
+
+    /// Map from a regex set index to a var set index.
+    regex_sets_index_to_var_index: Vec<usize>,
 }
 
 impl VariableSet {
-    pub(crate) fn new(exprs: &[&str]) -> Result<Self, CompilationError> {
+    pub(crate) fn new(exprs: &[&VariableExpr]) -> Result<Self, CompilationError> {
+        let mut lits = Vec::new();
+        let mut lits_ci = Vec::new();
+        let mut regex_exprs = Vec::new();
+        let mut aho_index_to_var_index = Vec::new();
+        let mut aho_ci_index_to_var_index = Vec::new();
+        let mut regex_sets_index_to_var_index = Vec::new();
+
+        for (var_index, expr) in exprs.iter().enumerate() {
+            match expr {
+                VariableExpr::Regex(e) => {
+                    regex_sets_index_to_var_index.push(regex_exprs.len());
+                    regex_exprs.push(e);
+                }
+                VariableExpr::Literals {
+                    literals,
+                    case_insensitive,
+                } => {
+                    if *case_insensitive {
+                        aho_ci_index_to_var_index
+                            .extend(std::iter::repeat(var_index).take(literals.len()));
+                        lits_ci.extend(literals);
+                    } else {
+                        aho_index_to_var_index
+                            .extend(std::iter::repeat(var_index).take(literals.len()));
+                        lits.extend(literals);
+                    }
+                }
+            }
+        }
+
+        let aho = AhoCorasick::new_auto_configured(&lits);
+        let aho_ci = AhoCorasickBuilder::new()
+            .ascii_case_insensitive(true)
+            .auto_configure(&lits_ci)
+            .build(&lits_ci);
+
+        // Build RegexSet containing max 200 expressions. This is attempting to strike a
+        // balance between grouping expressions in a single mem scan, and not having the set
+        // grow too big or scan too slowly.
+        let regex_sets = regex_exprs
+            .chunks(200)
+            .map(|exprs| {
+                RegexSetBuilder::new(exprs)
+                    .unicode(false)
+                    .octal(false)
+                    .build()
+                    .map_err(|error| CompilationError::VariableSetError(error.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(Self {
-            // Build RegexSet containing max 200 expressions. This is attempting to strike a
-            // balance between grouping expressions in a single mem scan, and not having the set
-            // grow too big or scan too slowly.
-            sets: exprs
-                .chunks(200)
-                .map(|exprs| {
-                    RegexSetBuilder::new(exprs)
-                        .unicode(false)
-                        .octal(false)
-                        .build()
-                        .map_err(|error| CompilationError::VariableSetError(error.to_string()))
-                })
-                .collect::<Result<Vec<_>, _>>()?,
+            aho,
+            aho_ci,
+            regex_sets,
+            nb_vars: exprs.len(),
+            aho_index_to_var_index,
+            aho_ci_index_to_var_index,
+            regex_sets_index_to_var_index,
         })
     }
 
@@ -38,7 +101,28 @@ impl VariableSet {
         let matches = if mem.len() < 4096 {
             None
         } else {
-            Some(self.sets.iter().map(|v| v.matches(mem)).collect())
+            let mut matches = vec![SetResult::NotFound; self.nb_vars];
+
+            for mat in self.aho.find_overlapping_iter(mem) {
+                let var_index = self.aho_index_to_var_index[mat.pattern()];
+                matches[var_index] = SetResult::Found;
+            }
+            for mat in self.aho_ci.find_overlapping_iter(mem) {
+                let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
+                matches[var_index] = SetResult::Found;
+            }
+
+            let mut offset = 0;
+            for set in &self.regex_sets {
+                let set_matches = set.matches(mem);
+                for idx in set_matches {
+                    let var_index = self.regex_sets_index_to_var_index[offset + idx];
+                    matches[var_index] = SetResult::Found;
+                }
+                offset += set.len();
+            }
+
+            Some(matches)
         };
 
         VariableSetMatches { matches }
@@ -47,10 +131,11 @@ impl VariableSet {
 
 #[derive(Debug)]
 pub(crate) struct VariableSetMatches {
-    matches: Option<Vec<SetMatches>>,
+    matches: Option<Vec<SetResult>>,
 }
 
 /// Result of a `VariableSet` scan for a given variable.
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum SetResult {
     /// Variable has no match.
     NotFound,
@@ -61,22 +146,10 @@ pub(crate) enum SetResult {
 }
 
 impl VariableSetMatches {
-    pub(crate) fn matched(&self, mut index: usize) -> SetResult {
+    pub(crate) fn matched(&self, index: usize) -> SetResult {
         match self.matches.as_ref() {
             None => SetResult::Unknown,
-            Some(vec) => {
-                for matches in vec {
-                    if index < matches.len() {
-                        if matches.matched(index) {
-                            return SetResult::Found;
-                        }
-                        return SetResult::NotFound;
-                    }
-                    index -= matches.len();
-                }
-                debug_assert!(false);
-                SetResult::Unknown
-            }
+            Some(vec) => vec[index],
         }
     }
 }

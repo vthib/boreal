@@ -1,4 +1,4 @@
-//! Provides the [`Scanner`] object which provides methods to scan
+//! Provides the [`Scanner`] object which provides methods to sca
 //! files or memory on a set of rules.
 use std::sync::Arc;
 
@@ -43,13 +43,13 @@ impl Scanner {
         global_rules: Vec<Rule>,
         modules: Vec<Box<dyn Module>>,
     ) -> Result<Self, CompilationError> {
-        let regex_exprs: Vec<_> = global_rules
+        let exprs: Vec<_> = global_rules
             .iter()
             .chain(rules.iter())
-            .flat_map(|rule| rule.variables.iter().map(|v| &*v.regex_expr))
+            .flat_map(|rule| rule.variables.iter().map(|v| &v.expr))
             .collect();
 
-        let variable_set = VariableSet::new(&regex_exprs)?;
+        let variable_set = VariableSet::new(&exprs)?;
 
         Ok(Self {
             rules,
