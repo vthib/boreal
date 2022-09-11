@@ -16,7 +16,7 @@ use memchr::memmem;
 
 use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
-use crate::scanner::VariableSetMatches;
+use crate::variable_set::VariableSetMatches;
 
 mod module;
 

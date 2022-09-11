@@ -1,6 +1,6 @@
 //! Implement scanning for variables
 use crate::compiler::Variable;
-use crate::scanner::SetResult;
+use crate::variable_set::SetResult;
 
 use super::variable::Match;
 use super::{ScanData, VariableEvaluation};
