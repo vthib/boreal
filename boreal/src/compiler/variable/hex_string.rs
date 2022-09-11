@@ -8,9 +8,9 @@ use crate::regex::add_ast_to_string;
 use super::VariableExpr;
 
 pub(super) fn compile_hex_string(hex_string: Vec<HexToken>) -> VariableExpr {
-    if let Some(literals) = hex_string_to_literals(&hex_string) {
+    if can_use_literals(&hex_string) {
         VariableExpr::Literals {
-            literals: vec![literals],
+            literals: hex_string_to_literals(hex_string).finish(),
             case_insensitive: false,
         }
     } else {
@@ -22,20 +22,105 @@ pub(super) fn compile_hex_string(hex_string: Vec<HexToken>) -> VariableExpr {
     }
 }
 
-fn hex_string_to_literals(hex_string: &[HexToken]) -> Option<Vec<u8>> {
-    let mut literals = Vec::new();
+/// Can we use literals to match the hex string
+fn can_use_literals(hex_string: &[HexToken]) -> bool {
+    let nb_literals = match count_total_literals(hex_string) {
+        Some(v) => v,
+        None => return false,
+    };
+
+    nb_literals < 100
+}
+
+fn count_total_literals(hex_string: &[HexToken]) -> Option<usize> {
+    let mut nb_lits = 1_usize;
 
     for token in hex_string {
         match token {
-            HexToken::Byte(b) => literals.push(*b),
-            HexToken::Jump(_) => return None,
-            // TODO: both of those could be handled
-            HexToken::MaskedByte(_, _) => return None,
-            HexToken::Alternatives(_) => return None,
+            HexToken::Byte(_) => (),
+            HexToken::Jump(_) | HexToken::MaskedByte(_, _) => return None,
+            HexToken::Alternatives(alts) => {
+                nb_lits = nb_lits.checked_mul(alts.len())?;
+            }
         }
     }
 
-    Some(literals)
+    Some(nb_lits)
+}
+
+fn hex_string_to_literals(hex_string: Vec<HexToken>) -> HexLiterals {
+    let mut literals = HexLiterals::new();
+
+    for token in hex_string {
+        match token {
+            HexToken::Byte(b) => literals.add_byte(b),
+            HexToken::Jump(_) | HexToken::MaskedByte(_, _) => unreachable!(),
+            HexToken::Alternatives(alts) => literals.add_alternatives(alts),
+        }
+    }
+
+    literals
+}
+
+struct HexLiterals {
+    // Combination of all possible literals.
+    all: Vec<Vec<u8>>,
+    // Buffer of a string of bytes to be added to all the literals.
+    buffer: Vec<u8>,
+}
+
+impl HexLiterals {
+    fn new() -> Self {
+        Self {
+            all: Vec::new(),
+            buffer: Vec::new(),
+        }
+    }
+
+    fn add_byte(&mut self, b: u8) {
+        self.buffer.push(b);
+    }
+
+    fn add_alternatives(&mut self, alts: Vec<Vec<HexToken>>) {
+        // First, commit the local buffer, to have a proper list of all possible literals
+        self.commit_buffer();
+
+        // Then, do the cross product between our prefixes literals and the alternatives
+        let suffixes: Vec<Vec<u8>> = alts
+            .into_iter()
+            .map(hex_string_to_literals)
+            .flat_map(HexLiterals::finish)
+            .collect();
+        self.all = self
+            .all
+            .iter()
+            .flat_map(|prefix| {
+                suffixes.iter().map(|suffix| {
+                    prefix
+                        .iter()
+                        .copied()
+                        .chain(suffix.iter().copied())
+                        .collect()
+                })
+            })
+            .collect();
+    }
+
+    fn finish(mut self) -> Vec<Vec<u8>> {
+        self.commit_buffer();
+        self.all
+    }
+
+    fn commit_buffer(&mut self) {
+        let buffer = std::mem::take(&mut self.buffer);
+        if self.all.is_empty() {
+            self.all.push(buffer);
+        } else {
+            for t in &mut self.all {
+                t.extend(&buffer);
+            }
+        }
+    }
 }
 
 fn hex_string_to_ast(hex_string: Vec<HexToken>) -> Node {
