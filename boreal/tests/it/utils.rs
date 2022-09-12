@@ -1,3 +1,5 @@
+use boreal::scan_params::{EarlyScanConfiguration, ScanParamsBuilder};
+
 pub struct Checker {
     scanner: boreal::Scanner,
     yara_rules: Option<yara::Rules>,
@@ -200,9 +202,29 @@ impl Checker {
 
     #[track_caller]
     pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
-        let res = self.scanner.scan_mem(mem);
+        // Test with and without the use of the VariableSet optim. This ensures that we test both
+        // cases (which can both be used in prod, but depends on the auto configuration).
+        let res = self.scanner.scan(
+            ScanParamsBuilder::default()
+                .early_scan(EarlyScanConfiguration::Disable)
+                .build(mem),
+        );
         let res = !res.matched_rules.is_empty();
-        assert_eq!(res, expected_res, "test failed for boreal");
+        assert_eq!(
+            res, expected_res,
+            "test failed for boreal without variable set"
+        );
+
+        let res = self.scanner.scan(
+            ScanParamsBuilder::default()
+                .early_scan(EarlyScanConfiguration::Enable)
+                .build(mem),
+        );
+        let res = !res.matched_rules.is_empty();
+        assert_eq!(
+            res, expected_res,
+            "test failed for boreal with variable set"
+        );
     }
 
     #[track_caller]

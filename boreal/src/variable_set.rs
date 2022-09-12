@@ -2,7 +2,10 @@
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use regex::bytes::{RegexSet, RegexSetBuilder};
 
-use crate::compiler::{CompilationError, VariableExpr};
+use crate::{
+    compiler::{CompilationError, VariableExpr},
+    scan_params::EarlyScanConfiguration,
+};
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
@@ -42,7 +45,7 @@ impl VariableSet {
         for (var_index, expr) in exprs.iter().enumerate() {
             match expr {
                 VariableExpr::Regex(e) => {
-                    regex_sets_index_to_var_index.push(regex_exprs.len());
+                    regex_sets_index_to_var_index.push(var_index);
                     regex_exprs.push(e);
                 }
                 VariableExpr::Literals {
@@ -93,36 +96,36 @@ impl VariableSet {
         })
     }
 
-    pub(crate) fn matches(&self, mem: &[u8]) -> VariableSetMatches {
-        // For very small mem, it's not worth it to use a regex set.
-        // TODO: find the right size for this
-        // TODO: this basically bypasses this optim for all the integration tests, find a way
-        // to improve this.
-        let matches = if mem.len() < 4096 {
-            None
-        } else {
-            let mut matches = vec![SetResult::NotFound; self.nb_vars];
+    pub(crate) fn matches(&self, mem: &[u8], cfg: &EarlyScanConfiguration) -> VariableSetMatches {
+        let matches = match cfg {
+            EarlyScanConfiguration::Disable => None,
+            // For very small mem, it's not worth it to use a regex set.
+            // TODO: find the right size for this
+            EarlyScanConfiguration::AutoConfigure if mem.len() < 4096 => None,
+            EarlyScanConfiguration::AutoConfigure | EarlyScanConfiguration::Enable => {
+                let mut matches = vec![SetResult::NotFound; self.nb_vars];
 
-            for mat in self.aho.find_overlapping_iter(mem) {
-                let var_index = self.aho_index_to_var_index[mat.pattern()];
-                matches[var_index] = SetResult::Found;
-            }
-            for mat in self.aho_ci.find_overlapping_iter(mem) {
-                let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
-                matches[var_index] = SetResult::Found;
-            }
-
-            let mut offset = 0;
-            for set in &self.regex_sets {
-                let set_matches = set.matches(mem);
-                for idx in set_matches {
-                    let var_index = self.regex_sets_index_to_var_index[offset + idx];
+                for mat in self.aho.find_overlapping_iter(mem) {
+                    let var_index = self.aho_index_to_var_index[mat.pattern()];
                     matches[var_index] = SetResult::Found;
                 }
-                offset += set.len();
-            }
+                for mat in self.aho_ci.find_overlapping_iter(mem) {
+                    let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
+                    matches[var_index] = SetResult::Found;
+                }
 
-            Some(matches)
+                let mut offset = 0;
+                for set in &self.regex_sets {
+                    let set_matches = set.matches(mem);
+                    for idx in set_matches {
+                        let var_index = self.regex_sets_index_to_var_index[offset + idx];
+                        matches[var_index] = SetResult::Found;
+                    }
+                    offset += set.len();
+                }
+
+                Some(matches)
+            }
         };
 
         VariableSetMatches { matches }

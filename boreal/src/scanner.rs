@@ -6,6 +6,7 @@ use crate::{
     compiler::{CompilationError, Rule},
     evaluator::{self, ScanData},
     module::Module,
+    scan_params::{ScanParams, ScanParamsBuilder},
     variable_set::VariableSet,
 };
 
@@ -59,10 +60,19 @@ impl Scanner {
 
     /// Scan a byte slice.
     ///
-    /// Returns a list of rules that matched on the given
-    /// byte slice.
+    /// Returns a list of rules that matched on the given byte slice.
     #[must_use]
     pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> ScanResult<'scanner> {
+        self.scan(ScanParamsBuilder::default().build(mem))
+    }
+
+    /// Do a scan using the provided parameters.
+    ///
+    /// Returns a list of rules that matched on the given byte slice.
+    #[must_use]
+    pub fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
+        let ScanParams { mem, early_scan } = params;
+
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
         //
@@ -73,7 +83,7 @@ impl Scanner {
         // - evaluate global rules that have no variables first
         // - then scan the set
         // - then evaluate rest of global rules first, then rules
-        let variable_set_matches = self.variable_set.matches(mem);
+        let variable_set_matches = self.variable_set.matches(mem, &early_scan);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
