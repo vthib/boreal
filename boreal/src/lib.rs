@@ -56,5 +56,5 @@ pub mod module;
 pub mod regex;
 pub mod scan_params;
 mod scanner;
-pub use scanner::Scanner;
+pub use scanner::*;
 mod variable_set;

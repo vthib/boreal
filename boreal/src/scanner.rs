@@ -158,8 +158,6 @@ fn build_matched_rule<'a>(
     }
 }
 
-// TODO: add tests on those results
-
 /// Result of a scan
 #[derive(Debug)]
 pub struct ScanResult<'scanner> {

@@ -1,4 +1,7 @@
-use boreal::scan_params::{EarlyScanConfiguration, ScanParamsBuilder};
+use boreal::{
+    scan_params::{EarlyScanConfiguration, ScanParamsBuilder},
+    ScanResult,
+};
 
 pub struct Checker {
     scanner: boreal::Scanner,
@@ -142,59 +145,24 @@ impl Checker {
         }
     }
 
-    // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", count), ...])]
+    // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", [(offset, length), ...]), ...]]
     #[track_caller]
-    pub fn check_str_matches(&self, mem: &[u8], expected_matches: Vec<(&str, Vec<(&str, usize)>)>) {
-        let mut expected: Vec<_> = expected_matches
-            .into_iter()
-            .map(|(a, b)| (a.to_string(), b))
-            .collect();
+    pub fn check_full_matches(&self, mem: &[u8], mut expected: FullMatches) {
         let res = self.scanner.scan_mem(mem);
-        let res: Vec<_> = res
-            .matched_rules
-            .into_iter()
-            .map(|v| {
-                let rule_name = if let Some(ns) = &v.namespace {
-                    format!("{}:{}", ns, v.name)
-                } else {
-                    format!("default:{}", v.name)
-                };
-                let str_matches: Vec<_> = v
-                    .matches
-                    .into_iter()
-                    .map(|str_match| (str_match.name, str_match.matches.len()))
-                    .collect();
-                (rule_name, str_matches)
-            })
-            .collect();
+        let res = get_boreal_full_matches(res);
         assert_eq!(res, expected, "test failed for boreal");
 
         if let Some(rules) = &self.yara_rules {
             let res = rules.scan_mem(mem, 1).unwrap();
-            let mut res: Vec<_> = res
-                .into_iter()
-                .map(|v| {
-                    let rule_name = format!("{}:{}", v.namespace, v.identifier);
-                    let str_matches: Vec<_> = v
-                        .strings
-                        .into_iter()
-                        .map(|str_match| {
-                            // The identifier from yara starts with '$', not us.
-                            // TODO: should we normalize this?
-                            (&str_match.identifier[1..], str_match.matches.len())
-                        })
-                        .collect();
-                    (rule_name, str_matches)
-                })
-                .collect();
-            // Yara still reports private strings, however they will always have zero matches.
-            // We do not list private strings, so to really compare both, we need to clean up all 0
-            // matches in the yara results & expected results
+            let mut res = get_yara_full_matches(&res);
+            // Yara still reports private strings, however they will always have
+            // zero matches. We do not list private strings, so to really compare both,
+            // we need to clean up all 0 matches in the yara results & expected results
             for s in &mut res {
-                s.1.retain(|m| m.1 != 0);
+                s.1.retain(|m| !m.1.is_empty());
             }
             for s in &mut expected {
-                s.1.retain(|m| m.1 != 0);
+                s.1.retain(|m| !m.1.is_empty());
             }
             assert_eq!(res, expected, "conformity test failed for libyara");
         }
@@ -303,6 +271,61 @@ pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
 pub fn check_err(rule: &str, expected_prefix: &str) {
     let compiler = Compiler::new();
     compiler.check_add_rules_err(rule, expected_prefix);
+}
+
+type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(usize, usize)>)>)>;
+
+fn get_boreal_full_matches(res: ScanResult) -> FullMatches {
+    res.matched_rules
+        .into_iter()
+        .map(|v| {
+            let rule_name = if let Some(ns) = &v.namespace {
+                format!("{}:{}", ns, v.name)
+            } else {
+                format!("default:{}", v.name)
+            };
+            let str_matches: Vec<_> = v
+                .matches
+                .into_iter()
+                .map(|str_match| {
+                    (
+                        str_match.name,
+                        str_match
+                            .matches
+                            .into_iter()
+                            .map(|m| (m.offset, m.value.len()))
+                            .collect(),
+                    )
+                })
+                .collect();
+            (rule_name, str_matches)
+        })
+        .collect()
+}
+
+fn get_yara_full_matches<'a>(res: &'a [yara::Rule]) -> FullMatches<'a> {
+    res.iter()
+        .map(|v| {
+            let rule_name = format!("{}:{}", v.namespace, v.identifier);
+            let str_matches: Vec<_> = v
+                .strings
+                .iter()
+                .map(|str_match| {
+                    (
+                        // The identifier from yara starts with '$', not us.
+                        // TODO: should we normalize this?
+                        &str_match.identifier[1..],
+                        str_match
+                            .matches
+                            .iter()
+                            .map(|m| (m.offset, m.length))
+                            .collect(),
+                    )
+                })
+                .collect();
+            (rule_name, str_matches)
+        })
+        .collect()
 }
 
 pub fn build_rule(condition: &str) -> String {

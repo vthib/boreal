@@ -968,29 +968,44 @@ rule c {
     );
 
     // Nothing matches
-    checker.check_str_matches(b"", vec![]);
+    checker.check_full_matches(b"", vec![]);
     // Match on a0, b0 and c0: private strings are not reported,
     // independently on number of matches
-    checker.check_str_matches(
+    checker.check_full_matches(
         b"c0a0b0c0   c0",
         vec![
-            ("default:a", vec![]),
-            ("default:b", vec![("b0", 1), ("b2", 0)]),
-            ("default:c", vec![("c0", 3), ("c1", 0)]),
+            ("default:a".to_owned(), vec![]),
+            (
+                "default:b".to_owned(),
+                vec![("b0", vec![(4, 2)]), ("b2", vec![])],
+            ),
+            (
+                "default:c".to_owned(),
+                vec![("c0", vec![(0, 2), (6, 2), (11, 2)]), ("c1", vec![])],
+            ),
         ],
     );
     // Match on b1 only
-    checker.check_str_matches(b"b1", vec![("default:b", vec![("b0", 0), ("b2", 0)])]);
+    checker.check_full_matches(
+        b"b1",
+        vec![("default:b".to_owned(), vec![("b0", vec![]), ("b2", vec![])])],
+    );
     // Match on a0 a1 and a2
-    checker.check_str_matches(b"a0a2a1", vec![("default:a", vec![])]);
+    checker.check_full_matches(b"a0a2a1", vec![("default:a".to_owned(), vec![])]);
 
     // match on all of them
-    checker.check_str_matches(
+    checker.check_full_matches(
         b"a0a1a2c2c1c0b2b0b1",
         vec![
-            ("default:a", vec![]),
-            ("default:b", vec![("b0", 1), ("b2", 1)]),
-            ("default:c", vec![("c0", 1), ("c1", 1)]),
+            ("default:a".to_owned(), vec![]),
+            (
+                "default:b".to_owned(),
+                vec![("b0", vec![(14, 2)]), ("b2", vec![(12, 2)])],
+            ),
+            (
+                "default:c".to_owned(),
+                vec![("c0", vec![(10, 2)]), ("c1", vec![(8, 2)])],
+            ),
         ],
     );
 }
