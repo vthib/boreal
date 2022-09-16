@@ -150,7 +150,7 @@ fn build_matched_rule<'a>(
                     .iter()
                     .map(|mat| StringMatch {
                         offset: mat.start,
-                        value: mem[mat.start..mat.end].to_vec(),
+                        data: mem[mat.start..mat.end].to_vec(),
                     })
                     .collect(),
             })
@@ -206,5 +206,5 @@ pub struct StringMatch {
 
     /// The matched data.
     // TODO: implement a max bound for this
-    pub value: Vec<u8>,
+    pub data: Vec<u8>,
 }

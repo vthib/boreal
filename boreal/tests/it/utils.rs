@@ -149,7 +149,7 @@ impl Checker {
     #[track_caller]
     pub fn check_full_matches(&self, mem: &[u8], mut expected: FullMatches) {
         let res = self.scanner.scan_mem(mem);
-        let res = get_boreal_full_matches(res);
+        let res = get_boreal_full_matches(&res);
         assert_eq!(res, expected, "test failed for boreal");
 
         if let Some(rules) = &self.yara_rules {
@@ -210,7 +210,7 @@ impl Checker {
         for r in res.matched_rules {
             for var in r.matches {
                 for mat in var.matches {
-                    if mat.value == expected_match {
+                    if mat.data == expected_match {
                         found = true;
                     }
                 }
@@ -273,11 +273,11 @@ pub fn check_err(rule: &str, expected_prefix: &str) {
     compiler.check_add_rules_err(rule, expected_prefix);
 }
 
-type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(usize, usize)>)>)>;
+type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(&'a [u8], usize, usize)>)>)>;
 
-fn get_boreal_full_matches(res: ScanResult) -> FullMatches {
+fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
     res.matched_rules
-        .into_iter()
+        .iter()
         .map(|v| {
             let rule_name = if let Some(ns) = &v.namespace {
                 format!("{}:{}", ns, v.name)
@@ -286,14 +286,14 @@ fn get_boreal_full_matches(res: ScanResult) -> FullMatches {
             };
             let str_matches: Vec<_> = v
                 .matches
-                .into_iter()
+                .iter()
                 .map(|str_match| {
                     (
                         str_match.name,
                         str_match
                             .matches
-                            .into_iter()
-                            .map(|m| (m.offset, m.value.len()))
+                            .iter()
+                            .map(|m| (&*m.data, m.offset, m.data.len()))
                             .collect(),
                     )
                 })
@@ -318,7 +318,7 @@ fn get_yara_full_matches<'a>(res: &'a [yara::Rule]) -> FullMatches<'a> {
                         str_match
                             .matches
                             .iter()
-                            .map(|m| (m.offset, m.length))
+                            .map(|m| (&*m.data, m.offset, m.length))
                             .collect(),
                     )
                 })

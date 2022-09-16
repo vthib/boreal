@@ -977,11 +977,14 @@ rule c {
             ("default:a".to_owned(), vec![]),
             (
                 "default:b".to_owned(),
-                vec![("b0", vec![(4, 2)]), ("b2", vec![])],
+                vec![("b0", vec![(b"b0", 4, 2)]), ("b2", vec![])],
             ),
             (
                 "default:c".to_owned(),
-                vec![("c0", vec![(0, 2), (6, 2), (11, 2)]), ("c1", vec![])],
+                vec![
+                    ("c0", vec![(b"c0", 0, 2), (b"c0", 6, 2), (b"c0", 11, 2)]),
+                    ("c1", vec![]),
+                ],
             ),
         ],
     );
@@ -1000,11 +1003,11 @@ rule c {
             ("default:a".to_owned(), vec![]),
             (
                 "default:b".to_owned(),
-                vec![("b0", vec![(14, 2)]), ("b2", vec![(12, 2)])],
+                vec![("b0", vec![(b"b0", 14, 2)]), ("b2", vec![(b"b2", 12, 2)])],
             ),
             (
                 "default:c".to_owned(),
-                vec![("c0", vec![(10, 2)]), ("c1", vec![(8, 2)])],
+                vec![("c0", vec![(b"c0", 10, 2)]), ("c1", vec![(b"c1", 8, 2)])],
             ),
         ],
     );
