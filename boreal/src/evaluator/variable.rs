@@ -1,7 +1,10 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use crate::compiler::{Variable, VariableMatcher};
+use crate::{
+    compiler::{Variable, VariableMatcher},
+    variable_set::SetResult,
+};
 
 /// Variable evaluation context.
 ///
@@ -18,17 +21,36 @@ pub(crate) struct VariableEvaluation<'a> {
     ///
     /// Set to None once the whole mem has been scanned.
     next_offset: Option<usize>,
+
+    /// The variable has been found in the scanned memory.
+    ///
+    /// If true, it indicates the variable has been found, although
+    /// details on the matches are unknown. This provides a quick
+    /// response if the only use of the variable is to check its presence.
+    pub(crate) has_been_found: bool,
 }
 
 pub type Match = std::ops::Range<usize>;
 
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.
-    pub fn new(var: &'a Variable) -> Self {
-        Self {
+    pub fn new(var: &'a Variable, set_result: SetResult) -> Self {
+        let mut this = Self {
             var,
             matches: Vec::new(),
             next_offset: Some(0),
+            has_been_found: false,
+        };
+        match set_result {
+            SetResult::Unknown => this,
+            SetResult::NotFound => {
+                this.next_offset = None;
+                this
+            }
+            SetResult::Found => {
+                this.has_been_found = !this.need_full_matches();
+                this
+            }
         }
     }
 
