@@ -12,6 +12,7 @@ pub struct ScanParams<'a> {
 }
 
 /// Builder for the [`ScanParams`] object
+#[derive(Clone, Debug)]
 pub struct ScanParamsBuilder {
     early_scan: EarlyScanConfiguration,
     compute_full_matches: bool,
