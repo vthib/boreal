@@ -71,7 +71,11 @@ impl Scanner {
     /// Returns a list of rules that matched on the given byte slice.
     #[must_use]
     pub fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
-        let ScanParams { mem, early_scan } = params;
+        let ScanParams {
+            mem,
+            early_scan,
+            compute_full_matches,
+        } = params;
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
@@ -105,7 +109,12 @@ impl Scanner {
                 };
             }
             if !rule.is_private {
-                matched_rules.push(build_matched_rule(rule, var_evals, mem));
+                matched_rules.push(build_matched_rule(
+                    rule,
+                    var_evals,
+                    mem,
+                    compute_full_matches,
+                ));
             }
         }
 
@@ -118,7 +127,12 @@ impl Scanner {
                 set_index_offset += rule.variables.len();
 
                 if res && !rule.is_private {
-                    matched_rules.push(build_matched_rule(rule, var_evals, mem));
+                    matched_rules.push(build_matched_rule(
+                        rule,
+                        var_evals,
+                        mem,
+                        compute_full_matches,
+                    ));
                 }
                 res
             };
@@ -134,15 +148,23 @@ impl Scanner {
 
 fn build_matched_rule<'a>(
     rule: &'a Rule,
-    var_evals: Vec<evaluator::VariableEvaluation<'a>>,
+    mut var_evals: Vec<evaluator::VariableEvaluation<'a>>,
     mem: &[u8],
+    compute_full_matches: bool,
 ) -> MatchedRule<'a> {
+    if compute_full_matches {
+        for var_eval in &mut var_evals {
+            var_eval.compute_all_matches(mem);
+        }
+    }
+
     MatchedRule {
         namespace: rule.namespace.as_deref(),
         name: &rule.name,
         matches: var_evals
             .into_iter()
             .filter(|eval| !eval.var.is_private())
+            .filter(|eval| !eval.matches.is_empty())
             .map(|eval| StringMatches {
                 name: &eval.var.name,
                 matches: eval

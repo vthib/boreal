@@ -975,24 +975,15 @@ rule c {
         b"c0a0b0c0   c0",
         vec![
             ("default:a".to_owned(), vec![]),
-            (
-                "default:b".to_owned(),
-                vec![("b0", vec![(b"b0", 4, 2)]), ("b2", vec![])],
-            ),
+            ("default:b".to_owned(), vec![("b0", vec![(b"b0", 4, 2)])]),
             (
                 "default:c".to_owned(),
-                vec![
-                    ("c0", vec![(b"c0", 0, 2), (b"c0", 6, 2), (b"c0", 11, 2)]),
-                    ("c1", vec![]),
-                ],
+                vec![("c0", vec![(b"c0", 0, 2), (b"c0", 6, 2), (b"c0", 11, 2)])],
             ),
         ],
     );
     // Match on b1 only
-    checker.check_full_matches(
-        b"b1",
-        vec![("default:b".to_owned(), vec![("b0", vec![]), ("b2", vec![])])],
-    );
+    checker.check_full_matches(b"b1", vec![("default:b".to_owned(), vec![])]);
     // Match on a0 a1 and a2
     checker.check_full_matches(b"a0a2a1", vec![("default:a".to_owned(), vec![])]);
 

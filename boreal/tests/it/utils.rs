@@ -148,7 +148,11 @@ impl Checker {
     // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", [(offset, length), ...]), ...]]
     #[track_caller]
     pub fn check_full_matches(&self, mem: &[u8], mut expected: FullMatches) {
-        let res = self.scanner.scan_mem(mem);
+        // We need to compute the full matches for this test
+        let params = ScanParamsBuilder::default()
+            .compute_full_matches(true)
+            .build(mem);
+        let res = self.scanner.scan(params);
         let res = get_boreal_full_matches(&res);
         assert_eq!(res, expected, "test failed for boreal");
 

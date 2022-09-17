@@ -13,6 +13,7 @@ mod regex;
 // Tests related to evaluation of rules
 mod evaluation;
 mod for_expression;
+mod full;
 mod modules;
 mod namespaces;
 mod variables;

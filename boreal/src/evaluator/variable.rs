@@ -151,6 +151,12 @@ impl<'a> VariableEvaluation<'a> {
         false
     }
 
+    /// Force computation of all possible matches.
+    pub fn compute_all_matches(&mut self, mem: &[u8]) {
+        // TODO: have a limit on the number of matches
+        while self.get_next_match(mem).is_some() {}
+    }
+
     /// Find next matches, save them, and call the given closure on each new one found.
     ///
     /// If the closure returns false, the search ends. Otherwise, the search continues.
