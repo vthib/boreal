@@ -64,12 +64,13 @@ impl<'a> VariableEvaluation<'a> {
         self.var.is_fullword() || self.var.non_wide_regex.is_some()
     }
 
-    /// Search occurrence of a variable in bytes
-    pub fn find(&mut self, mem: &[u8]) -> Option<Match> {
-        self.matches
-            .get(0)
-            .cloned()
-            .or_else(|| self.get_next_match(mem))
+    /// Return true if the variable can be found in the scanned memory.
+    pub fn find(&mut self, mem: &[u8]) -> bool {
+        if self.has_been_found || !self.matches.is_empty() {
+            true
+        } else {
+            self.get_next_match(mem).is_some()
+        }
     }
 
     /// Get a specific match occurrence for the variable.

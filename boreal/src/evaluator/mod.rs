@@ -491,11 +491,7 @@ impl Evaluator<'_, '_> {
                 // no need to rescan.
                 let index = self.get_variable_index(*variable_index)?;
                 let var = &mut self.variables[index];
-                if var.has_been_found {
-                    Some(Value::Boolean(true))
-                } else {
-                    Some(Value::Boolean(var.find(self.mem).is_some()))
-                }
+                Some(Value::Boolean(var.find(self.mem)))
             }
 
             Expression::VariableAt {
