@@ -27,8 +27,6 @@ mod read_integer;
 use read_integer::evaluate_read_integer;
 mod variable;
 pub(crate) use variable::VariableEvaluation;
-mod variables;
-use variables::Variables;
 
 #[derive(Clone, Debug)]
 enum Value {
@@ -123,7 +121,17 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     previous_rules_results: &'scan [bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
     let mut evaluator = Evaluator {
-        variables: Variables::new(&rule.variables, set_index_offset, scan_data),
+        variables: rule
+            .variables
+            .iter()
+            .enumerate()
+            .map(|(i, var)| {
+                VariableEvaluation::new(
+                    var,
+                    scan_data.variable_set_matches.matched(set_index_offset + i),
+                )
+            })
+            .collect(),
         mem: scan_data.mem,
         previous_rules_results,
         currently_selected_variable_index: None,
@@ -133,11 +141,11 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     let res = evaluator
         .evaluate_expr(&rule.condition)
         .map_or(false, |v| v.to_bool());
-    (res, evaluator.variables.variables)
+    (res, evaluator.variables)
 }
 
 struct Evaluator<'scan, 'rule> {
-    variables: Variables<'scan, 'rule>,
+    variables: Vec<VariableEvaluation<'rule>>,
 
     mem: &'scan [u8],
 
@@ -235,7 +243,8 @@ impl Evaluator<'_, '_> {
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
                         let index = self.get_variable_index(*variable_index)?;
-                        let count = self.variables.count_matches_in(index, from, to);
+                        let var = &mut self.variables[index];
+                        let count = var.count_matches_in(self.mem, from, to);
 
                         i64::try_from(count).ok().map(Value::Integer)
                     }
@@ -244,7 +253,8 @@ impl Evaluator<'_, '_> {
             }
             Expression::Count(variable_index) => {
                 let index = self.get_variable_index(*variable_index)?;
-                let count = self.variables.count_matches(index);
+                let var = &mut self.variables[index];
+                let count = var.count_matches(self.mem);
                 i64::try_from(count).ok().map(Value::Integer)
             }
             Expression::Offset {
@@ -256,8 +266,8 @@ impl Evaluator<'_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let index = self.get_variable_index(*variable_index)?;
-                        self.variables
-                            .find_match_occurence(index, v - 1)
+                        let var = &mut self.variables[index];
+                        var.find_match_occurence(self.mem, v - 1)
                             .map(|mat| Value::Integer(mat.start as i64))
                     }
                     Ok(_) | Err(_) => None,
@@ -272,8 +282,8 @@ impl Evaluator<'_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let index = self.get_variable_index(*variable_index)?;
-                        self.variables
-                            .find_match_occurence(index, v - 1)
+                        let var = &mut self.variables[index];
+                        var.find_match_occurence(self.mem, v - 1)
                             .map(|mat| Value::Integer(mat.len() as i64))
                     }
                     Ok(_) | Err(_) => None,
@@ -480,7 +490,12 @@ impl Evaluator<'_, '_> {
                 // For this expression, we can use the variables set to retrieve the truth value,
                 // no need to rescan.
                 let index = self.get_variable_index(*variable_index)?;
-                Some(Value::Boolean(self.variables.find(index)))
+                let var = &mut self.variables[index];
+                if var.has_been_found {
+                    Some(Value::Boolean(true))
+                } else {
+                    Some(Value::Boolean(var.find(self.mem).is_some()))
+                }
             }
 
             Expression::VariableAt {
@@ -497,7 +512,8 @@ impl Evaluator<'_, '_> {
                 match usize::try_from(offset) {
                     Ok(offset) => {
                         let index = self.get_variable_index(*variable_index)?;
-                        Some(Value::Boolean(self.variables.find_at(index, offset)))
+                        let var = &mut self.variables[index];
+                        Some(Value::Boolean(var.find_at(self.mem, offset)))
                     }
                     Err(_) => Some(Value::Boolean(false)),
                 }
@@ -514,8 +530,9 @@ impl Evaluator<'_, '_> {
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
                         let index = self.get_variable_index(*variable_index)?;
+                        let var = &mut self.variables[index];
 
-                        Some(Value::Boolean(self.variables.find_in(index, from, to)))
+                        Some(Value::Boolean(var.find_in(self.mem, from, to)))
                     }
                     _ => Some(Value::Boolean(false)),
                 }
@@ -527,7 +544,7 @@ impl Evaluator<'_, '_> {
                 body,
             } => {
                 let nb_elements = if set.elements.is_empty() {
-                    self.variables.variables.len()
+                    self.variables.len()
                 } else {
                     set.elements.len()
                 };
@@ -541,7 +558,7 @@ impl Evaluator<'_, '_> {
                 let prev_selected_var_index = self.currently_selected_variable_index;
 
                 let result = if set.elements.is_empty() {
-                    self.evaluate_for_var(selection, body, 0..self.variables.variables.len())
+                    self.evaluate_for_var(selection, body, 0..self.variables.len())
                 } else {
                     self.evaluate_for_var(selection, body, set.elements.iter().copied())
                 };
