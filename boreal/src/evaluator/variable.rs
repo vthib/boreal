@@ -27,14 +27,14 @@ pub(crate) struct VariableEvaluation<'a> {
     /// If true, it indicates the variable has been found, although
     /// details on the matches are unknown. This provides a quick
     /// response if the only use of the variable is to check its presence.
-    pub(crate) has_been_found: bool,
+    has_been_found: bool,
 }
 
 pub type Match = std::ops::Range<usize>;
 
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.
-    pub fn new(var: &'a Variable, set_result: SetResult) -> Self {
+    pub fn new(var: &'a Variable, set_result: &SetResult, mem: &[u8]) -> Self {
         let mut this = Self {
             var,
             matches: Vec::new(),
@@ -49,6 +49,26 @@ impl<'a> VariableEvaluation<'a> {
             }
             SetResult::Found => {
                 this.has_been_found = !this.need_full_matches();
+                this
+            }
+            SetResult::Matches(matches) => {
+                if this.need_full_matches() {
+                    this.matches = matches
+                        .iter()
+                        .filter_map(|mat| {
+                            let mut mat = mat.clone();
+                            if this.validate_and_update_match(mem, &mut mat) {
+                                Some(mat)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                } else {
+                    this.matches = matches.to_vec();
+                }
+                this.next_offset = None;
+                this.has_been_found = !this.matches.is_empty();
                 this
             }
         }
@@ -219,15 +239,19 @@ impl<'a> VariableEvaluation<'a> {
                 }),
             }?;
 
-            if !apply_wide_word_boundaries(&mut mat, mem, self.var)
-                || !check_fullword(&mat, mem, self.var)
-            {
+            if !self.validate_and_update_match(mem, &mut mat) {
+                // FIXME: this uses the updated match, this should be buggy, write a test and fix
+                // it.
                 offset = mat.start + 1;
                 continue;
             }
             return Some(mat);
         }
         None
+    }
+
+    fn validate_and_update_match(&self, mem: &[u8], mat: &mut Match) -> bool {
+        check_fullword(mat, mem, self.var) && apply_wide_word_boundaries(mat, mem, self.var)
     }
 }
 

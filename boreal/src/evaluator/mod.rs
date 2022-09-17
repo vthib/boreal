@@ -128,7 +128,8 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
             .map(|(i, var)| {
                 VariableEvaluation::new(
                     var,
-                    scan_data.variable_set_matches.matched(set_index_offset + i),
+                    &scan_data.variable_set_matches.matched(set_index_offset + i),
+                    scan_data.mem,
                 )
             })
             .collect(),

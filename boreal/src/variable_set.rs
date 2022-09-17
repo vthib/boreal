@@ -1,4 +1,6 @@
 //! Provides the [`VariableSet`] object.
+use std::ops::Range;
+
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use regex::bytes::{RegexSet, RegexSetBuilder};
 
@@ -103,15 +105,19 @@ impl VariableSet {
             // TODO: find the right size for this
             EarlyScanConfiguration::AutoConfigure if mem.len() < 4096 => None,
             EarlyScanConfiguration::AutoConfigure | EarlyScanConfiguration::Enable => {
-                let mut matches = vec![SetResult::NotFound; self.nb_vars];
+                let mut matches = vec![None; self.nb_vars];
 
                 for mat in self.aho.find_overlapping_iter(mem) {
                     let var_index = self.aho_index_to_var_index[mat.pattern()];
-                    matches[var_index] = SetResult::Found;
+                    matches[var_index]
+                        .get_or_insert_with(Vec::new)
+                        .push(mat.start()..mat.end());
                 }
                 for mat in self.aho_ci.find_overlapping_iter(mem) {
                     let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
-                    matches[var_index] = SetResult::Found;
+                    matches[var_index]
+                        .get_or_insert_with(Vec::new)
+                        .push(mat.start()..mat.end());
                 }
 
                 let mut offset = 0;
@@ -119,7 +125,7 @@ impl VariableSet {
                     let set_matches = set.matches(mem);
                     for idx in set_matches {
                         let var_index = self.regex_sets_index_to_var_index[offset + idx];
-                        matches[var_index] = SetResult::Found;
+                        matches[var_index] = Some(Vec::new());
                     }
                     offset += set.len();
                 }
@@ -132,27 +138,39 @@ impl VariableSet {
     }
 }
 
+// Result of a match for a variable.
+// - None means not found
+// - Some(vec![]) means found, but no details on the matches are available
+// - Some(vec![..]) means found and matches details are available.
+type MatchResult = Option<Vec<Range<usize>>>;
+
 #[derive(Debug)]
 pub(crate) struct VariableSetMatches {
-    matches: Option<Vec<SetResult>>,
+    matches: Option<Vec<MatchResult>>,
 }
 
 /// Result of a `VariableSet` scan for a given variable.
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum SetResult {
+#[derive(Clone, Debug)]
+pub(crate) enum SetResult<'a> {
     /// Variable has no match.
     NotFound,
     /// Unknown, must scan for the variable on its own.
     Unknown,
     /// Found at least one match.
     Found,
+    /// List of matches.
+    Matches(&'a [Range<usize>]),
 }
 
 impl VariableSetMatches {
     pub(crate) fn matched(&self, index: usize) -> SetResult {
         match self.matches.as_ref() {
             None => SetResult::Unknown,
-            Some(vec) => vec[index],
+            Some(vec) => match &vec[index] {
+                None => SetResult::NotFound,
+                Some(v) if v.is_empty() => SetResult::Found,
+                Some(v) => SetResult::Matches(v),
+            },
         }
     }
 }
