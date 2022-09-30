@@ -1,6 +1,7 @@
 //! Compilation of a parsed expression into an optimized one.
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use codespan_reporting::diagnostic::Diagnostic;
@@ -121,41 +122,85 @@ impl Compiler {
         }
     }
 
+    /// Add rules to the scanner from a file.
+    ///
+    /// The default namespace will be used.
+    ///
+    /// # Errors
+    ///
+    /// An error is returned if failing to parse the rules, or on any I/O error (when trying
+    /// to open and read the file, or any following includes).
+    pub fn add_rules_file<T: AsRef<Path>>(&mut self, path: T) -> Result<(), AddRuleError> {
+        self.add_rules_file_inner(path.as_ref(), None)
+    }
+
+    /// Add rules to the scanner from a file into a specific namespace.
+    ///
+    /// The default namespace will be used.
+    ///
+    /// # Errors
+    ///
+    /// An error is returned if failing to parse the rules, or on any I/O error (when trying
+    /// to open and read the file, or any following includes).
+    pub fn add_rules_file_in_namespace<T: AsRef<Path>, S: Into<String>>(
+        &mut self,
+        path: T,
+        namespace: S,
+    ) -> Result<(), AddRuleError> {
+        self.add_rules_file_inner(path.as_ref(), Some(namespace.into()))
+    }
+
+    fn add_rules_file_inner(
+        &mut self,
+        path: &Path,
+        namespace: Option<String>,
+    ) -> Result<(), AddRuleError> {
+        // TODO: memmap the file instead?
+        let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError::IOError {
+            path: path.to_path_buf(),
+            error,
+        })?;
+        self.add_rules_str_inner(&contents, namespace)
+    }
+
     /// Add rules to the scanner from a string.
     ///
     /// The default namespace will be used.
     ///
     /// # Errors
     ///
-    /// If parsing of the rules fails, an error is returned.
-    pub fn add_rules_str(&mut self, s: &str) -> Result<(), AddRuleError> {
-        let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
-        self.add_file(file, None)
-            .map_err(AddRuleError::CompilationError)?;
-        Ok(())
+    /// An error is returned if failing to parse the rules, or on any I/O error on includes.
+    pub fn add_rules_str<T: AsRef<str>>(&mut self, rules: T) -> Result<(), AddRuleError> {
+        self.add_rules_str_inner(rules.as_ref(), None)
     }
 
     /// Add rules to the scanner from a string into a specific namespace.
     ///
     /// # Errors
     ///
-    /// If parsing of the rules fails, an error is returned.
-    pub fn add_rules_str_in_namespace<S: Into<String>>(
+    /// An error is returned if failing to parse the rules, or on any I/O error on includes.
+    pub fn add_rules_str_in_namespace<T: AsRef<str>, S: Into<String>>(
         &mut self,
-        s: &str,
+        rules: T,
         namespace: S,
     ) -> Result<(), AddRuleError> {
+        self.add_rules_str_inner(rules.as_ref(), Some(namespace.into()))
+    }
+
+    fn add_rules_str_inner(
+        &mut self,
+        s: &str,
+        namespace: Option<String>,
+    ) -> Result<(), AddRuleError> {
         let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
-        self.add_file(file, Some(namespace.into()))
-            .map_err(AddRuleError::CompilationError)?;
-        Ok(())
+        self.add_file(file, namespace)
     }
 
     fn add_file(
         &mut self,
         file: parser::YaraFile,
         namespace: Option<String>,
-    ) -> Result<(), CompilationError> {
+    ) -> Result<(), AddRuleError> {
         let namespace = match namespace {
             Some(name) => self
                 .namespaces
@@ -201,36 +246,43 @@ impl Compiler {
                             );
                         }
                         None => {
-                            return Err(CompilationError::UnknownImport {
-                                name: import.name,
-                                span: import.span,
-                            })
+                            return Err(AddRuleError::CompilationError(
+                                CompilationError::UnknownImport {
+                                    name: import.name,
+                                    span: import.span,
+                                },
+                            ))
                         }
                     };
                 }
                 parser::YaraFileComponent::Rule(rule) => {
                     for prefix in &namespace.forbidden_rule_prefixes {
                         if rule.name.starts_with(prefix) {
-                            return Err(CompilationError::MatchOnWildcardRuleSet {
-                                rule_name: rule.name,
-                                name_span: rule.name_span,
-                                rule_set: format!("{}*", prefix),
-                            });
+                            return Err(AddRuleError::CompilationError(
+                                CompilationError::MatchOnWildcardRuleSet {
+                                    rule_name: rule.name,
+                                    name_span: rule.name_span,
+                                    rule_set: format!("{}*", prefix),
+                                },
+                            ));
                         }
                     }
 
                     let rule_name = rule.name.clone();
                     let is_global = rule.is_global;
                     let name_span = rule.name_span.clone();
-                    let rule = compile_rule(*rule, namespace)?;
+                    let rule =
+                        compile_rule(*rule, namespace).map_err(AddRuleError::CompilationError)?;
 
                     // Check then insert, to avoid a double clone on the rule name. Maybe
                     // someday we'll get the raw entry API.
                     if namespace.rules_indexes.contains_key(&rule_name) {
-                        return Err(CompilationError::DuplicatedRuleName {
-                            name: rule_name,
-                            span: name_span,
-                        });
+                        return Err(AddRuleError::CompilationError(
+                            CompilationError::DuplicatedRuleName {
+                                name: rule_name,
+                                span: name_span,
+                            },
+                        ));
                     }
 
                     if is_global {
@@ -292,6 +344,18 @@ struct Namespace {
 
 #[derive(Debug)]
 pub enum AddRuleError {
+    /// Error while trying to read a file.
+    ///
+    /// This can happen either:
+    /// - when using the [`Compiler::add_rules_file`] or [`Compiler::add_rules_file_in_namespace`]
+    ///   and failing to read from the provided path.
+    /// - On `include` clauses.
+    IOError {
+        /// The path causing the error.
+        path: std::path::PathBuf,
+        /// The IO error.
+        error: std::io::Error,
+    },
     /// Error while parsing a rule.
     ParseError(boreal_parser::Error),
     /// Error while compiling a rule.
@@ -330,6 +394,11 @@ impl AddRuleError {
     #[must_use]
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
+            Self::IOError { path, error } => Diagnostic::error().with_message(format!(
+                "cannot parse `{}`: {}",
+                path.display(),
+                error
+            )),
             Self::ParseError(err) => err.to_diagnostic(),
             Self::CompilationError(err) => err.to_diagnostic(),
         }
