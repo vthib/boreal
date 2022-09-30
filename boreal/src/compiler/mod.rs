@@ -142,18 +142,18 @@ impl Compiler {
     ///
     /// An error is returned if failing to parse the rules, or on any I/O error (when trying
     /// to open and read the file, or any following includes).
-    pub fn add_rules_file_in_namespace<T: AsRef<Path>, S: Into<String>>(
+    pub fn add_rules_file_in_namespace<T: AsRef<Path>, S: AsRef<str>>(
         &mut self,
         path: T,
         namespace: S,
     ) -> Result<(), AddRuleError> {
-        self.add_rules_file_inner(path.as_ref(), Some(namespace.into()))
+        self.add_rules_file_inner(path.as_ref(), Some(namespace.as_ref()))
     }
 
     fn add_rules_file_inner(
         &mut self,
         path: &Path,
-        namespace: Option<String>,
+        namespace: Option<&str>,
     ) -> Result<(), AddRuleError> {
         // TODO: memmap the file instead?
         let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError::IOError {
@@ -179,121 +179,124 @@ impl Compiler {
     /// # Errors
     ///
     /// An error is returned if failing to parse the rules, or on any I/O error on includes.
-    pub fn add_rules_str_in_namespace<T: AsRef<str>, S: Into<String>>(
+    pub fn add_rules_str_in_namespace<T: AsRef<str>, S: AsRef<str>>(
         &mut self,
         rules: T,
         namespace: S,
     ) -> Result<(), AddRuleError> {
-        self.add_rules_str_inner(rules.as_ref(), Some(namespace.into()))
+        self.add_rules_str_inner(rules.as_ref(), Some(namespace.as_ref()))
     }
 
     fn add_rules_str_inner(
         &mut self,
         s: &str,
-        namespace: Option<String>,
+        namespace: Option<&str>,
     ) -> Result<(), AddRuleError> {
         let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
-        self.add_file(file, namespace)
+        for component in file.components {
+            self.add_component(component, namespace)?;
+        }
+        Ok(())
     }
 
-    fn add_file(
+    fn add_component(
         &mut self,
-        file: parser::YaraFile,
-        namespace: Option<String>,
+        component: parser::YaraFileComponent,
+        namespace_name: Option<&str>,
     ) -> Result<(), AddRuleError> {
-        let namespace = match namespace {
+        let namespace = match namespace_name {
             Some(name) => self
                 .namespaces
-                .entry(name.clone())
+                .entry(name.to_string())
                 .or_insert_with(|| Namespace {
-                    name: Some(name),
+                    name: Some(name.to_string()),
                     ..Namespace::default()
                 }),
             None => &mut self.default_namespace,
         };
 
-        for component in file.components {
-            match component {
-                parser::YaraFileComponent::Include(_) => todo!(),
-                parser::YaraFileComponent::Import(import) => {
-                    match self.available_modules.get_mut(&import.name) {
-                        Some(module) => {
-                            // XXX: this is a bit ugly, but i haven't found a better way to get
-                            // ownership of the module.
-                            let loc = std::mem::replace(
-                                &mut module.location,
-                                ModuleLocation::ImportedIndex(0),
-                            );
-                            let module_index = match loc {
-                                ModuleLocation::ImportedIndex(i) => i,
-                                ModuleLocation::Module(m) => {
-                                    // Move the module into the imported modules vec, and keep
-                                    // the index.
-                                    let i = self.imported_modules.len();
-                                    self.imported_modules.push(m);
-                                    i
-                                }
-                            };
-                            module.location = ModuleLocation::ImportedIndex(module_index);
+        match component {
+            parser::YaraFileComponent::Include(path) => {
+                self.add_rules_file_inner(Path::new(&path), namespace_name)?;
+            }
+            parser::YaraFileComponent::Import(import) => {
+                match self.available_modules.get_mut(&import.name) {
+                    Some(module) => {
+                        // XXX: this is a bit ugly, but i haven't found a better way to get
+                        // ownership of the module.
+                        let loc = std::mem::replace(
+                            &mut module.location,
+                            ModuleLocation::ImportedIndex(0),
+                        );
+                        let module_index = match loc {
+                            ModuleLocation::ImportedIndex(i) => i,
+                            ModuleLocation::Module(m) => {
+                                // Move the module into the imported modules vec, and keep
+                                // the index.
+                                let i = self.imported_modules.len();
+                                self.imported_modules.push(m);
+                                i
+                            }
+                        };
+                        module.location = ModuleLocation::ImportedIndex(module_index);
 
-                            // Ignore result: if the import was already done, it's fine.
-                            let _r = namespace.imported_modules.insert(
-                                import.name.clone(),
-                                ImportedModule {
-                                    module: Arc::clone(&module.compiled_module),
-                                    module_index,
-                                },
-                            );
-                        }
-                        None => {
-                            return Err(AddRuleError::CompilationError(
-                                CompilationError::UnknownImport {
-                                    name: import.name,
-                                    span: import.span,
-                                },
-                            ))
-                        }
-                    };
-                }
-                parser::YaraFileComponent::Rule(rule) => {
-                    for prefix in &namespace.forbidden_rule_prefixes {
-                        if rule.name.starts_with(prefix) {
-                            return Err(AddRuleError::CompilationError(
-                                CompilationError::MatchOnWildcardRuleSet {
-                                    rule_name: rule.name,
-                                    name_span: rule.name_span,
-                                    rule_set: format!("{}*", prefix),
-                                },
-                            ));
-                        }
+                        // Ignore result: if the import was already done, it's fine.
+                        let _r = namespace.imported_modules.insert(
+                            import.name.clone(),
+                            ImportedModule {
+                                module: Arc::clone(&module.compiled_module),
+                                module_index,
+                            },
+                        );
                     }
-
-                    let rule_name = rule.name.clone();
-                    let is_global = rule.is_global;
-                    let name_span = rule.name_span.clone();
-                    let rule =
-                        compile_rule(*rule, namespace).map_err(AddRuleError::CompilationError)?;
-
-                    // Check then insert, to avoid a double clone on the rule name. Maybe
-                    // someday we'll get the raw entry API.
-                    if namespace.rules_indexes.contains_key(&rule_name) {
+                    None => {
                         return Err(AddRuleError::CompilationError(
-                            CompilationError::DuplicatedRuleName {
-                                name: rule_name,
-                                span: name_span,
+                            CompilationError::UnknownImport {
+                                name: import.name,
+                                span: import.span,
+                            },
+                        ))
+                    }
+                };
+            }
+            parser::YaraFileComponent::Rule(rule) => {
+                for prefix in &namespace.forbidden_rule_prefixes {
+                    if rule.name.starts_with(prefix) {
+                        return Err(AddRuleError::CompilationError(
+                            CompilationError::MatchOnWildcardRuleSet {
+                                rule_name: rule.name,
+                                name_span: rule.name_span,
+                                rule_set: format!("{}*", prefix),
                             },
                         ));
                     }
+                }
 
-                    if is_global {
-                        let _r = namespace.rules_indexes.insert(rule_name, None);
-                        self.global_rules.push(rule);
-                    } else {
-                        let _r = namespace
-                            .rules_indexes
-                            .insert(rule_name, Some(self.rules.len()));
-                        self.rules.push(rule);
-                    }
+                let rule_name = rule.name.clone();
+                let is_global = rule.is_global;
+                let name_span = rule.name_span.clone();
+                let rule =
+                    compile_rule(*rule, namespace).map_err(AddRuleError::CompilationError)?;
+
+                // Check then insert, to avoid a double clone on the rule name. Maybe
+                // someday we'll get the raw entry API.
+                if namespace.rules_indexes.contains_key(&rule_name) {
+                    return Err(AddRuleError::CompilationError(
+                        CompilationError::DuplicatedRuleName {
+                            name: rule_name,
+                            span: name_span,
+                        },
+                    ));
+                }
+
+                if is_global {
+                    let _r = namespace.rules_indexes.insert(rule_name, None);
+                    self.global_rules.push(rule);
+                } else {
+                    let _r = namespace
+                        .rules_indexes
+                        .insert(rule_name, Some(self.rules.len()));
+                    self.rules.push(rule);
                 }
             }
         }
