@@ -27,6 +27,7 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::range_plus_one)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::single_match_else)]
 
 // TODO: To activate before release
 // #![deny(clippy::cargo)]

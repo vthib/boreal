@@ -763,7 +763,7 @@ fn parse_file(
                 e,
                 mem,
                 None,
-                add_file_to_data.then(|| data),
+                add_file_to_data.then_some(data),
             ))
         }
         FileKind::MachO64 => {
@@ -774,7 +774,7 @@ fn parse_file(
                 e,
                 mem,
                 Some(header.reserved.get(e)),
-                add_file_to_data.then(|| data),
+                add_file_to_data.then_some(data),
             ))
         }
         FileKind::MachOFat32 => parse_fat(mem, data, false),
