@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use boreal::{
     scan_params::{EarlyScanConfiguration, ScanParamsBuilder},
     ScanResult,
@@ -51,6 +53,34 @@ impl Compiler {
             .yara_compiler
             .take()
             .map(|compiler| compiler.add_rules_str_with_namespace(rules, ns).unwrap());
+    }
+
+    pub fn add_file(&mut self, path: &Path) {
+        if let Err(err) = self.compiler.add_rules_file(path) {
+            panic!(
+                "add of file {} failed: {}",
+                path.display(),
+                err.to_short_description("mem", &std::fs::read_to_string(path).unwrap())
+            );
+        }
+        self.yara_compiler = self
+            .yara_compiler
+            .take()
+            .map(|compiler| compiler.add_rules_file(path).unwrap());
+    }
+
+    pub fn add_file_in_namespace(&mut self, path: &Path, ns: &str) {
+        if let Err(err) = self.compiler.add_rules_file_in_namespace(path, ns) {
+            panic!(
+                "add of file {} failed: {}",
+                path.display(),
+                err.to_short_description("mem", &std::fs::read_to_string(path).unwrap())
+            );
+        }
+        self.yara_compiler = self
+            .yara_compiler
+            .take()
+            .map(|compiler| compiler.add_rules_file_with_namespace(path, ns).unwrap());
     }
 
     pub fn check_add_rules_err(mut self, rules: &str, expected_prefix: &str) {
@@ -126,9 +156,10 @@ impl Checker {
     // Check matches against a list of "<namespace>:<rule_name>" strings.
     #[track_caller]
     pub fn check_rule_matches(&self, mem: &[u8], expected_matches: &[&str]) {
-        let expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
+        let mut expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
+        expected.sort_unstable();
         self.check_boreal_inner(ScanParamsBuilder::default(), mem, |res, desc| {
-            let res: Vec<String> = res
+            let mut res: Vec<String> = res
                 .matched_rules
                 .into_iter()
                 .map(|v| {
@@ -139,15 +170,17 @@ impl Checker {
                     }
                 })
                 .collect();
+            res.sort_unstable();
             assert_eq!(res, expected, "test failed for boreal {}", desc);
         });
 
         if let Some(rules) = &self.yara_rules {
             let res = rules.scan_mem(mem, 1).unwrap();
-            let res: Vec<String> = res
+            let mut res: Vec<String> = res
                 .iter()
                 .map(|v| format!("{}:{}", v.namespace, v.identifier))
                 .collect();
+            res.sort_unstable();
             assert_eq!(res, expected, "conformity test failed for libyara");
         }
     }

@@ -206,3 +206,137 @@ rule b2 { condition: tests.constants.two == 2 }
         ],
     );
 }
+
+// Test includes implementation, including wrt namespaces
+#[test]
+// TODO: enable when yara-rust bug is fixed: https://github.com/Hugal31/yara-rust/pull/90
+#[ignore]
+fn test_includes() {
+    // [test_dir]
+    //     root.yar depends on dir1/sub1/b
+    //     root2.yar depends on dir1/sub1/../sub2/c
+    //     [dir1]
+    //         a.yar depends on ../dir2/sub1/d
+    //         [sub1]
+    //           b.yar depends on ../a
+    //         [sub2]
+    //           c.yar depends on ../../dir2/sub1/e
+    //     [dir2]
+    //         d.yar depends on sub2/f
+    //         [sub]
+    //             e.yar depends on f
+    //             f.yar
+    let test_dir = tempfile::TempDir::new().unwrap();
+    let path = test_dir.path();
+    std::fs::create_dir_all(path.join("dir1").join("sub1")).unwrap();
+    std::fs::create_dir_all(path.join("dir1").join("sub2")).unwrap();
+    std::fs::create_dir_all(path.join("dir2").join("sub")).unwrap();
+    std::fs::write(
+        path.join("root.yar"),
+        r#"
+include "dir1/sub1/b.yar"
+rule root {
+    strings:
+         $ = "root"
+    condition: b and all of them
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("root2.yar"),
+        r#"
+include "dir1/sub1/../sub2/c.yar"
+rule root2 {
+    strings:
+        $ = "root2"
+    condition: c and all of them
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("dir1").join("a.yar"),
+        r#"
+include "../dir2/d.yar"
+rule a {
+    strings:
+        $ = "aaaa"
+    condition: d and all of them
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("dir1").join("sub1").join("b.yar"),
+        r#"
+include "../a.yar"
+rule b {
+    strings:
+        $ = "bbbb"
+    condition: a and all of them
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("dir1").join("sub2").join("c.yar"),
+        r#"
+include "../../dir2/sub/e.yar"
+rule c {
+    strings:
+        $ = "bbbb"
+    condition: e and all of them
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("dir2").join("d.yar"),
+        r#"
+include "sub/f.yar"
+rule d {
+    strings:
+        $ = "dddd"
+    condition: f and all of them
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("dir2").join("sub").join("e.yar"),
+        r#"
+include "f.yar"
+rule e {
+    strings:
+        $ = "eeee"
+    condition: f and all of them
+}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("dir2").join("sub").join("f.yar"),
+        r#"
+rule f {
+    strings:
+        $ = "ffff"
+    condition: all of them
+}"#,
+    )
+    .unwrap();
+
+    let mut compiler = Compiler::new();
+    compiler.add_file(&path.join("root.yar"));
+    compiler.add_file_in_namespace(&path.join("root2.yar"), "ns2");
+
+    let checker = compiler.into_checker();
+
+    checker.check_rule_matches(
+        b"root2 aaaa bbbb cccc dddd eeee ffff",
+        &[
+            "default:root",
+            "default:a",
+            "default:b",
+            "default:d",
+            "default:f",
+            "ns2:root2",
+            "ns2:c",
+            "ns2:e",
+            "ns2:f",
+        ],
+    );
+}

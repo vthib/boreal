@@ -1,7 +1,7 @@
 //! Compilation of a parsed expression into an optimized one.
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use codespan_reporting::diagnostic::Diagnostic;
@@ -160,7 +160,7 @@ impl Compiler {
             path: path.to_path_buf(),
             error,
         })?;
-        self.add_rules_str_inner(&contents, namespace)
+        self.add_rules_str_inner(&contents, namespace, Some(path))
     }
 
     /// Add rules to the scanner from a string.
@@ -171,7 +171,7 @@ impl Compiler {
     ///
     /// An error is returned if failing to parse the rules, or on any I/O error on includes.
     pub fn add_rules_str<T: AsRef<str>>(&mut self, rules: T) -> Result<(), AddRuleError> {
-        self.add_rules_str_inner(rules.as_ref(), None)
+        self.add_rules_str_inner(rules.as_ref(), None, None)
     }
 
     /// Add rules to the scanner from a string into a specific namespace.
@@ -184,17 +184,18 @@ impl Compiler {
         rules: T,
         namespace: S,
     ) -> Result<(), AddRuleError> {
-        self.add_rules_str_inner(rules.as_ref(), Some(namespace.as_ref()))
+        self.add_rules_str_inner(rules.as_ref(), Some(namespace.as_ref()), None)
     }
 
     fn add_rules_str_inner(
         &mut self,
         s: &str,
         namespace: Option<&str>,
+        current_filepath: Option<&Path>,
     ) -> Result<(), AddRuleError> {
         let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
         for component in file.components {
-            self.add_component(component, namespace)?;
+            self.add_component(component, namespace, current_filepath)?;
         }
         Ok(())
     }
@@ -203,6 +204,7 @@ impl Compiler {
         &mut self,
         component: parser::YaraFileComponent,
         namespace_name: Option<&str>,
+        current_filepath: Option<&Path>,
     ) -> Result<(), AddRuleError> {
         let namespace = match namespace_name {
             Some(name) => self
@@ -217,7 +219,15 @@ impl Compiler {
 
         match component {
             parser::YaraFileComponent::Include(path) => {
-                self.add_rules_file_inner(Path::new(&path), namespace_name)?;
+                // Resolve the given path relative to the current one
+                let path = match current_filepath {
+                    None => PathBuf::from(path),
+                    Some(current_path) => current_path.parent().unwrap_or(current_path).join(path),
+                };
+                let path = path
+                    .canonicalize()
+                    .map_err(|error| AddRuleError::IOError { path, error })?;
+                self.add_rules_file_inner(&path, namespace_name)?;
             }
             parser::YaraFileComponent::Import(import) => {
                 match self.available_modules.get_mut(&import.name) {
@@ -355,7 +365,7 @@ pub enum AddRuleError {
     /// - On `include` clauses.
     IOError {
         /// The path causing the error.
-        path: std::path::PathBuf,
+        path: PathBuf,
         /// The IO error.
         error: std::io::Error,
     },

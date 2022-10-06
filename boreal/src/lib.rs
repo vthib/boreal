@@ -41,6 +41,8 @@ use const_format as _;
 #[cfg(test)]
 use glob as _;
 #[cfg(test)]
+use tempfile as _;
+#[cfg(test)]
 use walkdir as _;
 #[cfg(test)]
 use yara as _;
