@@ -346,6 +346,11 @@ pub enum Expression {
     /// The value is the index of the rule result in the stored rules result vector.
     Rule(usize),
 
+    /// Dependency on an externally defined symbol.
+    ///
+    /// The value is the index into the external symbols vector stored in the compiled rules.
+    ExternalSymbol(usize),
+
     /// A byte string.
     Bytes(Vec<u8>),
 
@@ -1174,7 +1179,7 @@ fn compile_identifier(
             .ok_or_else(|| CompilationError::InvalidIdentifierUse {
                 span: identifier_span.clone(),
             })
-    // Finally, try to resolve to an existing rule in the namespace.
+    // Then, try to resolve to an existing rule in the namespace.
     } else if let Some(index) = compiler.namespace.rules_indexes.get(&identifier.name) {
         if identifier.operations.is_empty() {
             let expr = match index {
@@ -1189,6 +1194,11 @@ fn compile_identifier(
                 span: identifier_span.clone(),
             })
         }
+    // Finally, try to resolve to an external symbol.
+    } else if let Some((index, value)) =
+        super::external_symbol::get_external_symbol(compiler, &identifier.name)
+    {
+        Ok((Expression::ExternalSymbol(index), value.get_type()))
     } else {
         Err(CompilationError::UnknownIdentifier {
             name: identifier.name,

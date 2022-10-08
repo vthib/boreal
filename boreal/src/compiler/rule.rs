@@ -59,6 +59,9 @@ pub(super) struct RuleCompiler<'a> {
     /// and used to ensure no rules matching those wildcard can be declared anymore
     /// in the namespace.
     pub rule_wildcard_uses: Vec<String>,
+
+    /// List of external symbols defined in the compiler.
+    pub external_symbols: &'a Vec<super::ExternalSymbol>,
 }
 
 /// Helper struct used to track variables being compiled in a rule.
@@ -81,6 +84,7 @@ impl<'a> RuleCompiler<'a> {
     pub(super) fn new(
         rule: &parser::Rule,
         namespace: &'a Namespace,
+        external_symbols: &'a Vec<super::ExternalSymbol>,
     ) -> Result<Self, CompilationError> {
         let mut names_set = HashSet::new();
         let mut variables = Vec::with_capacity(rule.variables.len());
@@ -105,6 +109,7 @@ impl<'a> RuleCompiler<'a> {
             variables,
             bounded_identifiers: HashMap::new(),
             rule_wildcard_uses: Vec::new(),
+            external_symbols,
         })
     }
 
@@ -174,9 +179,10 @@ impl<'a> RuleCompiler<'a> {
 pub(super) fn compile_rule(
     rule: parser::Rule,
     namespace: &mut Namespace,
+    external_symbols: &Vec<super::ExternalSymbol>,
 ) -> Result<Rule, CompilationError> {
     let (condition, wildcards, vars) = {
-        let mut compiler = RuleCompiler::new(&rule, namespace)?;
+        let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols)?;
         let condition = compile_expression(&mut compiler, rule.condition)?;
 
         (condition, compiler.rule_wildcard_uses, compiler.variables)

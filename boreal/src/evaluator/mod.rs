@@ -619,6 +619,8 @@ impl Evaluator<'_, '_> {
             Expression::Module(module_expr) => module::evaluate_expr(self, module_expr)
                 .and_then(module::module_value_to_expr_value),
 
+            Expression::ExternalSymbol(_index) => todo!(),
+
             Expression::Rule(index) => self
                 .previous_rules_results
                 .get(*index)

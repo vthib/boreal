@@ -21,6 +21,8 @@ mod module;
 pub use module::*;
 mod rule;
 pub use rule::*;
+mod external_symbol;
+pub use external_symbol::*;
 
 use crate::Scanner;
 
@@ -46,6 +48,9 @@ pub struct Compiler {
 
     /// List of imported modules, passed to the scanner.
     imported_modules: Vec<Box<dyn crate::module::Module>>,
+
+    /// Externally defined symbols.
+    external_symbols: Vec<ExternalSymbol>,
 }
 
 #[derive(Debug)]
@@ -285,8 +290,8 @@ impl Compiler {
                 let rule_name = rule.name.clone();
                 let is_global = rule.is_global;
                 let name_span = rule.name_span.clone();
-                let rule =
-                    compile_rule(*rule, namespace).map_err(AddRuleError::CompilationError)?;
+                let rule = compile_rule(*rule, namespace, &self.external_symbols)
+                    .map_err(AddRuleError::CompilationError)?;
 
                 // Check then insert, to avoid a double clone on the rule name. Maybe
                 // someday we'll get the raw entry API.
