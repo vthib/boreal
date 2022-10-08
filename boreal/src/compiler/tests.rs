@@ -24,7 +24,12 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
             _ => panic!(),
         })
         .unwrap();
-    let compiler = Compiler::new();
+    let mut compiler = Compiler::new();
+    assert!(compiler.define_symbol("sym_int", 32));
+    assert!(compiler.define_symbol("sym_flt", -2.34));
+    assert!(compiler.define_symbol("sym_bool", true));
+    assert!(compiler.define_symbol("sym_bytes", "keyboard"));
+
     let mut rule_compiler = RuleCompiler::new(
         &rule,
         &compiler.default_namespace,
@@ -246,6 +251,11 @@ fn test_compilation_types() {
     compile_expr("any of them", Type::Boolean);
     compile_expr("any of them in (0..10)", Type::Boolean);
     compile_expr("for all i in (1,2): (true)", Type::Boolean);
+
+    compile_expr("sym_bytes", Type::Bytes);
+    compile_expr("sym_int", Type::Integer);
+    compile_expr("sym_flt", Type::Float);
+    compile_expr("sym_bool", Type::Boolean);
 }
 
 #[test]

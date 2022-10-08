@@ -319,6 +319,36 @@ impl Compiler {
         Ok(())
     }
 
+    /// Define a symbol that can be used in compiled rules.
+    ///
+    /// Any rules compiled after the addition can use the symbol name, which will be replaced
+    /// during scanning by either:
+    /// - a new value provided by the caller when scanning.
+    /// - the default value provided here otherwise.
+    ///
+    /// Returns false if a symbol of the same name is already defined.
+    pub fn define_symbol<S, T>(&mut self, name: S, value: T) -> bool
+    where
+        S: AsRef<str>,
+        T: Into<ExternalValue>,
+    {
+        self.define_symbol_inner(name.as_ref(), value.into())
+    }
+
+    fn define_symbol_inner(&mut self, name: &str, default_value: ExternalValue) -> bool {
+        for sym in &self.external_symbols {
+            if sym.name == name {
+                return false;
+            }
+        }
+
+        self.external_symbols.push(ExternalSymbol {
+            name: name.to_owned(),
+            default_value,
+        });
+        true
+    }
+
     /// Finalize the compiler and generate a [`Scanner`].
     ///
     /// # Errors

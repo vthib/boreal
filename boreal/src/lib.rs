@@ -53,7 +53,7 @@ use yara as _;
 use criterion as _;
 
 mod compiler;
-pub use compiler::{AddRuleError, CompilationError, Compiler};
+pub use compiler::{AddRuleError, CompilationError, Compiler, ExternalValue};
 mod evaluator;
 pub mod module;
 pub mod regex;

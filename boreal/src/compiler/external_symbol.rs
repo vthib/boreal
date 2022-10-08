@@ -1,18 +1,18 @@
 use super::{RuleCompiler, Type};
 
 #[derive(Clone, Debug)]
-pub struct ExternalSymbol {
+pub(crate) struct ExternalSymbol {
     /// Name of the symbol.
     ///
     /// Must be unique across all others external symbols, but can have the same name as other
     /// types of symbols: rule name, modules, etc. See order of symbol resolution.
-    name: String,
+    pub name: String,
 
     /// Default value of the symbol.
     ///
     /// If no value is specified for this symbol during a scan, this value will be used instead.
     /// It is also used to type-check the expression during compilation.
-    default_value: ExternalValue,
+    pub default_value: ExternalValue,
 }
 
 /// A value used for an external symbol.
@@ -50,3 +50,36 @@ pub(super) fn get_external_symbol<'a>(
     }
     None
 }
+
+impl From<i64> for ExternalValue {
+    fn from(v: i64) -> Self {
+        Self::Integer(v)
+    }
+}
+
+impl From<f64> for ExternalValue {
+    fn from(v: f64) -> Self {
+        Self::Float(v)
+    }
+}
+
+impl From<bool> for ExternalValue {
+    fn from(v: bool) -> Self {
+        Self::Boolean(v)
+    }
+}
+
+macro_rules! impl_into_bytes {
+    ($ty:ty) => {
+        impl From<$ty> for ExternalValue {
+            fn from(v: $ty) -> Self {
+                Self::Bytes(v.into())
+            }
+        }
+    };
+}
+
+impl_into_bytes!(Vec<u8>);
+impl_into_bytes!(&[u8]);
+impl_into_bytes!(String);
+impl_into_bytes!(&str);

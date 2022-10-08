@@ -15,6 +15,19 @@ pub struct Compiler {
     yara_compiler: Option<yara::Compiler>,
 }
 
+macro_rules! define_symbol_method {
+    ($name:ident, $ty:ty) => {
+        pub fn $name(&mut self, name: &str, v: $ty, expected_res: bool) {
+            assert_eq!(self.compiler.define_symbol(name, v), expected_res);
+
+            if let Some(compiler) = self.yara_compiler.as_mut() {
+                let res = compiler.define_variable(name, v);
+                assert_eq!(res.is_ok(), expected_res);
+            }
+        }
+    };
+}
+
 impl Compiler {
     pub fn new() -> Self {
         Self::new_inner(true)
@@ -101,6 +114,11 @@ impl Compiler {
             );
         }
     }
+
+    define_symbol_method!(define_symbol_int, i64);
+    define_symbol_method!(define_symbol_float, f64);
+    define_symbol_method!(define_symbol_str, &str);
+    define_symbol_method!(define_symbol_bool, bool);
 
     pub fn into_checker(self) -> Checker {
         Checker {
