@@ -3653,7 +3653,19 @@ fn test_integer_functions() {
     );
 }
 
-// FIXME: add test_include
+#[test]
+fn test_include_files() {
+    check(
+        "include \"tests/assets/libyara/data/baz.yar\" rule t { condition: baz }",
+        b"",
+        true,
+    );
+    check(
+        "include \"tests/assets/libyara/data/foo.yar\" rule t { condition: foo }",
+        b"",
+        true,
+    );
+}
 
 #[test]
 fn test_tags() {
@@ -3667,9 +3679,9 @@ fn test_tags() {
     );
 }
 
-// FIXME add test_process_scan
+// TODO: implement process scanning and add test_process_scan
 
-// FIXME add test_performance_warnings ?
+// TODO add test_performance_warnings ?
 
 #[test]
 fn test_meta() {
