@@ -50,10 +50,18 @@ impl Compiler {
             },
         };
 
+        // From libyara, to make some compat tests pass
+        this.define_symbol_int("var_zero", 0, true);
+        this.define_symbol_int("var_one", 1, true);
+        this.define_symbol_bool("var_true", true, true);
+        this.define_symbol_bool("var_false", false, true);
+
+        // For our own tests
         this.define_symbol_int("sym_int", 1, true);
         this.define_symbol_bool("sym_bool", true, true);
         this.define_symbol_float("sym_float", 1.23, true);
         this.define_symbol_str("sym_str", "rge", true);
+
         this
     }
 

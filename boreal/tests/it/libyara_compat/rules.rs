@@ -24,11 +24,10 @@ fn test_boolean_operators() {
     check("rule test { condition: false }", &[], false);
     check("rule test { condition: true and false }", &[], false);
     check("rule test { condition: false or false }", &[], false);
-    // TODO: implement constants
-    // check("rule test { condition: not var_false }", b"", true);
-    // check("rule test { condition: var_true }", b"", true);
-    // check("rule test { condition: var_false }", b"", false);
-    // check("rule test { condition: not var_true }", b"", false);
+    check("rule test { condition: not var_false }", b"", true);
+    check("rule test { condition: var_true }", b"", true);
+    check("rule test { condition: var_false }", b"", false);
+    check("rule test { condition: not var_true }", b"", false);
 
     check(
         "import \"tests\" rule test { condition: not tests.undefined.i }",
@@ -216,9 +215,8 @@ fn test_arithmetic_operators() {
     check("rule test { condition: 0o100 == 64 }", &[], true);
     check("rule test { condition: 0o755 == 493 }", &[], true);
 
-    // TODO: implement constants
-    // check("rule test { condition: var_one*3 == 3}", b"", true);
-    // check("rule test { condition: var_zero*3 == 0}", b"", true);
+    check("rule test { condition: var_one*3 == 3}", b"", true);
+    check("rule test { condition: var_zero*3 == 0}", b"", true);
 
     check_err(
         "rule test { condition: 9223372036854775808 > 0 }",
