@@ -14,7 +14,7 @@ use std::sync::Arc;
 use crate::regex::Regex;
 use memchr::memmem;
 
-use crate::compiler::{Expression, ForIterator, ForSelection, Rule, VariableIndex};
+use crate::compiler::{Expression, ExternalValue, ForIterator, ForSelection, Rule, VariableIndex};
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 use crate::variable_set::VariableSetMatches;
 
@@ -29,7 +29,7 @@ mod variable;
 pub(crate) use variable::VariableEvaluation;
 
 #[derive(Clone, Debug)]
-enum Value {
+pub(super) enum Value {
     Integer(i64),
     Float(f64),
     Bytes(Vec<u8>),
@@ -63,6 +63,17 @@ impl Value {
     }
 }
 
+impl From<ExternalValue> for Value {
+    fn from(v: ExternalValue) -> Self {
+        match v {
+            ExternalValue::Integer(v) => Value::Integer(v),
+            ExternalValue::Float(v) => Value::Float(v),
+            ExternalValue::Bytes(v) => Value::Bytes(v),
+            ExternalValue::Boolean(v) => Value::Boolean(v),
+        }
+    }
+}
+
 /// Data linked to the scan, shared by all rules.
 #[derive(Debug)]
 pub struct ScanData<'a> {
@@ -78,6 +89,9 @@ pub struct ScanData<'a> {
     //
     // Context used when calling module functions
     module_ctx: ScanContext<'a>,
+
+    // List of values for external symbols.
+    external_symbols: &'a [Value],
 }
 
 impl<'a> ScanData<'a> {
@@ -85,6 +99,7 @@ impl<'a> ScanData<'a> {
         mem: &'a [u8],
         variable_set_matches: VariableSetMatches,
         modules: &[Box<dyn Module>],
+        external_symbols: &'a [Value],
     ) -> Self {
         let mut module_ctx = ScanContext {
             mem,
@@ -106,6 +121,7 @@ impl<'a> ScanData<'a> {
                 .collect(),
             variable_set_matches,
             module_ctx,
+            external_symbols,
         }
     }
 }
@@ -619,7 +635,9 @@ impl Evaluator<'_, '_> {
             Expression::Module(module_expr) => module::evaluate_expr(self, module_expr)
                 .and_then(module::module_value_to_expr_value),
 
-            Expression::ExternalSymbol(_index) => todo!(),
+            Expression::ExternalSymbol(index) => {
+                self.scan_data.external_symbols.get(*index).cloned()
+            }
 
             Expression::Rule(index) => self
                 .previous_rules_results

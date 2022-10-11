@@ -355,7 +355,12 @@ impl Compiler {
     ///
     /// Can fail if generating a set of all rules variables is not possible.
     pub fn into_scanner(self) -> Result<Scanner, CompilationError> {
-        Scanner::new(self.rules, self.global_rules, self.imported_modules)
+        Scanner::new(
+            self.rules,
+            self.global_rules,
+            self.imported_modules,
+            self.external_symbols,
+        )
     }
 }
 

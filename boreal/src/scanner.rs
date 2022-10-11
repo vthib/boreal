@@ -1,10 +1,10 @@
 //! Provides the [`Scanner`] object which provides methods to sca
 //! files or memory on a set of rules.
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    compiler::{CompilationError, Rule},
-    evaluator::{self, ScanData},
+    compiler::{CompilationError, ExternalSymbol, ExternalValue, Rule},
+    evaluator::{self, ScanData, Value},
     module::Module,
     scan_params::{ScanParams, ScanParamsBuilder},
     variable_set::VariableSet,
@@ -13,10 +13,17 @@ use crate::{
 /// Holds a list of rules, and provides methods to run them on files or bytes.
 #[derive(Clone, Debug)]
 pub struct Scanner {
-    // Put all compiled data into an inner struct behind an Arc: this allows cloning the Scanner
-    // cheaply, in order to use it in parallel or modify external variables without impacting
-    // other scans.
+    /// Inner value containing all compiled data.
+    ///
+    /// Put all compiled data into an inner struct behind an Arc: this allows cloning the Scanner
+    /// cheaply, in order to use it in parallel or modify external variables without impacting
+    /// other scans.
     inner: Arc<Inner>,
+
+    /// Default value of external symbols.
+    ///
+    /// Compiled rules uses indexing into this vec to retrieve the symbols values.
+    external_symbols_values: Vec<Value>,
 }
 
 impl Scanner {
@@ -24,6 +31,7 @@ impl Scanner {
         rules: Vec<Rule>,
         global_rules: Vec<Rule>,
         modules: Vec<Box<dyn Module>>,
+        external_symbols: Vec<ExternalSymbol>,
     ) -> Result<Self, CompilationError> {
         let exprs: Vec<_> = global_rules
             .iter()
@@ -33,13 +41,26 @@ impl Scanner {
 
         let variable_set = VariableSet::new(&exprs)?;
 
+        let mut external_symbols_values = Vec::new();
+        let mut external_symbols_map = HashMap::new();
+        for (index, sym) in external_symbols.into_iter().enumerate() {
+            let ExternalSymbol {
+                name,
+                default_value,
+            } = sym;
+            external_symbols_values.push(default_value.into());
+            let _ = external_symbols_map.insert(name, index);
+        }
+
         Ok(Self {
             inner: Arc::new(Inner {
                 rules,
                 global_rules,
                 variable_set,
                 modules,
+                external_symbols_map,
             }),
+            external_symbols_values,
         })
     }
 
@@ -56,7 +77,48 @@ impl Scanner {
     /// Returns a list of rules that matched on the given byte slice.
     #[must_use]
     pub fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
-        self.inner.scan(params)
+        self.inner.scan(params, &self.external_symbols_values)
+    }
+
+    /// Define a value for a symbol defined and used in compiled rules.
+    ///
+    /// This symbol must have been defined when compiling rules using
+    /// [`crate::Compiler::define_symbol`]. The provided value must have the same type as
+    /// the value provided to this function.
+    ///
+    /// # Errors
+    ///
+    /// Fails if a symbol of the given name has never been defined, or if the type of the value
+    /// is invalid.
+    pub fn define_symbol<S, T>(&mut self, name: S, value: T) -> Result<(), DefineSymbolError>
+    where
+        S: AsRef<str>,
+        T: Into<ExternalValue>,
+    {
+        self.define_symbol_inner(name.as_ref(), value.into())
+    }
+
+    fn define_symbol_inner(
+        &mut self,
+        name: &str,
+        value: ExternalValue,
+    ) -> Result<(), DefineSymbolError> {
+        let index = match self.inner.external_symbols_map.get(name) {
+            Some(v) => *v,
+            None => return Err(DefineSymbolError::UnknownName),
+        };
+
+        if let Some(v) = self.external_symbols_values.get_mut(index) {
+            match (v, value) {
+                (Value::Boolean(a), ExternalValue::Boolean(b)) => *a = b,
+                (Value::Integer(a), ExternalValue::Integer(b)) => *a = b,
+                (Value::Float(a), ExternalValue::Float(b)) => *a = b,
+                (Value::Bytes(a), ExternalValue::Bytes(b)) => *a = b,
+                _ => return Err(DefineSymbolError::InvalidType),
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -83,10 +145,17 @@ struct Inner {
 
     /// List of modules used during scanning.
     modules: Vec<Box<dyn Module>>,
+
+    /// Mapping from names to index for external symbols.
+    external_symbols_map: HashMap<String, usize>,
 }
 
 impl Inner {
-    fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
+    fn scan<'scanner>(
+        &'scanner self,
+        params: ScanParams<'scanner>,
+        external_symbols_values: &[Value],
+    ) -> ScanResult<'scanner> {
         let ScanParams {
             mem,
             early_scan,
@@ -108,7 +177,12 @@ impl Inner {
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
-        let scan_data = ScanData::new(mem, variable_set_matches, &self.modules);
+        let scan_data = ScanData::new(
+            mem,
+            variable_set_matches,
+            &self.modules,
+            external_symbols_values,
+        );
 
         // First, check global rules
         let mut set_index_offset = 0;
@@ -245,4 +319,23 @@ pub struct StringMatch {
     /// The matched data.
     // TODO: implement a max bound for this
     pub data: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum DefineSymbolError {
+    /// No symbol with this name exists.
+    UnknownName,
+    /// The defined symbol has a different value type than the provided one.
+    InvalidType,
+}
+
+impl std::error::Error for DefineSymbolError {}
+
+impl std::fmt::Display for DefineSymbolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownName => write!(f, "unknown symbol name"),
+            Self::InvalidType => write!(f, "invalid value type"),
+        }
+    }
 }
