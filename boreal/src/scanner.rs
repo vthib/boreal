@@ -11,8 +11,57 @@ use crate::{
 };
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Scanner {
+    // Put all compiled data into an inner struct behind an Arc: this allows cloning the Scanner
+    // cheaply, in order to use it in parallel or modify external variables without impacting
+    // other scans.
+    inner: Arc<Inner>,
+}
+
+impl Scanner {
+    pub(crate) fn new(
+        rules: Vec<Rule>,
+        global_rules: Vec<Rule>,
+        modules: Vec<Box<dyn Module>>,
+    ) -> Result<Self, CompilationError> {
+        let exprs: Vec<_> = global_rules
+            .iter()
+            .chain(rules.iter())
+            .flat_map(|rule| rule.variables.iter().map(|v| &v.expr))
+            .collect();
+
+        let variable_set = VariableSet::new(&exprs)?;
+
+        Ok(Self {
+            inner: Arc::new(Inner {
+                rules,
+                global_rules,
+                variable_set,
+                modules,
+            }),
+        })
+    }
+
+    /// Scan a byte slice.
+    ///
+    /// Returns a list of rules that matched on the given byte slice.
+    #[must_use]
+    pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> ScanResult<'scanner> {
+        self.scan(ScanParamsBuilder::default().build(mem))
+    }
+
+    /// Do a scan using the provided parameters.
+    ///
+    /// Returns a list of rules that matched on the given byte slice.
+    #[must_use]
+    pub fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
+        self.inner.scan(params)
+    }
+}
+
+#[derive(Debug)]
+struct Inner {
     /// List of compiled rules.
     ///
     /// Order is important, as rules can depend on other rules, and uses indexes into this array
@@ -36,41 +85,8 @@ pub struct Scanner {
     modules: Vec<Box<dyn Module>>,
 }
 
-impl Scanner {
-    pub(crate) fn new(
-        rules: Vec<Rule>,
-        global_rules: Vec<Rule>,
-        modules: Vec<Box<dyn Module>>,
-    ) -> Result<Self, CompilationError> {
-        let exprs: Vec<_> = global_rules
-            .iter()
-            .chain(rules.iter())
-            .flat_map(|rule| rule.variables.iter().map(|v| &v.expr))
-            .collect();
-
-        let variable_set = VariableSet::new(&exprs)?;
-
-        Ok(Self {
-            rules,
-            global_rules,
-            variable_set,
-            modules,
-        })
-    }
-
-    /// Scan a byte slice.
-    ///
-    /// Returns a list of rules that matched on the given byte slice.
-    #[must_use]
-    pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> ScanResult<'scanner> {
-        self.scan(ScanParamsBuilder::default().build(mem))
-    }
-
-    /// Do a scan using the provided parameters.
-    ///
-    /// Returns a list of rules that matched on the given byte slice.
-    #[must_use]
-    pub fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
+impl Inner {
+    fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
         let ScanParams {
             mem,
             early_scan,
