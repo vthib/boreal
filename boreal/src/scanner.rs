@@ -20,6 +20,11 @@ pub struct Scanner {
     /// other scans.
     inner: Arc<Inner>,
 
+    /// Parameters to use during scanning.
+    ///
+    /// See documentation of [`ScanParamsBuilder`] for details on those parameters.
+    scan_params: ScanParams,
+
     /// Default value of external symbols.
     ///
     /// Compiled rules uses indexing into this vec to retrieve the symbols values.
@@ -60,6 +65,7 @@ impl Scanner {
                 modules,
                 external_symbols_map,
             }),
+            scan_params: ScanParamsBuilder::default().build(),
             external_symbols_values,
         })
     }
@@ -69,15 +75,8 @@ impl Scanner {
     /// Returns a list of rules that matched on the given byte slice.
     #[must_use]
     pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> ScanResult<'scanner> {
-        self.scan(ScanParamsBuilder::default().build(mem))
-    }
-
-    /// Do a scan using the provided parameters.
-    ///
-    /// Returns a list of rules that matched on the given byte slice.
-    #[must_use]
-    pub fn scan<'scanner>(&'scanner self, params: ScanParams<'scanner>) -> ScanResult<'scanner> {
-        self.inner.scan(params, &self.external_symbols_values)
+        self.inner
+            .scan(mem, &self.scan_params, &self.external_symbols_values)
     }
 
     /// Define a value for a symbol defined and used in compiled rules.
@@ -120,6 +119,11 @@ impl Scanner {
 
         Ok(())
     }
+
+    /// Set scan parameters on this scanner.
+    pub fn set_scan_params(&mut self, params: ScanParams) {
+        self.scan_params = params;
+    }
 }
 
 #[derive(Debug)]
@@ -153,11 +157,11 @@ struct Inner {
 impl Inner {
     fn scan<'scanner>(
         &'scanner self,
-        params: ScanParams<'scanner>,
+        mem: &[u8],
+        params: &ScanParams,
         external_symbols_values: &[Value],
     ) -> ScanResult<'scanner> {
         let ScanParams {
-            mem,
             early_scan,
             compute_full_matches,
         } = params;
@@ -172,7 +176,7 @@ impl Inner {
         // - evaluate global rules that have no variables first
         // - then scan the set
         // - then evaluate rest of global rules first, then rules
-        let variable_set_matches = self.variable_set.matches(mem, &early_scan);
+        let variable_set_matches = self.variable_set.matches(mem, early_scan);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
@@ -203,7 +207,7 @@ impl Inner {
                     rule,
                     var_evals,
                     mem,
-                    compute_full_matches,
+                    *compute_full_matches,
                 ));
             }
         }
@@ -221,7 +225,7 @@ impl Inner {
                         rule,
                         var_evals,
                         mem,
-                        compute_full_matches,
+                        *compute_full_matches,
                     ));
                 }
                 res

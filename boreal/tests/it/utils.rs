@@ -390,20 +390,29 @@ fn check_boreal_inner<F>(
 {
     // Test with and without the use of the VariableSet optim. This ensures that we test both
     // cases (which can both be used in prod, but depends on the auto configuration).
-    let res = scanner.scan(
-        builder
-            .clone()
-            .early_scan(EarlyScanConfiguration::Disable)
-            .build(mem),
-    );
-    checker(res, "without variable set");
+    {
+        let mut scanner = scanner.clone();
+        scanner.set_scan_params(
+            builder
+                .clone()
+                .early_scan(EarlyScanConfiguration::Disable)
+                .build(),
+        );
+        let res = scanner.scan_mem(mem);
+        checker(res, "without variable set");
+    }
 
-    let res = scanner.scan(
-        builder
-            .early_scan(EarlyScanConfiguration::Enable)
-            .build(mem),
-    );
-    checker(res, "with variable set");
+    {
+        let mut scanner = scanner.clone();
+        scanner.set_scan_params(
+            builder
+                .clone()
+                .early_scan(EarlyScanConfiguration::Enable)
+                .build(),
+        );
+        let res = scanner.scan_mem(mem);
+        checker(res, "with variable set");
+    }
 }
 
 // Parse and compile `rule`, then for each test,

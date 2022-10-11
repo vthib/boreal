@@ -1,9 +1,6 @@
 /// Parameters used to configure a scan.
 #[derive(Clone, Debug)]
-pub struct ScanParams<'a> {
-    /// Bytes on which to run a scan
-    pub(crate) mem: &'a [u8],
-
+pub struct ScanParams {
     /// Configuration for the early scan optimization.
     pub(crate) early_scan: EarlyScanConfiguration,
 
@@ -56,14 +53,13 @@ impl Default for ScanParamsBuilder {
 impl ScanParamsBuilder {
     /// Consume the builder and generate a [`ScanParams`] object usable for scans.
     #[must_use]
-    pub fn build(self, mem: &[u8]) -> ScanParams {
+    pub fn build(self) -> ScanParams {
         let Self {
             early_scan,
             compute_full_matches,
         } = self;
 
         ScanParams {
-            mem,
             early_scan,
             compute_full_matches,
         }
