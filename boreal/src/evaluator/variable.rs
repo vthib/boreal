@@ -55,14 +55,7 @@ impl<'a> VariableEvaluation<'a> {
                 if this.need_full_matches() {
                     this.matches = matches
                         .iter()
-                        .filter_map(|mat| {
-                            let mut mat = mat.clone();
-                            if this.validate_and_update_match(mem, &mut mat) {
-                                Some(mat)
-                            } else {
-                                None
-                            }
-                        })
+                        .filter_map(|mat| this.validate_and_update_match(mem, mat.clone()))
                         .collect();
                 } else {
                     this.matches = matches.to_vec();
@@ -226,7 +219,7 @@ impl<'a> VariableEvaluation<'a> {
     /// Run the variable matcher at the given offset until a match is found.
     fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Match> {
         while offset < mem.len() {
-            let mut mat = match &self.var.matcher {
+            let mat = match &self.var.matcher {
                 VariableMatcher::Regex(regex) => regex.find_at(mem, offset).map(|m| m.range()),
                 VariableMatcher::AhoCorasick(aho) => aho.find(&mem[offset..]).map(|m| Match {
                     start: offset + m.start(),
@@ -234,33 +227,38 @@ impl<'a> VariableEvaluation<'a> {
                 }),
             }?;
 
-            if !self.validate_and_update_match(mem, &mut mat) {
-                // FIXME: this uses the updated match, this should be buggy, write a test and fix
-                // it.
-                offset = mat.start + 1;
-                continue;
+            match self.validate_and_update_match(mem, mat.clone()) {
+                Some(m) => return Some(m),
+                None => {
+                    offset = mat.start + 1;
+                }
             }
-            return Some(mat);
         }
         None
     }
 
-    fn validate_and_update_match(&self, mem: &[u8], mat: &mut Match) -> bool {
-        check_fullword(mat, mem, self.var) && apply_wide_word_boundaries(mat, mem, self.var)
+    fn validate_and_update_match(&self, mem: &[u8], mat: Match) -> Option<Match> {
+        if self.var.is_fullword() && !check_fullword(&mat, mem, self.var) {
+            return None;
+        }
+
+        match self.var.non_wide_regex.as_ref() {
+            Some(regex) => apply_wide_word_boundaries(mat, mem, regex),
+            None => Some(mat),
+        }
     }
 }
 
 /// Check the match respects the word boundaries inside the variable.
-fn apply_wide_word_boundaries(mat: &mut Match, mem: &[u8], var: &Variable) -> bool {
-    let regex = match var.non_wide_regex.as_ref() {
-        Some(v) => v,
-        None => return true,
-    };
-
+fn apply_wide_word_boundaries(
+    mut mat: Match,
+    mem: &[u8],
+    regex: &regex::bytes::Regex,
+) -> Option<Match> {
     // The match can be on a non wide regex, if the variable was both ascii and wide. Make sure
     // the match is wide.
-    if !is_match_wide(mat, mem) {
-        return true;
+    if !is_match_wide(&mat, mem) {
+        return Some(mat);
     }
 
     // Take the previous and next byte, so that word boundaries placed at the beginning or end of
@@ -287,9 +285,9 @@ fn apply_wide_word_boundaries(mat: &mut Match, mem: &[u8], var: &Variable) -> bo
             // Modify the match end. This is needed because the application of word boundary
             // may modify the match. Since we matched on non wide mem though, double the size.
             mat.end = mat.start + 2 * (m.end() - m.start());
-            true
+            Some(mat)
         }
-        _ => false,
+        _ => None,
     }
 }
 
@@ -308,10 +306,6 @@ fn unwide(mem: &[u8]) -> Vec<u8> {
 
 /// Check the match respects a possible fullword modifier for the variable.
 fn check_fullword(mat: &Match, mem: &[u8], var: &Variable) -> bool {
-    if !var.is_fullword() {
-        return true;
-    }
-
     // TODO: We need to know if the match is done on an ascii or wide string to properly check for
     // fullword constraints. This is done in a very ugly way, by going through the match.
     // A better way would be to know which alternation in the match was found.
