@@ -79,7 +79,6 @@ impl From<ExternalValue> for Value {
 pub struct ScanData<'a> {
     mem: &'a [u8],
 
-    // TODO: make this lazy?
     pub module_values: Vec<(&'static str, Arc<ModuleValue>)>,
 
     // List of "no match/has at least one match" results for all variables.

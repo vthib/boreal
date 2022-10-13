@@ -13,7 +13,6 @@ pub fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable
         .read_slice::<pe::ImageDebugDirectory>(nb_directories)
         .ok()?
     {
-        // TODO: handle more debug types
         if debug_dir.typ.get(LE) != pe::IMAGE_DEBUG_TYPE_CODEVIEW {
             return None;
         }

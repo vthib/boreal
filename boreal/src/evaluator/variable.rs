@@ -142,7 +142,6 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable at a given offset
-    // FIXME: this is really bad performance
     pub fn find_at(&mut self, mem: &[u8], offset: usize) -> bool {
         if offset >= mem.len() {
             return false;
@@ -167,7 +166,6 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable in between given offset
-    // FIXME: this is really bad performance
     pub fn find_in(&mut self, mem: &[u8], from: usize, to: usize) -> bool {
         if from >= mem.len() {
             return false;
@@ -181,9 +179,6 @@ impl<'a> VariableEvaluation<'a> {
             }
         }
 
-        // TODO: if would be better to have a method on the matcher to search between
-        // from and to, or even to search with find_at(from), instead of searching from
-        // the start of the mem.
         while let Some(mat) = self.get_next_match(mem) {
             if mat.start > to {
                 return false;

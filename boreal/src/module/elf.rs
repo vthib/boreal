@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-// TODO: add tests on all methods, not relying on libyara compat tests
-
 use object::{
     elf,
     read::elf::{
