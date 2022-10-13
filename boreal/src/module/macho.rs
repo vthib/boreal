@@ -6,7 +6,7 @@ use object::{
         ThreadCommand,
     },
     read::macho::{FatArch, LoadCommandData, MachHeader, Section, Segment},
-    BigEndian, Endian, Endianness, FileKind, U32, U64,
+    BigEndian, Endianness, FileKind, U32, U64,
 };
 
 use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
@@ -1003,9 +1003,9 @@ fn handle_unix_thread(
     }
 }
 
-fn segment_to_map<S: Segment<Endian = E>, E: Copy>(
+fn segment_to_map<S: Segment<Endian = Endianness>>(
     segment: &S,
-    e: E,
+    e: Endianness,
 ) -> HashMap<&'static str, Value> {
     let vmaddr: u64 = segment.vmaddr(e).into();
     let vmsize: u64 = segment.vmsize(e).into();
@@ -1029,10 +1029,34 @@ fn segment_to_map<S: Segment<Endian = E>, E: Copy>(
     .collect()
 }
 
-// TODO: ask object to expose reserved1/2/3 through the trait?
-fn sections32<E: Endian>(
-    segment: &SegmentCommand32<E>,
-    e: E,
+fn sections_to_map<S: Section<Endian = Endianness>>(
+    section: &S,
+    e: Endianness,
+) -> HashMap<&'static str, Value> {
+    let addr: u64 = section.addr(e).into();
+    let size: u64 = section.size(e).into();
+    let segname = section.segment_name().to_vec();
+    let sectname = section.name().to_vec();
+
+    [
+        ("segname", Some(segname.into())),
+        ("sectname", Some(sectname.into())),
+        ("addr", addr.try_into().ok()),
+        ("size", size.try_into().ok()),
+        ("offset", Some(section.offset(e).into())),
+        ("align", Some(section.align(e).into())),
+        ("reloff", Some(section.reloff(e).into())),
+        ("nreloc", Some(section.nreloc(e).into())),
+        ("flags", Some(section.flags(e).into())),
+    ]
+    .into_iter()
+    .filter_map(|(k, v)| v.map(|v| (k, v)))
+    .collect()
+}
+
+fn sections32(
+    segment: &SegmentCommand32<Endianness>,
+    e: Endianness,
     section_data: &[u8],
 ) -> Option<Vec<Value>> {
     Some(
@@ -1041,37 +1065,18 @@ fn sections32<E: Endian>(
             .ok()?
             .iter()
             .map(|section| {
-                let addr: u64 = section.addr(e).into();
-                let size: u64 = section.size(e).into();
-                let segname = section.segment_name().to_vec();
-                let sectname = section.name().to_vec();
-
-                Value::Object(
-                    [
-                        ("segname", Some(segname.into())),
-                        ("sectname", Some(sectname.into())),
-                        ("addr", addr.try_into().ok()),
-                        ("size", size.try_into().ok()),
-                        ("offset", Some(section.offset(e).into())),
-                        ("align", Some(section.align(e).into())),
-                        ("reloff", Some(section.reloff(e).into())),
-                        ("nreloc", Some(section.nreloc(e).into())),
-                        ("flags", Some(section.flags(e).into())),
-                        ("reserved1", Some(section.reserved1.get(e).into())),
-                        ("reserved2", Some(section.reserved2.get(e).into())),
-                    ]
-                    .into_iter()
-                    .filter_map(|(k, v)| v.map(|v| (k, v)))
-                    .collect(),
-                )
+                let mut map = sections_to_map(section, e);
+                let _r = map.insert("reserved1", section.reserved1.get(e).into());
+                let _r = map.insert("reserved2", section.reserved2.get(e).into());
+                Value::Object(map)
             })
             .collect(),
     )
 }
 
-fn sections64<E: Endian>(
-    segment: &SegmentCommand64<E>,
-    e: E,
+fn sections64(
+    segment: &SegmentCommand64<Endianness>,
+    e: Endianness,
     section_data: &[u8],
 ) -> Option<Vec<Value>> {
     Some(
@@ -1080,30 +1085,11 @@ fn sections64<E: Endian>(
             .ok()?
             .iter()
             .map(|section| {
-                let addr: u64 = section.addr(e);
-                let size: u64 = section.size(e);
-                let segname = section.segment_name().to_vec();
-                let sectname = section.name().to_vec();
-
-                Value::Object(
-                    [
-                        ("segname", Some(segname.into())),
-                        ("sectname", Some(sectname.into())),
-                        ("addr", addr.try_into().ok()),
-                        ("size", size.try_into().ok()),
-                        ("offset", Some(section.offset(e).into())),
-                        ("align", Some(section.align(e).into())),
-                        ("reloff", Some(section.reloff(e).into())),
-                        ("nreloc", Some(section.nreloc(e).into())),
-                        ("flags", Some(section.flags(e).into())),
-                        ("reserved1", Some(section.reserved1.get(e).into())),
-                        ("reserved2", Some(section.reserved2.get(e).into())),
-                        ("reserved3", Some(section.reserved3.get(e).into())),
-                    ]
-                    .into_iter()
-                    .filter_map(|(k, v)| v.map(|v| (k, v)))
-                    .collect(),
-                )
+                let mut map = sections_to_map(section, e);
+                let _r = map.insert("reserved1", section.reserved1.get(e).into());
+                let _r = map.insert("reserved2", section.reserved2.get(e).into());
+                let _r = map.insert("reserved3", section.reserved3.get(e).into());
+                Value::Object(map)
             })
             .collect(),
     )
