@@ -96,7 +96,7 @@ fn test_math_mean() {
 #[test]
 fn test_math_serial_correlation() {
     test(r#"math.serial_correlation("A") == -100000"#, b"");
-    // TODO: report bug at libyara
+    // TODO(4.3): https://github.com/VirusTotal/yara/pull/1771
     // test(r#"math.serial_correlation("AC") == -1"#, b"");
     // test(r#"math.serial_correlation("5'%") == -0.5"#, b"");
     // test(

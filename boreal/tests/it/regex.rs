@@ -16,7 +16,7 @@ rule a {{
 #[test]
 fn test_regex_unicode_handling() {
     // Unicode characters are rejected inside a regex.
-    // TODO: this is broken in libyara: see https://github.com/VirusTotal/yara/pull/1770
+    // TODO(4.3): this is broken in libyara: see https://github.com/VirusTotal/yara/pull/1770
     // To re-enable once updated to 4.3
     // check_err(
     //     "rule a { strings: $a = /<é+>/ condition: $a }",

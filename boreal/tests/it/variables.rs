@@ -1006,8 +1006,7 @@ fn test_variable_find_at_invalid() {
     check(&build_rule("$a0 at (#a0-10)"), b"", false);
 
     // Undefined value
-    // TODO: update this when updating to yara 4.3
-    // See https://github.com/VirusTotal/yara/pull/1759
+    // TODO(4.3): See https://github.com/VirusTotal/yara/pull/1759
     check(
         &build_rule("defined ($a0 at tests.integer_array[5])"),
         b"",

@@ -626,7 +626,7 @@ rule a {
         #a in (2..5) == 3
 }"#,
     );
-    // TODO upgrade yara: this raises a FATAL_INTERNAL_ERROR in libyara 4.2, fixed on master
+    // TODO(4.3): this raises a FATAL_INTERNAL_ERROR in libyara 4.2, fixed on master
     checker.check_boreal(b"", false);
     checker.check_boreal(b"  abaabb", true);
     checker.check_boreal(b"  ababab", false);
@@ -1096,7 +1096,7 @@ rule e {
 }
 
 
-// TODO: re-enable this when the none bug in libyara is fixed
+// TODO(4.3): re-enable this when the none bug in libyara is fixed
 // rule f {
 //     condition: none of (g*)
 // }

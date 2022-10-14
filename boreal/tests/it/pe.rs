@@ -195,7 +195,7 @@ pe.image_version.minor == 0 and
  and
     pe.import_details[0].library_name == "KERNEL32.dll" and
     pe.import_details[0].number_of_functions == 21 and
- // TODO: see https://github.com/VirusTotal/yara/pull/1747, need 4.3 release
+ // TODO(4.3): see https://github.com/VirusTotal/yara/pull/1747, need 4.3 release
  //   (
  //       pe.import_details[1].functions[0].name == "__dllonexit" and
  //       pe.import_details[1].functions[1].name == "__getmainargs" and
@@ -390,7 +390,7 @@ pe.checksum == 0 and
     pe.data_directories[15].size == 0 and
     pe.data_directories[15].virtual_address == 0)
  and
-// TODO: yara used wrong namings for those, fix not released yet:
+// TODO(4.3): yara used wrong namings for those, fix not released yet:
 // <https://github.com/VirusTotal/yara/commit/3bb53558367f689d31975aea5f8b563439548d17>
 // (
 //     (
@@ -418,7 +418,7 @@ pe.image_version.minor == 0 and
  and
     pe.import_details[0].library_name == "WS2_32.dll" and
     pe.import_details[0].number_of_functions == 2 and
- // TODO: see https://github.com/VirusTotal/yara/pull/1747, need 4.3 release
+ // TODO(4.3): see https://github.com/VirusTotal/yara/pull/1747, need 4.3 release
  //   (
  //       pe.import_details[1].functions[0].name == "GetCommandLineA" and
  //       pe.import_details[1].functions[1].name == "WriteConsoleW" and
