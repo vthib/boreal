@@ -332,7 +332,7 @@ impl Evaluator<'_, '_> {
                         if m == 0 {
                             None
                         } else {
-                            Some(Value::Integer(n.wrapping_div(m)))
+                            n.checked_div(m).map(Value::Integer)
                         }
                     }
                     (Value::Float(a), Value::Integer(n)) =>
@@ -604,7 +604,10 @@ impl Evaluator<'_, '_> {
                     None => return Some(Value::Boolean(false)),
                 };
 
-                self.evaluate_for_iterator(iterator, selection, body)
+                match self.evaluate_for_iterator(iterator, selection, body) {
+                    Some(v) => Some(v),
+                    None => Some(Value::Boolean(false)),
+                }
             }
 
             Expression::ForRules { selection, set } => {

@@ -17,6 +17,7 @@ mod for_expression;
 mod full;
 mod modules;
 mod namespaces;
+mod undefined;
 mod variables;
 
 // Tests related to modules
