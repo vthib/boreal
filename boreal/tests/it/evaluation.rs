@@ -91,6 +91,23 @@ fn test_eval_div() {
 }
 
 #[test]
+fn test_eval_mod() {
+    check(&build_empty_rule("7 % 4 == 3"), &[], true);
+    check(&build_empty_rule("-7 % 4 == -3"), &[], true);
+
+    // Use some tricks to avoid overflow rejection in libyara on parsing
+    check(&build_rule("1 % (#c0 + 0) == 1"), &[], false);
+    check(&build_rule("-2 % (-0 + #c0) > 0"), &[], false);
+
+    // TODO: Dont actually test this on libyara, it triggers a SIGFPE. Report it upstream
+    check_boreal(
+        &build_rule("(#c0 + -0x7FFFFFFFFFFFFFFF - 1) % -1 > 0"),
+        &[],
+        false,
+    );
+}
+
+#[test]
 fn test_eval_shl() {
     check(&build_empty_rule("15 << 2 == 60"), &[], true);
     check(

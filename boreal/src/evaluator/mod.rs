@@ -352,7 +352,7 @@ impl Evaluator<'_, '_> {
             Expression::Mod(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Integer(left % right))
+                left.checked_rem(right).map(Value::Integer)
             }
 
             Expression::BitwiseXor(left, right) => {
