@@ -209,8 +209,6 @@ rule b2 { condition: tests.constants.two == 2 }
 
 // Test includes implementation, including wrt namespaces
 #[test]
-// TODO: enable when yara-rust bug is fixed: https://github.com/Hugal31/yara-rust/pull/90
-#[ignore]
 fn test_includes() {
     // [test_dir]
     //     root.yar depends on dir1/sub1/b

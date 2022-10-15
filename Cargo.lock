@@ -1193,9 +1193,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "yara"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "572c5f3202756a6363953c6b26ab7a9323f0fd71c265d970fd5e3aa97e5636f4"
+checksum = "be41aadf33e8f2d113308f3418bfe7436b42180949ff43addd2398c374c66df5"
 dependencies = [
  "bitflags",
  "lazy_static",
