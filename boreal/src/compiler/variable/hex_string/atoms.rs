@@ -1,91 +1,170 @@
 use boreal_parser::HexToken;
 
-use crate::compiler::variable::atom::AtomSet;
+use crate::compiler::variable::atom::{Atom, AtomSet};
 
 /// Extract an atom set from a hex string.
 pub fn extract_atoms(hex_string: Vec<HexToken>) -> AtomSet {
+    let atoms = extract_atoms_inner(hex_string);
+    atoms.into_set()
+}
+
+fn extract_atoms_inner(hex_string: Vec<HexToken>) -> HexAtoms {
     let mut atoms = HexAtoms::new();
 
     for token in hex_string {
         match token {
             HexToken::Byte(b) => atoms.add_byte(b),
-            HexToken::Jump(_) => atoms.close(),
+            HexToken::Jump(_) => atoms.rotate(),
             // This could be handled, but it already is optimized when converting a hex string to
             // only literals. So it makes more sense to ignore it here.
-            HexToken::MaskedByte(_, _) => atoms.close(),
+            HexToken::MaskedByte(_, _) => atoms.rotate(),
             HexToken::Alternatives(alts) => atoms.add_alternatives(alts),
         }
     }
 
-    atoms.finish()
+    atoms
 }
 
+#[derive(Debug, Default)]
 struct HexAtoms {
-    // Set of all already extracted atoms.
-    atom_set: AtomSet,
+    set: AtomSet,
 
-    // Set of atoms currently being built.
-    prefixes: Vec<Vec<u8>>,
+    left: Vec<Atom>,
+    right: Vec<Atom>,
 
-    // Buffer of local atom being built.
-    buffer: Vec<u8>,
+    contiguous: bool,
 }
 
 impl HexAtoms {
     fn new() -> Self {
         Self {
-            atom_set: AtomSet::default(),
-            prefixes: Vec::new(),
-            buffer: Vec::new(),
+            set: AtomSet::default(),
+            left: Vec::new(),
+            right: Vec::new(),
+            contiguous: true,
         }
     }
 
-    fn add_byte(&mut self, b: u8) {
-        self.buffer.push(b);
+    fn add_byte(&mut self, byte: u8) {
+        let atoms = if self.contiguous {
+            &mut self.left
+        } else {
+            &mut self.right
+        };
+        if atoms.is_empty() {
+            atoms.push(Vec::new());
+        }
+        for atom in atoms {
+            atom.push(byte);
+        }
     }
 
-    fn close(&mut self) {
-        self.commit_buffer();
-        self.atom_set
-            .add_alternate(std::mem::take(&mut self.prefixes));
+    fn rotate(&mut self) {
+        if self.contiguous {
+            self.contiguous = false;
+        } else if !self.right.is_empty() {
+            self.set.add_atoms(std::mem::take(&mut self.right));
+        }
+    }
+
+    // Merge another possible HexAtoms with the current one (as an alternation).
+    fn concat(&mut self, other: Self) {
+        self.set.add_set(other.set);
+        self.cartesian_product(other.left);
+        if !other.contiguous {
+            self.rotate();
+            self.right = other.right;
+        }
+        self.contiguous = self.contiguous && other.contiguous;
     }
 
     fn add_alternatives(&mut self, alts: Vec<Vec<HexToken>>) {
-        // Don't make the combinatory grow too much
-        if self
-            .prefixes
-            .len()
-            .checked_mul(alts.len())
-            .map_or(false, |v| v > 32)
+        // Then, do the cross product between our prefixes literals and the alternatives
+        if let Some(suffixes) = alts
+            .into_iter()
+            .map(extract_atoms_inner)
+            .reduce(HexAtoms::reduce_alternate)
         {
-            self.close();
+            self.concat(suffixes);
+        }
+    }
+
+    fn into_set(mut self) -> AtomSet {
+        // Close the left & right sets, and keep the best one across the three
+        self.set.add_atoms(self.left);
+        self.set.add_atoms(self.right);
+        self.set
+    }
+
+    fn reduce_alternate(mut self, mut other: Self) -> Self {
+        // FIXME: this does not seem right
+        self.set.add_set(other.set);
+
+        // If other is non contiguous, and a boundary is empty, it means it contains a non
+        // atomicable pattern on the boundary. This makes this boundary non expressable in
+        // alternations, which itself is expressed by an empty Vec.
+        if other.left.is_empty() {
+            self.left = Vec::new();
+        }
+        if !other.contiguous && other.right.is_empty() {
+            self.right = Vec::new();
+        }
+
+        let add = |a: &mut Vec<_>, b| {
+            if !a.is_empty() {
+                a.extend_from_slice(b);
+            }
+        };
+        match (self.contiguous, other.contiguous) {
+            (true, true) => add(&mut self.left, &other.left),
+            (true, false) => {
+                add(&mut self.left, &other.left);
+                add(&mut self.left, &other.right);
+            }
+            (false, true) => {
+                add(&mut self.left, &other.left);
+                add(&mut self.right, &other.left);
+            }
+            (false, false) => {
+                add(&mut self.left, &other.left);
+                add(&mut self.right, &other.right);
+            }
+        };
+
+        self.contiguous = self.contiguous && other.contiguous;
+        self
+    }
+
+    fn cartesian_product(&mut self, suffixes: Vec<Vec<u8>>) {
+        // Suffixes are non expressable with atoms, so we have to rotate.
+        if suffixes.is_empty() {
+            self.rotate();
             return;
         }
 
-        // Then, do the cross product between our prefixes literals and the alternatives
-        let suffixes: Vec<Vec<u8>> = alts
-            .into_iter()
-            .map(extract_atoms)
-            .flat_map(AtomSet::into_literals)
-            .collect();
-        // If of the suffix is empty, it means we did not have a single atom for its branch,
-        // and we thus cannot add the alternatives.
-        if suffixes.iter().any(Vec::is_empty) {
-            self.close();
+        let prefixes = if self.contiguous {
+            &mut self.left
+        } else {
+            &mut self.right
+        };
+
+        if prefixes.is_empty() {
+            *prefixes = suffixes;
+            return;
         }
 
-        self.commit_buffer();
-        self.cartesian_product(&suffixes);
-    }
+        // Don't make the combinatory grow too much
+        if prefixes
+            .len()
+            .checked_mul(suffixes.len())
+            .map_or(false, |v| v > 32)
+        {
+            self.rotate();
+            self.right = suffixes;
+            return;
+        }
 
-    fn finish(mut self) -> AtomSet {
-        self.close();
-        self.atom_set
-    }
-
-    fn cartesian_product(&mut self, suffixes: &[Vec<u8>]) {
-        self.prefixes = self
-            .prefixes
+        *prefixes = prefixes
             .iter()
             .flat_map(|prefix| {
                 suffixes.iter().map(|suffix| {
@@ -97,17 +176,6 @@ impl HexAtoms {
                 })
             })
             .collect();
-    }
-
-    fn commit_buffer(&mut self) {
-        let buffer = std::mem::take(&mut self.buffer);
-        if self.prefixes.is_empty() {
-            self.prefixes.push(buffer);
-        } else {
-            for t in &mut self.prefixes {
-                t.extend(&buffer);
-            }
-        }
     }
 }
 
@@ -143,7 +211,12 @@ mod tests {
         );
 
         // jump or masked bytes should invalidate alternations if one branch does not have a single
-        // byte
+        test("{ AB ( ?? | FF ) CC }", &[b"\xAB"]);
+        test("{ AB ( ?? DD | FF ) CC }", &[b"\xDD\xCC", b"\xFF\xCC"]);
+        test("{ AB ( 11 ?? DD | FF ) CC }", &[b"\xAB\x11", b"\xAB\xFF"]);
+        test("{ AB ( 11 ?? | FF ) CC }", &[b"\xAB\x11", b"\xAB\xFF"]);
+        // TODO: generating just CC would be better
+        test("{ ( 11 ?? | FF ) CC }", &[b"\x11", b"\xFF"]);
         test(
             "{ AB ( 11 | 22 ) 33 ( ?1 | 44 ) }",
             &[b"\xAB\x11\x33", b"\xAB\x22\x33"],
@@ -233,7 +306,7 @@ mod tests {
         // hex strings found in some real rules
         test(
             "{ 00 01 00 01 00 02 ?? ?? 00 02 00 01 00 02 ?? ?? 00 03 00 02 00 04 ?? ?? ?? ?? 00 04 00 02 00 04 ?? ?? }",
-            &[b"\x00\x01\x00\x01\x00\x02"]);
+            &[b"\x00\x02\x00\x01\x00\x02"]);
 
         test(
             "{ c7 0? 00 00 01 00 [4-14] c7 0? 01 00 00 00 }",
@@ -252,32 +325,14 @@ mod tests {
 04 02 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 81 | 41 81 ) ( 3? | 3C 24 | 7D 00 ) \
 02 AA 02 C1 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 8B | 41 8B | 44 8B | 45 8B ) \
 ( 4? | 5? | 6? | 7? | ?4 24 | ?C 24 ) 06 }",
-            &[
-                b"\x02\xAA\x02\xC1\x0F\x85\x8b",
-                b"\x02\xAA\x02\xC1\x0F\x85\x41\x8b",
-                b"\x02\xAA\x02\xC1\x0F\x85\x44\x8b",
-                b"\x02\xAA\x02\xC1\x0F\x85\x45\x8b",
-                b"\x02\xAA\x02\xC1\x75\x8b",
-                b"\x02\xAA\x02\xC1\x75\x41\x8b",
-                b"\x02\xAA\x02\xC1\x75\x44\x8b",
-                b"\x02\xAA\x02\xC1\x75\x45\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x0F\x85\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x0F\x85\x41\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x0F\x85\x44\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x0F\x85\x45\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x75\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x75\x41\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x75\x44\x8b",
-                b"\x3C\x24\x02\xAA\x02\xC1\x75\x45\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x0F\x85\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x0F\x85\x41\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x0F\x85\x44\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x0F\x85\x45\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x75\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x75\x41\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x75\x44\x8b",
-                b"\x7d\x00\x02\xAA\x02\xC1\x75\x45\x8b",
-            ],
+            &[b"\x02\xAA\x02\xC1\x0F\x85", b"\x02\xAA\x02\xC1\x75"],
         );
+
+        // TODO: expanding the masked byte would improve the atoms
+        test(
+            "{ 8B C? [2-3] F6 D? 1A C? [2-3] [2-3] 30 0? ?? 4? }",
+            &[b"\xF6"],
+        );
+        test("{ C6 0? E9 4? 8? 4? 05 [2] 89 4? 01 }", &[b"\xE9"]);
     }
 }

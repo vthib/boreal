@@ -21,18 +21,20 @@ pub struct AtomSet {
 }
 
 impl AtomSet {
-    pub fn add_alternate(&mut self, atoms: Vec<Atom>) {
+    pub fn new(atoms: Vec<Atom>) -> Self {
+        let rank = atoms_rank(&atoms);
+        Self { atoms, rank }
+    }
+
+    pub fn add_atoms(&mut self, atoms: Vec<Atom>) {
+        self.add_set(Self::new(atoms));
+    }
+
+    pub fn add_set(&mut self, other: Self) {
         // this.atoms is one possible set, and the provided atoms are another one.
         // Keep the one with the best rank.
-        if self.is_empty() {
-            self.atoms = atoms;
-            self.rank = atoms_rank(&self.atoms);
-        } else {
-            let new_rank = atoms_rank(&atoms);
-            if new_rank > self.rank {
-                self.atoms = atoms;
-                self.rank = new_rank;
-            }
+        if self.is_empty() || other.rank > self.rank {
+            *self = other;
         }
     }
 
@@ -49,7 +51,7 @@ impl AtomSet {
     }
 }
 
-type Atom = Vec<u8>;
+pub type Atom = Vec<u8>;
 
 /// Retrieve the rank of a set of atoms;
 fn atoms_rank(atoms: &[Atom]) -> u32 {
