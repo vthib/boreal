@@ -3,17 +3,17 @@ use boreal_parser::HexToken;
 use crate::compiler::variable::atom::{Atom, AtomSet};
 
 /// Extract an atom set from a hex string.
-pub fn extract_atoms(hex_string: Vec<HexToken>) -> AtomSet {
+pub fn extract_atoms(hex_string: &[HexToken]) -> AtomSet {
     let atoms = extract_atoms_inner(hex_string);
     atoms.into_set()
 }
 
-fn extract_atoms_inner(hex_string: Vec<HexToken>) -> HexAtoms {
+fn extract_atoms_inner(hex_string: &[HexToken]) -> HexAtoms {
     let mut atoms = HexAtoms::new();
 
     for token in hex_string {
         match token {
-            HexToken::Byte(b) => atoms.add_byte(b),
+            HexToken::Byte(b) => atoms.add_byte(*b),
             HexToken::Jump(_) => atoms.rotate(),
             // This could be handled, but it already is optimized when converting a hex string to
             // only literals. So it makes more sense to ignore it here.
@@ -78,11 +78,11 @@ impl HexAtoms {
         self.contiguous = self.contiguous && other.contiguous;
     }
 
-    fn add_alternatives(&mut self, alts: Vec<Vec<HexToken>>) {
+    fn add_alternatives(&mut self, alts: &[Vec<HexToken>]) {
         // Then, do the cross product between our prefixes literals and the alternatives
         if let Some(suffixes) = alts
-            .into_iter()
-            .map(extract_atoms_inner)
+            .iter()
+            .map(|v| extract_atoms_inner(v))
             .reduce(HexAtoms::reduce_alternate)
         {
             self.concat(suffixes);
@@ -96,7 +96,7 @@ impl HexAtoms {
         self.set
     }
 
-    fn reduce_alternate(mut self, mut other: Self) -> Self {
+    fn reduce_alternate(mut self, other: Self) -> Self {
         // FIXME: this does not seem right
         self.set.add_set(other.set);
 
@@ -190,8 +190,8 @@ mod tests {
         fn test(hex_string: &str, expected_atoms: &[&[u8]]) {
             let hex_string = parse_hex_string(hex_string);
 
-            let atoms = extract_atoms(hex_string);
-            assert_eq!(atoms.into_literals(), expected_atoms);
+            let atoms = extract_atoms(&hex_string);
+            assert_eq!(atoms.get_literals(), expected_atoms);
         }
 
         test("{ AB CD 01 }", &[b"\xab\xcd\x01"]);

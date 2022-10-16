@@ -8,6 +8,7 @@ use super::base64::encode_base64;
 use super::CompilationError;
 
 mod atom;
+use atom::AtomSet;
 mod hex_string;
 mod regex;
 
@@ -20,7 +21,9 @@ pub struct Variable {
     pub name: String,
 
     /// Final expression of the variable.
-    pub expr: VariableExpr,
+    ///
+    /// This is an option so that it can be moved to the variable set optim.
+    pub expr: Option<VariableExpr>,
 
     /// Matcher that can be used to scan for the variable.
     pub matcher: VariableMatcher,
@@ -44,7 +47,13 @@ pub struct Variable {
 #[derive(Debug)]
 pub enum VariableExpr {
     /// regex expression.
-    Regex(String),
+    Regex {
+        /// Complete regex expression.
+        expr: String,
+
+        /// Atom set for the variable.
+        atom_set: AtomSet,
+    },
     /// Set of bytes literal.
     Literals {
         literals: Vec<Vec<u8>>,
@@ -120,7 +129,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
 
     Ok(Variable {
         name,
-        expr,
+        expr: Some(expr),
         matcher,
         non_wide_regex,
         flags,
@@ -129,7 +138,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
 
 fn build_matcher(expr: &VariableExpr) -> Result<VariableMatcher, VariableCompilationError> {
     match expr {
-        VariableExpr::Regex(e) => RegexBuilder::new(e)
+        VariableExpr::Regex { expr, atom_set: _ } => RegexBuilder::new(expr)
             .unicode(false)
             .octal(false)
             .build()

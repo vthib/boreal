@@ -33,21 +33,13 @@ impl AtomSet {
     pub fn add_set(&mut self, other: Self) {
         // this.atoms is one possible set, and the provided atoms are another one.
         // Keep the one with the best rank.
-        if self.is_empty() || other.rank > self.rank {
+        if self.atoms.is_empty() || other.rank > self.rank {
             *self = other;
         }
     }
 
-    pub fn into_literals(self) -> Vec<Vec<u8>> {
-        self.atoms
-    }
-
     pub fn get_literals(&self) -> &[Atom] {
         &self.atoms
-    }
-
-    fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
     }
 }
 

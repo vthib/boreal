@@ -22,8 +22,8 @@ pub(crate) struct VariableSet {
     /// Regex sets for regexes.
     regex_sets: Vec<RegexSet>,
 
-    /// Number of variables in the set.
-    nb_vars: usize,
+    /// Variable expressions.
+    var_exprs: Vec<VariableExpr>,
 
     /// Map from a aho pattern index to a var set index.
     aho_index_to_var_index: Vec<usize>,
@@ -36,19 +36,31 @@ pub(crate) struct VariableSet {
 }
 
 impl VariableSet {
-    pub(crate) fn new(exprs: &[&VariableExpr]) -> Result<Self, CompilationError> {
+    pub(crate) fn new<I: IntoIterator<Item = VariableExpr>>(
+        exprs: I,
+    ) -> Result<Self, CompilationError> {
         let mut lits = Vec::new();
         let mut lits_ci = Vec::new();
         let mut regex_exprs = Vec::new();
         let mut aho_index_to_var_index = Vec::new();
         let mut aho_ci_index_to_var_index = Vec::new();
         let mut regex_sets_index_to_var_index = Vec::new();
+        let var_exprs: Vec<_> = exprs.into_iter().collect();
 
-        for (var_index, expr) in exprs.iter().enumerate() {
-            match expr {
-                VariableExpr::Regex(e) => {
-                    regex_sets_index_to_var_index.push(var_index);
-                    regex_exprs.push(e);
+        for (var_index, expr) in var_exprs.iter().enumerate() {
+            match &expr {
+                VariableExpr::Regex { expr, atom_set } => {
+                    let literals = atom_set.get_literals();
+
+                    // No atoms could be extracted for the regex, so use a classic regex set.
+                    if literals.is_empty() {
+                        regex_sets_index_to_var_index.push(var_index);
+                        regex_exprs.push(expr);
+                    } else {
+                        aho_index_to_var_index
+                            .extend(std::iter::repeat(var_index).take(literals.len()));
+                        lits.extend(literals);
+                    }
                 }
                 VariableExpr::Literals {
                     literals,
@@ -91,7 +103,7 @@ impl VariableSet {
             aho,
             aho_ci,
             regex_sets,
-            nb_vars: exprs.len(),
+            var_exprs,
             aho_index_to_var_index,
             aho_ci_index_to_var_index,
             regex_sets_index_to_var_index,
@@ -105,19 +117,33 @@ impl VariableSet {
             // TODO: find the right size for this
             EarlyScanConfiguration::AutoConfigure if mem.len() < 4096 => None,
             EarlyScanConfiguration::AutoConfigure | EarlyScanConfiguration::Enable => {
-                let mut matches = vec![None; self.nb_vars];
+                let mut matches = vec![None; self.var_exprs.len()];
 
                 for mat in self.aho.find_overlapping_iter(mem) {
                     let var_index = self.aho_index_to_var_index[mat.pattern()];
-                    matches[var_index]
-                        .get_or_insert_with(Vec::new)
-                        .push(mat.start()..mat.end());
+                    // TODO: rework this with a trait implemented by each var
+                    let using_atoms = match &self.var_exprs[var_index] {
+                        VariableExpr::Regex { atom_set, .. } => !atom_set.get_literals().is_empty(),
+                        VariableExpr::Literals { .. } => false,
+                    };
+
+                    if using_atoms {
+                        matches[var_index] = Some(MatchResult::Unknown);
+                    } else {
+                        let m = mat.start()..mat.end();
+                        match &mut matches[var_index] {
+                            Some(MatchResult::Matches(v)) => v.push(m),
+                            _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
+                        };
+                    }
                 }
                 for mat in self.aho_ci.find_overlapping_iter(mem) {
                     let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
-                    matches[var_index]
-                        .get_or_insert_with(Vec::new)
-                        .push(mat.start()..mat.end());
+                    let m = mat.start()..mat.end();
+                    match &mut matches[var_index] {
+                        Some(MatchResult::Matches(v)) => v.push(m),
+                        _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
+                    };
                 }
 
                 let mut offset = 0;
@@ -125,7 +151,7 @@ impl VariableSet {
                     let set_matches = set.matches(mem);
                     for idx in set_matches {
                         let var_index = self.regex_sets_index_to_var_index[offset + idx];
-                        matches[var_index] = Some(Vec::new());
+                        matches[var_index] = Some(MatchResult::Found);
                     }
                     offset += set.len();
                 }
@@ -138,15 +164,19 @@ impl VariableSet {
     }
 }
 
-// Result of a match for a variable.
-// - None means not found
-// - Some(vec![]) means found, but no details on the matches are available
-// - Some(vec![..]) means found and matches details are available.
-type MatchResult = Option<Vec<Range<usize>>>;
+#[derive(Clone, Debug)]
+enum MatchResult {
+    /// Unknown, must scan for the variable on its own.
+    Unknown,
+    /// Found at least one match.
+    Found,
+    /// List of matches.
+    Matches(Vec<Range<usize>>),
+}
 
 #[derive(Debug)]
 pub(crate) struct VariableSetMatches {
-    matches: Option<Vec<MatchResult>>,
+    matches: Option<Vec<Option<MatchResult>>>,
 }
 
 /// Result of a `VariableSet` scan for a given variable.
@@ -168,8 +198,9 @@ impl VariableSetMatches {
             None => SetResult::Unknown,
             Some(vec) => match &vec[index] {
                 None => SetResult::NotFound,
-                Some(v) if v.is_empty() => SetResult::Found,
-                Some(v) => SetResult::Matches(v),
+                Some(MatchResult::Unknown) => SetResult::Unknown,
+                Some(MatchResult::Found) => SetResult::Found,
+                Some(MatchResult::Matches(m)) => SetResult::Matches(m),
             },
         }
     }

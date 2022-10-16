@@ -33,18 +33,18 @@ pub struct Scanner {
 
 impl Scanner {
     pub(crate) fn new(
-        rules: Vec<Rule>,
-        global_rules: Vec<Rule>,
+        mut rules: Vec<Rule>,
+        mut global_rules: Vec<Rule>,
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
     ) -> Result<Self, CompilationError> {
         let exprs: Vec<_> = global_rules
-            .iter()
-            .chain(rules.iter())
-            .flat_map(|rule| rule.variables.iter().map(|v| &v.expr))
+            .iter_mut()
+            .chain(rules.iter_mut())
+            .flat_map(|rule| rule.variables.iter_mut().map(|v| v.expr.take().unwrap()))
             .collect();
 
-        let variable_set = VariableSet::new(&exprs)?;
+        let variable_set = VariableSet::new(exprs)?;
 
         let mut external_symbols_values = Vec::new();
         let mut external_symbols_map = HashMap::new();

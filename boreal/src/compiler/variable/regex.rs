@@ -5,6 +5,7 @@ use regex_syntax::ParserBuilder;
 
 use crate::regex::add_ast_to_string;
 
+use super::atom::AtomSet;
 use super::{VariableCompilationError, VariableExpr};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -67,7 +68,13 @@ pub fn compile_regex(
         expr = format!("(?{}){}", mods, expr);
     }
 
-    Ok((VariableExpr::Regex(expr), non_wide_regex))
+    Ok((
+        VariableExpr::Regex {
+            expr,
+            atom_set: AtomSet::default(),
+        },
+        non_wide_regex,
+    ))
 }
 
 /// Convert a regex expression into a HIR.
