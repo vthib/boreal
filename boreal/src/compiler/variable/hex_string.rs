@@ -7,12 +7,13 @@ use crate::regex::add_ast_to_string;
 
 use super::VariableExpr;
 
+mod atoms;
 mod literals;
 
 pub(super) fn compile_hex_string(hex_string: Vec<HexToken>) -> VariableExpr {
-    if literals::can_use_literals(&hex_string) {
+    if literals::can_use_only_literals(&hex_string) {
         VariableExpr::Literals {
-            literals: literals::hex_string_to_literals(hex_string),
+            literals: literals::hex_string_to_only_literals(hex_string),
             case_insensitive: false,
         }
     } else {

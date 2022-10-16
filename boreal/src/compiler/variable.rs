@@ -7,6 +7,7 @@ use boreal_parser::{VariableFlags, VariableModifiers};
 use super::base64::encode_base64;
 use super::CompilationError;
 
+mod atom;
 mod hex_string;
 mod regex;
 

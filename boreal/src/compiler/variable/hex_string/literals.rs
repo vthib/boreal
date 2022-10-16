@@ -1,7 +1,7 @@
 use boreal_parser::{HexMask, HexToken};
 
-/// Can literals be used to express the hex string
-pub fn can_use_literals(hex_string: &[HexToken]) -> bool {
+/// Can the hex string be expressed using only literals.
+pub fn can_use_only_literals(hex_string: &[HexToken]) -> bool {
     let nb_literals = match count_total_literals(hex_string) {
         Some(v) => v,
         None => return false,
@@ -37,8 +37,8 @@ fn count_total_literals(hex_string: &[HexToken]) -> Option<usize> {
     Some(nb_lits)
 }
 
-/// Convert a hex string into an array of literals.
-pub fn hex_string_to_literals(hex_string: Vec<HexToken>) -> Vec<Vec<u8>> {
+/// Convert a hex string into an array of literals that entirely express it.
+pub fn hex_string_to_only_literals(hex_string: Vec<HexToken>) -> Vec<Vec<u8>> {
     let mut literals = HexLiterals::new();
 
     for token in hex_string {
@@ -77,7 +77,10 @@ impl HexLiterals {
         self.commit_buffer();
 
         // Then, do the cross product between our prefixes literals and the alternatives
-        let suffixes: Vec<Vec<u8>> = alts.into_iter().flat_map(hex_string_to_literals).collect();
+        let suffixes: Vec<Vec<u8>> = alts
+            .into_iter()
+            .flat_map(hex_string_to_only_literals)
+            .collect();
         self.cartesian_product(&suffixes);
     }
 
@@ -136,13 +139,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hex_string_to_literals() {
+    fn test_hex_string_to_only_literals() {
         #[track_caller]
         fn test(hex_string: &str, expected_lits: &[&[u8]]) {
             let hex_string = parse_hex_string(hex_string);
 
             let count = count_total_literals(&hex_string);
-            let lits = hex_string_to_literals(hex_string);
+            let lits = hex_string_to_only_literals(hex_string);
             assert_eq!(lits, expected_lits);
             assert_eq!(lits.len(), count.unwrap());
         }
