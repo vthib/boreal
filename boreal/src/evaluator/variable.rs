@@ -47,10 +47,6 @@ impl<'a> VariableEvaluation<'a> {
                 this.next_offset = None;
                 this
             }
-            SetResult::Found => {
-                this.has_been_found = !this.need_full_matches();
-                this
-            }
             SetResult::Matches(matches) => {
                 if this.need_full_matches() {
                     this.matches = matches

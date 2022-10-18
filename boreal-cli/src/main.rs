@@ -66,12 +66,7 @@ fn main() -> Result<(), std::io::Error> {
             display_diag_and_exit(&args.rules_file, &rules_contents, err.to_diagnostic());
         }
 
-        match compiler.into_scanner() {
-            Ok(v) => v,
-            Err(err) => {
-                display_diag_and_exit(&args.rules_file, &rules_contents, err.to_diagnostic())
-            }
-        }
+        compiler.into_scanner()
     };
 
     let mut walker = WalkDir::new(&args.input).follow_links(!args.no_follow_symlinks);

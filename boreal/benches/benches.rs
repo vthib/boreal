@@ -45,7 +45,7 @@ fn bench_scan_nul_file(c: &mut Criterion) {
             let yara_compiler = yara::Compiler::new().unwrap();
             let yara_compiler = add_rules(path, &mut boreal_compiler, yara_compiler);
 
-            let boreal_scanner = boreal_compiler.into_scanner().unwrap();
+            let boreal_scanner = boreal_compiler.into_scanner();
             let yara_compiled_rules = yara_compiler.compile_rules().unwrap();
 
             let mut group =

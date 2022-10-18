@@ -3,7 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    compiler::{CompilationError, ExternalSymbol, ExternalValue, Rule},
+    compiler::{ExternalSymbol, ExternalValue, Rule},
     evaluator::{self, ScanData, Value},
     module::Module,
     scan_params::{ScanParams, ScanParamsBuilder},
@@ -37,14 +37,14 @@ impl Scanner {
         mut global_rules: Vec<Rule>,
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
-    ) -> Result<Self, CompilationError> {
+    ) -> Self {
         let exprs: Vec<_> = global_rules
             .iter_mut()
             .chain(rules.iter_mut())
             .flat_map(|rule| rule.variables.iter_mut().map(|v| v.expr.take().unwrap()))
             .collect();
 
-        let variable_set = VariableSet::new(exprs)?;
+        let variable_set = VariableSet::new(exprs);
 
         let mut external_symbols_values = Vec::new();
         let mut external_symbols_map = HashMap::new();
@@ -57,7 +57,7 @@ impl Scanner {
             let _ = external_symbols_map.insert(name, index);
         }
 
-        Ok(Self {
+        Self {
             inner: Arc::new(Inner {
                 rules,
                 global_rules,
@@ -67,7 +67,7 @@ impl Scanner {
             }),
             scan_params: ScanParamsBuilder::default().build(),
             external_symbols_values,
-        })
+        }
     }
 
     /// Scan a byte slice.

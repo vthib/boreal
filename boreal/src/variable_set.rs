@@ -2,12 +2,9 @@
 use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
-use regex::bytes::{RegexSet, RegexSetBuilder};
 
-use crate::{
-    compiler::{CompilationError, VariableExpr},
-    scan_params::EarlyScanConfiguration,
-};
+use crate::compiler::VariableExpr;
+use crate::scan_params::EarlyScanConfiguration;
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
@@ -19,8 +16,6 @@ pub(crate) struct VariableSet {
     /// Number of literals in the
     /// Aho Corasick for variables that are literals, and are case insensitive.
     aho_ci: AhoCorasick,
-    /// Regex sets for regexes.
-    regex_sets: Vec<RegexSet>,
 
     /// Variable expressions.
     var_exprs: Vec<VariableExpr>,
@@ -31,31 +26,27 @@ pub(crate) struct VariableSet {
     /// Map from a aho ci pattern index to a var set index.
     aho_ci_index_to_var_index: Vec<usize>,
 
-    /// Map from a regex set index to a var set index.
-    regex_sets_index_to_var_index: Vec<usize>,
+    /// List of indexes for vars that are not part of the aho corasick
+    non_handled_var_indexes: Vec<usize>,
 }
 
 impl VariableSet {
-    pub(crate) fn new<I: IntoIterator<Item = VariableExpr>>(
-        exprs: I,
-    ) -> Result<Self, CompilationError> {
+    pub(crate) fn new<I: IntoIterator<Item = VariableExpr>>(exprs: I) -> Self {
         let mut lits = Vec::new();
         let mut lits_ci = Vec::new();
-        let mut regex_exprs = Vec::new();
         let mut aho_index_to_var_index = Vec::new();
         let mut aho_ci_index_to_var_index = Vec::new();
-        let mut regex_sets_index_to_var_index = Vec::new();
+        let mut non_handled_var_indexes = Vec::new();
         let var_exprs: Vec<_> = exprs.into_iter().collect();
 
         for (var_index, expr) in var_exprs.iter().enumerate() {
             match &expr {
-                VariableExpr::Regex { expr, atom_set } => {
+                VariableExpr::Regex { expr: _, atom_set } => {
                     let literals = atom_set.get_literals();
 
                     // No atoms could be extracted for the regex, so use a classic regex set.
                     if literals.is_empty() {
-                        regex_sets_index_to_var_index.push(var_index);
-                        regex_exprs.push(expr);
+                        non_handled_var_indexes.push(var_index);
                     } else {
                         aho_index_to_var_index
                             .extend(std::iter::repeat(var_index).take(literals.len()));
@@ -85,29 +76,14 @@ impl VariableSet {
             .auto_configure(&lits_ci)
             .build(&lits_ci);
 
-        // Build RegexSet containing max 200 expressions. This is attempting to strike a
-        // balance between grouping expressions in a single mem scan, and not having the set
-        // grow too big or scan too slowly.
-        let regex_sets = regex_exprs
-            .chunks(200)
-            .map(|exprs| {
-                RegexSetBuilder::new(exprs)
-                    .unicode(false)
-                    .octal(false)
-                    .build()
-                    .map_err(|error| CompilationError::VariableSetError(error.to_string()))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(Self {
+        Self {
             aho,
             aho_ci,
-            regex_sets,
             var_exprs,
             aho_index_to_var_index,
             aho_ci_index_to_var_index,
-            regex_sets_index_to_var_index,
-        })
+            non_handled_var_indexes,
+        }
     }
 
     pub(crate) fn matches(&self, mem: &[u8], cfg: &EarlyScanConfiguration) -> VariableSetMatches {
@@ -146,14 +122,8 @@ impl VariableSet {
                     };
                 }
 
-                let mut offset = 0;
-                for set in &self.regex_sets {
-                    let set_matches = set.matches(mem);
-                    for idx in set_matches {
-                        let var_index = self.regex_sets_index_to_var_index[offset + idx];
-                        matches[var_index] = Some(MatchResult::Found);
-                    }
-                    offset += set.len();
+                for i in &self.non_handled_var_indexes {
+                    matches[*i] = Some(MatchResult::Unknown);
                 }
 
                 Some(matches)
@@ -168,8 +138,6 @@ impl VariableSet {
 enum MatchResult {
     /// Unknown, must scan for the variable on its own.
     Unknown,
-    /// Found at least one match.
-    Found,
     /// List of matches.
     Matches(Vec<Range<usize>>),
 }
@@ -186,8 +154,6 @@ pub(crate) enum SetResult<'a> {
     NotFound,
     /// Unknown, must scan for the variable on its own.
     Unknown,
-    /// Found at least one match.
-    Found,
     /// List of matches.
     Matches(&'a [Range<usize>]),
 }
@@ -199,7 +165,6 @@ impl VariableSetMatches {
             Some(vec) => match &vec[index] {
                 None => SetResult::NotFound,
                 Some(MatchResult::Unknown) => SetResult::Unknown,
-                Some(MatchResult::Found) => SetResult::Found,
                 Some(MatchResult::Matches(m)) => SetResult::Matches(m),
             },
         }

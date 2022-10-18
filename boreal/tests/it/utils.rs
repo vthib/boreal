@@ -137,7 +137,7 @@ impl Compiler {
 
     pub fn into_checker(self) -> Checker {
         Checker {
-            scanner: self.compiler.into_scanner().unwrap(),
+            scanner: self.compiler.into_scanner(),
             yara_rules: self.yara_compiler.map(|v| v.compile_rules().unwrap()),
         }
     }
