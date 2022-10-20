@@ -4,7 +4,6 @@ use std::ops::Range;
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
 use crate::compiler::VariableExpr;
-use crate::scan_params::EarlyScanConfiguration;
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
@@ -86,49 +85,39 @@ impl VariableSet {
         }
     }
 
-    pub(crate) fn matches(&self, mem: &[u8], cfg: &EarlyScanConfiguration) -> VariableSetMatches {
-        let matches = match cfg {
-            EarlyScanConfiguration::Disable => None,
-            // For very small mem, it's not worth it to use a regex set.
-            // TODO: find the right size for this
-            EarlyScanConfiguration::AutoConfigure if mem.len() < 4096 => None,
-            EarlyScanConfiguration::AutoConfigure | EarlyScanConfiguration::Enable => {
-                let mut matches = vec![None; self.var_exprs.len()];
+    pub(crate) fn matches(&self, mem: &[u8]) -> VariableSetMatches {
+        let mut matches = vec![None; self.var_exprs.len()];
 
-                for mat in self.aho.find_overlapping_iter(mem) {
-                    let var_index = self.aho_index_to_var_index[mat.pattern()];
-                    // TODO: rework this with a trait implemented by each var
-                    let using_atoms = match &self.var_exprs[var_index] {
-                        VariableExpr::Regex { atom_set, .. } => !atom_set.get_literals().is_empty(),
-                        VariableExpr::Literals { .. } => false,
-                    };
+        for mat in self.aho.find_overlapping_iter(mem) {
+            let var_index = self.aho_index_to_var_index[mat.pattern()];
+            // TODO: rework this with a trait implemented by each var
+            let using_atoms = match &self.var_exprs[var_index] {
+                VariableExpr::Regex { atom_set, .. } => !atom_set.get_literals().is_empty(),
+                VariableExpr::Literals { .. } => false,
+            };
 
-                    if using_atoms {
-                        matches[var_index] = Some(MatchResult::Unknown);
-                    } else {
-                        let m = mat.start()..mat.end();
-                        match &mut matches[var_index] {
-                            Some(MatchResult::Matches(v)) => v.push(m),
-                            _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
-                        };
-                    }
-                }
-                for mat in self.aho_ci.find_overlapping_iter(mem) {
-                    let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
-                    let m = mat.start()..mat.end();
-                    match &mut matches[var_index] {
-                        Some(MatchResult::Matches(v)) => v.push(m),
-                        _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
-                    };
-                }
-
-                for i in &self.non_handled_var_indexes {
-                    matches[*i] = Some(MatchResult::Unknown);
-                }
-
-                Some(matches)
+            if using_atoms {
+                matches[var_index] = Some(MatchResult::Unknown);
+            } else {
+                let m = mat.start()..mat.end();
+                match &mut matches[var_index] {
+                    Some(MatchResult::Matches(v)) => v.push(m),
+                    _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
+                };
             }
-        };
+        }
+        for mat in self.aho_ci.find_overlapping_iter(mem) {
+            let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
+            let m = mat.start()..mat.end();
+            match &mut matches[var_index] {
+                Some(MatchResult::Matches(v)) => v.push(m),
+                _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
+            };
+        }
+
+        for i in &self.non_handled_var_indexes {
+            matches[*i] = Some(MatchResult::Unknown);
+        }
 
         VariableSetMatches { matches }
     }
@@ -144,7 +133,7 @@ enum MatchResult {
 
 #[derive(Debug)]
 pub(crate) struct VariableSetMatches {
-    matches: Option<Vec<Option<MatchResult>>>,
+    matches: Vec<Option<MatchResult>>,
 }
 
 /// Result of a `VariableSet` scan for a given variable.
@@ -160,13 +149,10 @@ pub(crate) enum SetResult<'a> {
 
 impl VariableSetMatches {
     pub(crate) fn matched(&self, index: usize) -> SetResult {
-        match self.matches.as_ref() {
-            None => SetResult::Unknown,
-            Some(vec) => match &vec[index] {
-                None => SetResult::NotFound,
-                Some(MatchResult::Unknown) => SetResult::Unknown,
-                Some(MatchResult::Matches(m)) => SetResult::Matches(m),
-            },
+        match &self.matches[index] {
+            None => SetResult::NotFound,
+            Some(MatchResult::Unknown) => SetResult::Unknown,
+            Some(MatchResult::Matches(m)) => SetResult::Matches(m),
         }
     }
 }

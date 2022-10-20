@@ -162,7 +162,6 @@ impl Inner {
         external_symbols_values: &[Value],
     ) -> ScanResult<'scanner> {
         let ScanParams {
-            early_scan,
             compute_full_matches,
         } = params;
 
@@ -176,7 +175,7 @@ impl Inner {
         // - evaluate global rules that have no variables first
         // - then scan the set
         // - then evaluate rest of global rules first, then rules
-        let variable_set_matches = self.variable_set.matches(mem, early_scan);
+        let variable_set_matches = self.variable_set.matches(mem);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
