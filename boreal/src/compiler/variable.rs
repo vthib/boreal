@@ -1,5 +1,4 @@
 use ::regex::bytes::{Regex, RegexBuilder};
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 use boreal_parser::{VariableFlags, VariableModifiers};
@@ -65,7 +64,7 @@ pub enum VariableExpr {
 #[derive(Debug)]
 pub enum VariableMatcher {
     Regex(Regex),
-    AhoCorasick(Box<AhoCorasick>),
+    None,
 }
 
 impl Variable {
@@ -144,15 +143,11 @@ fn build_matcher(expr: &VariableExpr) -> Result<VariableMatcher, VariableCompila
             .build()
             .map(VariableMatcher::Regex)
             .map_err(|err| VariableCompilationError::Regex(err.to_string())),
-        VariableExpr::Literals {
-            literals,
-            case_insensitive,
-        } => Ok(VariableMatcher::AhoCorasick(Box::new(
-            AhoCorasickBuilder::new()
-                .ascii_case_insensitive(*case_insensitive)
-                .auto_configure(literals)
-                .build(literals),
-        ))),
+        VariableExpr::Literals { .. } => {
+            // The literals will be handled in the variable set, so there is no need to have
+            // a runtime matcher.
+            Ok(VariableMatcher::None)
+        }
     }
 }
 

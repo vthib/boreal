@@ -217,10 +217,12 @@ impl<'a> VariableEvaluation<'a> {
         while offset < mem.len() {
             let mat = match &self.var.matcher {
                 VariableMatcher::Regex(regex) => regex.find_at(mem, offset).map(|m| m.range()),
-                VariableMatcher::AhoCorasick(aho) => aho.find(&mem[offset..]).map(|m| Match {
-                    start: offset + m.start(),
-                    end: offset + m.end(),
-                }),
+                VariableMatcher::None => {
+                    // This variable should have been covered by the variable set, so we should
+                    // not be able to reach this code.
+                    debug_assert!(false);
+                    None
+                }
             }?;
 
             match self.validate_and_update_match(mem, mat.clone()) {
