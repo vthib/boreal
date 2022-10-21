@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use crate::compiler::VariableExpr;
+use crate::compiler::{Variable, VariableExpr};
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
@@ -16,9 +16,6 @@ pub(crate) struct VariableSet {
     /// Aho Corasick for variables that are literals, and are case insensitive.
     aho_ci: AhoCorasick,
 
-    /// Variable expressions.
-    var_exprs: Vec<VariableExpr>,
-
     /// Map from a aho pattern index to a var set index.
     aho_index_to_var_index: Vec<usize>,
 
@@ -30,16 +27,15 @@ pub(crate) struct VariableSet {
 }
 
 impl VariableSet {
-    pub(crate) fn new<I: IntoIterator<Item = VariableExpr>>(exprs: I) -> Self {
+    pub(crate) fn new(variables: &[Variable]) -> Self {
         let mut lits = Vec::new();
         let mut lits_ci = Vec::new();
         let mut aho_index_to_var_index = Vec::new();
         let mut aho_ci_index_to_var_index = Vec::new();
         let mut non_handled_var_indexes = Vec::new();
-        let var_exprs: Vec<_> = exprs.into_iter().collect();
 
-        for (var_index, expr) in var_exprs.iter().enumerate() {
-            match &expr {
+        for (var_index, var) in variables.iter().enumerate() {
+            match &var.expr {
                 VariableExpr::Regex { expr: _, atom_set } => {
                     let literals = atom_set.get_literals();
 
@@ -78,20 +74,19 @@ impl VariableSet {
         Self {
             aho,
             aho_ci,
-            var_exprs,
             aho_index_to_var_index,
             aho_ci_index_to_var_index,
             non_handled_var_indexes,
         }
     }
 
-    pub(crate) fn matches(&self, mem: &[u8]) -> VariableSetMatches {
-        let mut matches = vec![None; self.var_exprs.len()];
+    pub(crate) fn matches(&self, mem: &[u8], variables: &[Variable]) -> VariableSetMatches {
+        let mut matches = vec![None; variables.len()];
 
         for mat in self.aho.find_overlapping_iter(mem) {
             let var_index = self.aho_index_to_var_index[mat.pattern()];
             // TODO: rework this with a trait implemented by each var
-            let using_atoms = match &self.var_exprs[var_index] {
+            let using_atoms = match &variables[var_index].expr {
                 VariableExpr::Regex { atom_set, .. } => !atom_set.get_literals().is_empty(),
                 VariableExpr::Literals { .. } => false,
             };

@@ -35,13 +35,11 @@ impl Scanner {
     pub(crate) fn new(
         rules: Vec<Rule>,
         global_rules: Vec<Rule>,
-        mut variables: Vec<Variable>,
+        variables: Vec<Variable>,
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
     ) -> Self {
-        let exprs = variables.iter_mut().map(|v| v.expr.take().unwrap());
-
-        let variable_set = VariableSet::new(exprs);
+        let variable_set = VariableSet::new(&variables);
 
         let mut external_symbols_values = Vec::new();
         let mut external_symbols_map = HashMap::new();
@@ -178,7 +176,7 @@ impl Inner {
         // - evaluate global rules that have no variables first
         // - then scan the set
         // - then evaluate rest of global rules first, then rules
-        let variable_set_matches = self.variable_set.matches(mem);
+        let variable_set_matches = self.variable_set.matches(mem, &self.variables);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());

@@ -20,9 +20,7 @@ pub struct Variable {
     pub name: String,
 
     /// Final expression of the variable.
-    ///
-    /// This is an option so that it can be moved to the variable set optim.
-    pub expr: Option<VariableExpr>,
+    pub expr: VariableExpr,
 
     /// Matcher that can be used to scan for the variable.
     pub matcher: VariableMatcher,
@@ -128,7 +126,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
 
     Ok(Variable {
         name,
-        expr: Some(expr),
+        expr,
         matcher,
         non_wide_regex,
         flags,
