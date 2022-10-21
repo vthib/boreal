@@ -35,6 +35,9 @@ pub struct Compiler {
     /// List of compiled, global rules.
     global_rules: Vec<Rule>,
 
+    /// List of compiled variables.
+    variables: Vec<Variable>,
+
     /// Default namespace, see [`Namespace`]
     default_namespace: Namespace,
 
@@ -290,7 +293,7 @@ impl Compiler {
                 let rule_name = rule.name.clone();
                 let is_global = rule.is_global;
                 let name_span = rule.name_span.clone();
-                let rule = compile_rule(*rule, namespace, &self.external_symbols)
+                let (rule, vars) = compile_rule(*rule, namespace, &self.external_symbols)
                     .map_err(AddRuleError::CompilationError)?;
 
                 // Check then insert, to avoid a double clone on the rule name. Maybe
@@ -313,6 +316,7 @@ impl Compiler {
                         .insert(rule_name, Some(self.rules.len()));
                     self.rules.push(rule);
                 }
+                self.variables.extend(vars);
             }
         }
 
@@ -359,6 +363,7 @@ impl Compiler {
         Scanner::new(
             self.rules,
             self.global_rules,
+            self.variables,
             self.imported_modules,
             self.external_symbols,
         )

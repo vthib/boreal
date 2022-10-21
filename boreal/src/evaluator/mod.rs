@@ -14,7 +14,9 @@ use std::sync::Arc;
 use crate::regex::Regex;
 use memchr::memmem;
 
-use crate::compiler::{Expression, ExternalValue, ForIterator, ForSelection, Rule, VariableIndex};
+use crate::compiler::{
+    Expression, ExternalValue, ForIterator, ForSelection, Rule, Variable, VariableIndex,
+};
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 use crate::variable_set::VariableSetMatches;
 
@@ -131,18 +133,19 @@ impl<'a> ScanData<'a> {
 /// byte slice, false otherwise.
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
+    variables: &'rule [Variable],
     scan_data: &'scan ScanData,
     set_index_offset: usize,
     previous_rules_results: &'scan [bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
     let mut evaluator = Evaluator {
-        variables: rule
-            .variables
+        variables: variables
             .iter()
             .enumerate()
             .map(|(i, var)| {
                 VariableEvaluation::new(
                     var,
+                    // FIXME: remove this set_index_offset by giving the slice directly
                     &scan_data.variable_set_matches.matched(set_index_offset + i),
                     scan_data.mem,
                 )

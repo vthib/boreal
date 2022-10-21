@@ -3,7 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    compiler::{ExternalSymbol, ExternalValue, Rule},
+    compiler::{ExternalSymbol, ExternalValue, Rule, Variable},
     evaluator::{self, ScanData, Value},
     module::Module,
     scan_params::{ScanParams, ScanParamsBuilder},
@@ -33,16 +33,13 @@ pub struct Scanner {
 
 impl Scanner {
     pub(crate) fn new(
-        mut rules: Vec<Rule>,
-        mut global_rules: Vec<Rule>,
+        rules: Vec<Rule>,
+        global_rules: Vec<Rule>,
+        mut variables: Vec<Variable>,
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
     ) -> Self {
-        let exprs: Vec<_> = global_rules
-            .iter_mut()
-            .chain(rules.iter_mut())
-            .flat_map(|rule| rule.variables.iter_mut().map(|v| v.expr.take().unwrap()))
-            .collect();
+        let exprs = variables.iter_mut().map(|v| v.expr.take().unwrap());
 
         let variable_set = VariableSet::new(exprs);
 
@@ -61,6 +58,7 @@ impl Scanner {
             inner: Arc::new(Inner {
                 rules,
                 global_rules,
+                variables,
                 variable_set,
                 modules,
                 external_symbols_map,
@@ -140,6 +138,11 @@ struct Inner {
     /// evaluated.
     global_rules: Vec<Rule>,
 
+    /// Compiled variables.
+    ///
+    /// Those are stored in the order the rules have been compiled in.
+    variables: Vec<Variable>,
+
     /// Regex set of all variables used in the rules.
     ///
     /// This is used to scan the memory in one go, and find which variables are found. This
@@ -188,11 +191,16 @@ impl Inner {
         );
 
         // First, check global rules
-        let mut set_index_offset = 0;
+        let mut var_index = 0;
         for rule in &self.global_rules {
-            let (res, var_evals) =
-                evaluator::evaluate_rule(rule, &scan_data, set_index_offset, &previous_results);
-            set_index_offset += rule.variables.len();
+            let (res, var_evals) = evaluator::evaluate_rule(
+                rule,
+                &self.variables[var_index..(var_index + rule.nb_variables)],
+                &scan_data,
+                var_index,
+                &previous_results,
+            );
+            var_index += rule.nb_variables;
 
             if !res {
                 matched_rules.clear();
@@ -214,10 +222,15 @@ impl Inner {
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
             let res = {
-                let (res, var_evals) =
-                    evaluator::evaluate_rule(rule, &scan_data, set_index_offset, &previous_results);
+                let (res, var_evals) = evaluator::evaluate_rule(
+                    rule,
+                    &self.variables[var_index..(var_index + rule.nb_variables)],
+                    &scan_data,
+                    var_index,
+                    &previous_results,
+                );
 
-                set_index_offset += rule.variables.len();
+                var_index += rule.nb_variables;
 
                 if res && !rule.is_private {
                     matched_rules.push(build_matched_rule(

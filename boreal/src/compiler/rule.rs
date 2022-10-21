@@ -27,8 +27,8 @@ pub struct Rule {
     /// Metadata associated with the rule.
     pub metadatas: Vec<parser::Metadata>,
 
-    /// Variable associated with the rule
-    pub(crate) variables: Vec<Variable>,
+    /// Number of variables used by the rule.
+    pub(crate) nb_variables: usize,
 
     /// Condition of the rule.
     pub(crate) condition: Expression,
@@ -180,7 +180,7 @@ pub(super) fn compile_rule(
     rule: parser::Rule,
     namespace: &mut Namespace,
     external_symbols: &Vec<super::ExternalSymbol>,
-) -> Result<Rule, CompilationError> {
+) -> Result<(Rule, Vec<Variable>), CompilationError> {
     let (condition, wildcards, vars) = {
         let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols)?;
         let condition = compile_expression(&mut compiler, rule.condition)?;
@@ -213,17 +213,21 @@ pub(super) fn compile_rule(
         }
     }
 
-    Ok(Rule {
-        name: rule.name,
-        namespace: namespace.name.clone(),
-        tags: rule.tags.into_iter().map(|v| v.tag).collect(),
-        metadatas: rule.metadatas,
-        variables: rule
-            .variables
-            .into_iter()
-            .map(compile_variable)
-            .collect::<Result<Vec<_>, _>>()?,
-        condition: condition.expr,
-        is_private: rule.is_private,
-    })
+    let variables = rule
+        .variables
+        .into_iter()
+        .map(compile_variable)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((
+        Rule {
+            name: rule.name,
+            namespace: namespace.name.clone(),
+            tags: rule.tags.into_iter().map(|v| v.tag).collect(),
+            metadatas: rule.metadatas,
+            nb_variables: variables.len(),
+            condition: condition.expr,
+            is_private: rule.is_private,
+        },
+        variables,
+    ))
 }
