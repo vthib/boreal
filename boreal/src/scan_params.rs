@@ -1,37 +1,11 @@
 /// Parameters used to configure a scan.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ScanParams {
     /// Compute full matches on matching rules.
     pub(crate) compute_full_matches: bool,
 }
 
-/// Builder for the [`ScanParams`] object
-#[derive(Clone, Debug)]
-pub struct ScanParamsBuilder {
-    compute_full_matches: bool,
-}
-
-impl Default for ScanParamsBuilder {
-    fn default() -> Self {
-        Self {
-            compute_full_matches: false,
-        }
-    }
-}
-
-impl ScanParamsBuilder {
-    /// Consume the builder and generate a [`ScanParams`] object usable for scans.
-    #[must_use]
-    pub fn build(self) -> ScanParams {
-        let Self {
-            compute_full_matches,
-        } = self;
-
-        ScanParams {
-            compute_full_matches,
-        }
-    }
-
+impl ScanParams {
     /// Compute full matches on matching rules.
     ///
     /// By default, matching rules may not report all of the string matches:

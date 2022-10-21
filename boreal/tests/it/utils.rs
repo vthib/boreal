@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use boreal::{scan_params::ScanParamsBuilder, ScanResult};
+use boreal::scan_params::ScanParams;
+use boreal::ScanResult;
 
 pub struct Checker {
     scanner: boreal::Scanner,
@@ -213,11 +214,7 @@ impl Checker {
         // We need to compute the full matches for this test
         {
             let mut scanner = self.scanner.clone();
-            scanner.set_scan_params(
-                ScanParamsBuilder::default()
-                    .compute_full_matches(true)
-                    .build(),
-            );
+            scanner.set_scan_params(ScanParams::default().compute_full_matches(true));
             let res = scanner.scan_mem(mem);
             let res = get_boreal_full_matches(&res);
             assert_eq!(res, expected, "test failed for boreal");

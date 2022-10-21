@@ -6,7 +6,7 @@ use crate::{
     compiler::{ExternalSymbol, ExternalValue, Rule, Variable},
     evaluator::{self, ScanData, Value},
     module::Module,
-    scan_params::{ScanParams, ScanParamsBuilder},
+    scan_params::ScanParams,
     variable_set::VariableSet,
 };
 
@@ -61,7 +61,7 @@ impl Scanner {
                 modules,
                 external_symbols_map,
             }),
-            scan_params: ScanParamsBuilder::default().build(),
+            scan_params: ScanParams::default(),
             external_symbols_values,
         }
     }
