@@ -267,7 +267,7 @@ fn build_matched_rule<'a>(
         name: &rule.name,
         matches: var_evals
             .into_iter()
-            .filter(|eval| !eval.var.is_private())
+            .filter(|eval| !eval.var.is_private)
             .filter(|eval| !eval.matches.is_empty())
             .map(|eval| StringMatches {
                 name: &eval.var.name,

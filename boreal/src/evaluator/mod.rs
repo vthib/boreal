@@ -147,7 +147,6 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
                     var,
                     // FIXME: remove this set_index_offset by giving the slice directly
                     &scan_data.variable_set_matches.matched(set_index_offset + i),
-                    scan_data.mem,
                 )
             })
             .collect(),

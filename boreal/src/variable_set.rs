@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use crate::compiler::{Variable, VariableExpr};
+use crate::compiler::{AcMatchStatus, Variable};
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
@@ -35,33 +35,16 @@ impl VariableSet {
         let mut non_handled_var_indexes = Vec::new();
 
         for (var_index, var) in variables.iter().enumerate() {
-            match &var.expr {
-                VariableExpr::Regex { expr: _, atom_set } => {
-                    let literals = atom_set.get_literals();
+            let literals = var.matcher.get_literals();
 
-                    // No atoms could be extracted for the regex, so use a classic regex set.
-                    if literals.is_empty() {
-                        non_handled_var_indexes.push(var_index);
-                    } else {
-                        aho_index_to_var_index
-                            .extend(std::iter::repeat(var_index).take(literals.len()));
-                        lits.extend(literals);
-                    }
-                }
-                VariableExpr::Literals {
-                    literals,
-                    case_insensitive,
-                } => {
-                    if *case_insensitive {
-                        aho_ci_index_to_var_index
-                            .extend(std::iter::repeat(var_index).take(literals.len()));
-                        lits_ci.extend(literals);
-                    } else {
-                        aho_index_to_var_index
-                            .extend(std::iter::repeat(var_index).take(literals.len()));
-                        lits.extend(literals);
-                    }
-                }
+            if literals.is_empty() {
+                non_handled_var_indexes.push(var_index);
+            } else if var.matcher.is_case_insensitive() {
+                aho_ci_index_to_var_index.extend(std::iter::repeat(var_index).take(literals.len()));
+                lits_ci.extend(literals);
+            } else {
+                aho_index_to_var_index.extend(std::iter::repeat(var_index).take(literals.len()));
+                lits.extend(literals);
             }
         }
 
@@ -85,28 +68,28 @@ impl VariableSet {
 
         for mat in self.aho.find_overlapping_iter(mem) {
             let var_index = self.aho_index_to_var_index[mat.pattern()];
-            // TODO: rework this with a trait implemented by each var
-            let using_atoms = match &variables[var_index].expr {
-                VariableExpr::Regex { atom_set, .. } => !atom_set.get_literals().is_empty(),
-                VariableExpr::Literals { .. } => false,
-            };
+            let m = mat.start()..mat.end();
 
-            if using_atoms {
-                matches[var_index] = Some(MatchResult::Unknown);
-            } else {
-                let m = mat.start()..mat.end();
-                match &mut matches[var_index] {
+            match &variables[var_index].matcher.check_ac_match(mem, &m) {
+                AcMatchStatus::Valid => match &mut matches[var_index] {
                     Some(MatchResult::Matches(v)) => v.push(m),
                     _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
-                };
-            }
+                },
+                AcMatchStatus::Unknown => matches[var_index] = Some(MatchResult::Unknown),
+                AcMatchStatus::Invalid => (),
+            };
         }
         for mat in self.aho_ci.find_overlapping_iter(mem) {
             let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
             let m = mat.start()..mat.end();
-            match &mut matches[var_index] {
-                Some(MatchResult::Matches(v)) => v.push(m),
-                _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
+
+            match &variables[var_index].matcher.check_ac_match(mem, &m) {
+                AcMatchStatus::Valid => match &mut matches[var_index] {
+                    Some(MatchResult::Matches(v)) => v.push(m),
+                    _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
+                },
+                AcMatchStatus::Unknown => matches[var_index] = Some(MatchResult::Unknown),
+                AcMatchStatus::Invalid => (),
             };
         }
 

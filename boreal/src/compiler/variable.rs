@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use ::regex::bytes::{Regex, RegexBuilder};
 
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
@@ -19,140 +21,93 @@ pub struct Variable {
     /// Anonymous variables are just named "".
     pub name: String,
 
-    /// Final expression of the variable.
-    pub expr: VariableExpr,
+    /// Is the variable marked as private.
+    pub is_private: bool,
 
-    /// Matcher that can be used to scan for the variable.
-    pub matcher: VariableMatcher,
+    /// Matcher impl for the variable
+    pub matcher: Box<dyn Matcher>,
+}
 
-    /// Regex of the non wide version of the regex.
+/// A trait used to match the variable on bytes.
+pub trait Matcher: std::fmt::Debug {
+    /// Get literals to use in the Aho-Corasick early scan.
+    fn get_literals(&self) -> &[Vec<u8>];
+
+    /// Are the literals case insensitive
+    fn is_case_insensitive(&self) -> bool;
+
+    /// Check if a match found by the Aho-Corasick scan is valid.
+    fn check_ac_match(&self, mem: &[u8], mat: &Range<usize>) -> AcMatchStatus;
+
+    /// Find the next match in the given bytes.
     ///
-    /// This is only set for the specific case of a regex variable, with a wide modifier, that
-    /// contains word boundaries.
-    /// In this case, the regex expression cannot be "widened", and this regex is used to post
-    /// check matches.
-    pub non_wide_regex: Option<Regex>,
-
-    /// Flags related to variable modifiers, which are needed during scanning.
-    flags: VariableFlags,
+    /// This is only called if either:
+    ///
+    /// - No literals were returned by [`Self::get_literals`].
+    /// - [`MatchStatus::Unknown`] was returned by [`Self::check_ac_match`].
+    ///
+    /// If either one of those conditions is true, the variable is scanned on its own by calling
+    /// this method.
+    fn find_next_match_at(&self, mem: &[u8], offset: usize) -> Option<Range<usize>>;
 }
 
-/// Final expression of a variable.
-///
-/// This is the final result of the compilation, usable as inputs of scanning utilities, such as
-/// regexes, set regexes or aho-corasick algorithms.
-#[derive(Debug)]
-pub enum VariableExpr {
-    /// regex expression.
-    Regex {
-        /// Complete regex expression.
-        expr: String,
-
-        /// Atom set for the variable.
-        atom_set: AtomSet,
-    },
-    /// Set of bytes literal.
-    Literals {
-        literals: Vec<Vec<u8>>,
-        case_insensitive: bool,
-    },
-}
-
-/// Matcher for a variable.
-#[derive(Debug)]
-pub enum VariableMatcher {
-    Regex(Regex),
-    None,
-}
-
-impl Variable {
-    pub fn is_ascii(&self) -> bool {
-        self.flags.contains(VariableFlags::ASCII)
-    }
-
-    pub fn is_fullword(&self) -> bool {
-        self.flags.contains(VariableFlags::FULLWORD)
-    }
-
-    pub fn is_private(&self) -> bool {
-        self.flags.contains(VariableFlags::PRIVATE)
-    }
-
-    pub fn is_wide(&self) -> bool {
-        self.flags.contains(VariableFlags::WIDE)
-    }
+/// State of an aho-corasick match on a [`Matcher`] literals.
+#[derive(Clone, Debug)]
+pub enum AcMatchStatus {
+    /// The match is valid, and can be saved.
+    Valid,
+    /// The match is invalid and should be discarded.
+    Invalid,
+    /// Unknown status for the match, will need to be confirmed on its own.
+    Unknown,
 }
 
 pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, CompilationError> {
     let VariableDeclaration {
         name,
         value,
-        modifiers,
+        mut modifiers,
         span,
     } = decl;
-    let mut flags = modifiers.flags;
-    if !flags.contains(VariableFlags::WIDE) {
-        flags.insert(VariableFlags::ASCII);
+
+    if !modifiers.flags.contains(VariableFlags::WIDE) {
+        modifiers.flags.insert(VariableFlags::ASCII);
     }
 
-    let mut non_wide_regex = None;
-
-    let expr = match value {
-        VariableDeclarationValue::Bytes(s) => compile_bytes(s, &modifiers),
-        VariableDeclarationValue::Regex(regex) => regex::compile_regex(regex, &modifiers)
-            .map(|(expr, v)| {
-                non_wide_regex = v;
-                expr
-            })
-            .map_err(|error| CompilationError::VariableCompilation {
-                variable_name: name.clone(),
-                span: span.clone(),
-                error,
-            })?,
+    let matcher = match value {
+        VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
+        VariableDeclarationValue::Regex(regex) => regex::compile_regex(regex, &modifiers),
         VariableDeclarationValue::HexString(hex_string) => {
             // Fullword and wide is not compatible with hex strings
-            flags.remove(VariableFlags::FULLWORD);
-            flags.remove(VariableFlags::WIDE);
+            modifiers.flags.remove(VariableFlags::FULLWORD);
+            modifiers.flags.remove(VariableFlags::WIDE);
 
-            hex_string::compile_hex_string(hex_string)
+            hex_string::compile_hex_string(hex_string, modifiers.flags)
         }
-    };
-
-    let matcher = build_matcher(&expr).map_err(|error| CompilationError::VariableCompilation {
+    }
+    .map_err(|error| CompilationError::VariableCompilation {
         variable_name: name.clone(),
-        span,
+        span: span.clone(),
         error,
     })?;
 
     Ok(Variable {
         name,
-        expr,
+        is_private: modifiers.flags.contains(VariableFlags::PRIVATE),
         matcher,
-        non_wide_regex,
-        flags,
     })
 }
 
-fn build_matcher(expr: &VariableExpr) -> Result<VariableMatcher, VariableCompilationError> {
-    match expr {
-        VariableExpr::Regex { expr, atom_set: _ } => RegexBuilder::new(expr)
-            .unicode(false)
-            .octal(false)
-            .build()
-            .map(VariableMatcher::Regex)
-            .map_err(|err| VariableCompilationError::Regex(err.to_string())),
-        VariableExpr::Literals { .. } => {
-            // The literals will be handled in the variable set, so there is no need to have
-            // a runtime matcher.
-            Ok(VariableMatcher::None)
-        }
-    }
+fn compile_regex_expr(expr: &str) -> Result<Regex, VariableCompilationError> {
+    RegexBuilder::new(expr)
+        .unicode(false)
+        .octal(false)
+        .build()
+        .map_err(|err| VariableCompilationError::Regex(err.to_string()))
 }
 
-fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> VariableExpr {
+fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> Box<dyn Matcher> {
     let mut literals = Vec::with_capacity(2);
-
-    let case_insensitive = modifiers.flags.contains(VariableFlags::NOCASE);
 
     if modifiers.flags.contains(VariableFlags::WIDE) {
         if modifiers.flags.contains(VariableFlags::ASCII) {
@@ -175,10 +130,10 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> VariableExpr 
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        return VariableExpr::Literals {
+        return Box::new(LiteralsMatcher {
             literals: new_literals,
-            case_insensitive,
-        };
+            flags: modifiers.flags,
+        });
     }
 
     if modifiers.flags.contains(VariableFlags::BASE64)
@@ -209,10 +164,217 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> VariableExpr 
         }
     }
 
-    VariableExpr::Literals {
+    Box::new(LiteralsMatcher {
         literals,
-        case_insensitive,
+        flags: modifiers.flags,
+    })
+}
+
+/// Matcher on exact literals.
+///
+/// This can only be used if the variable is expressed exactly by those literals. This variable
+/// is matched entirely by the Aho-Corasick scan, and do not need post scanning.
+#[derive(Debug)]
+struct LiteralsMatcher {
+    /// Set of literals that compose the variable.
+    literals: Vec<Vec<u8>>,
+
+    /// Flags related to variable modifiers.
+    flags: VariableFlags,
+}
+
+impl Matcher for LiteralsMatcher {
+    fn get_literals(&self) -> &[Vec<u8>] {
+        &self.literals
     }
+
+    fn is_case_insensitive(&self) -> bool {
+        self.flags.contains(VariableFlags::NOCASE)
+    }
+
+    fn check_ac_match(&self, mem: &[u8], mat: &Range<usize>) -> AcMatchStatus {
+        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, mat, self.flags) {
+            AcMatchStatus::Invalid
+        } else {
+            AcMatchStatus::Valid
+        }
+    }
+
+    fn find_next_match_at(&self, _mem: &[u8], _offset: usize) -> Option<Range<usize>> {
+        // This variable should have been covered by the variable set, so we should
+        // not be able to reach this code.
+        debug_assert!(false);
+        None
+    }
+}
+
+/// Matcher on a variable expressable with a regex.
+///
+/// Literals can be provided to the Aho-Corasick scan to improve performances.
+#[derive(Debug)]
+struct RegexMatcher {
+    /// The regex expressing the variable.
+    regex: Regex,
+
+    /// Atom set containing literals extracted from the regex.
+    atom_set: AtomSet,
+
+    /// Flags related to variable modifiers, which are needed during scanning.
+    flags: VariableFlags,
+
+    /// Regex of the non wide version of the regex.
+    ///
+    /// This is only set for the specific case of a regex variable, with a wide modifier, that
+    /// contains word boundaries.
+    /// In this case, the regex expression cannot be "widened", and this regex is used to post
+    /// check matches.
+    non_wide_regex: Option<Regex>,
+}
+
+impl Matcher for RegexMatcher {
+    fn get_literals(&self) -> &[Vec<u8>] {
+        self.atom_set.get_literals()
+    }
+
+    fn is_case_insensitive(&self) -> bool {
+        false
+    }
+
+    fn check_ac_match(&self, _mem: &[u8], _mat: &Range<usize>) -> AcMatchStatus {
+        AcMatchStatus::Unknown
+    }
+
+    fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Range<usize>> {
+        while offset < mem.len() {
+            let mat = self.regex.find_at(mem, offset).map(|m| m.range())?;
+
+            match self.validate_and_update_match(mem, mat.clone()) {
+                Some(m) => return Some(m),
+                None => {
+                    offset = mat.start + 1;
+                }
+            }
+        }
+        None
+    }
+}
+
+impl RegexMatcher {
+    fn validate_and_update_match(&self, mem: &[u8], mat: Range<usize>) -> Option<Range<usize>> {
+        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, self.flags) {
+            return None;
+        }
+
+        match self.non_wide_regex.as_ref() {
+            Some(regex) => apply_wide_word_boundaries(mat, mem, regex),
+            None => Some(mat),
+        }
+    }
+}
+
+/// Check the match respects a possible fullword modifier for the variable.
+fn check_fullword(mem: &[u8], mat: &Range<usize>, flags: VariableFlags) -> bool {
+    // TODO: We need to know if the match is done on an ascii or wide string to properly check for
+    // fullword constraints. This is done in a very ugly way, by going through the match.
+    // A better way would be to know which alternation in the match was found.
+    let mut match_is_wide = false;
+
+    if flags.contains(VariableFlags::WIDE) {
+        match_is_wide = is_match_wide(mat, mem);
+        if match_is_wide {
+            if mat.start > 1 && mem[mat.start - 1] == b'\0' && is_ascii_alnum(mem[mat.start - 2]) {
+                return false;
+            }
+            if mat.end + 1 < mem.len() && is_ascii_alnum(mem[mat.end]) && mem[mat.end + 1] == b'\0'
+            {
+                return false;
+            }
+        }
+    }
+    if flags.contains(VariableFlags::ASCII) && !match_is_wide {
+        if mat.start > 0 && is_ascii_alnum(mem[mat.start - 1]) {
+            return false;
+        }
+        if mat.end < mem.len() && is_ascii_alnum(mem[mat.end]) {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Check the match respects the word boundaries inside the variable.
+fn apply_wide_word_boundaries(
+    mut mat: Range<usize>,
+    mem: &[u8],
+    regex: &Regex,
+) -> Option<Range<usize>> {
+    // The match can be on a non wide regex, if the variable was both ascii and wide. Make sure
+    // the match is wide.
+    if !is_match_wide(&mat, mem) {
+        return Some(mat);
+    }
+
+    // Take the previous and next byte, so that word boundaries placed at the beginning or end of
+    // the regex can be checked.
+    // Note that we must check that the previous/next byte is "wide" as well, otherwise it is not
+    // valid.
+    let start = if mat.start >= 2 && mem[mat.start - 1] == b'\0' {
+        mat.start - 2
+    } else {
+        mat.start
+    };
+
+    // Remove the wide bytes, and then use the non wide regex to check for word boundaries.
+    // Since when checking word boundaries, we might match more than the initial match (because of
+    // non greedy repetitions bounded by word boundaries), we need to add more data at the end.
+    // How much? We cannot know, but including too much would be too much of a performance tank.
+    // This is arbitrarily capped at 500 for the moment (or until the string is no longer wide)...
+    // TODO bench this
+    let unwiden_mem = unwide(&mem[start..std::cmp::min(mem.len(), mat.end + 500)]);
+
+    let expected_start = if start < mat.start { 1 } else { 0 };
+    match regex.find(&unwiden_mem) {
+        Some(m) if m.start() == expected_start => {
+            // Modify the match end. This is needed because the application of word boundary
+            // may modify the match. Since we matched on non wide mem though, double the size.
+            mat.end = mat.start + 2 * (m.end() - m.start());
+            Some(mat)
+        }
+        _ => None,
+    }
+}
+
+fn unwide(mem: &[u8]) -> Vec<u8> {
+    let mut res = Vec::new();
+
+    for b in mem.chunks_exact(2) {
+        if b[1] != b'\0' {
+            break;
+        }
+        res.push(b[0]);
+    }
+
+    res
+}
+
+// Is a match a wide string or an ascii one
+fn is_match_wide(mat: &Range<usize>, mem: &[u8]) -> bool {
+    if (mat.end - mat.start) % 2 != 0 {
+        return false;
+    }
+    if mat.is_empty() {
+        return true;
+    }
+
+    !mem[(mat.start + 1)..mat.end]
+        .iter()
+        .step_by(2)
+        .any(|c| *c != b'\0')
+}
+
+fn is_ascii_alnum(c: u8) -> bool {
+    (b'0'..=b'9').contains(&c) || (b'A'..=b'Z').contains(&c) || (b'a'..=b'z').contains(&c)
 }
 
 /// Convert an ascii string to a wide string

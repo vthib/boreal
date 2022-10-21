@@ -1,21 +1,24 @@
 use boreal_parser::regex::{
     BracketedClass, BracketedClassItem, ClassKind, Node, RepetitionKind, RepetitionRange,
 };
-use boreal_parser::{HexMask, HexToken};
+use boreal_parser::{HexMask, HexToken, VariableFlags};
 
 use crate::regex::add_ast_to_string;
 
-use super::VariableExpr;
+use super::{LiteralsMatcher, Matcher, RegexMatcher, VariableCompilationError};
 
 mod atoms;
 mod literals;
 
-pub(super) fn compile_hex_string(hex_string: Vec<HexToken>) -> VariableExpr {
+pub(super) fn compile_hex_string(
+    hex_string: Vec<HexToken>,
+    flags: VariableFlags,
+) -> Result<Box<dyn Matcher>, VariableCompilationError> {
     if literals::can_use_only_literals(&hex_string) {
-        VariableExpr::Literals {
+        Ok(Box::new(LiteralsMatcher {
             literals: literals::hex_string_to_only_literals(hex_string),
-            case_insensitive: false,
-        }
+            flags,
+        }))
     } else {
         let atom_set = atoms::extract_atoms(&hex_string);
 
@@ -23,7 +26,13 @@ pub(super) fn compile_hex_string(hex_string: Vec<HexToken>) -> VariableExpr {
         let mut expr = String::new();
         expr.push_str("(?s)");
         add_ast_to_string(ast, &mut expr);
-        VariableExpr::Regex { expr, atom_set }
+
+        Ok(Box::new(RegexMatcher {
+            regex: super::compile_regex_expr(&expr)?,
+            atom_set,
+            flags,
+            non_wide_regex: None,
+        }))
     }
 }
 
