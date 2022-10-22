@@ -122,9 +122,21 @@ impl Scanner {
     ///
     /// Returns a list of rules that matched on the given byte slice.
     #[must_use]
-    pub fn scan_mem<'scanner>(&'scanner self, mem: &'scanner [u8]) -> ScanResult<'scanner> {
+    pub fn scan_mem<'scanner>(&'scanner self, mem: &[u8]) -> ScanResult<'scanner> {
         self.inner
             .scan(mem, &self.scan_params, &self.external_symbols_values)
+    }
+
+    /// Scan a file.
+    ///
+    /// Returns a list of rules that matched the given file.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file at the given path cannot be read.
+    pub fn scan_file<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<ScanResult> {
+        let contents = std::fs::read(path.as_ref())?;
+        Ok(self.scan_mem(&contents))
     }
 
     /// Define a value for a symbol defined and used in compiled rules.

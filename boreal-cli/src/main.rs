@@ -126,8 +126,7 @@ fn main() -> ExitCode {
 }
 
 fn scan_file(scanner: &Scanner, path: &Path, args: &Args) -> std::io::Result<()> {
-    let file_contents = std::fs::read(path)?;
-    let res = scanner.scan_mem(&file_contents);
+    let res = scanner.scan_file(path)?;
 
     if args.print_module_data {
         for (module_name, module_value) in res.module_values {
