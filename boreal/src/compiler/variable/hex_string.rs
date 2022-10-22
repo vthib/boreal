@@ -20,9 +20,8 @@ pub(super) fn compile_hex_string(
             flags,
         }))
     } else {
-        let atom_set = atoms::extract_atoms(&hex_string);
-
         let ast = hex_string_to_ast(hex_string);
+        let atom_set = atoms::extract_atoms(&ast);
         let mut expr = String::new();
         expr.push_str("(?s)");
         add_ast_to_string(ast, &mut expr);

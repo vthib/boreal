@@ -1,28 +1,9 @@
-use boreal_parser::HexToken;
+use boreal_parser::regex::Node;
 
 use crate::compiler::variable::atom::{Atom, AtomSet};
 
-/// Extract an atom set from a hex string.
-pub fn extract_atoms(hex_string: &[HexToken]) -> AtomSet {
-    let atoms = extract_atoms_inner(hex_string);
-    atoms.into_set()
-}
-
-fn extract_atoms_inner(hex_string: &[HexToken]) -> HexAtoms {
-    let mut atoms = HexAtoms::new();
-
-    for token in hex_string {
-        match token {
-            HexToken::Byte(b) => atoms.add_byte(*b),
-            HexToken::Jump(_) => atoms.rotate(),
-            // This could be handled, but it already is optimized when converting a hex string to
-            // only literals. So it makes more sense to ignore it here.
-            HexToken::MaskedByte(_, _) => atoms.rotate(),
-            HexToken::Alternatives(alts) => atoms.add_alternatives(alts),
-        }
-    }
-
-    atoms
+pub fn extract_atoms(node: &Node) -> AtomSet {
+    HexAtoms::from_regex_node(node).into_set()
 }
 
 #[derive(Debug, Default)]
@@ -45,6 +26,28 @@ impl HexAtoms {
         }
     }
 
+    fn from_regex_node(node: &Node) -> Self {
+        let mut this = Self::new();
+        this.add_node(node);
+        this
+    }
+
+    fn add_node(&mut self, node: &Node) {
+        match node {
+            Node::Literal(b) => self.add_byte(*b),
+            Node::Repetition { .. } | Node::Dot | Node::Class(_) => self.rotate(),
+            Node::Empty => (),
+            Node::Assertion(_) => self.clear(),
+            Node::Group(node) => self.add_node(node),
+            Node::Concat(nodes) => {
+                for node in nodes {
+                    self.add_node(node);
+                }
+            }
+            Node::Alternation(nodes) => self.add_alternatives(nodes),
+        }
+    }
+
     fn add_byte(&mut self, byte: u8) {
         let atoms = if self.contiguous {
             &mut self.left
@@ -56,6 +59,14 @@ impl HexAtoms {
         }
         for atom in atoms {
             atom.push(byte);
+        }
+    }
+
+    fn clear(&mut self) {
+        if self.contiguous {
+            self.left.clear();
+        } else {
+            self.right.clear();
         }
     }
 
@@ -78,11 +89,11 @@ impl HexAtoms {
         self.contiguous = self.contiguous && other.contiguous;
     }
 
-    fn add_alternatives(&mut self, alts: &[Vec<HexToken>]) {
+    fn add_alternatives(&mut self, alts: &[Node]) {
         // Then, do the cross product between our prefixes literals and the alternatives
         if let Some(suffixes) = alts
             .iter()
-            .map(|v| extract_atoms_inner(v))
+            .map(HexAtoms::from_regex_node)
             .reduce(HexAtoms::reduce_alternate)
         {
             self.concat(suffixes);
@@ -178,7 +189,6 @@ impl HexAtoms {
             .collect();
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::super::tests::parse_hex_string;
@@ -189,8 +199,9 @@ mod tests {
         #[track_caller]
         fn test(hex_string: &str, expected_atoms: &[&[u8]]) {
             let hex_string = parse_hex_string(hex_string);
+            let ast = super::super::hex_string_to_ast(hex_string);
 
-            let atoms = extract_atoms(&hex_string);
+            let atoms = extract_atoms(&ast);
             assert_eq!(atoms.get_literals(), expected_atoms);
         }
 
