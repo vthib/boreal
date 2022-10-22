@@ -135,7 +135,8 @@ impl HexLiterals {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::parse_hex_string;
+    use crate::compiler::variable::tests::parse_hex_string;
+
     use super::*;
 
     #[test]

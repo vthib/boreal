@@ -7,7 +7,6 @@ use crate::regex::add_ast_to_string;
 
 use super::{LiteralsMatcher, Matcher, RegexMatcher, VariableCompilationError};
 
-mod atoms;
 mod literals;
 
 pub(super) fn compile_hex_string(
@@ -21,7 +20,7 @@ pub(super) fn compile_hex_string(
         }))
     } else {
         let ast = hex_string_to_ast(hex_string);
-        let atom_set = atoms::extract_atoms(&ast);
+        let atom_set = super::atom::extract_atoms(&ast);
         let mut expr = String::new();
         expr.push_str("(?s)");
         add_ast_to_string(ast, &mut expr);
@@ -35,7 +34,7 @@ pub(super) fn compile_hex_string(
     }
 }
 
-fn hex_string_to_ast(hex_string: Vec<HexToken>) -> Node {
+pub(super) fn hex_string_to_ast(hex_string: Vec<HexToken>) -> Node {
     Node::Concat(hex_string.into_iter().map(hex_token_to_ast).collect())
 }
 
@@ -77,27 +76,8 @@ fn hex_token_to_ast(token: HexToken) -> Node {
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests::parse_hex_string;
     use super::*;
-    use boreal_parser::{parse_str, VariableDeclarationValue};
-
-    #[track_caller]
-    pub(super) fn parse_hex_string(hex_string: &str) -> Vec<HexToken> {
-        let rule_str = format!("rule a {{ strings: $a = {} condition: $a }}", hex_string);
-        let mut file = parse_str(&rule_str).unwrap();
-        let mut rule = file
-            .components
-            .pop()
-            .map(|v| match v {
-                boreal_parser::YaraFileComponent::Rule(v) => v,
-                _ => panic!(),
-            })
-            .unwrap();
-        let var = rule.variables.pop().unwrap();
-        match var.value {
-            VariableDeclarationValue::HexString(s) => s,
-            _ => panic!(),
-        }
-    }
 
     #[test]
     fn test_hex_string_to_regex() {

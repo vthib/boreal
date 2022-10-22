@@ -409,3 +409,27 @@ impl std::fmt::Display for VariableCompilationError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use boreal_parser::{parse_str, HexToken, VariableDeclarationValue};
+
+    #[track_caller]
+    pub(super) fn parse_hex_string(hex_string: &str) -> Vec<HexToken> {
+        let rule_str = format!("rule a {{ strings: $a = {} condition: $a }}", hex_string);
+        let mut file = parse_str(&rule_str).unwrap();
+        let mut rule = file
+            .components
+            .pop()
+            .map(|v| match v {
+                boreal_parser::YaraFileComponent::Rule(v) => v,
+                _ => panic!(),
+            })
+            .unwrap();
+        let var = rule.variables.pop().unwrap();
+        match var.value {
+            VariableDeclarationValue::HexString(s) => s,
+            _ => panic!(),
+        }
+    }
+}
