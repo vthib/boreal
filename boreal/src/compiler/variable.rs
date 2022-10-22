@@ -33,11 +33,8 @@ pub trait Matcher: std::fmt::Debug {
     /// Get literals to use in the Aho-Corasick early scan.
     fn get_literals(&self) -> &[Vec<u8>];
 
-    /// Are the literals case insensitive
-    fn is_case_insensitive(&self) -> bool;
-
     /// Check if a match found by the Aho-Corasick scan is valid.
-    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>) -> AcMatchStatus;
+    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, literal_index: usize) -> AcMatchStatus;
 
     /// Find the next match in the given bytes.
     ///
@@ -188,11 +185,13 @@ impl Matcher for LiteralsMatcher {
         &self.literals
     }
 
-    fn is_case_insensitive(&self) -> bool {
-        self.flags.contains(VariableFlags::NOCASE)
-    }
+    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, literal_index: usize) -> AcMatchStatus {
+        if !self.flags.contains(VariableFlags::NOCASE)
+            && self.literals[literal_index] != mem[mat.start..mat.end]
+        {
+            return AcMatchStatus::Invalid;
+        }
 
-    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>) -> AcMatchStatus {
         if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, self.flags) {
             return AcMatchStatus::Invalid;
         }
@@ -238,11 +237,12 @@ impl Matcher for RegexMatcher {
         self.atom_set.get_literals()
     }
 
-    fn is_case_insensitive(&self) -> bool {
-        false
-    }
-
-    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>) -> AcMatchStatus {
+    fn check_ac_match(
+        &self,
+        mem: &[u8],
+        mat: Range<usize>,
+        _literal_index: usize,
+    ) -> AcMatchStatus {
         match self.validators.as_ref() {
             Some((pre, post)) => {
                 if let Some(pre_match) = pre.find(&mem[..mat.end]) {

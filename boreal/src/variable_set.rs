@@ -12,53 +12,56 @@ use crate::compiler::{AcMatchStatus, Variable};
 pub(crate) struct VariableSet {
     /// Aho Corasick for variables that are literals.
     aho: AhoCorasick,
-    /// Number of literals in the
-    /// Aho Corasick for variables that are literals, and are case insensitive.
-    aho_ci: AhoCorasick,
 
-    /// Map from a aho pattern index to a var set index.
-    aho_index_to_var_index: Vec<usize>,
+    /// Map from a aho pattern index to details on the literals.
+    aho_index_to_literal_info: Vec<LiteralInfo>,
 
-    /// Map from a aho ci pattern index to a var set index.
-    aho_ci_index_to_var_index: Vec<usize>,
-
-    /// List of indexes for vars that are not part of the aho corasick
+    /// List of indexes for vars that are not part of the aho corasick.
     non_handled_var_indexes: Vec<usize>,
+}
+
+/// Details on a literal of a variable.
+#[derive(Debug)]
+struct LiteralInfo {
+    /// Index of the variable in the variable array.
+    variable_index: usize,
+
+    /// Index of the literal for the variable.
+    literal_index: usize,
 }
 
 impl VariableSet {
     pub(crate) fn new(variables: &[Variable]) -> Self {
         let mut lits = Vec::new();
-        let mut lits_ci = Vec::new();
-        let mut aho_index_to_var_index = Vec::new();
-        let mut aho_ci_index_to_var_index = Vec::new();
+        let mut aho_index_to_literal_info = Vec::new();
         let mut non_handled_var_indexes = Vec::new();
 
-        for (var_index, var) in variables.iter().enumerate() {
+        for (variable_index, var) in variables.iter().enumerate() {
             let literals = var.matcher.get_literals();
 
             if literals.is_empty() {
-                non_handled_var_indexes.push(var_index);
-            } else if var.matcher.is_case_insensitive() {
-                aho_ci_index_to_var_index.extend(std::iter::repeat(var_index).take(literals.len()));
-                lits_ci.extend(literals);
+                non_handled_var_indexes.push(variable_index);
             } else {
-                aho_index_to_var_index.extend(std::iter::repeat(var_index).take(literals.len()));
+                aho_index_to_literal_info.extend((0..literals.len()).map(|literal_index| {
+                    LiteralInfo {
+                        variable_index,
+                        literal_index,
+                    }
+                }));
                 lits.extend(literals);
             }
         }
 
-        let aho = AhoCorasick::new_auto_configured(&lits);
-        let aho_ci = AhoCorasickBuilder::new()
+        // TODO: Should this AC be case insensitive or not? Redo some benches once other
+        // optimizations are done.
+        let aho = AhoCorasickBuilder::new()
             .ascii_case_insensitive(true)
-            .auto_configure(&lits_ci)
-            .build(&lits_ci);
+            .auto_configure(&lits)
+            .build(&lits);
 
         Self {
             aho,
-            aho_ci,
-            aho_index_to_var_index,
-            aho_ci_index_to_var_index,
+            aho_index_to_literal_info,
             non_handled_var_indexes,
         }
     }
@@ -67,28 +70,21 @@ impl VariableSet {
         let mut matches = vec![None; variables.len()];
 
         for mat in self.aho.find_overlapping_iter(mem) {
-            let var_index = self.aho_index_to_var_index[mat.pattern()];
+            let LiteralInfo {
+                variable_index,
+                literal_index,
+            } = self.aho_index_to_literal_info[mat.pattern()];
             let m = mat.start()..mat.end();
 
-            match variables[var_index].matcher.check_ac_match(mem, m) {
-                AcMatchStatus::Valid(m) => match &mut matches[var_index] {
+            match variables[variable_index]
+                .matcher
+                .check_ac_match(mem, m, literal_index)
+            {
+                AcMatchStatus::Valid(m) => match &mut matches[variable_index] {
                     Some(MatchResult::Matches(v)) => v.push(m),
-                    _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
+                    _ => matches[variable_index] = Some(MatchResult::Matches(vec![m])),
                 },
-                AcMatchStatus::Unknown => matches[var_index] = Some(MatchResult::Unknown),
-                AcMatchStatus::Invalid => (),
-            };
-        }
-        for mat in self.aho_ci.find_overlapping_iter(mem) {
-            let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
-            let m = mat.start()..mat.end();
-
-            match variables[var_index].matcher.check_ac_match(mem, m) {
-                AcMatchStatus::Valid(m) => match &mut matches[var_index] {
-                    Some(MatchResult::Matches(v)) => v.push(m),
-                    _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
-                },
-                AcMatchStatus::Unknown => matches[var_index] = Some(MatchResult::Unknown),
+                AcMatchStatus::Unknown => matches[variable_index] = Some(MatchResult::Unknown),
                 AcMatchStatus::Invalid => (),
             };
         }
