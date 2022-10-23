@@ -20,11 +20,11 @@ impl Regex {
     /// # Errors
     ///
     /// Will return `err` if the regex is malformed.
-    pub fn new(ast: Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
+    pub fn new(ast: &Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
         Self::new_inner(ast, case_insensitive, dot_all)
     }
 
-    fn new_inner(ast: Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
+    fn new_inner(ast: &Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
         let mut expr = String::new();
         add_ast_to_string(ast, &mut expr);
 
@@ -45,15 +45,15 @@ impl Regex {
 }
 
 /// Convert a yara regex AST into a rust regex expression.
-pub(crate) fn add_ast_to_string(ast: Node, out: &mut String) {
+pub(crate) fn add_ast_to_string(ast: &Node, out: &mut String) {
     // TODO avoid recursion here.
     push_ast(ast, out);
 }
 
-fn push_ast(node: Node, out: &mut String) {
+fn push_ast(node: &Node, out: &mut String) {
     match node {
         Node::Alternation(nodes) => {
-            for (i, n) in nodes.into_iter().enumerate() {
+            for (i, n) in nodes.iter().enumerate() {
                 if i != 0 {
                     out.push('|');
                 }
@@ -64,7 +64,7 @@ fn push_ast(node: Node, out: &mut String) {
         Node::Assertion(AssertionKind::EndLine) => out.push('$'),
         Node::Assertion(AssertionKind::WordBoundary) => out.push_str(r"\b"),
         Node::Assertion(AssertionKind::NonWordBoundary) => out.push_str(r"\B"),
-        Node::Class(ClassKind::Perl(p)) => push_perl_class(&p, out),
+        Node::Class(ClassKind::Perl(p)) => push_perl_class(p, out),
         Node::Class(ClassKind::Bracketed(c)) => push_bracketed_class(c, out),
         Node::Concat(nodes) => {
             for n in nodes {
@@ -73,14 +73,14 @@ fn push_ast(node: Node, out: &mut String) {
         }
         Node::Dot => out.push('.'),
         Node::Empty => (),
-        Node::Literal(b) => push_literal(b, out),
+        Node::Literal(b) => push_literal(*b, out),
         Node::Group(n) => {
             out.push('(');
-            push_ast(*n, out);
+            push_ast(n, out);
             out.push(')');
         }
         Node::Repetition { node, kind, greedy } => {
-            push_ast(*node, out);
+            push_ast(node, out);
             match kind {
                 RepetitionKind::ZeroOrOne => out.push('?'),
                 RepetitionKind::ZeroOrMore => out.push('*'),
@@ -142,19 +142,19 @@ fn push_perl_class(cls: &PerlClass, out: &mut String) {
     }
 }
 
-fn push_bracketed_class(cls: BracketedClass, out: &mut String) {
+fn push_bracketed_class(cls: &BracketedClass, out: &mut String) {
     out.push('[');
     if cls.negated {
         out.push('^');
     }
-    for item in cls.items {
+    for item in &cls.items {
         match item {
-            BracketedClassItem::Perl(p) => push_perl_class(&p, out),
-            BracketedClassItem::Literal(b) => push_literal(b, out),
+            BracketedClassItem::Perl(p) => push_perl_class(p, out),
+            BracketedClassItem::Literal(b) => push_literal(*b, out),
             BracketedClassItem::Range(a, b) => {
-                push_literal(a, out);
+                push_literal(*a, out);
                 out.push('-');
-                push_literal(b, out);
+                push_literal(*b, out);
             }
         }
     }
@@ -204,7 +204,7 @@ mod tests {
             };
             let ast = regex.ast;
             let mut res = String::new();
-            add_ast_to_string(ast, &mut res);
+            add_ast_to_string(&ast, &mut res);
             assert_eq!(&res, expected_res.unwrap_or(expr));
         }
 

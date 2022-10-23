@@ -26,7 +26,7 @@ pub fn compile_regex(
     } = regex;
 
     let mut expr = String::new();
-    add_ast_to_string(ast, &mut expr);
+    add_ast_to_string(&ast, &mut expr);
 
     if modifiers.flags.contains(VariableFlags::NOCASE) {
         case_insensitive = true;

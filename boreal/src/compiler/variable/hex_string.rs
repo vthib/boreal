@@ -23,7 +23,7 @@ pub(super) fn compile_hex_string(
         let atom_set = super::atom::extract_atoms(&ast);
         let mut expr = String::new();
         expr.push_str("(?s)");
-        add_ast_to_string(ast, &mut expr);
+        add_ast_to_string(&ast, &mut expr);
 
         Ok(Box::new(RegexMatcher {
             regex: super::compile_regex_expr(&expr)?,
@@ -87,7 +87,7 @@ mod tests {
 
             let ast = hex_string_to_ast(hex_string);
             let mut regex = String::new();
-            add_ast_to_string(ast, &mut regex);
+            add_ast_to_string(&ast, &mut regex);
             assert_eq!(regex, expected_regex);
         }
 
