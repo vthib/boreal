@@ -70,8 +70,8 @@ impl VariableSet {
             let var_index = self.aho_index_to_var_index[mat.pattern()];
             let m = mat.start()..mat.end();
 
-            match &variables[var_index].matcher.check_ac_match(mem, &m) {
-                AcMatchStatus::Valid => match &mut matches[var_index] {
+            match variables[var_index].matcher.check_ac_match(mem, m) {
+                AcMatchStatus::Valid(m) => match &mut matches[var_index] {
                     Some(MatchResult::Matches(v)) => v.push(m),
                     _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
                 },
@@ -83,8 +83,8 @@ impl VariableSet {
             let var_index = self.aho_ci_index_to_var_index[mat.pattern()];
             let m = mat.start()..mat.end();
 
-            match &variables[var_index].matcher.check_ac_match(mem, &m) {
-                AcMatchStatus::Valid => match &mut matches[var_index] {
+            match variables[var_index].matcher.check_ac_match(mem, m) {
+                AcMatchStatus::Valid(m) => match &mut matches[var_index] {
                     Some(MatchResult::Matches(v)) => v.push(m),
                     _ => matches[var_index] = Some(MatchResult::Matches(vec![m])),
                 },

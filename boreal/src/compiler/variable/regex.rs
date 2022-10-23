@@ -72,6 +72,7 @@ pub fn compile_regex(
         regex: super::compile_regex_expr(&expr)?,
         atom_set: AtomSet::default(),
         flags: modifiers.flags,
+        validators: None,
         non_wide_regex,
     }))
 }

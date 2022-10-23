@@ -37,7 +37,7 @@ pub trait Matcher: std::fmt::Debug {
     fn is_case_insensitive(&self) -> bool;
 
     /// Check if a match found by the Aho-Corasick scan is valid.
-    fn check_ac_match(&self, mem: &[u8], mat: &Range<usize>) -> AcMatchStatus;
+    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>) -> AcMatchStatus;
 
     /// Find the next match in the given bytes.
     ///
@@ -55,7 +55,7 @@ pub trait Matcher: std::fmt::Debug {
 #[derive(Clone, Debug)]
 pub enum AcMatchStatus {
     /// The match is valid, and can be saved.
-    Valid,
+    Valid(Range<usize>),
     /// The match is invalid and should be discarded.
     Invalid,
     /// Unknown status for the match, will need to be confirmed on its own.
@@ -192,12 +192,12 @@ impl Matcher for LiteralsMatcher {
         self.flags.contains(VariableFlags::NOCASE)
     }
 
-    fn check_ac_match(&self, mem: &[u8], mat: &Range<usize>) -> AcMatchStatus {
-        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, mat, self.flags) {
-            AcMatchStatus::Invalid
-        } else {
-            AcMatchStatus::Valid
+    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>) -> AcMatchStatus {
+        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, self.flags) {
+            return AcMatchStatus::Invalid;
         }
+
+        AcMatchStatus::Valid(mat)
     }
 
     fn find_next_match_at(&self, _mem: &[u8], _offset: usize) -> Option<Range<usize>> {
@@ -222,6 +222,8 @@ struct RegexMatcher {
     /// Flags related to variable modifiers, which are needed during scanning.
     flags: VariableFlags,
 
+    validators: Option<(Regex, Regex)>,
+
     /// Regex of the non wide version of the regex.
     ///
     /// This is only set for the specific case of a regex variable, with a wide modifier, that
@@ -240,8 +242,20 @@ impl Matcher for RegexMatcher {
         false
     }
 
-    fn check_ac_match(&self, _mem: &[u8], _mat: &Range<usize>) -> AcMatchStatus {
-        AcMatchStatus::Unknown
+    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>) -> AcMatchStatus {
+        match self.validators.as_ref() {
+            Some((pre, post)) => {
+                if let Some(pre_match) = pre.find(&mem[..mat.end]) {
+                    if let Some(post_match) = post.find(&mem[mat.start..]) {
+                        return AcMatchStatus::Valid(
+                            pre_match.start()..(mat.start + post_match.end()),
+                        );
+                    }
+                }
+                AcMatchStatus::Invalid
+            }
+            None => AcMatchStatus::Unknown,
+        }
     }
 
     fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Range<usize>> {

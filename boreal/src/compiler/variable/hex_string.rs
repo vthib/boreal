@@ -25,10 +25,16 @@ pub(super) fn compile_hex_string(
         expr.push_str("(?s)");
         add_ast_to_string(&ast, &mut expr);
 
+        let (pre, post) = atom_set.build_regexes(&ast);
+
         Ok(Box::new(RegexMatcher {
             regex: super::compile_regex_expr(&expr)?,
             atom_set,
             flags,
+            validators: Some((
+                super::compile_regex_expr(&pre)?,
+                super::compile_regex_expr(&post)?,
+            )),
             non_wide_regex: None,
         }))
     }

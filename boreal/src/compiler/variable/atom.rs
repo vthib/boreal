@@ -12,26 +12,43 @@
 //! Atoms are selected by computing a rank for each atom: the higher the rank, the preferred the
 //! atom. This rank is related to how rare the atom should be found during scanning, and thus
 //! the rate of false positive matches.
-use boreal_parser::regex::Node;
+use boreal_parser::regex::{AssertionKind, Node};
+
+use crate::regex::add_ast_to_string;
+
+// FIXME: add lots of tests here...
+
+pub fn extract_atoms(node: &Node) -> AtomSet {
+    let mut position = AstPosition(Vec::new());
+    let mut hex_atoms = HexAtoms::new();
+    hex_atoms.add_node(node, &mut position);
+    hex_atoms.into_set()
+}
 
 /// Set of atoms that allows quickly searching for the eventual presence of a variable.
 #[derive(Debug, Default)]
 pub struct AtomSet {
     atoms: Vec<Atom>,
+    literals: Vec<Vec<u8>>,
     rank: u32,
 }
 
 impl AtomSet {
-    pub fn new(atoms: Vec<Atom>) -> Self {
+    fn new(atoms: Vec<Atom>) -> Self {
         let rank = atoms_rank(&atoms);
-        Self { atoms, rank }
+        let literals = atoms.iter().map(|v| v.literals.clone()).collect();
+        Self {
+            atoms,
+            literals,
+            rank,
+        }
     }
 
-    pub fn add_atoms(&mut self, atoms: Vec<Atom>) {
+    fn add_atoms(&mut self, atoms: Vec<Atom>) {
         self.add_set(Self::new(atoms));
     }
 
-    pub fn add_set(&mut self, other: Self) {
+    fn add_set(&mut self, other: Self) {
         // this.atoms is one possible set, and the provided atoms are another one.
         // Keep the one with the best rank.
         if self.atoms.is_empty() || other.rank > self.rank {
@@ -39,32 +56,65 @@ impl AtomSet {
         }
     }
 
-    pub fn get_literals(&self) -> &[Atom] {
-        &self.atoms
+    pub fn get_literals(&self) -> &[Vec<u8>] {
+        &self.literals
+    }
+
+    fn build_pre_ast(&self, original_node: &Node) -> Node {
+        match &self.atoms[..] {
+            [] => Node::Empty,
+            [atom] => atom.build_pre_ast(original_node),
+            atoms => Node::Alternation(
+                atoms
+                    .iter()
+                    .map(|atom| atom.build_pre_ast(original_node))
+                    .collect(),
+            ),
+        }
+    }
+
+    fn build_post_ast(&self, original_node: &Node) -> Node {
+        match &self.atoms[..] {
+            [] => Node::Empty,
+            [atom] => atom.build_post_ast(original_node),
+            atoms => Node::Alternation(
+                atoms
+                    .iter()
+                    .map(|atom| atom.build_post_ast(original_node))
+                    .collect(),
+            ),
+        }
+    }
+
+    pub fn build_regexes(&self, original_node: &Node) -> (String, String) {
+        let mut pre = String::new();
+        pre.push_str("(?s)");
+        add_ast_to_string(&self.build_pre_ast(original_node), &mut pre);
+
+        let mut post = String::new();
+        post.push_str("(?s)");
+        add_ast_to_string(&self.build_post_ast(original_node), &mut post);
+
+        (pre, post)
     }
 }
 
-pub type Atom = Vec<u8>;
-
-/// Retrieve the rank of a set of atoms;
+/// Retrieve the rank of a set of atoms.
 fn atoms_rank(atoms: &[Atom]) -> u32 {
     // Get the min rank. This is probably the best solution, it isn't clear if a better one
     // is easy to find.
-    atoms.iter().map(atom_rank).min().unwrap_or(0)
+    atoms
+        .iter()
+        .map(|atom| {
+            // FIXME: we just use the length of the literal for the moment, this is obviously very bad,
+            // eg "00 +" can be as long as we want, but is always a bad choice.
+            u32::try_from(atom.literals.len()).unwrap_or(u32::MAX)
+        })
+        .min()
+        .unwrap_or(0)
 }
 
-/// Retrieve the rank of an atom.
-fn atom_rank(atom: &Atom) -> u32 {
-    // FIXME: we just use the length of the atom for the moment, this is obviously very bad,
-    // eg "00 +" can be as long as we want, but is always a bad choice.
-    u32::try_from(atom.len()).unwrap_or(u32::MAX)
-}
-
-pub fn extract_atoms(node: &Node) -> AtomSet {
-    HexAtoms::from_regex_node(node).into_set()
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct HexAtoms {
     set: AtomSet,
 
@@ -84,39 +134,39 @@ impl HexAtoms {
         }
     }
 
-    fn from_regex_node(node: &Node) -> Self {
-        let mut this = Self::new();
-        this.add_node(node);
-        this
-    }
-
-    fn add_node(&mut self, node: &Node) {
+    fn add_node(&mut self, node: &Node, position: &mut AstPosition) {
         match node {
-            Node::Literal(b) => self.add_byte(*b),
-            Node::Repetition { .. } | Node::Dot | Node::Class(_) => self.rotate(),
+            Node::Literal(b) => self.add_byte(*b, position),
+            Node::Repetition { .. } | Node::Dot | Node::Class(_) => self.close(position),
             Node::Empty => (),
             Node::Assertion(_) => self.clear(),
-            Node::Group(node) => self.add_node(node),
+            Node::Group(node) => {
+                position.0.push(0);
+                self.add_node(node, position);
+                let _ = position.0.pop();
+            }
             Node::Concat(nodes) => {
-                for node in nodes {
-                    self.add_node(node);
+                for (i, node) in nodes.iter().enumerate() {
+                    position.0.push(i);
+                    self.add_node(node, position);
+                    let _ = position.0.pop();
                 }
             }
-            Node::Alternation(nodes) => self.add_alternatives(nodes),
+            Node::Alternation(nodes) => self.add_alternatives(nodes, position),
         }
     }
 
-    fn add_byte(&mut self, byte: u8) {
+    fn add_byte(&mut self, byte: u8, position: &AstPosition) {
         let atoms = if self.contiguous {
             &mut self.left
         } else {
             &mut self.right
         };
         if atoms.is_empty() {
-            atoms.push(Vec::new());
+            atoms.push(Atom::new(position));
         }
         for atom in atoms {
-            atom.push(byte);
+            atom.literals.push(byte);
         }
     }
 
@@ -128,33 +178,46 @@ impl HexAtoms {
         }
     }
 
-    fn rotate(&mut self) {
+    fn close(&mut self, position: &AstPosition) {
         if self.contiguous {
+            for atom in &mut self.left {
+                atom.close(position);
+            }
             self.contiguous = false;
         } else if !self.right.is_empty() {
+            for atom in &mut self.right {
+                atom.close(position);
+            }
             self.set.add_atoms(std::mem::take(&mut self.right));
         }
     }
 
     // Merge another possible HexAtoms with the current one (as an alternation).
-    fn concat(&mut self, other: Self) {
+    fn concat(&mut self, other: Self, position: &AstPosition) {
         self.set.add_set(other.set);
-        self.cartesian_product(other.left);
+        self.cartesian_product(other.left, position);
         if !other.contiguous {
-            self.rotate();
+            self.close(position);
             self.right = other.right;
         }
         self.contiguous = self.contiguous && other.contiguous;
     }
 
-    fn add_alternatives(&mut self, alts: &[Node]) {
+    fn add_alternatives(&mut self, alts: &[Node], position: &mut AstPosition) {
         // Then, do the cross product between our prefixes literals and the alternatives
         if let Some(suffixes) = alts
             .iter()
-            .map(HexAtoms::from_regex_node)
+            .enumerate()
+            .map(|(i, node)| {
+                position.0.push(i);
+                let mut hex_atoms = HexAtoms::new();
+                hex_atoms.add_node(node, position);
+                let _ = position.0.pop();
+                hex_atoms
+            })
             .reduce(HexAtoms::reduce_alternate)
         {
-            self.concat(suffixes);
+            self.concat(suffixes, position);
         }
     }
 
@@ -204,10 +267,10 @@ impl HexAtoms {
         self
     }
 
-    fn cartesian_product(&mut self, suffixes: Vec<Vec<u8>>) {
-        // Suffixes are non expressable with atoms, so we have to rotate.
+    fn cartesian_product(&mut self, suffixes: Vec<Atom>, position: &AstPosition) {
+        // Suffixes are non expressable with atoms, so we have to close the current ones.
         if suffixes.is_empty() {
-            self.rotate();
+            self.close(position);
             return;
         }
 
@@ -228,7 +291,7 @@ impl HexAtoms {
             .checked_mul(suffixes.len())
             .map_or(false, |v| v > 32)
         {
-            self.rotate();
+            self.close(position);
             self.right = suffixes;
             return;
         }
@@ -236,15 +299,159 @@ impl HexAtoms {
         *prefixes = prefixes
             .iter()
             .flat_map(|prefix| {
-                suffixes.iter().map(|suffix| {
-                    prefix
+                suffixes.iter().map(|suffix| Atom {
+                    literals: prefix
+                        .literals
                         .iter()
                         .copied()
-                        .chain(suffix.iter().copied())
-                        .collect()
+                        .chain(suffix.literals.iter().copied())
+                        .collect(),
+                    atom_start: prefix.atom_start.clone(),
+                    atom_end: suffix.atom_end.clone(),
                 })
             })
             .collect();
+    }
+}
+
+/// Position inside a Regex AST.
+///
+/// This position is stored as a set of indexes into the AST subtree.
+#[derive(Clone, Debug, Default)]
+struct AstPosition(Vec<usize>);
+
+#[derive(Clone, Debug)]
+struct Atom {
+    literals: Vec<u8>,
+
+    atom_start: AstPosition,
+    atom_end: Option<AstPosition>,
+}
+
+impl Atom {
+    fn new(position: &AstPosition) -> Self {
+        Self {
+            literals: Vec::new(),
+            atom_start: position.clone(),
+            atom_end: None,
+        }
+    }
+
+    fn close(&mut self, position: &AstPosition) {
+        self.atom_end = Some(position.clone());
+    }
+
+    fn build_pre_ast(&self, original_node: &Node) -> Node {
+        let mut nodes = match build_ast_up_to(original_node, &self.atom_start.0) {
+            // TODO: avoid building a regex if this is Node::Empty
+            Node::Concat(nodes) => nodes,
+            node => {
+                let mut nodes = Vec::with_capacity(self.literals.len() + 2);
+                nodes.push(node);
+                nodes
+            }
+        };
+        for b in &self.literals {
+            nodes.push(Node::Literal(*b));
+        }
+        nodes.push(Node::Assertion(AssertionKind::EndLine));
+        Node::Concat(nodes)
+    }
+
+    fn build_post_ast(&self, original_node: &Node) -> Node {
+        match &self.atom_end {
+            // TODO: avoid building a regex in this case
+            None => {
+                let mut nodes = Vec::new();
+                nodes.push(Node::Assertion(AssertionKind::StartLine));
+                for b in &self.literals {
+                    nodes.push(Node::Literal(*b));
+                }
+                Node::Concat(nodes)
+            }
+            Some(end_pos) => {
+                let mut nodes = Vec::new();
+                nodes.push(Node::Assertion(AssertionKind::StartLine));
+                for b in &self.literals {
+                    nodes.push(Node::Literal(*b));
+                }
+                match build_ast_from(original_node, &end_pos.0) {
+                    Node::Concat(post_nodes) => nodes.extend(post_nodes),
+                    node => nodes.push(node),
+                }
+                Node::Concat(nodes)
+            }
+        }
+    }
+}
+
+fn build_ast_up_to(node: &Node, position: &[usize]) -> Node {
+    match node {
+        Node::Literal(_)
+        | Node::Repetition { .. }
+        | Node::Dot
+        | Node::Class(_)
+        | Node::Empty
+        | Node::Assertion(_) => Node::Empty,
+        Node::Group(subnode) => match position {
+            [] => Node::Empty,
+            [idx, rest @ ..] => {
+                debug_assert!(*idx == 0);
+                Node::Group(Box::new(build_ast_up_to(subnode, rest)))
+            }
+        },
+        Node::Concat(nodes) => match position {
+            [] => Node::Empty,
+            [0, rest @ ..] => build_ast_up_to(&nodes[0], rest),
+            [idx, rest @ ..] => {
+                let mut new_nodes = Vec::new();
+                new_nodes.extend(nodes[..*idx].iter().cloned());
+                new_nodes.push(build_ast_up_to(&nodes[*idx], rest));
+                Node::Concat(new_nodes)
+            }
+        },
+        Node::Alternation(nodes) => match position {
+            [] => Node::Empty,
+            [idx, rest @ ..] => {
+                debug_assert!(*idx < nodes.len());
+                build_ast_up_to(&nodes[*idx], rest)
+            }
+        },
+    }
+}
+
+fn build_ast_from(node: &Node, position: &[usize]) -> Node {
+    match node {
+        Node::Literal(_)
+        | Node::Repetition { .. }
+        | Node::Dot
+        | Node::Class(_)
+        | Node::Empty
+        | Node::Assertion(_) => node.clone(),
+        Node::Group(subnode) => match position {
+            [] => node.clone(),
+            [idx, rest @ ..] => {
+                debug_assert!(*idx == 0);
+                Node::Group(Box::new(build_ast_from(subnode, rest)))
+            }
+        },
+        Node::Concat(nodes) => match position {
+            [] => node.clone(),
+            [idx, rest @ ..] if *idx == nodes.len() - 1 => build_ast_from(&nodes[*idx], rest),
+            [idx, rest @ ..] => {
+                let mut new_nodes = Vec::new();
+                new_nodes.push(build_ast_from(&nodes[*idx], rest));
+                new_nodes.extend(nodes[(*idx + 1)..].iter().cloned());
+                Node::Concat(new_nodes)
+            }
+        },
+        Node::Alternation(nodes) => match position {
+            [] => node.clone(),
+            [idx, rest @ ..] => {
+                debug_assert!(*idx < nodes.len());
+                build_ast_from(&nodes[*idx], rest)
+            }
+        },
     }
 }
 
@@ -257,8 +464,8 @@ mod tests {
     #[test]
     fn test_hex_string_extract_atoms() {
         #[track_caller]
-        fn test(hex_string: &str, expected_atoms: &[&[u8]]) {
-            let hex_string = parse_hex_string(hex_string);
+        fn test(hex_string_expr: &str, expected_atoms: &[&[u8]]) {
+            let hex_string = parse_hex_string(hex_string_expr);
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
             let atoms = extract_atoms(&ast);

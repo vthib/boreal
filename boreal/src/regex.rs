@@ -211,7 +211,7 @@ mod tests {
         // Syntaxes that matches between yara and rust regexes.
         test("^a.d+$", None);
         test(r"\s?\S??\w*(\W*?\d+?\D\b)+", None);
-        test(r"\ba\B[a\w]|a(b|cd)t[^a-z]", None);
+        test(r"(\ba\B[a\w]|a(b|cd)t[^a-z])", None);
 
         // Syntaxes that are modified to avoid issues
         test(
