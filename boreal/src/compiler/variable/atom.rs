@@ -105,13 +105,43 @@ fn atoms_rank(atoms: &[Atom]) -> u32 {
     // is easy to find.
     atoms
         .iter()
-        .map(|atom| {
-            // FIXME: we just use the length of the literal for the moment, this is obviously very bad,
-            // eg "00 +" can be as long as we want, but is always a bad choice.
-            u32::try_from(atom.literals.len()).unwrap_or(u32::MAX)
-        })
+        .map(|atom| literals_rank(&atom.literals))
         .min()
         .unwrap_or(0)
+}
+
+fn literals_rank(lits: &[u8]) -> u32 {
+    // This algorithm is straight copied from libyara.
+    // TODO: Probably want to revisit this.
+    let mut quality = 0_u32;
+    let mut bitmask = [false; 256];
+    let mut nb_uniq = 0;
+
+    for lit in lits {
+        match *lit {
+            0x00 | 0x20 | 0xCC | 0xFF => quality += 12,
+            v if (b'a'..=b'z').contains(&v) => quality += 18,
+            _ => quality += 20,
+        }
+
+        if !bitmask[*lit as usize] {
+            bitmask[*lit as usize] = true;
+            nb_uniq += 1;
+        }
+    }
+
+    // If all the bytes in the atom are equal and very common, let's penalize
+    // it heavily.
+    if nb_uniq == 1 && (bitmask[0] || bitmask[0x20] || bitmask[0xCC] || bitmask[0xFF]) {
+        quality -= 10 * u32::try_from(lits.len()).unwrap_or(30);
+    }
+    // In general atoms with more unique bytes have a better quality, so let's
+    // boost the quality in the amount of unique bytes.
+    else {
+        quality += 2 * nb_uniq;
+    }
+
+    quality
 }
 
 #[derive(Debug)]
@@ -584,7 +614,7 @@ mod tests {
         // hex strings found in some real rules
         test(
             "{ 00 01 00 01 00 02 ?? ?? 00 02 00 01 00 02 ?? ?? 00 03 00 02 00 04 ?? ?? ?? ?? 00 04 00 02 00 04 ?? ?? }",
-            &[b"\x00\x02\x00\x01\x00\x02"]);
+            &[b"\x00\x03\x00\x02\x00\x04"]);
 
         test(
             "{ c7 0? 00 00 01 00 [4-14] c7 0? 01 00 00 00 }",
@@ -597,7 +627,7 @@ mod tests {
         test(
 "{ FC E8??000000 [0-32] EB2B ?? 8B??00 83C504 8B??00 31?? 83C504 55 8B??00 31?? 89??00 31?? \
 83C504 83??04 31?? 39?? 7402 EBE8 ?? FF?? E8D0FFFFFF }",
-            &[b"\x00\x83\xC5\x04\x8B"]);
+            &[b"\x83\xC5\x04\x55\x8B"]);
         test(
             "{ ( 0F 82 ?? ?? 00 00 | 72 ?? ) ( 80 | 41 80 ) ( 7? | 7C 24 ) \
 04 02 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 81 | 41 81 ) ( 3? | 3C 24 | 7D 00 ) \
