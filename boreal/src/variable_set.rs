@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use crate::compiler::{AcMatchStatus, Variable};
+use crate::compiler::{literals_rank, AcMatchStatus, Variable};
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
@@ -21,13 +21,16 @@ pub(crate) struct VariableSet {
 }
 
 /// Details on a literal of a variable.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct LiteralInfo {
     /// Index of the variable in the variable array.
     variable_index: usize,
 
     /// Index of the literal for the variable.
     literal_index: usize,
+
+    /// Left and right offset for the slice picked in the Aho-Corasick.
+    slice_offset: (usize, usize),
 }
 
 impl VariableSet {
@@ -42,13 +45,15 @@ impl VariableSet {
             if literals.is_empty() {
                 non_handled_var_indexes.push(variable_index);
             } else {
-                aho_index_to_literal_info.extend((0..literals.len()).map(|literal_index| {
-                    LiteralInfo {
+                for (literal_index, lit) in literals.iter().enumerate() {
+                    let (start, end) = pick_best_atom_in_literal(lit);
+                    aho_index_to_literal_info.push(LiteralInfo {
                         variable_index,
                         literal_index,
-                    }
-                }));
-                lits.extend(literals);
+                        slice_offset: (start, end),
+                    });
+                    lits.push(lit[start..(lit.len() - end)].to_vec());
+                }
             }
         }
 
@@ -56,7 +61,7 @@ impl VariableSet {
         // optimizations are done.
         let aho = AhoCorasickBuilder::new()
             .ascii_case_insensitive(true)
-            .auto_configure(&lits)
+            .dfa(true)
             .build(&lits);
 
         Self {
@@ -73,8 +78,18 @@ impl VariableSet {
             let LiteralInfo {
                 variable_index,
                 literal_index,
+                slice_offset: (start_offset, end_offset),
             } = self.aho_index_to_literal_info[mat.pattern()];
-            let m = mat.start()..mat.end();
+            let start = match mat.start().checked_sub(start_offset) {
+                Some(v) => v,
+                None => continue,
+            };
+            let end = match mat.end().checked_add(end_offset) {
+                Some(v) if v > mem.len() => continue,
+                Some(v) => v,
+                None => continue,
+            };
+            let m = start..end;
 
             match variables[variable_index]
                 .matcher
@@ -95,6 +110,17 @@ impl VariableSet {
 
         VariableSetMatches { matches }
     }
+}
+
+fn pick_best_atom_in_literal(lit: &[u8]) -> (usize, usize) {
+    if lit.len() <= 4 {
+        return (0, 0);
+    }
+
+    lit.windows(4)
+        .enumerate()
+        .max_by_key(|(_, s)| literals_rank(s))
+        .map_or((0, 0), |(i, _)| (i, lit.len() - i - 4))
 }
 
 #[derive(Clone, Debug)]

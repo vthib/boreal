@@ -110,7 +110,7 @@ fn atoms_rank(atoms: &[Atom]) -> u32 {
         .unwrap_or(0)
 }
 
-fn literals_rank(lits: &[u8]) -> u32 {
+pub fn literals_rank(lits: &[u8]) -> u32 {
     // This algorithm is straight copied from libyara.
     // TODO: Probably want to revisit this.
     let mut quality = 0_u32;

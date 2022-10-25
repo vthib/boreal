@@ -9,6 +9,7 @@ use super::base64::encode_base64;
 use super::CompilationError;
 
 mod atom;
+pub use atom::literals_rank;
 use atom::AtomSet;
 mod hex_string;
 mod regex;
@@ -186,9 +187,11 @@ impl Matcher for LiteralsMatcher {
     }
 
     fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, literal_index: usize) -> AcMatchStatus {
-        if !self.flags.contains(VariableFlags::NOCASE)
-            && self.literals[literal_index] != mem[mat.start..mat.end]
-        {
+        if self.flags.contains(VariableFlags::NOCASE) {
+            if !self.literals[literal_index].eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
+                return AcMatchStatus::Invalid;
+            }
+        } else if self.literals[literal_index] != mem[mat.start..mat.end] {
             return AcMatchStatus::Invalid;
         }
 
