@@ -20,20 +20,14 @@ pub(super) fn compile_hex_string(
         }))
     } else {
         let ast = hex_string_to_ast(hex_string);
-        let atom_set = super::atom::extract_atoms(&ast);
+        let atomized_regex = super::atom::build_atomized_regex(&ast)?;
         let mut expr = String::new();
         add_ast_to_string(&ast, &mut expr);
 
-        let (pre, post) = atom_set.build_regexes(&ast);
-
         Ok(Box::new(RegexMatcher {
             regex: super::compile_regex_expr(&expr, false, true)?,
-            literals: atom_set.into_literals(),
+            atomized_regex,
             flags,
-            validators: Some((
-                super::compile_regex_expr(&pre, false, true)?,
-                super::compile_regex_expr(&post, false, true)?,
-            )),
             non_wide_regex: None,
         }))
     }

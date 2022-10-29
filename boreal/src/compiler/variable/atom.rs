@@ -12,17 +12,49 @@
 //! Atoms are selected by computing a rank for each atom: the higher the rank, the preferred the
 //! atom. This rank is related to how rare the atom should be found during scanning, and thus
 //! the rate of false positive matches.
+use std::ops::Range;
+
 use boreal_parser::regex::{AssertionKind, Node};
+use regex::bytes::Regex;
 
 use crate::regex::add_ast_to_string;
 
+use super::VariableCompilationError;
+
 // FIXME: add lots of tests here...
 
-pub fn extract_atoms(node: &Node) -> AtomSet {
+pub fn build_atomized_regex(
+    node: &Node,
+) -> Result<Option<AtomizedRegex>, VariableCompilationError> {
     let mut position = AstPosition(Vec::new());
-    let mut hex_atoms = HexAtoms::new();
-    hex_atoms.add_node(node, &mut position);
-    hex_atoms.into_set()
+    let mut visitor = AtomVisitor::new();
+    visitor.visit(node, &mut position);
+    visitor.into_set().into_atomized_regex(node)
+}
+
+#[derive(Debug)]
+pub struct AtomizedRegex {
+    /// Literals extracted from the regex.
+    literals: Vec<Vec<u8>>,
+
+    /// Validators of matches on literals.
+    left_validator: Regex,
+    right_validator: Regex,
+}
+
+impl AtomizedRegex {
+    pub fn literals(&self) -> &[Vec<u8>] {
+        &self.literals
+    }
+
+    pub fn check_literal_match(&self, mem: &[u8], mat: Range<usize>) -> Option<Range<usize>> {
+        if let Some(pre_match) = self.left_validator.find(&mem[..mat.end]) {
+            if let Some(post_match) = self.right_validator.find(&mem[mat.start..]) {
+                return Some(pre_match.start()..(mat.start + post_match.end()));
+            }
+        }
+        None
+    }
 }
 
 /// Set of atoms that allows quickly searching for the eventual presence of a variable.
@@ -56,8 +88,24 @@ impl AtomSet {
         }
     }
 
-    pub fn into_literals(self) -> Vec<Vec<u8>> {
-        self.literals
+    pub fn into_atomized_regex(
+        self,
+        original_node: &Node,
+    ) -> Result<Option<AtomizedRegex>, VariableCompilationError> {
+        if self.literals.is_empty() {
+            return Ok(None);
+        }
+
+        let mut pre = String::new();
+        let mut post = String::new();
+        add_ast_to_string(&self.build_pre_ast(original_node), &mut pre);
+        add_ast_to_string(&self.build_post_ast(original_node), &mut post);
+
+        Ok(Some(AtomizedRegex {
+            literals: self.literals,
+            left_validator: super::compile_regex_expr(&pre, false, true)?,
+            right_validator: super::compile_regex_expr(&post, false, true)?,
+        }))
     }
 
     fn build_pre_ast(&self, original_node: &Node) -> Node {
@@ -84,16 +132,6 @@ impl AtomSet {
                     .collect(),
             ),
         }
-    }
-
-    pub fn build_regexes(&self, original_node: &Node) -> (String, String) {
-        let mut pre = String::new();
-        add_ast_to_string(&self.build_pre_ast(original_node), &mut pre);
-
-        let mut post = String::new();
-        add_ast_to_string(&self.build_post_ast(original_node), &mut post);
-
-        (pre, post)
     }
 }
 
@@ -143,7 +181,7 @@ pub fn literals_rank(lits: &[u8]) -> u32 {
 }
 
 #[derive(Debug)]
-struct HexAtoms {
+struct AtomVisitor {
     set: AtomSet,
 
     left: Vec<Atom>,
@@ -152,7 +190,7 @@ struct HexAtoms {
     contiguous: bool,
 }
 
-impl HexAtoms {
+impl AtomVisitor {
     fn new() -> Self {
         Self {
             set: AtomSet::default(),
@@ -162,7 +200,7 @@ impl HexAtoms {
         }
     }
 
-    fn add_node(&mut self, node: &Node, position: &mut AstPosition) {
+    fn visit(&mut self, node: &Node, position: &mut AstPosition) {
         match node {
             Node::Literal(b) => self.add_byte(*b, position),
             Node::Repetition { .. } | Node::Dot | Node::Class(_) => self.close(position),
@@ -170,13 +208,13 @@ impl HexAtoms {
             Node::Assertion(_) => self.clear(),
             Node::Group(node) => {
                 position.0.push(0);
-                self.add_node(node, position);
+                self.visit(node, position);
                 let _ = position.0.pop();
             }
             Node::Concat(nodes) => {
                 for (i, node) in nodes.iter().enumerate() {
                     position.0.push(i);
-                    self.add_node(node, position);
+                    self.visit(node, position);
                     let _ = position.0.pop();
                 }
             }
@@ -238,12 +276,12 @@ impl HexAtoms {
             .enumerate()
             .map(|(i, node)| {
                 position.0.push(i);
-                let mut hex_atoms = HexAtoms::new();
-                hex_atoms.add_node(node, position);
+                let mut hex_atoms = AtomVisitor::new();
+                hex_atoms.visit(node, position);
                 let _ = position.0.pop();
                 hex_atoms
             })
-            .reduce(HexAtoms::reduce_alternate)
+            .reduce(AtomVisitor::reduce_alternate)
         {
             self.concat(suffixes, position);
         }
@@ -496,8 +534,14 @@ mod tests {
             let hex_string = parse_hex_string(hex_string_expr);
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
-            let atoms = extract_atoms(&ast);
-            assert_eq!(atoms.into_literals(), expected_atoms);
+            let atomized_regex = build_atomized_regex(&ast).unwrap();
+            assert_eq!(
+                match atomized_regex {
+                    Some(r) => r.literals,
+                    None => Vec::new(),
+                },
+                expected_atoms
+            );
         }
 
         test("{ AB CD 01 }", &[b"\xab\xcd\x01"]);

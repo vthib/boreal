@@ -10,7 +10,6 @@ use super::CompilationError;
 
 mod atom;
 pub use atom::literals_rank;
-use atom::AtomSet;
 mod hex_string;
 mod regex;
 
@@ -225,13 +224,11 @@ struct RegexMatcher {
     /// The regex expressing the variable.
     regex: Regex,
 
-    /// Literals extracted from the regex.
-    literals: Vec<Vec<u8>>,
-
     /// Flags related to variable modifiers, which are needed during scanning.
     flags: VariableFlags,
 
-    validators: Option<(Regex, Regex)>,
+    /// A regex expression that can be matched during the AC pass.
+    atomized_regex: Option<atom::AtomizedRegex>,
 
     /// Regex of the non wide version of the regex.
     ///
@@ -244,7 +241,10 @@ struct RegexMatcher {
 
 impl Matcher for RegexMatcher {
     fn literals(&self) -> &[Vec<u8>] {
-        &self.literals
+        match self.atomized_regex.as_ref() {
+            Some(r) => r.literals(),
+            None => &[],
+        }
     }
 
     fn check_ac_match(
@@ -253,17 +253,11 @@ impl Matcher for RegexMatcher {
         mat: Range<usize>,
         _literal_index: usize,
     ) -> AcMatchStatus {
-        match self.validators.as_ref() {
-            Some((pre, post)) => {
-                if let Some(pre_match) = pre.find(&mem[..mat.end]) {
-                    if let Some(post_match) = post.find(&mem[mat.start..]) {
-                        return AcMatchStatus::Valid(
-                            pre_match.start()..(mat.start + post_match.end()),
-                        );
-                    }
-                }
-                AcMatchStatus::Invalid
-            }
+        match self.atomized_regex.as_ref() {
+            Some(r) => match r.check_literal_match(mem, mat) {
+                Some(m) => AcMatchStatus::Valid(m),
+                None => AcMatchStatus::Invalid,
+            },
             None => AcMatchStatus::Unknown,
         }
     }

@@ -4,7 +4,6 @@ use regex_syntax::ParserBuilder;
 
 use crate::regex::add_ast_to_string;
 
-use super::atom::AtomSet;
 use super::{Matcher, RegexMatcher, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -49,9 +48,8 @@ pub fn compile_regex(
 
     Ok(Box::new(RegexMatcher {
         regex: super::compile_regex_expr(&expr, case_insensitive, dot_all)?,
-        literals: Vec::new(),
+        atomized_regex: None,
         flags: modifiers.flags,
-        validators: None,
         non_wide_regex,
     }))
 }
