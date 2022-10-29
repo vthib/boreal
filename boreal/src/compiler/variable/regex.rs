@@ -70,7 +70,7 @@ pub fn compile_regex(
 
     Ok(Box::new(RegexMatcher {
         regex: super::compile_regex_expr(&expr)?,
-        atom_set: AtomSet::default(),
+        literals: Vec::new(),
         flags: modifiers.flags,
         validators: None,
         non_wide_regex,

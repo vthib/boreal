@@ -32,7 +32,7 @@ pub struct Variable {
 /// A trait used to match the variable on bytes.
 pub trait Matcher: std::fmt::Debug {
     /// Get literals to use in the Aho-Corasick early scan.
-    fn get_literals(&self) -> &[Vec<u8>];
+    fn literals(&self) -> &[Vec<u8>];
 
     /// Check if a match found by the Aho-Corasick scan is valid.
     fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, literal_index: usize) -> AcMatchStatus;
@@ -41,7 +41,7 @@ pub trait Matcher: std::fmt::Debug {
     ///
     /// This is only called if either:
     ///
-    /// - No literals were returned by [`Self::get_literals`].
+    /// - No literals were returned by [`Self::literals`].
     /// - [`MatchStatus::Unknown`] was returned by [`Self::check_ac_match`].
     ///
     /// If either one of those conditions is true, the variable is scanned on its own by calling
@@ -182,7 +182,7 @@ struct LiteralsMatcher {
 }
 
 impl Matcher for LiteralsMatcher {
-    fn get_literals(&self) -> &[Vec<u8>] {
+    fn literals(&self) -> &[Vec<u8>] {
         &self.literals
     }
 
@@ -218,8 +218,8 @@ struct RegexMatcher {
     /// The regex expressing the variable.
     regex: Regex,
 
-    /// Atom set containing literals extracted from the regex.
-    atom_set: AtomSet,
+    /// Literals extracted from the regex.
+    literals: Vec<Vec<u8>>,
 
     /// Flags related to variable modifiers, which are needed during scanning.
     flags: VariableFlags,
@@ -236,8 +236,8 @@ struct RegexMatcher {
 }
 
 impl Matcher for RegexMatcher {
-    fn get_literals(&self) -> &[Vec<u8>] {
-        self.atom_set.get_literals()
+    fn literals(&self) -> &[Vec<u8>] {
+        &self.literals
     }
 
     fn check_ac_match(

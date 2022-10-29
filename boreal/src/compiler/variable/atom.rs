@@ -56,8 +56,8 @@ impl AtomSet {
         }
     }
 
-    pub fn get_literals(&self) -> &[Vec<u8>] {
-        &self.literals
+    pub fn into_literals(self) -> Vec<Vec<u8>> {
+        self.literals
     }
 
     fn build_pre_ast(&self, original_node: &Node) -> Node {
@@ -499,7 +499,7 @@ mod tests {
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
             let atoms = extract_atoms(&ast);
-            assert_eq!(atoms.get_literals(), expected_atoms);
+            assert_eq!(atoms.into_literals(), expected_atoms);
         }
 
         test("{ AB CD 01 }", &[b"\xab\xcd\x01"]);

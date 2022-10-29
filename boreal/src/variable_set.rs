@@ -40,7 +40,7 @@ impl VariableSet {
         let mut non_handled_var_indexes = Vec::new();
 
         for (variable_index, var) in variables.iter().enumerate() {
-            let literals = var.matcher.get_literals();
+            let literals = var.matcher.literals();
 
             if literals.is_empty() {
                 non_handled_var_indexes.push(variable_index);

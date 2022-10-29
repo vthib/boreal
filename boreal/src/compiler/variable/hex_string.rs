@@ -29,7 +29,7 @@ pub(super) fn compile_hex_string(
 
         Ok(Box::new(RegexMatcher {
             regex: super::compile_regex_expr(&expr)?,
-            atom_set,
+            literals: atom_set.into_literals(),
             flags,
             validators: Some((
                 super::compile_regex_expr(&pre)?,
