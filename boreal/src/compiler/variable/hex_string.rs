@@ -22,18 +22,17 @@ pub(super) fn compile_hex_string(
         let ast = hex_string_to_ast(hex_string);
         let atom_set = super::atom::extract_atoms(&ast);
         let mut expr = String::new();
-        expr.push_str("(?s)");
         add_ast_to_string(&ast, &mut expr);
 
         let (pre, post) = atom_set.build_regexes(&ast);
 
         Ok(Box::new(RegexMatcher {
-            regex: super::compile_regex_expr(&expr)?,
+            regex: super::compile_regex_expr(&expr, false, true)?,
             literals: atom_set.into_literals(),
             flags,
             validators: Some((
-                super::compile_regex_expr(&pre)?,
-                super::compile_regex_expr(&post)?,
+                super::compile_regex_expr(&pre, false, true)?,
+                super::compile_regex_expr(&post, false, true)?,
             )),
             non_wide_regex: None,
         }))

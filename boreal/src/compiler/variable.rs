@@ -96,10 +96,17 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     })
 }
 
-fn compile_regex_expr(expr: &str) -> Result<Regex, VariableCompilationError> {
+fn compile_regex_expr(
+    expr: &str,
+    case_insensitive: bool,
+    dot_all: bool,
+) -> Result<Regex, VariableCompilationError> {
     RegexBuilder::new(expr)
         .unicode(false)
         .octal(false)
+        .multi_line(false)
+        .case_insensitive(case_insensitive)
+        .dot_matches_new_line(dot_all)
         .build()
         .map_err(|err| VariableCompilationError::Regex(err.to_string()))
 }

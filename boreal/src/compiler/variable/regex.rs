@@ -1,5 +1,4 @@
 use boreal_parser::{Regex, VariableFlags, VariableModifiers};
-use regex::bytes::RegexBuilder;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
@@ -34,27 +33,11 @@ pub fn compile_regex(
 
     let mut non_wide_regex = None;
 
-    let mods = match (case_insensitive, dot_all) {
-        (true, true) => "is",
-        (false, true) => "s",
-        (true, false) => "i",
-        (false, false) => "",
-    };
-
     if modifiers.flags.contains(VariableFlags::WIDE) {
         let hir = expr_to_hir(&expr).unwrap();
         let (wide_hir, has_word_boundaries) = hir_to_wide(&hir)?;
         if has_word_boundaries {
-            let builder = if mods.is_empty() {
-                RegexBuilder::new(&expr)
-            } else {
-                RegexBuilder::new(&format!("(?{}){}", mods, expr))
-            };
-            non_wide_regex = Some(
-                builder
-                    .build()
-                    .map_err(|err| VariableCompilationError::Regex(err.to_string()))?,
-            );
+            non_wide_regex = Some(super::compile_regex_expr(&expr, case_insensitive, dot_all)?);
         }
 
         if modifiers.flags.contains(VariableFlags::ASCII) {
@@ -64,12 +47,8 @@ pub fn compile_regex(
         }
     }
 
-    if !mods.is_empty() {
-        expr = format!("(?{}){}", mods, expr);
-    }
-
     Ok(Box::new(RegexMatcher {
-        regex: super::compile_regex_expr(&expr)?,
+        regex: super::compile_regex_expr(&expr, case_insensitive, dot_all)?,
         literals: Vec::new(),
         flags: modifiers.flags,
         validators: None,

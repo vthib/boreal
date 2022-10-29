@@ -327,6 +327,13 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(&to_wide(b"<a[AA.AAA]>"), true);
     checker.check(&to_wide(b"<a[AA>A.>"), false);
     checker.check(&to_wide(b"<a[AA>AA.>"), false);
+
+    // Test word boundaries do not use unicode syntax
+    let checker = build_checker(r"<\w+\b.a>", "wide");
+    checker.check(&to_wide(b"<ave|a>"), true);
+    checker.check(&to_wide(b"<aveva>"), false);
+    checker.check(&to_wide("<avéva>".as_bytes()), false);
+    checker.check(&to_wide("<avé|a>".as_bytes()), false);
 }
 
 #[test]

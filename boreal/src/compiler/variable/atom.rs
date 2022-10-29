@@ -88,11 +88,9 @@ impl AtomSet {
 
     pub fn build_regexes(&self, original_node: &Node) -> (String, String) {
         let mut pre = String::new();
-        pre.push_str("(?s)");
         add_ast_to_string(&self.build_pre_ast(original_node), &mut pre);
 
         let mut post = String::new();
-        post.push_str("(?s)");
         add_ast_to_string(&self.build_post_ast(original_node), &mut post);
 
         (pre, post)
