@@ -35,8 +35,8 @@ pub fn compile_regex(
     let mut non_wide_regex = None;
 
     let mods = match (case_insensitive, dot_all) {
-        (true, true) => "ism",
-        (false, true) => "sm",
+        (true, true) => "is",
+        (false, true) => "s",
         (true, false) => "i",
         (false, false) => "",
     };

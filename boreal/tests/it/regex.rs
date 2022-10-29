@@ -29,6 +29,79 @@ fn test_regex_unicode_handling() {
 }
 
 #[test]
+fn test_regex_flags() {
+    let checker = Checker::new(&build_rule(r"/a.b/"));
+    checker.check(b"ab", false);
+    checker.check(b"aab", true);
+    checker.check(b"AaB", false);
+    checker.check(b"Aab", false);
+    checker.check(b"aaB", false);
+    checker.check(b"a\tb", true);
+    checker.check(b"a\nb", false);
+    checker.check(b"A\nB", false);
+
+    let checker = Checker::new(&build_rule(r"/a.b/s"));
+    checker.check(b"ab", false);
+    checker.check(b"aab", true);
+    checker.check(b"AaB", false);
+    checker.check(b"Aab", false);
+    checker.check(b"aaB", false);
+    checker.check(b"a\tb", true);
+    checker.check(b"a\nb", true);
+    checker.check(b"A\nB", false);
+
+    let checker = Checker::new(&build_rule(r"/a.b/i"));
+    checker.check(b"ab", false);
+    checker.check(b"aab", true);
+    checker.check(b"AaB", true);
+    checker.check(b"Aab", true);
+    checker.check(b"aaB", true);
+    checker.check(b"a\tb", true);
+    checker.check(b"a\nb", false);
+    checker.check(b"A\nB", false);
+
+    let checker = Checker::new(&build_rule(r"/a.b/is"));
+    checker.check(b"ab", false);
+    checker.check(b"aab", true);
+    checker.check(b"AaB", true);
+    checker.check(b"Aab", true);
+    checker.check(b"aaB", true);
+    checker.check(b"a\tb", true);
+    checker.check(b"a\nb", true);
+    checker.check(b"A\nB", true);
+}
+
+#[test]
+fn test_regex_anchors() {
+    let checker = Checker::new(&build_rule(r"/^a/"));
+    checker.check(b"a", true);
+    checker.check(b"ab", true);
+    checker.check(b"ba", false);
+    checker.check(b"b\ta", false);
+    checker.check(b"b\na", false);
+    let checker = Checker::new(&build_rule(r"/a$/"));
+    checker.check(b"a", true);
+    checker.check(b"ab", false);
+    checker.check(b"ba", true);
+    checker.check(b"a\tb", false);
+    checker.check(b"a\nb", false);
+
+    // s flag does not modify this behavior
+    let checker = Checker::new(&build_rule(r"/^a/s"));
+    checker.check(b"a", true);
+    checker.check(b"ab", true);
+    checker.check(b"ba", false);
+    checker.check(b"b\ta", false);
+    checker.check(b"b\na", false);
+    let checker = Checker::new(&build_rule(r"/a$/s"));
+    checker.check(b"a", true);
+    checker.check(b"ab", false);
+    checker.check(b"ba", true);
+    checker.check(b"a\tb", false);
+    checker.check(b"a\nb", false);
+}
+
+#[test]
 fn test_regex_unneeded_escapes() {
     // Escaping for specific bytes
     check(

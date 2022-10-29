@@ -933,7 +933,7 @@ fn test_variable_find() {
         r#"
         rule a {
             strings:
-                $a = /.*b/s
+                $a = /a.*b/s
             condition:
                 $a
         }"#,
