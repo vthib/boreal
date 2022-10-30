@@ -1042,3 +1042,352 @@ fn test_variable_find_in_invalid() {
         false,
     );
 }
+
+#[test]
+fn test_variable_hex_string_masks() {
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { ?C }
+        $b = { C? }
+    condition:
+        any of them
+}
+"#,
+    );
+
+    checker.check_full_matches(
+        &(0_u8..=255_u8).collect::<Vec<_>>(),
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                (
+                    "a",
+                    vec![
+                        (b"\x0c", 12, 1),
+                        (b"\x1c", 28, 1),
+                        (b"\x2c", 44, 1),
+                        (b"\x3c", 60, 1),
+                        (b"\x4c", 76, 1),
+                        (b"\x5c", 92, 1),
+                        (b"\x6c", 108, 1),
+                        (b"\x7c", 124, 1),
+                        (b"\x8c", 140, 1),
+                        (b"\x9c", 156, 1),
+                        (b"\xac", 172, 1),
+                        (b"\xbc", 188, 1),
+                        (b"\xcc", 204, 1),
+                        (b"\xdc", 220, 1),
+                        (b"\xec", 236, 1),
+                        (b"\xfc", 252, 1),
+                    ],
+                ),
+                (
+                    "b",
+                    vec![
+                        (b"\xc0", 192, 1),
+                        (b"\xc1", 193, 1),
+                        (b"\xc2", 194, 1),
+                        (b"\xc3", 195, 1),
+                        (b"\xc4", 196, 1),
+                        (b"\xc5", 197, 1),
+                        (b"\xc6", 198, 1),
+                        (b"\xc7", 199, 1),
+                        (b"\xc8", 200, 1),
+                        (b"\xc9", 201, 1),
+                        (b"\xca", 202, 1),
+                        (b"\xcb", 203, 1),
+                        (b"\xcc", 204, 1),
+                        (b"\xcd", 205, 1),
+                        (b"\xce", 206, 1),
+                        (b"\xcf", 207, 1),
+                    ],
+                ),
+            ],
+        )],
+    );
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { AB ?C DE }
+        $b = { AB C? DE }
+        $c = { AB ?? }
+        $d = { ?? DE }
+    condition:
+        any of them
+}
+"#,
+    );
+
+    checker.check_full_matches(b"", vec![]);
+    checker.check_full_matches(
+        b"\xab\xde \xab\xcc\xde \xab \xde \xde \xde\xde \xab\xab\xcf\xde\xde\xde\xab",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                ("a", vec![(b"\xab\xcc\xde", 3, 3)]),
+                ("b", vec![(b"\xab\xcc\xde", 3, 3), (b"\xab\xcf\xde", 17, 3)]),
+                (
+                    "c",
+                    vec![
+                        (b"\xab\xde", 0, 2),
+                        (b"\xab\xcc", 3, 2),
+                        (b"\xab ", 7, 2),
+                        (b"\xab\xab", 16, 2),
+                        (b"\xab\xcf", 17, 2),
+                    ],
+                ),
+                (
+                    "d",
+                    vec![
+                        (b"\xab\xde", 0, 2),
+                        (b"\xcc\xde", 4, 2),
+                        (b" \xde", 8, 2),
+                        (b" \xde", 10, 2),
+                        (b" \xde", 12, 2),
+                        (b"\xde\xde", 13, 2),
+                        (b"\xcf\xde", 18, 2),
+                        (b"\xde\xde", 19, 2),
+                        (b"\xde\xde", 20, 2),
+                    ],
+                ),
+            ],
+        )],
+    );
+}
+
+#[test]
+fn test_variable_hex_string_jumps() {
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        // 61 is 'a', 62 is 'b'
+        $a = { 61 [1-2] 62 }
+        $b = { 61 [1-] 62 }
+        $c = { 61 [0-1] 62 }
+    condition:
+        any of them
+}
+"#,
+    );
+
+    checker.check_full_matches(
+        b"b ab aab abbb aaaab aaaaabb ababaabb abbaaabab",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                (
+                    "a",
+                    vec![
+                        (b"aab", 5, 3),
+                        (b"abb", 9, 3),
+                        (b"aaab", 15, 4),
+                        (b"aab", 16, 3),
+                        (b"aaab", 22, 4),
+                        (b"aab", 23, 3),
+                        (b"abb", 24, 3),
+                        (b"abab", 28, 4),
+                        (b"aab", 32, 3),
+                        (b"abb", 33, 3),
+                        (b"abb", 37, 3),
+                        (b"aaab", 40, 4),
+                        (b"aab", 41, 3),
+                        (b"abab", 42, 4),
+                    ],
+                ),
+                (
+                    "b",
+                    vec![
+                        (b"ab aab", 2, 6),
+                        (b"aab", 5, 3),
+                        (b"ab ab", 6, 5),
+                        (b"abb", 9, 3),
+                        (b"aaaab", 14, 5),
+                        (b"aaab", 15, 4),
+                        (b"aab", 16, 3),
+                        (b"ab aaaaab", 17, 9),
+                        (b"aaaaab", 20, 6),
+                        (b"aaaab", 21, 5),
+                        (b"aaab", 22, 4),
+                        (b"aab", 23, 3),
+                        (b"abb", 24, 3),
+                        (b"abab", 28, 4),
+                        (b"abaab", 30, 5),
+                        (b"aab", 32, 3),
+                        (b"abb", 33, 3),
+                        (b"abb", 37, 3),
+                        (b"aaab", 40, 4),
+                        (b"aab", 41, 3),
+                        (b"abab", 42, 4),
+                    ],
+                ),
+                (
+                    "c",
+                    vec![
+                        (b"ab", 2, 2),
+                        (b"aab", 5, 3),
+                        (b"ab", 6, 2),
+                        (b"ab", 9, 2),
+                        (b"aab", 16, 3),
+                        (b"ab", 17, 2),
+                        (b"aab", 23, 3),
+                        (b"ab", 24, 2),
+                        (b"ab", 28, 2),
+                        (b"ab", 30, 2),
+                        (b"aab", 32, 3),
+                        (b"ab", 33, 2),
+                        (b"ab", 37, 2),
+                        (b"aab", 41, 3),
+                        (b"ab", 42, 2),
+                        (b"ab", 44, 2),
+                    ],
+                ),
+            ],
+        )],
+    );
+}
+
+#[test]
+fn test_variable_hex_string_alternations() {
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        // 61 is 'a', 67 is 'g'
+        $a = { 61 (62 | 63 | 64 65 | 66 ) 67 }
+        $b = { 61 (62 | ( 63 | 64 ) 65 ) }
+        $c = { ( ( 61 | 62 ) | 63 64 ) }
+    condition:
+        any of them
+}
+"#,
+    );
+
+    checker.check_full_matches(
+        b"ag abcdefg abg cde ace df acg adeg adfg afg egadadce",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                (
+                    "a",
+                    vec![
+                        (b"abg", 11, 3),
+                        (b"acg", 26, 3),
+                        (b"adeg", 30, 4),
+                        (b"afg", 40, 3),
+                    ],
+                ),
+                (
+                    "b",
+                    vec![
+                        (b"ab", 3, 2),
+                        (b"ab", 11, 2),
+                        (b"ace", 19, 3),
+                        (b"ade", 30, 3),
+                    ],
+                ),
+                (
+                    "c",
+                    vec![
+                        (b"a", 0, 1),
+                        (b"a", 3, 1),
+                        (b"b", 4, 1),
+                        (b"cd", 5, 2),
+                        (b"a", 11, 1),
+                        (b"b", 12, 1),
+                        (b"cd", 15, 2),
+                        (b"a", 19, 1),
+                        (b"a", 26, 1),
+                        (b"a", 30, 1),
+                        (b"a", 35, 1),
+                        (b"a", 40, 1),
+                        (b"a", 46, 1),
+                        (b"a", 48, 1),
+                    ],
+                ),
+            ],
+        )],
+    );
+}
+
+#[test]
+fn test_variable_hex_string_atoms() {
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        // whole atom on the left side
+        $a = { 64 65 66 67 (?? | 68) ?9 }
+        // whole atom on the right side
+        $b = { 6? (62 | 63 ??) 64 65 66 67 }
+        // whole atom in the middle
+        $c = { (?2 | 61) 64 65 66 67 ?? 69 }
+    condition:
+        any of them
+}
+"#,
+    );
+    checker.check_full_matches(
+        b"abcdefghi defgri defghh abdefg acadefg adefggi bdefg.i",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                (
+                    "a",
+                    vec![
+                        (b"defghi", 3, 6),
+                        (b"defgri", 10, 6),
+                        (b"defggi", 40, 6),
+                        (b"defg.i", 48, 6),
+                    ],
+                ),
+                ("b", vec![(b"abdefg", 24, 6), (b"acadefg", 31, 7)]),
+                ("c", vec![(b"adefggi", 39, 7), (b"bdefg.i", 47, 7)]),
+            ],
+        )],
+    );
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        // atom from a whole alternation
+        $a = { 61 ?? ( 62 63 | 64) 65 }
+        // atom from a split alternation
+        $b = { 61 ( ?? 62 63 | 64) 65 }
+        $c = { 61 62 ( 63 ?? | 64) 65 }
+        // atom from two split alternations
+        $d = { 61 ( ?? 62 | 63 ) ( 64 | 65 ?? ) 66 }
+    condition:
+        any of them
+}
+"#,
+    );
+    checker.check_full_matches(
+        b"aabce a.de ade ace abe abde abcce aabdf a.bdf aceef a.be.f",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                (
+                    "a",
+                    vec![(b"aabce", 0, 5), (b"a.de", 6, 4), (b"abde", 23, 4)],
+                ),
+                ("b", vec![(b"aabce", 0, 5), (b"ade", 11, 3)]),
+                ("c", vec![(b"abde", 23, 4), (b"abcce", 28, 5)]),
+                (
+                    "d",
+                    vec![
+                        (b"aabdf", 34, 5),
+                        (b"a.bdf", 40, 5),
+                        (b"aceef", 46, 5),
+                        (b"a.be.f", 52, 6),
+                    ],
+                ),
+            ],
+        )],
+    );
+}

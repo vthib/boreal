@@ -131,6 +131,7 @@ impl AtomVisitor {
 
         if self.atoms.is_empty() {
             self.atoms = lits;
+            self.atoms_start_position = self.current_position;
         } else {
             self.atoms = self
                 .atoms
@@ -145,11 +146,13 @@ impl AtomVisitor {
     }
 
     fn close(&mut self) {
-        self.set.add_atoms(
-            std::mem::take(&mut self.atoms),
-            self.atoms_start_position,
-            self.current_position,
-        );
+        if !self.atoms.is_empty() {
+            self.set.add_atoms(
+                std::mem::take(&mut self.atoms),
+                self.atoms_start_position,
+                self.current_position,
+            );
+        }
     }
 
     fn into_set(mut self) -> AtomSet {
@@ -671,6 +674,13 @@ mod tests {
             &[b"\xC6"],
             r"\xc6$",
             r"^\xc6[\x00-\x0f]\xe9[@-O][\x80-\x8f][@-O]\x05.{2,2}?\x89[@-O]\x01",
+        );
+
+        test(
+            "{ 61 ?? ( 62 63 | 64) 65 }",
+            &[b"\x62\x63\x65", b"\x64\x65"],
+            r"a.(bce|de)$",
+            r"^(bce|de)",
         );
     }
 }
