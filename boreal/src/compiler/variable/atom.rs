@@ -26,9 +26,29 @@ use super::VariableCompilationError;
 pub fn build_atomized_regex(
     node: &Node,
 ) -> Result<Option<AtomizedRegex>, VariableCompilationError> {
+    match build_atomized_expressions(node) {
+        Some(v) => Ok(Some(AtomizedRegex::new(v)?)),
+        None => Ok(None),
+    }
+}
+
+fn build_atomized_expressions(node: &Node) -> Option<AtomizedExpressions> {
     let mut visitor = AtomVisitor::new(AstPosition(Vec::new()));
     visitor.visit(node);
-    visitor.into_set().into_atomized_regex(node)
+    visitor.into_set().into_atomized_expression(node)
+}
+
+#[derive(Debug)]
+pub struct AtomizedExpressions {
+    /// Literals extracted from the regex.
+    literals: Vec<Vec<u8>>,
+
+    /// Expression for validators of matches on literals.
+    ///
+    /// The `pre` is the regex expression that must match before (and including) the literal.
+    /// The `post` is the regex expression that must match after (and including) the literal.
+    pre: String,
+    post: String,
 }
 
 #[derive(Debug)]
@@ -42,6 +62,14 @@ pub struct AtomizedRegex {
 }
 
 impl AtomizedRegex {
+    fn new(expr: AtomizedExpressions) -> Result<Self, VariableCompilationError> {
+        Ok(Self {
+            literals: expr.literals,
+            left_validator: super::compile_regex_expr(&expr.pre, false, true)?,
+            right_validator: super::compile_regex_expr(&expr.post, false, true)?,
+        })
+    }
+
     pub fn literals(&self) -> &[Vec<u8>] {
         &self.literals
     }
@@ -87,24 +115,21 @@ impl AtomSet {
         }
     }
 
-    pub fn into_atomized_regex(
-        self,
-        original_node: &Node,
-    ) -> Result<Option<AtomizedRegex>, VariableCompilationError> {
+    pub fn into_atomized_expression(self, original_node: &Node) -> Option<AtomizedExpressions> {
         if self.literals.is_empty() {
-            return Ok(None);
+            None
+        } else {
+            let mut pre = String::new();
+            let mut post = String::new();
+            add_ast_to_string(&self.build_pre_ast(original_node), &mut pre);
+            add_ast_to_string(&self.build_post_ast(original_node), &mut post);
+
+            Some(AtomizedExpressions {
+                literals: self.literals,
+                pre,
+                post,
+            })
         }
-
-        let mut pre = String::new();
-        let mut post = String::new();
-        add_ast_to_string(&self.build_pre_ast(original_node), &mut pre);
-        add_ast_to_string(&self.build_post_ast(original_node), &mut post);
-
-        Ok(Some(AtomizedRegex {
-            literals: self.literals,
-            left_validator: super::compile_regex_expr(&pre, false, true)?,
-            right_validator: super::compile_regex_expr(&post, false, true)?,
-        }))
     }
 
     fn build_pre_ast(&self, original_node: &Node) -> Node {
@@ -529,26 +554,53 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hex_string_extract_atoms() {
+    fn test_hex_string_atoms() {
         #[track_caller]
-        fn test(hex_string_expr: &str, expected_atoms: &[&[u8]]) {
+        fn test(
+            hex_string_expr: &str,
+            expected_lits: &[&[u8]],
+            expected_pre: &str,
+            expected_post: &str,
+        ) {
             let hex_string = parse_hex_string(hex_string_expr);
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
-            let atomized_regex = build_atomized_regex(&ast).unwrap();
-            assert_eq!(
-                match atomized_regex {
-                    Some(r) => r.literals,
-                    None => Vec::new(),
-                },
-                expected_atoms
-            );
+            let exprs = build_atomized_expressions(&ast);
+            if expected_lits.is_empty() {
+                assert!(exprs.is_none());
+            } else {
+                let exprs = exprs.unwrap();
+                assert_eq!(exprs.literals, expected_lits);
+                assert_eq!(exprs.pre, expected_pre);
+                assert_eq!(exprs.post, expected_post);
+            }
         }
 
-        test("{ AB CD 01 }", &[b"\xab\xcd\x01"]);
-        test("{ AB ?D 01 }", &[b"\xab"]);
-        test("{ D? FE }", &[b"\xFE"]);
-        test("{ ( AA | BB ) F? }", &[b"\xAA", b"\xBB"]);
+        test(
+            "{ AB CD 01 }",
+            &[b"\xab\xcd\x01"],
+            r"\xab\xcd\x01$",
+            r"^\xab\xcd\x01",
+        );
+
+        test(
+            "{ AB ?D 01 }",
+            &[b"\xab"],
+            r"\xab$",
+            r"^\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
+        );
+
+        test("{ D? FE }", &[b"\xfe"], r"[\xd0-\xdf]\xfe$", r"^\xfe");
+
+        test(
+            "{ ( AA | BB ) F? }",
+            &[b"\xAA", b"\xBB"],
+            // FIXME: this looks weird "(\xaa|\xbb)$" would be cleaner
+            r"()\xaa$|()\xbb$",
+            // FIXME: this looks weird "^(\xaa|\xbb)[\xf0-\xff]" would be cleaner
+            r"^\xaa[\xf0-\xff]|^\xbb[\xf0-\xff]",
+        );
+
         test(
             "{ AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD }",
             &[
@@ -559,18 +611,53 @@ mod tests {
                 b"\xAB\x23\x45\x89\xCD",
                 b"\xAB\x23\x45\xF0\xCD",
             ],
+            "\\xab\\x01g\\xcd$|\\xab\\x01\\x89\\xcd$|\\xab\\x01\\xf0\\xcd$|\\xab\\x23Eg\\xcd$|\
+             \\xab\\x23E\\x89\\xcd$|\\xab\\x23E\\xf0\\xcd$",
+            "^\\xab\\x01g\\xcd|^\\xab\\x01\\x89\\xcd|^\\xab\\x01\\xf0\\xcd|^\\xab\\x23Eg\\xcd|\
+             ^\\xab\\x23E\\x89\\xcd|^\\xab\\x23E\\xf0\\xcd",
         );
 
         // jump or masked bytes should invalidate alternations if one branch does not have a single
-        test("{ AB ( ?? | FF ) CC }", &[b"\xAB"]);
-        test("{ AB ( ?? DD | FF ) CC }", &[b"\xDD\xCC", b"\xFF\xCC"]);
-        test("{ AB ( 11 ?? DD | FF ) CC }", &[b"\xAB\x11", b"\xAB\xFF"]);
-        test("{ AB ( 11 ?? | FF ) CC }", &[b"\xAB\x11", b"\xAB\xFF"]);
-        // TODO: generating just CC would be better
-        test("{ ( 11 ?? | FF ) CC }", &[b"\x11", b"\xFF"]);
         test(
-            "{ AB ( 11 | 22 ) 33 ( ?1 | 44 ) }",
-            &[b"\xAB\x11\x33", b"\xAB\x22\x33"],
+            "{ AB ( ?? | FF ) CC }",
+            &[b"\xAB"],
+            r"\xab$",
+            r"^\xab(.|\xff)\xcc",
+        );
+        test(
+            "{ AB ( ?? DD | FF ) CC }",
+            &[b"\xDD\xCC", b"\xFF\xCC"],
+            // FIXME: ugly
+            r"\xab(.)\xdd\xcc$|\xab()\xff\xcc$",
+            r"^\xdd\xcc|^\xff\xcc",
+        );
+        test(
+            "{ AB ( 11 ?? DD | FF ) CC }",
+            &[b"\xAB\x11", b"\xAB\xFF"],
+            r"\xab\x11$|\xab\xff$",
+            // FIXME: buggy
+            r"^\xab\x11(\x11.\xdd|\xff)\xcc|^\xab\xff(\x11.\xdd|\xff)\xcc",
+        );
+        test(
+            "{ AB ( 11 ?? | FF ) CC }",
+            &[b"\xAB\x11", b"\xAB\xFF"],
+            r"\xab\x11$|\xab\xff$",
+            // FIXME: buggy
+            r"^\xab\x11(\x11.|\xff)\xcc|^\xab\xff(\x11.|\xff)\xcc",
+        );
+        // TODO: generating just CC would be better
+        test(
+            "{ ( 11 ?? | FF ) CC }",
+            &[b"\x11", b"\xFF"],
+            r"()\x11$|()\xff$",
+            // FIXME: buggy
+            r"^\x11(\x11.|\xff)\xcc|^\xff(\x11.|\xff)\xcc",
+        );
+        test(
+            "{ AB ( 11 | 12 ) 13 ( 1? | 14 ) }",
+            &[b"\xAB\x11\x13", b"\xAB\x12\x13"],
+            r"\xab\x11\x13$|\xab\x12\x13$",
+            r"^\xab\x11\x13([\x10-\x1f]|\x14)|^\xab\x12\x13([\x10-\x1f]|\x14)",
         );
 
         // Test imbrication of alternations
@@ -591,6 +678,11 @@ mod tests {
                 b"\xFF\x58\xCC",
                 b"\xFF\xDD",
             ],
+            "()\\x01$|(())\\x23E$|(())\\x23g$|(())\\x23X\\xaa$|(())\\x23X\\xbb$|(())\\x23X\\xcc$|\
+             (())\\x23\\xdd$|(())\\xffE$|(())\\xffg$|(())\\xffX\\xaa$|(())\\xffX\\xbb$|\
+             (())\\xffX\\xcc$|(())\\xff\\xdd$",
+            "^\\x01|^\\x23E|^\\x23g|^\\x23X\\xaa|^\\x23X\\xbb|^\\x23X\\xcc|^\\x23\\xdd|^\\xffE|\
+             ^\\xffg|^\\xffX\\xaa|^\\xffX\\xbb|^\\xffX\\xcc|^\\xff\\xdd",
         );
 
         // Do not grow alternations too much, 32 max
@@ -630,6 +722,23 @@ mod tests {
                 b"\x12\x22\x32\x42\x51",
                 b"\x12\x22\x32\x42\x52",
             ],
+            "()\\x11!1AQ$|()\\x11!1AR$|()\\x11!1BQ$|()\\x11!1BR$|()\\x11!2AQ$|()\\x11!2AR$|\
+             ()\\x11!2BQ$|()\\x11!2BR$|()\\x11\"1AQ$|()\\x11\"1AR$|()\\x11\"1BQ$|()\\x11\"1BR$|\
+             ()\\x11\"2AQ$|()\\x11\"2AR$|()\\x11\"2BQ$|()\\x11\"2BR$|()\\x12!1AQ$|()\\x12!1AR$|\
+             ()\\x12!1BQ$|()\\x12!1BR$|()\\x12!2AQ$|()\\x12!2AR$|()\\x12!2BQ$|()\\x12!2BR$|\
+             ()\\x12\"1AQ$|()\\x12\"1AR$|()\\x12\"1BQ$|()\\x12\"1BR$|()\\x12\"2AQ$|()\\x12\"2AR$|\
+             ()\\x12\"2BQ$|()\\x12\"2BR$",
+            "^\\x11!1AQ(a|b)(q|r)\\x88|^\\x11!1AR(a|b)(q|r)\\x88|^\\x11!1BQ(a|b)(q|r)\\x88|\
+             ^\\x11!1BR(a|b)(q|r)\\x88|^\\x11!2AQ(a|b)(q|r)\\x88|^\\x11!2AR(a|b)(q|r)\\x88|\
+             ^\\x11!2BQ(a|b)(q|r)\\x88|^\\x11!2BR(a|b)(q|r)\\x88|^\\x11\"1AQ(a|b)(q|r)\\x88|\
+             ^\\x11\"1AR(a|b)(q|r)\\x88|^\\x11\"1BQ(a|b)(q|r)\\x88|^\\x11\"1BR(a|b)(q|r)\\x88|\
+             ^\\x11\"2AQ(a|b)(q|r)\\x88|^\\x11\"2AR(a|b)(q|r)\\x88|^\\x11\"2BQ(a|b)(q|r)\\x88|\
+             ^\\x11\"2BR(a|b)(q|r)\\x88|^\\x12!1AQ(a|b)(q|r)\\x88|^\\x12!1AR(a|b)(q|r)\\x88|\
+             ^\\x12!1BQ(a|b)(q|r)\\x88|^\\x12!1BR(a|b)(q|r)\\x88|^\\x12!2AQ(a|b)(q|r)\\x88|\
+             ^\\x12!2AR(a|b)(q|r)\\x88|^\\x12!2BQ(a|b)(q|r)\\x88|^\\x12!2BR(a|b)(q|r)\\x88|\
+             ^\\x12\"1AQ(a|b)(q|r)\\x88|^\\x12\"1AR(a|b)(q|r)\\x88|^\\x12\"1BQ(a|b)(q|r)\\x88|\
+             ^\\x12\"1BR(a|b)(q|r)\\x88|^\\x12\"2AQ(a|b)(q|r)\\x88|^\\x12\"2AR(a|b)(q|r)\\x88|\
+             ^\\x12\"2BQ(a|b)(q|r)\\x88|^\\x12\"2BR(a|b)(q|r)\\x88",
         );
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) 33 ( 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10  ) }",
@@ -639,6 +748,11 @@ mod tests {
                 b"\x12\x21\x33",
                 b"\x12\x22\x33",
             ],
+            r#"()\x11!3$|()\x11"3$|()\x12!3$|()\x12"3$"#,
+            "^\\x11!3(\\x01|\\x02|\\x03|\\x04|\\x05|\\x06|\\x07|\\x08|\\x09|\\x10)|\
+             ^\\x11\"3(\\x01|\\x02|\\x03|\\x04|\\x05|\\x06|\\x07|\\x08|\\x09|\\x10)|\
+             ^\\x12!3(\\x01|\\x02|\\x03|\\x04|\\x05|\\x06|\\x07|\\x08|\\x09|\\x10)|\
+             ^\\x12\"3(\\x01|\\x02|\\x03|\\x04|\\x05|\\x06|\\x07|\\x08|\\x09|\\x10)",
         );
 
         // TODO: to improve, there are diminishing returns in computing the longest atoms.
@@ -650,40 +764,79 @@ mod tests {
                 b"\x11\x22\x33\x44\x55\x66\x77\xAA",
                 b"\x11\x22\x33\x44\x55\x66\x77\xBB",
             ],
+            r#"\x11"3DUfw\x88$|\x11"3DUfw\x99$|\x11"3DUfw\xaa$|\x11"3DUfw\xbb$"#,
+            r#"^\x11"3DUfw\x88|^\x11"3DUfw\x99|^\x11"3DUfw\xaa|^\x11"3DUfw\xbb"#,
         );
 
-        test("{ 11 ?A 22 33 [1] 44 55 66 A? 77 88 }", &[b"\x44\x55\x66"]);
+        test(
+            "{ 11 ?A 22 33 [1] 44 55 66 A? 77 88 }",
+            &[b"\x44\x55\x66"],
+            r#"\x11[\x0a\x1a\x2a:JZjz\x8a\x9a\xaa\xba\xca\xda\xea\xfa]"3.DUf$"#,
+            r#"^DUf[\xa0-\xaf]w\x88"#,
+        );
 
         // hex strings found in some real rules
         test(
-            "{ 00 01 00 01 00 02 ?? ?? 00 02 00 01 00 02 ?? ?? 00 03 00 02 00 04 ?? ?? ?? ?? 00 04 00 02 00 04 ?? ?? }",
-            &[b"\x00\x03\x00\x02\x00\x04"]);
+            "{ 00 01 00 01 00 02 ?? ?? 00 02 00 01 00 02 ?? ?? 00 03 00 02 00 04 ?? ?? ?? ?? \
+               00 04 00 02 00 04 ?? ?? }",
+            &[b"\x00\x03\x00\x02\x00\x04"],
+            r"\x00\x01\x00\x01\x00\x02..\x00\x02\x00\x01\x00\x02..\x00\x03\x00\x02\x00\x04$",
+            r"^\x00\x03\x00\x02\x00\x04....\x00\x04\x00\x02\x00\x04..",
+        );
 
         test(
             "{ c7 0? 00 00 01 00 [4-14] c7 0? 01 00 00 00 }",
             &[b"\x00\x00\x01\x00"],
+            r"\xc7[\x00-\x0f]\x00\x00\x01\x00$",
+            r"^\x00\x00\x01\x00.{4,14}?\xc7[\x00-\x0f]\x01\x00\x00\x00",
         );
         test(
             "{ 00 CC 00 ?? ?? ?? ?? ?? 00 64 65 66 61 75 6C 74 2E 70 72 6F 70 65 72 74 69 65 73 }",
             &[b"\x00\x64\x65\x66\x61\x75\x6C\x74\x2E\x70\x72\x6F\x70\x65\x72\x74\x69\x65\x73"],
+            r"\x00\xcc\x00.....\x00default\x2eproperties$",
+            r"^\x00default\x2eproperties",
         );
         test(
-"{ FC E8??000000 [0-32] EB2B ?? 8B??00 83C504 8B??00 31?? 83C504 55 8B??00 31?? 89??00 31?? \
-83C504 83??04 31?? 39?? 7402 EBE8 ?? FF?? E8D0FFFFFF }",
-            &[b"\x83\xC5\x04\x55\x8B"]);
+            "{ FC E8??000000 [0-32] EB2B ?? 8B??00 83C504 8B??00 31?? 83C504 55 8B??00 31?? \
+              89??00 31?? 83C504 83??04 31?? 39?? 7402 EBE8 ?? FF?? E8D0FFFFFF }",
+            &[b"\x83\xC5\x04\x55\x8B"],
+            "\\xfc\\xe8.\\x00\\x00\\x00.{0,32}?\\xeb\\x2b.\\x8b.\\x00\\x83\\xc5\\x04\
+             \\x8b.\\x001.\\x83\\xc5\\x04U\\x8b$",
+            "^\\x83\\xc5\\x04U\\x8b.\\x001.\\x89.\\x001.\\x83\\xc5\\x04\\x83.\\x041.9.t\
+             \\x02\\xeb\\xe8.\\xff.\\xe8\\xd0\\xff\\xff\\xff",
+        );
         test(
             "{ ( 0F 82 ?? ?? 00 00 | 72 ?? ) ( 80 | 41 80 ) ( 7? | 7C 24 ) \
-04 02 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 81 | 41 81 ) ( 3? | 3C 24 | 7D 00 ) \
-02 AA 02 C1 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 8B | 41 8B | 44 8B | 45 8B ) \
-( 4? | 5? | 6? | 7? | ?4 24 | ?C 24 ) 06 }",
+        04 02 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 81 | 41 81 ) ( 3? | 3C 24 | 7D 00 ) \
+        02 AA 02 C1 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 8B | 41 8B | 44 8B | 45 8B ) \
+        ( 4? | 5? | 6? | 7? | ?4 24 | ?C 24 ) 06 }",
             &[b"\x02\xAA\x02\xC1\x0F\x85", b"\x02\xAA\x02\xC1\x75"],
+            "(\\x0f\\x82..\\x00\\x00|r.)(\\x80|A\\x80)([p-\\x7f]|\\x7c\\x24)\\x04\\x02\
+             (\\x0f\\x85..\\x00\\x00|u.)(\\x81|A\\x81)([0-\\x3f]|<\\x24|\\x7d\\x00)\
+             \\x02\\xaa\\x02\\xc1\\x0f\\x85$|(\\x0f\\x82..\\x00\\x00|r.)(\\x80|A\\x80)\
+             ([p-\\x7f]|\\x7c\\x24)\\x04\\x02(\\x0f\\x85..\\x00\\x00|u.)(\\x81|A\\x81)\
+             ([0-\\x3f]|<\\x24|\\x7d\\x00)\\x02\\xaa\\x02\\xc1u$",
+            "^\\x02\\xaa\\x02\\xc1\\x0f\\x85(\\x0f\\x85..\\x00\\x00|u.)(\\x8b|A\\x8b|\
+             D\\x8b|E\\x8b)([@-O]|[P-_]|[`-o]|[p-\\x7f]|[\\x04\\x14\\x244DTdt\\x84\\x94\
+             \\xa4\\xb4\\xc4\\xd4\\xe4\\xf4]\\x24|[\\x0c\\x1c,<L\\x5cl\\x7c\\x8c\\x9c\\xac\
+             \\xbc\\xcc\\xdc\\xec\\xfc]\\x24)\\x06|^\\x02\\xaa\\x02\\xc1u(\\x0f\\x85..\\x00\
+             \\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)([@-O]|[P-_]|[`-o]|[p-\\x7f]|[\\x04\\x14\\x24\
+             4DTdt\\x84\\x94\\xa4\\xb4\\xc4\\xd4\\xe4\\xf4]\\x24|[\\x0c\\x1c,<L\\x5cl\\x7c\\x8c\
+             \\x9c\\xac\\xbc\\xcc\\xdc\\xec\\xfc]\\x24)\\x06",
         );
 
         // TODO: expanding the masked byte would improve the atoms
         test(
             "{ 8B C? [2-3] F6 D? 1A C? [2-3] [2-3] 30 0? ?? 4? }",
             &[b"\xF6"],
+            r"\x8b[\xc0-\xcf].{2,3}?\xf6$",
+            r"^\xf6[\xd0-\xdf]\x1a[\xc0-\xcf].{2,3}?.{2,3}?0[\x00-\x0f].[@-O]",
         );
-        test("{ C6 0? E9 4? 8? 4? 05 [2] 89 4? 01 }", &[b"\xE9"]);
+        test(
+            "{ C6 0? E9 4? 8? 4? 05 [2] 89 4? 01 }",
+            &[b"\xE9"],
+            r"\xc6[\x00-\x0f]\xe9$",
+            r"^\xe9[@-O][\x80-\x8f][@-O]\x05.{2,2}?\x89[@-O]\x01",
+        );
     }
 }
