@@ -26,9 +26,8 @@ use super::VariableCompilationError;
 pub fn build_atomized_regex(
     node: &Node,
 ) -> Result<Option<AtomizedRegex>, VariableCompilationError> {
-    let mut position = AstPosition(Vec::new());
-    let mut visitor = AtomVisitor::new();
-    visitor.visit(node, &mut position);
+    let mut visitor = AtomVisitor::new(AstPosition(Vec::new()));
+    visitor.visit(node);
     visitor.into_set().into_atomized_regex(node)
 }
 
@@ -188,48 +187,51 @@ struct AtomVisitor {
     right: Vec<Atom>,
 
     contiguous: bool,
+
+    position: AstPosition,
 }
 
 impl AtomVisitor {
-    fn new() -> Self {
+    fn new(position: AstPosition) -> Self {
         Self {
             set: AtomSet::default(),
             left: Vec::new(),
             right: Vec::new(),
             contiguous: true,
+            position,
         }
     }
 
-    fn visit(&mut self, node: &Node, position: &mut AstPosition) {
+    fn visit(&mut self, node: &Node) {
         match node {
-            Node::Literal(b) => self.add_byte(*b, position),
-            Node::Repetition { .. } | Node::Dot | Node::Class(_) => self.close(position),
+            Node::Literal(b) => self.add_byte(*b),
+            Node::Repetition { .. } | Node::Dot | Node::Class(_) => self.close(),
             Node::Empty => (),
             Node::Assertion(_) => self.clear(),
             Node::Group(node) => {
-                position.0.push(0);
-                self.visit(node, position);
-                let _ = position.0.pop();
+                self.position.0.push(0);
+                self.visit(node);
+                let _ = self.position.0.pop();
             }
             Node::Concat(nodes) => {
                 for (i, node) in nodes.iter().enumerate() {
-                    position.0.push(i);
-                    self.visit(node, position);
-                    let _ = position.0.pop();
+                    self.position.0.push(i);
+                    self.visit(node);
+                    let _ = self.position.0.pop();
                 }
             }
-            Node::Alternation(nodes) => self.add_alternatives(nodes, position),
+            Node::Alternation(nodes) => self.add_alternatives(nodes),
         }
     }
 
-    fn add_byte(&mut self, byte: u8, position: &AstPosition) {
+    fn add_byte(&mut self, byte: u8) {
         let atoms = if self.contiguous {
             &mut self.left
         } else {
             &mut self.right
         };
         if atoms.is_empty() {
-            atoms.push(Atom::new(position));
+            atoms.push(Atom::new(&self.position));
         }
         for atom in atoms {
             atom.literals.push(byte);
@@ -244,46 +246,45 @@ impl AtomVisitor {
         }
     }
 
-    fn close(&mut self, position: &AstPosition) {
+    fn close(&mut self) {
         if self.contiguous {
             for atom in &mut self.left {
-                atom.close(position);
+                atom.close(&self.position);
             }
             self.contiguous = false;
         } else if !self.right.is_empty() {
             for atom in &mut self.right {
-                atom.close(position);
+                atom.close(&self.position);
             }
             self.set.add_atoms(std::mem::take(&mut self.right));
         }
     }
 
     // Merge another possible HexAtoms with the current one (as an alternation).
-    fn concat(&mut self, other: Self, position: &AstPosition) {
+    fn concat(&mut self, other: Self) {
         self.set.add_set(other.set);
-        self.cartesian_product(other.left, position);
+        self.cartesian_product(other.left);
         if !other.contiguous {
-            self.close(position);
+            self.close();
             self.right = other.right;
         }
         self.contiguous = self.contiguous && other.contiguous;
     }
 
-    fn add_alternatives(&mut self, alts: &[Node], position: &mut AstPosition) {
+    fn add_alternatives(&mut self, alts: &[Node]) {
         // Then, do the cross product between our prefixes literals and the alternatives
         if let Some(suffixes) = alts
             .iter()
             .enumerate()
             .map(|(i, node)| {
-                position.0.push(i);
-                let mut hex_atoms = AtomVisitor::new();
-                hex_atoms.visit(node, position);
-                let _ = position.0.pop();
+                let mut hex_atoms = AtomVisitor::new(self.position.clone());
+                hex_atoms.position.0.push(i);
+                hex_atoms.visit(node);
                 hex_atoms
             })
             .reduce(AtomVisitor::reduce_alternate)
         {
-            self.concat(suffixes, position);
+            self.concat(suffixes);
         }
     }
 
@@ -333,10 +334,10 @@ impl AtomVisitor {
         self
     }
 
-    fn cartesian_product(&mut self, suffixes: Vec<Atom>, position: &AstPosition) {
+    fn cartesian_product(&mut self, suffixes: Vec<Atom>) {
         // Suffixes are non expressable with atoms, so we have to close the current ones.
         if suffixes.is_empty() {
-            self.close(position);
+            self.close();
             return;
         }
 
@@ -357,7 +358,7 @@ impl AtomVisitor {
             .checked_mul(suffixes.len())
             .map_or(false, |v| v > 32)
         {
-            self.close(position);
+            self.close();
             self.right = suffixes;
             return;
         }
