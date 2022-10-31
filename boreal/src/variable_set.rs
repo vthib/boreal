@@ -80,6 +80,9 @@ impl VariableSet {
                 literal_index,
                 slice_offset: (start_offset, end_offset),
             } = self.aho_index_to_literal_info[mat.pattern()];
+
+            // Upscale to the original literal shape before feeding it to the matcher verification
+            // function.
             let start = match mat.start().checked_sub(start_offset) {
                 Some(v) => v,
                 None => continue,
@@ -91,16 +94,40 @@ impl VariableSet {
             };
             let m = start..end;
 
-            match variables[variable_index]
-                .matcher
-                .check_ac_match(mem, m, literal_index)
-            {
-                AcMatchStatus::Valid(m) => match &mut matches[variable_index] {
+            // Shorten the mem to prevent new matches on the same starting byte.
+            // For example, for `a.*?bb`, and input `abbb`, this can happen:
+            // - extract atom `bb`
+            // - get AC match on `a(bb)b`: call check_ac_match, this will return the
+            //   match `(abb)b`.
+            // - get AC match on `ab(bb)`: call check_ac_match, this will return the
+            //   match `(abbb)`.
+            // This is invalid, only one match per starting byte can happen.
+            // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
+            // saved match.
+            let start_position = match matches[variable_index].as_ref() {
+                Some(MatchResult::Matches(v)) => match v.last() {
+                    Some(m) => m.start + 1,
+                    None => 0,
+                },
+                _ => 0,
+            };
+
+            match variables[variable_index].matcher.check_ac_match(
+                mem,
+                m,
+                start_position,
+                literal_index,
+            ) {
+                AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
+                    Some(MatchResult::Matches(v)) => v.extend(found_matches),
+                    _ => matches[variable_index] = Some(MatchResult::Matches(found_matches)),
+                },
+                AcMatchStatus::Single(m) => match &mut matches[variable_index] {
                     Some(MatchResult::Matches(v)) => v.push(m),
                     _ => matches[variable_index] = Some(MatchResult::Matches(vec![m])),
                 },
                 AcMatchStatus::Unknown => matches[variable_index] = Some(MatchResult::Unknown),
-                AcMatchStatus::Invalid => (),
+                AcMatchStatus::None => (),
             };
         }
 

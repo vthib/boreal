@@ -1391,3 +1391,73 @@ rule a {
         )],
     );
 }
+
+#[test]
+fn test_hex_string_atoms_multiple_matches() {
+    // Define variables with the atom after some ungreedy repetitions.
+    // This means that for one literal match, there might be multiple actual matches.
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        // 61 is 'a', 62 is 'b'
+        $a = { 61 [1-2] 62 62 }
+        $b = { 61 [1-] 62 62 }
+        $c = { 61 [0-1] 62 62 }
+    condition:
+        any of them
+}
+"#,
+    );
+
+    checker.check_full_matches(
+        b"b ab aab abbb aaaab aaaaabb ababaabb abbaaabab",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                (
+                    "a",
+                    vec![
+                        (b"abbb", 9, 4),
+                        (b"aaabb", 22, 5),
+                        (b"aabb", 23, 4),
+                        (b"aabb", 32, 4),
+                    ],
+                ),
+                (
+                    "b",
+                    vec![
+                        (b"ab aab abb", 2, 10),
+                        (b"aab abb", 5, 7),
+                        (b"ab abb", 6, 6),
+                        (b"abbb", 9, 4),
+                        (b"aaaab aaaaabb", 14, 13),
+                        (b"aaab aaaaabb", 15, 12),
+                        (b"aab aaaaabb", 16, 11),
+                        (b"ab aaaaabb", 17, 10),
+                        (b"aaaaabb", 20, 7),
+                        (b"aaaabb", 21, 6),
+                        (b"aaabb", 22, 5),
+                        (b"aabb", 23, 4),
+                        (b"abb ababaabb", 24, 12),
+                        (b"ababaabb", 28, 8),
+                        (b"abaabb", 30, 6),
+                        (b"aabb", 32, 4),
+                        (b"abb abb", 33, 7),
+                    ],
+                ),
+                (
+                    "c",
+                    vec![
+                        (b"abb", 9, 3),
+                        (b"aabb", 23, 4),
+                        (b"abb", 24, 3),
+                        (b"aabb", 32, 4),
+                        (b"abb", 33, 3),
+                        (b"abb", 37, 3),
+                    ],
+                ),
+            ],
+        )],
+    );
+}

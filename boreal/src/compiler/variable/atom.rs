@@ -197,13 +197,31 @@ impl AtomizedRegex {
         &self.literals
     }
 
-    pub fn check_literal_match(&self, mem: &[u8], mat: Range<usize>) -> Option<Range<usize>> {
-        if let Some(pre_match) = self.left_validator.find(&mem[..mat.end]) {
-            if let Some(post_match) = self.right_validator.find(&mem[mat.start..]) {
-                return Some(pre_match.start()..(mat.start + post_match.end()));
+    pub fn check_literal_match(
+        &self,
+        mem: &[u8],
+        mut start_pos: usize,
+        mat: Range<usize>,
+    ) -> Vec<Range<usize>> {
+        match self.right_validator.find(&mem[mat.start..]) {
+            Some(post_match) => {
+                let end = mat.start + post_match.end();
+
+                // The left validator can yield multiple matches.
+                // For example, `a.?bb`, with the `bb` atom, can match as many times as there are
+                // 'a' characters before the `bb` atom.
+                //
+                // XXX: This only works if the left validator does not contain any greedy repetitions!
+                let mut matches = Vec::new();
+                while let Some(m) = self.left_validator.find(&mem[start_pos..mat.end]) {
+                    let m = (m.start() + start_pos)..end;
+                    start_pos = m.start + 1;
+                    matches.push(m);
+                }
+                matches
             }
+            None => Vec::new(),
         }
-        None
     }
 }
 
@@ -233,10 +251,11 @@ impl AtomSet {
         if self.atoms.is_empty() {
             None
         } else {
+            let (pre_ast, post_ast) = self.build_pre_post_ast(original_node);
             let mut pre = String::new();
+            add_ast_to_string(&pre_ast, &mut pre);
             let mut post = String::new();
-            add_ast_to_string(&self.build_pre_ast(original_node), &mut pre);
-            add_ast_to_string(&self.build_post_ast(original_node), &mut post);
+            add_ast_to_string(&post_ast, &mut post);
 
             Some(AtomizedExpressions {
                 literals: self.atoms,
@@ -263,24 +282,78 @@ impl AtomSet {
         }
     }
 
-    fn build_pre_ast(&self, original_node: &Node) -> Node {
-        let mut nodes = Vec::new();
+    fn build_pre_post_ast(&self, original_node: &Node) -> (Node, Node) {
+        let mut pre_nodes = Vec::new();
+        let mut post_nodes = Vec::new();
 
-        add_ast_up_to(original_node, self.start_position, &mut nodes);
-        self.add_literals_ast(&mut nodes);
-        nodes.push(Node::Assertion(AssertionKind::EndLine));
+        post_nodes.push(Node::Assertion(AssertionKind::StartLine));
+        self.add_literals_ast(&mut post_nodes);
+        self.add_pre_post_nodes(original_node, &mut 0, &mut pre_nodes, &mut post_nodes);
+        self.add_literals_ast(&mut pre_nodes);
+        pre_nodes.push(Node::Assertion(AssertionKind::EndLine));
 
-        Node::Concat(nodes)
+        (Node::Concat(pre_nodes), Node::Concat(post_nodes))
     }
 
-    fn build_post_ast(&self, original_node: &Node) -> Node {
-        let mut nodes = Vec::new();
+    fn add_pre_post_nodes(
+        &self,
+        node: &Node,
+        cur_pos: &mut usize,
+        out_pre: &mut Vec<Node>,
+        out_post: &mut Vec<Node>,
+    ) {
+        match node {
+            Node::Literal(_)
+            | Node::Repetition { .. }
+            | Node::Dot
+            | Node::Class(_)
+            | Node::Empty
+            | Node::Assertion(_)
+            | Node::Alternation(_) => {
+                self.add_pre_post_node(node.clone(), *cur_pos, out_pre, out_post);
+            }
+            Node::Group(subnode) => {
+                let mut new_nodes_pre = Vec::with_capacity(1);
+                let mut new_nodes_post = Vec::with_capacity(1);
+                self.add_pre_post_nodes(subnode, cur_pos, &mut new_nodes_pre, &mut new_nodes_post);
+                if let Some(node) = new_nodes_pre.pop() {
+                    out_pre.push(Node::Group(Box::new(node)));
+                }
+                if let Some(node) = new_nodes_post.pop() {
+                    out_post.push(Node::Group(Box::new(node)));
+                }
+            }
 
-        nodes.push(Node::Assertion(AssertionKind::StartLine));
-        self.add_literals_ast(&mut nodes);
-        add_ast_from(original_node, self.end_position, &mut nodes);
+            Node::Concat(nodes) => {
+                let mut new_nodes_pre = Vec::new();
+                let mut new_nodes_post = Vec::new();
+                for node in nodes {
+                    self.add_pre_post_nodes(node, cur_pos, &mut new_nodes_pre, &mut new_nodes_post);
+                }
+                if !new_nodes_pre.is_empty() {
+                    out_pre.push(Node::Concat(new_nodes_pre));
+                }
+                if !new_nodes_post.is_empty() {
+                    out_post.push(Node::Concat(new_nodes_post));
+                }
+            }
+        }
 
-        Node::Concat(nodes)
+        *cur_pos += 1;
+    }
+
+    fn add_pre_post_node(
+        &self,
+        node: Node,
+        cur_pos: usize,
+        out_pre: &mut Vec<Node>,
+        out_post: &mut Vec<Node>,
+    ) {
+        if cur_pos < self.start_position {
+            out_pre.push(node);
+        } else if cur_pos >= self.end_position {
+            out_post.push(node);
+        }
     }
 }
 
@@ -327,100 +400,6 @@ pub fn literals_rank(lits: &[u8]) -> u32 {
     }
 
     quality
-}
-
-fn add_ast_up_to(node: &Node, position: usize, out: &mut Vec<Node>) {
-    let mut pos = 0;
-    let _ = add_ast_up_to_inner(node, position, &mut pos, out);
-}
-
-fn add_ast_up_to_inner(
-    node: &Node,
-    position: usize,
-    cur_pos: &mut usize,
-    out: &mut Vec<Node>,
-) -> bool {
-    if *cur_pos >= position {
-        return false;
-    }
-
-    match node {
-        Node::Literal(_)
-        | Node::Repetition { .. }
-        | Node::Dot
-        | Node::Class(_)
-        | Node::Empty
-        | Node::Assertion(_)
-        | Node::Alternation(_) => out.push(node.clone()),
-        Node::Group(subnode) => {
-            let mut new_nodes = Vec::with_capacity(1);
-            if add_ast_up_to_inner(subnode, position, cur_pos, &mut new_nodes) {
-                debug_assert!(new_nodes.len() == 1);
-                if let Some(node) = new_nodes.pop() {
-                    out.push(Node::Group(Box::new(node)));
-                }
-            } else {
-                return false;
-            }
-        }
-
-        Node::Concat(nodes) => {
-            let mut new_nodes = Vec::with_capacity(nodes.len());
-
-            for node in nodes {
-                if !add_ast_up_to_inner(node, position, cur_pos, &mut new_nodes) {
-                    break;
-                }
-            }
-            if !new_nodes.is_empty() {
-                out.push(Node::Concat(new_nodes));
-            }
-        }
-    }
-
-    *cur_pos += 1;
-    true
-}
-
-fn add_ast_from(node: &Node, position: usize, out: &mut Vec<Node>) {
-    let mut pos = 0;
-    add_ast_from_inner(node, position, &mut pos, out);
-}
-
-fn add_ast_from_inner(node: &Node, position: usize, cur_pos: &mut usize, out: &mut Vec<Node>) {
-    match node {
-        Node::Literal(_)
-        | Node::Repetition { .. }
-        | Node::Dot
-        | Node::Class(_)
-        | Node::Empty
-        | Node::Assertion(_)
-        | Node::Alternation(_) => {
-            if *cur_pos >= position {
-                out.push(node.clone());
-            }
-        }
-        Node::Group(subnode) => {
-            let mut new_nodes = Vec::with_capacity(1);
-            add_ast_from_inner(subnode, position, cur_pos, &mut new_nodes);
-            if let Some(node) = new_nodes.pop() {
-                out.push(Node::Group(Box::new(node)));
-            }
-        }
-
-        Node::Concat(nodes) => {
-            let mut new_nodes = Vec::with_capacity(nodes.len());
-
-            for node in nodes {
-                add_ast_from_inner(node, position, cur_pos, &mut new_nodes);
-            }
-            if !new_nodes.is_empty() {
-                out.push(Node::Concat(new_nodes));
-            }
-        }
-    }
-
-    *cur_pos += 1;
 }
 
 #[cfg(test)]

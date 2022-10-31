@@ -34,7 +34,17 @@ pub trait Matcher: std::fmt::Debug {
     fn literals(&self) -> &[Vec<u8>];
 
     /// Check if a match found by the Aho-Corasick scan is valid.
-    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, literal_index: usize) -> AcMatchStatus;
+    ///
+    /// The `start_position` indicates the index at which matching can be done against the given
+    /// `mem` bytes. This is passed as a parameter as the match ranges depend on indices relative
+    /// to the start of the mem.
+    fn check_ac_match(
+        &self,
+        mem: &[u8],
+        mat: Range<usize>,
+        start_position: usize,
+        literal_index: usize,
+    ) -> AcMatchStatus;
 
     /// Find the next match in the given bytes.
     ///
@@ -51,10 +61,18 @@ pub trait Matcher: std::fmt::Debug {
 /// State of an aho-corasick match on a [`Matcher`] literals.
 #[derive(Clone, Debug)]
 pub enum AcMatchStatus {
-    /// The match is valid, and can be saved.
-    Valid(Range<usize>),
-    /// The match is invalid and should be discarded.
-    Invalid,
+    /// The literal yields multiple matches (can be empty).
+    Multiple(Vec<Range<usize>>),
+
+    /// The literal yields a single match (None if invalid).
+    ///
+    /// This is an optim to avoid allocating a Vec for the very common case of returning a
+    /// single match.
+    Single(Range<usize>),
+
+    /// The literal does not give any match.
+    None,
+
     /// Unknown status for the match, will need to be confirmed on its own.
     Unknown,
 }
@@ -192,20 +210,26 @@ impl Matcher for LiteralsMatcher {
         &self.literals
     }
 
-    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, literal_index: usize) -> AcMatchStatus {
+    fn check_ac_match(
+        &self,
+        mem: &[u8],
+        mat: Range<usize>,
+        _start_position: usize,
+        literal_index: usize,
+    ) -> AcMatchStatus {
         if self.flags.contains(VariableFlags::NOCASE) {
             if !self.literals[literal_index].eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
-                return AcMatchStatus::Invalid;
+                return AcMatchStatus::None;
             }
         } else if self.literals[literal_index] != mem[mat.start..mat.end] {
-            return AcMatchStatus::Invalid;
+            return AcMatchStatus::None;
         }
 
         if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, self.flags) {
-            return AcMatchStatus::Invalid;
+            return AcMatchStatus::None;
         }
 
-        AcMatchStatus::Valid(mat)
+        AcMatchStatus::Single(mat)
     }
 
     fn find_next_match_at(&self, _mem: &[u8], _offset: usize) -> Option<Range<usize>> {
@@ -251,13 +275,11 @@ impl Matcher for RegexMatcher {
         &self,
         mem: &[u8],
         mat: Range<usize>,
+        start_position: usize,
         _literal_index: usize,
     ) -> AcMatchStatus {
         match self.atomized_regex.as_ref() {
-            Some(r) => match r.check_literal_match(mem, mat) {
-                Some(m) => AcMatchStatus::Valid(m),
-                None => AcMatchStatus::Invalid,
-            },
+            Some(r) => AcMatchStatus::Multiple(r.check_literal_match(mem, start_position, mat)),
             None => AcMatchStatus::Unknown,
         }
     }
