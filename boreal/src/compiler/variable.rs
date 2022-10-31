@@ -10,6 +10,8 @@ use super::CompilationError;
 
 mod atom;
 pub use atom::literals_rank;
+mod atomized_regex;
+use atomized_regex::AtomizedRegex;
 mod hex_string;
 mod regex;
 
@@ -252,7 +254,7 @@ struct RegexMatcher {
     flags: VariableFlags,
 
     /// A regex expression that can be matched during the AC pass.
-    atomized_regex: Option<atom::AtomizedRegex>,
+    atomized_regex: Option<AtomizedRegex>,
 
     /// Regex of the non wide version of the regex.
     ///

@@ -12,14 +12,9 @@
 //! Atoms are selected by computing a rank for each atom: the higher the rank, the preferred the
 //! atom. This rank is related to how rare the atom should be found during scanning, and thus
 //! the rate of false positive matches.
-use std::ops::Range;
-
 use boreal_parser::regex::{AssertionKind, Node};
-use regex::bytes::Regex;
 
 use crate::regex::add_ast_to_string;
-
-use super::VariableCompilationError;
 
 // FIXME: add lots of tests here...
 
@@ -167,69 +162,14 @@ impl AtomVisitor {
 #[derive(Debug)]
 pub struct AtomizedExpressions {
     /// Literals extracted from the regex.
-    literals: Vec<Vec<u8>>,
+    pub literals: Vec<Vec<u8>>,
 
-    /// Expression for validators of matches on literals.
+    /// AST Expression for validators of matches on literals.
     ///
     /// The `pre` is the regex expression that must match before (and including) the literal.
     /// The `post` is the regex expression that must match after (and including) the literal.
-    pre: String,
-    post: String,
-}
-
-#[derive(Debug)]
-pub struct AtomizedRegex {
-    /// Literals extracted from the regex.
-    literals: Vec<Vec<u8>>,
-
-    /// Validators of matches on literals.
-    left_validator: Regex,
-    right_validator: Regex,
-}
-
-impl AtomizedRegex {
-    pub fn new(
-        expr: AtomizedExpressions,
-        case_insensitive: bool,
-        dot_all: bool,
-    ) -> Result<Self, VariableCompilationError> {
-        Ok(Self {
-            literals: expr.literals,
-            left_validator: super::compile_regex_expr(&expr.pre, case_insensitive, dot_all)?,
-            right_validator: super::compile_regex_expr(&expr.post, case_insensitive, dot_all)?,
-        })
-    }
-
-    pub fn literals(&self) -> &[Vec<u8>] {
-        &self.literals
-    }
-
-    pub fn check_literal_match(
-        &self,
-        mem: &[u8],
-        mut start_pos: usize,
-        mat: Range<usize>,
-    ) -> Vec<Range<usize>> {
-        match self.right_validator.find(&mem[mat.start..]) {
-            Some(post_match) => {
-                let end = mat.start + post_match.end();
-
-                // The left validator can yield multiple matches.
-                // For example, `a.?bb`, with the `bb` atom, can match as many times as there are
-                // 'a' characters before the `bb` atom.
-                //
-                // XXX: This only works if the left validator does not contain any greedy repetitions!
-                let mut matches = Vec::new();
-                while let Some(m) = self.left_validator.find(&mem[start_pos..mat.end]) {
-                    let m = (m.start() + start_pos)..end;
-                    start_pos = m.start + 1;
-                    matches.push(m);
-                }
-                matches
-            }
-            None => Vec::new(),
-        }
-    }
+    pub pre: String,
+    pub post: String,
 }
 
 /// Set of atoms that allows quickly searching for the eventual presence of a variable.
@@ -432,6 +372,7 @@ mod tests {
                 assert!(exprs.is_none());
             } else {
                 let exprs = exprs.unwrap();
+
                 assert_eq!(exprs.literals, expected_lits);
                 assert_eq!(exprs.pre, expected_pre);
                 assert_eq!(exprs.post, expected_post);

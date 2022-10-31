@@ -5,7 +5,7 @@ use boreal_parser::{HexMask, HexToken, VariableFlags};
 
 use crate::regex::add_ast_to_string;
 
-use super::atom::AtomizedRegex;
+use super::atomized_regex::AtomizedRegex;
 use super::{LiteralsMatcher, Matcher, RegexMatcher, VariableCompilationError};
 
 mod literals;
