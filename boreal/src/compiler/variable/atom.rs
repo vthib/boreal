@@ -25,8 +25,11 @@ use super::VariableCompilationError;
 
 pub fn build_atomized_expressions(node: &Node) -> Option<AtomizedExpressions> {
     let mut visitor = AtomVisitor::new();
-    visitor.visit(node);
-    visitor.into_set().into_atomized_expression(node)
+    if visitor.visit(node) {
+        visitor.into_set().into_atomized_expression(node)
+    } else {
+        None
+    }
 }
 
 /// Visitor on a regex AST to extract atoms.
@@ -53,19 +56,27 @@ impl AtomVisitor {
 }
 
 impl AtomVisitor {
-    fn visit(&mut self, node: &Node) {
+    fn visit(&mut self, node: &Node) -> bool {
         // TODO for repetitions and alternation
         match node {
             Node::Literal(b) => self.add_byte(*b),
-            Node::Group(node) => self.visit(node),
-            Node::Repetition { .. }
-            | Node::Dot
-            | Node::Class(_)
-            | Node::Empty
-            | Node::Assertion(_) => self.close(),
+            Node::Group(node) => {
+                if !self.visit(node) {
+                    return false;
+                }
+            }
+            Node::Dot | Node::Class(_) | Node::Empty | Node::Assertion(_) => self.close(),
+            Node::Repetition { greedy, .. } => {
+                if *greedy {
+                    return false;
+                }
+                self.close();
+            }
             Node::Concat(nodes) => {
                 for node in nodes {
-                    self.visit(node);
+                    if !self.visit(node) {
+                        return false;
+                    }
                 }
             }
             Node::Alternation(alts) => {
@@ -76,6 +87,7 @@ impl AtomVisitor {
         }
 
         self.current_position += 1;
+        true
     }
 
     fn add_byte(&mut self, byte: u8) {
