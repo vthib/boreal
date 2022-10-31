@@ -2,7 +2,8 @@ use std::ops::Range;
 
 use regex::bytes::Regex;
 
-use super::{atom::AtomizedExpressions, VariableCompilationError};
+use super::atom::AtomizedExpressions;
+use super::VariableCompilationError;
 
 #[derive(Debug)]
 pub struct AtomizedRegex {

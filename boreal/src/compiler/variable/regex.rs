@@ -2,7 +2,7 @@ use boreal_parser::{Regex, VariableFlags, VariableModifiers};
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
-use crate::regex::add_ast_to_string;
+use crate::regex::regex_ast_to_string;
 
 use super::{Matcher, RegexMatcher, VariableCompilationError};
 
@@ -23,8 +23,7 @@ pub fn compile_regex(
         span: _,
     } = regex;
 
-    let mut expr = String::new();
-    add_ast_to_string(&ast, &mut expr);
+    let mut expr = regex_ast_to_string(&ast);
 
     if modifiers.flags.contains(VariableFlags::NOCASE) {
         case_insensitive = true;

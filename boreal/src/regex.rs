@@ -25,10 +25,7 @@ impl Regex {
     }
 
     fn new_inner(ast: &Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
-        let mut expr = String::new();
-        add_ast_to_string(ast, &mut expr);
-
-        RegexBuilder::new(&expr)
+        RegexBuilder::new(&regex_ast_to_string(ast))
             .unicode(false)
             .case_insensitive(case_insensitive)
             .dot_matches_new_line(dot_all)
@@ -45,9 +42,11 @@ impl Regex {
 }
 
 /// Convert a yara regex AST into a rust regex expression.
-pub(crate) fn add_ast_to_string(ast: &Node, out: &mut String) {
+pub(crate) fn regex_ast_to_string(ast: &Node) -> String {
     // TODO avoid recursion here.
-    push_ast(ast, out);
+    let mut out = String::new();
+    push_ast(ast, &mut out);
+    out
 }
 
 fn push_ast(node: &Node, out: &mut String) {
@@ -202,10 +201,10 @@ mod tests {
                 }) => regex,
                 _ => unreachable!(),
             };
-            let ast = regex.ast;
-            let mut res = String::new();
-            add_ast_to_string(&ast, &mut res);
-            assert_eq!(&res, expected_res.unwrap_or(expr));
+            assert_eq!(
+                regex_ast_to_string(&regex.ast),
+                expected_res.unwrap_or(expr)
+            );
         }
 
         // Syntaxes that matches between yara and rust regexes.

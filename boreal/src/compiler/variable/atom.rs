@@ -14,7 +14,7 @@
 //! the rate of false positive matches.
 use boreal_parser::regex::{AssertionKind, Node};
 
-use crate::regex::add_ast_to_string;
+use crate::regex::regex_ast_to_string;
 
 // FIXME: add lots of tests here...
 
@@ -199,15 +199,11 @@ impl AtomSet {
             None
         } else {
             let (pre_ast, post_ast) = self.build_pre_post_ast(original_node);
-            let mut pre = String::new();
-            add_ast_to_string(&pre_ast, &mut pre);
-            let mut post = String::new();
-            add_ast_to_string(&post_ast, &mut post);
 
             Some(AtomizedExpressions {
                 literals: self.atoms,
-                pre,
-                post,
+                pre: regex_ast_to_string(&pre_ast),
+                post: regex_ast_to_string(&post_ast),
             })
         }
     }
@@ -372,7 +368,6 @@ mod tests {
                 assert!(exprs.is_none());
             } else {
                 let exprs = exprs.unwrap();
-
                 assert_eq!(exprs.literals, expected_lits);
                 assert_eq!(exprs.pre, expected_pre);
                 assert_eq!(exprs.post, expected_post);

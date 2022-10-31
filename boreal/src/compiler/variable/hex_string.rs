@@ -3,7 +3,7 @@ use boreal_parser::regex::{
 };
 use boreal_parser::{HexMask, HexToken, VariableFlags};
 
-use crate::regex::add_ast_to_string;
+use crate::regex::regex_ast_to_string;
 
 use super::atomized_regex::AtomizedRegex;
 use super::{LiteralsMatcher, Matcher, RegexMatcher, VariableCompilationError};
@@ -21,8 +21,7 @@ pub(super) fn compile_hex_string(
         }))
     } else {
         let ast = hex_string_to_ast(hex_string);
-        let mut expr = String::new();
-        add_ast_to_string(&ast, &mut expr);
+        let expr = regex_ast_to_string(&ast);
 
         let atomized_regex = match super::atom::build_atomized_expressions(&ast) {
             Some(exprs) => Some(AtomizedRegex::new(exprs, false, true)?),
@@ -89,9 +88,7 @@ mod tests {
             let hex_string = parse_hex_string(hex_string);
 
             let ast = hex_string_to_ast(hex_string);
-            let mut regex = String::new();
-            add_ast_to_string(&ast, &mut regex);
-            assert_eq!(regex, expected_regex);
+            assert_eq!(&regex_ast_to_string(&ast), expected_regex);
         }
 
         test(
