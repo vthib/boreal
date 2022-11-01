@@ -38,8 +38,6 @@ pub struct AtomsDetails {
 
     /// Indicates whether the expression has greedy repetitions.
     pub has_greedy_repetitions: bool,
-    /// Indicates whether the expression has word boundaries.
-    pub has_word_boundaries: bool,
 }
 
 /// Visitor on a regex AST to extract atoms.
@@ -53,7 +51,6 @@ struct AtomVisitor {
     current_position: usize,
 
     has_greedy_repetitions: bool,
-    has_word_boundaries: bool,
 }
 
 impl AtomVisitor {
@@ -66,7 +63,6 @@ impl AtomVisitor {
             current_position: 0,
 
             has_greedy_repetitions: false,
-            has_word_boundaries: false,
         }
     }
 }
@@ -76,15 +72,8 @@ impl AtomVisitor {
         match node {
             Node::Literal(b) => self.add_byte(*b),
             Node::Group(node) => self.visit(node),
-            Node::Dot
-            | Node::Class(_)
-            | Node::Empty
-            | Node::Assertion(AssertionKind::StartLine)
-            | Node::Assertion(AssertionKind::EndLine) => self.close(),
-            Node::Assertion(AssertionKind::WordBoundary)
-            | Node::Assertion(AssertionKind::NonWordBoundary) => {
+            Node::Dot | Node::Class(_) | Node::Empty | Node::Assertion(_) => {
                 self.close();
-                self.has_word_boundaries = true;
             }
             Node::Repetition { greedy, .. } => {
                 if *greedy {
@@ -185,7 +174,6 @@ impl AtomVisitor {
             pre: pre_ast.as_ref().map(regex_ast_to_string),
             post: post_ast.as_ref().map(regex_ast_to_string),
             has_greedy_repetitions: self.has_greedy_repetitions,
-            has_word_boundaries: self.has_word_boundaries,
         }
     }
 }

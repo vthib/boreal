@@ -29,22 +29,22 @@ pub(super) fn compile_regex(
         mut literals,
         mut pre,
         mut post,
-        has_word_boundaries,
         has_greedy_repetitions,
     } = super::atom::get_atoms_details(ast);
 
+    let mut has_wide_word_boundaries = false;
     let matcher_type = if literals.is_empty() || has_greedy_repetitions {
         let mut expr = regex_ast_to_string(ast);
-        apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
+        has_wide_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
         apply_ascii_wide_flags_on_literals(&mut literals, flags);
 
         MatcherType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?)
     } else {
         if let Some(v) = &mut pre {
-            apply_ascii_wide_flags_on_regex_expr(v, flags)?;
+            has_wide_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
         }
         if let Some(v) = &mut post {
-            apply_ascii_wide_flags_on_regex_expr(v, flags)?;
+            has_wide_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
         }
         apply_ascii_wide_flags_on_literals(&mut literals, flags);
 
@@ -54,7 +54,7 @@ pub(super) fn compile_regex(
         }
     };
 
-    let non_wide_regex = if has_word_boundaries && flags.contains(VariableFlags::WIDE) {
+    let non_wide_regex = if has_wide_word_boundaries {
         let expr = regex_ast_to_string(ast);
         Some(super::compile_regex_expr(&expr, case_insensitive, dot_all)?)
     } else {
@@ -109,19 +109,20 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 pub fn apply_ascii_wide_flags_on_regex_expr(
     expr: &mut String,
     flags: VariableFlags,
-) -> Result<(), VariableCompilationError> {
+) -> Result<bool, VariableCompilationError> {
     if flags.contains(VariableFlags::WIDE) {
         let hir = expr_to_hir(expr).unwrap();
-        let (wide_hir, _) = hir_to_wide(&hir)?;
+        let (wide_hir, has_wide_word_boundaries) = hir_to_wide(&hir)?;
 
         *expr = if flags.contains(VariableFlags::ASCII) {
             Hir::alternation(vec![hir, wide_hir]).to_string()
         } else {
             wide_hir.to_string()
         };
+        Ok(has_wide_word_boundaries)
+    } else {
+        Ok(false)
     }
-
-    Ok(())
 }
 
 /// Convert a regex expression into a HIR.

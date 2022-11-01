@@ -334,6 +334,13 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(&to_wide(b"<aveva>"), false);
     checker.check(&to_wide("<avéva>".as_bytes()), false);
     checker.check(&to_wide("<avé|a>".as_bytes()), false);
+
+    // Test word boundaries inside a repetition, regression test
+    let checker = build_checker(r"<(c\b.a){2}>", "wide");
+    checker.check(&to_wide(b"<c|ac.a>"), true);
+    checker.check(&to_wide(b"<cbac.a>"), false);
+    checker.check(&to_wide(b"<c|acba>"), false);
+    checker.check(&to_wide(b"<cbacba>"), false);
 }
 
 #[test]
