@@ -93,7 +93,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
 
     let matcher = match value {
         VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
-        VariableDeclarationValue::Regex(regex) => regex::compile_regex(regex, &modifiers),
+        VariableDeclarationValue::Regex(regex) => regex::compile_regex(regex, modifiers.flags),
         VariableDeclarationValue::HexString(hex_string) => {
             // Fullword and wide is not compatible with hex strings
             modifiers.flags.remove(VariableFlags::FULLWORD);
@@ -297,7 +297,19 @@ impl Matcher for RegexMatcher {
     ) -> AcMatchStatus {
         match &self.regex_type {
             RegexType::Atomized(r) => {
-                r.check_literal_match(mem, start_position, mat, literal_index, self.flags)
+                match r.check_literal_match(mem, start_position, mat, literal_index, self.flags) {
+                    AcMatchStatus::Multiple(matches) => AcMatchStatus::Multiple(
+                        matches
+                            .into_iter()
+                            .filter_map(|mat| self.validate_and_update_match(mem, mat))
+                            .collect(),
+                    ),
+                    AcMatchStatus::Single(mat) => match self.validate_and_update_match(mem, mat) {
+                        Some(m) => AcMatchStatus::Single(m),
+                        None => AcMatchStatus::None,
+                    },
+                    status => status,
+                }
             }
             RegexType::Raw(_) => {
                 // This variable should not have been covered by the variable set, so we should

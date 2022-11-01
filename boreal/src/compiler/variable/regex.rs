@@ -1,9 +1,10 @@
-use boreal_parser::{Regex, VariableFlags, VariableModifiers};
+use boreal_parser::{Regex, VariableFlags};
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
 use crate::regex::regex_ast_to_string;
 
+use super::atomized_regex::AtomizedRegex;
 use super::{Matcher, RegexMatcher, RegexType, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -14,7 +15,7 @@ use super::{Matcher, RegexMatcher, RegexType, VariableCompilationError};
 ///   containing word boundaries.
 pub fn compile_regex(
     regex: Regex,
-    modifiers: &VariableModifiers,
+    flags: VariableFlags,
 ) -> Result<Box<dyn Matcher>, VariableCompilationError> {
     let Regex {
         ast,
@@ -23,33 +24,92 @@ pub fn compile_regex(
         span: _,
     } = regex;
 
-    let mut expr = regex_ast_to_string(&ast);
-
-    if modifiers.flags.contains(VariableFlags::NOCASE) {
+    if flags.contains(VariableFlags::NOCASE) {
         case_insensitive = true;
     }
 
-    let mut non_wide_regex = None;
+    let (regex_type, has_word_boundaries) = match super::atom::build_atomized_expressions(&ast) {
+        Some(mut exprs) => {
+            let mut has_word_boundaries = false;
+            if let Some(v) = &mut exprs.pre {
+                has_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
+            }
+            if let Some(v) = &mut exprs.post {
+                has_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
+            }
+            apply_ascii_wide_flags_on_literals(&mut exprs.literals, flags);
 
-    if modifiers.flags.contains(VariableFlags::WIDE) {
-        let hir = expr_to_hir(&expr).unwrap();
-        let (wide_hir, has_word_boundaries) = hir_to_wide(&hir)?;
-        if has_word_boundaries {
-            non_wide_regex = Some(super::compile_regex_expr(&expr, case_insensitive, dot_all)?);
+            (
+                RegexType::Atomized(AtomizedRegex::new(exprs, case_insensitive, dot_all)?),
+                has_word_boundaries,
+            )
         }
+        None => {
+            let mut expr = regex_ast_to_string(&ast);
+            let has_word_boundaries = apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
 
-        if modifiers.flags.contains(VariableFlags::ASCII) {
-            expr = Hir::alternation(vec![hir, wide_hir]).to_string();
-        } else {
-            expr = wide_hir.to_string();
+            (
+                RegexType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?),
+                has_word_boundaries,
+            )
         }
-    }
+    };
+
+    let non_wide_regex = if has_word_boundaries {
+        let expr = regex_ast_to_string(&ast);
+        Some(super::compile_regex_expr(&expr, case_insensitive, dot_all)?)
+    } else {
+        None
+    };
 
     Ok(Box::new(RegexMatcher {
-        regex_type: RegexType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?),
-        flags: modifiers.flags,
+        regex_type,
+        flags,
         non_wide_regex,
     }))
+}
+
+fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, flags: VariableFlags) {
+    if !flags.contains(VariableFlags::WIDE) {
+        return;
+    }
+
+    if flags.contains(VariableFlags::ASCII) {
+        let wide_literals: Vec<_> = literals.iter().map(|v| widen_literal(v)).collect();
+        literals.extend(wide_literals);
+    } else {
+        for lit in literals {
+            *lit = widen_literal(lit);
+        }
+    }
+}
+
+fn widen_literal(literal: &[u8]) -> Vec<u8> {
+    let mut new_lit = Vec::with_capacity(literal.len() * 2);
+    for b in literal {
+        new_lit.push(*b);
+        new_lit.push(0);
+    }
+    new_lit
+}
+
+pub fn apply_ascii_wide_flags_on_regex_expr(
+    expr: &mut String,
+    flags: VariableFlags,
+) -> Result<bool, VariableCompilationError> {
+    if flags.contains(VariableFlags::WIDE) {
+        let hir = expr_to_hir(expr).unwrap();
+        let (wide_hir, has_word_boundaries) = hir_to_wide(&hir)?;
+
+        *expr = if flags.contains(VariableFlags::ASCII) {
+            Hir::alternation(vec![hir, wide_hir]).to_string()
+        } else {
+            wide_hir.to_string()
+        };
+        Ok(has_word_boundaries)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Convert a regex expression into a HIR.
