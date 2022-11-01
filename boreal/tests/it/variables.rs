@@ -1467,4 +1467,86 @@ rule a {
             ],
         )],
     );
+
+    // Do the same with greedy repetitions.
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a.{1,2}bb/
+        $b = /a[^z]+bb/
+        $c = /a.?bb/
+        // Regression test, hide the greedy repetitions inside an expression not
+        // visited by the atom visitor.
+        $d = /a([^ ]+|z).aa/
+    condition:
+        any of them
+}
+"#,
+    );
+
+    checker.check_full_matches(
+        b"b ab aab abbb aaaab aaaaabb ababaabb abbaaabab",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                (
+                    "a",
+                    vec![
+                        (b"abbb", 9, 4),
+                        (b"aaabb", 22, 5),
+                        (b"aabb", 23, 4),
+                        (b"aabb", 32, 4),
+                    ],
+                ),
+                (
+                    "b",
+                    vec![
+                        (b"ab aab abbb aaaab aaaaabb ababaabb abb", 2, 38),
+                        (b"aab abbb aaaab aaaaabb ababaabb abb", 5, 35),
+                        (b"ab abbb aaaab aaaaabb ababaabb abb", 6, 34),
+                        (b"abbb aaaab aaaaabb ababaabb abb", 9, 31),
+                        (b"aaaab aaaaabb ababaabb abb", 14, 26),
+                        (b"aaab aaaaabb ababaabb abb", 15, 25),
+                        (b"aab aaaaabb ababaabb abb", 16, 24),
+                        (b"ab aaaaabb ababaabb abb", 17, 23),
+                        (b"aaaaabb ababaabb abb", 20, 20),
+                        (b"aaaabb ababaabb abb", 21, 19),
+                        (b"aaabb ababaabb abb", 22, 18),
+                        (b"aabb ababaabb abb", 23, 17),
+                        (b"abb ababaabb abb", 24, 16),
+                        (b"ababaabb abb", 28, 12),
+                        (b"abaabb abb", 30, 10),
+                        (b"aabb abb", 32, 8),
+                        (b"abb abb", 33, 7),
+                    ],
+                ),
+                (
+                    "c",
+                    vec![
+                        (b"abbb", 9, 4),
+                        (b"aabb", 23, 4),
+                        (b"abb", 24, 3),
+                        (b"aabb", 32, 4),
+                        (b"abb", 33, 3),
+                        (b"abb", 37, 3),
+                    ],
+                ),
+                (
+                    "d",
+                    vec![
+                        (b"ab aa", 2, 5),
+                        (b"abbb aa", 9, 7),
+                        (b"aaaab aa", 14, 8),
+                        (b"aaab aa", 15, 7),
+                        (b"aab aa", 16, 6),
+                        (b"ab aa", 17, 5),
+                        (b"aaaaa", 20, 5),
+                        (b"ababaa", 28, 6),
+                        (b"abbaaa", 37, 6),
+                    ],
+                ),
+            ],
+        )],
+    );
 }

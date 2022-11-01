@@ -29,8 +29,9 @@ pub(super) fn compile_regex(
         mut literals,
         mut pre,
         mut post,
-        has_greedy_repetitions,
     } = super::atom::get_atoms_details(ast);
+
+    let has_greedy_repetitions = scan_ast_for_greedy_repetitions(ast);
 
     let mut has_wide_word_boundaries = false;
     let matcher_type = if literals.is_empty() || has_greedy_repetitions {
@@ -66,6 +67,23 @@ pub(super) fn compile_regex(
         matcher_type,
         non_wide_regex,
     })
+}
+
+// FIXME: really need a visitor for the AST
+fn scan_ast_for_greedy_repetitions(node: &Node) -> bool {
+    match node {
+        Node::Literal(_) | Node::Dot | Node::Class(_) | Node::Empty | Node::Assertion(_) => false,
+        Node::Repetition { greedy, node, .. } => {
+            if *greedy {
+                return true;
+            }
+            scan_ast_for_greedy_repetitions(node)
+        }
+        Node::Group(node) => scan_ast_for_greedy_repetitions(node),
+        Node::Concat(nodes) | Node::Alternation(nodes) => {
+            nodes.iter().any(scan_ast_for_greedy_repetitions)
+        }
+    }
 }
 
 fn compile_validator(

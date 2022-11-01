@@ -35,9 +35,6 @@ pub struct AtomsDetails {
     /// The `post` is the regex expression that must match after (and including) the literal.
     pub pre: Option<String>,
     pub post: Option<String>,
-
-    /// Indicates whether the expression has greedy repetitions.
-    pub has_greedy_repetitions: bool,
 }
 
 /// Visitor on a regex AST to extract atoms.
@@ -49,8 +46,6 @@ struct AtomVisitor {
     atoms_start_position: usize,
 
     current_position: usize,
-
-    has_greedy_repetitions: bool,
 }
 
 impl AtomVisitor {
@@ -61,8 +56,6 @@ impl AtomVisitor {
             atoms_start_position: 0,
 
             current_position: 0,
-
-            has_greedy_repetitions: false,
         }
     }
 }
@@ -72,13 +65,11 @@ impl AtomVisitor {
         match node {
             Node::Literal(b) => self.add_byte(*b),
             Node::Group(node) => self.visit(node),
-            Node::Dot | Node::Class(_) | Node::Empty | Node::Assertion(_) => {
-                self.close();
-            }
-            Node::Repetition { greedy, .. } => {
-                if *greedy {
-                    self.has_greedy_repetitions = true;
-                }
+            Node::Dot
+            | Node::Class(_)
+            | Node::Empty
+            | Node::Assertion(_)
+            | Node::Repetition { .. } => {
                 self.close();
             }
             Node::Concat(nodes) => {
@@ -173,7 +164,6 @@ impl AtomVisitor {
             literals: self.set.atoms,
             pre: pre_ast.as_ref().map(regex_ast_to_string),
             post: post_ast.as_ref().map(regex_ast_to_string),
-            has_greedy_repetitions: self.has_greedy_repetitions,
         }
     }
 }
