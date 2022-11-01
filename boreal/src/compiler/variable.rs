@@ -219,19 +219,7 @@ impl Matcher for LiteralsMatcher {
         _start_position: usize,
         literal_index: usize,
     ) -> AcMatchStatus {
-        if self.flags.contains(VariableFlags::NOCASE) {
-            if !self.literals[literal_index].eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
-                return AcMatchStatus::None;
-            }
-        } else if self.literals[literal_index] != mem[mat.start..mat.end] {
-            return AcMatchStatus::None;
-        }
-
-        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, self.flags) {
-            return AcMatchStatus::None;
-        }
-
-        AcMatchStatus::Single(mat)
+        check_literal_with_flags(mem, mat, &self.literals[literal_index], self.flags)
     }
 
     fn find_next_match_at(&self, _mem: &[u8], _offset: usize) -> Option<Range<usize>> {
@@ -240,6 +228,27 @@ impl Matcher for LiteralsMatcher {
         debug_assert!(false);
         None
     }
+}
+
+fn check_literal_with_flags(
+    mem: &[u8],
+    mat: Range<usize>,
+    literal: &[u8],
+    flags: VariableFlags,
+) -> AcMatchStatus {
+    if flags.contains(VariableFlags::NOCASE) {
+        if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
+            return AcMatchStatus::None;
+        }
+    } else if literal != &mem[mat.start..mat.end] {
+        return AcMatchStatus::None;
+    }
+
+    if flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, flags) {
+        return AcMatchStatus::None;
+    }
+
+    AcMatchStatus::Single(mat)
 }
 
 /// Matcher on a variable expressable with a regex.
@@ -278,10 +287,10 @@ impl Matcher for RegexMatcher {
         mem: &[u8],
         mat: Range<usize>,
         start_position: usize,
-        _literal_index: usize,
+        literal_index: usize,
     ) -> AcMatchStatus {
         match self.atomized_regex.as_ref() {
-            Some(r) => AcMatchStatus::Multiple(r.check_literal_match(mem, start_position, mat)),
+            Some(r) => r.check_literal_match(mem, start_position, mat, literal_index, self.flags),
             None => AcMatchStatus::Unknown,
         }
     }

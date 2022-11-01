@@ -1,9 +1,10 @@
 use std::ops::Range;
 
+use boreal_parser::VariableFlags;
 use regex::bytes::Regex;
 
 use super::atom::AtomizedExpressions;
-use super::VariableCompilationError;
+use super::{check_literal_with_flags, AcMatchStatus, VariableCompilationError};
 
 #[derive(Debug)]
 pub struct AtomizedRegex {
@@ -43,19 +44,23 @@ impl AtomizedRegex {
         mem: &[u8],
         mut start_pos: usize,
         mat: Range<usize>,
-    ) -> Vec<Range<usize>> {
-        // FIXME: if both validators are None, we should check the match is actually valid:
-        // the AC has the right to reduce its literal. Add a test for this.
+        literal_index: usize,
+        flags: VariableFlags,
+    ) -> AcMatchStatus {
+        if self.left_validator.is_none() && self.right_validator.is_none() {
+            return check_literal_with_flags(mem, mat, &self.literals[literal_index], flags);
+        }
+
         let end = match &self.right_validator {
             Some(validator) => match validator.find(&mem[mat.start..]) {
                 Some(m) => mat.start + m.end(),
-                None => return Vec::new(),
+                None => return AcMatchStatus::None,
             },
             None => mat.end,
         };
 
         match &self.left_validator {
-            None => vec![mat.start..end],
+            None => AcMatchStatus::Multiple(vec![mat.start..end]),
             Some(validator) => {
                 // The left validator can yield multiple matches.
                 // For example, `a.?bb`, with the `bb` atom, can match as many times as there are
@@ -68,7 +73,7 @@ impl AtomizedRegex {
                     start_pos = m.start + 1;
                     matches.push(m);
                 }
-                matches
+                AcMatchStatus::Multiple(matches)
             }
         }
     }
