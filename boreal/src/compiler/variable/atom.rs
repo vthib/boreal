@@ -23,16 +23,7 @@ use super::VariableCompilationError;
 
 // FIXME: add lots of tests here...
 
-pub fn build_atomized_regex(
-    node: &Node,
-) -> Result<Option<AtomizedRegex>, VariableCompilationError> {
-    match build_atomized_expressions(node) {
-        Some(v) => Ok(Some(AtomizedRegex::new(v)?)),
-        None => Ok(None),
-    }
-}
-
-fn build_atomized_expressions(node: &Node) -> Option<AtomizedExpressions> {
+pub fn build_atomized_expressions(node: &Node) -> Option<AtomizedExpressions> {
     let mut visitor = AtomVisitor::new();
     visitor.visit(node);
     visitor.into_set().into_atomized_expression(node)
@@ -185,11 +176,15 @@ pub struct AtomizedRegex {
 }
 
 impl AtomizedRegex {
-    fn new(expr: AtomizedExpressions) -> Result<Self, VariableCompilationError> {
+    pub fn new(
+        expr: AtomizedExpressions,
+        case_insensitive: bool,
+        dot_all: bool,
+    ) -> Result<Self, VariableCompilationError> {
         Ok(Self {
             literals: expr.literals,
-            left_validator: super::compile_regex_expr(&expr.pre, false, true)?,
-            right_validator: super::compile_regex_expr(&expr.post, false, true)?,
+            left_validator: super::compile_regex_expr(&expr.pre, case_insensitive, dot_all)?,
+            right_validator: super::compile_regex_expr(&expr.post, case_insensitive, dot_all)?,
         })
     }
 
