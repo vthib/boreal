@@ -26,27 +26,52 @@ pub struct Variable {
     /// Is the variable marked as private.
     pub is_private: bool,
 
+    /// Set of literals extracted from the variable.
+    ///
+    /// Will be used by the AC pass to scan for the variable.
+    pub literals: Vec<Vec<u8>>,
+
+    /// Flags related to variable modifiers.
+    pub flags: VariableFlags,
+
     /// Matcher impl for the variable
     pub matcher: Box<dyn Matcher>,
 }
 
+impl Variable {
+    /// Confirm that an AC match is a match on the given literal.
+    ///
+    /// This is needed because the AC might optimize literals and get false positive matches.
+    /// This function is used to confirm the tentative match does match the literal with the given
+    /// index.
+    pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
+        let literal = &self.literals[literal_index];
+
+        if self.flags.contains(VariableFlags::NOCASE) {
+            if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
+                return false;
+            }
+        } else if literal != &mem[mat.start..mat.end] {
+            return false;
+        }
+
+        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, mat, self.flags) {
+            return false;
+        }
+
+        true
+    }
+}
+
 /// A trait used to match the variable on bytes.
 pub trait Matcher: std::fmt::Debug {
-    /// Get literals to use in the Aho-Corasick early scan.
-    fn literals(&self) -> &[Vec<u8>];
-
     /// Check if a match found by the Aho-Corasick scan is valid.
     ///
     /// The `start_position` indicates the index at which matching can be done against the given
     /// `mem` bytes. This is passed as a parameter as the match ranges depend on indices relative
     /// to the start of the mem.
-    fn check_ac_match(
-        &self,
-        mem: &[u8],
-        mat: Range<usize>,
-        start_position: usize,
-        literal_index: usize,
-    ) -> AcMatchStatus;
+    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, start_position: usize)
+        -> AcMatchStatus;
 
     /// Find the next match in the given bytes.
     ///
@@ -91,9 +116,14 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         modifiers.flags.insert(VariableFlags::ASCII);
     }
 
-    let matcher = match value {
+    let (literals, matcher) = match value {
         VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
-        VariableDeclarationValue::Regex(regex) => regex::compile_regex(regex, modifiers.flags),
+        VariableDeclarationValue::Regex(regex) => {
+            if regex.case_insensitive {
+                modifiers.flags.insert(VariableFlags::NOCASE);
+            }
+            regex::compile_regex(regex, modifiers.flags)
+        }
         VariableDeclarationValue::HexString(hex_string) => {
             // Fullword and wide is not compatible with hex strings
             modifiers.flags.remove(VariableFlags::FULLWORD);
@@ -111,6 +141,8 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     Ok(Variable {
         name,
         is_private: modifiers.flags.contains(VariableFlags::PRIVATE),
+        literals,
+        flags: modifiers.flags,
         matcher,
     })
 }
@@ -130,7 +162,10 @@ fn compile_regex_expr(
         .map_err(|err| VariableCompilationError::Regex(err.to_string()))
 }
 
-fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> Box<dyn Matcher> {
+fn compile_bytes(
+    value: Vec<u8>,
+    modifiers: &VariableModifiers,
+) -> (Vec<Vec<u8>>, Box<dyn Matcher>) {
     let mut literals = Vec::with_capacity(2);
 
     if modifiers.flags.contains(VariableFlags::WIDE) {
@@ -154,10 +189,7 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> Box<dyn Match
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        return Box::new(LiteralsMatcher {
-            literals: new_literals,
-            flags: modifiers.flags,
-        });
+        return (new_literals, Box::new(LiteralsMatcher {}));
     }
 
     if modifiers.flags.contains(VariableFlags::BASE64)
@@ -188,10 +220,7 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> Box<dyn Match
         }
     }
 
-    Box::new(LiteralsMatcher {
-        literals,
-        flags: modifiers.flags,
-    })
+    (literals, Box::new(LiteralsMatcher {}))
 }
 
 /// Matcher on exact literals.
@@ -199,27 +228,16 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> Box<dyn Match
 /// This can only be used if the variable is expressed exactly by those literals. This variable
 /// is matched entirely by the Aho-Corasick scan, and do not need post scanning.
 #[derive(Debug)]
-struct LiteralsMatcher {
-    /// Set of literals that compose the variable.
-    literals: Vec<Vec<u8>>,
-
-    /// Flags related to variable modifiers.
-    flags: VariableFlags,
-}
+struct LiteralsMatcher {}
 
 impl Matcher for LiteralsMatcher {
-    fn literals(&self) -> &[Vec<u8>] {
-        &self.literals
-    }
-
     fn check_ac_match(
         &self,
-        mem: &[u8],
+        _mem: &[u8],
         mat: Range<usize>,
         _start_position: usize,
-        literal_index: usize,
     ) -> AcMatchStatus {
-        check_literal_with_flags(mem, mat, &self.literals[literal_index], self.flags)
+        AcMatchStatus::Single(mat)
     }
 
     fn find_next_match_at(&self, _mem: &[u8], _offset: usize) -> Option<Range<usize>> {
@@ -228,27 +246,6 @@ impl Matcher for LiteralsMatcher {
         debug_assert!(false);
         None
     }
-}
-
-fn check_literal_with_flags(
-    mem: &[u8],
-    mat: Range<usize>,
-    literal: &[u8],
-    flags: VariableFlags,
-) -> AcMatchStatus {
-    if flags.contains(VariableFlags::NOCASE) {
-        if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
-            return AcMatchStatus::None;
-        }
-    } else if literal != &mem[mat.start..mat.end] {
-        return AcMatchStatus::None;
-    }
-
-    if flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, flags) {
-        return AcMatchStatus::None;
-    }
-
-    AcMatchStatus::Single(mat)
 }
 
 /// Matcher on a variable expressable with a regex.
@@ -281,36 +278,26 @@ enum RegexType {
 }
 
 impl Matcher for RegexMatcher {
-    fn literals(&self) -> &[Vec<u8>] {
-        match &self.regex_type {
-            RegexType::Atomized(r) => r.literals(),
-            RegexType::Raw(_) => &[],
-        }
-    }
-
     fn check_ac_match(
         &self,
         mem: &[u8],
         mat: Range<usize>,
         start_position: usize,
-        literal_index: usize,
     ) -> AcMatchStatus {
         match &self.regex_type {
-            RegexType::Atomized(r) => {
-                match r.check_literal_match(mem, start_position, mat, literal_index, self.flags) {
-                    AcMatchStatus::Multiple(matches) => AcMatchStatus::Multiple(
-                        matches
-                            .into_iter()
-                            .filter_map(|mat| self.validate_and_update_match(mem, mat))
-                            .collect(),
-                    ),
-                    AcMatchStatus::Single(mat) => match self.validate_and_update_match(mem, mat) {
-                        Some(m) => AcMatchStatus::Single(m),
-                        None => AcMatchStatus::None,
-                    },
-                    status => status,
-                }
-            }
+            RegexType::Atomized(r) => match r.check_literal_match(mem, start_position, mat) {
+                AcMatchStatus::Multiple(matches) => AcMatchStatus::Multiple(
+                    matches
+                        .into_iter()
+                        .filter_map(|mat| self.validate_and_update_match(mem, mat))
+                        .collect(),
+                ),
+                AcMatchStatus::Single(mat) => match self.validate_and_update_match(mem, mat) {
+                    Some(m) => AcMatchStatus::Single(m),
+                    None => AcMatchStatus::None,
+                },
+                status => status,
+            },
             RegexType::Raw(_) => {
                 // This variable should not have been covered by the variable set, so we should
                 // not be able to reach this code.

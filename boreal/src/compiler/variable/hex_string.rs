@@ -13,28 +13,37 @@ mod literals;
 pub(super) fn compile_hex_string(
     hex_string: Vec<HexToken>,
     flags: VariableFlags,
-) -> Result<Box<dyn Matcher>, VariableCompilationError> {
+) -> Result<(Vec<Vec<u8>>, Box<dyn Matcher>), VariableCompilationError> {
     if literals::can_use_only_literals(&hex_string) {
-        Ok(Box::new(LiteralsMatcher {
-            literals: literals::hex_string_to_only_literals(hex_string),
-            flags,
-        }))
+        Ok((
+            literals::hex_string_to_only_literals(hex_string),
+            Box::new(LiteralsMatcher {}),
+        ))
     } else {
         let ast = hex_string_to_ast(hex_string);
 
-        let regex_type = match super::atom::build_atomized_expressions(&ast) {
-            Some(exprs) => RegexType::Atomized(AtomizedRegex::new(exprs, false, true)?),
+        let (literals, regex_type) = match super::atom::build_atomized_expressions(&ast) {
+            Some(exprs) => (
+                exprs.literals.clone(),
+                RegexType::Atomized(AtomizedRegex::new(exprs, false, true)?),
+            ),
             None => {
                 let expr = regex_ast_to_string(&ast);
-                RegexType::Raw(super::compile_regex_expr(&expr, false, true)?)
+                (
+                    Vec::new(),
+                    RegexType::Raw(super::compile_regex_expr(&expr, false, true)?),
+                )
             }
         };
 
-        Ok(Box::new(RegexMatcher {
-            regex_type,
-            flags,
-            non_wide_regex: None,
-        }))
+        Ok((
+            literals,
+            Box::new(RegexMatcher {
+                regex_type,
+                flags,
+                non_wide_regex: None,
+            }),
+        ))
     }
 }
 

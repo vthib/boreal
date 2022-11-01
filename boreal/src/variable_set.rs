@@ -40,12 +40,10 @@ impl VariableSet {
         let mut non_handled_var_indexes = Vec::new();
 
         for (variable_index, var) in variables.iter().enumerate() {
-            let literals = var.matcher.literals();
-
-            if literals.is_empty() {
+            if var.literals.is_empty() {
                 non_handled_var_indexes.push(variable_index);
             } else {
-                for (literal_index, lit) in literals.iter().enumerate() {
+                for (literal_index, lit) in var.literals.iter().enumerate() {
                     let (start, end) = pick_best_atom_in_literal(lit);
                     aho_index_to_literal_info.push(LiteralInfo {
                         variable_index,
@@ -80,6 +78,7 @@ impl VariableSet {
                 literal_index,
                 slice_offset: (start_offset, end_offset),
             } = self.aho_index_to_literal_info[mat.pattern()];
+            let var = &variables[variable_index];
 
             // Upscale to the original literal shape before feeding it to the matcher verification
             // function.
@@ -93,6 +92,11 @@ impl VariableSet {
                 None => continue,
             };
             let m = start..end;
+
+            // Verify the literal is valid.
+            if !var.confirm_ac_literal(mem, &m, literal_index) {
+                continue;
+            }
 
             // Shorten the mem to prevent new matches on the same starting byte.
             // For example, for `a.*?bb`, and input `abbb`, this can happen:
@@ -112,12 +116,10 @@ impl VariableSet {
                 _ => 0,
             };
 
-            match variables[variable_index].matcher.check_ac_match(
-                mem,
-                m,
-                start_position,
-                literal_index,
-            ) {
+            match variables[variable_index]
+                .matcher
+                .check_ac_match(mem, m, start_position)
+            {
                 AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
                     Some(MatchResult::Matches(v)) => v.extend(found_matches),
                     _ => matches[variable_index] = Some(MatchResult::Matches(found_matches)),

@@ -1,16 +1,12 @@
 use std::ops::Range;
 
-use boreal_parser::VariableFlags;
 use regex::bytes::Regex;
 
 use super::atom::AtomizedExpressions;
-use super::{check_literal_with_flags, AcMatchStatus, VariableCompilationError};
+use super::{AcMatchStatus, VariableCompilationError};
 
 #[derive(Debug)]
 pub struct AtomizedRegex {
-    /// Literals extracted from the regex.
-    literals: Vec<Vec<u8>>,
-
     /// Validators of matches on literals.
     left_validator: Option<Regex>,
     right_validator: Option<Regex>,
@@ -23,20 +19,15 @@ impl AtomizedRegex {
         dot_all: bool,
     ) -> Result<Self, VariableCompilationError> {
         let AtomizedExpressions {
-            literals,
+            literals: _,
             pre,
             post,
         } = exprs;
 
         Ok(Self {
-            literals,
             left_validator: compile_validator(pre, case_insensitive, dot_all)?,
             right_validator: compile_validator(post, case_insensitive, dot_all)?,
         })
-    }
-
-    pub fn literals(&self) -> &[Vec<u8>] {
-        &self.literals
     }
 
     pub fn check_literal_match(
@@ -44,13 +35,7 @@ impl AtomizedRegex {
         mem: &[u8],
         mut start_pos: usize,
         mat: Range<usize>,
-        literal_index: usize,
-        flags: VariableFlags,
     ) -> AcMatchStatus {
-        if self.left_validator.is_none() && self.right_validator.is_none() {
-            return check_literal_with_flags(mem, mat, &self.literals[literal_index], flags);
-        }
-
         let end = match &self.right_validator {
             Some(validator) => match validator.find(&mem[mat.start..]) {
                 Some(m) => mat.start + m.end(),
