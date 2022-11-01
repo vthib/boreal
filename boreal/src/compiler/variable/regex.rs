@@ -6,7 +6,7 @@ use regex_syntax::ParserBuilder;
 
 use crate::regex::regex_ast_to_string;
 
-use super::atom::AtomizedExpressions;
+use super::atom::AtomsDetails;
 use super::{CompiledVariable, MatcherType, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -25,44 +25,36 @@ pub(super) fn compile_regex(
         case_insensitive = true;
     }
 
-    let (literals, matcher_type, has_word_boundaries) =
-        match super::atom::build_atomized_expressions(ast) {
-            Some(AtomizedExpressions {
-                mut literals,
-                mut pre,
-                mut post,
-            }) => {
-                let mut has_word_boundaries = false;
-                if let Some(v) = &mut pre {
-                    has_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
-                }
-                if let Some(v) = &mut post {
-                    has_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
-                }
-                apply_ascii_wide_flags_on_literals(&mut literals, flags);
+    let AtomsDetails {
+        mut literals,
+        mut pre,
+        mut post,
+        has_word_boundaries,
+        has_greedy_repetitions,
+    } = super::atom::get_atoms_details(ast);
 
-                (
-                    literals,
-                    MatcherType::Atomized {
-                        left_validator: compile_validator(pre, case_insensitive, dot_all)?,
-                        right_validator: compile_validator(post, case_insensitive, dot_all)?,
-                    },
-                    has_word_boundaries,
-                )
-            }
-            None => {
-                let mut expr = regex_ast_to_string(ast);
-                let has_word_boundaries = apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
+    let matcher_type = if literals.is_empty() || has_greedy_repetitions {
+        let mut expr = regex_ast_to_string(ast);
+        apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
+        apply_ascii_wide_flags_on_literals(&mut literals, flags);
 
-                (
-                    Vec::new(),
-                    MatcherType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?),
-                    has_word_boundaries,
-                )
-            }
-        };
+        MatcherType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?)
+    } else {
+        if let Some(v) = &mut pre {
+            apply_ascii_wide_flags_on_regex_expr(v, flags)?;
+        }
+        if let Some(v) = &mut post {
+            apply_ascii_wide_flags_on_regex_expr(v, flags)?;
+        }
+        apply_ascii_wide_flags_on_literals(&mut literals, flags);
 
-    let non_wide_regex = if has_word_boundaries {
+        MatcherType::Atomized {
+            left_validator: compile_validator(pre, case_insensitive, dot_all)?,
+            right_validator: compile_validator(post, case_insensitive, dot_all)?,
+        }
+    };
+
+    let non_wide_regex = if has_word_boundaries && flags.contains(VariableFlags::WIDE) {
         let expr = regex_ast_to_string(ast);
         Some(super::compile_regex_expr(&expr, case_insensitive, dot_all)?)
     } else {
@@ -117,20 +109,19 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 pub fn apply_ascii_wide_flags_on_regex_expr(
     expr: &mut String,
     flags: VariableFlags,
-) -> Result<bool, VariableCompilationError> {
+) -> Result<(), VariableCompilationError> {
     if flags.contains(VariableFlags::WIDE) {
         let hir = expr_to_hir(expr).unwrap();
-        let (wide_hir, has_word_boundaries) = hir_to_wide(&hir)?;
+        let (wide_hir, _) = hir_to_wide(&hir)?;
 
         *expr = if flags.contains(VariableFlags::ASCII) {
             Hir::alternation(vec![hir, wide_hir]).to_string()
         } else {
             wide_hir.to_string()
         };
-        Ok(has_word_boundaries)
-    } else {
-        Ok(false)
     }
+
+    Ok(())
 }
 
 /// Convert a regex expression into a HIR.

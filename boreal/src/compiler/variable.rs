@@ -243,10 +243,6 @@ impl Variable {
             return false;
         }
 
-        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, mat, self.flags) {
-            return false;
-        }
-
         true
     }
 

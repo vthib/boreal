@@ -18,13 +18,28 @@ use crate::regex::regex_ast_to_string;
 
 // FIXME: add lots of tests here...
 
-pub fn build_atomized_expressions(node: &Node) -> Option<AtomizedExpressions> {
+pub fn get_atoms_details(node: &Node) -> AtomsDetails {
     let mut visitor = AtomVisitor::new();
-    if visitor.visit(node) {
-        visitor.into_set().into_atomized_expression(node)
-    } else {
-        None
-    }
+    visitor.visit(node);
+    visitor.into_atoms_details(node)
+}
+
+#[derive(Debug)]
+pub struct AtomsDetails {
+    /// Literals extracted from the regex.
+    pub literals: Vec<Vec<u8>>,
+
+    /// AST Expression for validators of matches on literals.
+    ///
+    /// The `pre` is the regex expression that must match before (and including) the literal.
+    /// The `post` is the regex expression that must match after (and including) the literal.
+    pub pre: Option<String>,
+    pub post: Option<String>,
+
+    /// Indicates whether the expression has greedy repetitions.
+    pub has_greedy_repetitions: bool,
+    /// Indicates whether the expression has word boundaries.
+    pub has_word_boundaries: bool,
 }
 
 /// Visitor on a regex AST to extract atoms.
@@ -36,6 +51,9 @@ struct AtomVisitor {
     atoms_start_position: usize,
 
     current_position: usize,
+
+    has_greedy_repetitions: bool,
+    has_word_boundaries: bool,
 }
 
 impl AtomVisitor {
@@ -46,32 +64,37 @@ impl AtomVisitor {
             atoms_start_position: 0,
 
             current_position: 0,
+
+            has_greedy_repetitions: false,
+            has_word_boundaries: false,
         }
     }
 }
 
 impl AtomVisitor {
-    fn visit(&mut self, node: &Node) -> bool {
-        // TODO for repetitions and alternation
+    fn visit(&mut self, node: &Node) {
         match node {
             Node::Literal(b) => self.add_byte(*b),
-            Node::Group(node) => {
-                if !self.visit(node) {
-                    return false;
-                }
+            Node::Group(node) => self.visit(node),
+            Node::Dot
+            | Node::Class(_)
+            | Node::Empty
+            | Node::Assertion(AssertionKind::StartLine)
+            | Node::Assertion(AssertionKind::EndLine) => self.close(),
+            Node::Assertion(AssertionKind::WordBoundary)
+            | Node::Assertion(AssertionKind::NonWordBoundary) => {
+                self.close();
+                self.has_word_boundaries = true;
             }
-            Node::Dot | Node::Class(_) | Node::Empty | Node::Assertion(_) => self.close(),
             Node::Repetition { greedy, .. } => {
                 if *greedy {
-                    return false;
+                    self.has_greedy_repetitions = true;
                 }
                 self.close();
             }
             Node::Concat(nodes) => {
                 for node in nodes {
-                    if !self.visit(node) {
-                        return false;
-                    }
+                    self.visit(node);
                 }
             }
             Node::Alternation(alts) => {
@@ -82,7 +105,6 @@ impl AtomVisitor {
         }
 
         self.current_position += 1;
-        true
     }
 
     fn add_byte(&mut self, byte: u8) {
@@ -153,28 +175,24 @@ impl AtomVisitor {
         }
     }
 
-    fn into_set(mut self) -> AtomSet {
+    pub fn into_atoms_details(mut self, original_node: &Node) -> AtomsDetails {
         self.close();
-        self.set
+
+        let (pre_ast, post_ast) = self.set.build_pre_post_ast(original_node);
+
+        AtomsDetails {
+            literals: self.set.atoms,
+            pre: pre_ast.as_ref().map(regex_ast_to_string),
+            post: post_ast.as_ref().map(regex_ast_to_string),
+            has_greedy_repetitions: self.has_greedy_repetitions,
+            has_word_boundaries: self.has_word_boundaries,
+        }
     }
-}
-
-#[derive(Debug)]
-pub struct AtomizedExpressions {
-    /// Literals extracted from the regex.
-    pub literals: Vec<Vec<u8>>,
-
-    /// AST Expression for validators of matches on literals.
-    ///
-    /// The `pre` is the regex expression that must match before (and including) the literal.
-    /// The `post` is the regex expression that must match after (and including) the literal.
-    pub pre: Option<String>,
-    pub post: Option<String>,
 }
 
 /// Set of atoms that allows quickly searching for the eventual presence of a variable.
 #[derive(Debug, Default)]
-pub struct AtomSet {
+struct AtomSet {
     atoms: Vec<Vec<u8>>,
     start_position: usize,
     end_position: usize,
@@ -191,20 +209,6 @@ impl AtomSet {
             self.start_position = start_position;
             self.end_position = end_position;
             self.rank = rank;
-        }
-    }
-
-    pub fn into_atomized_expression(self, original_node: &Node) -> Option<AtomizedExpressions> {
-        if self.atoms.is_empty() {
-            None
-        } else {
-            let (pre_ast, post_ast) = self.build_pre_post_ast(original_node);
-
-            Some(AtomizedExpressions {
-                literals: self.atoms,
-                pre: pre_ast.as_ref().map(regex_ast_to_string),
-                post: post_ast.as_ref().map(regex_ast_to_string),
-            })
         }
     }
 
@@ -226,6 +230,10 @@ impl AtomSet {
     }
 
     fn build_pre_post_ast(&self, original_node: &Node) -> (Option<Node>, Option<Node>) {
+        if self.atoms.is_empty() {
+            return (None, None);
+        }
+
         let mut pre_nodes = Vec::new();
         let mut post_nodes = Vec::new();
 
@@ -376,15 +384,10 @@ mod tests {
             let hex_string = parse_hex_string(hex_string_expr);
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
-            let exprs = build_atomized_expressions(&ast);
-            if expected_lits.is_empty() {
-                assert!(exprs.is_none());
-            } else {
-                let exprs = exprs.unwrap();
-                assert_eq!(exprs.literals, expected_lits);
-                assert_eq!(exprs.pre.unwrap_or_default(), expected_pre);
-                assert_eq!(exprs.post.unwrap_or_default(), expected_post);
-            }
+            let exprs = get_atoms_details(&ast);
+            assert_eq!(exprs.literals, expected_lits);
+            assert_eq!(exprs.pre.unwrap_or_default(), expected_pre);
+            assert_eq!(exprs.post.unwrap_or_default(), expected_post);
         }
 
         test("{ AB CD 01 }", &[b"\xab\xcd\x01"], "", "");
