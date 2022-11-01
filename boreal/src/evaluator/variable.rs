@@ -173,7 +173,7 @@ impl<'a> VariableEvaluation<'a> {
             Some(v) => v,
         };
 
-        let mat = self.var.matcher.find_next_match_at(mem, offset);
+        let mat = self.var.find_next_match_at(mem, offset);
         match &mat {
             None => {
                 // No match, nothing to scan anymore

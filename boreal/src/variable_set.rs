@@ -116,10 +116,7 @@ impl VariableSet {
                 _ => 0,
             };
 
-            match variables[variable_index]
-                .matcher
-                .check_ac_match(mem, m, start_position)
-            {
+            match variables[variable_index].process_ac_match(mem, m, start_position) {
                 AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
                     Some(MatchResult::Matches(v)) => v.extend(found_matches),
                     _ => matches[variable_index] = Some(MatchResult::Matches(found_matches)),

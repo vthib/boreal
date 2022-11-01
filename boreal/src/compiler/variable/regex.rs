@@ -4,8 +4,8 @@ use regex_syntax::ParserBuilder;
 
 use crate::regex::regex_ast_to_string;
 
-use super::atomized_regex::AtomizedRegex;
-use super::{Matcher, RegexMatcher, RegexType, VariableCompilationError};
+use super::atom::AtomizedExpressions;
+use super::{MatcherType, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
 ///
@@ -13,10 +13,10 @@ use super::{Matcher, RegexMatcher, RegexType, VariableCompilationError};
 /// - The regex expression to use to match on this variable
 /// - An optional expr used to validate matches, only set in the specific case of a widen regex
 ///   containing word boundaries.
-pub fn compile_regex(
+pub(super) fn compile_regex(
     regex: Regex,
     flags: VariableFlags,
-) -> Result<(Vec<Vec<u8>>, Box<dyn Matcher>), VariableCompilationError> {
+) -> Result<(Vec<Vec<u8>>, MatcherType, Option<regex::bytes::Regex>), VariableCompilationError> {
     let Regex {
         ast,
         mut case_insensitive,
@@ -28,21 +28,28 @@ pub fn compile_regex(
         case_insensitive = true;
     }
 
-    let (literals, regex_type, has_word_boundaries) =
+    let (literals, matcher_type, has_word_boundaries) =
         match super::atom::build_atomized_expressions(&ast) {
-            Some(mut exprs) => {
+            Some(AtomizedExpressions {
+                mut literals,
+                mut pre,
+                mut post,
+            }) => {
                 let mut has_word_boundaries = false;
-                if let Some(v) = &mut exprs.pre {
+                if let Some(v) = &mut pre {
                     has_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
                 }
-                if let Some(v) = &mut exprs.post {
+                if let Some(v) = &mut post {
                     has_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
                 }
-                apply_ascii_wide_flags_on_literals(&mut exprs.literals, flags);
+                apply_ascii_wide_flags_on_literals(&mut literals, flags);
 
                 (
-                    exprs.literals.clone(),
-                    RegexType::Atomized(AtomizedRegex::new(exprs, case_insensitive, dot_all)?),
+                    literals,
+                    MatcherType::Atomized {
+                        left_validator: compile_validator(pre, case_insensitive, dot_all)?,
+                        right_validator: compile_validator(post, case_insensitive, dot_all)?,
+                    },
                     has_word_boundaries,
                 )
             }
@@ -52,7 +59,7 @@ pub fn compile_regex(
 
                 (
                     Vec::new(),
-                    RegexType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?),
+                    MatcherType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?),
                     has_word_boundaries,
                 )
             }
@@ -65,16 +72,23 @@ pub fn compile_regex(
         None
     };
 
-    Ok((
-        literals,
-        Box::new(RegexMatcher {
-            regex_type,
-            flags,
-            non_wide_regex,
-        }),
-    ))
+    Ok((literals, matcher_type, non_wide_regex))
 }
 
+fn compile_validator(
+    expr: Option<String>,
+    case_insensitive: bool,
+    dot_all: bool,
+) -> Result<Option<regex::bytes::Regex>, VariableCompilationError> {
+    match expr {
+        Some(expr) => Ok(Some(super::compile_regex_expr(
+            &expr,
+            case_insensitive,
+            dot_all,
+        )?)),
+        None => Ok(None),
+    }
+}
 fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, flags: VariableFlags) {
     if !flags.contains(VariableFlags::WIDE) {
         return;

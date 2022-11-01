@@ -10,8 +10,6 @@ use super::CompilationError;
 
 mod atom;
 pub use atom::literals_rank;
-mod atomized_regex;
-use atomized_regex::AtomizedRegex;
 mod hex_string;
 mod regex;
 
@@ -32,57 +30,32 @@ pub struct Variable {
     pub literals: Vec<Vec<u8>>,
 
     /// Flags related to variable modifiers.
-    pub flags: VariableFlags,
+    flags: VariableFlags,
 
-    /// Matcher impl for the variable
-    pub matcher: Box<dyn Matcher>,
+    /// Type of matching for the variable.
+    matcher_type: MatcherType,
+
+    /// Regex of the non wide version of the regex.
+    ///
+    /// This is only set for the specific case of a regex variable, with a wide modifier, that
+    /// contains word boundaries.
+    /// In this case, the regex expression cannot be "widened", and this regex is used to post
+    /// check matches.
+    non_wide_regex: Option<Regex>,
 }
 
-impl Variable {
-    /// Confirm that an AC match is a match on the given literal.
-    ///
-    /// This is needed because the AC might optimize literals and get false positive matches.
-    /// This function is used to confirm the tentative match does match the literal with the given
-    /// index.
-    pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
-        let literal = &self.literals[literal_index];
+#[derive(Debug)]
+enum MatcherType {
+    /// The literals cover entirely the variable.
+    Literals,
+    /// The regex can confirm matches from AC literal matches.
+    Atomized {
+        left_validator: Option<Regex>,
+        right_validator: Option<Regex>,
+    },
 
-        if self.flags.contains(VariableFlags::NOCASE) {
-            if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
-                return false;
-            }
-        } else if literal != &mem[mat.start..mat.end] {
-            return false;
-        }
-
-        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, mat, self.flags) {
-            return false;
-        }
-
-        true
-    }
-}
-
-/// A trait used to match the variable on bytes.
-pub trait Matcher: std::fmt::Debug {
-    /// Check if a match found by the Aho-Corasick scan is valid.
-    ///
-    /// The `start_position` indicates the index at which matching can be done against the given
-    /// `mem` bytes. This is passed as a parameter as the match ranges depend on indices relative
-    /// to the start of the mem.
-    fn check_ac_match(&self, mem: &[u8], mat: Range<usize>, start_position: usize)
-        -> AcMatchStatus;
-
-    /// Find the next match in the given bytes.
-    ///
-    /// This is only called if either:
-    ///
-    /// - No literals were returned by [`Self::literals`].
-    /// - [`MatchStatus::Unknown`] was returned by [`Self::check_ac_match`].
-    ///
-    /// If either one of those conditions is true, the variable is scanned on its own by calling
-    /// this method.
-    fn find_next_match_at(&self, mem: &[u8], offset: usize) -> Option<Range<usize>>;
+    /// The regex cannot confirm matches from AC literal matches.
+    Raw(Regex),
 }
 
 /// State of an aho-corasick match on a [`Matcher`] literals.
@@ -116,8 +89,11 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         modifiers.flags.insert(VariableFlags::ASCII);
     }
 
-    let (literals, matcher) = match value {
-        VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
+    let (literals, matcher_type, non_wide_regex) = match value {
+        VariableDeclarationValue::Bytes(s) => {
+            let (literals, matcher_type) = compile_bytes(s, &modifiers);
+            Ok((literals, matcher_type, None))
+        }
         VariableDeclarationValue::Regex(regex) => {
             if regex.case_insensitive {
                 modifiers.flags.insert(VariableFlags::NOCASE);
@@ -129,7 +105,8 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             modifiers.flags.remove(VariableFlags::FULLWORD);
             modifiers.flags.remove(VariableFlags::WIDE);
 
-            hex_string::compile_hex_string(hex_string, modifiers.flags)
+            hex_string::compile_hex_string(hex_string)
+                .map(|(literals, matcher_type)| (literals, matcher_type, None))
         }
     }
     .map_err(|error| CompilationError::VariableCompilation {
@@ -143,7 +120,8 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         is_private: modifiers.flags.contains(VariableFlags::PRIVATE),
         literals,
         flags: modifiers.flags,
-        matcher,
+        matcher_type,
+        non_wide_regex,
     })
 }
 
@@ -162,10 +140,7 @@ fn compile_regex_expr(
         .map_err(|err| VariableCompilationError::Regex(err.to_string()))
 }
 
-fn compile_bytes(
-    value: Vec<u8>,
-    modifiers: &VariableModifiers,
-) -> (Vec<Vec<u8>>, Box<dyn Matcher>) {
+fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> (Vec<Vec<u8>>, MatcherType) {
     let mut literals = Vec::with_capacity(2);
 
     if modifiers.flags.contains(VariableFlags::WIDE) {
@@ -189,7 +164,7 @@ fn compile_bytes(
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        return (new_literals, Box::new(LiteralsMatcher {}));
+        return (new_literals, MatcherType::Literals);
     }
 
     if modifiers.flags.contains(VariableFlags::BASE64)
@@ -220,102 +195,95 @@ fn compile_bytes(
         }
     }
 
-    (literals, Box::new(LiteralsMatcher {}))
+    (literals, MatcherType::Literals)
 }
 
-/// Matcher on exact literals.
-///
-/// This can only be used if the variable is expressed exactly by those literals. This variable
-/// is matched entirely by the Aho-Corasick scan, and do not need post scanning.
-#[derive(Debug)]
-struct LiteralsMatcher {}
-
-impl Matcher for LiteralsMatcher {
-    fn check_ac_match(
-        &self,
-        _mem: &[u8],
-        mat: Range<usize>,
-        _start_position: usize,
-    ) -> AcMatchStatus {
-        AcMatchStatus::Single(mat)
-    }
-
-    fn find_next_match_at(&self, _mem: &[u8], _offset: usize) -> Option<Range<usize>> {
-        // This variable should have been covered by the variable set, so we should
-        // not be able to reach this code.
-        debug_assert!(false);
-        None
-    }
-}
-
-/// Matcher on a variable expressable with a regex.
-///
-/// Literals can be provided to the Aho-Corasick scan to improve performances.
-#[derive(Debug)]
-struct RegexMatcher {
-    /// Type of regex.
-    regex_type: RegexType,
-
-    /// Flags related to variable modifiers, which are needed during scanning.
-    flags: VariableFlags,
-
-    /// Regex of the non wide version of the regex.
+impl Variable {
+    /// Confirm that an AC match is a match on the given literal.
     ///
-    /// This is only set for the specific case of a regex variable, with a wide modifier, that
-    /// contains word boundaries.
-    /// In this case, the regex expression cannot be "widened", and this regex is used to post
-    /// check matches.
-    non_wide_regex: Option<Regex>,
-}
+    /// This is needed because the AC might optimize literals and get false positive matches.
+    /// This function is used to confirm the tentative match does match the literal with the given
+    /// index.
+    pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
+        let literal = &self.literals[literal_index];
 
-/// Type of regex to use for matching.
-#[derive(Debug)]
-enum RegexType {
-    /// Raw regex when unable to use atoms.
-    Raw(Regex),
-    /// Regex with atoms to use in the AC pass
-    Atomized(AtomizedRegex),
-}
+        if self.flags.contains(VariableFlags::NOCASE) {
+            if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
+                return false;
+            }
+        } else if literal != &mem[mat.start..mat.end] {
+            return false;
+        }
 
-impl Matcher for RegexMatcher {
-    fn check_ac_match(
+        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, mat, self.flags) {
+            return false;
+        }
+
+        true
+    }
+
+    pub fn process_ac_match(
         &self,
         mem: &[u8],
         mat: Range<usize>,
-        start_position: usize,
+        mut start_position: usize,
     ) -> AcMatchStatus {
-        match &self.regex_type {
-            RegexType::Atomized(r) => match r.check_literal_match(mem, start_position, mat) {
-                AcMatchStatus::Multiple(matches) => AcMatchStatus::Multiple(
-                    matches
-                        .into_iter()
-                        .filter_map(|mat| self.validate_and_update_match(mem, mat))
-                        .collect(),
-                ),
-                AcMatchStatus::Single(mat) => match self.validate_and_update_match(mem, mat) {
-                    Some(m) => AcMatchStatus::Single(m),
-                    None => AcMatchStatus::None,
-                },
-                status => status,
+        match &self.matcher_type {
+            MatcherType::Literals => match self.validate_and_update_match(mem, mat) {
+                Some(m) => AcMatchStatus::Single(m),
+                None => AcMatchStatus::None,
             },
-            RegexType::Raw(_) => {
-                // This variable should not have been covered by the variable set, so we should
-                // not be able to reach this code.
-                debug_assert!(false);
-                AcMatchStatus::Unknown
+            MatcherType::Atomized {
+                left_validator,
+                right_validator,
+            } => {
+                let end = match right_validator {
+                    Some(validator) => match validator.find(&mem[mat.start..]) {
+                        Some(m) => mat.start + m.end(),
+                        None => return AcMatchStatus::None,
+                    },
+                    None => mat.end,
+                };
+
+                match left_validator {
+                    None => {
+                        let mat = mat.start..end;
+                        match self.validate_and_update_match(mem, mat) {
+                            Some(m) => AcMatchStatus::Single(m),
+                            None => AcMatchStatus::None,
+                        }
+                    }
+                    Some(validator) => {
+                        // The left validator can yield multiple matches.
+                        // For example, `a.?bb`, with the `bb` atom, can match as many times as there are
+                        // 'a' characters before the `bb` atom.
+                        //
+                        // XXX: This only works if the left validator does not contain any greedy repetitions!
+                        let mut matches = Vec::new();
+                        while let Some(m) = validator.find(&mem[start_position..mat.end]) {
+                            let m = (m.start() + start_position)..end;
+                            start_position = m.start + 1;
+                            if let Some(m) = self.validate_and_update_match(mem, m) {
+                                matches.push(m);
+                            }
+                        }
+                        AcMatchStatus::Multiple(matches)
+                    }
+                }
             }
+            MatcherType::Raw(_) => AcMatchStatus::Unknown,
         }
     }
 
-    fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Range<usize>> {
-        let regex = match &self.regex_type {
-            RegexType::Atomized(_) => {
+    pub fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Range<usize>> {
+        let regex = match &self.matcher_type {
+            MatcherType::Raw(r) => r,
+            _ => {
                 // This variable should have been covered by the variable set, so we should
                 // not be able to reach this code.
                 debug_assert!(false);
                 return None;
             }
-            RegexType::Raw(r) => r,
         };
 
         while offset < mem.len() {
@@ -330,9 +298,7 @@ impl Matcher for RegexMatcher {
         }
         None
     }
-}
 
-impl RegexMatcher {
     fn validate_and_update_match(&self, mem: &[u8], mat: Range<usize>) -> Option<Range<usize>> {
         if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, self.flags) {
             return None;

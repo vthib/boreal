@@ -1,52 +1,66 @@
 use boreal_parser::regex::{
     BracketedClass, BracketedClassItem, ClassKind, Node, RepetitionKind, RepetitionRange,
 };
-use boreal_parser::{HexMask, HexToken, VariableFlags};
+use boreal_parser::{HexMask, HexToken};
 
 use crate::regex::regex_ast_to_string;
 
-use super::atomized_regex::AtomizedRegex;
-use super::{LiteralsMatcher, Matcher, RegexMatcher, RegexType, VariableCompilationError};
+use super::atom::AtomizedExpressions;
+use super::{MatcherType, VariableCompilationError};
 
 mod literals;
 
+// FIXME: factorize with regex compilation
 pub(super) fn compile_hex_string(
     hex_string: Vec<HexToken>,
-    flags: VariableFlags,
-) -> Result<(Vec<Vec<u8>>, Box<dyn Matcher>), VariableCompilationError> {
+) -> Result<(Vec<Vec<u8>>, MatcherType), VariableCompilationError> {
     if literals::can_use_only_literals(&hex_string) {
         Ok((
             literals::hex_string_to_only_literals(hex_string),
-            Box::new(LiteralsMatcher {}),
+            MatcherType::Literals,
         ))
     } else {
         let ast = hex_string_to_ast(hex_string);
 
-        let (literals, regex_type) = match super::atom::build_atomized_expressions(&ast) {
-            Some(exprs) => (
-                exprs.literals.clone(),
-                RegexType::Atomized(AtomizedRegex::new(exprs, false, true)?),
+        let (literals, matcher_type) = match super::atom::build_atomized_expressions(&ast) {
+            Some(AtomizedExpressions {
+                literals,
+                pre,
+                post,
+            }) => (
+                literals,
+                MatcherType::Atomized {
+                    left_validator: compile_validator(pre, false, true)?,
+                    right_validator: compile_validator(post, false, true)?,
+                },
             ),
             None => {
                 let expr = regex_ast_to_string(&ast);
                 (
                     Vec::new(),
-                    RegexType::Raw(super::compile_regex_expr(&expr, false, true)?),
+                    MatcherType::Raw(super::compile_regex_expr(&expr, false, true)?),
                 )
             }
         };
 
-        Ok((
-            literals,
-            Box::new(RegexMatcher {
-                regex_type,
-                flags,
-                non_wide_regex: None,
-            }),
-        ))
+        Ok((literals, matcher_type))
     }
 }
 
+fn compile_validator(
+    expr: Option<String>,
+    case_insensitive: bool,
+    dot_all: bool,
+) -> Result<Option<regex::bytes::Regex>, VariableCompilationError> {
+    match expr {
+        Some(expr) => Ok(Some(super::compile_regex_expr(
+            &expr,
+            case_insensitive,
+            dot_all,
+        )?)),
+        None => Ok(None),
+    }
+}
 pub(super) fn hex_string_to_ast(hex_string: Vec<HexToken>) -> Node {
     Node::Concat(hex_string.into_iter().map(hex_token_to_ast).collect())
 }
