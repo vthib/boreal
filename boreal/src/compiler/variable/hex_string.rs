@@ -6,7 +6,7 @@ use boreal_parser::{HexMask, HexToken, VariableFlags};
 use crate::regex::regex_ast_to_string;
 
 use super::atomized_regex::AtomizedRegex;
-use super::{LiteralsMatcher, Matcher, RegexMatcher, VariableCompilationError};
+use super::{LiteralsMatcher, Matcher, RegexMatcher, RegexType, VariableCompilationError};
 
 mod literals;
 
@@ -21,15 +21,17 @@ pub(super) fn compile_hex_string(
         }))
     } else {
         let ast = hex_string_to_ast(hex_string);
-        let expr = regex_ast_to_string(&ast);
 
-        let atomized_regex = match super::atom::build_atomized_expressions(&ast) {
-            Some(exprs) => Some(AtomizedRegex::new(exprs, false, true)?),
-            None => None,
+        let regex_type = match super::atom::build_atomized_expressions(&ast) {
+            Some(exprs) => RegexType::Atomized(AtomizedRegex::new(exprs, false, true)?),
+            None => {
+                let expr = regex_ast_to_string(&ast);
+                RegexType::Raw(super::compile_regex_expr(&expr, false, true)?)
+            }
         };
+
         Ok(Box::new(RegexMatcher {
-            regex: super::compile_regex_expr(&expr, false, true)?,
-            atomized_regex,
+            regex_type,
             flags,
             non_wide_regex: None,
         }))

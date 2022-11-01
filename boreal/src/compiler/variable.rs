@@ -256,14 +256,11 @@ fn check_literal_with_flags(
 /// Literals can be provided to the Aho-Corasick scan to improve performances.
 #[derive(Debug)]
 struct RegexMatcher {
-    /// The regex expressing the variable.
-    regex: Regex,
+    /// Type of regex.
+    regex_type: RegexType,
 
     /// Flags related to variable modifiers, which are needed during scanning.
     flags: VariableFlags,
-
-    /// A regex expression that can be matched during the AC pass.
-    atomized_regex: Option<AtomizedRegex>,
 
     /// Regex of the non wide version of the regex.
     ///
@@ -274,11 +271,20 @@ struct RegexMatcher {
     non_wide_regex: Option<Regex>,
 }
 
+/// Type of regex to use for matching.
+#[derive(Debug)]
+enum RegexType {
+    /// Raw regex when unable to use atoms.
+    Raw(Regex),
+    /// Regex with atoms to use in the AC pass
+    Atomized(AtomizedRegex),
+}
+
 impl Matcher for RegexMatcher {
     fn literals(&self) -> &[Vec<u8>] {
-        match self.atomized_regex.as_ref() {
-            Some(r) => r.literals(),
-            None => &[],
+        match &self.regex_type {
+            RegexType::Atomized(r) => r.literals(),
+            RegexType::Raw(_) => &[],
         }
     }
 
@@ -289,15 +295,32 @@ impl Matcher for RegexMatcher {
         start_position: usize,
         literal_index: usize,
     ) -> AcMatchStatus {
-        match self.atomized_regex.as_ref() {
-            Some(r) => r.check_literal_match(mem, start_position, mat, literal_index, self.flags),
-            None => AcMatchStatus::Unknown,
+        match &self.regex_type {
+            RegexType::Atomized(r) => {
+                r.check_literal_match(mem, start_position, mat, literal_index, self.flags)
+            }
+            RegexType::Raw(_) => {
+                // This variable should not have been covered by the variable set, so we should
+                // not be able to reach this code.
+                debug_assert!(false);
+                AcMatchStatus::Unknown
+            }
         }
     }
 
     fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Range<usize>> {
+        let regex = match &self.regex_type {
+            RegexType::Atomized(_) => {
+                // This variable should have been covered by the variable set, so we should
+                // not be able to reach this code.
+                debug_assert!(false);
+                return None;
+            }
+            RegexType::Raw(r) => r,
+        };
+
         while offset < mem.len() {
-            let mat = self.regex.find_at(mem, offset).map(|m| m.range())?;
+            let mat = regex.find_at(mem, offset).map(|m| m.range())?;
 
             match self.validate_and_update_match(mem, mat.clone()) {
                 Some(m) => return Some(m),
