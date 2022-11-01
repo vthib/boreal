@@ -95,18 +95,32 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         non_wide_regex,
     } = match value {
         VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
-        VariableDeclarationValue::Regex(regex) => {
-            if regex.case_insensitive {
+        VariableDeclarationValue::Regex(boreal_parser::Regex {
+            ast,
+            case_insensitive,
+            dot_all,
+            span: _,
+        }) => {
+            if case_insensitive {
                 modifiers.flags.insert(VariableFlags::NOCASE);
             }
-            regex::compile_regex(regex, modifiers.flags)
+            regex::compile_regex(&ast, case_insensitive, dot_all, modifiers.flags)
         }
         VariableDeclarationValue::HexString(hex_string) => {
             // Fullword and wide is not compatible with hex strings
             modifiers.flags.remove(VariableFlags::FULLWORD);
             modifiers.flags.remove(VariableFlags::WIDE);
 
-            hex_string::compile_hex_string(hex_string)
+            if hex_string::can_use_only_literals(&hex_string) {
+                Ok(CompiledVariable {
+                    literals: hex_string::hex_string_to_only_literals(hex_string),
+                    matcher_type: MatcherType::Literals,
+                    non_wide_regex: None,
+                })
+            } else {
+                let ast = hex_string::hex_string_to_ast(hex_string);
+                regex::compile_regex(&ast, false, true, modifiers.flags)
+            }
         }
     }
     .map_err(|error| CompilationError::VariableCompilation {

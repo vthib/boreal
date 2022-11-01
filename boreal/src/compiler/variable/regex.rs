@@ -1,4 +1,6 @@
-use boreal_parser::{Regex, VariableFlags};
+use boreal_parser::regex::Node;
+use boreal_parser::VariableFlags;
+use regex::bytes::Regex;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
@@ -14,22 +16,17 @@ use super::{CompiledVariable, MatcherType, VariableCompilationError};
 /// - An optional expr used to validate matches, only set in the specific case of a widen regex
 ///   containing word boundaries.
 pub(super) fn compile_regex(
-    regex: Regex,
+    ast: &Node,
+    mut case_insensitive: bool,
+    dot_all: bool,
     flags: VariableFlags,
 ) -> Result<CompiledVariable, VariableCompilationError> {
-    let Regex {
-        ast,
-        mut case_insensitive,
-        dot_all,
-        span: _,
-    } = regex;
-
     if flags.contains(VariableFlags::NOCASE) {
         case_insensitive = true;
     }
 
     let (literals, matcher_type, has_word_boundaries) =
-        match super::atom::build_atomized_expressions(&ast) {
+        match super::atom::build_atomized_expressions(ast) {
             Some(AtomizedExpressions {
                 mut literals,
                 mut pre,
@@ -54,7 +51,7 @@ pub(super) fn compile_regex(
                 )
             }
             None => {
-                let mut expr = regex_ast_to_string(&ast);
+                let mut expr = regex_ast_to_string(ast);
                 let has_word_boundaries = apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
 
                 (
@@ -66,7 +63,7 @@ pub(super) fn compile_regex(
         };
 
     let non_wide_regex = if has_word_boundaries {
-        let expr = regex_ast_to_string(&ast);
+        let expr = regex_ast_to_string(ast);
         Some(super::compile_regex_expr(&expr, case_insensitive, dot_all)?)
     } else {
         None
@@ -83,7 +80,7 @@ fn compile_validator(
     expr: Option<String>,
     case_insensitive: bool,
     dot_all: bool,
-) -> Result<Option<regex::bytes::Regex>, VariableCompilationError> {
+) -> Result<Option<Regex>, VariableCompilationError> {
     match expr {
         Some(expr) => Ok(Some(super::compile_regex_expr(
             &expr,
