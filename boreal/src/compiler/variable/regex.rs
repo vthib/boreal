@@ -5,7 +5,7 @@ use regex_syntax::ParserBuilder;
 use crate::regex::regex_ast_to_string;
 
 use super::atom::AtomizedExpressions;
-use super::{MatcherType, VariableCompilationError};
+use super::{CompiledVariable, MatcherType, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
 ///
@@ -16,7 +16,7 @@ use super::{MatcherType, VariableCompilationError};
 pub(super) fn compile_regex(
     regex: Regex,
     flags: VariableFlags,
-) -> Result<(Vec<Vec<u8>>, MatcherType, Option<regex::bytes::Regex>), VariableCompilationError> {
+) -> Result<CompiledVariable, VariableCompilationError> {
     let Regex {
         ast,
         mut case_insensitive,
@@ -72,7 +72,11 @@ pub(super) fn compile_regex(
         None
     };
 
-    Ok((literals, matcher_type, non_wide_regex))
+    Ok(CompiledVariable {
+        literals,
+        matcher_type,
+        non_wide_regex,
+    })
 }
 
 fn compile_validator(

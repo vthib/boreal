@@ -89,11 +89,12 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         modifiers.flags.insert(VariableFlags::ASCII);
     }
 
-    let (literals, matcher_type, non_wide_regex) = match value {
-        VariableDeclarationValue::Bytes(s) => {
-            let (literals, matcher_type) = compile_bytes(s, &modifiers);
-            Ok((literals, matcher_type, None))
-        }
+    let CompiledVariable {
+        literals,
+        matcher_type,
+        non_wide_regex,
+    } = match value {
+        VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
         VariableDeclarationValue::Regex(regex) => {
             if regex.case_insensitive {
                 modifiers.flags.insert(VariableFlags::NOCASE);
@@ -106,7 +107,6 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             modifiers.flags.remove(VariableFlags::WIDE);
 
             hex_string::compile_hex_string(hex_string)
-                .map(|(literals, matcher_type)| (literals, matcher_type, None))
         }
     }
     .map_err(|error| CompilationError::VariableCompilation {
@@ -125,6 +125,12 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
     })
 }
 
+struct CompiledVariable {
+    literals: Vec<Vec<u8>>,
+    matcher_type: MatcherType,
+    non_wide_regex: Option<Regex>,
+}
+
 fn compile_regex_expr(
     expr: &str,
     case_insensitive: bool,
@@ -140,7 +146,7 @@ fn compile_regex_expr(
         .map_err(|err| VariableCompilationError::Regex(err.to_string()))
 }
 
-fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> (Vec<Vec<u8>>, MatcherType) {
+fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVariable {
     let mut literals = Vec::with_capacity(2);
 
     if modifiers.flags.contains(VariableFlags::WIDE) {
@@ -164,7 +170,11 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> (Vec<Vec<u8>>
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        return (new_literals, MatcherType::Literals);
+        return CompiledVariable {
+            literals: new_literals,
+            matcher_type: MatcherType::Literals,
+            non_wide_regex: None,
+        };
     }
 
     if modifiers.flags.contains(VariableFlags::BASE64)
@@ -195,7 +205,11 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> (Vec<Vec<u8>>
         }
     }
 
-    (literals, MatcherType::Literals)
+    CompiledVariable {
+        literals,
+        matcher_type: MatcherType::Literals,
+        non_wide_regex: None,
+    }
 }
 
 impl Variable {

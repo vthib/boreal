@@ -6,19 +6,20 @@ use boreal_parser::{HexMask, HexToken};
 use crate::regex::regex_ast_to_string;
 
 use super::atom::AtomizedExpressions;
-use super::{MatcherType, VariableCompilationError};
+use super::{CompiledVariable, MatcherType, VariableCompilationError};
 
 mod literals;
 
 // FIXME: factorize with regex compilation
 pub(super) fn compile_hex_string(
     hex_string: Vec<HexToken>,
-) -> Result<(Vec<Vec<u8>>, MatcherType), VariableCompilationError> {
+) -> Result<CompiledVariable, VariableCompilationError> {
     if literals::can_use_only_literals(&hex_string) {
-        Ok((
-            literals::hex_string_to_only_literals(hex_string),
-            MatcherType::Literals,
-        ))
+        Ok(CompiledVariable {
+            literals: literals::hex_string_to_only_literals(hex_string),
+            matcher_type: MatcherType::Literals,
+            non_wide_regex: None,
+        })
     } else {
         let ast = hex_string_to_ast(hex_string);
 
@@ -43,7 +44,11 @@ pub(super) fn compile_hex_string(
             }
         };
 
-        Ok((literals, matcher_type))
+        Ok(CompiledVariable {
+            literals,
+            matcher_type,
+            non_wide_regex: None,
+        })
     }
 }
 
