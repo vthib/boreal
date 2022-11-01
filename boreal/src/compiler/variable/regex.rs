@@ -1,4 +1,4 @@
-use boreal_parser::regex::Node;
+use boreal_parser::regex::{AssertionKind, Node};
 use boreal_parser::VariableFlags;
 use regex::bytes::Regex;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
@@ -31,10 +31,10 @@ pub(super) fn compile_regex(
         mut post,
     } = super::atom::get_atoms_details(ast);
 
-    let has_greedy_repetitions = scan_ast_for_greedy_repetitions(ast);
+    let use_ac = ast_is_ac_friendly(ast);
 
     let mut has_wide_word_boundaries = false;
-    let matcher_type = if literals.is_empty() || has_greedy_repetitions {
+    let matcher_type = if literals.is_empty() || !use_ac {
         let mut expr = regex_ast_to_string(ast);
         has_wide_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
         apply_ascii_wide_flags_on_literals(&mut literals, flags);
@@ -70,19 +70,29 @@ pub(super) fn compile_regex(
 }
 
 // FIXME: really need a visitor for the AST
-fn scan_ast_for_greedy_repetitions(node: &Node) -> bool {
+fn ast_is_ac_friendly(node: &Node) -> bool {
     match node {
-        Node::Literal(_) | Node::Dot | Node::Class(_) | Node::Empty | Node::Assertion(_) => false,
+        Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
+            // Do not use an AC if anchors are present, it will be much efficient to just run
+            // the regex directly.
+            false
+        }
+        Node::Literal(_)
+        | Node::Dot
+        | Node::Class(_)
+        | Node::Empty
+        | Node::Assertion(AssertionKind::WordBoundary)
+        | Node::Assertion(AssertionKind::NonWordBoundary) => true,
         Node::Repetition { greedy, node, .. } => {
             if *greedy {
-                return true;
+                // TODO: allow greedy when it does not contain characters from the literals?
+                // This would allow matching \s* which would be useful.
+                return false;
             }
-            scan_ast_for_greedy_repetitions(node)
+            ast_is_ac_friendly(node)
         }
-        Node::Group(node) => scan_ast_for_greedy_repetitions(node),
-        Node::Concat(nodes) | Node::Alternation(nodes) => {
-            nodes.iter().any(scan_ast_for_greedy_repetitions)
-        }
+        Node::Group(node) => ast_is_ac_friendly(node),
+        Node::Concat(nodes) | Node::Alternation(nodes) => nodes.iter().all(ast_is_ac_friendly),
     }
 }
 
