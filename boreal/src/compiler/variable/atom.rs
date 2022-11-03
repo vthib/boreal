@@ -14,13 +14,13 @@
 //! the rate of false positive matches.
 use boreal_parser::regex::{AssertionKind, Node};
 
-use crate::regex::regex_ast_to_string;
+use crate::regex::{regex_ast_to_string, visit, VisitAction, Visitor};
 
 // FIXME: add lots of tests here...
 
 pub fn get_atoms_details(node: &Node) -> AtomsDetails {
-    let mut visitor = AtomVisitor::new();
-    visitor.visit(node);
+    let visitor = AtomVisitor::new();
+    let visitor = visit(node, visitor);
     visitor.into_atoms_details(node)
 }
 
@@ -60,33 +60,43 @@ impl AtomVisitor {
     }
 }
 
-impl AtomVisitor {
-    fn visit(&mut self, node: &Node) {
+impl Visitor for AtomVisitor {
+    type Output = Self;
+
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
         match node {
-            Node::Literal(b) => self.add_byte(*b),
-            Node::Group(node) => self.visit(node),
+            Node::Literal(b) => {
+                self.add_byte(*b);
+                VisitAction::Skip
+            }
             Node::Dot
             | Node::Class(_)
             | Node::Empty
             | Node::Assertion(_)
             | Node::Repetition { .. } => {
                 self.close();
-            }
-            Node::Concat(nodes) => {
-                for node in nodes {
-                    self.visit(node);
-                }
+                VisitAction::Skip
             }
             Node::Alternation(alts) => {
                 if !self.visit_alternation(alts) {
                     self.close();
                 }
+                VisitAction::Skip
             }
+            Node::Group(_) | Node::Concat(_) => VisitAction::Continue,
         }
+    }
 
+    fn visit_post(&mut self, _node: &Node) {
         self.current_position += 1;
     }
 
+    fn finish(self) -> Self {
+        self
+    }
+}
+
+impl AtomVisitor {
     fn add_byte(&mut self, byte: u8) {
         if self.atoms.is_empty() {
             self.atoms.push(Vec::new());
@@ -212,38 +222,100 @@ impl AtomSet {
             return (None, None);
         }
 
-        let mut pre_nodes = Vec::new();
-        let mut post_nodes = Vec::new();
+        let (pre_node, post_node) = visit(
+            original_node,
+            PrePostExtractor::new(self.start_position, self.end_position),
+        );
 
-        post_nodes.push(Node::Assertion(AssertionKind::StartLine));
-        self.add_literals_ast(&mut post_nodes);
-        let post_len = post_nodes.len();
-        self.add_pre_post_nodes(original_node, &mut 0, &mut pre_nodes, &mut post_nodes);
-
-        let post_node = if post_len == post_nodes.len() {
-            None
-        } else {
-            Some(Node::Concat(post_nodes))
-        };
-
-        let pre_node = if pre_nodes.is_empty() {
-            None
-        } else {
+        let pre_node = pre_node.map(|pre| {
+            let mut pre_nodes = Vec::new();
+            pre_nodes.push(pre);
             self.add_literals_ast(&mut pre_nodes);
             pre_nodes.push(Node::Assertion(AssertionKind::EndLine));
-            Some(Node::Concat(pre_nodes))
-        };
+            Node::Concat(pre_nodes)
+        });
+        let post_node = post_node.map(|post| {
+            let mut post_nodes = Vec::new();
+            post_nodes.push(Node::Assertion(AssertionKind::StartLine));
+            self.add_literals_ast(&mut post_nodes);
+            post_nodes.push(post);
+            Node::Concat(post_nodes)
+        });
 
         (pre_node, post_node)
     }
+}
 
-    fn add_pre_post_nodes(
-        &self,
-        node: &Node,
-        cur_pos: &mut usize,
-        out_pre: &mut Vec<Node>,
-        out_post: &mut Vec<Node>,
-    ) {
+#[derive(Default)]
+struct PrePostExtractor {
+    pre_stack: Vec<Vec<Node>>,
+    post_stack: Vec<Vec<Node>>,
+
+    pre_node: Option<Node>,
+    post_node: Option<Node>,
+
+    current_position: usize,
+    start_position: usize,
+    end_position: usize,
+}
+
+impl PrePostExtractor {
+    fn new(start_position: usize, end_position: usize) -> Self {
+        Self {
+            pre_stack: Vec::new(),
+            post_stack: Vec::new(),
+
+            pre_node: None,
+            post_node: None,
+
+            current_position: 0,
+            start_position,
+            end_position,
+        }
+    }
+
+    fn push_stack(&mut self) {
+        self.pre_stack.push(Vec::new());
+        self.post_stack.push(Vec::new());
+    }
+
+    fn pop_stack(&mut self) -> (Option<Vec<Node>>, Option<Vec<Node>>) {
+        (self.pre_stack.pop(), self.post_stack.pop())
+    }
+
+    fn add_pre_post_node(&mut self, node: &Node) {
+        if self.current_position < self.start_position {
+            self.add_pre_node(node.clone());
+        } else if self.current_position >= self.end_position {
+            self.add_post_node(node.clone());
+        }
+    }
+
+    fn add_pre_node(&mut self, node: Node) {
+        if self.pre_stack.is_empty() {
+            // Empty stack: we should only have a single HIR to set at top-level.
+            self.pre_node = Some(node);
+        } else {
+            let pos = self.pre_stack.len() - 1;
+            self.pre_stack[pos].push(node);
+        }
+    }
+
+    fn add_post_node(&mut self, node: Node) {
+        if self.post_stack.is_empty() {
+            // Empty stack: we should only have a single HIR to set at top-level.
+            self.post_node = Some(node);
+        } else {
+            let pos = self.post_stack.len() - 1;
+            self.post_stack[pos].push(node);
+        }
+    }
+}
+
+impl Visitor for PrePostExtractor {
+    type Output = (Option<Node>, Option<Node>);
+
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
         match node {
             Node::Literal(_)
             | Node::Repetition { .. }
@@ -252,50 +324,58 @@ impl AtomSet {
             | Node::Empty
             | Node::Assertion(_)
             | Node::Alternation(_) => {
-                self.add_pre_post_node(node.clone(), *cur_pos, out_pre, out_post);
+                self.add_pre_post_node(node);
+                VisitAction::Skip
             }
-            Node::Group(subnode) => {
-                let mut new_nodes_pre = Vec::with_capacity(1);
-                let mut new_nodes_post = Vec::with_capacity(1);
-                self.add_pre_post_nodes(subnode, cur_pos, &mut new_nodes_pre, &mut new_nodes_post);
-                if let Some(node) = new_nodes_pre.pop() {
-                    out_pre.push(Node::Group(Box::new(node)));
-                }
-                if let Some(node) = new_nodes_post.pop() {
-                    out_post.push(Node::Group(Box::new(node)));
-                }
-            }
-
-            Node::Concat(nodes) => {
-                let mut new_nodes_pre = Vec::new();
-                let mut new_nodes_post = Vec::new();
-                for node in nodes {
-                    self.add_pre_post_nodes(node, cur_pos, &mut new_nodes_pre, &mut new_nodes_post);
-                }
-                if !new_nodes_pre.is_empty() {
-                    out_pre.push(Node::Concat(new_nodes_pre));
-                }
-                if !new_nodes_post.is_empty() {
-                    out_post.push(Node::Concat(new_nodes_post));
-                }
+            Node::Group(_) | Node::Concat(_) => {
+                self.push_stack();
+                VisitAction::Continue
             }
         }
-
-        *cur_pos += 1;
     }
 
-    fn add_pre_post_node(
-        &self,
-        node: Node,
-        cur_pos: usize,
-        out_pre: &mut Vec<Node>,
-        out_post: &mut Vec<Node>,
-    ) {
-        if cur_pos < self.start_position {
-            out_pre.push(node);
-        } else if cur_pos >= self.end_position {
-            out_post.push(node);
+    fn visit_post(&mut self, node: &Node) {
+        match node {
+            Node::Literal(_)
+            | Node::Repetition { .. }
+            | Node::Dot
+            | Node::Class(_)
+            | Node::Empty
+            | Node::Assertion(_)
+            | Node::Alternation(_) => (),
+            Node::Group(_) => {
+                let (pre, post) = self.pop_stack();
+                // Safety: push_stack was called in visit_pre for this node
+                let mut pre = pre.unwrap();
+                let mut post = post.unwrap();
+
+                if let Some(node) = pre.pop() {
+                    self.add_pre_node(Node::Group(Box::new(node)));
+                }
+                if let Some(node) = post.pop() {
+                    self.add_post_node(Node::Group(Box::new(node)));
+                }
+            }
+
+            Node::Concat(_) => {
+                let (pre, post) = self.pop_stack();
+                // Safety: push_stack was called in visit_pre for this node
+                let pre = pre.unwrap();
+                let post = post.unwrap();
+                if !pre.is_empty() {
+                    self.add_pre_node(Node::Concat(pre));
+                }
+                if !post.is_empty() {
+                    self.add_post_node(Node::Concat(post));
+                }
+            }
         }
+
+        self.current_position += 1;
+    }
+
+    fn finish(self) -> Self::Output {
+        (self.pre_node, self.post_node)
     }
 }
 

@@ -4,7 +4,7 @@ use regex::bytes::Regex;
 use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
 use regex_syntax::ParserBuilder;
 
-use crate::regex::regex_ast_to_string;
+use crate::regex::{regex_ast_to_string, VisitAction, Visitor as AstVisitor};
 
 use super::atom::AtomsDetails;
 use super::{CompiledVariable, MatcherType, VariableCompilationError};
@@ -31,7 +31,7 @@ pub(super) fn compile_regex(
         mut post,
     } = super::atom::get_atoms_details(ast);
 
-    let use_ac = ast_is_ac_friendly(ast);
+    let use_ac = crate::regex::visit(ast, AcCompatibility::default());
 
     let mut has_wide_word_boundaries = false;
     let matcher_type = if literals.is_empty() || !use_ac {
@@ -69,30 +69,37 @@ pub(super) fn compile_regex(
     })
 }
 
-// FIXME: really need a visitor for the AST
-fn ast_is_ac_friendly(node: &Node) -> bool {
-    match node {
-        Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
-            // Do not use an AC if anchors are present, it will be much efficient to just run
-            // the regex directly.
-            false
-        }
-        Node::Literal(_)
-        | Node::Dot
-        | Node::Class(_)
-        | Node::Empty
-        | Node::Assertion(AssertionKind::WordBoundary)
-        | Node::Assertion(AssertionKind::NonWordBoundary) => true,
-        Node::Repetition { greedy, node, .. } => {
-            if *greedy {
+struct AcCompatibility(bool);
+
+impl Default for AcCompatibility {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
+impl AstVisitor for AcCompatibility {
+    type Output = bool;
+
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+        match node {
+            Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
+                // Do not use an AC if anchors are present, it will be much efficient to just run
+                // the regex directly.
+                self.0 = false;
+            }
+            Node::Repetition { greedy: true, .. } => {
                 // TODO: allow greedy when it does not contain characters from the literals?
                 // This would allow matching \s* which would be useful.
-                return false;
+                self.0 = false;
             }
-            ast_is_ac_friendly(node)
+            _ => (),
         }
-        Node::Group(node) => ast_is_ac_friendly(node),
-        Node::Concat(nodes) | Node::Alternation(nodes) => nodes.iter().all(ast_is_ac_friendly),
+
+        VisitAction::Continue
+    }
+
+    fn finish(self) -> Self::Output {
+        self.0
     }
 }
 

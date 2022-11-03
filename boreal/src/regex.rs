@@ -7,6 +7,9 @@ use boreal_parser::regex::{
     RepetitionKind, RepetitionRange,
 };
 
+mod visitor;
+pub use visitor::{visit, VisitAction, Visitor};
+
 /// Regex following the YARA format.
 ///
 /// This represents a regex expression as can be used in a YARA rule, either as a
@@ -43,121 +46,138 @@ impl Regex {
 
 /// Convert a yara regex AST into a rust regex expression.
 pub(crate) fn regex_ast_to_string(ast: &Node) -> String {
-    // TODO avoid recursion here.
-    let mut out = String::new();
-    push_ast(ast, &mut out);
-    out
+    visit(ast, AstPrinter::default())
 }
 
-fn push_ast(node: &Node, out: &mut String) {
-    match node {
-        Node::Alternation(nodes) => {
-            for (i, n) in nodes.iter().enumerate() {
-                if i != 0 {
-                    out.push('|');
+#[derive(Default)]
+struct AstPrinter {
+    res: String,
+}
+
+impl Visitor for AstPrinter {
+    type Output = String;
+
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+        match node {
+            Node::Assertion(AssertionKind::StartLine) => self.res.push('^'),
+            Node::Assertion(AssertionKind::EndLine) => self.res.push('$'),
+            Node::Assertion(AssertionKind::WordBoundary) => self.res.push_str(r"\b"),
+            Node::Assertion(AssertionKind::NonWordBoundary) => self.res.push_str(r"\B"),
+            Node::Class(ClassKind::Perl(p)) => self.push_perl_class(p),
+            Node::Class(ClassKind::Bracketed(c)) => self.push_bracketed_class(c),
+            Node::Dot => self.res.push('.'),
+            Node::Literal(b) => self.push_literal(*b),
+            Node::Group(_) => self.res.push('('),
+            Node::Alternation(_) | Node::Concat(_) | Node::Empty | Node::Repetition { .. } => (),
+        }
+
+        VisitAction::Continue
+    }
+
+    fn visit_post(&mut self, node: &Node) {
+        match node {
+            Node::Alternation(_)
+            | Node::Assertion(_)
+            | Node::Class(_)
+            | Node::Concat(_)
+            | Node::Dot
+            | Node::Empty
+            | Node::Literal(_) => (),
+            Node::Group(_) => self.res.push(')'),
+            Node::Repetition {
+                kind,
+                greedy,
+                node: _,
+            } => {
+                match kind {
+                    RepetitionKind::ZeroOrOne => self.res.push('?'),
+                    RepetitionKind::ZeroOrMore => self.res.push('*'),
+                    RepetitionKind::OneOrMore => self.res.push('+'),
+                    RepetitionKind::Range(range) => {
+                        let _r = match range {
+                            RepetitionRange::Exactly(n) => write!(self.res, "{{{}}}", n),
+                            RepetitionRange::AtLeast(n) => write!(self.res, "{{{},}}", n),
+                            RepetitionRange::Bounded(n, m) => write!(self.res, "{{{},{}}}", n, m),
+                        };
+                    }
+                };
+                if !greedy {
+                    self.res.push('?');
                 }
-                push_ast(n, out);
             }
         }
-        Node::Assertion(AssertionKind::StartLine) => out.push('^'),
-        Node::Assertion(AssertionKind::EndLine) => out.push('$'),
-        Node::Assertion(AssertionKind::WordBoundary) => out.push_str(r"\b"),
-        Node::Assertion(AssertionKind::NonWordBoundary) => out.push_str(r"\B"),
-        Node::Class(ClassKind::Perl(p)) => push_perl_class(p, out),
-        Node::Class(ClassKind::Bracketed(c)) => push_bracketed_class(c, out),
-        Node::Concat(nodes) => {
-            for n in nodes {
-                push_ast(n, out);
-            }
+    }
+
+    fn visit_alternation_in(&mut self) {
+        self.res.push('|');
+    }
+
+    fn finish(self) -> Self::Output {
+        self.res
+    }
+}
+
+impl AstPrinter {
+    fn push_literal(&mut self, lit: u8) {
+        if (lit.is_ascii_alphanumeric()
+            || lit.is_ascii_graphic()
+            || lit.is_ascii_punctuation()
+            || lit == b' ')
+            && !regex_syntax::is_meta_character(char::from(lit))
+        {
+            self.res.push(char::from(lit));
+        } else {
+            let _r = write!(&mut self.res, r"\x{:02x}", lit);
         }
-        Node::Dot => out.push('.'),
-        Node::Empty => (),
-        Node::Literal(b) => push_literal(*b, out),
-        Node::Group(n) => {
-            out.push('(');
-            push_ast(n, out);
-            out.push(')');
+    }
+
+    fn push_perl_class(&mut self, cls: &PerlClass) {
+        match cls {
+            PerlClass {
+                kind: PerlClassKind::Word,
+                negated: false,
+            } => self.res.push_str(r"\w"),
+            PerlClass {
+                kind: PerlClassKind::Word,
+                negated: true,
+            } => self.res.push_str(r"\W"),
+            PerlClass {
+                kind: PerlClassKind::Space,
+                negated: false,
+            } => self.res.push_str(r"\s"),
+            PerlClass {
+                kind: PerlClassKind::Space,
+                negated: true,
+            } => self.res.push_str(r"\S"),
+            PerlClass {
+                kind: PerlClassKind::Digit,
+                negated: false,
+            } => self.res.push_str(r"\d"),
+            PerlClass {
+                kind: PerlClassKind::Digit,
+                negated: true,
+            } => self.res.push_str(r"\D"),
         }
-        Node::Repetition { node, kind, greedy } => {
-            push_ast(node, out);
-            match kind {
-                RepetitionKind::ZeroOrOne => out.push('?'),
-                RepetitionKind::ZeroOrMore => out.push('*'),
-                RepetitionKind::OneOrMore => out.push('+'),
-                RepetitionKind::Range(range) => {
-                    let _r = match range {
-                        RepetitionRange::Exactly(n) => write!(out, "{{{}}}", n),
-                        RepetitionRange::AtLeast(n) => write!(out, "{{{},}}", n),
-                        RepetitionRange::Bounded(n, m) => write!(out, "{{{},{}}}", n, m),
-                    };
+    }
+
+    fn push_bracketed_class(&mut self, cls: &BracketedClass) {
+        self.res.push('[');
+        if cls.negated {
+            self.res.push('^');
+        }
+        for item in &cls.items {
+            match item {
+                BracketedClassItem::Perl(p) => self.push_perl_class(p),
+                BracketedClassItem::Literal(b) => self.push_literal(*b),
+                BracketedClassItem::Range(a, b) => {
+                    self.push_literal(*a);
+                    self.res.push('-');
+                    self.push_literal(*b);
                 }
-            };
-            if !greedy {
-                out.push('?');
             }
         }
+        self.res.push(']');
     }
-}
-
-fn push_literal(lit: u8, out: &mut String) {
-    if (lit.is_ascii_alphanumeric()
-        || lit.is_ascii_graphic()
-        || lit.is_ascii_punctuation()
-        || lit == b' ')
-        && !regex_syntax::is_meta_character(char::from(lit))
-    {
-        out.push(char::from(lit));
-    } else {
-        let _r = write!(out, r"\x{:02x}", lit);
-    }
-}
-
-fn push_perl_class(cls: &PerlClass, out: &mut String) {
-    match cls {
-        PerlClass {
-            kind: PerlClassKind::Word,
-            negated: false,
-        } => out.push_str(r"\w"),
-        PerlClass {
-            kind: PerlClassKind::Word,
-            negated: true,
-        } => out.push_str(r"\W"),
-        PerlClass {
-            kind: PerlClassKind::Space,
-            negated: false,
-        } => out.push_str(r"\s"),
-        PerlClass {
-            kind: PerlClassKind::Space,
-            negated: true,
-        } => out.push_str(r"\S"),
-        PerlClass {
-            kind: PerlClassKind::Digit,
-            negated: false,
-        } => out.push_str(r"\d"),
-        PerlClass {
-            kind: PerlClassKind::Digit,
-            negated: true,
-        } => out.push_str(r"\D"),
-    }
-}
-
-fn push_bracketed_class(cls: &BracketedClass, out: &mut String) {
-    out.push('[');
-    if cls.negated {
-        out.push('^');
-    }
-    for item in &cls.items {
-        match item {
-            BracketedClassItem::Perl(p) => push_perl_class(p, out),
-            BracketedClassItem::Literal(b) => push_literal(*b, out),
-            BracketedClassItem::Range(a, b) => {
-                push_literal(*a, out);
-                out.push('-');
-                push_literal(*b, out);
-            }
-        }
-    }
-    out.push(']');
 }
 
 #[derive(Clone, Debug)]
