@@ -12,13 +12,13 @@
 use std::sync::Arc;
 
 use crate::regex::Regex;
+use crate::variable_set::AcResult;
 use memchr::memmem;
 
 use crate::compiler::{
     Expression, ExternalValue, ForIterator, ForSelection, Rule, Variable, VariableIndex,
 };
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
-use crate::variable_set::VariableSetMatches;
 
 mod module;
 
@@ -83,11 +83,6 @@ pub struct ScanData<'a> {
 
     pub module_values: Vec<(&'static str, Arc<ModuleValue>)>,
 
-    // List of "no match/has at least one match" results for all variables.
-    variable_set_matches: VariableSetMatches,
-
-    // Index offset into `variables_matches`.
-    //
     // Context used when calling module functions
     module_ctx: ScanContext<'a>,
 
@@ -98,7 +93,6 @@ pub struct ScanData<'a> {
 impl<'a> ScanData<'a> {
     pub(crate) fn new(
         mem: &'a [u8],
-        variable_set_matches: VariableSetMatches,
         modules: &[Box<dyn Module>],
         external_symbols: &'a [Value],
     ) -> Self {
@@ -120,7 +114,6 @@ impl<'a> ScanData<'a> {
                     )
                 })
                 .collect(),
-            variable_set_matches,
             module_ctx,
             external_symbols,
         }
@@ -134,21 +127,15 @@ impl<'a> ScanData<'a> {
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
     variables: &'rule [Variable],
+    ac_results: &'scan [AcResult],
     scan_data: &'scan ScanData,
-    set_index_offset: usize,
     previous_rules_results: &'scan [bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
     let mut evaluator = Evaluator {
         variables: variables
             .iter()
-            .enumerate()
-            .map(|(i, var)| {
-                VariableEvaluation::new(
-                    var,
-                    // FIXME: remove this set_index_offset by giving the slice directly
-                    &scan_data.variable_set_matches.matched(set_index_offset + i),
-                )
-            })
+            .zip(ac_results)
+            .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
             .collect(),
         mem: scan_data.mem,
         previous_rules_results,

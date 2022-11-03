@@ -176,17 +176,12 @@ impl Inner {
         // - evaluate global rules that have no variables first
         // - then scan the set
         // - then evaluate rest of global rules first, then rules
-        let variable_set_matches = self.variable_set.matches(mem, &self.variables);
+        let ac_matches = self.variable_set.matches(mem, &self.variables);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
-        let scan_data = ScanData::new(
-            mem,
-            variable_set_matches,
-            &self.modules,
-            external_symbols_values,
-        );
+        let scan_data = ScanData::new(mem, &self.modules, external_symbols_values);
 
         // First, check global rules
         let mut var_index = 0;
@@ -194,8 +189,8 @@ impl Inner {
             let (res, var_evals) = evaluator::evaluate_rule(
                 rule,
                 &self.variables[var_index..(var_index + rule.nb_variables)],
+                &ac_matches[var_index..(var_index + rule.nb_variables)],
                 &scan_data,
-                var_index,
                 &previous_results,
             );
             var_index += rule.nb_variables;
@@ -223,8 +218,8 @@ impl Inner {
                 let (res, var_evals) = evaluator::evaluate_rule(
                     rule,
                     &self.variables[var_index..(var_index + rule.nb_variables)],
+                    &ac_matches[var_index..(var_index + rule.nb_variables)],
                     &scan_data,
-                    var_index,
                     &previous_results,
                 );
 

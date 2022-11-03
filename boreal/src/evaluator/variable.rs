@@ -1,7 +1,8 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use crate::{compiler::Variable, variable_set::SetResult};
+use crate::compiler::Variable;
+use crate::variable_set::AcResult;
 
 /// Variable evaluation context.
 ///
@@ -31,21 +32,21 @@ pub type Match = std::ops::Range<usize>;
 
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.
-    pub fn new(var: &'a Variable, set_result: &SetResult) -> Self {
+    pub fn new(var: &'a Variable, ac_result: &AcResult) -> Self {
         let mut this = Self {
             var,
             matches: Vec::new(),
             next_offset: Some(0),
             has_been_found: false,
         };
-        match set_result {
-            SetResult::Unknown => this,
-            SetResult::NotFound => {
+        match ac_result {
+            AcResult::Unknown => this,
+            AcResult::NotFound => {
                 this.next_offset = None;
                 this
             }
-            SetResult::Matches(matches) => {
-                this.matches = matches.to_vec();
+            AcResult::Matches(matches) => {
+                this.matches = matches.clone();
                 this.next_offset = None;
                 this.has_been_found = !this.matches.is_empty();
                 this

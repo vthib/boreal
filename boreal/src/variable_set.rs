@@ -69,8 +69,8 @@ impl VariableSet {
         }
     }
 
-    pub(crate) fn matches(&self, mem: &[u8], variables: &[Variable]) -> VariableSetMatches {
-        let mut matches = vec![None; variables.len()];
+    pub(crate) fn matches(&self, mem: &[u8], variables: &[Variable]) -> Vec<AcResult> {
+        let mut matches = vec![AcResult::NotFound; variables.len()];
 
         for mat in self.aho.find_overlapping_iter(mem) {
             let LiteralInfo {
@@ -108,8 +108,8 @@ impl VariableSet {
             // This is invalid, only one match per starting byte can happen.
             // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
             // saved match.
-            let start_position = match matches[variable_index].as_ref() {
-                Some(MatchResult::Matches(v)) => match v.last() {
+            let start_position = match &matches[variable_index] {
+                AcResult::Matches(v) => match v.last() {
                     Some(m) => m.start + 1,
                     None => 0,
                 },
@@ -118,23 +118,23 @@ impl VariableSet {
 
             match variables[variable_index].process_ac_match(mem, m, start_position) {
                 AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
-                    Some(MatchResult::Matches(v)) => v.extend(found_matches),
-                    _ => matches[variable_index] = Some(MatchResult::Matches(found_matches)),
+                    AcResult::Matches(v) => v.extend(found_matches),
+                    _ => matches[variable_index] = AcResult::Matches(found_matches),
                 },
                 AcMatchStatus::Single(m) => match &mut matches[variable_index] {
-                    Some(MatchResult::Matches(v)) => v.push(m),
-                    _ => matches[variable_index] = Some(MatchResult::Matches(vec![m])),
+                    AcResult::Matches(v) => v.push(m),
+                    _ => matches[variable_index] = AcResult::Matches(vec![m]),
                 },
-                AcMatchStatus::Unknown => matches[variable_index] = Some(MatchResult::Unknown),
+                AcMatchStatus::Unknown => matches[variable_index] = AcResult::Unknown,
                 AcMatchStatus::None => (),
             };
         }
 
         for i in &self.non_handled_var_indexes {
-            matches[*i] = Some(MatchResult::Unknown);
+            matches[*i] = AcResult::Unknown;
         }
 
-        VariableSetMatches { matches }
+        matches
     }
 }
 
@@ -150,35 +150,11 @@ fn pick_best_atom_in_literal(lit: &[u8]) -> (usize, usize) {
 }
 
 #[derive(Clone, Debug)]
-enum MatchResult {
-    /// Unknown, must scan for the variable on its own.
-    Unknown,
-    /// List of matches.
-    Matches(Vec<Range<usize>>),
-}
-
-#[derive(Debug)]
-pub(crate) struct VariableSetMatches {
-    matches: Vec<Option<MatchResult>>,
-}
-
-/// Result of a `VariableSet` scan for a given variable.
-#[derive(Clone, Debug)]
-pub(crate) enum SetResult<'a> {
-    /// Variable has no match.
+pub(crate) enum AcResult {
+    /// Variable was not found by the AC pass.
     NotFound,
     /// Unknown, must scan for the variable on its own.
     Unknown,
-    /// List of matches.
-    Matches(&'a [Range<usize>]),
-}
-
-impl VariableSetMatches {
-    pub(crate) fn matched(&self, index: usize) -> SetResult {
-        match &self.matches[index] {
-            None => SetResult::NotFound,
-            Some(MatchResult::Unknown) => SetResult::Unknown,
-            Some(MatchResult::Matches(m)) => SetResult::Matches(m),
-        }
-    }
+    /// List of matches for the variable.
+    Matches(Vec<Range<usize>>),
 }
