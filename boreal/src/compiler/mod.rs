@@ -163,7 +163,6 @@ impl Compiler {
         path: &Path,
         namespace: Option<&str>,
     ) -> Result<(), AddRuleError> {
-        // TODO: memmap the file instead?
         let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError::IOError {
             path: path.to_path_buf(),
             error,

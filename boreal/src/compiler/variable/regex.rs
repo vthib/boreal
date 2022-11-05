@@ -330,10 +330,6 @@ impl Visitor for AstWidener {
             // depending on which solution is picked. Those are mostly edge cases on carefully
             // crafted regexes, so it should not matter, but the test
             // `test_variable_regex_word_boundaries_edge_cases` tests some of those.
-            //
-            // TODO: test and bench the first solution, to build an iterator on all the wide
-            // slices that can be found in the input, and run the raw on those unwidden
-            // slices.
             Node::Assertion(AssertionKind::WordBoundary)
             | Node::Assertion(AssertionKind::NonWordBoundary) => {
                 self.has_word_boundaries = true;
