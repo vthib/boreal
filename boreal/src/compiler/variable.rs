@@ -456,6 +456,11 @@ pub enum VariableCompilationError {
     /// Error when compiling a regex variable.
     Regex(String),
 
+    /// Logic error while attempting to extract atoms from a variable.
+    ///
+    /// This really should not happen, and indicates a bug in the extraction code.
+    AtomsExtractionError,
+
     /// Structural error when applying the `wide` modifier to a regex.
     ///
     /// This really should not happen, and indicates a bug in the code
@@ -467,6 +472,8 @@ impl std::fmt::Display for VariableCompilationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Regex(e) => e.fmt(f),
+            // This should not happen. Please report it upstream if it does.
+            Self::AtomsExtractionError => write!(f, "unable to extract atoms"),
             // This should not happen. Please report it upstream if it does.
             Self::WidenError => write!(f, "unable to apply the wide modifier to the regex"),
         }

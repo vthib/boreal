@@ -31,7 +31,9 @@ pub(super) fn compile_regex(
         mut literals,
         mut pre,
         mut post,
-    } = super::atom::get_atoms_details(ast);
+    } = super::atom::get_atoms_details(ast).map_err(|e| match e {
+        super::atom::AtomsExtractionError => VariableCompilationError::AtomsExtractionError,
+    })?;
 
     let use_ac =
         crate::regex::visit(ast, AcCompatibility::default()).unwrap_or_else(|e| match e {});

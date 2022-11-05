@@ -18,7 +18,7 @@ use boreal_parser::regex::{AssertionKind, Node};
 
 use crate::regex::{regex_ast_to_string, visit, VisitAction, Visitor};
 
-pub fn get_atoms_details(node: &Node) -> AtomsDetails {
+pub fn get_atoms_details(node: &Node) -> Result<AtomsDetails, AtomsExtractionError> {
     let visitor = AtomsExtractor::new();
     let visitor = visit(node, visitor).unwrap_or_else(|e| match e {});
     visitor.into_atoms_details(node)
@@ -36,6 +36,20 @@ pub struct AtomsDetails {
     pub pre: Option<String>,
     pub post: Option<String>,
 }
+
+/// Logic error while extracting atoms from a regex.
+///
+/// This should never happen. If you get this error, please file a bug report.
+#[derive(Debug)]
+pub struct AtomsExtractionError;
+
+impl std::fmt::Display for AtomsExtractionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unable to extract atoms from string expression")
+    }
+}
+
+impl std::error::Error for AtomsExtractionError {}
 
 /// Visitor on a regex AST to extract atoms.
 ///
@@ -186,16 +200,19 @@ impl AtomsExtractor {
         }
     }
 
-    pub fn into_atoms_details(mut self, original_node: &Node) -> AtomsDetails {
+    pub fn into_atoms_details(
+        mut self,
+        original_node: &Node,
+    ) -> Result<AtomsDetails, AtomsExtractionError> {
         self.close();
 
-        let (pre_ast, post_ast) = self.set.build_pre_post_ast(original_node);
+        let (pre_ast, post_ast) = self.set.build_pre_post_ast(original_node)?;
 
-        AtomsDetails {
+        Ok(AtomsDetails {
             literals: self.set.atoms,
             pre: pre_ast.as_ref().map(regex_ast_to_string),
             post: post_ast.as_ref().map(regex_ast_to_string),
-        }
+        })
     }
 }
 
@@ -247,13 +264,27 @@ impl AtomSet {
         }
     }
 
-    fn build_pre_post_ast(&self, original_node: &Node) -> (Option<Node>, Option<Node>) {
+    fn build_pre_post_ast(
+        &self,
+        original_node: &Node,
+    ) -> Result<(Option<Node>, Option<Node>), AtomsExtractionError> {
         if self.atoms.is_empty() {
-            return (None, None);
+            return Ok((None, None));
         }
 
         let visitor = PrePostExtractor::new(self.start_position, self.end_position);
-        let (pre_node, post_node) = visit(original_node, visitor).unwrap_or_else(|e| match e {});
+        let (pre_node, post_node) = match visit(original_node, visitor) {
+            Ok(v) => v,
+            Err(err) => {
+                // This should not happen, it indicates a logic error in the visitor.
+                debug_assert!(
+                    false,
+                    "cannot extract pre and post AST from {:?}, starting_position: {}, end_position: {}",
+                    original_node, self.start_position, self.end_position
+                );
+                return Err(err);
+            }
+        };
 
         let pre_node = pre_node.map(|pre| {
             let mut pre_nodes = Vec::new();
@@ -270,7 +301,7 @@ impl AtomSet {
             Node::Concat(post_nodes)
         });
 
-        (pre_node, post_node)
+        Ok((pre_node, post_node))
     }
 }
 
@@ -360,42 +391,47 @@ impl PrePostExtractor {
         self.post_stack.push(Vec::new());
     }
 
-    fn pop_stack(&mut self) -> (Option<Vec<Node>>, Option<Vec<Node>>) {
-        (self.pre_stack.pop(), self.post_stack.pop())
+    fn pop_stack(&mut self) -> Result<(Vec<Node>, Vec<Node>), AtomsExtractionError> {
+        match (self.pre_stack.pop(), self.post_stack.pop()) {
+            (Some(pre), Some(post)) => Ok((pre, post)),
+            _ => Err(AtomsExtractionError),
+        }
     }
 
-    fn add_pre_post_node(&mut self, node: &Node) {
+    fn add_pre_post_node(&mut self, node: &Node) -> Result<(), AtomsExtractionError> {
         if self.current_position < self.start_position {
-            self.add_pre_node(node.clone());
+            self.add_node(node.clone(), false)
         } else if self.current_position >= self.end_position {
-            self.add_post_node(node.clone());
+            self.add_node(node.clone(), true)
+        } else {
+            Ok(())
         }
     }
 
-    fn add_pre_node(&mut self, node: Node) {
-        if self.pre_stack.is_empty() {
-            // Empty stack: we should only have a single HIR to set at top-level.
-            self.pre_node = Some(node);
+    fn add_node(&mut self, node: Node, post: bool) -> Result<(), AtomsExtractionError> {
+        let (stack, final_node) = if post {
+            (&mut self.post_stack, &mut self.post_node)
         } else {
-            let pos = self.pre_stack.len() - 1;
-            self.pre_stack[pos].push(node);
-        }
-    }
+            (&mut self.pre_stack, &mut self.pre_node)
+        };
 
-    fn add_post_node(&mut self, node: Node) {
-        if self.post_stack.is_empty() {
+        if stack.is_empty() {
             // Empty stack: we should only have a single HIR to set at top-level.
-            self.post_node = Some(node);
+            match final_node.replace(node) {
+                Some(_) => Err(AtomsExtractionError),
+                None => Ok(()),
+            }
         } else {
-            let pos = self.post_stack.len() - 1;
-            self.post_stack[pos].push(node);
+            let pos = stack.len() - 1;
+            stack[pos].push(node);
+            Ok(())
         }
     }
 }
 
 impl Visitor for PrePostExtractor {
     type Output = (Option<Node>, Option<Node>);
-    type Err = Infallible;
+    type Err = AtomsExtractionError;
 
     fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
         // XXX: be careful here, the visit *must* have the exact same behavior as for the
@@ -408,7 +444,7 @@ impl Visitor for PrePostExtractor {
             | Node::Empty
             | Node::Assertion(_)
             | Node::Alternation(_) => {
-                self.add_pre_post_node(node);
+                self.add_pre_post_node(node)?;
                 VisitAction::Skip
             }
             Node::Group(_) | Node::Concat(_) => {
@@ -428,29 +464,23 @@ impl Visitor for PrePostExtractor {
             | Node::Assertion(_)
             | Node::Alternation(_) => (),
             Node::Group(_) => {
-                let (pre, post) = self.pop_stack();
-                // Safety: push_stack was called in visit_pre for this node
-                let mut pre = pre.unwrap();
-                let mut post = post.unwrap();
+                let (mut pre, mut post) = self.pop_stack()?;
 
                 if let Some(node) = pre.pop() {
-                    self.add_pre_node(Node::Group(Box::new(node)));
+                    self.add_node(Node::Group(Box::new(node)), false)?;
                 }
                 if let Some(node) = post.pop() {
-                    self.add_post_node(Node::Group(Box::new(node)));
+                    self.add_node(Node::Group(Box::new(node)), true)?;
                 }
             }
 
             Node::Concat(_) => {
-                let (pre, post) = self.pop_stack();
-                // Safety: push_stack was called in visit_pre for this node
-                let pre = pre.unwrap();
-                let post = post.unwrap();
+                let (pre, post) = self.pop_stack()?;
                 if !pre.is_empty() {
-                    self.add_pre_node(Node::Concat(pre));
+                    self.add_node(Node::Concat(pre), false)?;
                 }
                 if !post.is_empty() {
-                    self.add_post_node(Node::Concat(post));
+                    self.add_node(Node::Concat(post), true)?;
                 }
             }
         }
@@ -482,7 +512,7 @@ mod tests {
             let hex_string = parse_hex_string(hex_string_expr);
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
-            let exprs = get_atoms_details(&ast);
+            let exprs = get_atoms_details(&ast).unwrap();
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(exprs.pre.unwrap_or_default(), expected_pre);
             assert_eq!(exprs.post.unwrap_or_default(), expected_post);
@@ -714,7 +744,7 @@ mod tests {
         #[track_caller]
         fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
             let regex = parse_regex_string(expr);
-            let exprs = get_atoms_details(&regex.ast);
+            let exprs = get_atoms_details(&regex.ast).unwrap();
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(exprs.pre.unwrap_or_default(), expected_pre);
             assert_eq!(exprs.post.unwrap_or_default(), expected_post);
