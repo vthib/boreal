@@ -509,7 +509,7 @@ fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{parse, parse_err, test_public_type};
+    use crate::test_helpers::{parse, parse_err, test_public_type};
 
     #[test]
     fn test_parse_regex() {

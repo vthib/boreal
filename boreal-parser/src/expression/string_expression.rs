@@ -93,7 +93,7 @@ pub(super) fn string_length_expression(input: Input) -> ParseResult<Expression> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{parse, parse_err};
+    use crate::test_helpers::{parse, parse_err};
 
     #[test]
     fn test_string_count_expression() {

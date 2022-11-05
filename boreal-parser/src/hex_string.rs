@@ -272,7 +272,7 @@ pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<HexToken>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{parse, parse_err, test_public_type};
+    use crate::test_helpers::{parse, parse_err, test_public_type};
 
     #[test]
     fn test_parse_hex_byte() {

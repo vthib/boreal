@@ -80,4 +80,4 @@ pub fn parse_str(input: &str) -> Result<YaraFile, Error> {
 }
 
 #[cfg(test)]
-mod tests;
+mod test_helpers;

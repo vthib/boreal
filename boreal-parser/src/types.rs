@@ -271,7 +271,7 @@ impl std::ops::Deref for Input<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_public_type;
+    use crate::test_helpers::test_public_type;
 
     use super::*;
 

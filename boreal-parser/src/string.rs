@@ -160,7 +160,7 @@ fn quoted_no_rtrim(input: Input) -> ParseResult<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{parse, parse_err};
+    use super::super::test_helpers::{parse, parse_err};
 
     #[test]
     fn test_parse_quoted() {

@@ -68,7 +68,7 @@ mod tests {
     use super::{
         read_integer_expression, read_integer_type, Expression, ExpressionKind, ReadIntegerType,
     };
-    use crate::tests::{parse, parse_err, test_public_type};
+    use crate::test_helpers::{parse, parse_err, test_public_type};
 
     #[test]
     fn test_read_integer() {

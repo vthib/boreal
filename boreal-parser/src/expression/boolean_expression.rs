@@ -266,7 +266,7 @@ mod tests {
     use crate::{
         expression::Identifier,
         regex::{self, Regex},
-        tests::{parse, parse_check, parse_err, test_public_type},
+        test_helpers::{parse, parse_check, parse_err, test_public_type},
     };
     use std::ops::Range;
 

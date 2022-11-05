@@ -573,10 +573,10 @@ fn condition(input: Input) -> ParseResult<Expression> {
 mod tests {
     use crate::expression::{Expression, ExpressionKind, ForSelection, VariableSet};
     use crate::hex_string::{HexToken, Mask};
-    use crate::tests::test_public_type;
+    use crate::test_helpers::test_public_type;
     use crate::Regex;
 
-    use super::super::tests::{parse, parse_err};
+    use super::super::test_helpers::{parse, parse_err};
     use super::*;
 
     #[test]

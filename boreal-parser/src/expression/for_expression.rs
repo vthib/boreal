@@ -328,7 +328,7 @@ mod tests {
     use super::*;
     use crate::{
         expression::{ExpressionKind, Identifier, IdentifierOperation},
-        tests::{parse, parse_err, test_public_type},
+        test_helpers::{parse, parse_err, test_public_type},
         IdentifierOperationType,
     };
 

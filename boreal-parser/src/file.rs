@@ -111,7 +111,7 @@ fn import(input: Input) -> ParseResult<Import> {
 mod tests {
     use super::*;
     use crate::{
-        tests::{parse, parse_err, test_public_type},
+        test_helpers::{parse, parse_err, test_public_type},
         Expression, ExpressionKind,
     };
 

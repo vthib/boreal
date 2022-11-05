@@ -237,7 +237,7 @@ mod tests {
     use crate::{
         expression::ReadIntegerType,
         regex::Regex,
-        tests::{parse, parse_check, parse_err},
+        test_helpers::{parse, parse_check, parse_err},
     };
     use std::ops::Range;
 

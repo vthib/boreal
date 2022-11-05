@@ -151,7 +151,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{parse, parse_err};
+    use crate::test_helpers::{parse, parse_err};
 
     fn dummy_parser(input: Input) -> ParseResult<char> {
         char('-')(input)
