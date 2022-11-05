@@ -189,16 +189,32 @@ fn alternative(mut input: Input) -> ParseResult<Node> {
 
     loop {
         let (input2, node) = concatenation(input)?;
-        let (input2, alt_char) = opt(char('|'))(input2)?;
-        if alt_char.is_none() {
-            if alts.is_empty() {
-                return Ok((input2, node));
-            }
+        let (input2, has_alt_char) = eat_opt_char('|', input2);
+        if has_alt_char {
             alts.push(node);
-            return Ok((input2, Node::Alternation(alts)));
+            input = input2;
+            continue;
         }
-        alts.push(node);
-        input = input2;
+
+        return Ok((
+            input2,
+            if alts.is_empty() {
+                node
+            } else {
+                alts.push(node);
+                Node::Alternation(alts)
+            },
+        ));
+    }
+}
+
+fn eat_opt_char(c: char, mut input: Input) -> (Input, bool) {
+    match input.cursor().chars().next() {
+        Some(c2) if c2 == c => {
+            input.advance(c.len_utf8());
+            (input, true)
+        }
+        _ => (input, false),
     }
 }
 
@@ -218,8 +234,7 @@ fn concatenation(input: Input) -> ParseResult<Node> {
 
 fn repeat(input: Input) -> ParseResult<Node> {
     // First, parse assertions
-    let (input, node) = opt(assertion)(input)?;
-    if let Some(node) = node {
+    if let Ok((input, node)) = assertion(input) {
         return Ok((input, node));
     }
 
@@ -314,22 +329,16 @@ fn bracketed_class(input: Input) -> ParseResult<BracketedClass> {
 }
 
 fn bracketed_class_inner(input: Input) -> ParseResult<BracketedClass> {
-    let (input, negated) = opt(char('^'))(input)?;
-    let (input, contains_closing_bracket) = opt(char(']'))(input)?;
+    let (input, negated) = eat_opt_char('^', input);
+    let (input, contains_closing_bracket) = eat_opt_char(']', input);
 
     let (input, mut items) = many0(bracketed_class_item)(input)?;
     let (input, _) = char(']')(input)?;
 
-    if contains_closing_bracket.is_some() {
+    if contains_closing_bracket {
         items.push(BracketedClassItem::Literal(b']'));
     }
-    Ok((
-        input,
-        BracketedClass {
-            items,
-            negated: negated.is_some(),
-        },
-    ))
+    Ok((input, BracketedClass { items, negated }))
 }
 
 fn bracketed_class_item(input: Input) -> ParseResult<BracketedClassItem> {
@@ -342,21 +351,20 @@ fn bracketed_class_item(input: Input) -> ParseResult<BracketedClassItem> {
 fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassItem> {
     let start = input;
     let (input, lit) = bracketed_class_literal(input)?;
-    let (input2, dash) = opt(char('-'))(input)?;
+    let (input2, has_dash) = eat_opt_char('-', input);
 
-    match dash {
-        Some(_) => {
-            let (input3, lit2) = opt(bracketed_class_literal)(input2)?;
-            match lit2 {
-                Some(lit2) if lit2 < lit => Err(nom::Err::Failure(Error::new(
-                    input3.get_span_from_no_rtrim(start),
-                    ErrorKind::RegexClassRangeInvalid,
-                ))),
-                Some(lit2) => Ok((input3, BracketedClassItem::Range(lit, lit2))),
-                None => Ok((input, BracketedClassItem::Literal(lit))),
-            }
+    if has_dash {
+        let (input3, lit2) = opt(bracketed_class_literal)(input2)?;
+        match lit2 {
+            Some(lit2) if lit2 < lit => Err(nom::Err::Failure(Error::new(
+                input3.get_span_from_no_rtrim(start),
+                ErrorKind::RegexClassRangeInvalid,
+            ))),
+            Some(lit2) => Ok((input3, BracketedClassItem::Range(lit, lit2))),
+            None => Ok((input, BracketedClassItem::Literal(lit))),
         }
-        None => Ok((input, BracketedClassItem::Literal(lit))),
+    } else {
+        Ok((input, BracketedClassItem::Literal(lit)))
     }
 }
 
@@ -433,9 +441,9 @@ fn char_to_u8(c: char) -> Result<u8, ErrorKind> {
 
 fn range_repetition(input: Input) -> ParseResult<(RepetitionRange, bool)> {
     let (input, range) = alt((range_single, range_multi))(input)?;
-    let (input, non_greedy) = opt(char('?'))(input)?;
+    let (input, non_greedy) = eat_opt_char('?', input);
 
-    Ok((input, (range, non_greedy.is_none())))
+    Ok((input, (range, !non_greedy)))
 }
 
 fn range_single(input: Input) -> ParseResult<RepetitionRange> {
@@ -487,11 +495,10 @@ fn parse_u32(input: Input) -> ParseResult<u32> {
 
 fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
     let start = input;
-    let (input, v) = digit0(input)?;
-
-    if v.is_empty() {
-        return Ok((input, None));
-    }
+    let (input, v) = match digit0::<_, Error>(input) {
+        Ok((input, s)) if !s.is_empty() => (input, s),
+        _ => return Ok((input, None)),
+    };
 
     let n = match str::parse::<u32>(&v) {
         Ok(n) => n,
@@ -590,6 +597,8 @@ mod tests {
         parse_err(regex, "/");
         parse_err(regex, "/\n/");
         parse_err(regex, "/a{2}");
+        parse_err(regex, "/a///");
+        parse_err(regex, "/a{5,4}/");
     }
 
     #[test]
