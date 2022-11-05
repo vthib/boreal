@@ -1,32 +1,32 @@
+use boreal_parser::hex_string::{Mask, Token};
 use boreal_parser::regex::{
     BracketedClass, BracketedClassItem, ClassKind, Node, RepetitionKind, RepetitionRange,
 };
-use boreal_parser::{HexMask, HexToken};
 
-pub(super) fn hex_string_to_ast(hex_string: Vec<HexToken>) -> Node {
+pub(super) fn hex_string_to_ast(hex_string: Vec<Token>) -> Node {
     Node::Concat(hex_string.into_iter().map(hex_token_to_ast).collect())
 }
 
-fn hex_token_to_ast(token: HexToken) -> Node {
+fn hex_token_to_ast(token: Token) -> Node {
     match token {
-        HexToken::Byte(b) => Node::Literal(b),
-        HexToken::MaskedByte(b, mask) => match mask {
-            HexMask::Left => Node::Class(ClassKind::Bracketed(BracketedClass {
+        Token::Byte(b) => Node::Literal(b),
+        Token::MaskedByte(b, mask) => match mask {
+            Mask::Left => Node::Class(ClassKind::Bracketed(BracketedClass {
                 items: (0..=0xF)
                     .map(|i| BracketedClassItem::Literal((i << 4) + b))
                     .collect(),
                 negated: false,
             })),
-            HexMask::Right => {
+            Mask::Right => {
                 let b = b << 4;
                 Node::Class(ClassKind::Bracketed(BracketedClass {
                     items: vec![BracketedClassItem::Range(b, b + 0x0F)],
                     negated: false,
                 }))
             }
-            HexMask::All => Node::Dot,
+            Mask::All => Node::Dot,
         },
-        HexToken::Jump(jump) => {
+        Token::Jump(jump) => {
             let kind = match (jump.from, jump.to) {
                 (from, None) => RepetitionKind::Range(RepetitionRange::AtLeast(from)),
                 (from, Some(to)) => RepetitionKind::Range(RepetitionRange::Bounded(from, to)),
@@ -37,14 +37,14 @@ fn hex_token_to_ast(token: HexToken) -> Node {
                 greedy: false,
             }
         }
-        HexToken::Alternatives(elems) => Node::Group(Box::new(Node::Alternation(
+        Token::Alternatives(elems) => Node::Group(Box::new(Node::Alternation(
             elems.into_iter().map(hex_string_to_ast).collect(),
         ))),
     }
 }
 
 /// Can the hex string be expressed using only literals.
-pub(super) fn can_use_only_literals(hex_string: &[HexToken]) -> bool {
+pub(super) fn can_use_only_literals(hex_string: &[Token]) -> bool {
     let nb_literals = match count_total_literals(hex_string) {
         Some(v) => v,
         None => return false,
@@ -54,20 +54,20 @@ pub(super) fn can_use_only_literals(hex_string: &[HexToken]) -> bool {
 }
 
 /// Count the total of literals that would needed to exhaustively express the hex string.
-fn count_total_literals(hex_string: &[HexToken]) -> Option<usize> {
+fn count_total_literals(hex_string: &[Token]) -> Option<usize> {
     let mut nb_lits = 1_usize;
 
     for token in hex_string {
         match token {
-            HexToken::Byte(_) => (),
-            HexToken::Jump(_) => return None,
-            HexToken::MaskedByte(_, mask) => match mask {
-                HexMask::Left | HexMask::Right => {
+            Token::Byte(_) => (),
+            Token::Jump(_) => return None,
+            Token::MaskedByte(_, mask) => match mask {
+                Mask::Left | Mask::Right => {
                     nb_lits = nb_lits.checked_mul(16)?;
                 }
-                HexMask::All => return None,
+                Mask::All => return None,
             },
-            HexToken::Alternatives(alts) => {
+            Token::Alternatives(alts) => {
                 let mut nb_alts = 0_usize;
                 for alt in alts {
                     nb_alts = nb_alts.checked_add(count_total_literals(alt)?)?;
@@ -81,15 +81,15 @@ fn count_total_literals(hex_string: &[HexToken]) -> Option<usize> {
 }
 
 /// Convert a hex string into an array of literals that entirely express it.
-pub(super) fn hex_string_to_only_literals(hex_string: Vec<HexToken>) -> Vec<Vec<u8>> {
+pub(super) fn hex_string_to_only_literals(hex_string: Vec<Token>) -> Vec<Vec<u8>> {
     let mut literals = HexLiterals::new();
 
     for token in hex_string {
         match token {
-            HexToken::Byte(b) => literals.add_byte(b),
-            HexToken::Jump(_) => unreachable!(),
-            HexToken::MaskedByte(b, mask) => literals.add_masked_byte(b, &mask),
-            HexToken::Alternatives(alts) => literals.add_alternatives(alts),
+            Token::Byte(b) => literals.add_byte(b),
+            Token::Jump(_) => unreachable!(),
+            Token::MaskedByte(b, mask) => literals.add_masked_byte(b, &mask),
+            Token::Alternatives(alts) => literals.add_alternatives(alts),
         }
     }
 
@@ -115,7 +115,7 @@ impl HexLiterals {
         self.buffer.push(b);
     }
 
-    fn add_alternatives(&mut self, alts: Vec<Vec<HexToken>>) {
+    fn add_alternatives(&mut self, alts: Vec<Vec<Token>>) {
         // First, commit the local buffer, to have a proper list of all possible literals
         self.commit_buffer();
 
@@ -127,18 +127,18 @@ impl HexLiterals {
         self.cartesian_product(&suffixes);
     }
 
-    fn add_masked_byte(&mut self, b: u8, mask: &HexMask) {
+    fn add_masked_byte(&mut self, b: u8, mask: &Mask) {
         // First, commit the local buffer, to have a proper list of all possible literals
         self.commit_buffer();
 
         // Then, build the suffixes corresponding to the mask.
         let suffixes: Vec<Vec<u8>> = match mask {
-            HexMask::Left => (0..=0xF).map(|i| vec![(i << 4) + b]).collect(),
-            HexMask::Right => {
+            Mask::Left => (0..=0xF).map(|i| vec![(i << 4) + b]).collect(),
+            Mask::Right => {
                 let b = b << 4;
                 (b..=(b + 0xF)).map(|i| vec![i]).collect()
             }
-            HexMask::All => unreachable!(),
+            Mask::All => unreachable!(),
         };
         self.cartesian_product(&suffixes);
     }

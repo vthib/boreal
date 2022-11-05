@@ -49,8 +49,7 @@ pub use expression::{
 };
 mod file;
 pub use file::{YaraFile, YaraFileComponent};
-mod hex_string;
-pub use hex_string::{HexToken, Jump as HexJump, Mask as HexMask};
+pub mod hex_string;
 mod nom_recipes;
 mod number;
 pub mod regex;

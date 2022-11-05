@@ -17,7 +17,7 @@ use super::types::{Input, ParseResult};
 
 /// A token in an hex string.
 #[derive(Clone, Debug, PartialEq)]
-pub enum HexToken {
+pub enum Token {
     /// A fully declared byte, eg `9C`
     Byte(u8),
     /// A masked byte, eg `?5`, `C?`, `??`
@@ -25,7 +25,7 @@ pub enum HexToken {
     /// A jump of unknown bytes, eg `[5-10]`, `[3-]`, ...
     Jump(Jump),
     /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
-    Alternatives(Vec<Vec<HexToken>>),
+    Alternatives(Vec<Vec<Token>>),
 }
 
 /// Mask on a byte.
@@ -172,19 +172,19 @@ fn validate_jump(range: &Jump) -> Result<(), ErrorKind> {
 /// This looks like `( AB .. | CD .. [ | .. ] )`.
 ///
 /// This is equivalent to the `alternatives` from `hex_grammar.y` in libyara.
-fn alternatives(input: Input) -> ParseResult<HexToken> {
+fn alternatives(input: Input) -> ParseResult<Token> {
     let (input, _) = rtrim(char('('))(input)?;
 
     cut(terminated(
         map(
             separated_list1(rtrim(char('|')), |input| tokens(input, true)),
-            HexToken::Alternatives,
+            Token::Alternatives,
         ),
         rtrim(char(')')),
     ))(input)
 }
 
-fn range_as_hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
+fn range_as_hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
     let start = input;
     let (input, range) = range(input)?;
 
@@ -201,10 +201,10 @@ fn range_as_hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexTok
     // Jump of one is equivalent to ??
     if let Some(to) = &range.to {
         if range.from == *to && range.from == 1 {
-            return Ok((input, HexToken::MaskedByte(0, Mask::All)));
+            return Ok((input, Token::MaskedByte(0, Mask::All)));
         }
     }
-    Ok((input, HexToken::Jump(range)))
+    Ok((input, Token::Jump(range)))
 }
 
 fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), ErrorKind> {
@@ -229,11 +229,11 @@ fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), ErrorKind> {
 /// `in_alternatives` flag is needed.
 ///
 /// This is equivalent to the `token_or_range` rule in `hex_grammar.y` in libyara.
-fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
+fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
     alt((
-        map(masked_byte, |(v, mask)| HexToken::MaskedByte(v, mask)),
+        map(masked_byte, |(v, mask)| Token::MaskedByte(v, mask)),
         // Always have at least one space after a byte or a masked byte
-        map(byte, HexToken::Byte),
+        map(byte, Token::Byte),
         |input| range_as_hex_token(input, in_alternatives),
         alternatives,
     ))(input)
@@ -244,12 +244,12 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<HexToken> {
 /// A jump is not allowed at the beginning or at the end of the list.
 ///
 /// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
-fn tokens(input: Input, in_alternatives: bool) -> ParseResult<Vec<HexToken>> {
+fn tokens(input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     let start = input;
     let (input, tokens) = many1(|input| hex_token(input, in_alternatives))(input)?;
 
-    if matches!(tokens[0], HexToken::Jump(_))
-        || (tokens.len() > 1 && matches!(tokens[tokens.len() - 1], HexToken::Jump(_)))
+    if matches!(tokens[0], Token::Jump(_))
+        || (tokens.len() > 1 && matches!(tokens[tokens.len() - 1], Token::Jump(_)))
     {
         Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
@@ -265,7 +265,7 @@ fn tokens(input: Input, in_alternatives: bool) -> ParseResult<Vec<HexToken>> {
 /// This looks like `{ AB .. }`.
 ///
 /// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
-pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<HexToken>> {
+pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<Token>> {
     let (input, _) = rtrim(char('{'))(input)?;
 
     cut(terminated(|input| tokens(input, false), rtrim(char('}'))))(input)
@@ -393,28 +393,28 @@ mod tests {
             alternatives,
             "( AB | 56 ?F ) ",
             "",
-            HexToken::Alternatives(vec![
-                vec![HexToken::Byte(0xAB)],
-                vec![HexToken::Byte(0x56), HexToken::MaskedByte(0x0F, Mask::Left)],
+            Token::Alternatives(vec![
+                vec![Token::Byte(0xAB)],
+                vec![Token::Byte(0x56), Token::MaskedByte(0x0F, Mask::Left)],
             ]),
         );
         parse(
             alternatives,
             "(12[1]C?|??[3-5]33)",
             "",
-            HexToken::Alternatives(vec![
+            Token::Alternatives(vec![
                 vec![
-                    HexToken::Byte(0x12),
-                    HexToken::MaskedByte(0, Mask::All),
-                    HexToken::MaskedByte(0x0C, Mask::Right),
+                    Token::Byte(0x12),
+                    Token::MaskedByte(0, Mask::All),
+                    Token::MaskedByte(0x0C, Mask::Right),
                 ],
                 vec![
-                    HexToken::MaskedByte(0x00, Mask::All),
-                    HexToken::Jump(Jump {
+                    Token::MaskedByte(0x00, Mask::All),
+                    Token::Jump(Jump {
                         from: 3,
                         to: Some(5),
                     }),
-                    HexToken::Byte(0x33),
+                    Token::Byte(0x33),
                 ],
             ]),
         );
@@ -422,28 +422,25 @@ mod tests {
             alternatives,
             "( ( ?D | 23)| 15) ",
             "",
-            HexToken::Alternatives(vec![
-                vec![HexToken::Alternatives(vec![
-                    vec![HexToken::MaskedByte(0x0D, Mask::Left)],
-                    vec![HexToken::Byte(0x23)],
+            Token::Alternatives(vec![
+                vec![Token::Alternatives(vec![
+                    vec![Token::MaskedByte(0x0D, Mask::Left)],
+                    vec![Token::Byte(0x23)],
                 ])],
-                vec![HexToken::Byte(0x15)],
+                vec![Token::Byte(0x15)],
             ]),
         );
         parse(
             alternatives,
             "( AA (BB | CC) | DD | EE FF )",
             "",
-            HexToken::Alternatives(vec![
+            Token::Alternatives(vec![
                 vec![
-                    HexToken::Byte(0xAA),
-                    HexToken::Alternatives(vec![
-                        vec![HexToken::Byte(0xBB)],
-                        vec![HexToken::Byte(0xCC)],
-                    ]),
+                    Token::Byte(0xAA),
+                    Token::Alternatives(vec![vec![Token::Byte(0xBB)], vec![Token::Byte(0xCC)]]),
                 ],
-                vec![HexToken::Byte(0xDD)],
-                vec![HexToken::Byte(0xEE), HexToken::Byte(0xFF)],
+                vec![Token::Byte(0xDD)],
+                vec![Token::Byte(0xEE), Token::Byte(0xFF)],
             ]),
         );
 
@@ -469,17 +466,17 @@ mod tests {
 
     #[test]
     fn test_hex_string() {
-        parse(hex_string, "{ AB }", "", vec![HexToken::Byte(0xAB)]);
+        parse(hex_string, "{ AB }", "", vec![Token::Byte(0xAB)]);
 
         parse(
             hex_string,
             "{ DE AD BE EF }",
             "",
             vec![
-                HexToken::Byte(0xDE),
-                HexToken::Byte(0xAD),
-                HexToken::Byte(0xBE),
-                HexToken::Byte(0xEF),
+                Token::Byte(0xDE),
+                Token::Byte(0xAD),
+                Token::Byte(0xBE),
+                Token::Byte(0xEF),
             ],
         );
         parse(
@@ -487,15 +484,12 @@ mod tests {
             "{ 01 ?2 ?? 3? [1-] ( AF | DC ) }",
             "",
             vec![
-                HexToken::Byte(1),
-                HexToken::MaskedByte(2, Mask::Left),
-                HexToken::MaskedByte(0, Mask::All),
-                HexToken::MaskedByte(3, Mask::Right),
-                HexToken::Jump(Jump { from: 1, to: None }),
-                HexToken::Alternatives(vec![
-                    vec![HexToken::Byte(0xAF)],
-                    vec![HexToken::Byte(0xDC)],
-                ]),
+                Token::Byte(1),
+                Token::MaskedByte(2, Mask::Left),
+                Token::MaskedByte(0, Mask::All),
+                Token::MaskedByte(3, Mask::Right),
+                Token::Jump(Jump { from: 1, to: None }),
+                Token::Alternatives(vec![vec![Token::Byte(0xAF)], vec![Token::Byte(0xDC)]]),
             ],
         );
 
@@ -513,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_public_types() {
-        test_public_type(HexToken::Byte(3));
+        test_public_type(Token::Byte(3));
         test_public_type(Mask::Left);
         test_public_type(Jump { from: 3, to: None });
     }

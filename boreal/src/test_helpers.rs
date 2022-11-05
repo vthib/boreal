@@ -1,7 +1,8 @@
-use boreal_parser::{parse, HexToken, Regex, VariableDeclarationValue};
+use boreal_parser::hex_string::Token;
+use boreal_parser::{parse, Regex, VariableDeclarationValue};
 
 #[track_caller]
-pub fn parse_hex_string(hex_string: &str) -> Vec<HexToken> {
+pub fn parse_hex_string(hex_string: &str) -> Vec<Token> {
     let rule_str = format!("rule a {{ strings: $a = {} condition: $a }}", hex_string);
     let mut file = parse(&rule_str).unwrap();
     let mut rule = file

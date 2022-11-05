@@ -112,7 +112,7 @@ pub enum VariableDeclarationValue {
     /// A regular expression.
     Regex(Regex),
     /// A hex string.
-    HexString(Vec<hex_string::HexToken>),
+    HexString(Vec<hex_string::Token>),
 }
 
 /// Modifiers applicable on a string.
@@ -572,7 +572,7 @@ fn condition(input: Input) -> ParseResult<Expression> {
 #[cfg(test)]
 mod tests {
     use crate::expression::{Expression, ExpressionKind, ForSelection, VariableSet};
-    use crate::hex_string::{HexToken, Mask};
+    use crate::hex_string::{Mask, Token};
     use crate::test_helpers::test_public_type;
     use crate::Regex;
 
@@ -902,7 +902,7 @@ mod tests {
                 },
                 VariableDeclaration {
                     name: "".to_owned(),
-                    value: VariableDeclarationValue::HexString(vec![HexToken::MaskedByte(
+                    value: VariableDeclarationValue::HexString(vec![Token::MaskedByte(
                         0x0B,
                         Mask::Left,
                     )]),
