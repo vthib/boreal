@@ -16,7 +16,7 @@ use std::convert::Infallible;
 
 use boreal_parser::regex::{AssertionKind, Node};
 
-use crate::regex::{regex_ast_to_string, visit, VisitAction, Visitor};
+use crate::regex::{visit, VisitAction, Visitor};
 
 pub fn get_atoms_details(node: &Node) -> Result<AtomsDetails, AtomsExtractionError> {
     let visitor = AtomsExtractor::new();
@@ -29,12 +29,12 @@ pub struct AtomsDetails {
     /// Literals extracted from the regex.
     pub literals: Vec<Vec<u8>>,
 
-    /// AST Expression for validators of matches on literals.
+    /// AST for validators of matches on literals.
     ///
-    /// The `pre` is the regex expression that must match before (and including) the literal.
-    /// The `post` is the regex expression that must match after (and including) the literal.
-    pub pre: Option<String>,
-    pub post: Option<String>,
+    /// The `pre` is the AST of the regex that must match before (and including) the literal.
+    /// The `post` is the AST of the regex that must match after (and including) the literal.
+    pub pre_ast: Option<Node>,
+    pub post_ast: Option<Node>,
 }
 
 /// Logic error while extracting atoms from a regex.
@@ -210,8 +210,8 @@ impl AtomsExtractor {
 
         Ok(AtomsDetails {
             literals: self.set.atoms,
-            pre: pre_ast.as_ref().map(regex_ast_to_string),
-            post: post_ast.as_ref().map(regex_ast_to_string),
+            pre_ast,
+            post_ast,
         })
     }
 }
@@ -496,7 +496,10 @@ impl Visitor for PrePostExtractor {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::{parse_hex_string, parse_regex_string};
+    use crate::{
+        regex::regex_ast_to_string,
+        test_helpers::{parse_hex_string, parse_regex_string},
+    };
 
     use super::*;
 
@@ -514,8 +517,22 @@ mod tests {
 
             let exprs = get_atoms_details(&ast).unwrap();
             assert_eq!(exprs.literals, expected_lits);
-            assert_eq!(exprs.pre.unwrap_or_default(), expected_pre);
-            assert_eq!(exprs.post.unwrap_or_default(), expected_post);
+            assert_eq!(
+                exprs
+                    .pre_ast
+                    .as_ref()
+                    .map(regex_ast_to_string)
+                    .unwrap_or_default(),
+                expected_pre
+            );
+            assert_eq!(
+                exprs
+                    .post_ast
+                    .as_ref()
+                    .map(regex_ast_to_string)
+                    .unwrap_or_default(),
+                expected_post
+            );
         }
 
         test("{ AB CD 01 }", &[b"\xab\xcd\x01"], "", "");
@@ -746,8 +763,22 @@ mod tests {
             let regex = parse_regex_string(expr);
             let exprs = get_atoms_details(&regex.ast).unwrap();
             assert_eq!(exprs.literals, expected_lits);
-            assert_eq!(exprs.pre.unwrap_or_default(), expected_pre);
-            assert_eq!(exprs.post.unwrap_or_default(), expected_post);
+            assert_eq!(
+                exprs
+                    .pre_ast
+                    .as_ref()
+                    .map(regex_ast_to_string)
+                    .unwrap_or_default(),
+                expected_pre
+            );
+            assert_eq!(
+                exprs
+                    .post_ast
+                    .as_ref()
+                    .map(regex_ast_to_string)
+                    .unwrap_or_default(),
+                expected_post
+            );
         }
 
         // Atom on the left side of a group

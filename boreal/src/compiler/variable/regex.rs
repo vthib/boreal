@@ -3,10 +3,8 @@ use std::convert::Infallible;
 use boreal_parser::regex::{AssertionKind, Node};
 use boreal_parser::VariableFlags;
 use regex::bytes::Regex;
-use regex_syntax::hir::{visit, Group, GroupKind, Hir, HirKind, Literal, Repetition, Visitor};
-use regex_syntax::ParserBuilder;
 
-use crate::regex::{regex_ast_to_string, VisitAction, Visitor as AstVisitor};
+use crate::regex::{regex_ast_to_string, visit, VisitAction, Visitor};
 
 use super::atom::AtomsDetails;
 use super::{CompiledVariable, MatcherType, VariableCompilationError};
@@ -29,29 +27,39 @@ pub(super) fn compile_regex(
 
     let AtomsDetails {
         mut literals,
-        mut pre,
-        mut post,
+        pre_ast,
+        post_ast,
     } = super::atom::get_atoms_details(ast).map_err(|e| match e {
         super::atom::AtomsExtractionError => VariableCompilationError::AtomsExtractionError,
     })?;
 
-    let use_ac =
-        crate::regex::visit(ast, AcCompatibility::default()).unwrap_or_else(|e| match e {});
+    let use_ac = visit(ast, AcCompatibility::default()).unwrap_or_else(|e| match e {});
 
     let mut has_wide_word_boundaries = false;
     let matcher_type = if literals.is_empty() || !use_ac {
-        let mut expr = regex_ast_to_string(ast);
-        has_wide_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(&mut expr, flags)?;
+        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, flags)?;
+        has_wide_word_boundaries |= has_ww_boundaries;
+
         apply_ascii_wide_flags_on_literals(&mut literals, flags);
 
         MatcherType::Raw(super::compile_regex_expr(&expr, case_insensitive, dot_all)?)
     } else {
-        if let Some(v) = &mut pre {
-            has_wide_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
-        }
-        if let Some(v) = &mut post {
-            has_wide_word_boundaries |= apply_ascii_wide_flags_on_regex_expr(v, flags)?;
-        }
+        let pre = match pre_ast {
+            Some(ast) => {
+                let (pre, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags)?;
+                has_wide_word_boundaries |= has_ww_boundaries;
+                Some(pre)
+            }
+            None => None,
+        };
+        let post = match post_ast {
+            Some(ast) => {
+                let (post, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags)?;
+                has_wide_word_boundaries |= has_ww_boundaries;
+                Some(post)
+            }
+            None => None,
+        };
         apply_ascii_wide_flags_on_literals(&mut literals, flags);
 
         MatcherType::Atomized {
@@ -82,7 +90,7 @@ impl Default for AcCompatibility {
     }
 }
 
-impl AstVisitor for AcCompatibility {
+impl Visitor for AcCompatibility {
     type Output = bool;
     type Err = Infallible;
 
@@ -123,6 +131,7 @@ fn compile_validator(
         None => Ok(None),
     }
 }
+
 fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, flags: VariableFlags) {
     if !flags.contains(VariableFlags::WIDE) {
         return;
@@ -147,57 +156,46 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
     new_lit
 }
 
-pub fn apply_ascii_wide_flags_on_regex_expr(
-    expr: &mut String,
+/// Convert the AST of a regex variable to a string, taking into account variable modifiers.
+fn convert_ast_to_string_with_flags(
+    ast: &Node,
     flags: VariableFlags,
-) -> Result<bool, VariableCompilationError> {
+) -> Result<(String, bool), VariableCompilationError> {
     if flags.contains(VariableFlags::WIDE) {
-        let hir = expr_to_hir(expr).unwrap();
-        let (wide_hir, has_wide_word_boundaries) = hir_to_wide(&hir)?;
+        let (wide_ast, has_wide_word_boundaries) = visit(ast, AstWidener::new())?;
 
-        *expr = if flags.contains(VariableFlags::ASCII) {
-            Hir::alternation(vec![hir, wide_hir]).to_string()
+        let expr = if flags.contains(VariableFlags::ASCII) {
+            format!(
+                "{}|{}",
+                regex_ast_to_string(ast),
+                regex_ast_to_string(&wide_ast),
+            )
         } else {
-            wide_hir.to_string()
+            regex_ast_to_string(&wide_ast)
         };
-        Ok(has_wide_word_boundaries)
+        Ok((expr, has_wide_word_boundaries))
     } else {
-        Ok(false)
+        Ok((regex_ast_to_string(ast), false))
     }
 }
 
-/// Convert a regex expression into a HIR.
-fn expr_to_hir(expr: &str) -> Result<Hir, regex_syntax::Error> {
-    ParserBuilder::new()
-        .octal(false)
-        .unicode(false)
-        .allow_invalid_utf8(true)
-        .build()
-        .parse(expr)
-}
-
-/// Transform a regex HIR to make the regex match "wide" characters.
+/// Visitor used to transform a regex AST to make the regex match "wide" characters.
 ///
 /// This is intented to transform a regex with the "wide" modifier, that is make it so
 /// the regex will not match raw ASCII but UCS-2.
 ///
 /// This means translating every match on a literal or class into this literal/class followed by a
-/// nul byte. See the implementation of the [`Visitor`] trait on [`HirWidener`] for more details.
-fn hir_to_wide(hir: &Hir) -> Result<(Hir, bool), VariableCompilationError> {
-    visit(hir, HirWidener::new())
-}
-
-/// Struct used to hold state while visiting the original HIR and building the widen one.
+/// nul byte. See the implementation of the [`Visitor`] trait on [`NodeWidener`] for more details.
 #[derive(Debug)]
-struct HirWidener {
-    /// Top level HIR object
-    hir: Option<Hir>,
+struct AstWidener {
+    /// Top level AST object
+    node: Option<Node>,
 
-    /// Stack of HIR objects built.
+    /// Stack of AST objects built.
     ///
-    /// Each visit to a compound HIR value (group, alternation, etc) will push a new level
+    /// Each visit to a compound AST value (group, alternation, etc) will push a new level
     /// to the stack. Then when we finish visiting the compound value, the level will be pop-ed,
-    /// and the new compound HIR value built.
+    /// and the new compound AST value built.
     stack: Vec<StackLevel>,
 
     /// Does the regex contains word boundaries
@@ -206,54 +204,54 @@ struct HirWidener {
 
 #[derive(Debug)]
 struct StackLevel {
-    /// HIR values built in this level.
-    hirs: Vec<Hir>,
+    /// AST values built in this level.
+    nodes: Vec<Node>,
 
-    /// Is this level for a concat HIR value.
+    /// Is this level for a concat AST value.
     in_concat: bool,
 }
 
 impl StackLevel {
     fn new(in_concat: bool) -> Self {
         Self {
-            hirs: Vec::new(),
+            nodes: Vec::new(),
             in_concat,
         }
     }
 
-    fn push(&mut self, hir: Hir) {
-        self.hirs.push(hir);
+    fn push(&mut self, node: Node) {
+        self.nodes.push(node);
     }
 }
 
-impl HirWidener {
+impl AstWidener {
     fn new() -> Self {
         Self {
-            hir: None,
+            node: None,
             stack: Vec::new(),
             has_word_boundaries: false,
         }
     }
 
-    fn add(&mut self, hir: Hir) -> Result<(), VariableCompilationError> {
+    fn add(&mut self, node: Node) -> Result<(), VariableCompilationError> {
         if self.stack.is_empty() {
-            // Empty stack: we should only have a single HIR to set at top-level.
-            match self.hir.replace(hir) {
+            // Empty stack: we should only have a single AST to set at top-level.
+            match self.node.replace(node) {
                 Some(_) => Err(VariableCompilationError::WidenError),
                 None => Ok(()),
             }
         } else {
             let pos = self.stack.len() - 1;
-            self.stack[pos].push(hir);
+            self.stack[pos].push(node);
             Ok(())
         }
     }
 
-    fn add_wide(&mut self, hir: Hir) -> Result<(), VariableCompilationError> {
-        let nul_byte = Hir::literal(Literal::Unicode('\0'));
+    fn add_wide(&mut self, node: Node) -> Result<(), VariableCompilationError> {
+        let nul_byte = Node::Literal(b'\0');
 
         if self.stack.is_empty() {
-            match self.hir.replace(Hir::concat(vec![hir, nul_byte])) {
+            match self.node.replace(Node::Concat(vec![node, nul_byte])) {
                 Some(_) => Err(VariableCompilationError::WidenError),
                 None => Ok(()),
             }
@@ -261,62 +259,60 @@ impl HirWidener {
             let pos = self.stack.len() - 1;
             let level = &mut self.stack[pos];
             if level.in_concat {
-                level.hirs.push(hir);
-                level.hirs.push(nul_byte);
+                level.nodes.push(node);
+                level.nodes.push(nul_byte);
             } else {
-                level.hirs.push(Hir::group(Group {
-                    kind: GroupKind::NonCapturing,
-                    hir: Box::new(Hir::concat(vec![hir, nul_byte])),
-                }));
+                level
+                    .nodes
+                    .push(Node::Group(Box::new(Node::Concat(vec![node, nul_byte]))));
             }
             Ok(())
         }
     }
 
-    fn pop(&mut self) -> Option<Vec<Hir>> {
-        self.stack.pop().map(|v| v.hirs)
+    fn pop(&mut self) -> Option<Vec<Node>> {
+        self.stack.pop().map(|v| v.nodes)
     }
 }
 
-impl Visitor for HirWidener {
-    type Output = (Hir, bool);
+impl Visitor for AstWidener {
+    type Output = (Node, bool);
     type Err = VariableCompilationError;
 
-    fn finish(self) -> Result<(Hir, bool), Self::Err> {
-        match self.hir {
+    fn finish(self) -> Result<(Node, bool), Self::Err> {
+        match self.node {
             Some(v) => Ok((v, self.has_word_boundaries)),
             None => Err(VariableCompilationError::WidenError),
         }
     }
 
-    fn visit_pre(&mut self, hir: &Hir) -> Result<(), Self::Err> {
-        match *hir.kind() {
-            HirKind::Empty
-            | HirKind::Literal(_)
-            | HirKind::Class(_)
-            | HirKind::Anchor(_)
-            | HirKind::WordBoundary(_) => {}
+    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
+        match node {
+            Node::Dot | Node::Empty | Node::Literal(_) | Node::Class(_) | Node::Assertion(_) => (),
 
-            HirKind::Repetition(_) | HirKind::Group(_) | HirKind::Alternation(_) => {
+            Node::Repetition { .. } | Node::Group(_) | Node::Alternation(_) => {
                 self.stack.push(StackLevel::new(false));
             }
-            HirKind::Concat(_) => {
+            Node::Concat(_) => {
                 self.stack.push(StackLevel::new(true));
             }
         }
-        Ok(())
+        Ok(VisitAction::Continue)
     }
 
-    fn visit_post(&mut self, hir: &Hir) -> Result<(), Self::Err> {
-        match hir.kind() {
-            HirKind::Empty => self.add(Hir::empty()),
+    fn visit_post(&mut self, node: &Node) -> Result<(), Self::Err> {
+        match node {
+            Node::Empty => self.add(Node::Empty),
 
-            // Literal or class: add a nul_byte after it
-            HirKind::Literal(lit) => self.add_wide(Hir::literal(lit.clone())),
-            HirKind::Class(cls) => self.add_wide(Hir::class(cls.clone())),
+            // Literal, dot or class: add a nul_byte after it
+            Node::Dot => self.add_wide(Node::Dot),
+            Node::Literal(lit) => self.add_wide(Node::Literal(*lit)),
+            Node::Class(cls) => self.add_wide(Node::Class(cls.clone())),
 
             // Anchor: no need to add anything
-            HirKind::Anchor(anchor) => self.add(Hir::anchor(anchor.clone())),
+            Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
+                self.add(node.clone())
+            }
 
             // Boundary is tricky as it looks for a match between two characters:
             // \b means: word on the left side, non-word on the right, or the opposite:
@@ -339,39 +335,41 @@ impl Visitor for HirWidener {
             // TODO: test and bench the first solution, to build an iterator on all the wide
             // slices that can be found in the input, and run the raw on those unwidden
             // slices.
-            HirKind::WordBoundary(_) => {
+            Node::Assertion(AssertionKind::WordBoundary)
+            | Node::Assertion(AssertionKind::NonWordBoundary) => {
                 self.has_word_boundaries = true;
-                self.add(Hir::empty())
+                self.add(Node::Empty)
             }
 
-            HirKind::Repetition(repetition) => {
-                let hir = self
+            Node::Repetition {
+                node: _,
+                kind,
+                greedy,
+            } => {
+                let node = self
                     .pop()
                     .and_then(|mut v| v.pop())
                     .ok_or(VariableCompilationError::WidenError)?;
-                self.add(Hir::repetition(Repetition {
-                    kind: repetition.kind.clone(),
-                    greedy: repetition.greedy,
-                    hir: Box::new(hir),
-                }))
+                self.add(Node::Repetition {
+                    kind: kind.clone(),
+                    greedy: *greedy,
+                    node: Box::new(node),
+                })
             }
-            HirKind::Group(group) => {
-                let hir = self
+            Node::Group(_) => {
+                let node = self
                     .pop()
                     .and_then(|mut v| v.pop())
                     .ok_or(VariableCompilationError::WidenError)?;
-                self.add(Hir::group(Group {
-                    kind: group.kind.clone(),
-                    hir: Box::new(hir),
-                }))
+                self.add(Node::Group(Box::new(node)))
             }
-            HirKind::Concat(_) => {
+            Node::Concat(_) => {
                 let vec = self.pop().ok_or(VariableCompilationError::WidenError)?;
-                self.add(Hir::concat(vec))
+                self.add(Node::Concat(vec))
             }
-            HirKind::Alternation(_) => {
+            Node::Alternation(_) => {
                 let vec = self.pop().ok_or(VariableCompilationError::WidenError)?;
-                self.add(Hir::alternation(vec))
+                self.add(Node::Alternation(vec))
             }
         }
     }

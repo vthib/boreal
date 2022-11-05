@@ -25,7 +25,6 @@ codespan-reporting = "0.11"
 aho-corasick = "0.7"
 memchr = "2.4"
 regex = "1.5"
-# Needed to parse & modify HIR for some modifiers (eg wide regex)
 # No default features to disable unicode, we do not need it
 regex-syntax = { version = "0.6", default-features = false }
 
