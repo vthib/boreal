@@ -82,11 +82,8 @@ impl Visitor for AtomsExtractor {
                 self.add_byte(*b);
                 VisitAction::Skip
             }
-            Node::Dot
-            | Node::Class(_)
-            | Node::Empty
-            | Node::Assertion(_)
-            | Node::Repetition { .. } => {
+            Node::Empty => VisitAction::Skip,
+            Node::Dot | Node::Class(_) | Node::Assertion(_) | Node::Repetition { .. } => {
                 self.close();
                 VisitAction::Skip
             }
@@ -742,8 +739,7 @@ mod tests {
         test("a.+bc.e", &[b"bc"], "a.+bc$", "^bc.e");
         test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "^bc\\B.e");
         test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "^bc[aA]e");
-        // FIXME: empty should not close
-        test("a.+bc()de", &[b"bc"], "a.+bc$", "^bc()de");
+        test("a.+bc()de", &[b"bcde"], "a.+bcde$", "");
 
         test("a+(b.c)(d)(ef)g+", &[b"cdef"], "a+(b.)cdef$", "^cdefg+");
 
