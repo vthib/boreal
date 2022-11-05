@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt::Write;
 
 use regex::bytes::RegexBuilder;
@@ -46,7 +47,7 @@ impl Regex {
 
 /// Convert a yara regex AST into a rust regex expression.
 pub(crate) fn regex_ast_to_string(ast: &Node) -> String {
-    visit(ast, AstPrinter::default())
+    visit(ast, AstPrinter::default()).unwrap_or_else(|e| match e {})
 }
 
 #[derive(Default)]
@@ -56,8 +57,9 @@ struct AstPrinter {
 
 impl Visitor for AstPrinter {
     type Output = String;
+    type Err = Infallible;
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
         match node {
             Node::Assertion(AssertionKind::StartLine) => self.res.push('^'),
             Node::Assertion(AssertionKind::EndLine) => self.res.push('$'),
@@ -71,10 +73,10 @@ impl Visitor for AstPrinter {
             Node::Alternation(_) | Node::Concat(_) | Node::Empty | Node::Repetition { .. } => (),
         }
 
-        VisitAction::Continue
+        Ok(VisitAction::Continue)
     }
 
-    fn visit_post(&mut self, node: &Node) {
+    fn visit_post(&mut self, node: &Node) -> Result<(), Self::Err> {
         match node {
             Node::Alternation(_)
             | Node::Assertion(_)
@@ -106,14 +108,16 @@ impl Visitor for AstPrinter {
                 }
             }
         }
+
+        Ok(())
     }
 
     fn visit_alternation_in(&mut self) {
         self.res.push('|');
     }
 
-    fn finish(self) -> Self::Output {
-        self.res
+    fn finish(self) -> Result<Self::Output, Self::Err> {
+        Ok(self.res)
     }
 }
 

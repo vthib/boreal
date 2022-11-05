@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use boreal_parser::regex::{AssertionKind, Node};
 use boreal_parser::VariableFlags;
 use regex::bytes::Regex;
@@ -31,7 +33,8 @@ pub(super) fn compile_regex(
         mut post,
     } = super::atom::get_atoms_details(ast);
 
-    let use_ac = crate::regex::visit(ast, AcCompatibility::default());
+    let use_ac =
+        crate::regex::visit(ast, AcCompatibility::default()).unwrap_or_else(|e| match e {});
 
     let mut has_wide_word_boundaries = false;
     let matcher_type = if literals.is_empty() || !use_ac {
@@ -79,8 +82,9 @@ impl Default for AcCompatibility {
 
 impl AstVisitor for AcCompatibility {
     type Output = bool;
+    type Err = Infallible;
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
         match node {
             Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
                 // Do not use an AC if anchors are present, it will be much efficient to just run
@@ -95,11 +99,11 @@ impl AstVisitor for AcCompatibility {
             _ => (),
         }
 
-        VisitAction::Continue
+        Ok(VisitAction::Continue)
     }
 
-    fn finish(self) -> Self::Output {
-        self.0
+    fn finish(self) -> Result<Self::Output, Self::Err> {
+        Ok(self.0)
     }
 }
 

@@ -4,18 +4,29 @@ use boreal_parser::regex::Node;
 pub trait Visitor {
     /// Type of the result of the visit.
     type Output;
+    /// Type of errors generated during the visit.
+    type Err;
 
     /// Called for all nodes, before visiting children nodes.
-    fn visit_pre(&mut self, node: &Node) -> VisitAction;
+    ///
+    /// If an error is returned, the visit is stopped and the error bubbled up.
+    #[allow(clippy::missing_errors_doc)]
+    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err>;
 
     /// Called for all nodes, after visiting children nodes.
-    fn visit_post(&mut self, _node: &Node) {}
+    ///
+    /// If an error is returned, the visit is stopped and the error bubbled up.
+    #[allow(clippy::missing_errors_doc)]
+    fn visit_post(&mut self, _node: &Node) -> Result<(), Self::Err> {
+        Ok(())
+    }
 
     /// Called between alternation nodes.
     fn visit_alternation_in(&mut self) {}
 
+    #[allow(clippy::missing_errors_doc)]
     /// Close the visitor and return the result.
-    fn finish(self) -> Self::Output;
+    fn finish(self) -> Result<Self::Output, Self::Err>;
 }
 
 /// Action to take on a given node regarding its children.
@@ -32,10 +43,15 @@ pub enum VisitAction {
 ///
 /// This is done with a heap-based stack to ensure that the stack does not grow while visiting
 /// the regex, preventing stack overflows on expressions with too much depth.
+///
+/// # Errors
+///
+/// If the visitor generates an error any time during the visit, the visit ends and the error
+/// is returned.
 // This is greatly inspired by the HeapVisitor of the regex crate.
 // See
 // <https://github.com/rust-lang/regex/blob/regex-syntax-0.6.25/regex-syntax/src/hir/visitor.rs>
-pub fn visit<V: Visitor>(mut node: &Node, mut visitor: V) -> V::Output {
+pub fn visit<V: Visitor>(mut node: &Node, mut visitor: V) -> Result<V::Output, V::Err> {
     // Heap-base stack to visit nodes without growing the stack.
     // Each element is:
     // - a node that is currently being visited.
@@ -43,7 +59,7 @@ pub fn visit<V: Visitor>(mut node: &Node, mut visitor: V) -> V::Output {
     let mut stack = Vec::new();
 
     loop {
-        if let VisitAction::Continue = visitor.visit_pre(node) {
+        if let VisitAction::Continue = visitor.visit_pre(node)? {
             if let Some(frame) = build_stack_frame(node) {
                 // New stack frame for the node. Push the node and its frame onto the stack,
                 // and visit its first children.
@@ -56,7 +72,7 @@ pub fn visit<V: Visitor>(mut node: &Node, mut visitor: V) -> V::Output {
 
         // Node has either no children or `VisitAction::Skip` was returned. End the visit on
         // this node and go through the stack until finding a new node to visit.
-        visitor.visit_post(node);
+        visitor.visit_post(node)?;
         loop {
             match stack.pop() {
                 Some((frame, parent)) => {
@@ -76,7 +92,7 @@ pub fn visit<V: Visitor>(mut node: &Node, mut visitor: V) -> V::Output {
                             break;
                         }
                         // Frame is exhausted, visit_post the parent and pop the next element
-                        None => visitor.visit_post(parent),
+                        None => visitor.visit_post(parent)?,
                     }
                 }
                 None => {
