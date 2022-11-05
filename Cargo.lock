@@ -125,7 +125,6 @@ version = "0.0.1"
 dependencies = [
  "bitflags",
  "codespan-reporting",
- "glob",
  "nom",
 ]
 
