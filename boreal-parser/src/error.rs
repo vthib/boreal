@@ -12,7 +12,7 @@ pub struct Error {
     /// Span of the error in the input.
     ///
     /// This is a range of offset, in chars, from the beginning
-    /// of the input given to [`crate::parse_str`].
+    /// of the input given to [`crate::parse`].
     span: Range<usize>,
 
     /// Kind of the error.

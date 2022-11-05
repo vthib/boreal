@@ -200,7 +200,7 @@ impl Compiler {
         namespace: Option<&str>,
         current_filepath: Option<&Path>,
     ) -> Result<(), AddRuleError> {
-        let file = parser::parse_str(s).map_err(AddRuleError::ParseError)?;
+        let file = parser::parse(s).map_err(AddRuleError::ParseError)?;
         for component in file.components {
             self.add_component(component, namespace, current_filepath)?;
         }
@@ -427,7 +427,7 @@ impl AddRuleError {
     ///
     /// * `input_name`: a name for the input, used at the beginning of the
     ///   description: `<filename>:<line>:<column>: <description>`.
-    /// * `input`: the input given to [`parse_str`] that generated the error.
+    /// * `input`: the input given to [`boreal_parser::parse`] that generated the error.
     #[must_use]
     pub fn to_short_description(&self, input_name: &str, input: &str) -> String {
         // Generate a small report using codespan_reporting

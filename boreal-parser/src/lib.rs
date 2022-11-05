@@ -1,6 +1,6 @@
-//! Parsing methods for .yar files.
+//! Parser for YARA rules.
 //!
-//! This module mainly intends to match the lexical patterns used in libyara.
+//! The only entrypoint is [`parse`], which parses the contents of a YARA file.
 
 // Deny most of allowed by default lints from rustc.
 #![deny(explicit_outlives_requirements)]
@@ -70,7 +70,7 @@ mod types;
 ///
 /// Returns an error if the parsing fails, or if there are
 /// trailing data in the file that has not been parsed.
-pub fn parse_str(input: &str) -> Result<YaraFile, Error> {
+pub fn parse(input: &str) -> Result<YaraFile, Error> {
     use nom::Finish;
 
     let input = types::Input::new(input);
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn test_parse_str() {
-        assert!(parse_str("  global rule c { condition: false }").is_ok());
-        assert!(parse_str("  global rule c { condtion: false }").is_err());
+        assert!(parse("  global rule c { condition: false }").is_ok());
+        assert!(parse("  global rule c { condtion: false }").is_err());
     }
 }

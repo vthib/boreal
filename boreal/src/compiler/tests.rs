@@ -1,6 +1,6 @@
 use super::{expression::Type, RuleCompiler};
 use crate::{AddRuleError, Compiler};
-use boreal_parser::parse_str;
+use boreal_parser::parse;
 
 #[track_caller]
 fn compile_expr(expression_str: &str, expected_type: Type) {
@@ -8,7 +8,7 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         "rule a {{ strings: $a = /a/ condition: {} }}",
         expression_str
     );
-    let file = parse_str(&rule_str).unwrap_or_else(|err| {
+    let file = parse(&rule_str).unwrap_or_else(|err| {
         panic!(
             "failed parsing: {}",
             AddRuleError::ParseError(err).to_short_description("mem", &rule_str)
