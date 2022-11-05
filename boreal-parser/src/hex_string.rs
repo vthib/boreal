@@ -5,10 +5,10 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, digit1},
-    combinator::{cut, map, opt},
+    combinator::{cut, map, opt, value},
     error::{ErrorKind as NomErrorKind, ParseError},
     multi::{many1, separated_list1},
-    sequence::{preceded, separated_pair, terminated},
+    sequence::{delimited, preceded, terminated},
 };
 
 use super::error::{Error, ErrorKind};
@@ -107,37 +107,39 @@ fn range(input: Input) -> ParseResult<Jump> {
     let start = input;
     let (input, _) = rtrim(char('['))(input)?;
 
-    let (input, jump) = cut(terminated(
-        alt((
-            // Parses [a?-b?]
-            map(
-                separated_pair(
-                    opt(map_res(rtrim(digit1), |v| {
-                        str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
-                    })),
+    // Parse 'a'
+    let (input, from) = opt(map_res(rtrim(digit1), |v| {
+        str::parse::<u32>(v.cursor()).map_err(ErrorKind::StrToIntError)
+    }))(input)?;
+
+    let (input, to) = match from {
+        Some(from) => {
+            alt((
+                // Parses -b?]
+                delimited(
                     rtrim(char('-')),
                     opt(map_res(rtrim(digit1), |v| {
                         str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
                     })),
+                    rtrim(char(']')),
                 ),
-                |(from, to)| Jump {
-                    from: from.unwrap_or(0),
-                    to,
-                },
-            ),
-            // Parses [a]
-            map(
-                map_res(rtrim(digit1), |v| {
-                    str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
-                }),
-                |value| Jump {
-                    from: value,
-                    to: Some(value),
-                },
-            ),
-        )),
-        rtrim(char(']')),
-    ))(input)?;
+                // Otherwise, this means '[a]'
+                value(Some(from), rtrim(char(']'))),
+            ))(input)?
+        }
+        None => delimited(
+            rtrim(char('-')),
+            opt(map_res(rtrim(digit1), |v| {
+                str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
+            })),
+            rtrim(char(']')),
+        )(input)?,
+    };
+
+    let jump = Jump {
+        from: from.unwrap_or(0),
+        to,
+    };
 
     if let Err(kind) = validate_jump(&jump) {
         return Err(nom::Err::Failure(Error::new(
@@ -355,7 +357,9 @@ mod tests {
         parse_err(range, "[1-2-]");
         parse_err(range, "[-2-]");
         parse_err(range, "[d-e]");
+        parse_err(range, "[1 2]");
         parse_err(range, "[999999999999-]");
+        parse_err(range, "[1-999999999999]");
         parse_err(range, "[-999999999999]");
 
         // validation errors
