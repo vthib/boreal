@@ -400,15 +400,12 @@ mod tests {
         );
         parse(
             alternatives,
-            "(12[1-3]C?|??[3-5]33)",
+            "(12[1]C?|??[3-5]33)",
             "",
             HexToken::Alternatives(vec![
                 vec![
                     HexToken::Byte(0x12),
-                    HexToken::Jump(Jump {
-                        from: 1,
-                        to: Some(3),
-                    }),
+                    HexToken::MaskedByte(0, Mask::All),
                     HexToken::MaskedByte(0x0C, Mask::Right),
                 ],
                 vec![

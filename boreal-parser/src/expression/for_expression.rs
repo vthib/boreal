@@ -98,7 +98,6 @@ fn for_expression_with_selection<'a>(
 
     let (input, expr) = match rule_set(input) {
         Ok((input, set)) => (input, ExpressionKind::ForRules { selection, set }),
-        Err(nom::Err::Failure(e)) => return Err(nom::Err::Failure(e)),
         Err(_) => {
             let (input, set) = cut(string_set)(input)?;
             let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
@@ -607,6 +606,10 @@ mod tests {
             },
         );
 
+        parse_err(boolean_expression, "for true");
+        parse_err(boolean_expression, "2% /*");
+        parse_err(boolean_expression, "2% of (a* /*");
+
         parse_err(for_expression_abbrev, "");
         parse_err(for_expression_abbrev, "any");
         parse_err(for_expression_abbrev, "any of");
@@ -650,7 +653,9 @@ mod tests {
         parse_err(for_expression_full, "for");
         parse_err(for_expression_full, "for all");
         parse_err(for_expression_full, "for all of");
+        parse_err(for_expression_full, "for any of /*");
         parse_err(for_expression_full, "for all of them");
+        parse_err(for_expression_full, "for 5% //");
         parse_err(for_expression_full, "for 5% of them :");
         parse_err(for_expression_full, "for 5% of them: (");
         parse_err(for_expression_full, "for 5% of them: (");

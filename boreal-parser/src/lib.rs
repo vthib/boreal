@@ -81,3 +81,14 @@ pub fn parse_str(input: &str) -> Result<YaraFile, Error> {
 
 #[cfg(test)]
 mod test_helpers;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_str() {
+        assert!(parse_str("  global rule c { condition: false }").is_ok());
+        assert!(parse_str("  global rule c { condtion: false }").is_err());
+    }
+}

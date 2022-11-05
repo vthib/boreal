@@ -129,6 +129,7 @@ mod tests {
 
         parse_err(string_count_expression, "");
         parse_err(string_count_expression, "foo");
+        parse_err(string_count_expression, "#foo in");
     }
 
     #[test]

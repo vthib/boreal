@@ -5,7 +5,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::char,
-    combinator::{cut, opt, peek},
+    combinator::{cut, map, opt, value},
     sequence::delimited,
     Parser,
 };
@@ -73,17 +73,19 @@ fn primary_expression_shift(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = primary_expression_add(input)?;
 
-    while let Ok((i, op)) = rtrim(alt((tag("<<"), tag(">>"))))(input) {
+    while let Ok((i, shift_right)) =
+        rtrim(alt((value(false, tag("<<")), value(true, tag(">>")))))(input)
+    {
         let (i2, right_elem) = cut(primary_expression_add)(i)?;
         input = i2;
 
         let left = Box::new(res);
         let right = Box::new(right_elem);
         res = Expression {
-            expr: match op.cursor() {
-                "<<" => ExpressionKind::ShiftLeft(left, right),
-                ">>" => ExpressionKind::ShiftRight(left, right),
-                _ => unreachable!(),
+            expr: if shift_right {
+                ExpressionKind::ShiftRight(left, right)
+            } else {
+                ExpressionKind::ShiftLeft(left, right)
             },
             span: input.get_span_from(start),
         }
@@ -96,15 +98,15 @@ fn primary_expression_add(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = primary_expression_mul(input)?;
 
-    while let Ok((i, op)) = rtrim(alt((tag("+"), tag("-"))))(input) {
+    while let Ok((i, is_sub)) = rtrim(alt((value(false, tag("+")), value(true, tag("-")))))(input) {
         let (i2, right_elem) = cut(primary_expression_mul)(i)?;
         input = i2;
 
         res = Expression {
-            expr: match op.cursor() {
-                "+" => ExpressionKind::Add(Box::new(res), Box::new(right_elem)),
-                "-" => ExpressionKind::Sub(Box::new(res), Box::new(right_elem)),
-                _ => unreachable!(),
+            expr: if is_sub {
+                ExpressionKind::Sub(Box::new(res), Box::new(right_elem))
+            } else {
+                ExpressionKind::Add(Box::new(res), Box::new(right_elem))
             },
             span: input.get_span_from(start),
         }
@@ -112,20 +114,30 @@ fn primary_expression_add(input: Input) -> ParseResult<Expression> {
     Ok((input, res))
 }
 
+enum MulExpr {
+    Mul,
+    Div,
+    Mod,
+}
+
 /// parse *, \, % operators
 fn primary_expression_mul(input: Input) -> ParseResult<Expression> {
     let start = input;
     let (mut input, mut res) = primary_expression_neg(input)?;
 
-    while let Ok((i, op)) = rtrim(alt((char('*'), char('\\'), char('%'))))(input) {
-        if op == '%' {
+    while let Ok((i, op)) = rtrim(alt((
+        map(char('*'), |_| MulExpr::Mul),
+        map(char('\\'), |_| MulExpr::Div),
+        map(char('%'), |_| MulExpr::Mod),
+    )))(input)
+    {
+        if matches!(op, MulExpr::Mod) {
             // XXX: workaround issue with parsing the for as_percent expression:
             // - '50% of them'
             //   => should parse the expression as '50', not as '50' mod 'of'
             // Not sure how yacc manages to properly handle those rules, but
             // I have no easy solution for this in nom.
-            let (_, of) = opt(peek(ttag("of")))(i)?;
-            if of.is_some() {
+            if let Ok((_, Some(_))) = opt(ttag("of"))(i) {
                 return Ok((input, res));
             }
         }
@@ -135,10 +147,9 @@ fn primary_expression_mul(input: Input) -> ParseResult<Expression> {
 
         res = Expression {
             expr: match op {
-                '*' => ExpressionKind::Mul(Box::new(res), Box::new(right_elem)),
-                '\\' => ExpressionKind::Div(Box::new(res), Box::new(right_elem)),
-                '%' => ExpressionKind::Mod(Box::new(res), Box::new(right_elem)),
-                _ => unreachable!(),
+                MulExpr::Mul => ExpressionKind::Mul(Box::new(res), Box::new(right_elem)),
+                MulExpr::Div => ExpressionKind::Div(Box::new(res), Box::new(right_elem)),
+                MulExpr::Mod => ExpressionKind::Mod(Box::new(res), Box::new(right_elem)),
             },
             span: input.get_span_from(start),
         }

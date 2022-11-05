@@ -246,21 +246,6 @@ impl nom::Offset for Input<'_> {
     }
 }
 
-impl nom::ExtendInto for Input<'_> {
-    type Item = char;
-    type Extender = String;
-
-    #[inline]
-    fn new_builder(&self) -> String {
-        String::new()
-    }
-
-    #[inline]
-    fn extend_into(&self, acc: &mut String) {
-        acc.push_str(self.cursor);
-    }
-}
-
 impl std::ops::Deref for Input<'_> {
     type Target = str;
 

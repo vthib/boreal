@@ -73,6 +73,9 @@ mod tests {
     #[test]
     fn test_read_integer() {
         parse(read_integer_type, "int8", "", ReadIntegerType::Int8);
+        parse(read_integer_type, "int8be a", "a", ReadIntegerType::Int8);
+        parse(read_integer_type, "uint8 a", "a", ReadIntegerType::Uint8);
+        parse(read_integer_type, "uint8be", "", ReadIntegerType::Uint8);
         parse(read_integer_type, "uint8 be", "be", ReadIntegerType::Uint8);
         parse(read_integer_type, "uint8 a", "a", ReadIntegerType::Uint8);
 

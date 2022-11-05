@@ -854,7 +854,7 @@ mod tests {
         );
         parse_err(
             string_modifiers,
-            &format!(r#"base64("{}") base64wide"#, alphabet),
+            &format!(r#"base64wide("{}") base64"#, alphabet),
         );
         parse_err(
             string_modifiers,
@@ -1079,6 +1079,7 @@ mod tests {
         parse_err(xor_modifier, "");
         parse_err(xor_modifier, "xora");
         parse_err(xor_modifier, "xor(");
+        parse_err(xor_modifier, "xor(//");
         parse_err(xor_modifier, "xor(13");
         parse_err(xor_modifier, "xor()");
         parse_err(xor_modifier, "xor(-1)");
@@ -1115,8 +1116,9 @@ mod tests {
         parse_err(base64_modifier, "");
         parse_err(base64_modifier, "base64a");
         parse_err(base64_modifier, "base64widea");
-        parse_err(base64_modifier, "base64a(");
-        parse_err(base64_modifier, "base64widea(");
+        parse_err(base64_modifier, "base64(");
+        parse_err(base64_modifier, "base64wide(");
+        parse_err(base64_modifier, "base64wide(//");
         parse_err(base64_modifier, &format!(r#"base64("{}""#, alphabet));
         parse_err(base64_modifier, "base64(\"123\")");
         parse_err(base64_modifier, "base64wide(15)");

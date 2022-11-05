@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
     character::complete::{char, multispace1},
-    combinator::{opt, value},
+    combinator::{cut, opt, value},
     error::{ErrorKind as NomErrorKind, ParseError},
     multi::many0,
     sequence::tuple,
@@ -114,12 +114,18 @@ pub fn textual_tag(
 ///
 /// Equivalent to the `comment` state in libyara.
 fn multiline_comment(input: Input) -> ParseResult<()> {
-    value((), tuple((tag("/*"), take_until("*/"), tag("*/"))))(input)
+    value(
+        (),
+        tuple((tag("/*"), cut(take_until("*/")), cut(tag("*/")))),
+    )(input)
 }
 
 /// Parse single line // ... comments.
 fn singleline_comment(input: Input) -> ParseResult<()> {
-    value((), tuple((tag("//"), take_until("\n"), char('\n'))))(input)
+    value(
+        (),
+        tuple((tag("//"), cut(take_until("\n")), cut(char('\n')))),
+    )(input)
 }
 
 /// Equivalent to [`nom::combinator::map_res`] but expects an
@@ -174,6 +180,9 @@ mod tests {
         parse(ltrim, " /* */- b", "- b", ());
         parse(ltrim, "/* */ /* */   b", "b", ());
         parse(ltrim, "// /* foo\n /**/   ", "", ());
+
+        parse_err(ltrim, "/*");
+        parse_err(ltrim, "//");
     }
 
     #[test]

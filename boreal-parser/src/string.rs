@@ -190,6 +190,9 @@ mod tests {
         parse_err(quoted, r#""a\xAG""#);
         parse_err(quoted, r#""a\xGA""#);
         parse_err(quoted, r#""\a""#);
+        parse_err(quoted, r#""\x"#);
+        parse_err(quoted, r#""\x1"#);
+        parse_err(quoted, r#""\x1""#);
     }
 
     #[test]

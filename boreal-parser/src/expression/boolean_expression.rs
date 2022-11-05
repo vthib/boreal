@@ -4,9 +4,11 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    combinator::{cut, value},
+    combinator::{cut, map},
     sequence::preceded,
 };
+
+use crate::Regex;
 
 use super::{
     super::{
@@ -132,6 +134,11 @@ fn expression_item(input: Input) -> ParseResult<Expression> {
     for_expression_with_expr_selection(expr, start, input)
 }
 
+enum EqExprBuilder {
+    Regex(fn(Expression, Regex) -> ExpressionKind),
+    Expr(fn(Expression, Expression) -> ExpressionKind),
+}
+
 /// parse `==`, `!=`, `(i)contains`, `(i)startswith`, `(i)endswith`,
 /// `iequals`, `matches` operators.
 fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
@@ -139,55 +146,80 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
     let (mut input, mut res) = primary_expression_cmp(input)?;
 
     while let Ok((i, op)) = rtrim(alt((
-        value("==", tag("==")),
-        value("!=", tag("!=")),
-        ttag("contains"),
-        ttag("icontains"),
-        ttag("startswith"),
-        ttag("istartswith"),
-        ttag("endswith"),
-        ttag("iendswith"),
-        ttag("iequals"),
-        ttag("matches"),
+        map(tag("=="), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::Eq(Box::new(a), Box::new(b)))
+        }),
+        map(tag("!="), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::NotEq(Box::new(a), Box::new(b)))
+        }),
+        map(ttag("contains"), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::Contains {
+                haystack: Box::new(a),
+                needle: Box::new(b),
+                case_insensitive: false,
+            })
+        }),
+        map(ttag("icontains"), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::Contains {
+                haystack: Box::new(a),
+                needle: Box::new(b),
+                case_insensitive: true,
+            })
+        }),
+        map(ttag("startswith"), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::StartsWith {
+                expr: Box::new(a),
+                prefix: Box::new(b),
+                case_insensitive: false,
+            })
+        }),
+        map(ttag("istartswith"), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::StartsWith {
+                expr: Box::new(a),
+                prefix: Box::new(b),
+                case_insensitive: true,
+            })
+        }),
+        map(ttag("endswith"), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::EndsWith {
+                expr: Box::new(a),
+                suffix: Box::new(b),
+                case_insensitive: false,
+            })
+        }),
+        map(ttag("iendswith"), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::EndsWith {
+                expr: Box::new(a),
+                suffix: Box::new(b),
+                case_insensitive: true,
+            })
+        }),
+        map(ttag("iequals"), |_| {
+            EqExprBuilder::Expr(|a, b| ExpressionKind::IEquals(Box::new(a), Box::new(b)))
+        }),
+        map(ttag("matches"), |_| {
+            EqExprBuilder::Regex(|a, b| ExpressionKind::Matches(Box::new(a), b))
+        }),
     )))(input)
     {
-        if op == "matches" {
-            let (i2, regexp) = cut(regex)(i)?;
-            input = i2;
-            res = Expression {
-                expr: ExpressionKind::Matches(Box::new(res), regexp),
-                span: input.get_span_from(start),
-            };
-            continue;
+        match op {
+            EqExprBuilder::Expr(builder) => {
+                let (i2, new_expr) = cut(primary_expression_cmp)(i)?;
+                input = i2;
+                res = Expression {
+                    expr: builder(res, new_expr),
+                    span: input.get_span_from(start),
+                }
+            }
+            EqExprBuilder::Regex(builder) => {
+                let (i2, regex) = cut(regex)(i)?;
+                input = i2;
+                res = Expression {
+                    expr: builder(res, regex),
+                    span: input.get_span_from(start),
+                }
+            }
         }
-
-        let (i2, right_elem) = cut(primary_expression_cmp)(i)?;
-        input = i2;
-        let expr = match op {
-            "==" => ExpressionKind::Eq(Box::new(res), Box::new(right_elem)),
-            "!=" => ExpressionKind::NotEq(Box::new(res), Box::new(right_elem)),
-            "contains" | "icontains" => ExpressionKind::Contains {
-                haystack: Box::new(res),
-                needle: Box::new(right_elem),
-                case_insensitive: op.bytes().next() == Some(b'i'),
-            },
-            "startswith" | "istartswith" => ExpressionKind::StartsWith {
-                expr: Box::new(res),
-                prefix: Box::new(right_elem),
-                case_insensitive: op.bytes().next() == Some(b'i'),
-            },
-            "endswith" | "iendswith" => ExpressionKind::EndsWith {
-                expr: Box::new(res),
-                suffix: Box::new(right_elem),
-                case_insensitive: op.bytes().next() == Some(b'i'),
-            },
-            "iequals" => ExpressionKind::IEquals(Box::new(res), Box::new(right_elem)),
-            _ => unreachable!(),
-        };
-        res = Expression {
-            expr,
-            span: input.get_span_from(start),
-        };
     }
     Ok((input, res))
 }
@@ -462,6 +494,53 @@ mod tests {
                 span: 0..12,
             },
         );
+        parse(
+            boolean_expression,
+            "false or false or true",
+            "",
+            Expression {
+                expr: ExpressionKind::Or(vec![
+                    Expression {
+                        expr: ExpressionKind::Boolean(false),
+                        span: 0..5,
+                    },
+                    Expression {
+                        expr: ExpressionKind::Boolean(false),
+                        span: 9..14,
+                    },
+                    Expression {
+                        expr: ExpressionKind::Boolean(true),
+                        span: 18..22,
+                    },
+                ]),
+                span: 0..22,
+            },
+        );
+        parse(
+            boolean_expression,
+            "false and false and true",
+            "",
+            Expression {
+                expr: ExpressionKind::And(vec![
+                    Expression {
+                        expr: ExpressionKind::Boolean(false),
+                        span: 0..5,
+                    },
+                    Expression {
+                        expr: ExpressionKind::Boolean(false),
+                        span: 10..15,
+                    },
+                    Expression {
+                        expr: ExpressionKind::Boolean(true),
+                        span: 20..24,
+                    },
+                ]),
+                span: 0..24,
+            },
+        );
+
+        parse_err(boolean_expression, "false and /a");
+        parse_err(boolean_expression, "false or /a");
     }
 
     #[test]
@@ -776,6 +855,14 @@ mod tests {
         parse_err(boolean_expression, "not");
         parse_err(boolean_expression, "defined");
         parse_err(boolean_expression, "1 == ");
+        parse_err(boolean_expression, "1 <= ");
+        parse_err(boolean_expression, "1 | ");
+        parse_err(boolean_expression, "1 & ");
+        parse_err(boolean_expression, "1 ^ ");
+        parse_err(boolean_expression, "1 << ");
+        parse_err(boolean_expression, "1 + ");
+        parse_err(boolean_expression, "1 * ");
+        parse_err(boolean_expression, "1 + -");
     }
 
     #[test]

@@ -211,6 +211,7 @@ mod tests {
 
         parse_err(parse_yara_file, "rule");
         parse_err(parse_yara_file, "rule a { condition: true } b");
+        parse_err(parse_yara_file, " /*");
     }
 
     #[test]
