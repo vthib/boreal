@@ -1,6 +1,8 @@
 //! Parser for YARA rules.
 //!
-//! The only entrypoint is [`parse`], which parses the contents of a YARA file.
+//! This crate is designed to be used by the [`boreal` crate](https://docs.rs/boreal/%2A/boreal/).
+//!
+//! It exposes a single function, [`parse`], which parses the contents of a YARA file.
 
 // Deny most of allowed by default lints from rustc.
 #![deny(explicit_outlives_requirements)]

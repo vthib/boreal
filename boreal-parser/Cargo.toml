@@ -1,12 +1,16 @@
 [package]
 name = "boreal-parser"
 version = "0.0.1"
+description = "A parser library for YARA files, intended for use with the boreal library"
 repository = "https://github.com/vthib/boreal"
-edition = "2021"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
+keywords = ["boreal", "yara", "parser"]
+categories = ["parser-implementations"]
+edition = "2021"
 
 [dependencies]
-# Parsing .yar files
+# Parsing library
 nom = "7.1"
 
 # packing multiple flags together
