@@ -1,6 +1,4 @@
-//! Parsing related to hex strings, eg { AB 0F [0-300] ... }
-//!
-//! This implements the `hex_lexer/hex_grammar` files from libyara.
+//! AST objects related to hex strings.
 use nom::{
     branch::alt,
     bytes::complete::tag,

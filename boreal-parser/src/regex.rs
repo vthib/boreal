@@ -1,4 +1,4 @@
-//! Parsing related to strings, regexes and identifiers.
+//! AST elements related to YARA regexes.
 use std::ops::Range;
 
 use nom::{

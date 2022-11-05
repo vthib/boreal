@@ -22,8 +22,8 @@ pub struct YaraFile {
     /// List of components contained in the file.
     ///
     /// This enum form is required to keep the order in which rules and imports
-    /// appear the file. This is needed to properly resolve symbols to a rule
-    /// or a module, or to properly use included rules in wildcard use of rule
+    /// appear in the file. This is needed to properly resolve symbols to a rule
+    /// or a module, or to properly use rules included by wildcard use of rule
     /// names in conditions.
     pub components: Vec<YaraFileComponent>,
 }

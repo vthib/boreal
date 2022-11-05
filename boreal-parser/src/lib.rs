@@ -63,8 +63,6 @@ mod types;
 
 /// Parse a YARA file.
 ///
-/// Returns the list of rules declared in the file.
-///
 /// # Errors
 ///
 /// Returns an error if the parsing fails, or if there are
