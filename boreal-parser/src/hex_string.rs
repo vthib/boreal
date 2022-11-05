@@ -16,7 +16,7 @@ use super::nom_recipes::{map_res, rtrim};
 use super::types::{Input, ParseResult};
 
 /// A token in an hex string.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum HexToken {
     /// A fully declared byte, eg `9C`
     Byte(u8),
@@ -29,7 +29,7 @@ pub enum HexToken {
 }
 
 /// Mask on a byte.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Mask {
     /// The left part is masked, ie ?X
     Left,
@@ -46,7 +46,7 @@ pub enum Mask {
 /// - `[a-]` means `a` or more.
 /// - `[-]` is equivalent to `[0-]`.
 /// - `[a]` is equivalent to `[a-a]`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Jump {
     /// Beginning of the range, included.
     pub from: u32,
@@ -272,7 +272,7 @@ pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<HexToken>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{parse, parse_err};
+    use crate::tests::{parse, parse_err, test_public_type};
 
     #[test]
     fn test_parse_hex_byte() {
@@ -508,5 +508,12 @@ mod tests {
         parse_err(hex_string, "{A}");
         parse_err(hex_string, "{ABA}");
         parse_err(hex_string, "{AB");
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(HexToken::Byte(3));
+        test_public_type(Mask::Left);
+        test_public_type(Jump { from: 3, to: None });
     }
 }

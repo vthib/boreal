@@ -90,7 +90,7 @@ mod tests {
     use super::*;
     use crate::{
         expression::ExpressionKind,
-        tests::{parse, parse_err},
+        tests::{parse, parse_err, test_public_type},
     };
 
     #[test]
@@ -268,5 +268,10 @@ mod tests {
                 ],
             },
         );
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(identifier(Input::new("a.b[2].c(3)")).unwrap());
     }
 }

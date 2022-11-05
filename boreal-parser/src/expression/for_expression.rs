@@ -328,7 +328,7 @@ mod tests {
     use super::*;
     use crate::{
         expression::{ExpressionKind, Identifier, IdentifierOperation},
-        tests::{parse, parse_err},
+        tests::{parse, parse_err, test_public_type},
         IdentifierOperationType,
     };
 
@@ -857,5 +857,18 @@ mod tests {
         parse_err(iterator, ")");
         parse_err(iterator, "(1,2");
         parse_err(iterator, "(1..2");
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(iterator(Input::new("a.b")).unwrap());
+        test_public_type(iterator(Input::new("(1..2)")).unwrap());
+        test_public_type(iterator(Input::new("(1, 2)")).unwrap());
+
+        test_public_type(for_selection_full(Input::new("any")).unwrap());
+        test_public_type(for_selection_full(Input::new("foo")).unwrap());
+
+        test_public_type(string_set(Input::new("($a*, $c)")).unwrap());
+        test_public_type(rule_set(Input::new("(a*, c)")).unwrap());
     }
 }

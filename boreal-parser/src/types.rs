@@ -268,3 +268,15 @@ impl std::ops::Deref for Input<'_> {
         self.cursor
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::tests::test_public_type;
+
+    use super::*;
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(Input::new(r"a"));
+    }
+}

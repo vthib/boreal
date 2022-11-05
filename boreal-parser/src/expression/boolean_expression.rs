@@ -266,7 +266,7 @@ mod tests {
     use crate::{
         expression::Identifier,
         regex::{self, Regex},
-        tests::{parse, parse_check, parse_err},
+        tests::{parse, parse_check, parse_err, test_public_type},
     };
     use std::ops::Range;
 
@@ -872,5 +872,10 @@ mod tests {
                 span: 0..4,
             },
         );
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(boolean_expression(Input::new("a == 2")).unwrap());
     }
 }

@@ -68,7 +68,7 @@ mod tests {
     use super::{
         read_integer_expression, read_integer_type, Expression, ExpressionKind, ReadIntegerType,
     };
-    use crate::tests::{parse, parse_err};
+    use crate::tests::{parse, parse_err, test_public_type};
 
     #[test]
     fn test_read_integer() {
@@ -140,5 +140,10 @@ mod tests {
         parse_err(read_integer_expression, "uint32(");
         parse_err(read_integer_expression, "uint32()");
         parse_err(read_integer_expression, "uint32be ( 3");
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(ReadIntegerType::Int32);
     }
 }

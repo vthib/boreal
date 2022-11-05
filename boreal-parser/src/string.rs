@@ -163,7 +163,6 @@ mod tests {
     use super::super::tests::{parse, parse_err};
 
     #[test]
-    // TODO: test this more extensively, but with libyara compliance tests
     fn test_parse_quoted() {
         use super::quoted;
 

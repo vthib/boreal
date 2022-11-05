@@ -17,7 +17,7 @@ use super::{
 };
 
 /// A parsed Yara file.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct YaraFile {
     /// List of components contained in the file.
     ///
@@ -29,7 +29,7 @@ pub struct YaraFile {
 }
 
 /// A top-level component of a Yara file.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum YaraFileComponent {
     /// A Yara rule
     Rule(Box<Rule>),
@@ -40,7 +40,7 @@ pub enum YaraFileComponent {
 }
 
 /// An import inside a Yara file.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Import {
     /// The name being imported
     pub name: String,
@@ -111,7 +111,7 @@ fn import(input: Input) -> ParseResult<Import> {
 mod tests {
     use super::*;
     use crate::{
-        tests::{parse, parse_err},
+        tests::{parse, parse_err, test_public_type},
         Expression, ExpressionKind,
     };
 
@@ -211,5 +211,20 @@ mod tests {
 
         parse_err(parse_yara_file, "rule");
         parse_err(parse_yara_file, "rule a { condition: true } b");
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(
+            parse_yara_file(Input::new(
+                r#"
+import "a"
+include "b"
+
+rule a { condition: true }
+"#,
+            ))
+            .unwrap(),
+        );
     }
 }

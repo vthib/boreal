@@ -545,7 +545,6 @@ fn test_eval_defined() {
     check(&build_rule("defined (false and (1 \\ #c0))"), &[], true);
     check(&build_rule("defined (true and (1 \\ #c0))"), &[], true);
 
-    // TODO: test all undefined cases?
     check(&build_rule("defined (1 \\ #c0)"), &[], false);
 
     check_boreal(

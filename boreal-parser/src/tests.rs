@@ -35,3 +35,13 @@ where
     let res = f(input).finish();
     check(res.unwrap().1);
 }
+
+// This test serves two purposes:
+// - Ensure public types have expected impls: Clone, Debug, Send & Sync
+// - Instrument those impls to avoid having those derive be marked as missed in coverage...
+//
+// Each module that exposes public types is expected to use it on those types.
+pub fn test_public_type<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
+    let _r = t.clone();
+    let _r = format!("{:?}", &t);
+}

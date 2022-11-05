@@ -509,7 +509,7 @@ fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{parse, parse_err};
+    use crate::tests::{parse, parse_err, test_public_type};
 
     #[test]
     fn test_parse_regex() {
@@ -1131,5 +1131,10 @@ mod tests {
         parse(parse_opt_u32, "-5a", "-5a", None);
 
         parse_err(parse_opt_u32, "5000000000000");
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(regex(Input::new(r"/a{2}[az]\b\s|.+$/")).unwrap());
     }
 }

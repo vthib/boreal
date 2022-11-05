@@ -21,7 +21,7 @@ use super::{
 };
 
 /// A Yara rule.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Rule {
     /// Name of the rule.
     pub name: String,
@@ -55,7 +55,7 @@ pub struct Rule {
 }
 
 /// Tag for a rule.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuleTag {
     /// The tag name.
     pub tag: String,
@@ -65,7 +65,7 @@ pub struct RuleTag {
 }
 
 /// Value associated with a metadata key.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MetadataValue {
     Bytes(Vec<u8>),
     Integer(i64),
@@ -73,7 +73,7 @@ pub enum MetadataValue {
 }
 
 /// A metadata key-value, associated with a rule.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Metadata {
     /// Name of the metadata.
     pub name: String,
@@ -105,7 +105,7 @@ bitflags! {
 }
 
 /// Value for a string associated with a rule.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum VariableDeclarationValue {
     /// A raw byte string.
     Bytes(Vec<u8>),
@@ -116,7 +116,7 @@ pub enum VariableDeclarationValue {
 }
 
 /// Modifiers applicable on a string.
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct VariableModifiers {
     /// Bitflags of possibles flags modifying the string.
     pub flags: VariableFlags,
@@ -132,7 +132,7 @@ pub struct VariableModifiers {
 }
 
 /// String declared in a rule.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VariableDeclaration {
     /// Name of the string.
     pub name: String,
@@ -302,7 +302,7 @@ fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
 }
 
 /// A single parsed modifier
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Modifier {
     // Must not use this enum value for the flags XOR and BASE64(WIDE).
     // Instead, use the other enum values to ensure the associated data
@@ -573,6 +573,7 @@ fn condition(input: Input) -> ParseResult<Expression> {
 mod tests {
     use crate::expression::{Expression, ExpressionKind, ForSelection, VariableSet};
     use crate::hex_string::{HexToken, Mask};
+    use crate::tests::test_public_type;
     use crate::Regex;
 
     use super::super::tests::{parse, parse_err};
@@ -1119,5 +1120,30 @@ mod tests {
         parse_err(base64_modifier, &format!(r#"base64("{}""#, alphabet));
         parse_err(base64_modifier, "base64(\"123\")");
         parse_err(base64_modifier, "base64wide(15)");
+    }
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(
+            rule(Input::new(
+                r#"private rule a : tag {
+    meta:
+        a = "a"
+        b = 2
+        c = true
+    strings:
+        $a = { 01 }
+        $b = "02" xor(15-30)
+        $c = "02" base64("!@#$%^&*(){}[].,|ABCDEFGHIJ\x09LMNOPQRSTUVWXYZabcdefghijklmnopqrstu")
+        $d = /ab/ wide
+    condition:
+      any of them
+}
+"#,
+            ))
+            .unwrap(),
+        );
+
+        test_public_type(string_modifier(Input::new("wide")).unwrap());
     }
 }

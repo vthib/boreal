@@ -7,7 +7,7 @@ use nom::error::{ErrorKind as NomErrorKind, ParseError};
 use super::types::Input;
 
 /// Parsing error.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Error {
     /// Span of the error in the input.
     ///
@@ -155,7 +155,7 @@ impl ParseError<Input<'_>> for Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ErrorKind {
     /// A base64 modifier alphabet has an invalid length.
     ///
@@ -226,4 +226,15 @@ pub enum ErrorKind {
 
     /// Xor modifier with a invalid range, ie `from` > `to`:
     XorRangeInvalid { from: u8, to: u8 },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::test_public_type;
+
+    #[test]
+    fn test_public_types() {
+        test_public_type(Error::new(0..3, ErrorKind::JumpEmpty));
+    }
 }
