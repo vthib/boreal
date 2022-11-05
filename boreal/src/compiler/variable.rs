@@ -1,9 +1,9 @@
 use std::ops::Range;
 
-use ::regex::bytes::{Regex, RegexBuilder};
-
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 use boreal_parser::{VariableFlags, VariableModifiers};
+
+use crate::regex::Regex;
 
 use super::base64::encode_base64;
 use super::CompilationError;
@@ -150,14 +150,7 @@ fn compile_regex_expr(
     case_insensitive: bool,
     dot_all: bool,
 ) -> Result<Regex, VariableCompilationError> {
-    RegexBuilder::new(expr)
-        .unicode(false)
-        .octal(false)
-        .multi_line(false)
-        .case_insensitive(case_insensitive)
-        .dot_matches_new_line(dot_all)
-        .build()
-        .map_err(|err| VariableCompilationError::Regex(err.to_string()))
+    Regex::from_str(expr, case_insensitive, dot_all).map_err(VariableCompilationError::Regex)
 }
 
 fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVariable {
@@ -262,7 +255,7 @@ impl Variable {
                 right_validator,
             } => {
                 let end = match right_validator {
-                    Some(validator) => match validator.find(&mem[mat.start..]) {
+                    Some(validator) => match validator.as_regex().find(&mem[mat.start..]) {
                         Some(m) => mat.start + m.end(),
                         None => return AcMatchStatus::None,
                     },
@@ -284,7 +277,8 @@ impl Variable {
                         //
                         // XXX: This only works if the left validator does not contain any greedy repetitions!
                         let mut matches = Vec::new();
-                        while let Some(m) = validator.find(&mem[start_position..mat.end]) {
+                        while let Some(m) = validator.as_regex().find(&mem[start_position..mat.end])
+                        {
                             let m = (m.start() + start_position)..end;
                             start_position = m.start + 1;
                             if let Some(m) = self.validate_and_update_match(mem, m) {
@@ -311,7 +305,7 @@ impl Variable {
         };
 
         while offset < mem.len() {
-            let mat = regex.find_at(mem, offset).map(|m| m.range())?;
+            let mat = regex.as_regex().find_at(mem, offset).map(|m| m.range())?;
 
             match self.validate_and_update_match(mem, mat.clone()) {
                 Some(m) => return Some(m),
@@ -397,7 +391,7 @@ fn apply_wide_word_boundaries(
     let unwiden_mem = unwide(&mem[start..std::cmp::min(mem.len(), mat.end + 500)]);
 
     let expected_start = if start < mat.start { 1 } else { 0 };
-    match regex.find(&unwiden_mem) {
+    match regex.as_regex().find(&unwiden_mem) {
         Some(m) if m.start() == expected_start => {
             // Modify the match end. This is needed because the application of word boundary
             // may modify the match. Since we matched on non wide mem though, double the size.
@@ -454,7 +448,7 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
 #[derive(Debug)]
 pub enum VariableCompilationError {
     /// Error when compiling a regex variable.
-    Regex(String),
+    Regex(crate::regex::Error),
 
     /// Logic error while attempting to extract atoms from a variable.
     ///

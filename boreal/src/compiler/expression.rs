@@ -1150,7 +1150,7 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         span,
     } = regex;
 
-    Regex::new(&ast, case_insensitive, dot_all)
+    Regex::from_ast(&ast, case_insensitive, dot_all)
         .map_err(|error| CompilationError::RegexError { error, span })
 }
 

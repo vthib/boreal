@@ -2,9 +2,8 @@ use std::convert::Infallible;
 
 use boreal_parser::regex::{AssertionKind, Node};
 use boreal_parser::VariableFlags;
-use regex::bytes::Regex;
 
-use crate::regex::{regex_ast_to_string, visit, VisitAction, Visitor};
+use crate::regex::{regex_ast_to_string, visit, Regex, VisitAction, Visitor};
 
 use super::atom::AtomsDetails;
 use super::{CompiledVariable, MatcherType, VariableCompilationError};
