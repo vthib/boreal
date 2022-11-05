@@ -9,7 +9,7 @@ use super::base64::encode_base64;
 use super::CompilationError;
 
 mod atom;
-pub use atom::literals_rank;
+pub use atom::atom_rank;
 mod hex_string;
 mod regex;
 
@@ -469,30 +469,6 @@ impl std::fmt::Display for VariableCompilationError {
             Self::Regex(e) => e.fmt(f),
             // This should not happen. Please report it upstream if it does.
             Self::WidenError => write!(f, "unable to apply the wide modifier to the regex"),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use boreal_parser::{parse_str, HexToken, VariableDeclarationValue};
-
-    #[track_caller]
-    pub(super) fn parse_hex_string(hex_string: &str) -> Vec<HexToken> {
-        let rule_str = format!("rule a {{ strings: $a = {} condition: $a }}", hex_string);
-        let mut file = parse_str(&rule_str).unwrap();
-        let mut rule = file
-            .components
-            .pop()
-            .map(|v| match v {
-                boreal_parser::YaraFileComponent::Rule(v) => v,
-                _ => panic!(),
-            })
-            .unwrap();
-        let var = rule.variables.pop().unwrap();
-        match var.value {
-            VariableDeclarationValue::HexString(s) => s,
-            _ => panic!(),
         }
     }
 }

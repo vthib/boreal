@@ -198,29 +198,12 @@ impl std::error::Error for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
+    use crate::test_helpers::parse_regex_string;
 
     #[test]
     fn test_regex_conversion() {
         fn test(expr: &str, expected_res: Option<&str>) {
-            // Build a rule with a variable using the given regex expr. This gives us the AST for
-            // the regex, which we convert back to a rust regex expr.
-            let rule = format!(
-                "rule a {{ strings: $ = /{}/ condition: any of them }}",
-                expr
-            );
-            let mut file = boreal_parser::parse_str(&rule).unwrap();
-            let mut rule = match file.components.pop() {
-                Some(boreal_parser::YaraFileComponent::Rule(r)) => r,
-                _ => unreachable!(),
-            };
-            let regex = match rule.variables.pop() {
-                Some(VariableDeclaration {
-                    value: VariableDeclarationValue::Regex(regex),
-                    ..
-                }) => regex,
-                _ => unreachable!(),
-            };
+            let regex = parse_regex_string(expr);
             assert_eq!(
                 regex_ast_to_string(&regex.ast),
                 expected_res.unwrap_or(expr)

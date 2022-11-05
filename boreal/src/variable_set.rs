@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use crate::compiler::{literals_rank, AcMatchStatus, Variable};
+use crate::compiler::{atom_rank, AcMatchStatus, Variable};
 
 /// Factorize regex expression of all the variables in the scanner.
 ///
@@ -145,7 +145,7 @@ fn pick_best_atom_in_literal(lit: &[u8]) -> (usize, usize) {
 
     lit.windows(4)
         .enumerate()
-        .max_by_key(|(_, s)| literals_rank(s))
+        .max_by_key(|(_, s)| atom_rank(s))
         .map_or((0, 0), |(i, _)| (i, lit.len() - i - 4))
 }
 

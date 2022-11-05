@@ -16,10 +16,8 @@ use boreal_parser::regex::{AssertionKind, Node};
 
 use crate::regex::{regex_ast_to_string, visit, VisitAction, Visitor};
 
-// FIXME: add lots of tests here...
-
 pub fn get_atoms_details(node: &Node) -> AtomsDetails {
-    let visitor = AtomVisitor::new();
+    let visitor = AtomsExtractor::new();
     let visitor = visit(node, visitor);
     visitor.into_atoms_details(node)
 }
@@ -38,17 +36,32 @@ pub struct AtomsDetails {
 }
 
 /// Visitor on a regex AST to extract atoms.
+///
+/// To extract atoms:
+/// - only group and concatenations are visited
+/// - alternations are visited shallowly, and only taken into account if it is an alternation of
+///   literals.
+/// - repetitions and classes are not handled.
+///
+/// This strive to strike a balance between exhaustively finding any possible atom to compute the
+/// best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
-struct AtomVisitor {
+struct AtomsExtractor {
+    /// Set of best atoms extracted so far.
     set: AtomSet,
 
+    /// Atoms currently being built.
     atoms: Vec<Vec<u8>>,
+    /// Starting position of the currently built atoms.
     atoms_start_position: usize,
 
+    /// Current position of the visitor.
+    ///
+    /// This position is a simple counter of visited nodes.
     current_position: usize,
 }
 
-impl AtomVisitor {
+impl AtomsExtractor {
     fn new() -> Self {
         Self {
             set: AtomSet::default(),
@@ -60,7 +73,7 @@ impl AtomVisitor {
     }
 }
 
-impl Visitor for AtomVisitor {
+impl Visitor for AtomsExtractor {
     type Output = Self;
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
@@ -96,20 +109,23 @@ impl Visitor for AtomVisitor {
     }
 }
 
-impl AtomVisitor {
+impl AtomsExtractor {
+    /// Add a byte to the atoms being built.
     fn add_byte(&mut self, byte: u8) {
         if self.atoms.is_empty() {
             self.atoms.push(Vec::new());
             self.atoms_start_position = self.current_position;
         }
+
         for atom in &mut self.atoms {
             atom.push(byte);
         }
     }
 
+    /// Visit an alternation to add it to the currently being build atoms.
+    ///
+    /// Only allow alternations if each one is a literal or a concat of literals.
     fn visit_alternation(&mut self, alts: &[Node]) -> bool {
-        // Only allow alternations if each one is a literal or a concat of literals.
-        // This can be revised in the future.
         let mut lits = Vec::new();
 
         for node in alts {
@@ -130,6 +146,7 @@ impl AtomVisitor {
             }
         }
 
+        // Limit the amount of atoms being built to avoid exponential buildup.
         if self
             .atoms
             .len()
@@ -143,6 +160,8 @@ impl AtomVisitor {
             self.atoms = lits;
             self.atoms_start_position = self.current_position;
         } else {
+            // Compute the cardinal product between the prefixes and the literals of the
+            // alternation.
             self.atoms = self
                 .atoms
                 .iter()
@@ -155,6 +174,7 @@ impl AtomVisitor {
         true
     }
 
+    /// Close currently being built atoms.
     fn close(&mut self) {
         if !self.atoms.is_empty() {
             self.set.add_atoms(
@@ -178,18 +198,27 @@ impl AtomVisitor {
     }
 }
 
-/// Set of atoms that allows quickly searching for the eventual presence of a variable.
+/// Set of atoms extracted from a regex AST.
 #[derive(Debug, Default)]
 struct AtomSet {
+    /// List of atoms extracted.
     atoms: Vec<Vec<u8>>,
+
+    /// Starting position of the atoms (including the first bytes of the atoms).
     start_position: usize,
+    /// Ending position of the atoms (excluding the last bytes of the atoms).
     end_position: usize,
+
+    /// Rank of the saved atoms.
     rank: u32,
 }
 
 impl AtomSet {
     fn add_atoms(&mut self, atoms: Vec<Vec<u8>>, start_position: usize, end_position: usize) {
-        let rank = atoms_rank(&atoms);
+        // Get the min rank. This is probably the best solution, it isn't clear if a better one
+        // is easy to find.
+        let rank = atoms.iter().map(|atom| atom_rank(atom)).min().unwrap_or(0);
+
         // this.atoms is one possible set, and the provided atoms are another one.
         // Keep the one with the best rank.
         if self.atoms.is_empty() || rank > self.rank {
@@ -246,17 +275,70 @@ impl AtomSet {
     }
 }
 
+/// Compute the rank of an atom.
+///
+/// The higher the value, the best quality (i.e., the less false positives).
+pub fn atom_rank(lits: &[u8]) -> u32 {
+    // This algorithm is straight copied from libyara.
+    // TODO: Probably want to revisit this.
+    let mut quality = 0_u32;
+    let mut bitmask = [false; 256];
+    let mut nb_uniq = 0;
+
+    for lit in lits {
+        match *lit {
+            0x00 | 0x20 | 0xCC | 0xFF => quality += 12,
+            v if (b'a'..=b'z').contains(&v) => quality += 18,
+            _ => quality += 20,
+        }
+
+        if !bitmask[*lit as usize] {
+            bitmask[*lit as usize] = true;
+            nb_uniq += 1;
+        }
+    }
+
+    // If all the bytes in the atom are equal and very common, let's penalize
+    // it heavily.
+    if nb_uniq == 1 && (bitmask[0] || bitmask[0x20] || bitmask[0xCC] || bitmask[0xFF]) {
+        quality -= 10 * u32::try_from(lits.len()).unwrap_or(30);
+    }
+    // In general atoms with more unique bytes have a better quality, so let's
+    // boost the quality in the amount of unique bytes.
+    else {
+        quality += 2 * nb_uniq;
+    }
+
+    quality
+}
+
+/// Visitor used to extract the AST nodes that are before and after extracted atoms.
+///
+/// The goal is to be able to generate regex expressions to validate the regex, knowing the
+/// position of atoms found by the AC pass.
 #[derive(Default)]
 struct PrePostExtractor {
+    /// Stacks used during the visit to reconstruct compound nodes.
     pre_stack: Vec<Vec<Node>>,
     post_stack: Vec<Vec<Node>>,
 
+    /// Top level pre node.
+    ///
+    /// May end up None if the extracted atoms are from the start of the regex.
     pre_node: Option<Node>,
+
+    /// Top level post node.
+    ///
+    /// May end up None if the extracted atoms are from the end of the regex.
     post_node: Option<Node>,
 
-    current_position: usize,
+    /// Start position of the extracted atoms.
     start_position: usize,
+    /// End position of the extracted atoms.
     end_position: usize,
+
+    /// Current position during the visit of the original AST.
+    current_position: usize,
 }
 
 impl PrePostExtractor {
@@ -316,6 +398,8 @@ impl Visitor for PrePostExtractor {
     type Output = (Option<Node>, Option<Node>);
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
+        // XXX: be careful here, the visit *must* have the exact same behavior as for the
+        // `AtomsExtractor` visitor, to ensure the pre post expressions are correct.
         match node {
             Node::Literal(_)
             | Node::Repetition { .. }
@@ -379,54 +463,9 @@ impl Visitor for PrePostExtractor {
     }
 }
 
-/// Retrieve the rank of a set of atoms.
-fn atoms_rank(atoms: &[Vec<u8>]) -> u32 {
-    // Get the min rank. This is probably the best solution, it isn't clear if a better one
-    // is easy to find.
-    atoms
-        .iter()
-        .map(|atom| literals_rank(atom))
-        .min()
-        .unwrap_or(0)
-}
-
-pub fn literals_rank(lits: &[u8]) -> u32 {
-    // This algorithm is straight copied from libyara.
-    // TODO: Probably want to revisit this.
-    let mut quality = 0_u32;
-    let mut bitmask = [false; 256];
-    let mut nb_uniq = 0;
-
-    for lit in lits {
-        match *lit {
-            0x00 | 0x20 | 0xCC | 0xFF => quality += 12,
-            v if (b'a'..=b'z').contains(&v) => quality += 18,
-            _ => quality += 20,
-        }
-
-        if !bitmask[*lit as usize] {
-            bitmask[*lit as usize] = true;
-            nb_uniq += 1;
-        }
-    }
-
-    // If all the bytes in the atom are equal and very common, let's penalize
-    // it heavily.
-    if nb_uniq == 1 && (bitmask[0] || bitmask[0x20] || bitmask[0xCC] || bitmask[0xFF]) {
-        quality -= 10 * u32::try_from(lits.len()).unwrap_or(30);
-    }
-    // In general atoms with more unique bytes have a better quality, so let's
-    // boost the quality in the amount of unique bytes.
-    else {
-        quality += 2 * nb_uniq;
-    }
-
-    quality
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::compiler::variable::tests::parse_hex_string;
+    use crate::test_helpers::{parse_hex_string, parse_regex_string};
 
     use super::*;
 
@@ -667,5 +706,54 @@ mod tests {
             r"a.(bce|de)$",
             "",
         );
+    }
+
+    #[test]
+    fn test_regex_atoms() {
+        #[track_caller]
+        fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
+            let regex = parse_regex_string(expr);
+            let exprs = get_atoms_details(&regex.ast);
+            assert_eq!(exprs.literals, expected_lits);
+            assert_eq!(exprs.pre.unwrap_or_default(), expected_pre);
+            assert_eq!(exprs.post.unwrap_or_default(), expected_post);
+        }
+
+        // Atom on the left side of a group
+        test("abc(a+)b", &[b"abc"], "", "^abc(a+)b");
+        // Atom spanning inside a group
+        test("ab(ca+)b", &[b"abc"], "", "^abc(a+)b");
+        // Atom spanning up to the end of a group
+        test("ab(c)a+b", &[b"abc"], "", "^abca+b");
+        // Atom spanning in and out of a group
+        test("a(b)ca+b", &[b"abc"], "", "^abca+b");
+
+        // Atom on the right side of a group
+        test("b(a+)abc", &[b"abc"], "b(a+)abc$", "");
+        // Atom spanning inside a group
+        test("b(a+a)bc", &[b"abc"], "b(a+)abc$", "");
+        // Atom starting in a group
+        test("ba+(ab)c", &[b"abc"], "ba+abc$", "");
+        // Atom spanning in and out of a group
+        test("ba+a(bc)", &[b"abc"], "ba+abc$", "");
+
+        // A few tests on closing nodes
+        test("a.+bcd{2}e", &[b"bc"], "a.+bc$", "^bcd{2}e");
+        test("a.+bc.e", &[b"bc"], "a.+bc$", "^bc.e");
+        test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "^bc\\B.e");
+        test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "^bc[aA]e");
+        // FIXME: empty should not close
+        test("a.+bc()de", &[b"bc"], "a.+bc$", "^bc()de");
+
+        test("a+(b.c)(d)(ef)g+", &[b"cdef"], "a+(b.)cdef$", "^cdefg+");
+
+        test(
+            "a((b(c)((d)()(e(g+h)ij)))kl)m",
+            &[b"hijklm"],
+            "a((b(c)((d)()(e(g+)))))hijklm$",
+            "",
+        );
+
+        test("{ AB CD 01 }", &[b"{ AB CD 01 }"], "", "");
     }
 }

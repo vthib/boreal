@@ -179,7 +179,7 @@ impl HexLiterals {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{compiler::variable::tests::parse_hex_string, regex::regex_ast_to_string};
+    use crate::{regex::regex_ast_to_string, test_helpers::parse_hex_string};
 
     #[test]
     fn test_hex_string_to_only_literals() {

@@ -61,3 +61,6 @@ pub mod scan_params;
 mod scanner;
 pub use scanner::*;
 mod variable_set;
+
+#[cfg(test)]
+mod test_helpers;
