@@ -241,9 +241,6 @@ pub enum CompilationError {
         /// Type of error
         error: VariableCompilationError,
     },
-
-    /// Error when generating a RegexSet containing all variables.
-    VariableSetError(String),
 }
 
 impl CompilationError {
@@ -407,9 +404,6 @@ impl CompilationError {
                     variable_name, error
                 ))
                 .with_labels(vec![Label::primary((), span.clone())]),
-
-            Self::VariableSetError(error) => Diagnostic::error()
-                .with_message(format!("cannot generate a set of all variables: {}", error)),
         }
     }
 }
