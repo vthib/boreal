@@ -23,3 +23,14 @@ impl ScanParams {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::test_type_traits;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(ScanParams::default());
+    }
+}

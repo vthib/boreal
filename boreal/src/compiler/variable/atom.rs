@@ -346,7 +346,7 @@ pub fn atom_rank(lits: &[u8]) -> u32 {
 ///
 /// The goal is to be able to generate regex expressions to validate the regex, knowing the
 /// position of atoms found by the AC pass.
-#[derive(Default)]
+#[derive(Debug)]
 struct PrePostExtractor {
     /// Stacks used during the visit to reconstruct compound nodes.
     pre_stack: Vec<Vec<Node>>,
@@ -498,7 +498,7 @@ impl Visitor for PrePostExtractor {
 mod tests {
     use crate::{
         regex::regex_ast_to_string,
-        test_helpers::{parse_hex_string, parse_regex_string},
+        test_helpers::{parse_hex_string, parse_regex_string, test_type_traits_non_clonable},
     };
 
     use super::*;
@@ -816,5 +816,23 @@ mod tests {
         );
 
         test("{ AB CD 01 }", &[b"{ AB CD 01 }"], "", "");
+    }
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(AtomsDetails {
+            literals: Vec::new(),
+            pre_ast: None,
+            post_ast: None,
+        });
+        test_type_traits_non_clonable(AtomsExtractionError);
+        assert_eq!(
+            AtomsExtractionError.to_string(),
+            "unable to extract atoms from string expression"
+        );
+
+        test_type_traits_non_clonable(AtomsExtractor::new());
+        test_type_traits_non_clonable(AtomSet::default());
+        test_type_traits_non_clonable(PrePostExtractor::new(0, 0));
     }
 }

@@ -1,4 +1,8 @@
-use super::{expression::Type, RuleCompiler};
+use std::sync::Arc;
+
+use super::expression::Type;
+use super::*;
+use crate::test_helpers::test_type_traits_non_clonable;
 use crate::{AddRuleError, Compiler};
 use boreal_parser::parse;
 
@@ -36,7 +40,7 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         &compiler.external_symbols,
     )
     .unwrap();
-    let res = super::compile_expression(&mut rule_compiler, rule.condition).unwrap();
+    let res = compile_expression(&mut rule_compiler, rule.condition).unwrap();
     assert_eq!(res.ty, expected_type);
 }
 
@@ -262,4 +266,24 @@ fn test_compilation_types() {
 fn test_compilation_variables() {
     compile_rule_err("rule a { strings: $a=/a/ $a=/b/ condition: all of them }");
     compile_rule_err("rule a { condition: $a }");
+}
+
+#[test]
+fn test_types_traits() {
+    test_type_traits_non_clonable(Compiler::new());
+    test_type_traits_non_clonable(Namespace::default());
+    test_type_traits_non_clonable(AvailableModule {
+        compiled_module: Arc::new(compile_module(&crate::module::Time)),
+        location: ModuleLocation::Module(Box::new(crate::module::Time)),
+    });
+    test_type_traits_non_clonable(ImportedModule {
+        module: Arc::new(compile_module(&crate::module::Time)),
+        module_index: 0,
+    });
+    test_type_traits_non_clonable(AddRuleError::CompilationError(
+        CompilationError::DuplicatedRuleName {
+            name: "a".to_owned(),
+            span: 0..1,
+        },
+    ));
 }

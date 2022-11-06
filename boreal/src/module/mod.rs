@@ -39,7 +39,7 @@ pub use pe::Pe;
 ///
 /// - As dynamic values, whose shape depend on the memory being scanned. This often includes
 ///   arrays such as `elf.sections`, or raw values such as `pe.machine`.
-pub trait Module {
+pub trait Module: Send + Sync {
     /// Name of the module, used in `import` clauses.
     fn get_name(&self) -> &'static str;
 
@@ -178,7 +178,7 @@ impl std::fmt::Debug for ScanContext<'_> {
 }
 
 #[derive(Default)]
-pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any>>);
+pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
 
 pub trait ModuleData {
     type Data: Any + Send + Sync;
@@ -196,6 +196,7 @@ impl ModuleDataMap {
             .and_then(|v| v.downcast_ref())
     }
 }
+
 /// A value bound to an identifier.
 ///
 /// This object represents an immediately resolvable value for an identifier.
@@ -470,3 +471,73 @@ macro_rules! try_from_value_integer {
 
 try_from_value_integer!(u64);
 try_from_value_integer!(usize);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(Value::Integer(0));
+        test_type_traits(StaticValue::Integer(0));
+        test_type_traits(Type::Integer);
+
+        test_type_traits_non_clonable(Time);
+        test_type_traits_non_clonable(Math);
+        #[cfg(feature = "hash")]
+        test_type_traits_non_clonable(Hash);
+        #[cfg(feature = "object")]
+        {
+            test_type_traits_non_clonable(Elf);
+            test_type_traits_non_clonable(MachO);
+            test_type_traits_non_clonable(Pe);
+        }
+
+        assert_eq!(format!("{:?}", Value::Integer(0)), "Integer(0)");
+        assert_eq!(format!("{:?}", Value::Float(0.0)), "Float(0.0)");
+        assert_eq!(format!("{:?}", Value::Bytes(Vec::new())), "Bytes(\"\")");
+        assert_eq!(format!("{:?}", Value::Bytes(vec![255])), "Bytes([255])");
+        assert_eq!(
+            format!(
+                "{:?}",
+                Value::Regex(Regex::from_str("", false, false).unwrap())
+            ),
+            "Regex(Regex())"
+        );
+        assert_eq!(format!("{:?}", Value::Boolean(true)), "Boolean(true)");
+        assert_eq!(format!("{:?}", Value::Object(HashMap::new())), "Object({})");
+        assert_eq!(format!("{:?}", Value::Array(Vec::new())), "Array([])");
+        assert_eq!(
+            format!("{:?}", Value::Dictionary(HashMap::new())),
+            "Dictionary({})"
+        );
+        assert!(format!("{:?}", Value::Function(|_, _| None)).starts_with("Function"));
+
+        assert_eq!(format!("{:?}", StaticValue::Integer(0)), "Integer(0)");
+        assert_eq!(format!("{:?}", StaticValue::Float(0.0)), "Float(0.0)");
+        assert_eq!(format!("{:?}", StaticValue::Bytes(Vec::new())), "Bytes([])");
+        assert_eq!(format!("{:?}", StaticValue::Bytes(vec![2])), "Bytes([2])");
+        assert_eq!(
+            format!(
+                "{:?}",
+                StaticValue::Regex(Regex::from_str("", false, false).unwrap())
+            ),
+            "Regex(Regex())"
+        );
+        assert_eq!(format!("{:?}", StaticValue::Boolean(true)), "Boolean(true)");
+        assert_eq!(
+            format!("{:?}", StaticValue::Object(HashMap::new())),
+            "Object({})"
+        );
+        assert!(format!(
+            "{:?}",
+            StaticValue::Function {
+                fun: |_, _| None,
+                arguments_types: Vec::new(),
+                return_type: Type::Boolean
+            }
+        )
+        .starts_with("Function"));
+    }
+}

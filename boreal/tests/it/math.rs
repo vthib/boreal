@@ -287,8 +287,8 @@ fn test_math_percentage() {
     test("not defined math.percentage(0, 1, 5)", b"");
 
     test_err(
-        "math.percentage(0.2) == 1",
-        "mem:5:31: error: invalid arguments types: [floating-point number]",
+        "math.percentage(true) == 1",
+        "mem:5:31: error: invalid arguments types: [boolean]",
     );
 }
 

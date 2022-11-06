@@ -348,3 +348,38 @@ impl std::fmt::Display for DefineSymbolError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(Scanner::new(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ));
+        test_type_traits_non_clonable(ScanResult {
+            matched_rules: Vec::new(),
+            module_values: Vec::new(),
+        });
+        test_type_traits_non_clonable(MatchedRule {
+            namespace: None,
+            name: "a",
+            matches: Vec::new(),
+        });
+        test_type_traits_non_clonable(StringMatches {
+            name: "a",
+            matches: Vec::new(),
+        });
+        test_type_traits_non_clonable(StringMatch {
+            offset: 0,
+            data: Vec::new(),
+        });
+        test_type_traits_non_clonable(DefineSymbolError::UnknownName);
+    }
+}

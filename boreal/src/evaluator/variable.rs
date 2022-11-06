@@ -193,3 +193,28 @@ impl<'a> VariableEvaluation<'a> {
         mat
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use boreal_parser::{VariableDeclaration, VariableDeclarationValue, VariableModifiers};
+
+    use crate::{compiler::compile_variable, test_helpers::test_type_traits_non_clonable};
+
+    use super::*;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(VariableEvaluation {
+            var: &compile_variable(VariableDeclaration {
+                name: "a".to_owned(),
+                value: VariableDeclarationValue::Bytes(Vec::new()),
+                modifiers: VariableModifiers::default(),
+                span: 0..1,
+            })
+            .unwrap(),
+            matches: Vec::new(),
+            next_offset: None,
+            has_been_found: false,
+        });
+    }
+}

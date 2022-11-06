@@ -861,3 +861,26 @@ impl ForSelectionEvaluator {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+
+    use super::*;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(Value::Integer(0));
+        test_type_traits_non_clonable(ScanData {
+            mem: b"",
+            module_values: Vec::new(),
+            module_ctx: ScanContext {
+                mem: b"",
+                module_data: ModuleDataMap::default(),
+            },
+            external_symbols: &[],
+        });
+        test_type_traits_non_clonable(ForSelectionEvaluation::Value(Value::Integer(0)));
+        test_type_traits_non_clonable(ForSelectionEvaluator::None);
+    }
+}

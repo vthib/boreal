@@ -369,3 +369,16 @@ impl Visitor for AstWidener {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_helpers::test_type_traits_non_clonable;
+
+    use super::*;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(AstWidener::new());
+        test_type_traits_non_clonable(StackLevel::new(false));
+    }
+}

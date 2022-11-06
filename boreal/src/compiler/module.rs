@@ -211,7 +211,6 @@ pub(super) fn compile_identifier<'a, 'b>(
     Ok(module_use)
 }
 
-#[derive(Debug)]
 pub(super) struct ModuleUse<'a, 'b> {
     compiler: &'b mut RuleCompiler<'a>,
 
@@ -596,5 +595,25 @@ fn module_type_to_expr_type(v: &ValueType) -> Option<Type> {
         ValueType::Regex => Some(Type::Regex),
         ValueType::Boolean => Some(Type::Boolean),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::test_type_traits_non_clonable;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(compile_module(&crate::module::Time));
+        test_type_traits_non_clonable(ValueOperation::Subfield("a".to_owned()));
+        test_type_traits_non_clonable(BoundedValueIndex::Module(0));
+        test_type_traits_non_clonable(ModuleExpression::BoundedModuleValueUse {
+            index: BoundedValueIndex::Module(0),
+            operations: Vec::new(),
+        });
+        test_type_traits_non_clonable(IteratorType::Array(ValueType::Integer));
+        test_type_traits_non_clonable(TypeError::UnknownSubfield("a".to_owned()));
+        test_type_traits_non_clonable(ValueOrType::Type(&ValueType::Integer));
     }
 }

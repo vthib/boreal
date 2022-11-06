@@ -83,3 +83,18 @@ impl_into_bytes!(Vec<u8>);
 impl_into_bytes!(&[u8]);
 impl_into_bytes!(String);
 impl_into_bytes!(&str);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::test_type_traits;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(ExternalSymbol {
+            name: "a".to_owned(),
+            default_value: ExternalValue::Integer(0),
+        });
+        test_type_traits(ExternalValue::Integer(0));
+    }
+}

@@ -103,7 +103,6 @@ pub fn visit<V: Visitor>(mut node: &Node, mut visitor: V) -> Result<V::Output, V
     }
 }
 
-#[derive(Debug)]
 struct StackFrame<'a> {
     node: &'a Node,
 

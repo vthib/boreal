@@ -231,3 +231,35 @@ pub(super) fn compile_rule(
         variables,
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_helpers::test_type_traits_non_clonable;
+
+    use super::*;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(RuleCompiler {
+            namespace: &Namespace::default(),
+            variables: Vec::new(),
+            bounded_identifiers: HashMap::new(),
+            rule_wildcard_uses: Vec::new(),
+            external_symbols: &vec![],
+        });
+        test_type_traits_non_clonable(Rule {
+            name: "a".to_owned(),
+            namespace: None,
+            tags: Vec::new(),
+            metadatas: Vec::new(),
+            nb_variables: 0,
+            condition: Expression::Filesize,
+            is_private: false,
+        });
+        test_type_traits_non_clonable(RuleCompilerVariable {
+            name: "a".to_owned(),
+            span: 0..1,
+            used: false,
+        });
+    }
+}

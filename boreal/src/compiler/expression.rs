@@ -73,7 +73,7 @@ impl Expr {
 pub struct VariableIndex(pub Option<usize>);
 
 /// Set of multiple variables.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct VariableSet {
     /// Indexes of the variables selected in the set.
     ///
@@ -83,7 +83,7 @@ pub struct VariableSet {
 }
 
 /// Set of multiple rules.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct RuleSet {
     /// Indexes of the rules selected in the set.
     ///
@@ -1241,4 +1241,31 @@ fn compile_identifier_as_iterator(
         .ok_or_else(|| CompilationError::NonIterableIdentifier {
             span: identifier_span.clone(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(Type::Integer);
+        test_type_traits(VariableIndex(None));
+        test_type_traits(VariableSet {
+            elements: Vec::new(),
+        });
+        test_type_traits(RuleSet {
+            elements: Vec::new(),
+            already_matched: 0,
+        });
+        test_type_traits_non_clonable(Expr {
+            expr: Expression::Boolean(true),
+            ty: Type::Boolean,
+            span: 0..1,
+        });
+        test_type_traits_non_clonable(Expression::Boolean(true));
+        test_type_traits_non_clonable(ForSelection::Any);
+        test_type_traits_non_clonable(ForIterator::List(Vec::new()));
+    }
 }

@@ -189,3 +189,20 @@ pub(crate) enum AcResult {
     /// List of matches for the variable.
     Matches(Vec<Range<usize>>),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(VariableSet::new(&[]));
+        test_type_traits_non_clonable(LiteralInfo {
+            variable_index: 0,
+            literal_index: 0,
+            slice_offset: (0, 0),
+        });
+        test_type_traits(AcResult::Unknown);
+    }
+}

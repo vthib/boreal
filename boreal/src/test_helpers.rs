@@ -38,3 +38,15 @@ pub fn parse_regex_string(hex_string: &str) -> Regex {
         _ => panic!(),
     }
 }
+
+// Those helpers serves two purposes:
+// - Ensure public types have expected impls: Clone, Debug, Send & Sync
+// - Instrument those impls to avoid having those derive be marked as missed in coverage...
+pub fn test_type_traits<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
+    let _r = t.clone();
+    let _r = format!("{:?}", &t);
+}
+
+pub fn test_type_traits_non_clonable<T: std::fmt::Debug + Send + Sync>(t: T) {
+    let _r = format!("{:?}", &t);
+}

@@ -473,3 +473,31 @@ impl std::fmt::Display for VariableCompilationError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(compile_variable(VariableDeclaration {
+            name: "a".to_owned(),
+            value: VariableDeclarationValue::Bytes(Vec::new()),
+            modifiers: VariableModifiers::default(),
+            span: 0..1,
+        }));
+        test_type_traits_non_clonable(MatcherType::Literals);
+        test_type_traits(AcMatchStatus::Unknown);
+
+        test_type_traits_non_clonable(VariableCompilationError::WidenError);
+        assert_eq!(
+            VariableCompilationError::AtomsExtractionError.to_string(),
+            "unable to extract atoms",
+        );
+        assert_eq!(
+            VariableCompilationError::WidenError.to_string(),
+            "unable to apply the wide modifier to the regex"
+        );
+    }
+}

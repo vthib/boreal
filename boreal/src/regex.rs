@@ -215,8 +215,10 @@ impl std::error::Error for Error {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use super::*;
-    use crate::test_helpers::parse_regex_string;
+    use crate::test_helpers::{parse_regex_string, test_type_traits};
 
     #[test]
     fn test_regex_conversion() {
@@ -266,5 +268,13 @@ mod tests {
                 r#"\x7b"Hosts":\x5b".{10,512}"\x5d,"Proxy":".{0,512}","Version":".{1,32}","Guid":""#,
             ),
         );
+    }
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(Regex::from_str("a", false, false));
+        let error = Error(regex::Error::Syntax("a".to_owned()));
+        test_type_traits(error.clone());
+        assert!(error.source().is_some());
     }
 }
