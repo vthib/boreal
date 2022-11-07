@@ -21,12 +21,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
-      - run: cargo test --all-features
+      - run: cargo test
 
     strategy:
       fail-fast: false
       matrix:
-        build: [linux, linux32, windows, windows32, macos]
+        build: [linux, linux32, windows, windows32]
         include:
           - build: linux
             os: ubuntu-latest
@@ -40,9 +40,6 @@ jobs:
           - build: windows32
             os: windows-latest
             target: i686-pc-windows-msvc
-          - build: macos
-            os: macos-latest
-            target: x86_64-apple-darwin
 
   clippy:
     name: Clippy
