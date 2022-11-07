@@ -23,7 +23,7 @@ pub(super) fn evaluate_expr(
                 }
             };
             let value = Arc::clone(value);
-            evaluate_ops(evaluator, &*value, operations.iter())
+            evaluate_ops(evaluator, &value, operations.iter())
         }
         ModuleExpression::Function {
             fun,

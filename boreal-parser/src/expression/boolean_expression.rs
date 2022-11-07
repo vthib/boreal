@@ -399,7 +399,7 @@ mod tests {
             "",
             Expression {
                 expr: ExpressionKind::VariableIn {
-                    variable_name: "".to_owned(),
+                    variable_name: String::new(),
                     variable_name_span: 0..1,
                     from: Box::new(Expression {
                         expr: ExpressionKind::Neg(Box::new(Expression {

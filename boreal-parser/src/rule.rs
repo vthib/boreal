@@ -901,7 +901,7 @@ mod tests {
                     span: 34..43,
                 },
                 VariableDeclaration {
-                    name: "".to_owned(),
+                    name: String::new(),
                     value: VariableDeclarationValue::HexString(vec![Token::MaskedByte(
                         0x0B,
                         Mask::Left,

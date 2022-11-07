@@ -139,11 +139,7 @@ impl Math {
         let lower: f64 = args.next()?.try_into().ok()?;
         let upper: f64 = args.next()?.try_into().ok()?;
 
-        Some(Value::Integer(if test >= lower && test <= upper {
-            1
-        } else {
-            0
-        }))
+        Some(Value::Integer(i64::from(test >= lower && test <= upper)))
     }
 
     fn deviation(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
@@ -270,7 +266,7 @@ impl Math {
         let mut args = args.into_iter();
         let v: bool = args.next()?.try_into().ok()?;
 
-        Some(Value::Integer(if v { 1 } else { 0 }))
+        Some(Value::Integer(v.into()))
     }
 
     fn abs(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {

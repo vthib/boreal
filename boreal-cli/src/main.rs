@@ -103,7 +103,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 
 fn scan_file(scanner: &Scanner, path: &Path, args: &Args) -> std::io::Result<()> {
-    let file_contents = std::fs::read(&path)?;
+    let file_contents = std::fs::read(path)?;
     let res = scanner.scan_mem(&file_contents);
 
     if args.print_module_data {

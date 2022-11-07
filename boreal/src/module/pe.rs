@@ -1788,7 +1788,7 @@ fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<u32> {
 }
 
 fn bool_to_int_value(b: bool) -> Value {
-    Value::Integer(if b { 1 } else { 0 })
+    Value::Integer(b.into())
 }
 
 impl Pe {
@@ -2118,10 +2118,10 @@ impl Pe {
                 let fun_name = fun_name.to_ascii_lowercase();
 
                 if !first {
-                    hasher.update(&[b',']);
+                    hasher.update([b',']);
                 }
                 hasher.update(&dll_name);
-                hasher.update(&[b'.']);
+                hasher.update([b'.']);
                 hasher.update(fun_name);
                 first = false;
             }

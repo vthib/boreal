@@ -214,7 +214,7 @@ mod tests {
         use super::string_identifier_with_wildcard as siww;
 
         parse(siww, "$_*", "", ("_".to_owned(), true));
-        parse(siww, "$", "", ("".to_owned(), false));
+        parse(siww, "$", "", (String::new(), false));
         parse(siww, "$a* c", "c", ("a".to_owned(), true));
         parse(siww, "$9b*c", "c", ("9b".to_owned(), true));
         parse(siww, "$_1Bd_F+", "+", ("_1Bd_F".to_owned(), false));

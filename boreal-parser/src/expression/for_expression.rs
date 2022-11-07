@@ -437,7 +437,7 @@ mod tests {
                     span: 0..5,
                 },
                 SetElement {
-                    name: "".to_owned(),
+                    name: String::new(),
                     is_wildcard: false,
                     span: 6..7,
                 },
@@ -486,7 +486,7 @@ mod tests {
             "",
             VariableSet {
                 elements: vec![SetElement {
-                    name: "".to_owned(),
+                    name: String::new(),
                     is_wildcard: false,
                     span: 1..2,
                 }],
@@ -641,7 +641,7 @@ mod tests {
                         }],
                     },
                     body: Some(Box::new(Expression {
-                        expr: ExpressionKind::Variable("".to_owned()),
+                        expr: ExpressionKind::Variable(String::new()),
                         span: 22..23,
                     })),
                 },

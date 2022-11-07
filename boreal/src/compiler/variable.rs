@@ -390,6 +390,7 @@ fn apply_wide_word_boundaries(
     // TODO bench this
     let unwiden_mem = unwide(&mem[start..std::cmp::min(mem.len(), mat.end + 500)]);
 
+    #[allow(clippy::bool_to_int_with_if)]
     let expected_start = if start < mat.start { 1 } else { 0 };
     match regex.as_regex().find(&unwiden_mem) {
         Some(m) if m.start() == expected_start => {
