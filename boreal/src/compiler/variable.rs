@@ -145,14 +145,6 @@ struct CompiledVariable {
     non_wide_regex: Option<Regex>,
 }
 
-fn compile_regex_expr(
-    expr: &str,
-    case_insensitive: bool,
-    dot_all: bool,
-) -> Result<Regex, VariableCompilationError> {
-    Regex::from_str(expr, case_insensitive, dot_all).map_err(VariableCompilationError::Regex)
-}
-
 fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVariable {
     let mut literals = Vec::with_capacity(2);
 
