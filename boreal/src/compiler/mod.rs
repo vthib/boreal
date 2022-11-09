@@ -91,6 +91,9 @@ impl Compiler {
     /// - `math`
     /// - `hash` if the `hash` feature is enabled
     /// - `elf`, `macho` and `pe` if the `object` feature is enabled
+    ///
+    /// To create a compiler without some or all of those modules, use [`Compiler::default`] to
+    /// create a [`Compiler`] without any modules, then add back only the desired modules.
     #[must_use]
     pub fn new() -> Self {
         let mut this = Self::default();

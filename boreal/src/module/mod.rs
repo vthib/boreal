@@ -1,3 +1,42 @@
+//! Modules that can be imported and used in rules.
+//!
+//! To implement a new module, the [`Module`] trait must be implemented. This module can then
+//! be added to the compiler by calling [`crate::Compiler::add_module`], making it available to
+//! all future rules added to this compiler.
+//!
+//! ```
+//! use boreal::module::{Module, StaticValue};
+//! use boreal::Compiler;
+//! use std::collections::HashMap;
+//!
+//! struct Pi;
+//!
+//! impl Module for Pi {
+//!     fn get_name(&self) -> &'static str {
+//!         "pi"
+//!     }
+//!
+//!     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+//!         [
+//!             ("PI", StaticValue::Float(std::f64::consts::PI))
+//!         ].into()
+//!     }
+//! }
+//!
+//! const RULE: &str = r#"
+//!     import "pi"
+//!
+//!     rule a {
+//!         condition: pi.PI != 0.0
+//!     }
+//! "#;
+//!
+//! fn main() {
+//!     let mut compiler = Compiler::new();
+//!     compiler.add_module(Pi);
+//!     assert!(compiler.add_rules_str(RULE).is_ok());
+//! }
+//! ```
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
@@ -121,53 +160,7 @@ pub struct ScanContext<'a> {
 
     /// Private data (per-scan) of each module.
     ///
-    /// This can be used by a module to store data used in functions. The data must be set when
-    /// [`Module::get_dynamic_values`] is called, and can be retrieved when functions are called.
-    ///
-    /// ```
-    /// # use std::collections::HashMap;
-    /// use boreal::module::{Module, StaticValue, Value, Type, ScanContext, ModuleData};
-    ///
-    /// struct Foo;
-    ///
-    /// struct FooData {
-    ///     a: i64,
-    /// }
-    ///
-    /// impl ModuleData for Foo {
-    ///     type Data = FooData;
-    /// }
-    ///
-    /// impl Module for Foo {
-    ///     fn get_name(&self) -> &'static str {
-    ///         "foo"
-    ///     }
-    ///
-    ///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
-    ///         [("fun", StaticValue::function(Self::fun, vec![vec![]], Type::Integer))].into()
-    ///     }
-    ///
-    ///     fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
-    ///         [("b", Type::Boolean)].into()
-    ///     }
-    ///
-    ///     fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-    ///         ctx.module_data.insert::<Self>(FooData {
-    ///             a: 5,
-    ///             });
-    ///
-    ///         [("b", true.into())].into()
-    ///     }
-    /// }
-    ///
-    /// impl Foo {
-    ///     fn fun(ctx: &ScanContext, _args: Vec<Value>) -> Option<Value> {
-    ///         let data = ctx.module_data.get::<Self>()?;
-    ///
-    ///         Some(data.a.into())
-    ///     }
-    /// }
-    /// ```
+    /// See [`ModuleData`] for an example on how this can be used.
     pub module_data: ModuleDataMap,
 }
 
@@ -177,20 +170,80 @@ impl std::fmt::Debug for ScanContext<'_> {
     }
 }
 
+/// Object holding the data of each module. See [`ModuleData`].
 #[derive(Default)]
 pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
 
-pub trait ModuleData {
+/// Data used by module to share state with module functions.
+///
+/// Functions exposed by a module may need to use values that are computed when
+/// [`Module::get_dynamic_values`] is called. In that case, this trait can be implemented on a
+/// private struct, and:
+/// - an instance of this type can be saved during the [`Module::get_dynamic_values`] call, by
+///   calling [`ModuleDataMap::insert::<Self>`].
+/// - this instance can be retrieved in any function call by calling
+///   [`ModuleDataMap::get::<Self>`].
+///
+/// ```
+/// use std::collections::HashMap;
+/// use boreal::module::{Module, ModuleData, StaticValue, Value, Type, ScanContext};
+///
+/// struct Foo;
+///
+/// struct FooData {
+///     value: u32,
+/// }
+///
+/// impl ModuleData for Foo {
+///     type Data = FooData;
+/// }
+///
+/// impl Module for Foo {
+///     fn get_name(&self) -> &'static str {
+///         "foo"
+///     }
+///
+///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+///         [(
+///             "get_data_value",
+///             StaticValue::function(
+///                 Self::get_data_value,
+///                 vec![],
+///                 Type::Integer
+///             )
+///         )].into()
+///     }
+///
+///     fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
+///         ctx.module_data.insert::<Self>(FooData {
+///             value: 5
+///         });
+///
+///         HashMap::new()
+///     }
+/// }
+///
+/// impl Foo {
+///     fn get_data_value(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+///         let data = ctx.module_data.get::<Self>()?;
+///         Some(data.value.into())
+///     }
+/// }
+/// ```
+pub trait ModuleData: Module {
+    /// Data to associate with the module.
     type Data: Any + Send + Sync;
 }
 
 impl ModuleDataMap {
-    pub fn insert<T: ModuleData + 'static>(&mut self, data: T::Data) {
+    /// Insert the data of a module in the map.
+    pub fn insert<T: Module + ModuleData + 'static>(&mut self, data: T::Data) {
         let _r = self.0.insert(TypeId::of::<T>(), Box::new(data));
     }
 
+    /// Retrieve the data of a module.
     #[must_use]
-    pub fn get<T: ModuleData + 'static>(&self) -> Option<&T::Data> {
+    pub fn get<T: Module + ModuleData + 'static>(&self) -> Option<&T::Data> {
         self.0
             .get(&TypeId::of::<T>())
             .and_then(|v| v.downcast_ref())
@@ -224,7 +277,7 @@ pub enum Value {
     /// syntax `foo[x]` in a rule.
     Array(Vec<Value>),
 
-    /// A dictionary.
+    /// A dictionary, indexed by bytes.
     ///
     /// For example, if a module `foo` exports a dictionary value, then it can be accessed with the
     /// syntax `foo["key"]` in a rule.
@@ -300,8 +353,15 @@ pub enum StaticValue {
 
     /// A function, see [`Value::Function`].
     Function {
+        /// The function to call.
         fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
+
+        /// Types of arguments for the function.
+        ///
+        /// See [`Type::Function::arguments_types`] for more details.
         arguments_types: Vec<Vec<Type>>,
+
+        /// Type of the function's returned value.
         return_type: Type,
     },
 }
@@ -331,10 +391,24 @@ impl std::fmt::Debug for StaticValue {
 }
 
 impl Value {
+    /// Build a [`Self::Bytes`] value.
+    ///
+    /// ```
+    /// use boreal::module::Value;
+    ///
+    /// let value = Value::bytes("value");
+    /// ```
     pub fn bytes<T: Into<Vec<u8>>>(v: T) -> Self {
         Self::Bytes(v.into())
     }
 
+    /// Build a [`Self::Object`] value.
+    ///
+    /// ```
+    /// use boreal::module::Value;
+    ///
+    /// let value = Value::object([("a", 1.into()), ("b", Value::bytes("b"))]);
+    /// ```
     #[must_use]
     pub fn object<const N: usize>(v: [(&'static str, Value); N]) -> Self {
         Self::Object(v.into())
@@ -342,15 +416,55 @@ impl Value {
 }
 
 impl StaticValue {
+    /// Build a [`Self::Bytes`] static value.
+    ///
+    /// ```
+    /// use boreal::module::StaticValue;
+    ///
+    /// let value = StaticValue::bytes("value");
+    /// ```
     pub fn bytes<T: Into<Vec<u8>>>(v: T) -> Self {
         Self::Bytes(v.into())
     }
 
+    /// Build a [`Self::Object`] static value.
+    ///
+    /// ```
+    /// use boreal::module::StaticValue;
+    ///
+    /// let value = StaticValue::object([
+    ///     ("a", StaticValue::Integer(1)),
+    ///     ("b", StaticValue::bytes("b"))
+    /// ]);
+    /// ```
     #[must_use]
     pub fn object<const N: usize>(v: [(&'static str, StaticValue); N]) -> Self {
         Self::Object(v.into())
     }
 
+    /// Build a [`Self::Function`] static value.
+    ///
+    /// ```
+    /// use boreal::module::{ScanContext, StaticValue, Type, Value};
+    ///
+    /// fn change_case(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    ///     let mut args = args.into_iter();
+    ///     let s: Vec<u8> = args.next()?.try_into().ok()?;
+    ///     let to_upper: bool = args.next()?.try_into().ok()?;
+    ///
+    ///     if to_upper {
+    ///         Some(s.to_ascii_uppercase().into())
+    ///     } else {
+    ///         Some(s.to_ascii_lowercase().into())
+    ///     }
+    /// }
+    ///
+    /// let value = StaticValue::function(
+    ///     change_case,
+    ///     vec![vec![Type::Bytes, Type::Boolean]],
+    ///     Type::Bytes
+    /// );
+    /// ```
     pub fn function(
         fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
         arguments_types: Vec<Vec<Type>>,
@@ -367,30 +481,58 @@ impl StaticValue {
 /// Type of a value returned during scanning.
 #[derive(Clone, Debug)]
 pub enum Type {
+    /// Integer type, matching [`Value::Integer`].
     Integer,
+    /// Floating-point number type, matching [`Value::Float`].
     Float,
+    /// Bytes type, matching [`Value::Bytes`].
     Bytes,
+    /// Regex type, matching [`Value::Regex`].
     Regex,
+    /// Boolean type, matching [`Value::Boolean`].
     Boolean,
+    /// Object type, matching [`Value::Object`].
     Object(HashMap<&'static str, Type>),
+    /// Array type, matching [`Value::Array`].
     Array {
+        /// Type of the values in the array.
         value_type: Box<Type>,
     },
+    /// Dictionary type, matching [`Value::Dictionary`].
     Dictionary {
+        /// Type of the values in the dictionary (keys are bytes).
         value_type: Box<Type>,
     },
+    /// Function type, matching [`Value::Function`].
     Function {
+        /// Types of arguments for the function.
+        ///
+        /// Each element in the list is a list of arguments types that the function accepts.
+        /// This is only used to type-check the function call when a rule is compiled.
+        ///
+        /// For example: `vec![ vec![Type::Integer, Type::Boolean], vec![Type::String] ]` accepts
+        /// `f(5, true)` and `f("a")`, but rejects `f()`, `f(5)` or `f("a", true)`.
         arguments_types: Vec<Vec<Type>>,
+
+        /// Type of the function's returned value.
         return_type: Box<Type>,
     },
 }
 
 impl Type {
+    /// Build a [`Self::Object`] type.
+    ///
+    /// ```
+    /// use boreal::module::Type;
+    ///
+    /// let t = Type::object([("a", Type::Integer), ("b", Type::Bytes)]);
+    /// ```
     #[must_use]
     pub fn object<const N: usize>(v: [(&'static str, Type); N]) -> Self {
         Self::Object(v.into())
     }
 
+    /// Build a [`Self::Array`] type.
     #[must_use]
     pub fn array(value_type: Type) -> Self {
         Self::Array {
@@ -398,6 +540,7 @@ impl Type {
         }
     }
 
+    /// Build a [`Self::Dictionary`] type.
     #[must_use]
     pub fn dict(value_type: Type) -> Self {
         Self::Dictionary {
@@ -405,6 +548,13 @@ impl Type {
         }
     }
 
+    /// Build a [`Self::Function`] type.
+    ///
+    /// ```
+    /// use boreal::module::Type;
+    ///
+    /// let t = Type::function(vec![vec![Type::Bytes, Type::Float]], Type::Integer);
+    /// ```
     #[must_use]
     pub fn function(arguments_types: Vec<Vec<Type>>, return_type: Type) -> Self {
         Self::Function {
