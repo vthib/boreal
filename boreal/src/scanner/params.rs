@@ -1,3 +1,5 @@
+//! Parameters applicable to a scan.
+
 /// Parameters used to configure a scan.
 #[derive(Clone, Debug, Default)]
 pub struct ScanParams {
@@ -13,7 +15,8 @@ impl ScanParams {
     /// - finding out if a regex matches is cheaper than computing the offset and length of its
     ///   matches
     /// - etc
-    /// Therefore, the [`crate::ScanResult`] object may not contain what a user would expect.
+    /// Therefore, the [`crate::scanner::ScanResult`] object may not contain what a user would
+    /// expect.
     ///
     /// Setting this parameter to true ensures that for every matching rules, all of the
     /// variable matches are computed and reported.

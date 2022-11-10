@@ -1,16 +1,67 @@
-//! Provides the [`Scanner`] object which provides methods to sca
-//! files or memory on a set of rules.
+//! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     compiler::{ExternalSymbol, ExternalValue, Rule, Variable},
     evaluator::{self, ScanData, Value},
     module::Module,
-    scan_params::ScanParams,
     variable_set::VariableSet,
 };
 
+mod params;
+pub use params::ScanParams;
+
 /// Holds a list of rules, and provides methods to run them on files or bytes.
+///
+/// A [`Scanner`] can be created with a [`crate::Compiler`] object when all rules have been
+/// added to it.
+///
+/// ```
+/// let mut compiler = boreal::Compiler::new();
+///
+/// // Add as many rules as desired.
+/// compiler.add_rules_str("rule a { strings: $a = \"abc\" condition: $a }")?;
+///
+/// // Compile all the rules and generate a scanner.
+/// let scanner = compiler.into_scanner();
+///
+/// // Use the scanner to run the rules against byte strings or files.
+/// let scan_result = scanner.scan_mem(b"abc");
+/// assert_eq!(scan_result.matched_rules.len(), 1);
+/// # Ok::<(), boreal::AddRuleError>(())
+/// ```
+///
+/// If you need to use the scanner in a multi-thread context, and need to define symbols or
+/// modify scan parameters for each scan, you can clone the object, which is guaranteed to be
+/// cheap.
+///
+/// ```
+/// let mut compiler = boreal::Compiler::new();
+/// compiler.define_symbol("extension", "");
+/// compiler.add_rules_str("rule a { condition: extension endswith \"pdf\" }")?;
+/// let scanner = compiler.into_scanner();
+///
+/// let thread1 = {
+///     let mut scanner = scanner.clone();
+///     std::thread::spawn(move || {
+///         scanner.define_symbol("extension", "exe");
+///         let res = scanner.scan_mem(b"");
+///         assert!(res.matched_rules.is_empty());
+///     })
+/// };
+/// let thread2 = {
+///     let mut scanner = scanner.clone();
+///     std::thread::spawn(move || {
+///          scanner.define_symbol("extension", "pdf");
+///          let res = scanner.scan_mem(b"");
+///          assert_eq!(res.matched_rules.len(), 1);
+///     })
+/// };
+///
+/// thread1.join();
+/// thread2.join();
+/// # Ok::<(), boreal::AddRuleError>(())
+/// ```
 #[derive(Clone, Debug)]
 pub struct Scanner {
     /// Inner value containing all compiled data.
@@ -22,7 +73,7 @@ pub struct Scanner {
 
     /// Parameters to use during scanning.
     ///
-    /// See documentation of [`ScanParamsBuilder`] for details on those parameters.
+    /// See documentation of [`ScanParams`] for details on those parameters.
     scan_params: ScanParams,
 
     /// Default value of external symbols.

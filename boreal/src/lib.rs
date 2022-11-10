@@ -57,9 +57,8 @@ pub use compiler::{AddRuleError, CompilationError, Compiler, ExternalValue};
 mod evaluator;
 pub mod module;
 pub mod regex;
-pub mod scan_params;
-mod scanner;
-pub use scanner::*;
+pub mod scanner;
+pub use scanner::Scanner;
 mod variable_set;
 
 #[cfg(test)]

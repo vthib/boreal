@@ -1,7 +1,6 @@
 use std::path::Path;
 
-use boreal::scan_params::ScanParams;
-use boreal::ScanResult;
+use boreal::scanner::{ScanParams, ScanResult};
 
 pub struct Checker {
     scanner: boreal::Scanner,
