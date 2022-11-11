@@ -1,13 +1,23 @@
-//! Provides the [`VariableSet`] object.
+//! Provides the [`AcScan`] object, used to scan for all variables in a single AC pass.
 use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
 use crate::compiler::variable::{atom_rank, AcMatchStatus, Variable};
 
-/// Factorize regex expression of all the variables in the scanner.
+/// Factorize atoms from all variables, to scan for them in a single pass.
 ///
-/// Used to minimize the number of passes on the scanned memory.
+/// For every variable, literals named atoms are extracted from the variables expressions. A single
+/// Aho-Corasick object is built from all those literals, and a single pass on the scanned bytes
+/// is done with this object. For every match on a literal, the match is then verified to see if
+/// it matches the whole variable expression.
+///
+/// An exception to this is for variables that we either:
+/// - cannot manage to extract atoms from
+/// - need to or prefer scanning on their own
+///
+/// For those variables, the AC pass does not provide any result, and the variable will be scanned
+/// on its own during evaluation of the rules.
 #[derive(Debug)]
 pub(crate) struct AcScan {
     /// Aho Corasick for variables that are literals.

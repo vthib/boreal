@@ -1,7 +1,7 @@
 //! Tests on using boreal more "fully".
 //!
 //! Almost all other tests are in isolation, one rule with one variable, only checking if the rule
-//! passes, etc. This can miss bugs that depends on a more real usage of the library: variable set
+//! passes, etc. This can miss bugs that depends on a more real usage of the library: AC scan
 //! indexes or reported matches that are wrong when many variables are used, etc.
 //!
 //! This module is for tests that try to cover those cases.

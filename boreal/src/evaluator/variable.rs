@@ -1,8 +1,8 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
+use super::ac_scan::AcResult;
 use crate::compiler::variable::Variable;
-use crate::variable_set::AcResult;
 
 /// Variable evaluation context.
 ///

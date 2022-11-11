@@ -289,7 +289,7 @@ impl Variable {
         let regex = match &self.matcher_type {
             MatcherType::Raw(r) => r,
             _ => {
-                // This variable should have been covered by the variable set, so we should
+                // This variable should have been covered by the AC pass, so we should
                 // not be able to reach this code.
                 debug_assert!(false);
                 return None;

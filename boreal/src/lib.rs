@@ -88,12 +88,15 @@ use criterion as _;
 
 pub mod compiler;
 pub use compiler::Compiler;
+
 mod evaluator;
+
 pub mod module;
+
 pub mod regex;
+
 pub mod scanner;
 pub use scanner::Scanner;
-mod variable_set;
 
 #[cfg(test)]
 mod test_helpers;

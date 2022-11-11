@@ -5,9 +5,9 @@ use std::sync::Arc;
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
+use crate::evaluator::ac_scan::AcScan;
 use crate::evaluator::{evaluate_rule, ScanData, Value, VariableEvaluation};
 use crate::module::Module;
-use crate::variable_set::AcScan;
 
 mod params;
 pub use params::ScanParams;

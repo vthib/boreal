@@ -15,11 +15,12 @@ use crate::compiler::expression::{Expression, ForIterator, ForSelection, Variabl
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::regex::Regex;
-use crate::variable_set::AcResult;
 use memchr::memmem;
 
 use crate::compiler::ExternalValue;
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
+
+pub mod ac_scan;
 
 mod module;
 
@@ -128,7 +129,7 @@ impl<'a> ScanData<'a> {
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
     variables: &'rule [Variable],
-    ac_results: &'scan [AcResult],
+    ac_results: &'scan [ac_scan::AcResult],
     scan_data: &'scan ScanData,
     previous_rules_results: &'scan [bool],
 ) -> (bool, Vec<VariableEvaluation<'rule>>) {
