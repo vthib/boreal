@@ -4,10 +4,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use boreal_parser as parser;
 
-use super::{
-    compile_expression, compile_variable, CompilationError, Expression, Namespace, Variable,
-    VariableIndex,
-};
+use super::expression::{compile_expression, Expression, VariableIndex};
+use super::external_symbol::ExternalSymbol;
+use super::variable::{compile_variable, Variable};
+use super::{CompilationError, Namespace};
 use crate::module::Type as ModuleType;
 
 /// A compiled scanning rule.
@@ -61,7 +61,7 @@ pub(super) struct RuleCompiler<'a> {
     pub rule_wildcard_uses: Vec<String>,
 
     /// List of external symbols defined in the compiler.
-    pub external_symbols: &'a Vec<super::ExternalSymbol>,
+    pub external_symbols: &'a Vec<ExternalSymbol>,
 }
 
 /// Helper struct used to track variables being compiled in a rule.
@@ -84,7 +84,7 @@ impl<'a> RuleCompiler<'a> {
     pub(super) fn new(
         rule: &parser::Rule,
         namespace: &'a Namespace,
-        external_symbols: &'a Vec<super::ExternalSymbol>,
+        external_symbols: &'a Vec<ExternalSymbol>,
     ) -> Result<Self, CompilationError> {
         let mut names_set = HashSet::new();
         let mut variables = Vec::with_capacity(rule.variables.len());
@@ -179,7 +179,7 @@ impl<'a> RuleCompiler<'a> {
 pub(super) fn compile_rule(
     rule: parser::Rule,
     namespace: &mut Namespace,
-    external_symbols: &Vec<super::ExternalSymbol>,
+    external_symbols: &Vec<ExternalSymbol>,
 ) -> Result<(Rule, Vec<Variable>), CompilationError> {
     let (condition, wildcards, vars) = {
         let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols)?;

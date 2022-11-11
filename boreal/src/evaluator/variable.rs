@@ -1,7 +1,7 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use crate::compiler::Variable;
+use crate::compiler::variable::Variable;
 use crate::variable_set::AcResult;
 
 /// Variable evaluation context.
@@ -198,7 +198,8 @@ impl<'a> VariableEvaluation<'a> {
 mod tests {
     use boreal_parser::{VariableDeclaration, VariableDeclarationValue, VariableModifiers};
 
-    use crate::{compiler::compile_variable, test_helpers::test_type_traits_non_clonable};
+    use crate::compiler::variable::compile_variable;
+    use crate::test_helpers::test_type_traits_non_clonable;
 
     use super::*;
 

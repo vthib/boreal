@@ -2,7 +2,9 @@ use std::{collections::HashMap, ops::Range};
 
 use boreal_parser as parser;
 
-use super::{compile_expression, CompilationError, Expression, ImportedModule, RuleCompiler, Type};
+use super::expression::{compile_expression, Expression, Type};
+use super::rule::RuleCompiler;
+use super::{CompilationError, ImportedModule};
 use crate::module::{self, ScanContext, StaticValue, Type as ValueType, Value};
 
 /// Module used during compilation

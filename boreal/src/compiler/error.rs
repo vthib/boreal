@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
-use super::VariableCompilationError;
+use super::variable::VariableCompilationError;
 
 /// Type of error while compiling a rule.
 #[derive(Debug)]

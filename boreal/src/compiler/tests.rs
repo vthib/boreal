@@ -1,9 +1,13 @@
 use std::sync::Arc;
 
-use super::expression::Type;
-use super::*;
+use super::expression::{compile_expression, Type};
+use super::module::compile_module;
+use super::rule::RuleCompiler;
+use super::{
+    AddRuleError, AvailableModule, CompilationError, Compiler, ImportedModule, ModuleLocation,
+    Namespace,
+};
 use crate::test_helpers::test_type_traits_non_clonable;
-use crate::{AddRuleError, Compiler};
 use boreal_parser::parse;
 
 #[track_caller]

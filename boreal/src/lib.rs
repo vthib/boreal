@@ -52,8 +52,8 @@ use yara as _;
 #[cfg(feature = "bench")]
 use criterion as _;
 
-mod compiler;
-pub use compiler::{AddRuleError, CompilationError, Compiler, ExternalValue};
+pub mod compiler;
+pub use compiler::Compiler;
 mod evaluator;
 pub mod module;
 pub mod regex;

@@ -9,12 +9,9 @@ use boreal_parser::regex::{
 };
 
 mod visitor;
-pub use visitor::{visit, VisitAction, Visitor};
+pub(crate) use visitor::{visit, VisitAction, Visitor};
 
 /// Regex following the YARA format.
-///
-/// This represents a regex expression as can be used in a YARA rule, either as a
-/// string or has a raw value.
 #[derive(Clone, Debug)]
 pub struct Regex(regex::bytes::Regex);
 

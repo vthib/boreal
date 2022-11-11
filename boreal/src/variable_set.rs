@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use crate::compiler::{atom_rank, AcMatchStatus, Variable};
+use crate::compiler::variable::{atom_rank, AcMatchStatus, Variable};
 
 /// Factorize regex expression of all the variables in the scanner.
 ///

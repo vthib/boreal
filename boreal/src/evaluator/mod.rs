@@ -11,13 +11,14 @@
 //! The use of an `Option` is useful to propagate this poison value easily.
 use std::sync::Arc;
 
+use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
+use crate::compiler::rule::Rule;
+use crate::compiler::variable::Variable;
 use crate::regex::Regex;
 use crate::variable_set::AcResult;
 use memchr::memmem;
 
-use crate::compiler::{
-    Expression, ExternalValue, ForIterator, ForSelection, Rule, Variable, VariableIndex,
-};
+use crate::compiler::ExternalValue;
 use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 mod module;

@@ -13,16 +13,12 @@ use boreal_parser as parser;
 mod base64;
 mod error;
 pub use error::CompilationError;
-mod expression;
-pub use expression::*;
-mod variable;
-pub use variable::*;
-mod module;
-pub use module::*;
-mod rule;
-pub use rule::*;
-mod external_symbol;
-pub use external_symbol::*;
+pub(crate) mod expression;
+pub(crate) mod external_symbol;
+pub use external_symbol::ExternalValue;
+pub(crate) mod module;
+pub(crate) mod rule;
+pub(crate) mod variable;
 
 use crate::Scanner;
 
@@ -30,13 +26,13 @@ use crate::Scanner;
 #[derive(Debug, Default)]
 pub struct Compiler {
     /// List of compiled rules.
-    rules: Vec<Rule>,
+    rules: Vec<rule::Rule>,
 
     /// List of compiled, global rules.
-    global_rules: Vec<Rule>,
+    global_rules: Vec<rule::Rule>,
 
     /// List of compiled variables.
-    variables: Vec<Variable>,
+    variables: Vec<variable::Variable>,
 
     /// Default namespace, see [`Namespace`]
     default_namespace: Namespace,
@@ -44,7 +40,7 @@ pub struct Compiler {
     /// Other namespaces, accessible by their names.
     namespaces: HashMap<String, Namespace>,
 
-    /// Modules declared in the scanner, added with [`Compiler::add_module`].
+    /// Modules declared in the compiler, added with [`Compiler::add_module`].
     ///
     /// These are modules that can be imported and used in the namespaces.
     available_modules: HashMap<String, AvailableModule>,
@@ -53,13 +49,13 @@ pub struct Compiler {
     imported_modules: Vec<Box<dyn crate::module::Module>>,
 
     /// Externally defined symbols.
-    external_symbols: Vec<ExternalSymbol>,
+    external_symbols: Vec<external_symbol::ExternalSymbol>,
 }
 
 #[derive(Debug)]
 struct AvailableModule {
     /// The compiled module.
-    compiled_module: Arc<Module>,
+    compiled_module: Arc<module::Module>,
 
     /// The location of the module object
     location: ModuleLocation,
@@ -76,7 +72,7 @@ enum ModuleLocation {
 #[derive(Debug)]
 struct ImportedModule {
     /// The imported module.
-    module: Arc<Module>,
+    module: Arc<module::Module>,
 
     /// Index of the module in the imported vec, used to access the module dynamic values during
     /// scanning.
@@ -119,7 +115,7 @@ impl Compiler {
     /// Returns false if a module with the same name is already registered, and the module
     /// was not added.
     pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) -> bool {
-        let m = compile_module(&module);
+        let m = module::compile_module(&module);
 
         match self.available_modules.entry(m.name.to_owned()) {
             Entry::Occupied(_) => false,
@@ -295,7 +291,7 @@ impl Compiler {
                 let rule_name = rule.name.clone();
                 let is_global = rule.is_global;
                 let name_span = rule.name_span.clone();
-                let (rule, vars) = compile_rule(*rule, namespace, &self.external_symbols)
+                let (rule, vars) = rule::compile_rule(*rule, namespace, &self.external_symbols)
                     .map_err(AddRuleError::CompilationError)?;
 
                 // Check then insert, to avoid a double clone on the rule name. Maybe
@@ -348,7 +344,7 @@ impl Compiler {
             }
         }
 
-        self.external_symbols.push(ExternalSymbol {
+        self.external_symbols.push(external_symbol::ExternalSymbol {
             name: name.to_owned(),
             default_value,
         });

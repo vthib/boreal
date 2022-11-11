@@ -1,5 +1,5 @@
 //! Provides methods to evaluate the read integer expressions
-use crate::compiler::Expression;
+use crate::compiler::expression::Expression;
 use boreal_parser::ReadIntegerType;
 
 use super::{Evaluator, Value};

@@ -5,8 +5,9 @@ use std::ops::Range;
 
 use boreal_parser as parser;
 
-use super::{module, ModuleExpression};
-use super::{CompilationError, RuleCompiler};
+use super::module::ModuleExpression;
+use super::rule::RuleCompiler;
+use super::{module, CompilationError};
 use crate::module::Type as ModuleType;
 use crate::regex::Regex;
 

@@ -1,4 +1,5 @@
-use super::{RuleCompiler, Type};
+use super::expression::Type;
+use super::rule::RuleCompiler;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ExternalSymbol {

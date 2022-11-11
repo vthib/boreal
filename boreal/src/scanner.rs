@@ -1,12 +1,13 @@
 //! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::{
-    compiler::{ExternalSymbol, ExternalValue, Rule, Variable},
-    evaluator::{self, ScanData, Value},
-    module::Module,
-    variable_set::VariableSet,
-};
+use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
+use crate::compiler::rule::Rule;
+use crate::compiler::variable::Variable;
+use crate::evaluator::{evaluate_rule, ScanData, Value, VariableEvaluation};
+use crate::module::Module;
+use crate::variable_set::VariableSet;
 
 mod params;
 pub use params::ScanParams;
@@ -28,7 +29,7 @@ pub use params::ScanParams;
 /// // Use the scanner to run the rules against byte strings or files.
 /// let scan_result = scanner.scan_mem(b"abc");
 /// assert_eq!(scan_result.matched_rules.len(), 1);
-/// # Ok::<(), boreal::AddRuleError>(())
+/// # Ok::<(), boreal::compiler::AddRuleError>(())
 /// ```
 ///
 /// If you need to use the scanner in a multi-thread context, and need to define symbols or
@@ -60,7 +61,7 @@ pub use params::ScanParams;
 ///
 /// thread1.join();
 /// thread2.join();
-/// # Ok::<(), boreal::AddRuleError>(())
+/// # Ok::<(), boreal::compiler::AddRuleError>(())
 /// ```
 #[derive(Clone, Debug)]
 pub struct Scanner {
@@ -237,7 +238,7 @@ impl Inner {
         // First, check global rules
         let mut var_index = 0;
         for rule in &self.global_rules {
-            let (res, var_evals) = evaluator::evaluate_rule(
+            let (res, var_evals) = evaluate_rule(
                 rule,
                 &self.variables[var_index..(var_index + rule.nb_variables)],
                 &ac_matches[var_index..(var_index + rule.nb_variables)],
@@ -266,7 +267,7 @@ impl Inner {
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
             let res = {
-                let (res, var_evals) = evaluator::evaluate_rule(
+                let (res, var_evals) = evaluate_rule(
                     rule,
                     &self.variables[var_index..(var_index + rule.nb_variables)],
                     &ac_matches[var_index..(var_index + rule.nb_variables)],
@@ -298,7 +299,7 @@ impl Inner {
 
 fn build_matched_rule<'a>(
     rule: &'a Rule,
-    mut var_evals: Vec<evaluator::VariableEvaluation<'a>>,
+    mut var_evals: Vec<VariableEvaluation<'a>>,
     mem: &[u8],
     compute_full_matches: bool,
 ) -> MatchedRule<'a> {

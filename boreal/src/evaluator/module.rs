@@ -1,10 +1,10 @@
 //! Provides methods to evaluate module values during scanning.
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::{
-    compiler::{BoundedValueIndex, Expression, ModuleExpression, ValueOperation},
-    module::{ScanContext, Value as ModuleValue},
-};
+use crate::compiler::expression::Expression;
+use crate::compiler::module::{BoundedValueIndex, ModuleExpression, ValueOperation};
+use crate::module::{ScanContext, Value as ModuleValue};
 
 use super::{Evaluator, Value};
 
