@@ -382,6 +382,7 @@ pub struct StringMatch {
     pub data: Vec<u8>,
 }
 
+/// Error when defining a symbol's value in a [`Scanner`].
 #[derive(Debug)]
 pub enum DefineSymbolError {
     /// No symbol with this name exists.

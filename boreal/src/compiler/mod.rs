@@ -1,4 +1,4 @@
-//! Compilation of a parsed expression into an optimized one.
+//! Provides the [`Compiler`] object used to compile YARA rules.
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -129,7 +129,7 @@ impl Compiler {
         }
     }
 
-    /// Add rules to the scanner from a file.
+    /// Add rules to compile from a file.
     ///
     /// The default namespace will be used.
     ///
@@ -141,7 +141,7 @@ impl Compiler {
         self.add_rules_file_inner(path.as_ref(), None)
     }
 
-    /// Add rules to the scanner from a file into a specific namespace.
+    /// Add rules to compile from a file into a specific namespace.
     ///
     /// The default namespace will be used.
     ///
@@ -169,7 +169,7 @@ impl Compiler {
         self.add_rules_str_inner(&contents, namespace, Some(path))
     }
 
-    /// Add rules to the scanner from a string.
+    /// Add rules to compile from a string.
     ///
     /// The default namespace will be used.
     ///
@@ -180,7 +180,7 @@ impl Compiler {
         self.add_rules_str_inner(rules.as_ref(), None, None)
     }
 
-    /// Add rules to the scanner from a string into a specific namespace.
+    /// Add rules to compile from a string into a specific namespace.
     ///
     /// # Errors
     ///
@@ -399,6 +399,7 @@ struct Namespace {
     pub forbidden_rule_prefixes: Vec<String>,
 }
 
+/// Error when adding a rule to a [`Compiler`].
 #[derive(Debug)]
 pub enum AddRuleError {
     /// Error while trying to read a file.
@@ -413,8 +414,10 @@ pub enum AddRuleError {
         /// The IO error.
         error: std::io::Error,
     },
+
     /// Error while parsing a rule.
     ParseError(boreal_parser::Error),
+
     /// Error while compiling a rule.
     CompilationError(CompilationError),
 }
@@ -444,10 +447,8 @@ impl AddRuleError {
 
     /// Convert to a [`Diagnostic`].
     ///
-    /// This can be used to display the error in a more user-friendly manner
-    /// than the simple `to_short_description`. It does require depending
-    /// on the `codespan_reporting` crate to make use of this diagnostic
-    /// however.
+    /// This can be used to display the error in a more user-friendly manner than the
+    /// simple `Self::to_short_description`.
     #[must_use]
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {

@@ -27,10 +27,7 @@ impl Error {
 
     /// Convert to a [`Diagnostic`].
     ///
-    /// This can be used to display the error in a more user-friendly manner
-    /// than the simple `to_short_description`. It does require depending
-    /// on the `codespan_reporting` crate to make use of this diagnostic
-    /// however.
+    /// This can be used to display the error in a user-friendly manner.
     #[must_use]
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match &self.kind {

@@ -1,3 +1,6 @@
+//! YARA regex handling
+//!
+//! This module contains a set of types and helpers to handle the YARA regex syntax.
 use std::convert::Infallible;
 use std::fmt::Write;
 
@@ -195,6 +198,7 @@ impl AstPrinter {
     }
 }
 
+/// Error when compiling a regex.
 #[derive(Clone, Debug)]
 pub struct Error(regex::Error);
 

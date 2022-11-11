@@ -244,6 +244,9 @@ pub enum CompilationError {
 }
 
 impl CompilationError {
+    /// Convert to a [`Diagnostic`].
+    ///
+    /// This can be used to display the error in a user-friendly manner.
     #[must_use]
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
