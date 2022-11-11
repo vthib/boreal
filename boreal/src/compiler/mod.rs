@@ -325,7 +325,8 @@ impl Compiler {
     ///
     /// Any rules compiled after the addition can use the symbol name, which will be replaced
     /// during scanning by either:
-    /// - a new value provided by the caller when scanning.
+    /// - the last value set in the [`Scanner`] value for this symbol (see
+    /// [`Scanner::define_symbol`]).
     /// - the default value provided here otherwise.
     ///
     /// Returns false if a symbol of the same name is already defined.

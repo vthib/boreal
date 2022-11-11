@@ -9,9 +9,9 @@ use crate::compiler::variable::{atom_rank, AcMatchStatus, Variable};
 ///
 /// Used to minimize the number of passes on the scanned memory.
 #[derive(Debug)]
-pub(crate) struct VariableSet {
+pub(crate) struct AcScan {
     /// Aho Corasick for variables that are literals.
-    aho: AhoVersion,
+    aho: ACVersion,
 
     /// Map from a aho pattern index to details on the literals.
     aho_index_to_literal_info: Vec<LiteralInfo>,
@@ -34,12 +34,12 @@ struct LiteralInfo {
 }
 
 #[derive(Debug)]
-enum AhoVersion {
+enum ACVersion {
     Size32(AhoCorasick<u32>),
     Default(AhoCorasick),
 }
 
-impl VariableSet {
+impl AcScan {
     pub(crate) fn new(variables: &[Variable]) -> Self {
         let mut lits = Vec::new();
         let mut aho_index_to_literal_info = Vec::new();
@@ -70,8 +70,8 @@ impl VariableSet {
         // First try with a smaller size to reduce memory use and improve performances, otherwise
         // use the default version.
         let aho = match builder.build_with_size::<u32, _, _>(&lits) {
-            Ok(v) => AhoVersion::Size32(v),
-            Err(_) => AhoVersion::Default(builder.build(&lits)),
+            Ok(v) => ACVersion::Size32(v),
+            Err(_) => ACVersion::Default(builder.build(&lits)),
         };
 
         Self {
@@ -85,12 +85,12 @@ impl VariableSet {
         let mut matches = vec![AcResult::NotFound; variables.len()];
 
         match &self.aho {
-            AhoVersion::Size32(v) => {
+            ACVersion::Size32(v) => {
                 for mat in v.find_overlapping_iter(mem) {
                     self.handle_possible_match(mem, variables, &mat, &mut matches);
                 }
             }
-            AhoVersion::Default(v) => {
+            ACVersion::Default(v) => {
                 for mat in v.find_overlapping_iter(mem) {
                     self.handle_possible_match(mem, variables, &mat, &mut matches);
                 }
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(VariableSet::new(&[]));
+        test_type_traits_non_clonable(AcScan::new(&[]));
         test_type_traits_non_clonable(LiteralInfo {
             variable_index: 0,
             literal_index: 0,

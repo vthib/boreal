@@ -7,7 +7,7 @@ use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::{evaluate_rule, ScanData, Value, VariableEvaluation};
 use crate::module::Module;
-use crate::variable_set::VariableSet;
+use crate::variable_set::AcScan;
 
 mod params;
 pub use params::ScanParams;
@@ -91,7 +91,7 @@ impl Scanner {
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
     ) -> Self {
-        let variable_set = VariableSet::new(&variables);
+        let variable_set = AcScan::new(&variables);
 
         let mut external_symbols_values = Vec::new();
         let mut external_symbols_map = HashMap::new();
@@ -198,7 +198,7 @@ struct Inner {
     /// This is used to scan the memory in one go, and find which variables are found. This
     /// is usually sufficient for most rules. Other rules that depend on the number or length of
     /// matches will scan the memory during their evaluation.
-    variable_set: VariableSet,
+    variable_set: AcScan,
 
     /// List of modules used during scanning.
     modules: Vec<Box<dyn Module>>,
