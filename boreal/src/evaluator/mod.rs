@@ -21,7 +21,6 @@ use std::sync::Arc;
 
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
-use crate::compiler::variable::Variable;
 use crate::regex::Regex;
 use memchr::memmem;
 
@@ -136,31 +135,25 @@ impl<'a> ScanData<'a> {
 /// byte slice, false otherwise.
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
-    variables: &'rule [Variable],
-    ac_results: &'scan [ac_scan::AcResult],
+    variables: &'rule mut [VariableEvaluation],
     scan_data: &'scan ScanData,
     previous_rules_results: &'scan [bool],
-) -> (bool, Vec<VariableEvaluation<'rule>>) {
+) -> bool {
     let mut evaluator = Evaluator {
-        variables: variables
-            .iter()
-            .zip(ac_results)
-            .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
-            .collect(),
+        variables,
         mem: scan_data.mem,
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
         scan_data,
     };
-    let res = evaluator
+    evaluator
         .evaluate_expr(&rule.condition)
-        .map_or(false, |v| v.to_bool());
-    (res, evaluator.variables)
+        .map_or(false, |v| v.to_bool())
 }
 
 struct Evaluator<'scan, 'rule> {
-    variables: Vec<VariableEvaluation<'rule>>,
+    variables: &'scan mut [VariableEvaluation<'rule>],
 
     mem: &'scan [u8],
 

@@ -238,13 +238,12 @@ impl Inner {
         // First, check global rules
         let mut var_index = 0;
         for rule in &self.global_rules {
-            let (res, var_evals) = evaluate_rule(
-                rule,
-                &self.variables[var_index..(var_index + rule.nb_variables)],
-                &ac_matches[var_index..(var_index + rule.nb_variables)],
-                &scan_data,
-                &previous_results,
-            );
+            let mut var_evals: Vec<_> = self.variables[var_index..(var_index + rule.nb_variables)]
+                .iter()
+                .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
+                .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
+                .collect();
+            let res = evaluate_rule(rule, &mut var_evals, &scan_data, &previous_results);
             var_index += rule.nb_variables;
 
             if !res {
@@ -267,13 +266,13 @@ impl Inner {
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
             let res = {
-                let (res, var_evals) = evaluate_rule(
-                    rule,
-                    &self.variables[var_index..(var_index + rule.nb_variables)],
-                    &ac_matches[var_index..(var_index + rule.nb_variables)],
-                    &scan_data,
-                    &previous_results,
-                );
+                let mut var_evals: Vec<_> = self.variables
+                    [var_index..(var_index + rule.nb_variables)]
+                    .iter()
+                    .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
+                    .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
+                    .collect();
+                let res = evaluate_rule(rule, &mut var_evals, &scan_data, &previous_results);
 
                 var_index += rule.nb_variables;
 
