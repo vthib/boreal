@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_err, Checker};
+use crate::utils::{build_rule, check, check_boreal, check_err, Checker};
 
 #[test]
 fn test_variable() {
@@ -1021,10 +1021,10 @@ fn test_variable_find_at_invalid() {
 
     // Undefined value
     // TODO(4.3): See https://github.com/VirusTotal/yara/pull/1759
-    check(
+    check_boreal(
         &build_rule("defined ($a0 at tests.integer_array[5])"),
         b"",
-        true,
+        false,
     );
     check(&build_rule("$a0 at tests.integer_array[5]"), b"", false);
 }

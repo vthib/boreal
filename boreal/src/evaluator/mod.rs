@@ -9,6 +9,14 @@
 //! - etc
 //!
 //! The use of an `Option` is useful to propagate this poison value easily.
+//!
+//! The only operators that do not rethrow the poison value are:
+//!
+//! - `and` and `or`
+//! - all `for` variants, both for the selection and the body.
+//! - `defined`
+//!
+//! For all of those, an undefined value is considered to be equivalent to a false boolean value.
 use std::sync::Arc;
 
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
@@ -506,12 +514,7 @@ impl Evaluator<'_, '_> {
                 offset,
             } => {
                 // Safety: index has been generated during compilation and is valid.
-                let offset = match self.evaluate_expr(offset) {
-                    Some(v) => v.unwrap_number()?,
-                    // This is actually what libyara does instead of returning an undefined value,
-                    // not sure why.
-                    None => return Some(Value::Boolean(false)),
-                };
+                let offset = self.evaluate_expr(offset)?.unwrap_number()?;
                 match usize::try_from(offset) {
                     Ok(offset) => {
                         let index = self.get_variable_index(*variable_index)?;

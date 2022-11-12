@@ -5,6 +5,7 @@ use crate::utils::{build_rule, check, check_boreal};
 const UNDEF_INT: &str = "tests.integer_array[5]";
 const UNDEF_STR: &str = "tests.string_array[5]";
 
+#[track_caller]
 fn assert_is_defined(cond: &str, expected_res: bool) {
     check(
         &build_rule(&format!("defined ({})", cond)),
@@ -13,6 +14,7 @@ fn assert_is_defined(cond: &str, expected_res: bool) {
     );
 }
 
+#[track_caller]
 fn assert_is_defined_boreal(cond: &str, expected_res: bool) {
     check_boreal(
         &build_rule(&format!("defined ({})", cond)),
@@ -160,9 +162,9 @@ fn test_undefined_not() {
 
 #[test]
 fn test_undefined_var_at_in() {
-    // For AT, it is not propagate the undefined value
-    assert_is_defined(&format!("$a0 at {}", UNDEF_INT), true);
     // propagate undefined value from inner expr
+    // TODO(4.3): this is fixed in libyara 4.3
+    assert_is_defined_boreal(&format!("$a0 at {}", UNDEF_INT), false);
     assert_is_defined(&format!("$a0 in ({}..5)", UNDEF_INT), false);
     assert_is_defined(&format!("$a0 in (0..{})", UNDEF_INT), false);
 
