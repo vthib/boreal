@@ -69,17 +69,7 @@ where
             },
             ValueOperation::FunctionCall(arguments) => match value {
                 ModuleValue::Function(fun) => {
-                    let arguments: Result<Vec<_>, _> = arguments
-                        .iter()
-                        .map(|expr| {
-                            evaluator
-                                .evaluate_expr(expr)
-                                .map(expr_value_to_module_value)
-                        })
-                        .collect();
-
-                    let new_value = fun(&evaluator.scan_data.module_ctx, arguments?)
-                        .ok_or(PoisonKind::Undefined)?;
+                    let new_value = eval_function_op(evaluator, *fun, arguments)?;
                     return evaluate_ops(evaluator, &new_value, operations);
                 }
                 _ => return Err(PoisonKind::Undefined),
