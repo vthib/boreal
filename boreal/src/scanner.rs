@@ -243,7 +243,8 @@ impl Inner {
                 .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
                 .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
                 .collect();
-            let res = evaluate_rule(rule, &mut var_evals, &scan_data, &previous_results);
+            let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
+                .unwrap_or(false);
             var_index += rule.nb_variables;
 
             if !res {
@@ -272,7 +273,8 @@ impl Inner {
                     .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
                     .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
                     .collect();
-                let res = evaluate_rule(rule, &mut var_evals, &scan_data, &previous_results);
+                let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
+                    .unwrap_or(false);
 
                 var_index += rule.nb_variables;
 

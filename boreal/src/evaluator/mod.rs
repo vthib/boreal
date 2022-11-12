@@ -1,14 +1,31 @@
 //! Provides methods to evaluate expressions.
 //!
-//! Most evaluating methods return an `Option<Value>`. The `None` corresponds to the `Undefined`
-//! value, as described in yara: this is used for all operations that cannot be evaluated:
+//! Most evaluating methods return an `Option<Value>`. The `None` corresponds to an `Undefined`
+//! value, which can have two different meanings depending on the evaluation pass.
+//!
+//! The first evaluation pass is used to find if there are variables that need to be searched.
+//! For example, if all rules have a "filesize < 50KB" condition that short-circuit the whole
+//! rule's evaluation, then we should not need to scan for variables on any mem that is bigger
+//! than 50KB.
+//!
+//! During this evaluation pass, evaluation of anything related to variables returns the undefined
+//! value (None). This value is fully poisonous, and will be rethrown by basically all of the
+//! operators, except for a few:
+//!
+//! - `and` returns false if one of the operands returned false, regardless of whether some of
+//! those were poisoned.
+//! - `or` returns true if one of the operands returned true, regardless of whether some of
+//! those were poisoned.
+//! - the for operands may return `true` or `false` if the result does not depend on any poison
+//! value.
+//!
+//! The second evaluation pass is used to fully evaluate the rules. During this pass, None is the
+//! `undefined` value as described by YARA: it is used for all operations that cannot be evaluated:
 //!
 //! - Symbols that do not make sense, eg `pe.entrypoint` on a non PE scan.
 //! - Occurences numbers not found, eg `#a[100]`.
 //! - Arithmetic operations that do not make sense, eg `1 << -5`
 //! - etc
-//!
-//! The use of an `Option` is useful to propagate this poison value easily.
 //!
 //! The only operators that do not rethrow the poison value are:
 //!
@@ -135,11 +152,17 @@ impl<'a> ScanData<'a> {
 /// byte slice, false otherwise.
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
-    variables: &'rule mut [VariableEvaluation],
+    variables: Option<&'rule mut [VariableEvaluation]>,
     scan_data: &'scan ScanData,
     previous_rules_results: &'scan [bool],
-) -> bool {
+) -> Option<bool> {
     let mut evaluator = Evaluator {
+        undefined_kind: match &variables {
+            // If variable evaluations are provided, this is the normal yara evaluation
+            Some(_) => UndefinedKind::Yara,
+            // Otherwise, this is the evaluation to find if rules need variables matches.
+            None => UndefinedKind::Poison,
+        },
         variables,
         mem: scan_data.mem,
         previous_rules_results,
@@ -149,11 +172,11 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     };
     evaluator
         .evaluate_expr(&rule.condition)
-        .map_or(false, |v| v.to_bool())
+        .map(|v| v.to_bool())
 }
 
 struct Evaluator<'scan, 'rule> {
-    variables: &'scan mut [VariableEvaluation<'rule>],
+    variables: Option<&'scan mut [VariableEvaluation<'rule>]>,
 
     mem: &'scan [u8],
 
@@ -172,6 +195,29 @@ struct Evaluator<'scan, 'rule> {
 
     // Data related only to the scan, independent of the rule.
     scan_data: &'scan ScanData<'scan>,
+
+    undefined_kind: UndefinedKind,
+}
+
+/// How should the undefined value be considered.
+enum UndefinedKind {
+    /// The undefined value is poisonous.
+    ///
+    /// This value should always be propagated, unless an operator result can be computed
+    /// regardless of any value the poisonous value could take.
+    ///
+    /// This is used during the first evaluation pass, to find rules that do not depend on
+    /// their variables' matches.
+    Poison,
+
+    /// Yara undefined value.
+    ///
+    /// This value should generally be propagated, unless for a few operators that treat this value
+    /// as false.
+    ///
+    /// This is used during the second evaluation pass, where it represents operations that
+    /// could not be computed.
+    Yara,
 }
 
 macro_rules! bytes_op {
@@ -251,7 +297,7 @@ impl Evaluator<'_, '_> {
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
                         let index = self.get_variable_index(*variable_index)?;
-                        let var = &mut self.variables[index];
+                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
                         let count = var.count_matches_in(self.mem, from, to);
 
                         i64::try_from(count).ok().map(Value::Integer)
@@ -261,7 +307,7 @@ impl Evaluator<'_, '_> {
             }
             Expression::Count(variable_index) => {
                 let index = self.get_variable_index(*variable_index)?;
-                let var = &mut self.variables[index];
+                let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
                 let count = var.count_matches(self.mem);
                 i64::try_from(count).ok().map(Value::Integer)
             }
@@ -274,7 +320,7 @@ impl Evaluator<'_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let index = self.get_variable_index(*variable_index)?;
-                        let var = &mut self.variables[index];
+                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
                         var.find_match_occurence(self.mem, v - 1)
                             .map(|mat| Value::Integer(mat.start as i64))
                     }
@@ -290,7 +336,7 @@ impl Evaluator<'_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let index = self.get_variable_index(*variable_index)?;
-                        let var = &mut self.variables[index];
+                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
                         var.find_match_occurence(self.mem, v - 1)
                             .map(|mat| Value::Integer(mat.len() as i64))
                     }
@@ -390,28 +436,76 @@ impl Evaluator<'_, '_> {
             }
 
             Expression::And(ops) => {
-                // Do not rethrow None result for left & right => None is the "undefined" value,
-                // and the AND and OR operations are the only one not propagating this poisoned
-                // value, but forcing it to false.
-                for op in ops {
-                    let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
-                    if !res {
-                        return Some(Value::Boolean(false));
+                match self.undefined_kind {
+                    UndefinedKind::Poison => {
+                        let mut seen_poison = false;
+                        // Return:
+                        // - false if any operand evaluates to false
+                        // - true if all operands evaluate to true
+                        // - poison otherwise
+                        for op in ops {
+                            match self.evaluate_expr(op) {
+                                Some(v) => {
+                                    if !v.to_bool() {
+                                        return Some(Value::Boolean(false));
+                                    }
+                                }
+                                None => seen_poison = true,
+                            };
+                        }
+                        if seen_poison {
+                            None
+                        } else {
+                            Some(Value::Boolean(true))
+                        }
+                    }
+                    UndefinedKind::Yara => {
+                        // Consider any undefined value as false.
+                        for op in ops {
+                            let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
+                            if !res {
+                                return Some(Value::Boolean(false));
+                            }
+                        }
+                        Some(Value::Boolean(true))
                     }
                 }
-                Some(Value::Boolean(true))
             }
             Expression::Or(ops) => {
-                // Do not rethrow None result for left & right => None is the "undefined" value,
-                // and the AND and OR operations are the only one not propagating this poisoned
-                // value, but forcing it to false.
-                for op in ops {
-                    let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
-                    if res {
-                        return Some(Value::Boolean(true));
+                match self.undefined_kind {
+                    UndefinedKind::Poison => {
+                        let mut seen_poison = false;
+                        // Return:
+                        // - true if any operand evaluates to true
+                        // - false if all operands evaluate to false
+                        // - poison otherwise
+                        for op in ops {
+                            match self.evaluate_expr(op) {
+                                Some(v) => {
+                                    if v.to_bool() {
+                                        return Some(Value::Boolean(true));
+                                    }
+                                }
+                                None => seen_poison = true,
+                            };
+                        }
+                        if seen_poison {
+                            None
+                        } else {
+                            Some(Value::Boolean(false))
+                        }
+                    }
+                    UndefinedKind::Yara => {
+                        // Consider any undefined value as false.
+                        for op in ops {
+                            let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
+                            if res {
+                                return Some(Value::Boolean(true));
+                            }
+                        }
+                        Some(Value::Boolean(false))
                     }
                 }
-                Some(Value::Boolean(false))
             }
             Expression::Cmp {
                 left,
@@ -487,7 +581,10 @@ impl Evaluator<'_, '_> {
             Expression::Defined(expr) => {
                 let expr = self.evaluate_expr(expr);
 
-                Some(Value::Boolean(expr.is_some()))
+                match self.undefined_kind {
+                    UndefinedKind::Poison => expr.map(|_| Value::Boolean(true)),
+                    UndefinedKind::Yara => Some(Value::Boolean(expr.is_some())),
+                }
             }
             Expression::Not(expr) => {
                 let v = self.evaluate_expr(expr)?.to_bool();
@@ -498,7 +595,7 @@ impl Evaluator<'_, '_> {
                 // For this expression, we can use the variables set to retrieve the truth value,
                 // no need to rescan.
                 let index = self.get_variable_index(*variable_index)?;
-                let var = &mut self.variables[index];
+                let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
                 Some(Value::Boolean(var.find(self.mem)))
             }
 
@@ -511,7 +608,7 @@ impl Evaluator<'_, '_> {
                 match usize::try_from(offset) {
                     Ok(offset) => {
                         let index = self.get_variable_index(*variable_index)?;
-                        let var = &mut self.variables[index];
+                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
                         Some(Value::Boolean(var.find_at(self.mem, offset)))
                     }
                     Err(_) => Some(Value::Boolean(false)),
@@ -529,7 +626,7 @@ impl Evaluator<'_, '_> {
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
                         let index = self.get_variable_index(*variable_index)?;
-                        let var = &mut self.variables[index];
+                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
 
                         Some(Value::Boolean(var.find_in(self.mem, from, to)))
                     }
@@ -542,10 +639,9 @@ impl Evaluator<'_, '_> {
                 set,
                 body,
             } => {
-                let selection = match self.evaluate_for_selection(selection, set.elements.len()) {
-                    Some(ForSelectionEvaluation::Evaluator(e)) => e,
-                    Some(ForSelectionEvaluation::Value(v)) => return Some(v),
-                    None => return Some(Value::Boolean(false)),
+                let selection = match self.evaluate_for_selection(selection, set.elements.len())? {
+                    ForSelectionEvaluation::Evaluator(e) => e,
+                    ForSelectionEvaluation::Value(v) => return Some(v),
                 };
 
                 let prev_selected_var_index = self.currently_selected_variable_index;
@@ -553,7 +649,7 @@ impl Evaluator<'_, '_> {
                 let result = self.evaluate_for_var(selection, body, set.elements.iter().copied());
 
                 self.currently_selected_variable_index = prev_selected_var_index;
-                Some(result)
+                result
             }
 
             Expression::ForIdentifiers {
@@ -575,25 +671,26 @@ impl Evaluator<'_, '_> {
 
                 // XXX: giving a dummy value for the nb_elements is ok here, since it's only
                 // used for percent expr, which is not possible in this context.
-                let selection = match self.evaluate_for_selection(selection, 0) {
-                    Some(ForSelectionEvaluation::Evaluator(e)) => e,
-                    Some(ForSelectionEvaluation::Value(v)) => return Some(v),
-                    None => return Some(Value::Boolean(false)),
+                let selection = match self.evaluate_for_selection(selection, 0)? {
+                    ForSelectionEvaluation::Evaluator(e) => e,
+                    ForSelectionEvaluation::Value(v) => return Some(v),
                 };
 
                 match self.evaluate_for_iterator(iterator, selection, body) {
                     Some(v) => Some(v),
-                    None => Some(Value::Boolean(false)),
+                    None => match self.undefined_kind {
+                        UndefinedKind::Poison => None,
+                        UndefinedKind::Yara => Some(Value::Boolean(false)),
+                    },
                 }
             }
 
             Expression::ForRules { selection, set } => {
                 let nb_elements = set.elements.len() + set.already_matched;
 
-                let mut selection = match self.evaluate_for_selection(selection, nb_elements) {
-                    Some(ForSelectionEvaluation::Evaluator(e)) => e,
-                    Some(ForSelectionEvaluation::Value(v)) => return Some(v),
-                    None => return Some(Value::Boolean(false)),
+                let mut selection = match self.evaluate_for_selection(selection, nb_elements)? {
+                    ForSelectionEvaluation::Evaluator(e) => e,
+                    ForSelectionEvaluation::Value(v) => return Some(v),
                 };
 
                 for _ in 0..set.already_matched {
@@ -641,7 +738,15 @@ impl Evaluator<'_, '_> {
             ForSelection::All => Some(FSEvaluation::Evaluator(FSEvaluator::All)),
             ForSelection::None => Some(FSEvaluation::Evaluator(FSEvaluator::None)),
             ForSelection::Expr { expr, as_percent } => {
-                let mut value = self.evaluate_expr(expr)?.unwrap_number()?;
+                let mut value = match self.evaluate_expr(expr).and_then(Value::unwrap_number) {
+                    Some(v) => v,
+                    None => {
+                        return match self.undefined_kind {
+                            UndefinedKind::Poison => None,
+                            UndefinedKind::Yara => Some(FSEvaluation::Value(Value::Boolean(false))),
+                        };
+                    }
+                };
 
                 #[allow(clippy::cast_precision_loss)]
                 if *as_percent {
@@ -673,18 +778,35 @@ impl Evaluator<'_, '_> {
         mut selection: ForSelectionEvaluator,
         body: &Expression,
         iter: I,
-    ) -> Value
+    ) -> Option<Value>
     where
         I: IntoIterator<Item = usize>,
     {
+        let mut seen_poison = false;
+
         for index in iter {
             self.currently_selected_variable_index = Some(index);
-            let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+            let v = match self.evaluate_expr(body) {
+                Some(v) => v.to_bool(),
+                None => match self.undefined_kind {
+                    UndefinedKind::Poison => {
+                        seen_poison = true;
+                        continue;
+                    }
+                    UndefinedKind::Yara => false,
+                },
+            };
+
             if let Some(result) = selection.add_result_and_check(v) {
-                return Value::Boolean(result);
+                return Some(Value::Boolean(result));
             }
         }
-        Value::Boolean(selection.end())
+
+        if seen_poison {
+            None
+        } else {
+            Some(Value::Boolean(selection.end()))
+        }
     }
 
     fn evaluate_for_iterator(
@@ -693,9 +815,10 @@ impl Evaluator<'_, '_> {
         mut selection: ForSelectionEvaluator,
         body: &Expression,
     ) -> Option<Value> {
+        let mut seen_poison = false;
         let prev_stack_len = self.bounded_identifiers_stack.len();
 
-        match iterator {
+        let selection = match iterator {
             ForIterator::ModuleIterator(expr) => {
                 let value = module::evaluate_expr(self, expr)?;
 
@@ -703,8 +826,18 @@ impl Evaluator<'_, '_> {
                     ModuleValue::Array(array) => {
                         for value in array {
                             self.bounded_identifiers_stack.push(Arc::new(value));
-                            let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                            let v = self.evaluate_expr(body);
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
+                            let v = match v {
+                                Some(v) => v.to_bool(),
+                                None => match self.undefined_kind {
+                                    UndefinedKind::Poison => {
+                                        seen_poison = true;
+                                        continue;
+                                    }
+                                    UndefinedKind::Yara => false,
+                                },
+                            };
 
                             if let Some(result) = selection.add_result_and_check(v) {
                                 return Some(Value::Boolean(result));
@@ -716,8 +849,18 @@ impl Evaluator<'_, '_> {
                             self.bounded_identifiers_stack
                                 .push(Arc::new(ModuleValue::Bytes(key)));
                             self.bounded_identifiers_stack.push(Arc::new(value));
-                            let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                            let v = self.evaluate_expr(body);
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
+                            let v = match v {
+                                Some(v) => v.to_bool(),
+                                None => match self.undefined_kind {
+                                    UndefinedKind::Poison => {
+                                        seen_poison = true;
+                                        continue;
+                                    }
+                                    UndefinedKind::Yara => false,
+                                },
+                            };
 
                             if let Some(result) = selection.add_result_and_check(v) {
                                 return Some(Value::Boolean(result));
@@ -727,7 +870,7 @@ impl Evaluator<'_, '_> {
                     _ => return None,
                 };
 
-                Some(Value::Boolean(selection.end()))
+                selection
             }
             ForIterator::Range { from, to } => {
                 let from = self.evaluate_expr(from)?.unwrap_number()?;
@@ -740,14 +883,24 @@ impl Evaluator<'_, '_> {
                 for value in from..=to {
                     self.bounded_identifiers_stack
                         .push(Arc::new(ModuleValue::Integer(value)));
-                    let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                    let v = self.evaluate_expr(body);
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
+                    let v = match v {
+                        Some(v) => v.to_bool(),
+                        None => match self.undefined_kind {
+                            UndefinedKind::Poison => {
+                                seen_poison = true;
+                                continue;
+                            }
+                            UndefinedKind::Yara => false,
+                        },
+                    };
 
                     if let Some(result) = selection.add_result_and_check(v) {
                         return Some(Value::Boolean(result));
                     }
                 }
-                Some(Value::Boolean(selection.end()))
+                selection
             }
 
             ForIterator::List(exprs) => {
@@ -756,15 +909,31 @@ impl Evaluator<'_, '_> {
 
                     self.bounded_identifiers_stack
                         .push(Arc::new(ModuleValue::Integer(value)));
-                    let v = self.evaluate_expr(body).map_or(false, |v| v.to_bool());
+                    let v = self.evaluate_expr(body);
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
+                    let v = match v {
+                        Some(v) => v.to_bool(),
+                        None => match self.undefined_kind {
+                            UndefinedKind::Poison => {
+                                seen_poison = true;
+                                continue;
+                            }
+                            UndefinedKind::Yara => false,
+                        },
+                    };
 
                     if let Some(result) = selection.add_result_and_check(v) {
                         return Some(Value::Boolean(result));
                     }
                 }
-                Some(Value::Boolean(selection.end()))
+                selection
             }
+        };
+
+        if seen_poison {
+            None
+        } else {
+            Some(Value::Boolean(selection.end()))
         }
     }
 }
