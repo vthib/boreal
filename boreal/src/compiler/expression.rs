@@ -79,7 +79,6 @@ pub struct VariableSet {
     /// Indexes of the variables selected in the set.
     ///
     /// The indexes are relative to the array of compiled variable stored in the compiled rule.
-    /// If empty, all variables are selected.
     pub elements: Vec<usize>,
 }
 
@@ -968,6 +967,7 @@ fn compile_variable_set(
             });
         }
 
+        indexes.extend(0..compiler.variables.len());
         for var in &mut compiler.variables {
             var.used = true;
         }

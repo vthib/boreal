@@ -542,13 +542,7 @@ impl Evaluator<'_, '_> {
                 set,
                 body,
             } => {
-                let nb_elements = if set.elements.is_empty() {
-                    self.variables.len()
-                } else {
-                    set.elements.len()
-                };
-
-                let selection = match self.evaluate_for_selection(selection, nb_elements) {
+                let selection = match self.evaluate_for_selection(selection, set.elements.len()) {
                     Some(ForSelectionEvaluation::Evaluator(e)) => e,
                     Some(ForSelectionEvaluation::Value(v)) => return Some(v),
                     None => return Some(Value::Boolean(false)),
@@ -556,11 +550,7 @@ impl Evaluator<'_, '_> {
 
                 let prev_selected_var_index = self.currently_selected_variable_index;
 
-                let result = if set.elements.is_empty() {
-                    self.evaluate_for_var(selection, body, 0..self.variables.len())
-                } else {
-                    self.evaluate_for_var(selection, body, set.elements.iter().copied())
-                };
+                let result = self.evaluate_for_var(selection, body, set.elements.iter().copied());
 
                 self.currently_selected_variable_index = prev_selected_var_index;
                 Some(result)
