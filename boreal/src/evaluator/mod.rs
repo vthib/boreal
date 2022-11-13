@@ -106,7 +106,7 @@ impl From<ExternalValue> for Value {
 /// Data linked to the scan, shared by all rules.
 #[derive(Debug)]
 pub struct ScanData<'a> {
-    mem: &'a [u8],
+    pub mem: &'a [u8],
 
     pub module_values: Vec<(&'static str, Arc<ModuleValue>)>,
 

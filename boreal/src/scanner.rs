@@ -218,22 +218,25 @@ impl Inner {
             compute_full_matches,
         } = params;
 
+        let scan_data = ScanData::new(mem, &self.modules, external_symbols_values);
+
+        if !compute_full_matches {
+            // TODO: Ideally, we could keep the "previous_results" vec up to the first rule that
+            // needs matches.
+            if let Some(matched_rules) = self.evaluate_without_matches(&scan_data) {
+                return ScanResult {
+                    matched_rules,
+                    module_values: scan_data.module_values,
+                };
+            }
+        }
+
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        //
-        // TODO: this is not optimal w.r.t. global rules. I imagine people can use global rules
-        // that do not have variables, and attempt to avoid the cost of scanning if those rules do
-        // not match.
-        // A better solution would be:
-        // - evaluate global rules that have no variables first
-        // - then scan the set
-        // - then evaluate rest of global rules first, then rules
         let ac_matches = self.variable_set.matches(mem, &self.variables);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
-
-        let scan_data = ScanData::new(mem, &self.modules, external_symbols_values);
 
         // First, check global rules
         let mut var_index = 0;
@@ -295,6 +298,41 @@ impl Inner {
             matched_rules,
             module_values: scan_data.module_values,
         }
+    }
+
+    /// Evaluate all rules without availability of the variables' matches.
+    ///
+    /// This returns None if variables' matches must be computed, otherwise it returns the
+    /// final result of the scan.
+    fn evaluate_without_matches<'scanner>(
+        &'scanner self,
+        scan_data: &ScanData<'_>,
+    ) -> Option<Vec<MatchedRule<'scanner>>> {
+        let mut matched_rules = Vec::new();
+        let mut previous_results = Vec::with_capacity(self.rules.len());
+
+        // First, check global rules
+        for rule in &self.global_rules {
+            if evaluate_rule(rule, None, scan_data, &previous_results)? {
+                if !rule.is_private {
+                    matched_rules.push(build_matched_rule(rule, Vec::new(), scan_data.mem, false));
+                }
+            } else {
+                return Some(Vec::new());
+            }
+        }
+
+        // Then, if all global rules matched, the normal rules
+        for rule in &self.rules {
+            let matched = evaluate_rule(rule, None, scan_data, &previous_results)?;
+
+            if matched && !rule.is_private {
+                matched_rules.push(build_matched_rule(rule, Vec::new(), scan_data.mem, false));
+            }
+            previous_results.push(matched);
+        }
+
+        Some(matched_rules)
     }
 }
 
