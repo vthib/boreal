@@ -6,21 +6,27 @@ use crate::compiler::expression::Expression;
 use crate::compiler::module::{BoundedValueIndex, ModuleExpression, ValueOperation};
 use crate::module::{ScanContext, Value as ModuleValue};
 
-use super::{Evaluator, Value};
+use super::{Evaluator, PoisonKind, Value};
 
 pub(super) fn evaluate_expr(
     evaluator: &mut Evaluator,
     expr: &ModuleExpression,
-) -> Option<ModuleValue> {
+) -> Result<ModuleValue, PoisonKind> {
     match expr {
         ModuleExpression::BoundedModuleValueUse { index, operations } => {
             let value = match index {
                 BoundedValueIndex::Module(index) => {
-                    &evaluator.scan_data.module_values.get(*index)?.1
+                    &evaluator
+                        .scan_data
+                        .module_values
+                        .get(*index)
+                        .ok_or(PoisonKind::Undefined)?
+                        .1
                 }
-                BoundedValueIndex::BoundedStack(index) => {
-                    evaluator.bounded_identifiers_stack.get(*index)?
-                }
+                BoundedValueIndex::BoundedStack(index) => evaluator
+                    .bounded_identifiers_stack
+                    .get(*index)
+                    .ok_or(PoisonKind::Undefined)?,
             };
             let value = Arc::clone(value);
             evaluate_ops(evaluator, &value, operations.iter())
@@ -40,7 +46,7 @@ pub(super) fn evaluate_ops<'a, I>(
     evaluator: &mut Evaluator,
     mut value: &ModuleValue,
     mut operations: I,
-) -> Option<ModuleValue>
+) -> Result<ModuleValue, PoisonKind>
 where
     I: Iterator<Item = &'a ValueOperation> + 'a,
 {
@@ -48,9 +54,9 @@ where
         match op {
             ValueOperation::Subfield(subfield) => match value {
                 ModuleValue::Object(map) => {
-                    value = map.get(&**subfield)?;
+                    value = map.get(&**subfield).ok_or(PoisonKind::Undefined)?;
                 }
-                _ => None?,
+                _ => return Err(PoisonKind::Undefined),
             },
             ValueOperation::Subscript(subscript) => match value {
                 ModuleValue::Array(array) => {
@@ -59,11 +65,11 @@ where
                 ModuleValue::Dictionary(dict) => {
                     value = eval_dict_op(evaluator, subscript, dict)?;
                 }
-                _ => None?,
+                _ => return Err(PoisonKind::Undefined),
             },
             ValueOperation::FunctionCall(arguments) => match value {
                 ModuleValue::Function(fun) => {
-                    let arguments: Option<Vec<_>> = arguments
+                    let arguments: Result<Vec<_>, _> = arguments
                         .iter()
                         .map(|expr| {
                             evaluator
@@ -72,32 +78,33 @@ where
                         })
                         .collect();
 
-                    let new_value = fun(&evaluator.scan_data.module_ctx, arguments?)?;
+                    let new_value = fun(&evaluator.scan_data.module_ctx, arguments?)
+                        .ok_or(PoisonKind::Undefined)?;
                     return evaluate_ops(evaluator, &new_value, operations);
                 }
-                _ => None?,
+                _ => return Err(PoisonKind::Undefined),
             },
         }
     }
 
-    Some(value.clone())
+    Ok(value.clone())
 }
 
-pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Option<Value> {
+pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Result<Value, PoisonKind> {
     match value {
-        ModuleValue::Integer(v) => Some(Value::Integer(v)),
+        ModuleValue::Integer(v) => Ok(Value::Integer(v)),
         ModuleValue::Float(v) => {
             if v.is_nan() {
-                None
+                Err(PoisonKind::Undefined)
             } else {
-                Some(Value::Float(v))
+                Ok(Value::Float(v))
             }
         }
-        ModuleValue::Bytes(v) => Some(Value::Bytes(v)),
-        ModuleValue::Regex(v) => Some(Value::Regex(v)),
-        ModuleValue::Boolean(v) => Some(Value::Boolean(v)),
+        ModuleValue::Bytes(v) => Ok(Value::Bytes(v)),
+        ModuleValue::Regex(v) => Ok(Value::Regex(v)),
+        ModuleValue::Boolean(v) => Ok(Value::Boolean(v)),
 
-        _ => None,
+        _ => Err(PoisonKind::Undefined),
     }
 }
 
@@ -105,32 +112,31 @@ fn eval_array_op<'a>(
     evaluator: &mut Evaluator,
     subscript: &Expression,
     array: &'a [ModuleValue],
-) -> Option<&'a ModuleValue> {
+) -> Result<&'a ModuleValue, PoisonKind> {
     let index = evaluator.evaluate_expr(subscript)?.unwrap_number()?;
 
-    if let Ok(i) = usize::try_from(index) {
-        array.get(i)
-    } else {
-        None
-    }
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| array.get(i))
+        .ok_or(PoisonKind::Undefined)
 }
 
 fn eval_dict_op<'a>(
     evaluator: &mut Evaluator,
     subscript: &Expression,
     dict: &'a HashMap<Vec<u8>, ModuleValue>,
-) -> Option<&'a ModuleValue> {
+) -> Result<&'a ModuleValue, PoisonKind> {
     let val = evaluator.evaluate_expr(subscript)?.unwrap_bytes()?;
 
-    dict.get(&val)
+    dict.get(&val).ok_or(PoisonKind::Undefined)
 }
 
 fn eval_function_op(
     evaluator: &mut Evaluator,
     fun: fn(&ScanContext, Vec<ModuleValue>) -> Option<ModuleValue>,
     arguments: &[Expression],
-) -> Option<ModuleValue> {
-    let arguments: Option<Vec<_>> = arguments
+) -> Result<ModuleValue, PoisonKind> {
+    let arguments: Result<Vec<_>, _> = arguments
         .iter()
         .map(|expr| {
             evaluator
@@ -139,7 +145,7 @@ fn eval_function_op(
         })
         .collect();
 
-    fun(&evaluator.scan_data.module_ctx, arguments?)
+    fun(&evaluator.scan_data.module_ctx, arguments?).ok_or(PoisonKind::Undefined)
 }
 
 fn expr_value_to_module_value(v: Value) -> ModuleValue {

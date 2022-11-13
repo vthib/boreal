@@ -2,16 +2,19 @@
 use crate::compiler::expression::Expression;
 use boreal_parser::ReadIntegerType;
 
-use super::{Evaluator, Value};
+use super::{Evaluator, PoisonKind, Value};
 
 macro_rules! read {
     ($ty:ty, $slice:expr, $fun:expr) => {{
         let size = std::mem::size_of::<$ty>();
         if size > $slice.len() {
-            None
+            Err(PoisonKind::Undefined)
         } else {
             let (int_bytes, _) = $slice.split_at(size);
-            int_bytes.try_into().ok().map(|v| $fun(v) as i64)
+            int_bytes
+                .try_into()
+                .map(|v| $fun(v) as i64)
+                .map_err(|_| PoisonKind::Undefined)
         }
     }};
 }
@@ -32,12 +35,12 @@ pub(super) fn evaluate_read_integer(
     evaluator: &mut Evaluator,
     addr: &Expression,
     ty: ReadIntegerType,
-) -> Option<Value> {
+) -> Result<Value, PoisonKind> {
     let addr = evaluator.evaluate_expr(addr)?.unwrap_number()?;
 
-    let addr = usize::try_from(addr).ok()?;
+    let addr = usize::try_from(addr).map_err(|_| PoisonKind::Undefined)?;
     if addr >= evaluator.mem.len() {
-        return None;
+        return Err(PoisonKind::Undefined);
     }
     let mem = &evaluator.mem[addr..];
 
@@ -54,5 +57,5 @@ pub(super) fn evaluate_read_integer(
         ReadIntegerType::Int32BE => read_be!(i32, mem),
         ReadIntegerType::Uint32BE => read_be!(u32, mem),
     }?;
-    Some(Value::Integer(v))
+    Ok(Value::Integer(v))
 }

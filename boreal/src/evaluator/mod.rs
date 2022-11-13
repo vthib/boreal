@@ -1,15 +1,15 @@
 //! Provides methods to evaluate expressions.
 //!
-//! Most evaluating methods return an `Option<Value>`. The `None` corresponds to an `Undefined`
-//! value, which can have two different meanings depending on the evaluation pass.
+//! Most evaluating methods return an `Result<Value, PoisonKind>`. The `PoisonKind` represents an
+//! uncomputable value, which can have two different meanings depending on the evaluation pass.
 //!
 //! The first evaluation pass is used to find if there are variables that need to be searched.
 //! For example, if all rules have a "filesize < 50KB" condition that short-circuit the whole
 //! rule's evaluation, then we should not need to scan for variables on any mem that is bigger
 //! than 50KB.
 //!
-//! During this evaluation pass, evaluation of anything related to variables returns the undefined
-//! value (None). This value is fully poisonous, and will be rethrown by basically all of the
+//! During this evaluation pass, evaluation of anything related to variables returns its own
+//! poison kind. This value is fully poisonous, and will be rethrown by basically all of the
 //! operators, except for a few:
 //!
 //! - `and` returns false if one of the operands returned false, regardless of whether some of
@@ -19,8 +19,9 @@
 //! - the for operands may return `true` or `false` if the result does not depend on any poison
 //! value.
 //!
-//! The second evaluation pass is used to fully evaluate the rules. During this pass, None is the
-//! `undefined` value as described by YARA: it is used for all operations that cannot be evaluated:
+//! The second evaluation pass is used to fully evaluate the rules. During this pass, the poisong
+//! kind used is the `undefined` value as described by YARA: it is used for all operations that
+//! cannot be evaluated:
 //!
 //! - Symbols that do not make sense, eg `pe.entrypoint` on a non PE scan.
 //! - Occurences numbers not found, eg `#a[100]`.
@@ -76,17 +77,17 @@ impl Value {
         }
     }
 
-    fn unwrap_number(self) -> Option<i64> {
+    fn unwrap_number(self) -> Result<i64, PoisonKind> {
         match self {
-            Self::Integer(v) => Some(v),
-            _ => None,
+            Self::Integer(v) => Ok(v),
+            _ => Err(PoisonKind::Undefined),
         }
     }
 
-    fn unwrap_bytes(self) -> Option<Vec<u8>> {
+    fn unwrap_bytes(self) -> Result<Vec<u8>, PoisonKind> {
         match self {
-            Self::Bytes(v) => Some(v),
-            _ => None,
+            Self::Bytes(v) => Ok(v),
+            _ => Err(PoisonKind::Undefined),
         }
     }
 }
@@ -157,12 +158,6 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     previous_rules_results: &'scan [bool],
 ) -> Option<bool> {
     let mut evaluator = Evaluator {
-        undefined_kind: match &variables {
-            // If variable evaluations are provided, this is the normal yara evaluation
-            Some(_) => UndefinedKind::Yara,
-            // Otherwise, this is the evaluation to find if rules need variables matches.
-            None => UndefinedKind::Poison,
-        },
         variables,
         mem: scan_data.mem,
         previous_rules_results,
@@ -170,9 +165,11 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
         bounded_identifiers_stack: Vec::new(),
         scan_data,
     };
-    evaluator
-        .evaluate_expr(&rule.condition)
-        .map(|v| v.to_bool())
+    match evaluator.evaluate_expr(&rule.condition) {
+        Ok(v) => Some(v.to_bool()),
+        Err(PoisonKind::Undefined) => Some(false),
+        Err(PoisonKind::VarNeeded) => None,
+    }
 }
 
 struct Evaluator<'scan, 'rule> {
@@ -195,20 +192,17 @@ struct Evaluator<'scan, 'rule> {
 
     // Data related only to the scan, independent of the rule.
     scan_data: &'scan ScanData<'scan>,
-
-    undefined_kind: UndefinedKind,
 }
 
-/// How should the undefined value be considered.
-enum UndefinedKind {
-    /// The undefined value is poisonous.
+enum PoisonKind {
+    /// The poison comes from the need to compute variables.
     ///
     /// This value should always be propagated, unless an operator result can be computed
     /// regardless of any value the poisonous value could take.
     ///
     /// This is used during the first evaluation pass, to find rules that do not depend on
     /// their variables' matches.
-    Poison,
+    VarNeeded,
 
     /// Yara undefined value.
     ///
@@ -217,7 +211,7 @@ enum UndefinedKind {
     ///
     /// This is used during the second evaluation pass, where it represents operations that
     /// could not be computed.
-    Yara,
+    Undefined,
 }
 
 macro_rules! bytes_op {
@@ -230,9 +224,9 @@ macro_rules! bytes_op {
         if $case_insensitive {
             left.make_ascii_lowercase();
             right.make_ascii_lowercase();
-            Some(Value::Boolean(left.$method(&right)))
+            Ok(Value::Boolean(left.$method(&right)))
         } else {
-            Some(Value::Boolean(left.$method(&right)))
+            Ok(Value::Boolean(left.$method(&right)))
         }
     }};
 }
@@ -242,17 +236,17 @@ macro_rules! arith_op_num_and_float {
         let left = $self.evaluate_expr($left)?;
         let right = $self.evaluate_expr($right)?;
         match (left, right) {
-            (Value::Integer(n), Value::Integer(m)) => Some(Value::Integer(n.$wrapping_op(m))),
+            (Value::Integer(n), Value::Integer(m)) => Ok(Value::Integer(n.$wrapping_op(m))),
             (Value::Float(a), Value::Integer(n)) => {
                 #[allow(clippy::cast_precision_loss)]
-                Some(Value::Float(a $op (n as f64)))
+                Ok(Value::Float(a $op (n as f64)))
             },
             (Value::Integer(n), Value::Float(a)) => {
                 #[allow(clippy::cast_precision_loss)]
-                Some(Value::Float((n as f64) $op a))
+                Ok(Value::Float((n as f64) $op a))
             },
-            (Value::Float(a), Value::Float(b)) => Some(Value::Float(a $op b)),
-            (_, _) => None,
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a $op b)),
+            (_, _) => Err(PoisonKind::Undefined),
         }
     }}
 }
@@ -265,24 +259,40 @@ macro_rules! apply_cmp_op {
             (Value::Integer(n), Value::Float(b)) => (n as f64) $op b,
             (Value::Float(a), Value::Integer(m)) => a $op (m as f64),
             (Value::Bytes(a), Value::Bytes(b)) => a $op b,
-            _ => return None,
+            _ => return Err(PoisonKind::Undefined),
         }
     }
 }
 
+macro_rules! get_var {
+    ($self:expr, $var_index:expr) => {{
+        let index = $self.get_variable_index($var_index)?;
+        $self
+            .variables
+            .as_mut()
+            .map(|v| &mut v[index])
+            .ok_or(PoisonKind::VarNeeded)?
+    }};
+}
+
 impl Evaluator<'_, '_> {
-    fn get_variable_index(&self, var_index: VariableIndex) -> Option<usize> {
-        var_index.0.or(self.currently_selected_variable_index)
+    fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, PoisonKind> {
+        var_index
+            .0
+            .or(self.currently_selected_variable_index)
+            .ok_or(PoisonKind::Undefined)
     }
 
-    fn evaluate_expr(&mut self, expr: &Expression) -> Option<Value> {
+    fn evaluate_expr(&mut self, expr: &Expression) -> Result<Value, PoisonKind> {
         match expr {
-            Expression::Filesize => Some(Value::Integer(self.mem.len() as i64)),
+            Expression::Filesize => Ok(Value::Integer(self.mem.len() as i64)),
 
             #[cfg(feature = "object")]
-            Expression::Entrypoint => entrypoint::get_pe_or_elf_entry_point(self.mem),
+            Expression::Entrypoint => {
+                entrypoint::get_pe_or_elf_entry_point(self.mem).ok_or(PoisonKind::Undefined)
+            }
             #[cfg(not(feature = "object"))]
-            Expression::Entrypoint => None,
+            Expression::Entrypoint => Err(PoisonKind::Undefined),
 
             Expression::ReadInteger { addr, ty } => evaluate_read_integer(self, addr, *ty),
 
@@ -296,20 +306,22 @@ impl Evaluator<'_, '_> {
 
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
-                        let index = self.get_variable_index(*variable_index)?;
-                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
+                        let var = get_var!(self, *variable_index);
                         let count = var.count_matches_in(self.mem, from, to);
 
-                        i64::try_from(count).ok().map(Value::Integer)
+                        i64::try_from(count)
+                            .map(Value::Integer)
+                            .map_err(|_| PoisonKind::Undefined)
                     }
-                    _ => None,
+                    _ => Err(PoisonKind::Undefined),
                 }
             }
             Expression::Count(variable_index) => {
-                let index = self.get_variable_index(*variable_index)?;
-                let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
+                let var = get_var!(self, *variable_index);
                 let count = var.count_matches(self.mem);
-                i64::try_from(count).ok().map(Value::Integer)
+                i64::try_from(count)
+                    .map(Value::Integer)
+                    .map_err(|_| PoisonKind::Undefined)
             }
             Expression::Offset {
                 variable_index,
@@ -319,12 +331,12 @@ impl Evaluator<'_, '_> {
 
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
-                        let index = self.get_variable_index(*variable_index)?;
-                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
+                        let var = get_var!(self, *variable_index);
                         var.find_match_occurence(self.mem, v - 1)
                             .map(|mat| Value::Integer(mat.start as i64))
+                            .ok_or(PoisonKind::Undefined)
                     }
-                    Ok(_) | Err(_) => None,
+                    Ok(_) | Err(_) => Err(PoisonKind::Undefined),
                 }
             }
             Expression::Length {
@@ -335,12 +347,12 @@ impl Evaluator<'_, '_> {
 
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
-                        let index = self.get_variable_index(*variable_index)?;
-                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
+                        let var = get_var!(self, *variable_index);
                         var.find_match_occurence(self.mem, v - 1)
                             .map(|mat| Value::Integer(mat.len() as i64))
+                            .ok_or(PoisonKind::Undefined)
                     }
-                    Ok(_) | Err(_) => None,
+                    Ok(_) | Err(_) => Err(PoisonKind::Undefined),
                 }
             }
 
@@ -348,9 +360,9 @@ impl Evaluator<'_, '_> {
                 let v = self.evaluate_expr(expr)?;
 
                 match v {
-                    Value::Integer(n) => Some(Value::Integer(-n)),
-                    Value::Float(a) => Some(Value::Float(-a)),
-                    _ => None,
+                    Value::Integer(n) => Ok(Value::Integer(-n)),
+                    Value::Float(a) => Ok(Value::Float(-a)),
+                    _ => Err(PoisonKind::Undefined),
                 }
             }
             Expression::Add(left, right) => {
@@ -368,143 +380,115 @@ impl Evaluator<'_, '_> {
                 match (left, right) {
                     (Value::Integer(n), Value::Integer(m)) => {
                         if m == 0 {
-                            None
+                            Err(PoisonKind::Undefined)
                         } else {
-                            n.checked_div(m).map(Value::Integer)
+                            n.checked_div(m)
+                                .map(Value::Integer)
+                                .ok_or(PoisonKind::Undefined)
                         }
                     }
                     (Value::Float(a), Value::Integer(n)) =>
                     {
                         #[allow(clippy::cast_precision_loss)]
-                        Some(Value::Float(a / (n as f64)))
+                        Ok(Value::Float(a / (n as f64)))
                     }
                     (Value::Integer(n), Value::Float(a)) =>
                     {
                         #[allow(clippy::cast_precision_loss)]
-                        Some(Value::Float((n as f64) / a))
+                        Ok(Value::Float((n as f64) / a))
                     }
-                    (Value::Float(a), Value::Float(b)) => Some(Value::Float(a / b)),
-                    (_, _) => None,
+                    (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
+                    (_, _) => Err(PoisonKind::Undefined),
                 }
             }
             Expression::Mod(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                left.checked_rem(right).map(Value::Integer)
+                left.checked_rem(right)
+                    .map(Value::Integer)
+                    .ok_or(PoisonKind::Undefined)
             }
 
             Expression::BitwiseXor(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Integer(left ^ right))
+                Ok(Value::Integer(left ^ right))
             }
             Expression::BitwiseAnd(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Integer(left & right))
+                Ok(Value::Integer(left & right))
             }
             Expression::BitwiseOr(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
-                Some(Value::Integer(left | right))
+                Ok(Value::Integer(left | right))
             }
             Expression::BitwiseNot(expr) => {
                 let v = self.evaluate_expr(expr)?.unwrap_number()?;
-                Some(Value::Integer(!v))
+                Ok(Value::Integer(!v))
             }
             Expression::ShiftLeft(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
                 if right < 0 {
-                    None
+                    Err(PoisonKind::Undefined)
                 } else if right >= 64 {
-                    Some(Value::Integer(0))
+                    Ok(Value::Integer(0))
                 } else {
-                    Some(Value::Integer(left << right))
+                    Ok(Value::Integer(left << right))
                 }
             }
             Expression::ShiftRight(left, right) => {
                 let left = self.evaluate_expr(left)?.unwrap_number()?;
                 let right = self.evaluate_expr(right)?.unwrap_number()?;
                 if right < 0 {
-                    None
+                    Err(PoisonKind::Undefined)
                 } else if right >= 64 {
-                    Some(Value::Integer(0))
+                    Ok(Value::Integer(0))
                 } else {
-                    Some(Value::Integer(left >> right))
+                    Ok(Value::Integer(left >> right))
                 }
             }
 
             Expression::And(ops) => {
-                match self.undefined_kind {
-                    UndefinedKind::Poison => {
-                        let mut seen_poison = false;
-                        // Return:
-                        // - false if any operand evaluates to false
-                        // - true if all operands evaluate to true
-                        // - poison otherwise
-                        for op in ops {
-                            match self.evaluate_expr(op) {
-                                Some(v) => {
-                                    if !v.to_bool() {
-                                        return Some(Value::Boolean(false));
-                                    }
-                                }
-                                None => seen_poison = true,
-                            };
-                        }
-                        if seen_poison {
-                            None
-                        } else {
-                            Some(Value::Boolean(true))
-                        }
-                    }
-                    UndefinedKind::Yara => {
-                        // Consider any undefined value as false.
-                        for op in ops {
-                            let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
-                            if !res {
-                                return Some(Value::Boolean(false));
+                let mut var_needed = false;
+
+                for op in ops {
+                    match self.evaluate_expr(op) {
+                        Ok(v) => {
+                            if !v.to_bool() {
+                                return Ok(Value::Boolean(false));
                             }
                         }
-                        Some(Value::Boolean(true))
-                    }
+                        Err(PoisonKind::Undefined) => return Ok(Value::Boolean(false)),
+                        Err(PoisonKind::VarNeeded) => var_needed = true,
+                    };
+                }
+                if var_needed {
+                    Err(PoisonKind::VarNeeded)
+                } else {
+                    Ok(Value::Boolean(true))
                 }
             }
             Expression::Or(ops) => {
-                match self.undefined_kind {
-                    UndefinedKind::Poison => {
-                        let mut seen_poison = false;
-                        // Return:
-                        // - true if any operand evaluates to true
-                        // - false if all operands evaluate to false
-                        // - poison otherwise
-                        for op in ops {
-                            match self.evaluate_expr(op) {
-                                Some(v) => {
-                                    if v.to_bool() {
-                                        return Some(Value::Boolean(true));
-                                    }
-                                }
-                                None => seen_poison = true,
-                            };
-                        }
-                        if seen_poison {
-                            None
-                        } else {
-                            Some(Value::Boolean(false))
-                        }
-                    }
-                    UndefinedKind::Yara => {
-                        // Consider any undefined value as false.
-                        for op in ops {
-                            let res = self.evaluate_expr(op).map_or(false, |v| v.to_bool());
-                            if res {
-                                return Some(Value::Boolean(true));
+                let mut var_needed = false;
+
+                for op in ops {
+                    match self.evaluate_expr(op) {
+                        Ok(v) => {
+                            if v.to_bool() {
+                                return Ok(Value::Boolean(true));
                             }
                         }
-                        Some(Value::Boolean(false))
-                    }
+                        Err(PoisonKind::Undefined) => (),
+                        Err(PoisonKind::VarNeeded) => var_needed = true,
+                    };
+                }
+                if var_needed {
+                    Err(PoisonKind::VarNeeded)
+                } else {
+                    Ok(Value::Boolean(false))
                 }
             }
             Expression::Cmp {
@@ -521,7 +505,7 @@ impl Evaluator<'_, '_> {
                     (true, false) => apply_cmp_op!(left, right, <),
                     (true, true) => apply_cmp_op!(left, right, <=),
                 };
-                Some(Value::Boolean(res))
+                Ok(Value::Boolean(res))
             }
 
             Expression::Eq(left, right) => {
@@ -548,9 +532,9 @@ impl Evaluator<'_, '_> {
                 if *case_insensitive {
                     left.make_ascii_lowercase();
                     right.make_ascii_lowercase();
-                    Some(Value::Boolean(memmem::find(&left, &right).is_some()))
+                    Ok(Value::Boolean(memmem::find(&left, &right).is_some()))
                 } else {
-                    Some(Value::Boolean(memmem::find(&left, &right).is_some()))
+                    Ok(Value::Boolean(memmem::find(&left, &right).is_some()))
                 }
             }
             Expression::StartsWith {
@@ -572,31 +556,27 @@ impl Evaluator<'_, '_> {
                 left.make_ascii_lowercase();
                 let mut right = self.evaluate_expr(right)?.unwrap_bytes()?;
                 right.make_ascii_lowercase();
-                Some(Value::Boolean(left == right))
+                Ok(Value::Boolean(left == right))
             }
             Expression::Matches(expr, regex) => {
                 let s = self.evaluate_expr(expr)?.unwrap_bytes()?;
-                Some(Value::Boolean(regex.as_regex().is_match(&s)))
+                Ok(Value::Boolean(regex.as_regex().is_match(&s)))
             }
-            Expression::Defined(expr) => {
-                let expr = self.evaluate_expr(expr);
-
-                match self.undefined_kind {
-                    UndefinedKind::Poison => expr.map(|_| Value::Boolean(true)),
-                    UndefinedKind::Yara => Some(Value::Boolean(expr.is_some())),
-                }
-            }
+            Expression::Defined(expr) => match self.evaluate_expr(expr) {
+                Ok(_) => Ok(Value::Boolean(true)),
+                Err(PoisonKind::Undefined) => Ok(Value::Boolean(false)),
+                Err(e) => Err(e),
+            },
             Expression::Not(expr) => {
                 let v = self.evaluate_expr(expr)?.to_bool();
-                Some(Value::Boolean(!v))
+                Ok(Value::Boolean(!v))
             }
 
             Expression::Variable(variable_index) => {
                 // For this expression, we can use the variables set to retrieve the truth value,
                 // no need to rescan.
-                let index = self.get_variable_index(*variable_index)?;
-                let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
-                Some(Value::Boolean(var.find(self.mem)))
+                let var = get_var!(self, *variable_index);
+                Ok(Value::Boolean(var.find(self.mem)))
             }
 
             Expression::VariableAt {
@@ -607,11 +587,10 @@ impl Evaluator<'_, '_> {
                 let offset = self.evaluate_expr(offset)?.unwrap_number()?;
                 match usize::try_from(offset) {
                     Ok(offset) => {
-                        let index = self.get_variable_index(*variable_index)?;
-                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
-                        Some(Value::Boolean(var.find_at(self.mem, offset)))
+                        let var = get_var!(self, *variable_index);
+                        Ok(Value::Boolean(var.find_at(self.mem, offset)))
                     }
-                    Err(_) => Some(Value::Boolean(false)),
+                    Err(_) => Ok(Value::Boolean(false)),
                 }
             }
 
@@ -625,12 +604,11 @@ impl Evaluator<'_, '_> {
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
-                        let index = self.get_variable_index(*variable_index)?;
-                        let var = self.variables.as_mut().map(|vars| &mut vars[index])?;
+                        let var = get_var!(self, *variable_index);
 
-                        Some(Value::Boolean(var.find_in(self.mem, from, to)))
+                        Ok(Value::Boolean(var.find_in(self.mem, from, to)))
                     }
-                    _ => Some(Value::Boolean(false)),
+                    _ => Ok(Value::Boolean(false)),
                 }
             }
 
@@ -641,7 +619,7 @@ impl Evaluator<'_, '_> {
             } => {
                 let selection = match self.evaluate_for_selection(selection, set.elements.len())? {
                     ForSelectionEvaluation::Evaluator(e) => e,
-                    ForSelectionEvaluation::Value(v) => return Some(v),
+                    ForSelectionEvaluation::Value(v) => return Ok(v),
                 };
 
                 let prev_selected_var_index = self.currently_selected_variable_index;
@@ -673,15 +651,13 @@ impl Evaluator<'_, '_> {
                 // used for percent expr, which is not possible in this context.
                 let selection = match self.evaluate_for_selection(selection, 0)? {
                     ForSelectionEvaluation::Evaluator(e) => e,
-                    ForSelectionEvaluation::Value(v) => return Some(v),
+                    ForSelectionEvaluation::Value(v) => return Ok(v),
                 };
 
                 match self.evaluate_for_iterator(iterator, selection, body) {
-                    Some(v) => Some(v),
-                    None => match self.undefined_kind {
-                        UndefinedKind::Poison => None,
-                        UndefinedKind::Yara => Some(Value::Boolean(false)),
-                    },
+                    Ok(v) => Ok(v),
+                    Err(PoisonKind::Undefined) => Ok(Value::Boolean(false)),
+                    Err(e) => Err(e),
                 }
             }
 
@@ -690,38 +666,41 @@ impl Evaluator<'_, '_> {
 
                 let mut selection = match self.evaluate_for_selection(selection, nb_elements)? {
                     ForSelectionEvaluation::Evaluator(e) => e,
-                    ForSelectionEvaluation::Value(v) => return Some(v),
+                    ForSelectionEvaluation::Value(v) => return Ok(v),
                 };
 
                 for _ in 0..set.already_matched {
                     if let Some(result) = selection.add_result_and_check(true) {
-                        return Some(Value::Boolean(result));
+                        return Ok(Value::Boolean(result));
                     }
                 }
 
                 for index in &set.elements {
                     let v = self.previous_rules_results[*index];
                     if let Some(result) = selection.add_result_and_check(v) {
-                        return Some(Value::Boolean(result));
+                        return Ok(Value::Boolean(result));
                     }
                 }
-                Some(Value::Boolean(selection.end()))
+                Ok(Value::Boolean(selection.end()))
             }
 
             Expression::Module(module_expr) => module::evaluate_expr(self, module_expr)
                 .and_then(module::module_value_to_expr_value),
 
-            Expression::ExternalSymbol(index) => {
-                self.scan_data.external_symbols.get(*index).cloned()
-            }
+            Expression::ExternalSymbol(index) => self
+                .scan_data
+                .external_symbols
+                .get(*index)
+                .cloned()
+                .ok_or(PoisonKind::Undefined),
 
-            Expression::Rule(index) => Some(Value::Boolean(self.previous_rules_results[*index])),
+            Expression::Rule(index) => Ok(Value::Boolean(self.previous_rules_results[*index])),
 
-            Expression::Integer(v) => Some(Value::Integer(*v)),
-            Expression::Double(v) => Some(Value::Float(*v)),
-            Expression::Bytes(v) => Some(Value::Bytes(v.clone())),
-            Expression::Regex(v) => Some(Value::Regex(v.clone())),
-            Expression::Boolean(v) => Some(Value::Boolean(*v)),
+            Expression::Integer(v) => Ok(Value::Integer(*v)),
+            Expression::Double(v) => Ok(Value::Float(*v)),
+            Expression::Bytes(v) => Ok(Value::Bytes(v.clone())),
+            Expression::Regex(v) => Ok(Value::Regex(v.clone())),
+            Expression::Boolean(v) => Ok(Value::Boolean(*v)),
         }
     }
 
@@ -729,23 +708,21 @@ impl Evaluator<'_, '_> {
         &mut self,
         selection: &ForSelection,
         nb_elements: usize,
-    ) -> Option<ForSelectionEvaluation> {
+    ) -> Result<ForSelectionEvaluation, PoisonKind> {
         use ForSelectionEvaluation as FSEvaluation;
         use ForSelectionEvaluator as FSEvaluator;
 
         match selection {
-            ForSelection::Any => Some(FSEvaluation::Evaluator(FSEvaluator::Number(1))),
-            ForSelection::All => Some(FSEvaluation::Evaluator(FSEvaluator::All)),
-            ForSelection::None => Some(FSEvaluation::Evaluator(FSEvaluator::None)),
+            ForSelection::Any => Ok(FSEvaluation::Evaluator(FSEvaluator::Number(1))),
+            ForSelection::All => Ok(FSEvaluation::Evaluator(FSEvaluator::All)),
+            ForSelection::None => Ok(FSEvaluation::Evaluator(FSEvaluator::None)),
             ForSelection::Expr { expr, as_percent } => {
                 let mut value = match self.evaluate_expr(expr).and_then(Value::unwrap_number) {
-                    Some(v) => v,
-                    None => {
-                        return match self.undefined_kind {
-                            UndefinedKind::Poison => None,
-                            UndefinedKind::Yara => Some(FSEvaluation::Value(Value::Boolean(false))),
-                        };
+                    Ok(v) => v,
+                    Err(PoisonKind::Undefined) => {
+                        return Ok(FSEvaluation::Value(Value::Boolean(false)))
                     }
+                    Err(e) => return Err(e),
                 };
 
                 #[allow(clippy::cast_precision_loss)]
@@ -759,15 +736,15 @@ impl Evaluator<'_, '_> {
                     }
                 } else if value == 0 {
                     // Special case: 0 without percent is treated as None
-                    return Some(FSEvaluation::Evaluator(FSEvaluator::None));
+                    return Ok(FSEvaluation::Evaluator(FSEvaluator::None));
                 }
 
                 if value <= 0 {
-                    Some(FSEvaluation::Value(Value::Boolean(true)))
+                    Ok(FSEvaluation::Value(Value::Boolean(true)))
                 } else {
                     #[allow(clippy::cast_sign_loss)]
                     let value = { value as u64 };
-                    Some(FSEvaluation::Evaluator(FSEvaluator::Number(value)))
+                    Ok(FSEvaluation::Evaluator(FSEvaluator::Number(value)))
                 }
             }
         }
@@ -778,34 +755,32 @@ impl Evaluator<'_, '_> {
         mut selection: ForSelectionEvaluator,
         body: &Expression,
         iter: I,
-    ) -> Option<Value>
+    ) -> Result<Value, PoisonKind>
     where
         I: IntoIterator<Item = usize>,
     {
-        let mut seen_poison = false;
+        let mut var_needed = false;
 
         for index in iter {
             self.currently_selected_variable_index = Some(index);
             let v = match self.evaluate_expr(body) {
-                Some(v) => v.to_bool(),
-                None => match self.undefined_kind {
-                    UndefinedKind::Poison => {
-                        seen_poison = true;
-                        continue;
-                    }
-                    UndefinedKind::Yara => false,
-                },
+                Ok(v) => v.to_bool(),
+                Err(PoisonKind::Undefined) => false,
+                Err(PoisonKind::VarNeeded) => {
+                    var_needed = true;
+                    continue;
+                }
             };
 
             if let Some(result) = selection.add_result_and_check(v) {
-                return Some(Value::Boolean(result));
+                return Ok(Value::Boolean(result));
             }
         }
 
-        if seen_poison {
-            None
+        if var_needed {
+            Err(PoisonKind::VarNeeded)
         } else {
-            Some(Value::Boolean(selection.end()))
+            Ok(Value::Boolean(selection.end()))
         }
     }
 
@@ -814,8 +789,8 @@ impl Evaluator<'_, '_> {
         iterator: &ForIterator,
         mut selection: ForSelectionEvaluator,
         body: &Expression,
-    ) -> Option<Value> {
-        let mut seen_poison = false;
+    ) -> Result<Value, PoisonKind> {
+        let mut var_needed = false;
         let prev_stack_len = self.bounded_identifiers_stack.len();
 
         let selection = match iterator {
@@ -829,18 +804,16 @@ impl Evaluator<'_, '_> {
                             let v = self.evaluate_expr(body);
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
                             let v = match v {
-                                Some(v) => v.to_bool(),
-                                None => match self.undefined_kind {
-                                    UndefinedKind::Poison => {
-                                        seen_poison = true;
-                                        continue;
-                                    }
-                                    UndefinedKind::Yara => false,
-                                },
+                                Ok(v) => v.to_bool(),
+                                Err(PoisonKind::Undefined) => false,
+                                Err(PoisonKind::VarNeeded) => {
+                                    var_needed = true;
+                                    continue;
+                                }
                             };
 
                             if let Some(result) = selection.add_result_and_check(v) {
-                                return Some(Value::Boolean(result));
+                                return Ok(Value::Boolean(result));
                             }
                         }
                     }
@@ -852,22 +825,20 @@ impl Evaluator<'_, '_> {
                             let v = self.evaluate_expr(body);
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
                             let v = match v {
-                                Some(v) => v.to_bool(),
-                                None => match self.undefined_kind {
-                                    UndefinedKind::Poison => {
-                                        seen_poison = true;
-                                        continue;
-                                    }
-                                    UndefinedKind::Yara => false,
-                                },
+                                Ok(v) => v.to_bool(),
+                                Err(PoisonKind::Undefined) => false,
+                                Err(PoisonKind::VarNeeded) => {
+                                    var_needed = true;
+                                    continue;
+                                }
                             };
 
                             if let Some(result) = selection.add_result_and_check(v) {
-                                return Some(Value::Boolean(result));
+                                return Ok(Value::Boolean(result));
                             }
                         }
                     }
-                    _ => return None,
+                    _ => return Err(PoisonKind::Undefined),
                 };
 
                 selection
@@ -877,7 +848,7 @@ impl Evaluator<'_, '_> {
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
 
                 if from > to {
-                    return None;
+                    return Err(PoisonKind::Undefined);
                 }
 
                 for value in from..=to {
@@ -886,18 +857,16 @@ impl Evaluator<'_, '_> {
                     let v = self.evaluate_expr(body);
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
                     let v = match v {
-                        Some(v) => v.to_bool(),
-                        None => match self.undefined_kind {
-                            UndefinedKind::Poison => {
-                                seen_poison = true;
-                                continue;
-                            }
-                            UndefinedKind::Yara => false,
-                        },
+                        Ok(v) => v.to_bool(),
+                        Err(PoisonKind::Undefined) => false,
+                        Err(PoisonKind::VarNeeded) => {
+                            var_needed = true;
+                            continue;
+                        }
                     };
 
                     if let Some(result) = selection.add_result_and_check(v) {
-                        return Some(Value::Boolean(result));
+                        return Ok(Value::Boolean(result));
                     }
                 }
                 selection
@@ -912,43 +881,41 @@ impl Evaluator<'_, '_> {
                     let v = self.evaluate_expr(body);
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
                     let v = match v {
-                        Some(v) => v.to_bool(),
-                        None => match self.undefined_kind {
-                            UndefinedKind::Poison => {
-                                seen_poison = true;
-                                continue;
-                            }
-                            UndefinedKind::Yara => false,
-                        },
+                        Ok(v) => v.to_bool(),
+                        Err(PoisonKind::Undefined) => false,
+                        Err(PoisonKind::VarNeeded) => {
+                            var_needed = true;
+                            continue;
+                        }
                     };
 
                     if let Some(result) = selection.add_result_and_check(v) {
-                        return Some(Value::Boolean(result));
+                        return Ok(Value::Boolean(result));
                     }
                 }
                 selection
             }
         };
 
-        if seen_poison {
-            None
+        if var_needed {
+            Err(PoisonKind::VarNeeded)
         } else {
-            Some(Value::Boolean(selection.end()))
+            Ok(Value::Boolean(selection.end()))
         }
     }
 }
 
-fn eval_eq_values(left: Value, right: Value) -> Option<bool> {
+fn eval_eq_values(left: Value, right: Value) -> Result<bool, PoisonKind> {
     match (left, right) {
-        (Value::Integer(n), Value::Integer(m)) => Some(n == m),
-        (Value::Float(a), Value::Float(b)) => Some((a - b).abs() < f64::EPSILON),
+        (Value::Integer(n), Value::Integer(m)) => Ok(n == m),
+        (Value::Float(a), Value::Float(b)) => Ok((a - b).abs() < f64::EPSILON),
         #[allow(clippy::cast_precision_loss)]
         (Value::Integer(n), Value::Float(a)) | (Value::Float(a), Value::Integer(n)) => {
-            Some((a - (n as f64)).abs() < f64::EPSILON)
+            Ok((a - (n as f64)).abs() < f64::EPSILON)
         }
-        (Value::Bytes(a), Value::Bytes(b)) => Some(a == b),
-        (Value::Boolean(a), Value::Boolean(b)) => Some(a == b),
-        _ => None,
+        (Value::Bytes(a), Value::Bytes(b)) => Ok(a == b),
+        (Value::Boolean(a), Value::Boolean(b)) => Ok(a == b),
+        _ => Err(PoisonKind::Undefined),
     }
 }
 
