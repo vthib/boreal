@@ -880,7 +880,8 @@ mod tests {
         test_eval_with_poison(&single_var_rule("any of them"), b"", None);
         test_eval_with_poison(&single_var_rule("all of them"), b"", None);
         test_eval_with_poison(&single_var_rule("none of them"), b"", None);
-        test_eval_with_poison(&single_var_rule("5 of them"), b"", None);
+        test_eval_with_poison(&single_var_rule("5 of them"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 of them"), b"", None);
         test_eval_with_poison(&single_var_rule("5% of them"), b"", None);
         test_eval_with_poison(&single_var_rule("#a of them"), b"", None);
         test_eval_with_poison(&single_var_rule("#a% of them"), b"", None);

@@ -681,7 +681,7 @@ impl Evaluator<'_, '_> {
                     }
                 }
 
-                Ok(Value::Boolean(selection.end()))
+                selection.end(0)
             }
 
             Expression::Module(module_expr) => module::evaluate_expr(self, module_expr)
@@ -759,7 +759,7 @@ impl Evaluator<'_, '_> {
     where
         I: IntoIterator<Item = usize>,
     {
-        let mut var_needed = false;
+        let mut nb_vars_needed = 0;
 
         for index in iter {
             self.currently_selected_variable_index = Some(index);
@@ -767,7 +767,7 @@ impl Evaluator<'_, '_> {
                 Ok(v) => v.to_bool(),
                 Err(PoisonKind::Undefined) => false,
                 Err(PoisonKind::VarNeeded) => {
-                    var_needed = true;
+                    nb_vars_needed += 1;
                     continue;
                 }
             };
@@ -777,17 +777,7 @@ impl Evaluator<'_, '_> {
             }
         }
 
-        // XXX: This is not optimal: we could know that the result is false or not depending on
-        // the number of poisoned values. However, on this type of iterator, it is very hard
-        // to find a situation where we mix poisoned values and non poisoned, either all are
-        // poisoned or none, so it's not clear if there really is anything to fix. Worst case
-        // scenario, the rule is reported as poisoned instead of decided, and variables are
-        // scanned.
-        if var_needed {
-            Err(PoisonKind::VarNeeded)
-        } else {
-            Ok(Value::Boolean(selection.end()))
-        }
+        selection.end(nb_vars_needed)
     }
 
     fn evaluate_for_iterator(
@@ -796,7 +786,7 @@ impl Evaluator<'_, '_> {
         mut selection: ForSelectionEvaluator,
         body: &Expression,
     ) -> Result<Value, PoisonKind> {
-        let mut var_needed = false;
+        let mut nb_vars_needed = 0;
         let prev_stack_len = self.bounded_identifiers_stack.len();
 
         let selection = match iterator {
@@ -813,7 +803,7 @@ impl Evaluator<'_, '_> {
                                 Ok(v) => v.to_bool(),
                                 Err(PoisonKind::Undefined) => false,
                                 Err(PoisonKind::VarNeeded) => {
-                                    var_needed = true;
+                                    nb_vars_needed += 1;
                                     continue;
                                 }
                             };
@@ -834,7 +824,7 @@ impl Evaluator<'_, '_> {
                                 Ok(v) => v.to_bool(),
                                 Err(PoisonKind::Undefined) => false,
                                 Err(PoisonKind::VarNeeded) => {
-                                    var_needed = true;
+                                    nb_vars_needed += 1;
                                     continue;
                                 }
                             };
@@ -866,7 +856,7 @@ impl Evaluator<'_, '_> {
                         Ok(v) => v.to_bool(),
                         Err(PoisonKind::Undefined) => false,
                         Err(PoisonKind::VarNeeded) => {
-                            var_needed = true;
+                            nb_vars_needed += 1;
                             continue;
                         }
                     };
@@ -890,7 +880,7 @@ impl Evaluator<'_, '_> {
                         Ok(v) => v.to_bool(),
                         Err(PoisonKind::Undefined) => false,
                         Err(PoisonKind::VarNeeded) => {
-                            var_needed = true;
+                            nb_vars_needed += 1;
                             continue;
                         }
                     };
@@ -903,17 +893,7 @@ impl Evaluator<'_, '_> {
             }
         };
 
-        // XXX: This is not optimal: we could know that the result is false or not depending on
-        // the number of poisoned values. However, on this type of iterator, it is very hard
-        // to find a situation where we mix poisoned values and non poisoned, either all are
-        // poisoned or none, so it's not clear if there really is anything to fix. Worst case
-        // scenario, the rule is reported as poisoned instead of decided, and variables are
-        // scanned.
-        if var_needed {
-            Err(PoisonKind::VarNeeded)
-        } else {
-            Ok(Value::Boolean(selection.end()))
-        }
+        selection.end(nb_vars_needed)
     }
 }
 
@@ -987,10 +967,16 @@ impl ForSelectionEvaluator {
     }
 
     /// Return final value, no other matches can happen.
-    fn end(self) -> bool {
+    ///
+    /// `nb_vars_needed` indicates how many evaluations were not taken into account because it
+    /// needed var matches computation. A result should only be returned if the value cannot change
+    /// depending on any value those evaluations can take.
+    fn end(self, nb_vars_needed: u64) -> Result<Value, PoisonKind> {
         match self {
-            Self::All | Self::None => true,
-            Self::Number(_) => false,
+            Self::All | Self::None if nb_vars_needed > 0 => Err(PoisonKind::VarNeeded),
+            Self::All | Self::None => Ok(Value::Boolean(true)),
+            Self::Number(n) if nb_vars_needed >= n => Err(PoisonKind::VarNeeded),
+            Self::Number(_) => Ok(Value::Boolean(false)),
         }
     }
 }
