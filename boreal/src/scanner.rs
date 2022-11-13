@@ -405,8 +405,600 @@ impl std::fmt::Display for DefineSymbolError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashMap;
+
+    use crate::module::{ScanContext, StaticValue, Type, Value as ModuleValue};
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+    use crate::Compiler;
+
+    use super::*;
+
+    struct Test;
+
+    impl Module for Test {
+        fn get_name(&self) -> &'static str {
+            "test"
+        }
+
+        fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+            [(
+                "to_bytes",
+                StaticValue::function(Self::to_bytes, vec![vec![Type::Integer]], Type::Bytes),
+            )]
+            .into()
+        }
+
+        fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {
+            [
+                ("array", Type::array(Type::Integer)),
+                ("dict", Type::dict(Type::Integer)),
+            ]
+            .into()
+        }
+
+        fn get_dynamic_values(&self, _: &mut ScanContext) -> HashMap<&'static str, ModuleValue> {
+            [
+                ("array", ModuleValue::Array(vec![ModuleValue::Integer(3)])),
+                (
+                    "dict",
+                    ModuleValue::Dictionary([(b"a".to_vec(), ModuleValue::Integer(3))].into()),
+                ),
+            ]
+            .into()
+        }
+    }
+
+    impl Test {
+        fn to_bytes(_ctx: &ScanContext, args: Vec<ModuleValue>) -> Option<ModuleValue> {
+            let mut args = args.into_iter();
+            let v: i64 = args.next()?.try_into().ok()?;
+            Some(ModuleValue::Bytes(format!("{}", v).into_bytes()))
+        }
+    }
+
+    fn empty_rule(cond: &str) -> String {
+        format!(
+            r#"
+            import "test"
+
+            rule a {{
+                condition: {}
+            }}
+        "#,
+            cond
+        )
+    }
+
+    fn single_var_rule(cond: &str) -> String {
+        format!(
+            r#"
+            import "test"
+
+            rule a {{
+                strings:
+                    $a = /abc/
+                condition:
+                    {}
+            }}
+        "#,
+            cond
+        )
+    }
+
+    #[track_caller]
+    fn test_eval_with_poison(rule_str: &str, mem: &[u8], expected: Option<bool>) {
+        let mut compiler = Compiler::default();
+        let _ = compiler.add_module(Test);
+        compiler.add_rules_str(rule_str).unwrap();
+        let scanner = compiler.into_scanner();
+
+        let scan_data = ScanData::new(
+            mem,
+            &scanner.inner.modules,
+            &scanner.external_symbols_values,
+        );
+        let mut previous_results = Vec::new();
+        let rules = &scanner.inner.rules;
+        for rule in &rules[..(rules.len() - 1)] {
+            previous_results
+                .push(evaluate_rule(rule, None, &scan_data, &previous_results).unwrap());
+        }
+        let last_res = evaluate_rule(&rules[rules.len() - 1], None, &scan_data, &previous_results);
+
+        assert_eq!(last_res, expected);
+    }
+
+    #[test]
+    fn test_poison_filesize() {
+        test_eval_with_poison(&empty_rule("filesize"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("filesize"), b"a", Some(true));
+    }
+
+    #[test]
+    fn test_poison_entrypoint() {
+        test_eval_with_poison(&empty_rule("entrypoint"), b"", Some(false));
+    }
+
+    #[test]
+    fn test_poison_read_integer() {
+        test_eval_with_poison(&empty_rule("uint16(0)"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("uint16(0)"), b"abc", Some(true));
+        test_eval_with_poison(&single_var_rule("uint16(#a)"), b"abc", None);
+    }
+
+    #[test]
+    fn test_poison_count_in_range() {
+        test_eval_with_poison(&empty_rule("# in (0..3)"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("#a in (0..3)"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a in (0..#a)"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a in (#a..1)"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a in (0..entrypoint)"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("#a in (entrypoint..5)"), b"", Some(false));
+    }
+
+    #[test]
+    fn test_poison_count() {
+        test_eval_with_poison(&single_var_rule("#a"), b"", None);
+        test_eval_with_poison(&empty_rule("#"), b"", Some(false));
+    }
+
+    #[test]
+    fn test_poison_offset() {
+        test_eval_with_poison(&single_var_rule("@a"), b"", None);
+        test_eval_with_poison(&empty_rule("@"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("@a[2]"), b"", None);
+        test_eval_with_poison(&single_var_rule("@a[entrypoint]"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("@a[#a]"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_length() {
+        test_eval_with_poison(&single_var_rule("!a"), b"", None);
+        test_eval_with_poison(&empty_rule("!"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("!a[2]"), b"", None);
+        test_eval_with_poison(&single_var_rule("!a[entrypoint]"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("!a[#a]"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_neg() {
+        test_eval_with_poison(&empty_rule("-1"), b"", Some(true));
+        test_eval_with_poison(&single_var_rule("-#a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_add() {
+        test_eval_with_poison(&empty_rule("1 + 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 + entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint + 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 + #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a + 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_mul() {
+        test_eval_with_poison(&empty_rule("1 * 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 * entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint * 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 * #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a * 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_sub() {
+        test_eval_with_poison(&empty_rule("1 - 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 - entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint - 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 - #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a - 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_div() {
+        test_eval_with_poison(&empty_rule("4 \\ 3"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 \\ uint8(0)"), b"\0", Some(false));
+        test_eval_with_poison(&empty_rule("1 \\ entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint \\ 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 \\ #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a \\ 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_mod() {
+        test_eval_with_poison(&empty_rule("4 % 3"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 % uint8(0)"), b"\0", Some(false));
+        test_eval_with_poison(&empty_rule("1 % entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint % 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 % #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a % 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_bitwise_xor() {
+        test_eval_with_poison(&empty_rule("1 ^ 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 ^ entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint ^ 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 ^ #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a ^ 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_bitwise_and() {
+        test_eval_with_poison(&empty_rule("1 & 2"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("1 & entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint & 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 & #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a & 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_bitwise_or() {
+        test_eval_with_poison(&empty_rule("1 | 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 | entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint | 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 | #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a | 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_bitwise_not() {
+        test_eval_with_poison(&empty_rule("~1"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("~entrypoint"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("~#a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_shift_left() {
+        test_eval_with_poison(&empty_rule("1 << 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 << -2"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("1 << entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint << 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 << #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a << 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_shift_right() {
+        test_eval_with_poison(&empty_rule("2 >> 1"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("2 >> -1"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("1 >> entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint >> 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("1 >> #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a >> 1"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_and() {
+        test_eval_with_poison(&empty_rule("true and true"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("true and entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint and true"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("#a and true"), b"", None);
+        test_eval_with_poison(&single_var_rule("true and #a"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a and false"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("false and #a"), b"", Some(false));
+    }
+
+    #[test]
+    fn test_poison_or() {
+        test_eval_with_poison(&empty_rule("true or false"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("true or entrypoint"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("entrypoint or true"), b"", Some(true));
+        test_eval_with_poison(&single_var_rule("#a or true"), b"", Some(true));
+        test_eval_with_poison(&single_var_rule("true or #a"), b"", Some(true));
+        test_eval_with_poison(&single_var_rule("#a or false"), b"", None);
+        test_eval_with_poison(&single_var_rule("false or #a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_cmp() {
+        test_eval_with_poison(&empty_rule("1 <= 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 < entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint >= 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("#a <= 2"), b"", None);
+        test_eval_with_poison(&single_var_rule("1 > #a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_eq() {
+        test_eval_with_poison(&empty_rule("1 == 2"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("1 == entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint == 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("#a == 2"), b"", None);
+        test_eval_with_poison(&single_var_rule("1 == #a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_not_eq() {
+        test_eval_with_poison(&empty_rule("1 != 2"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("1 != entrypoint"), b"", Some(false));
+        test_eval_with_poison(&empty_rule("entrypoint != 1"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("#a != 2"), b"", None);
+        test_eval_with_poison(&single_var_rule("1 != #a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_contains() {
+        test_eval_with_poison(&empty_rule(r#""abc" contains "b""#), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule(r#""a" icontains test.to_bytes(entrypoint)"#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &empty_rule(r#"test.to_bytes(entrypoint) contains "a""#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#""a" icontains test.to_bytes(#a)"#),
+            b"",
+            None,
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#"test.to_bytes(#a) contains "a""#),
+            b"",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_poison_startswith() {
+        test_eval_with_poison(&empty_rule(r#""ab" startswith "a""#), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule(r#""a" istartswith test.to_bytes(entrypoint)"#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &empty_rule(r#"test.to_bytes(entrypoint) startswith "a""#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#""a" istartswith test.to_bytes(#a)"#),
+            b"",
+            None,
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#"test.to_bytes(#a) startswith "a""#),
+            b"",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_poison_endswith() {
+        test_eval_with_poison(&empty_rule(r#""ab" endswith "b""#), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule(r#""a" iendswith test.to_bytes(entrypoint)"#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &empty_rule(r#"test.to_bytes(entrypoint) endswith "a""#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#""a" iendswith test.to_bytes(#a)"#),
+            b"",
+            None,
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#"test.to_bytes(#a) endswith "a""#),
+            b"",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_poison_iequals() {
+        test_eval_with_poison(&empty_rule(r#""ab" iequals "Ab""#), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule(r#""a" iequals test.to_bytes(entrypoint)"#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &empty_rule(r#"test.to_bytes(entrypoint) iequals "a""#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#""a" iequals test.to_bytes(#a)"#),
+            b"",
+            None,
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#"test.to_bytes(#a) iequals "a""#),
+            b"",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_poison_matches() {
+        test_eval_with_poison(&empty_rule(r#""ab" matches /a/"#), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule(r#"test.to_bytes(entrypoint) matches /a/"#),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &single_var_rule(r#"test.to_bytes(#a) matches /a/"#),
+            b"",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_poison_defined() {
+        test_eval_with_poison(&empty_rule("defined 0"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("defined entrypoint"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("defined #a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_not() {
+        test_eval_with_poison(&empty_rule("not 0"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("not entrypoint"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("not #a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_variable() {
+        test_eval_with_poison(&single_var_rule("$a"), b"", None);
+        test_eval_with_poison(&empty_rule("$"), b"", Some(false));
+    }
+
+    #[test]
+    fn test_poison_variable_at() {
+        test_eval_with_poison(&single_var_rule("$a at 0"), b"", None);
+        test_eval_with_poison(&empty_rule("$ at 0"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("$a at entrypoint"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("$a at #a"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_variable_in() {
+        test_eval_with_poison(&single_var_rule("$a in (0..5)"), b"", None);
+        test_eval_with_poison(&empty_rule("$ in (0..5)"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("$a in (0..entrypoint)"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("$a in (entrypoint..5)"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("$a in (0..#a)"), b"", None);
+        test_eval_with_poison(&single_var_rule("$a in (#a..5)"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_for() {
+        test_eval_with_poison(&single_var_rule("any of them"), b"", None);
+        test_eval_with_poison(&single_var_rule("all of them"), b"", None);
+        test_eval_with_poison(&single_var_rule("none of them"), b"", None);
+        test_eval_with_poison(&single_var_rule("5 of them"), b"", None);
+        test_eval_with_poison(&single_var_rule("5% of them"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a of them"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a% of them"), b"", None);
+
+        test_eval_with_poison(&single_var_rule("any of them in (0..2)"), b"", None);
+        test_eval_with_poison(
+            &single_var_rule("any of them in (0..entrypoint)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &single_var_rule("any of them in (entrypoint..5)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("any of them in (0..#a)"), b"", None);
+        test_eval_with_poison(&single_var_rule("any of them in (#a..5)"), b"", None);
+
+        test_eval_with_poison(&single_var_rule("any of ($a)"), b"", None);
+        test_eval_with_poison(
+            &single_var_rule("for any of ($a): (false)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("for any of ($a): (true)"), b"", Some(true));
+        test_eval_with_poison(
+            &single_var_rule("for any of them: (false)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("for any of them: (true)"), b"", Some(true));
+    }
+
+    #[test]
+    fn test_poison_for_identifiers() {
+        test_eval_with_poison(&empty_rule("for any i in (1): (true)"), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule("for any i in (1): (entrypoint)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("for any i in (1): (!a[i])"), b"", None);
+
+        test_eval_with_poison(&empty_rule("for any i in (1..2): (true)"), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule("for any i in (1..2): (entrypoint)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("for any i in (1..2): (!a[i])"), b"", None);
+
+        test_eval_with_poison(
+            &empty_rule("for all i in (entrypoint): (true)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("for all i in (#a): (true)"), b"", None);
+
+        test_eval_with_poison(
+            &empty_rule("for all i in (0..entrypoint): (true)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(
+            &empty_rule("for all i in (entrypoint..1): (true)"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("for all i in (0..#a): (true)"), b"", None);
+        test_eval_with_poison(&single_var_rule("for all i in (#a..1): (true)"), b"", None);
+
+        test_eval_with_poison(&single_var_rule("for #a i in (1): (true)"), b"", None);
+
+        test_eval_with_poison(
+            &empty_rule("for any i in test.array: (true)"),
+            b"",
+            Some(true),
+        );
+        test_eval_with_poison(
+            &single_var_rule("for any i in test.array: (!a[i])"),
+            b"",
+            None,
+        );
+
+        test_eval_with_poison(
+            &empty_rule("for any k,v in test.dict: (true)"),
+            b"",
+            Some(true),
+        );
+        test_eval_with_poison(
+            &single_var_rule("for any k,v in test.dict: (@a[v])"),
+            b"",
+            None,
+        );
+    }
+
+    #[test]
+    fn test_poison_for_rules() {
+        // TODO
+    }
+
+    #[test]
+    fn test_poison_module() {
+        test_eval_with_poison(&empty_rule("test.to_bytes(5)"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("test.to_bytes(entrypoint)"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("test.to_bytes(#a)"), b"", None);
+
+        test_eval_with_poison(&empty_rule("test.array[0]"), b"", Some(true));
+        test_eval_with_poison(&empty_rule("test.array[entrypoint]"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("test.array[#a]"), b"", None);
+
+        test_eval_with_poison(&empty_rule("test.dict[\"a\"]"), b"", Some(true));
+        test_eval_with_poison(
+            &empty_rule("test.dict[test.to_bytes(entrypoint)]"),
+            b"",
+            Some(false),
+        );
+        test_eval_with_poison(&single_var_rule("test.dict[test.to_bytes(#a)]"), b"", None);
+    }
+
+    #[test]
+    fn test_poison_rule() {
+        // TODO
+    }
 
     #[test]
     fn test_types_traits() {

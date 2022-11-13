@@ -26,7 +26,7 @@ use crate::Scanner;
 #[derive(Debug, Default)]
 pub struct Compiler {
     /// List of compiled rules.
-    pub(crate) rules: Vec<rule::Rule>,
+    rules: Vec<rule::Rule>,
 
     /// List of compiled, global rules.
     global_rules: Vec<rule::Rule>,
@@ -46,7 +46,7 @@ pub struct Compiler {
     available_modules: HashMap<String, AvailableModule>,
 
     /// List of imported modules, passed to the scanner.
-    pub(crate) imported_modules: Vec<Box<dyn crate::module::Module>>,
+    imported_modules: Vec<Box<dyn crate::module::Module>>,
 
     /// Externally defined symbols.
     external_symbols: Vec<external_symbol::ExternalSymbol>,
