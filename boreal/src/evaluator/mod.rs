@@ -603,8 +603,8 @@ impl Evaluator<'_, '_> {
                 }
 
                 for index in &set.elements {
-                    let v = self.previous_rules_results.get(*index)?;
-                    if let Some(result) = selection.add_result_and_check(*v) {
+                    let v = self.previous_rules_results[*index];
+                    if let Some(result) = selection.add_result_and_check(v) {
                         return Some(Value::Boolean(result));
                     }
                 }
@@ -618,10 +618,7 @@ impl Evaluator<'_, '_> {
                 self.scan_data.external_symbols.get(*index).cloned()
             }
 
-            Expression::Rule(index) => self
-                .previous_rules_results
-                .get(*index)
-                .map(|v| Value::Boolean(*v)),
+            Expression::Rule(index) => Some(Value::Boolean(self.previous_rules_results[*index])),
 
             Expression::Integer(v) => Some(Value::Integer(*v)),
             Expression::Double(v) => Some(Value::Float(*v)),
