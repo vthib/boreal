@@ -461,6 +461,9 @@ mod tests {
             r#"
             import "test"
 
+            rule yes {{ condition: true }}
+            rule no {{ condition: false }}
+
             rule a {{
                 condition: {}
             }}
@@ -473,6 +476,9 @@ mod tests {
         format!(
             r#"
             import "test"
+
+            rule yes {{ condition: true }}
+            rule no {{ condition: false }}
 
             rule a {{
                 strings:
@@ -973,7 +979,9 @@ mod tests {
 
     #[test]
     fn test_poison_for_rules() {
-        // TODO
+        test_eval_with_poison(&empty_rule("2 of (no, yes)"), b"", Some(false));
+        test_eval_with_poison(&single_var_rule("#a of (yes, no)"), b"", None);
+        test_eval_with_poison(&single_var_rule("#a% of (yes, no)"), b"", None);
     }
 
     #[test]
@@ -993,11 +1001,6 @@ mod tests {
             Some(false),
         );
         test_eval_with_poison(&single_var_rule("test.dict[test.to_bytes(#a)]"), b"", None);
-    }
-
-    #[test]
-    fn test_poison_rule() {
-        // TODO
     }
 
     #[test]

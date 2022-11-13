@@ -680,6 +680,7 @@ impl Evaluator<'_, '_> {
                         return Ok(Value::Boolean(result));
                     }
                 }
+
                 Ok(Value::Boolean(selection.end()))
             }
 
@@ -776,6 +777,12 @@ impl Evaluator<'_, '_> {
             }
         }
 
+        // XXX: This is not optimal: we could know that the result is false or not depending on
+        // the number of poisoned values. However, on this type of iterator, it is very hard
+        // to find a situation where we mix poisoned values and non poisoned, either all are
+        // poisoned or none, so it's not clear if there really is anything to fix. Worst case
+        // scenario, the rule is reported as poisoned instead of decided, and variables are
+        // scanned.
         if var_needed {
             Err(PoisonKind::VarNeeded)
         } else {
@@ -896,6 +903,12 @@ impl Evaluator<'_, '_> {
             }
         };
 
+        // XXX: This is not optimal: we could know that the result is false or not depending on
+        // the number of poisoned values. However, on this type of iterator, it is very hard
+        // to find a situation where we mix poisoned values and non poisoned, either all are
+        // poisoned or none, so it's not clear if there really is anything to fix. Worst case
+        // scenario, the rule is reported as poisoned instead of decided, and variables are
+        // scanned.
         if var_needed {
             Err(PoisonKind::VarNeeded)
         } else {
