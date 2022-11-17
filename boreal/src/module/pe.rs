@@ -18,6 +18,11 @@ use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
 mod debug;
 mod ord;
+#[cfg(feature = "openssl")]
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
+mod signatures;
 mod version_info;
 
 const MAX_PE_SECTIONS: usize = 96;
@@ -974,8 +979,24 @@ impl Module for Pe {
             ),
             ("number_of_resources", Type::Integer),
             ("pdb_path", Type::Bytes),
-            // TODO: signatures
+            #[cfg(feature = "openssl")]
             ("number_of_signatures", Type::Integer),
+            #[cfg(feature = "openssl")]
+            (
+                "signatures",
+                Type::array(Type::object([
+                    ("thumbprint", Type::Bytes),
+                    ("issuer", Type::Bytes),
+                    ("subject", Type::Bytes),
+                    ("version", Type::Integer),
+                    ("algorithm", Type::Bytes),
+                    ("algorithm_oid", Type::Bytes),
+                    ("serial", Type::Bytes),
+                    ("not_before", Type::Integer),
+                    ("not_after", Type::Integer),
+                    // TODO: add valid_on
+                ])),
+            ),
         ]
         .into()
     }
@@ -1175,8 +1196,15 @@ fn parse_file<Pe: ImageNtHeaders>(
         add_resources(&data_dirs, mem, sections, data, &mut map);
     }
 
-    // TODO: rich signature
-    //
+    #[cfg(feature = "openssl")]
+    if let Some(signatures) = signatures::get_signatures(&data_dirs, mem) {
+        // TODO: add limit on number
+        if let Ok(v) = signatures.len().try_into() {
+            let _r = map.insert("number_of_signatures", Value::Integer(v));
+        }
+        let _r = map.insert("signatures", Value::Array(signatures));
+    }
+
     Some(map)
 }
 

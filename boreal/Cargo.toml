@@ -7,10 +7,20 @@ license = "MIT OR Apache-2.0"
 
 [features]
 default = ["hash", "object"]
+
 # Enables the "hash" module.
 hash = ["md-5", "sha1", "sha2", "hex", "crc32fast"]
+
 # Enables the "pe", "elf" and "macho" modules.
+#
+# The "pe" module is missing signatures details unless the `openssl` feature
+# is enabled.
 object = ["dep:object"]
+
+# Enables the "pe.signatures" module field.
+# The `object` feature must also be enabled to get access to the "pe" module.
+openssl = ["dep:openssl", "dep:openssl-sys", "dep:foreign-types-shared"]
+
 # Enables criterion for benches
 # Criterion is so chunky, I don't want it in my dev builds
 bench = ["dep:criterion"]
@@ -37,6 +47,11 @@ sha2 = { version = "0.10", optional = true }
 
 # "object" feature
 object = { version = "0.29", optional = true }
+
+# "openssl" feature
+openssl = { version = "0.10", optional = true }
+openssl-sys = { version = "0.9", optional = true }
+foreign-types-shared = { version = "0.1", optional = true }
 
 # There is no need for HTML reports, but criterion forces us to declare this
 # to remove a warning...
