@@ -2,24 +2,18 @@ use std::fmt::Write;
 
 use foreign_types_shared::{ForeignType, ForeignTypeRef};
 use object::{pe, read::pe::DataDirectories, Bytes, LittleEndian as LE, U16, U32};
-use openssl::asn1::{Asn1IntegerRef, Asn1Type};
+use openssl::asn1::{Asn1IntegerRef, Asn1StringRef, Asn1Type};
 use openssl::hash::MessageDigest;
 use openssl::nid::Nid;
 use openssl::pkcs7::{Pkcs7, Pkcs7Flags};
 use openssl::stack::Stack;
 use openssl::x509::{X509NameRef, X509};
 use openssl_sys::{
-    d2i_PKCS7, OBJ_nid2obj, OBJ_obj2txt, X509_get_signature_nid, ASN1_INTEGER, ASN1_TIME, X509_NAME,
+    d2i_PKCS7, OBJ_nid2obj, OBJ_obj2txt, OBJ_txt2obj, OPENSSL_sk_value, X509_get_signature_nid,
+    ASN1_TIME,
 };
 
 use super::Value;
-
-// TODO: add this to openssl-sys and Asn1Integer::to_der to rust-openssl ?
-extern "C" {
-    pub fn i2d_ASN1_INTEGER(a: *mut ASN1_INTEGER, out: *mut *mut u8) -> std::ffi::c_int;
-
-    pub fn X509_NAME_oneline(a: *mut X509_NAME, buf: *mut u8, size: std::ffi::c_int) -> *mut u8;
-}
 
 pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Value>> {
     let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_SECURITY)?;
@@ -54,23 +48,8 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Val
         if rev == 0x0200 && cert_type == 0x0002 {
             // TODO: limit on number of certs
             while !cert.is_empty() {
-                let pkcs = match MyPkcs7::from_der(&mut cert) {
-                    Some(v) => v,
-                    None => break,
-                };
-
-                let stack = match Stack::new() {
-                    Ok(v) => v,
-                    Err(_) => break,
-                };
-                let certs = match pkcs.0.signers(&stack, Pkcs7Flags::empty()) {
-                    Ok(v) => v,
-                    Err(_) => break,
-                };
-
-                // TODO: limit on number of certs
-                for cert in certs {
-                    signatures.push(x509_to_value(&cert));
+                if !add_signatures_from_pkcs7_der(&mut cert, &mut signatures) {
+                    break;
                 }
             }
         }
@@ -83,9 +62,77 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Val
     Some(signatures)
 }
 
+fn add_signatures_from_pkcs7_der(data: &mut &[u8], signatures: &mut Vec<Value>) -> bool {
+    let pkcs = match MyPkcs7::from_der(data) {
+        Some(v) => v,
+        None => return false,
+    };
+
+    let stack = match Stack::new() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let certs = match pkcs.0.signers(&stack, Pkcs7Flags::empty()) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    // TODO: limit on number of certs
+    for cert in certs {
+        signatures.push(x509_to_value(&cert));
+    }
+
+    // Detect nested signatures
+    add_nested_signatures(&pkcs, signatures);
+
+    true
+}
+
+fn add_nested_signatures(pkcs: &MyPkcs7, signatures: &mut Vec<Value>) {
+    const SPC_NESTED_SIGNATURE_OBJID: &str = "1.3.6.1.4.1.311.2.4.1\0";
+
+    let signer_info = unsafe { sys::PKCS7_get_signer_info(pkcs.0.as_ptr()) };
+    if signer_info.is_null() {
+        return;
+    }
+    let signer_info = unsafe { OPENSSL_sk_value(signer_info.cast(), 0) };
+    if signer_info.is_null() {
+        return;
+    }
+    let signer_info: &sys::PKCS7SignerInfo = unsafe { &*(signer_info.cast()) };
+    let attrs = signer_info.unauth_attr;
+    let idx = unsafe {
+        sys::X509at_get_attr_by_OBJ(
+            attrs,
+            OBJ_txt2obj(SPC_NESTED_SIGNATURE_OBJID.as_ptr().cast(), 1),
+            -1,
+        )
+    };
+    let xa = unsafe { sys::X509at_get_attr(attrs, idx) };
+    if xa.is_null() {
+        return;
+    }
+    for i in 0..16 {
+        let nested = unsafe { sys::X509_ATTRIBUTE_get0_type(xa, i) };
+        if nested.is_null() {
+            break;
+        }
+        let nested: &sys::MyAsn1Type = unsafe { &*nested.cast() };
+        if nested.typ != Asn1Type::SEQUENCE.as_raw() {
+            break;
+        }
+
+        let seq = unsafe { Asn1StringRef::from_ptr(nested.sequence) };
+        let mut data = seq.as_slice();
+        let _ = add_signatures_from_pkcs7_der(&mut data, signatures);
+    }
+}
+
 struct MyPkcs7(Pkcs7);
 
 impl MyPkcs7 {
+    // Same as Pkcs7::from_der, but update the slice to point to after the pkcs7. This allows
+    // parsing all certificates from the slice which is supposed to be an array.
     fn from_der(data: &mut &[u8]) -> Option<Self> {
         let mut ptr = data.as_ptr();
 
@@ -140,7 +187,7 @@ fn x509_to_value(cert: &X509) -> Value {
 
 fn get_x509_name(name: &X509NameRef) -> Vec<u8> {
     let mut buf = vec![0; 256];
-    let _ = unsafe { X509_NAME_oneline(name.as_ptr(), buf.as_mut_ptr(), buf.len() as _) };
+    let _ = unsafe { sys::X509_NAME_oneline(name.as_ptr(), buf.as_mut_ptr(), buf.len() as _) };
 
     let len = buf.iter().position(|v| *v == 0).unwrap_or(buf.len());
     buf.truncate(len);
@@ -164,14 +211,14 @@ fn get_nid_oid(nid: &Nid) -> Option<Vec<u8>> {
 }
 
 fn serial_number_to_string(serial: &Asn1IntegerRef) -> Option<String> {
-    let len = unsafe { i2d_ASN1_INTEGER(serial.as_ptr(), std::ptr::null_mut()) };
+    let len = unsafe { sys::i2d_ASN1_INTEGER(serial.as_ptr(), std::ptr::null_mut()) };
     if len <= 2 || len > 22 {
         return None;
     }
 
     let mut buf = vec![0; len as usize];
     let mut buf_ptr = buf.as_mut_ptr();
-    let len = unsafe { i2d_ASN1_INTEGER(serial.as_ptr(), &mut buf_ptr) };
+    let len = unsafe { sys::i2d_ASN1_INTEGER(serial.as_ptr(), &mut buf_ptr) };
     if len <= 0 {
         return None;
     }
@@ -198,7 +245,7 @@ fn asn1_time_to_ts(time: *mut ASN1_TIME) -> Option<u64> {
         return None;
     }
 
-    let time: &Asn1Time = unsafe { &*time.cast() };
+    let time: &sys::Asn1Time = unsafe { &*time.cast() };
     let mut res: u64 = 0;
     let data: &[u8] = unsafe { std::slice::from_raw_parts(time.data, time.length as usize) };
     let mut iter = data.iter().map(|v| u64::from(*v - b'0'));
@@ -249,15 +296,60 @@ fn is_leap(mut year: u64) -> bool {
     (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
 }
 
-// This is the object as declared in openssl, but the rust bindings do not expose it
-#[repr(C)]
-struct Asn1Time {
-    length: std::ffi::c_int,
-    typ: std::ffi::c_int,
-    data: *const u8,
-}
-
 // Align offset on 64-bit boundary
 const fn align64(offset: usize) -> usize {
     (offset + 7) & !7
+}
+
+// sys bindings for openssl that are missing from openssl-sys
+mod sys {
+    use openssl_sys::{
+        stack_st_X509_ATTRIBUTE, ASN1_INTEGER, ASN1_OBJECT, ASN1_STRING, ASN1_TYPE, PKCS7,
+        X509_NAME,
+    };
+    use std::ffi::{c_int, c_void};
+
+    extern "C" {
+        pub fn i2d_ASN1_INTEGER(a: *mut ASN1_INTEGER, out: *mut *mut u8) -> c_int;
+
+        pub fn X509_NAME_oneline(a: *mut X509_NAME, buf: *mut u8, size: c_int) -> *mut u8;
+
+        pub fn PKCS7_get_signer_info(p7: *mut PKCS7) -> *mut c_void;
+
+        pub fn X509at_get_attr_by_OBJ(
+            sk: *const stack_st_X509_ATTRIBUTE,
+            obj: *const ASN1_OBJECT,
+            lastpos: c_int,
+        ) -> c_int;
+
+        pub fn X509at_get_attr(x: *const stack_st_X509_ATTRIBUTE, loc: c_int)
+            -> *mut X509Attribute;
+
+        pub fn X509_ATTRIBUTE_get0_type(attr: *mut X509Attribute, idx: c_int) -> *mut ASN1_TYPE;
+    }
+
+    pub enum X509Attribute {}
+
+    #[repr(C)]
+    pub struct PKCS7SignerInfo {
+        // We only care about the unauth_attr field. The previous ones are all pointers, so just
+        // group them, alignment and offset is the same.
+        pub _ignore: [*const c_void; 6],
+        pub unauth_attr: *mut stack_st_X509_ATTRIBUTE,
+    }
+
+    #[repr(C)]
+    pub struct MyAsn1Type {
+        pub typ: c_int,
+        // This is a union, of which we only care about the sequence. typ should be 16
+        // (V_ASN1_SEQUENCE) to access this.
+        pub sequence: *mut ASN1_STRING,
+    }
+
+    #[repr(C)]
+    pub struct Asn1Time {
+        pub length: c_int,
+        pub typ: c_int,
+        pub data: *const u8,
+    }
 }

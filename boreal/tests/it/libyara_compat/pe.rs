@@ -366,8 +366,6 @@ fn test_pe() {
         true,
     );
 
-    // TODO: thumbprint
-    /*
     check_file(
         "import \"pe\"
         rule test {
@@ -385,7 +383,6 @@ fn test_pe() {
             pe.number_of_signatures == 2
         }",
         "tests/assets/libyara/data/3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c", true);
-      */
 
     check_file(
         "import \"pe\"
