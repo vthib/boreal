@@ -119,6 +119,34 @@ rule test {
 }
 
 #[test]
+fn test_signatures_valid_on() {
+    fn check_valid_on(value: i64, expected_res: bool) {
+        check_file(
+            &format!(r#"import "pe"
+
+            rule test {{
+                condition:
+                    pe.signatures[0].valid_on({})
+            }}"#, value),
+            "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+            expected_res
+        )
+    }
+
+    // This file has a signature with:
+    // - not_before = 1491955200
+    // - not_after = 1559692799
+    check_valid_on(0, false);
+    check_valid_on(-500, false);
+    check_valid_on(1491955199, false);
+    check_valid_on(1491955200, true);
+    check_valid_on(1491955201, true);
+    check_valid_on(1501239421, true);
+    check_valid_on(1559692799, true);
+    check_valid_on(1559692800, false);
+}
+
+#[test]
 fn test_coverage_pe_tiny() {
     check_file(
         r#"import "pe"

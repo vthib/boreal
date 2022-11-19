@@ -160,7 +160,9 @@ fn x509_to_value(cert: &X509) -> Value {
     let digest = cert.digest(MessageDigest::sha1()).ok();
 
     let not_before = asn1_time_to_ts(cert.not_before().as_ptr());
+    let not_before = not_before.and_then(|v| i64::try_from(v).ok());
     let not_after = asn1_time_to_ts(cert.not_after().as_ptr());
+    let not_after = not_after.and_then(|v| i64::try_from(v).ok());
 
     let sig_nid = Nid::from_raw(unsafe { X509_get_signature_nid(cert.as_ptr()) });
 
@@ -182,8 +184,14 @@ fn x509_to_value(cert: &X509) -> Value {
             ),
             ("version", Some(version.into())),
             ("serial", serial_number.map(|v| v.into_bytes().into())),
-            ("not_before", not_before.and_then(|v| v.try_into().ok())),
-            ("not_after", not_after.and_then(|v| v.try_into().ok())),
+            ("not_before", not_before.map(Into::into)),
+            ("not_after", not_after.map(Into::into)),
+            (
+                "valid_on",
+                Some(Value::function(move |_, args| {
+                    valid_on(args, not_before, not_after)
+                })),
+            ),
         ]
         .into_iter()
         .filter_map(|(k, v)| v.map(|v| (k, v)))
@@ -305,6 +313,18 @@ fn is_leap(mut year: u64) -> bool {
 // Align offset on 64-bit boundary
 const fn align64(offset: usize) -> usize {
     (offset + 7) & !7
+}
+
+fn valid_on(args: Vec<Value>, not_before: Option<i64>, not_after: Option<i64>) -> Option<Value> {
+    let mut args = args.into_iter();
+    let timestamp: i64 = args.next()?.try_into().ok()?;
+
+    match (not_before, not_after) {
+        (Some(not_before), Some(not_after)) => Some(Value::Boolean(
+            timestamp >= not_before && timestamp <= not_after,
+        )),
+        _ => None,
+    }
 }
 
 // sys bindings for openssl that are missing from openssl-sys

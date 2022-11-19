@@ -994,7 +994,10 @@ impl Module for Pe {
                     ("serial", Type::Bytes),
                     ("not_before", Type::Integer),
                     ("not_after", Type::Integer),
-                    // TODO: add valid_on
+                    (
+                        "valid_on",
+                        Type::function(vec![vec![Type::Integer]], Type::Integer),
+                    ),
                 ])),
             ),
         ]
