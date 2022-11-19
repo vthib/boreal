@@ -6,7 +6,7 @@ use object::{
         ThreadCommand,
     },
     read::macho::{FatArch, LoadCommandData, MachHeader, Section, Segment},
-    BigEndian, Endianness, FileKind, U32, U64,
+    BigEndian, Bytes, Endianness, FileKind, U32, U64,
 };
 
 use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
@@ -938,26 +938,12 @@ fn handle_unix_thread(
             return None;
         }
 
-        // TODO: ask object to expose the data buffer directly, this would avoid
-        // this very scary unsafe block.
-        //
-        // Safety:
-        //
-        // - underlying data buffer (address of thread_cmd) is of size "cmdsize". This is
-        //   guaranteed by object, but getting the underlying buffer would help ensure this
-        //   never changes.
-        // - offset is ensured to be in [0; cmdsize - N]
-        // Hence the N bytes pointed to after the add is in bound of the same allocated object.
-        let ptr: *const ThreadCommand<Endianness> = thread_cmd;
-        unsafe {
-            let ptr = ptr.cast::<u8>().add(offset);
-            if is64 {
-                let ptr = ptr.cast::<U64<Endianness>>();
-                Some((*ptr).get(e))
-            } else {
-                let ptr = ptr.cast::<U32<Endianness>>();
-                Some((*ptr).get(e).into())
-            }
+        let mut data = Bytes(cmd.raw_data());
+        data.skip(offset).ok()?;
+        if is64 {
+            data.read::<U64<Endianness>>().ok().map(|v| v.get(e))
+        } else {
+            data.read::<U32<Endianness>>().ok().map(|v| v.get(e).into())
         }
     };
 
