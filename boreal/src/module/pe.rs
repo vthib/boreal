@@ -1203,6 +1203,8 @@ fn parse_file<Pe: ImageNtHeaders>(
             let _r = map.insert("number_of_signatures", Value::Integer(v));
         }
         let _r = map.insert("signatures", Value::Array(signatures));
+    } else {
+        let _r = map.insert("number_of_signatures", Value::Integer(0));
     }
 
     Some(map)
