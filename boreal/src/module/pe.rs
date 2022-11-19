@@ -1668,7 +1668,7 @@ fn add_resources(
             // First level is type
             let ty = entry.name_or_id.get(LE);
             let ty_name = match entry.name_or_id() {
-                ResourceNameOrId::Name(name) => name.data(dir).ok(),
+                ResourceNameOrId::Name(name) => name.raw_data(dir).ok(),
                 ResourceNameOrId::Id(_) => None,
             };
 
@@ -1680,7 +1680,7 @@ fn add_resources(
                 // Second level is id
                 let id = entry.name_or_id.get(LE);
                 let id_name = match entry.name_or_id() {
-                    ResourceNameOrId::Name(name) => name.data(dir).ok(),
+                    ResourceNameOrId::Name(name) => name.raw_data(dir).ok(),
                     ResourceNameOrId::Id(_) => None,
                 };
 
@@ -1692,7 +1692,7 @@ fn add_resources(
                     // Third level is language
                     let lang = entry.name_or_id.get(LE);
                     let lang_name = match entry.name_or_id() {
-                        ResourceNameOrId::Name(name) => name.data(dir).ok(),
+                        ResourceNameOrId::Name(name) => name.raw_data(dir).ok(),
                         ResourceNameOrId::Id(_) => None,
                     };
 
@@ -1722,15 +1722,15 @@ fn add_resources(
                         }
 
                         let _r = match ty_name {
-                            Some(name) => obj.insert("type_string", u16_slice_to_value(name)),
+                            Some(name) => obj.insert("type_string", name.to_vec().into()),
                             None => obj.insert("type", ty.into()),
                         };
                         let _r = match id_name {
-                            Some(name) => obj.insert("name_string", u16_slice_to_value(name)),
+                            Some(name) => obj.insert("name_string", name.to_vec().into()),
                             None => obj.insert("id", id.into()),
                         };
                         let _r = match lang_name {
-                            Some(name) => obj.insert("language_string", u16_slice_to_value(name)),
+                            Some(name) => obj.insert("language_string", name.to_vec().into()),
                             None => obj.insert("language", lang.into()),
                         };
 
@@ -1792,14 +1792,6 @@ pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str
             ),
         ),
     ]);
-}
-
-fn u16_slice_to_value(slice: &[u16]) -> Value {
-    // Safety: it is always safe to interpret anything as bytes
-    let (pre, bytes, suf) = unsafe { slice.align_to::<u8>() };
-    debug_assert!(pre.is_empty());
-    debug_assert!(suf.is_empty());
-    Value::Bytes(bytes.to_vec())
 }
 
 fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<u32> {
