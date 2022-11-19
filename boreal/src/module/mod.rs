@@ -39,6 +39,7 @@
 //! ```
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::regex::Regex;
 
@@ -305,7 +306,9 @@ pub enum Value {
         ///     Value::Integer(x), // Number of matches of string $foo
         /// ]);
         /// ```
-        fn(&ScanContext, Vec<Value>) -> Option<Value>,
+        // TODO: find a way to simplify this
+        #[allow(clippy::type_complexity)]
+        Arc<Box<dyn Fn(&ScanContext, Vec<Value>) -> Option<Value> + Send + Sync>>,
     ),
 }
 
@@ -327,7 +330,7 @@ impl std::fmt::Debug for Value {
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
             Self::Array(arg0) => f.debug_tuple("Array").field(arg0).finish(),
             Self::Dictionary(arg0) => f.debug_tuple("Dictionary").field(arg0).finish(),
-            Self::Function(arg0) => f.debug_tuple("Function").field(&(*arg0 as usize)).finish(),
+            Self::Function(_) => f.debug_struct("Function").finish(),
         }
     }
 }
@@ -412,6 +415,23 @@ impl Value {
     #[must_use]
     pub fn object<const N: usize>(v: [(&'static str, Value); N]) -> Self {
         Self::Object(v.into())
+    }
+
+    /// Build a [`Self::Function`] value.
+    ///
+    /// A closure can be provided that captures values that have been generated locally. This
+    /// allows declaring functions which are context dependant, such as a function in an array of
+    /// object that depends on the index in the array.
+    /// ```
+    /// use boreal::module::Value;
+    ///
+    /// let value = Value::function(|_ctx, args| args.into_iter().next());
+    /// ```
+    pub fn function<F>(f: F) -> Self
+    where
+        F: Fn(&ScanContext, Vec<Value>) -> Option<Value> + Send + Sync + 'static,
+    {
+        Self::Function(Arc::new(Box::new(f)))
     }
 }
 
@@ -662,7 +682,7 @@ mod tests {
             format!("{:?}", Value::Dictionary(HashMap::new())),
             "Dictionary({})"
         );
-        assert!(format!("{:?}", Value::Function(|_, _| None)).starts_with("Function"));
+        assert!(format!("{:?}", Value::function(|_, _| None)).starts_with("Function"));
 
         assert_eq!(format!("{:?}", StaticValue::Integer(0)), "Integer(0)");
         assert_eq!(format!("{:?}", StaticValue::Float(0.0)), "Float(0.0)");

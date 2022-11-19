@@ -1244,8 +1244,8 @@ fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
             ("key", Some(info.xor_key.into())),
             ("raw_data", raw.map(Into::into)),
             ("clear_data", clear.map(Into::into)),
-            ("version", Some(Value::Function(Pe::rich_signature_version))),
-            ("toolid", Some(Value::Function(Pe::rich_signature_toolid))),
+            ("version", Some(Value::function(Pe::rich_signature_version))),
+            ("toolid", Some(Value::function(Pe::rich_signature_toolid))),
         ]
         .into_iter()
         .filter_map(|(k, v)| v.map(|v| (k, v)))

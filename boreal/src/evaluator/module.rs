@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::compiler::expression::Expression;
 use crate::compiler::module::{BoundedValueIndex, ModuleExpression, ValueOperation};
-use crate::module::{ScanContext, Value as ModuleValue};
+use crate::module::Value as ModuleValue;
 
 use super::{Evaluator, PoisonKind, Value};
 
@@ -36,7 +36,9 @@ pub(super) fn evaluate_expr(
             arguments,
             operations,
         } => {
-            let value = eval_function_op(evaluator, *fun, arguments)?;
+            let arguments = eval_function_args(evaluator, arguments)?;
+            let value =
+                fun(&evaluator.scan_data.module_ctx, arguments).ok_or(PoisonKind::Undefined)?;
             evaluate_ops(evaluator, &value, operations.iter())
         }
     }
@@ -69,7 +71,9 @@ where
             },
             ValueOperation::FunctionCall(arguments) => match value {
                 ModuleValue::Function(fun) => {
-                    let new_value = eval_function_op(evaluator, *fun, arguments)?;
+                    let arguments = eval_function_args(evaluator, arguments)?;
+                    let new_value = fun(&evaluator.scan_data.module_ctx, arguments)
+                        .ok_or(PoisonKind::Undefined)?;
                     return evaluate_ops(evaluator, &new_value, operations);
                 }
                 _ => return Err(PoisonKind::Undefined),
@@ -121,21 +125,18 @@ fn eval_dict_op<'a>(
     dict.get(&val).ok_or(PoisonKind::Undefined)
 }
 
-fn eval_function_op(
+fn eval_function_args(
     evaluator: &mut Evaluator,
-    fun: fn(&ScanContext, Vec<ModuleValue>) -> Option<ModuleValue>,
     arguments: &[Expression],
-) -> Result<ModuleValue, PoisonKind> {
-    let arguments: Result<Vec<_>, _> = arguments
+) -> Result<Vec<ModuleValue>, PoisonKind> {
+    arguments
         .iter()
         .map(|expr| {
             evaluator
                 .evaluate_expr(expr)
                 .map(expr_value_to_module_value)
         })
-        .collect();
-
-    fun(&evaluator.scan_data.module_ctx, arguments?).ok_or(PoisonKind::Undefined)
+        .collect()
 }
 
 fn expr_value_to_module_value(v: Value) -> ModuleValue {

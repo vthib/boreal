@@ -278,7 +278,7 @@ impl Module for Tests {
                                         ),
                                     ]),
                                 ),
-                                ("lazy_array", Value::Function(Self::lazy_array)),
+                                ("lazy_array", Value::function(Self::lazy_array)),
                             ]),
                         ),
                         (
@@ -294,20 +294,20 @@ impl Module for Tests {
                                         .into(),
                                     )]),
                                 ),
-                                ("lazy_array", Value::Function(Self::lazy_array)),
+                                ("lazy_array", Value::function(Self::lazy_array)),
                             ]),
                         ),
                     ]
                     .into(),
                 ),
             ),
-            ("fsum", Value::Function(Self::fsum)),
-            ("length", Value::Function(Self::length)),
-            ("empty", Value::Function(Self::empty)),
-            ("foobar", Value::Function(Self::foobar)),
+            ("fsum", Value::function(Self::fsum)),
+            ("length", Value::function(Self::length)),
+            ("empty", Value::function(Self::empty)),
+            ("foobar", Value::function(Self::foobar)),
             // The rest is not in libyara
-            ("lazy", Value::Function(Self::lazy)),
-            ("log", Value::Function(Self::log)),
+            ("lazy", Value::function(Self::lazy)),
+            ("log", Value::function(Self::log)),
         ]
         .into()
     }
@@ -398,22 +398,22 @@ impl Tests {
                     .into(),
                 ),
             ),
-            ("isum", Value::Function(Self::isum)),
+            ("isum", Value::function(Self::isum)),
             ("fake_bool_to_array", Value::Array(vec![Value::Integer(2)])),
             ("fake_bool_to_dict", Value::object([])),
-            ("fake_bool_to_fun", Value::Function(Self::empty)),
+            ("fake_bool_to_fun", Value::function(Self::empty)),
             ("fake_int", Value::bytes("ht+p")),
             ("fake_dict_to_bool", Value::Boolean(false)),
             ("fake_array_to_bool", Value::Boolean(false)),
             ("fake_fun_to_bool", Value::Boolean(false)),
-            ("lazy", Value::Function(Self::lazy_lazy)),
+            ("lazy", Value::function(Self::lazy_lazy)),
         ]))
     }
 
     fn lazy_lazy(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::object([(
             "lazy_int",
-            Value::Function(Self::lazy_lazy_int),
+            Value::function(Self::lazy_lazy_int),
         )]))
     }
 
