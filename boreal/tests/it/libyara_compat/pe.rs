@@ -366,6 +366,7 @@ fn test_pe() {
         true,
     );
 
+    #[cfg(feature = "openssl")]
     check_file(
         "import \"pe\"
         rule test {
@@ -376,6 +377,7 @@ fn test_pe() {
         }",
         "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
 
+    #[cfg(feature = "openssl")]
     check_file(
         "import \"pe\"
         rule test {

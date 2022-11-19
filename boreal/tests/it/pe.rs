@@ -118,6 +118,7 @@ rule test {
     );
 }
 
+#[cfg(feature = "openssl")]
 #[test]
 fn test_signatures_valid_on() {
     fn check_valid_on(value: i64, expected_res: bool) {
@@ -267,7 +268,6 @@ pe.number_of_imports == 2 and
 pe.number_of_resources == 0 and
 pe.number_of_rva_and_sizes == 16 and
 pe.number_of_sections == 7 and
-pe.number_of_signatures == 0 and
 pe.number_of_symbols == 0 and
 pe.opthdr_magic == 267 and
 pe.os_version.major == 4 and
@@ -359,7 +359,6 @@ pe.section_alignment == 4096 and
     pe.sections[6].virtual_address == 32768 and
     pe.sections[6].virtual_size == 32)
  and
-not defined pe.signatures[0].version and
 pe.size_of_code == 8192 and
 pe.size_of_headers == 4096 and
 pe.size_of_heap_commit == 4096 and
@@ -375,6 +374,18 @@ pe.subsystem_version.major == 4 and
 pe.subsystem_version.minor == 0 and
 pe.timestamp == 1459377848 and
 pe.win32_version_value == 0
+}"#,
+        "tests/assets/libyara/data/tiny",
+        true,
+    );
+
+    #[cfg(feature = "openssl")]
+    check_file(
+        r#"import "pe"
+rule test {
+    condition:
+        pe.number_of_signatures == 0 and
+        not defined pe.signatures[0].version
 }"#,
         "tests/assets/libyara/data/tiny",
         true,
@@ -624,6 +635,7 @@ pe.win32_version_value == 0
     );
 }
 
+#[cfg(feature = "openssl")]
 #[test]
 fn test_coverage_pe_079a472d() {
     check_file(
@@ -770,7 +782,6 @@ pe.number_of_imports == 2 and
 pe.number_of_resources == 2 and
 pe.number_of_rva_and_sizes == 16 and
 pe.number_of_sections == 5 and
-pe.number_of_signatures == 1 and
 pe.number_of_symbols == 0 and
 pe.number_of_version_infos == 11 and
 pe.opthdr_magic == 267 and
@@ -860,17 +871,6 @@ pe.section_alignment == 4096 and
     pe.sections[4].virtual_address == 24576 and
     pe.sections[4].virtual_size == 524)
  and
-(
-    pe.signatures[0].algorithm == "sha256WithRSAEncryption" and
-    pe.signatures[0].algorithm_oid == "1.2.840.113549.1.1.11" and
-    pe.signatures[0].issuer == "/C=US/O=Symantec Corporation/OU=Symantec Trust Network/CN=Symantec Class 3 SHA256 Code Signing CA" and
-    pe.signatures[0].not_after == 1559692799 and
-    pe.signatures[0].not_before == 1491955200 and
-    pe.signatures[0].serial == "21:bd:b2:cb:ec:e5:43:1e:24:f7:56:74:d6:0e:9c:1d" and
-    pe.signatures[0].subject == "/C=US/ST=California/L=Menlo Park/O=Quicken, Inc./OU=Operations/CN=Quicken, Inc." and
-    pe.signatures[0].thumbprint == "c1bf1b8f751bf97626ed77f755f0a393106f2454" and
-    pe.signatures[0].version == 3)
- and
 pe.size_of_code == 4608 and
 pe.size_of_headers == 1024 and
 pe.size_of_heap_commit == 4096 and
@@ -925,8 +925,31 @@ pe.win32_version_value == 0
         "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
         true,
     );
+
+    #[cfg(feature = "openssl")]
+    check_file(
+        r#"import "pe"
+rule test {
+    condition:
+        pe.number_of_signatures == 1 and
+        (
+            pe.signatures[0].algorithm == "sha256WithRSAEncryption" and
+            pe.signatures[0].algorithm_oid == "1.2.840.113549.1.1.11" and
+            pe.signatures[0].issuer == "/C=US/O=Symantec Corporation/OU=Symantec Trust Network/CN=Symantec Class 3 SHA256 Code Signing CA" and
+            pe.signatures[0].not_after == 1559692799 and
+            pe.signatures[0].not_before == 1491955200 and
+            pe.signatures[0].serial == "21:bd:b2:cb:ec:e5:43:1e:24:f7:56:74:d6:0e:9c:1d" and
+            pe.signatures[0].subject == "/C=US/ST=California/L=Menlo Park/O=Quicken, Inc./OU=Operations/CN=Quicken, Inc." and
+            pe.signatures[0].thumbprint == "c1bf1b8f751bf97626ed77f755f0a393106f2454" and
+            pe.signatures[0].version == 3
+        )
+}"#,
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
 }
 
+#[cfg(feature = "openssl")]
 #[test]
 fn test_signatures_nested() {
     check_file(
@@ -1026,7 +1049,6 @@ pe.number_of_exports == 0 and
 pe.number_of_resources == 4 and
 pe.number_of_rva_and_sizes == 16 and
 pe.number_of_sections == 3 and
-pe.number_of_signatures == 0 and
 pe.number_of_symbols == 0 and
 pe.opthdr_magic == 267 and
 pe.os_version.major == 6 and
@@ -1104,7 +1126,6 @@ pe.section_alignment == 4096 and
     pe.sections[2].virtual_address == 12288 and
     pe.sections[2].virtual_size == 440)
  and
-not defined pe.signatures[0].version and
 pe.size_of_code == 512 and
 pe.size_of_headers == 1024 and
 pe.size_of_heap_commit == 4096 and
@@ -1120,6 +1141,18 @@ pe.subsystem_version.major == 6 and
 pe.subsystem_version.minor == 0 and
 pe.timestamp == 1668868042 and
 pe.win32_version_value == 0
+}"#,
+        "tests/assets/pe/resources_only.dll",
+        true,
+    );
+
+    #[cfg(feature = "openssl")]
+    check_file(
+        r#"import "pe"
+rule test {
+    condition:
+        pe.number_of_signatures == 0 and
+        not defined pe.signatures[0].version
 }"#,
         "tests/assets/pe/resources_only.dll",
         true,

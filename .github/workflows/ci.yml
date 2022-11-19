@@ -22,6 +22,9 @@ jobs:
         with:
           target: ${{matrix.target}}
       - run: cargo test
+      - name: Test with Openssl
+        if: ${{ matrix.os != 'windows-latest' }}
+        run: cargo test --features openssl
 
     strategy:
       fail-fast: false
