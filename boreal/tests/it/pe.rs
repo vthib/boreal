@@ -1006,15 +1006,23 @@ pe.checksum == 0 and
 pe.dll_characteristics == 1344 and
 pe.entry_point == 0 and
 pe.entry_point_raw == 0 and
+not defined pe.export_details[0].name and
+not defined pe.export_timestamp and
 pe.file_alignment == 512 and
 pe.image_base == 268435456 and
 pe.image_version.major == 0 and
 pe.image_version.minor == 0 and
+not defined pe.import_details[0].library_name and
 pe.is_pe == 1 and
 pe.linker_version.major == 14 and
 pe.linker_version.minor == 29 and
 pe.loader_flags == 0 and
 pe.machine == 332 and
+pe.number_of_imported_functions == 0 and
+pe.number_of_imports == 0 and
+pe.number_of_delayed_imported_functions == 0 and
+pe.number_of_delayed_imports == 0 and
+pe.number_of_exports == 0 and
 pe.number_of_resources == 4 and
 pe.number_of_rva_and_sizes == 16 and
 pe.number_of_sections == 3 and
@@ -1060,10 +1068,6 @@ pe.rich_signature.key == 2388522663 and
 pe.rich_signature.length == 40 and
 pe.rich_signature.offset == 128 and
 pe.rich_signature.raw_data == "\xe3\x97\x33\xdd\xa7\xf6\x5d\x8e\xa7\xf6\x5d\x8e\xa7\xf6\x5d\x8e\x66\x83\x58\x8f\xa6\xf6\x5d\x8e\x66\x83\xa2\x8e\xa6\xf6\x5d\x8e\x66\x83\x5f\x8f\xa6\xf6\x5d\x8e" and
-true
- and
-true
- and
 pe.section_alignment == 4096 and
 (
     pe.sections[0].characteristics == 1610612768 and
@@ -1100,6 +1104,7 @@ pe.section_alignment == 4096 and
     pe.sections[2].virtual_address == 12288 and
     pe.sections[2].virtual_size == 440)
  and
+not defined pe.signatures[0].version and
 pe.size_of_code == 512 and
 pe.size_of_headers == 1024 and
 pe.size_of_heap_commit == 4096 and

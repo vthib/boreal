@@ -1196,9 +1196,7 @@ fn parse_file<Pe: ImageNtHeaders>(
         add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
         add_delay_load_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
         add_exports(&data_dirs, mem, sections, data, &mut map);
-        if !add_resources(&data_dirs, mem, sections, data, &mut map) {
-            let _r = map.insert("number_of_resources", Value::Integer(0));
-        }
+        add_resources(&data_dirs, mem, sections, data, &mut map);
     }
 
     #[cfg(feature = "openssl")]
@@ -1265,50 +1263,46 @@ fn add_imports<Pe: ImageNtHeaders>(
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
-    let table = match data_dirs.import_table(mem, sections) {
-        Ok(Some(table)) => table,
-        _ => return,
-    };
-    let mut descriptors = match table.descriptors() {
-        Ok(d) => d,
-        Err(_) => return,
-    };
     let mut imports = Vec::new();
     let mut nb_functions_total = 0;
 
-    while let Ok(Some(import_desc)) = descriptors.next() {
-        let library = match table.name(import_desc.name.get(LE)) {
-            Ok(name) => name.to_vec(),
-            Err(_) => continue,
-        };
-        let mut data_functions = Vec::new();
-        let functions = import_functions::<Pe>(
-            &table,
-            import_desc,
-            &library,
-            &mut data_functions,
-            &mut nb_functions_total,
-        );
-        let nb_functions = functions.as_ref().map(Vec::len);
+    let table = data_dirs.import_table(mem, sections).ok().flatten();
+    let descriptors = table.as_ref().and_then(|table| table.descriptors().ok());
+    if let (Some(table), Some(mut descriptors)) = (table, descriptors) {
+        while let Ok(Some(import_desc)) = descriptors.next() {
+            let library = match table.name(import_desc.name.get(LE)) {
+                Ok(name) => name.to_vec(),
+                Err(_) => continue,
+            };
+            let mut data_functions = Vec::new();
+            let functions = import_functions::<Pe>(
+                &table,
+                import_desc,
+                &library,
+                &mut data_functions,
+                &mut nb_functions_total,
+            );
+            let nb_functions = functions.as_ref().map(Vec::len);
 
-        data.imports.push(DataImport {
-            dll_name: library.clone(),
-            functions: data_functions,
-        });
+            data.imports.push(DataImport {
+                dll_name: library.clone(),
+                functions: data_functions,
+            });
 
-        imports.push(Value::Object(
-            [
-                ("library_name", Some(library.into())),
-                (
-                    "number_of_functions",
-                    nb_functions.and_then(|v| v.try_into().ok()),
-                ),
-                ("functions", functions.map(Value::Array)),
-            ]
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k, v)))
-            .collect(),
-        ));
+            imports.push(Value::Object(
+                [
+                    ("library_name", Some(library.into())),
+                    (
+                        "number_of_functions",
+                        nb_functions.and_then(|v| v.try_into().ok()),
+                    ),
+                    ("functions", functions.map(Value::Array)),
+                ]
+                .into_iter()
+                .filter_map(|(k, v)| v.map(|v| (k, v)))
+                .collect(),
+            ));
+        }
     }
 
     if let Ok(v) = nb_functions_total.try_into() {
@@ -1396,48 +1390,51 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
-    let table = match data_dirs.delay_load_import_table(mem, sections) {
-        Ok(Some(table)) => table,
-        _ => return,
-    };
-    let mut descriptors = match table.descriptors() {
-        Ok(d) => d,
-        Err(_) => return,
-    };
     let mut imports = Vec::new();
     let mut nb_functions_total = 0;
 
-    while let Ok(Some(import_desc)) = descriptors.next() {
-        let library = match table.name(import_desc.dll_name_rva.get(LE)) {
-            Ok(name) => name.to_vec(),
-            Err(_) => continue,
-        };
-        let mut data_functions = Vec::new();
-        let functions =
-            delay_load_import_functions::<Pe>(&table, import_desc, &library, &mut data_functions);
-        let nb_functions = functions.as_ref().map(Vec::len);
-        if let Some(n) = nb_functions {
-            nb_functions_total += n;
+    let table = data_dirs
+        .delay_load_import_table(mem, sections)
+        .ok()
+        .flatten();
+    let descriptors = table.as_ref().and_then(|table| table.descriptors().ok());
+    if let (Some(table), Some(mut descriptors)) = (table, descriptors) {
+        while let Ok(Some(import_desc)) = descriptors.next() {
+            let library = match table.name(import_desc.dll_name_rva.get(LE)) {
+                Ok(name) => name.to_vec(),
+                Err(_) => continue,
+            };
+            let mut data_functions = Vec::new();
+            let functions = delay_load_import_functions::<Pe>(
+                &table,
+                import_desc,
+                &library,
+                &mut data_functions,
+            );
+            let nb_functions = functions.as_ref().map(Vec::len);
+            if let Some(n) = nb_functions {
+                nb_functions_total += n;
+            }
+
+            data.delayed_imports.push(DataImport {
+                dll_name: library.clone(),
+                functions: data_functions,
+            });
+
+            imports.push(Value::Object(
+                [
+                    ("library_name", Some(library.into())),
+                    (
+                        "number_of_functions",
+                        nb_functions.and_then(|v| v.try_into().ok()),
+                    ),
+                    ("functions", functions.map(Value::Array)),
+                ]
+                .into_iter()
+                .filter_map(|(k, v)| v.map(|v| (k, v)))
+                .collect(),
+            ));
         }
-
-        data.delayed_imports.push(DataImport {
-            dll_name: library.clone(),
-            functions: data_functions,
-        });
-
-        imports.push(Value::Object(
-            [
-                ("library_name", Some(library.into())),
-                (
-                    "number_of_functions",
-                    nb_functions.and_then(|v| v.try_into().ok()),
-                ),
-                ("functions", functions.map(Value::Array)),
-            ]
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k, v)))
-            .collect(),
-        ));
     }
 
     if let Ok(v) = nb_functions_total.try_into() {
@@ -1479,73 +1476,72 @@ fn add_exports(
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
-    let table = match data_dirs.export_table(mem, sections) {
-        Ok(Some(table)) => table,
-        _ => return,
-    };
+    if let Ok(Some(table)) = data_dirs.export_table(mem, sections) {
+        let ordinal_base = table.ordinal_base() as usize;
+        let addresses = table.addresses();
+        let mut details: Vec<_> = addresses
+            .iter()
+            .take(MAX_PE_EXPORTS)
+            .enumerate()
+            .map(|(i, address)| {
+                let mut map = HashMap::with_capacity(4);
 
-    let ordinal_base = table.ordinal_base() as usize;
-    let addresses = table.addresses();
-    let mut details: Vec<_> = addresses
-        .iter()
-        .take(MAX_PE_EXPORTS)
-        .enumerate()
-        .map(|(i, address)| {
-            let mut map = HashMap::with_capacity(4);
-
-            if let Ok(v) = i64::try_from(ordinal_base + i) {
-                let _r = map.insert("ordinal", v.into());
-            }
-
-            let address = address.get(LE);
-            if let Ok(Some(mut forward)) = table.forward_string(address) {
-                if forward.len() > MAX_EXPORT_NAME_LENGTH {
-                    forward = &forward[..MAX_EXPORT_NAME_LENGTH];
+                if let Ok(v) = i64::try_from(ordinal_base + i) {
+                    let _r = map.insert("ordinal", v.into());
                 }
-                let _r = map.insert("forward_name", Value::bytes(forward));
-            } else if let Some(v) = va_to_file_offset(sections, address) {
-                let _r = map.insert("offset", v.into());
+
+                let address = address.get(LE);
+                if let Ok(Some(mut forward)) = table.forward_string(address) {
+                    if forward.len() > MAX_EXPORT_NAME_LENGTH {
+                        forward = &forward[..MAX_EXPORT_NAME_LENGTH];
+                    }
+                    let _r = map.insert("forward_name", Value::bytes(forward));
+                } else if let Some(v) = va_to_file_offset(sections, address) {
+                    let _r = map.insert("offset", v.into());
+                }
+
+                data.exports.push(DataExport {
+                    name: None,
+                    ordinal: ordinal_base + i,
+                });
+
+                Value::Object(map)
+            })
+            .collect();
+
+        // Now, add names
+        for (name_pointer, ordinal_index) in table.name_iter() {
+            let mut name = match table.name_from_pointer(name_pointer) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            if name.len() > MAX_EXPORT_NAME_LENGTH {
+                name = &name[..MAX_EXPORT_NAME_LENGTH];
             }
+            let ordinal_index = usize::from(ordinal_index);
 
-            data.exports.push(DataExport {
-                name: None,
-                ordinal: ordinal_base + i,
-            });
-
-            Value::Object(map)
-        })
-        .collect();
-
-    // Now, add names
-    for (name_pointer, ordinal_index) in table.name_iter() {
-        let mut name = match table.name_from_pointer(name_pointer) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        if name.len() > MAX_EXPORT_NAME_LENGTH {
-            name = &name[..MAX_EXPORT_NAME_LENGTH];
+            if let Some(Value::Object(map)) = details.get_mut(ordinal_index) {
+                let _r = map.insert("name", Value::bytes(name));
+            }
+            if let Some(export) = data.exports.get_mut(ordinal_index) {
+                export.name = Some(name.to_vec());
+            }
         }
-        let ordinal_index = usize::from(ordinal_index);
 
-        if let Some(Value::Object(map)) = details.get_mut(ordinal_index) {
-            let _r = map.insert("name", Value::bytes(name));
+        let dir = table.directory();
+        let _r = out.insert("export_timestamp", dir.time_date_stamp.get(LE).into());
+        let name_pointer = dir.name.get(LE);
+        if let Ok(dll_name) = table.name_from_pointer(name_pointer) {
+            let _r = out.insert("dll_name", dll_name.to_vec().into());
         }
-        if let Some(export) = data.exports.get_mut(ordinal_index) {
-            export.name = Some(name.to_vec());
+
+        if let Ok(v) = details.len().try_into() {
+            let _r = out.insert("number_of_exports", v);
         }
+        let _r = out.insert("export_details", Value::Array(details));
+    } else {
+        let _r = out.insert("number_of_exports", Value::Integer(0));
     }
-
-    let dir = table.directory();
-    let _r = out.insert("export_timestamp", dir.time_date_stamp.get(LE).into());
-    let name_pointer = dir.name.get(LE);
-    if let Ok(dll_name) = table.name_from_pointer(name_pointer) {
-        let _r = out.insert("dll_name", dll_name.to_vec().into());
-    }
-
-    if let Ok(v) = details.len().try_into() {
-        let _r = out.insert("number_of_exports", v);
-    }
-    let _r = out.insert("export_details", Value::Array(details));
 }
 
 fn data_directories(dirs: DataDirectories) -> Value {
@@ -1662,33 +1658,16 @@ fn add_resources(
     sections: &SectionTable,
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
-) -> bool {
-    let dir = match data_dirs.resource_directory(mem, sections) {
-        Ok(Some(dir)) => dir,
-        _ => return false,
-    };
-    let root = match dir.root() {
-        Ok(root) => root,
-        Err(_) => return false,
-    };
+) {
+    let dir = data_dirs.resource_directory(mem, sections).ok().flatten();
+    let root = dir.as_ref().and_then(|dir| dir.root().ok());
+    if let (Some(dir), Some(root)) = (dir, root) {
+        let mut resources = Vec::new();
 
-    let mut resources = Vec::new();
-    for entry in root.entries {
-        // First level is type
-        let ty = entry.name_or_id.get(LE);
-        let ty_name = match entry.name_or_id() {
-            ResourceNameOrId::Name(name) => name.data(dir).ok(),
-            ResourceNameOrId::Id(_) => None,
-        };
-
-        let table = match entry.data(dir) {
-            Ok(ResourceDirectoryEntryData::Table(table)) => table,
-            _ => continue,
-        };
-        for entry in table.entries {
-            // Second level is id
-            let id = entry.name_or_id.get(LE);
-            let id_name = match entry.name_or_id() {
+        for entry in root.entries {
+            // First level is type
+            let ty = entry.name_or_id.get(LE);
+            let ty_name = match entry.name_or_id() {
                 ResourceNameOrId::Name(name) => name.data(dir).ok(),
                 ResourceNameOrId::Id(_) => None,
             };
@@ -1698,77 +1677,90 @@ fn add_resources(
                 _ => continue,
             };
             for entry in table.entries {
-                // Third level is language
-                let lang = entry.name_or_id.get(LE);
-                let lang_name = match entry.name_or_id() {
+                // Second level is id
+                let id = entry.name_or_id.get(LE);
+                let id_name = match entry.name_or_id() {
                     ResourceNameOrId::Name(name) => name.data(dir).ok(),
                     ResourceNameOrId::Id(_) => None,
                 };
 
-                if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
-                    let rva = entry_data.offset_to_data.get(LE);
-                    let offset = va_to_file_offset(sections, rva);
-                    if ty == u32::from(pe::RT_VERSION) {
-                        if let Some(offset) = offset {
-                            add_version_infos(mem, offset, out);
+                let table = match entry.data(dir) {
+                    Ok(ResourceDirectoryEntryData::Table(table)) => table,
+                    _ => continue,
+                };
+                for entry in table.entries {
+                    // Third level is language
+                    let lang = entry.name_or_id.get(LE);
+                    let lang_name = match entry.name_or_id() {
+                        ResourceNameOrId::Name(name) => name.data(dir).ok(),
+                        ResourceNameOrId::Id(_) => None,
+                    };
+
+                    if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
+                        let rva = entry_data.offset_to_data.get(LE);
+                        let offset = va_to_file_offset(sections, rva);
+                        if ty == u32::from(pe::RT_VERSION) {
+                            if let Some(offset) = offset {
+                                add_version_infos(mem, offset, out);
+                            }
                         }
+
+                        if resources.len() > MAX_RESOURCES {
+                            continue;
+                        }
+
+                        data.resource_languages.push(lang);
+
+                        let mut obj: HashMap<_, _> = [
+                            ("rva", rva.into()),
+                            ("length", entry_data.size.get(LE).into()),
+                        ]
+                        .into();
+
+                        if let Some(offset) = offset {
+                            let _r = obj.insert("offset", offset.into());
+                        }
+
+                        let _r = match ty_name {
+                            Some(name) => obj.insert("type_string", u16_slice_to_value(name)),
+                            None => obj.insert("type", ty.into()),
+                        };
+                        let _r = match id_name {
+                            Some(name) => obj.insert("name_string", u16_slice_to_value(name)),
+                            None => obj.insert("id", id.into()),
+                        };
+                        let _r = match lang_name {
+                            Some(name) => obj.insert("language_string", u16_slice_to_value(name)),
+                            None => obj.insert("language", lang.into()),
+                        };
+
+                        resources.push(Value::Object(obj));
                     }
-
-                    if resources.len() > MAX_RESOURCES {
-                        continue;
-                    }
-
-                    data.resource_languages.push(lang);
-
-                    let mut obj: HashMap<_, _> = [
-                        ("rva", rva.into()),
-                        ("length", entry_data.size.get(LE).into()),
-                    ]
-                    .into();
-
-                    if let Some(offset) = offset {
-                        let _r = obj.insert("offset", offset.into());
-                    }
-
-                    let _r = match ty_name {
-                        Some(name) => obj.insert("type_string", u16_slice_to_value(name)),
-                        None => obj.insert("type", ty.into()),
-                    };
-                    let _r = match id_name {
-                        Some(name) => obj.insert("name_string", u16_slice_to_value(name)),
-                        None => obj.insert("id", id.into()),
-                    };
-                    let _r = match lang_name {
-                        Some(name) => obj.insert("language_string", u16_slice_to_value(name)),
-                        None => obj.insert("language", lang.into()),
-                    };
-
-                    resources.push(Value::Object(obj));
                 }
             }
         }
+
+        if let Ok(v) = i64::try_from(resources.len()) {
+            let _r = out.insert("number_of_resources", v.into());
+        }
+
+        out.extend([
+            (
+                "resource_timestamp",
+                root.header.time_date_stamp.get(LE).into(),
+            ),
+            (
+                "resource_version",
+                Value::object([
+                    ("major", root.header.major_version.get(LE).into()),
+                    ("minor", root.header.minor_version.get(LE).into()),
+                ]),
+            ),
+            ("resources", Value::Array(resources)),
+        ]);
+    } else {
+        let _r = out.insert("number_of_resources", Value::Integer(0));
     }
-
-    if let Ok(v) = i64::try_from(resources.len()) {
-        let _r = out.insert("number_of_resources", v.into());
-    }
-
-    out.extend([
-        (
-            "resource_timestamp",
-            root.header.time_date_stamp.get(LE).into(),
-        ),
-        (
-            "resource_version",
-            Value::object([
-                ("major", root.header.major_version.get(LE).into()),
-                ("minor", root.header.minor_version.get(LE).into()),
-            ]),
-        ),
-        ("resources", Value::Array(resources)),
-    ]);
-
-    true
 }
 
 pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str, Value>) {
