@@ -1,20 +1,4 @@
-use object::{Bytes, LittleEndian as LE, Pod, U16};
-
-#[derive(Copy, Clone)]
-#[repr(C)]
-struct Header {
-    length: U16<LE>,
-    value_length: U16<LE>,
-    typ: U16<LE>,
-}
-
-const HEADER_SIZE: usize = std::mem::size_of::<Header>();
-
-// Safety:
-// - Header is `#[repr(C)]`
-// - There is no invalid byte values
-// - There is no padding
-unsafe impl Pod for Header {}
+use object::{Bytes, LittleEndian as LE, U16};
 
 pub struct VersionInfo {
     pub key: Vec<u8>,
@@ -26,8 +10,8 @@ pub fn read_version_info(mem: &[u8], offset: usize) -> Option<Vec<VersionInfo>> 
 
     let mut bytes = Bytes(mem);
     bytes.skip(offset).ok()?;
-    let header = bytes.read::<Header>().ok()?;
-    let version_info_length = usize::from(header.length.get(LE));
+    let header = read_header(&mut bytes)?;
+    let version_info_length = usize::from(header.length);
     let end = offset + version_info_length;
     let key = bytes.read_bytes(VS_VERSION_INFO_KEY.len()).ok()?;
     if key.0 != VS_VERSION_INFO_KEY {
@@ -37,7 +21,7 @@ pub fn read_version_info(mem: &[u8], offset: usize) -> Option<Vec<VersionInfo>> 
     // VS_FIXEDFILEINFO is 32-bits aligned after the key.
     let offset = align32(offset + HEADER_SIZE + VS_VERSION_INFO_KEY.len());
     // Then add the length of the VS_FIXEDFILEINFO, and realign
-    let mut offset = align32(offset + usize::from(header.value_length.get(LE)));
+    let mut offset = align32(offset + usize::from(header.value_length));
 
     // Skip VarFileInfo, if any
     while let Some(length) = read_var_file_info(mem, offset) {
@@ -62,13 +46,13 @@ fn read_var_file_info(mem: &[u8], offset: usize) -> Option<usize> {
 
     let mut bytes = Bytes(mem);
     bytes.skip(offset).ok()?;
-    let header = bytes.read::<Header>().ok()?;
+    let header = read_header(&mut bytes)?;
     let key = bytes.read_bytes(VAR_FILE_INFO_KEY.len()).ok()?;
     if key.0 != VAR_FILE_INFO_KEY {
         return None;
     }
 
-    Some(usize::from(header.length.get(LE)))
+    Some(usize::from(header.length))
 }
 
 // Read a StringFileInfo. If present, return the length of the entry
@@ -77,13 +61,13 @@ fn read_string_file_info(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) 
 
     let mut bytes = Bytes(mem);
     bytes.skip(offset).ok()?;
-    let header = bytes.read::<Header>().ok()?;
+    let header = read_header(&mut bytes)?;
     let key = bytes.read_bytes(STRING_FILE_INFO_KEY.len()).ok()?;
     if key.0 != STRING_FILE_INFO_KEY {
         return None;
     }
 
-    let length = usize::from(header.length.get(LE));
+    let length = usize::from(header.length);
     let end = offset + length;
 
     // StringTable is then aligned
@@ -103,9 +87,9 @@ fn read_string_file_info(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) 
 fn read_string_table(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> Option<usize> {
     let mut bytes = Bytes(mem);
     bytes.skip(offset).ok()?;
-    let header = bytes.read::<Header>().ok()?;
+    let header = read_header(&mut bytes)?;
 
-    let length = usize::from(header.length.get(LE));
+    let length = usize::from(header.length);
     let end = offset + length;
 
     // move to children: header, 8 byte wide string and padding
@@ -125,13 +109,13 @@ fn read_string_table(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> O
 fn read_string(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> Option<usize> {
     let mut bytes = Bytes(mem);
     bytes.skip(offset).ok()?;
-    let header = bytes.read::<Header>().ok()?;
+    let header = read_header(&mut bytes)?;
 
-    let length = usize::from(header.length.get(LE));
+    let length = usize::from(header.length);
     let end = offset + length;
 
     // We have the size for the value, hence easily getting the value.
-    let value_length = usize::from(header.value_length.get(LE));
+    let value_length = usize::from(header.value_length);
     // This length is in characters, multiply by 2 to get byte length.
     let value_length = value_length * 2;
     if value_length + 6 > length {
@@ -182,4 +166,22 @@ fn unwide(mem: &[u8]) -> Vec<u8> {
 // Align offset on 32-bit boundary
 const fn align32(offset: usize) -> usize {
     (offset + 3) & !3
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct Header {
+    length: u16,
+    value_length: u16,
+    typ: u16,
+}
+
+const HEADER_SIZE: usize = std::mem::size_of::<Header>();
+
+fn read_header(data: &mut Bytes) -> Option<Header> {
+    Some(Header {
+        length: data.read::<U16<LE>>().ok()?.get(LE),
+        value_length: data.read::<U16<LE>>().ok()?.get(LE),
+        typ: data.read::<U16<LE>>().ok()?.get(LE),
+    })
 }
