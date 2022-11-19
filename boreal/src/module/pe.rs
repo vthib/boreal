@@ -1196,7 +1196,9 @@ fn parse_file<Pe: ImageNtHeaders>(
         add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
         add_delay_load_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
         add_exports(&data_dirs, mem, sections, data, &mut map);
-        add_resources(&data_dirs, mem, sections, data, &mut map);
+        if !add_resources(&data_dirs, mem, sections, data, &mut map) {
+            let _r = map.insert("number_of_resources", Value::Integer(0));
+        }
     }
 
     #[cfg(feature = "openssl")]
@@ -1660,14 +1662,14 @@ fn add_resources(
     sections: &SectionTable,
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
-) {
+) -> bool {
     let dir = match data_dirs.resource_directory(mem, sections) {
         Ok(Some(dir)) => dir,
-        _ => return,
+        _ => return false,
     };
     let root = match dir.root() {
         Ok(root) => root,
-        Err(_) => return,
+        Err(_) => return false,
     };
 
     let mut resources = Vec::new();
@@ -1765,6 +1767,8 @@ fn add_resources(
         ),
         ("resources", Value::Array(resources)),
     ]);
+
+    true
 }
 
 pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str, Value>) {

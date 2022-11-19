@@ -264,6 +264,7 @@ pe.loader_flags == 0 and
 pe.machine == 332 and
 pe.number_of_imported_functions == 48 and
 pe.number_of_imports == 2 and
+pe.number_of_resources == 0 and
 pe.number_of_rva_and_sizes == 16 and
 pe.number_of_sections == 7 and
 pe.number_of_signatures == 0 and
@@ -274,6 +275,10 @@ pe.os_version.minor == 0 and
 pe.overlay.offset == 0 and
 pe.overlay.size == 0 and
 pe.pointer_to_symbol_table == 0 and
+not defined pe.resource_timestamp == 0 and
+not defined pe.resource_version.major == 4 and
+not defined pe.resource_version.minor == 0 and
+not defined pe.resources[0].id and
 pe.section_alignment == 4096 and
 (
     pe.sections[0].characteristics == 1615855712 and
@@ -950,6 +955,168 @@ rule test {
         not defined pe.signatures[2].version
 }"#,
         "tests/assets/libyara/data/3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c",
+        true,
+    );
+}
+
+#[test]
+fn test_coverage_pe_resources_only() {
+    check_file(
+        r#"import "pe"
+rule test {
+    condition:
+pe.base_of_code == 4096 and
+pe.base_of_data == 8192 and
+pe.characteristics == 8450 and
+pe.checksum == 0 and
+(
+    pe.data_directories[0].size == 0 and
+    pe.data_directories[0].virtual_address == 0 and
+    pe.data_directories[1].size == 0 and
+    pe.data_directories[1].virtual_address == 0 and
+    pe.data_directories[2].size == 440 and
+    pe.data_directories[2].virtual_address == 12288 and
+    pe.data_directories[3].size == 0 and
+    pe.data_directories[3].virtual_address == 0 and
+    pe.data_directories[4].size == 0 and
+    pe.data_directories[4].virtual_address == 0 and
+    pe.data_directories[5].size == 0 and
+    pe.data_directories[5].virtual_address == 0 and
+    pe.data_directories[6].size == 28 and
+    pe.data_directories[6].virtual_address == 8192 and
+    pe.data_directories[7].size == 0 and
+    pe.data_directories[7].virtual_address == 0 and
+    pe.data_directories[8].size == 0 and
+    pe.data_directories[8].virtual_address == 0 and
+    pe.data_directories[9].size == 0 and
+    pe.data_directories[9].virtual_address == 0 and
+    pe.data_directories[10].size == 0 and
+    pe.data_directories[10].virtual_address == 0 and
+    pe.data_directories[11].size == 0 and
+    pe.data_directories[11].virtual_address == 0 and
+    pe.data_directories[12].size == 0 and
+    pe.data_directories[12].virtual_address == 0 and
+    pe.data_directories[13].size == 0 and
+    pe.data_directories[13].virtual_address == 0 and
+    pe.data_directories[14].size == 0 and
+    pe.data_directories[14].virtual_address == 0 and
+    pe.data_directories[15].size == 0 and
+    pe.data_directories[15].virtual_address == 0)
+ and
+pe.dll_characteristics == 1344 and
+pe.entry_point == 0 and
+pe.entry_point_raw == 0 and
+pe.file_alignment == 512 and
+pe.image_base == 268435456 and
+pe.image_version.major == 0 and
+pe.image_version.minor == 0 and
+pe.is_pe == 1 and
+pe.linker_version.major == 14 and
+pe.linker_version.minor == 29 and
+pe.loader_flags == 0 and
+pe.machine == 332 and
+pe.number_of_resources == 4 and
+pe.number_of_rva_and_sizes == 16 and
+pe.number_of_sections == 3 and
+pe.number_of_signatures == 0 and
+pe.number_of_symbols == 0 and
+pe.opthdr_magic == 267 and
+pe.os_version.major == 6 and
+pe.os_version.minor == 0 and
+pe.overlay.offset == 0 and
+pe.overlay.size == 0 and
+pe.pointer_to_symbol_table == 0 and
+pe.resource_timestamp == 0 and
+pe.resource_version.major == 0 and
+pe.resource_version.minor == 0 and
+(
+    pe.resources[0].language == 1036 and
+    pe.resources[0].length == 1 and
+    pe.resources[0].name_string == "C\x00U\x00S\x00T\x00O\x00M\x00N\x00A\x00M\x00E\x00" and
+    pe.resources[0].offset == 2400 and
+    pe.resources[0].rva == 12640 and
+    pe.resources[0].type_string == "C\x00U\x00S\x00T\x00O\x00M\x00T\x00Y\x00P\x00E\x00" and
+    pe.resources[1].id == 1 and
+    pe.resources[1].language == 1031 and
+    pe.resources[1].length == 11 and
+    pe.resources[1].offset == 2384 and
+    pe.resources[1].rva == 12624 and
+    pe.resources[1].type_string == "T\x00E\x00X\x00T\x00I\x00N\x00C\x00L\x00U\x00D\x00E\x00" and
+    pe.resources[2].id == 10 and
+    pe.resources[2].language == 1029 and
+    pe.resources[2].length == 36 and
+    pe.resources[2].offset == 2408 and
+    pe.resources[2].rva == 12648 and
+    pe.resources[2].type == 4 and
+    pe.resources[3].id == 10 and
+    pe.resources[3].language == 1032 and
+    pe.resources[3].length == 34 and
+    pe.resources[3].offset == 2448 and
+    pe.resources[3].rva == 12688 and
+    pe.resources[3].type == 4)
+ and
+pe.rich_signature.clear_data == "\x44\x61\x6e\x53\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc1\x75\x05\x01\x01\x00\x00\x00\xc1\x75\xff\x00\x01\x00\x00\x00\xc1\x75\x02\x01\x01\x00\x00\x00" and
+pe.rich_signature.key == 2388522663 and
+pe.rich_signature.length == 40 and
+pe.rich_signature.offset == 128 and
+pe.rich_signature.raw_data == "\xe3\x97\x33\xdd\xa7\xf6\x5d\x8e\xa7\xf6\x5d\x8e\xa7\xf6\x5d\x8e\x66\x83\x58\x8f\xa6\xf6\x5d\x8e\x66\x83\xa2\x8e\xa6\xf6\x5d\x8e\x66\x83\x5f\x8f\xa6\xf6\x5d\x8e" and
+true
+ and
+true
+ and
+pe.section_alignment == 4096 and
+(
+    pe.sections[0].characteristics == 1610612768 and
+    pe.sections[0].full_name == ".text" and
+    pe.sections[0].name == ".text" and
+    pe.sections[0].number_of_line_numbers == 0 and
+    pe.sections[0].number_of_relocations == 0 and
+    pe.sections[0].pointer_to_line_numbers == 0 and
+    pe.sections[0].pointer_to_relocations == 0 and
+    pe.sections[0].raw_data_offset == 1024 and
+    pe.sections[0].raw_data_size == 512 and
+    pe.sections[0].virtual_address == 4096 and
+    pe.sections[0].virtual_size == 7 and
+    pe.sections[1].characteristics == 1073741888 and
+    pe.sections[1].full_name == ".rdata" and
+    pe.sections[1].name == ".rdata" and
+    pe.sections[1].number_of_line_numbers == 0 and
+    pe.sections[1].number_of_relocations == 0 and
+    pe.sections[1].pointer_to_line_numbers == 0 and
+    pe.sections[1].pointer_to_relocations == 0 and
+    pe.sections[1].raw_data_offset == 1536 and
+    pe.sections[1].raw_data_size == 512 and
+    pe.sections[1].virtual_address == 8192 and
+    pe.sections[1].virtual_size == 188 and
+    pe.sections[2].characteristics == 1073741888 and
+    pe.sections[2].full_name == ".rsrc" and
+    pe.sections[2].name == ".rsrc" and
+    pe.sections[2].number_of_line_numbers == 0 and
+    pe.sections[2].number_of_relocations == 0 and
+    pe.sections[2].pointer_to_line_numbers == 0 and
+    pe.sections[2].pointer_to_relocations == 0 and
+    pe.sections[2].raw_data_offset == 2048 and
+    pe.sections[2].raw_data_size == 512 and
+    pe.sections[2].virtual_address == 12288 and
+    pe.sections[2].virtual_size == 440)
+ and
+pe.size_of_code == 512 and
+pe.size_of_headers == 1024 and
+pe.size_of_heap_commit == 4096 and
+pe.size_of_heap_reserve == 1048576 and
+pe.size_of_image == 16384 and
+pe.size_of_initialized_data == 1024 and
+pe.size_of_optional_header == 224 and
+pe.size_of_stack_commit == 4096 and
+pe.size_of_stack_reserve == 1048576 and
+pe.size_of_uninitialized_data == 0 and
+pe.subsystem == 2 and
+pe.subsystem_version.major == 6 and
+pe.subsystem_version.minor == 0 and
+pe.timestamp == 1668868042 and
+pe.win32_version_value == 0
+}"#,
+        "tests/assets/pe/resources_only.dll",
         true,
     );
 }

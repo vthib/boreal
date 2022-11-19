@@ -1,0 +1,61 @@
+resources_only.dll was generated like this:
+
+* Create three files: `Source.cpp`, `Resource.rc`, `resource.h`:
+
+Source.cpp:
+
+```
+int __stdcall WinMainCRTStartup(void)
+{
+    return 0;
+}
+```
+
+Resource.rc:
+
+```
+#include "resource.h"
+#include "winres.h"
+
+LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
+
+1 TEXTINCLUDE
+{
+    "resource.h\0"
+}
+
+LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
+
+CUSTOMNAME CUSTOMTYPE 
+{
+    "\0"
+}
+
+10 MENU
+LANGUAGE 5,1
+{
+ POPUP "&File1"
+ {
+  MENUITEM "&Exit",IDCANCEL
+ }
+}
+
+10 MENU
+LANGUAGE 8, 1
+{
+    POPUP "&File"
+    {
+        MENUITEM "&Exit", IDCANCEL
+    }
+}
+```
+
+`resource.h` is just empty.
+
+Then compile with:
+
+* `rc.exe /fo"Resource.res" Resource.rc`
+* `cl.exe /LD Source.cpp /link /nodefaultlib /noentry Resource.res`
+
+This generates a DLL with no imports/exports, and some custom resources with names and not just IDs.
+I haven't found a way to get names for languages however, not sure it is possible.
