@@ -1198,10 +1198,11 @@ fn parse_file<Pe: ImageNtHeaders>(
 
     #[cfg(feature = "openssl")]
     if let Some(signatures) = signatures::get_signatures(&data_dirs, mem) {
-        // TODO: add limit on number
-        if let Ok(v) = signatures.len().try_into() {
-            let _r = map.insert("number_of_signatures", Value::Integer(v));
-        }
+        // signatures has max MAX_PE_CERTS element, it will always fill in a i64.
+        let _r = map.insert(
+            "number_of_signatures",
+            Value::Integer(signatures.len() as _),
+        );
         let _r = map.insert("signatures", Value::Array(signatures));
     } else {
         let _r = map.insert("number_of_signatures", Value::Integer(0));

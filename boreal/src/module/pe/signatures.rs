@@ -15,6 +15,8 @@ use openssl_sys::{
 
 use super::Value;
 
+const MAX_PE_CERTS: usize = 16;
+
 pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Value>> {
     let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_SECURITY)?;
     let (va, size) = dir.address_range();
@@ -46,8 +48,7 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Val
 
         // revision is 2.0 and cert type is PKCS_SIGNED_DATA
         if rev == 0x0200 && cert_type == 0x0002 {
-            // TODO: limit on number of certs
-            while !cert.is_empty() {
+            while !cert.is_empty() && signatures.len() < MAX_PE_CERTS {
                 if !add_signatures_from_pkcs7_der(&mut cert, &mut signatures) {
                     break;
                 }
@@ -77,8 +78,10 @@ fn add_signatures_from_pkcs7_der(data: &mut &[u8], signatures: &mut Vec<Value>) 
         Err(_) => return false,
     };
 
-    // TODO: limit on number of certs
     for cert in certs {
+        if signatures.len() >= MAX_PE_CERTS {
+            break;
+        }
         signatures.push(x509_to_value(&cert));
     }
 
@@ -112,8 +115,8 @@ fn add_nested_signatures(pkcs: &MyPkcs7, signatures: &mut Vec<Value>) {
     if xa.is_null() {
         return;
     }
-    for i in 0..16 {
-        let nested = unsafe { sys::X509_ATTRIBUTE_get0_type(xa, i) };
+    for i in 0..MAX_PE_CERTS {
+        let nested = unsafe { sys::X509_ATTRIBUTE_get0_type(xa, i as i32) };
         if nested.is_null() {
             break;
         }
@@ -125,6 +128,9 @@ fn add_nested_signatures(pkcs: &MyPkcs7, signatures: &mut Vec<Value>) {
         let seq = unsafe { Asn1StringRef::from_ptr(nested.sequence) };
         let mut data = seq.as_slice();
         let _ = add_signatures_from_pkcs7_der(&mut data, signatures);
+        if signatures.len() >= MAX_PE_CERTS {
+            break;
+        }
     }
 }
 
