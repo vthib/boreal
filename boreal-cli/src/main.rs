@@ -1,17 +1,15 @@
 use std::path::{Path, PathBuf};
-use std::process::exit;
+use std::process::ExitCode;
 
 use boreal::Compiler;
 use boreal::{module::Value as ModuleValue, Scanner};
 
 use clap::Parser;
 use codespan_reporting::diagnostic::Diagnostic;
-use codespan_reporting::{
-    files::SimpleFile,
-    term::{
-        self,
-        termcolor::{ColorChoice, StandardStream},
-    },
+use codespan_reporting::files::SimpleFile;
+use codespan_reporting::term::{
+    self,
+    termcolor::{ColorChoice, StandardStream},
 };
 use walkdir::WalkDir;
 
@@ -43,27 +41,38 @@ struct Args {
     skip_larger: Option<u64>,
 }
 
-fn display_diag_and_exit(path: &Path, contents: &str, diagnostic: Diagnostic<()>) -> ! {
+fn display_diagnostic(path: &Path, contents: &str, diagnostic: Diagnostic<()>) {
     let writer = StandardStream::stderr(ColorChoice::Always);
-    let config = codespan_reporting::term::Config::default();
+    let config = term::Config::default();
 
     let path = path.display().to_string();
     let files = SimpleFile::new(&path, contents);
-    if let Err(e) = term::emit(&mut writer.lock(), &config, &files, &diagnostic) {
+    let writer = &mut writer.lock();
+    if let Err(e) = term::emit(writer, &config, &files, &diagnostic) {
         eprintln!("cannot emit diagnostics: {}", e);
     }
-    exit(2);
 }
 
-fn main() -> Result<(), std::io::Error> {
+fn main() -> ExitCode {
     let args = Args::parse();
 
     let scanner = {
-        let rules_contents = std::fs::read_to_string(&args.rules_file)?;
+        let rules_contents = match std::fs::read_to_string(&args.rules_file) {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!(
+                    "Unable to open rule file {}: {}",
+                    args.rules_file.display(),
+                    err
+                );
+                return ExitCode::FAILURE;
+            }
+        };
 
         let mut compiler = Compiler::new();
         if let Err(err) = compiler.add_rules_str(&rules_contents) {
-            display_diag_and_exit(&args.rules_file, &rules_contents, err.to_diagnostic());
+            display_diagnostic(&args.rules_file, &rules_contents, err.to_diagnostic());
+            return ExitCode::FAILURE;
         }
 
         compiler.into_scanner()
@@ -74,8 +83,15 @@ fn main() -> Result<(), std::io::Error> {
         walker = walker.max_depth(1);
     }
 
+    let mut has_success = false;
     for entry in walker {
-        let entry = entry?;
+        let entry = match entry {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!("{}", err);
+                continue;
+            }
+        };
 
         if !entry.file_type().is_file() {
             continue;
@@ -83,12 +99,12 @@ fn main() -> Result<(), std::io::Error> {
 
         if let Some(max_size) = args.skip_larger {
             if max_size > 0 && entry.depth() > 0 {
-                let meta = entry.metadata()?;
-                if meta.len() >= max_size {
+                let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
+                if file_length >= max_size {
                     eprintln!(
                         "skipping {} ({} bytes) because it's larger than {} bytes.",
                         entry.path().display(),
-                        meta.len(),
+                        file_length,
                         max_size
                     );
                     continue;
@@ -96,10 +112,17 @@ fn main() -> Result<(), std::io::Error> {
             }
         }
 
-        scan_file(&scanner, entry.path(), &args)?;
+        match scan_file(&scanner, entry.path(), &args) {
+            Ok(()) => has_success = true,
+            Err(err) => eprintln!("Cannot scan {}: {}", entry.path().display(), err),
+        }
     }
 
-    Ok(())
+    if has_success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 fn scan_file(scanner: &Scanner, path: &Path, args: &Args) -> std::io::Result<()> {

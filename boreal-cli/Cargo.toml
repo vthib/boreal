@@ -5,6 +5,10 @@ repository = "https://github.com/vthib/boreal"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
+[[bin]]
+name = "boreal"
+path = "src/main.rs"
+
 [dependencies]
 boreal = { path = "../boreal", version = "0.0.1" }
 
