@@ -41,6 +41,10 @@ struct Args {
     /// Skip files larger than the given size when scanning a directory
     #[clap(short = 'z', long, value_parser, value_name = "MAX_SIZE")]
     skip_larger: Option<u64>,
+
+    /// Number of threads to use when scanning directories
+    #[clap(short = 'p', long, value_parser, value_name = "NUMBER")]
+    threads: Option<usize>,
 }
 
 fn display_diagnostic(path: &Path, contents: &str, diagnostic: Diagnostic<()>) {
@@ -163,9 +167,13 @@ struct ThreadPool {
 
 impl ThreadPool {
     fn new(scanner: &Scanner, args: &Args) -> (Self, Sender<PathBuf>) {
-        let nb_cpus = std::thread::available_parallelism()
-            .map(|v| v.get())
-            .unwrap_or(32);
+        let nb_cpus = if let Some(nb) = args.threads {
+            std::cmp::min(1, nb)
+        } else {
+            std::thread::available_parallelism()
+                .map(|v| v.get())
+                .unwrap_or(32)
+        };
 
         let (sender, receiver) = bounded(nb_cpus * 5);
         (
