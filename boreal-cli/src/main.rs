@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::thread::JoinHandle;
 
 use boreal::Compiler;
 use boreal::{module::Value as ModuleValue, Scanner};
@@ -11,6 +12,7 @@ use codespan_reporting::term::{
     self,
     termcolor::{ColorChoice, StandardStream},
 };
+use crossbeam_channel::{bounded, Receiver, Sender};
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
@@ -78,57 +80,64 @@ fn main() -> ExitCode {
         compiler.into_scanner()
     };
 
-    let mut walker = WalkDir::new(&args.input).follow_links(!args.no_follow_symlinks);
-    if !args.recursive {
-        walker = walker.max_depth(1);
-    }
-
-    let mut has_success = false;
-    for entry in walker {
-        let entry = match entry {
-            Ok(v) => v,
-            Err(err) => {
-                eprintln!("{}", err);
-                continue;
-            }
-        };
-
-        if !entry.file_type().is_file() {
-            continue;
+    if args.input.is_dir() {
+        let mut walker = WalkDir::new(&args.input).follow_links(!args.no_follow_symlinks);
+        if !args.recursive {
+            walker = walker.max_depth(1);
         }
 
-        if let Some(max_size) = args.skip_larger {
-            if max_size > 0 && entry.depth() > 0 {
-                let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
-                if file_length >= max_size {
-                    eprintln!(
-                        "skipping {} ({} bytes) because it's larger than {} bytes.",
-                        entry.path().display(),
-                        file_length,
-                        max_size
-                    );
+        let (thread_pool, sender) = ThreadPool::new(&scanner, &args);
+
+        for entry in walker {
+            let entry = match entry {
+                Ok(v) => v,
+                Err(err) => {
+                    eprintln!("{}", err);
                     continue;
                 }
+            };
+
+            if !entry.file_type().is_file() {
+                continue;
             }
+
+            if let Some(max_size) = args.skip_larger {
+                if max_size > 0 && entry.depth() > 0 {
+                    let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
+                    if file_length >= max_size {
+                        eprintln!(
+                            "skipping {} ({} bytes) because it's larger than {} bytes.",
+                            entry.path().display(),
+                            file_length,
+                            max_size
+                        );
+                        continue;
+                    }
+                }
+            }
+
+            sender.send(entry.path().to_path_buf()).unwrap();
         }
 
-        match scan_file(&scanner, entry.path(), &args) {
-            Ok(()) => has_success = true,
-            Err(err) => eprintln!("Cannot scan {}: {}", entry.path().display(), err),
-        }
-    }
+        drop(sender);
+        thread_pool.join();
 
-    if has_success {
         ExitCode::SUCCESS
     } else {
-        ExitCode::FAILURE
+        match scan_file(&scanner, &args.input, args.print_module_data) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(err) => {
+                eprintln!("Cannot scan {}: {}", args.input.display(), err);
+                ExitCode::FAILURE
+            }
+        }
     }
 }
 
-fn scan_file(scanner: &Scanner, path: &Path, args: &Args) -> std::io::Result<()> {
+fn scan_file(scanner: &Scanner, path: &Path, print_module_data: bool) -> std::io::Result<()> {
     let res = scanner.scan_file(path)?;
 
-    if args.print_module_data {
+    if print_module_data {
         for (module_name, module_value) in res.module_values {
             // A module value must be an object. Filter out empty ones, it means the module has not
             // generated any values.
@@ -146,6 +155,52 @@ fn scan_file(scanner: &Scanner, path: &Path, args: &Args) -> std::io::Result<()>
     }
 
     Ok(())
+}
+
+struct ThreadPool {
+    threads: Vec<JoinHandle<()>>,
+}
+
+impl ThreadPool {
+    fn new(scanner: &Scanner, args: &Args) -> (Self, Sender<PathBuf>) {
+        let nb_cpus = std::thread::available_parallelism()
+            .map(|v| v.get())
+            .unwrap_or(32);
+
+        let (sender, receiver) = bounded(nb_cpus * 5);
+        (
+            Self {
+                threads: (0..nb_cpus)
+                    .map(|_| Self::worker_thread(scanner, &receiver, args))
+                    .collect(),
+            },
+            sender,
+        )
+    }
+
+    fn join(self) {
+        for handle in self.threads {
+            handle.join().unwrap();
+        }
+    }
+
+    fn worker_thread(
+        scanner: &Scanner,
+        receiver: &Receiver<PathBuf>,
+        args: &Args,
+    ) -> JoinHandle<()> {
+        let scanner = scanner.clone();
+        let receiver = receiver.clone();
+        let print_module_data = args.print_module_data;
+
+        std::thread::spawn(move || {
+            while let Ok(path) = receiver.recv() {
+                if let Err(err) = scan_file(&scanner, &path, print_module_data) {
+                    eprintln!("Cannot scan file {}: {}", path.display(), err);
+                }
+            }
+        })
+    }
 }
 
 /// Print a module value.

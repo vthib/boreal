@@ -18,6 +18,9 @@ clap = { version = "4.0", features = ["derive"] }
 # Proper error reporting on parsing
 codespan-reporting = "0.11"
 
+# Parallel evaluation on scanned directories
+crossbeam-channel = "0.5"
+
 # Display of bytes values
 hex = "0.4"
 
