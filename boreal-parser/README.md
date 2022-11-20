@@ -3,7 +3,7 @@ boreal-parser
 
 This crate provides a parser for YARA files.
 
-[![Build status](https://github.com/vthib/boreal/workflows/ci/badge.svg)](https://github.com/vthib/boreal/actions)
+[![Build status](https://github.com/vthib/boreal/actions/workflows/ci.yml/badge.svg)](https://github.com/vthib/boreal/actions/workflows/ci.yml)
 
 [![Crates.io](https://img.shields.io/crates/v/boreal-parser.svg)](https://crates.io/crates/boreal-parser)
 
