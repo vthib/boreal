@@ -63,21 +63,16 @@ fn main() -> ExitCode {
     let args = Args::parse();
 
     let scanner = {
-        let rules_contents = match std::fs::read_to_string(&args.rules_file) {
-            Ok(v) => v,
-            Err(err) => {
-                eprintln!(
-                    "Unable to open rule file {}: {}",
-                    args.rules_file.display(),
-                    err
-                );
-                return ExitCode::FAILURE;
-            }
-        };
-
         let mut compiler = Compiler::new();
-        if let Err(err) = compiler.add_rules_str(&rules_contents) {
-            display_diagnostic(&args.rules_file, &rules_contents, err.to_diagnostic());
+        if let Err(err) = compiler.add_rules_file(&args.rules_file) {
+            match std::fs::read_to_string(&args.rules_file) {
+                Ok(rules_contents) => {
+                    display_diagnostic(&args.rules_file, &rules_contents, err.to_diagnostic());
+                }
+                Err(err) => {
+                    eprintln!("Unable to parse {}: {}", args.rules_file.display(), err);
+                }
+            }
             return ExitCode::FAILURE;
         }
 
