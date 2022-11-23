@@ -1,10 +1,11 @@
 //! Provides the [`Compiler`] object used to compile YARA rules.
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use codespan_reporting::diagnostic::Diagnostic;
+use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
 
@@ -163,11 +164,8 @@ impl Compiler {
         namespace: Option<&str>,
     ) -> Result<(), AddRuleError> {
         let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError {
-            path: None,
-            kind: AddRuleErrorKind::IO {
-                path: path.to_path_buf(),
-                error,
-            },
+            path: Some(path.to_path_buf()),
+            kind: AddRuleErrorKind::IO(error),
         })?;
         self.add_rules_str_inner(&contents, namespace, Some(path))
     }
@@ -231,15 +229,22 @@ impl Compiler {
 
         match component {
             // TODO: add span
-            parser::YaraFileComponent::Include(path) => {
+            parser::YaraFileComponent::Include(include) => {
                 // Resolve the given path relative to the current one
                 let path = match current_filepath {
-                    None => PathBuf::from(path),
-                    Some(current_path) => current_path.parent().unwrap_or(current_path).join(path),
+                    None => PathBuf::from(include.path),
+                    Some(current_path) => current_path
+                        .parent()
+                        .unwrap_or(current_path)
+                        .join(include.path),
                 };
                 let path = path.canonicalize().map_err(|error| AddRuleError {
                     path: current_filepath.map(Path::to_path_buf),
-                    kind: AddRuleErrorKind::IO { path, error },
+                    kind: AddRuleErrorKind::InvalidInclude {
+                        path,
+                        span: include.span,
+                        error,
+                    },
                 })?;
                 self.add_rules_file_inner(&path, namespace_name)?;
             }
@@ -419,7 +424,7 @@ struct Namespace {
 /// Error when adding a rule to a [`Compiler`].
 #[derive(Debug)]
 pub struct AddRuleError {
-    /// The path causing the error.
+    /// The path to the file containing the error.
     ///
     /// None if the error happens on a raw string ([`Compiler::add_rules_str`]).
     pub path: Option<PathBuf>,
@@ -437,16 +442,16 @@ enum AddRuleErrorKind {
     /// - when using the [`Compiler::add_rules_file`] or [`Compiler::add_rules_file_in_namespace`]
     ///   and failing to read from the provided path.
     /// - On `include` clauses.
-    IO {
-        /// Path that caused the IO error.
-        ///
-        /// This can be different from the path stored in [`AddRuleError`], which is the path to
-        /// a valid file that lead to this IO error.
-        /// For example, on an invalid include, the including file is [`AddRuleError::path`] and
-        /// the included path is this path.
+    IO(std::io::Error),
+
+    InvalidInclude {
+        /// Path in the include clause that is invalid.
         path: PathBuf,
 
-        /// IO error.
+        /// Span of the include.
+        span: Range<usize>,
+
+        /// IO error on this path.
         error: std::io::Error,
     },
 
@@ -493,9 +498,10 @@ impl AddRuleError {
 impl AddRuleErrorKind {
     fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
-            Self::IO { path, error } => {
-                Diagnostic::error().with_message(format!("cannot parse `{:?}`: {}", &path, error))
-            }
+            Self::IO(error) => Diagnostic::error().with_message(format!("IO error: {}", error)),
+            Self::InvalidInclude { path, span, error } => Diagnostic::error()
+                .with_message(format!("cannot include `{}`: {}", path.display(), error))
+                .with_labels(vec![Label::primary((), span.clone())]),
             Self::Parse(err) => err.to_diagnostic(),
             Self::Compilation(err) => err.to_diagnostic(),
         }

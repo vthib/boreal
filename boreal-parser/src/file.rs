@@ -36,7 +36,7 @@ pub enum YaraFileComponent {
     /// A module import
     Import(Import),
     /// An include of another file
-    Include(String),
+    Include(Include),
 }
 
 /// An import inside a Yara file.
@@ -45,6 +45,15 @@ pub struct Import {
     /// The name being imported
     pub name: String,
     /// The span covering the whole import, ie `import "foo"`
+    pub span: Range<usize>,
+}
+
+/// An import inside a Yara file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Include {
+    /// Path to the file being included
+    pub path: String,
+    /// The span covering the whole include, ie `include "./bar.yar"`
     pub span: Range<usize>,
 }
 
@@ -74,15 +83,25 @@ pub fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
 }
 
 /// Parse an include declaration
-fn include_file(input: Input) -> ParseResult<String> {
-    rtrim(preceded(
+fn include_file(input: Input) -> ParseResult<Include> {
+    let start = input;
+
+    let (input, path) = rtrim(preceded(
         rtrim(ttag("include")),
         cut(delimited(
             char('"'),
             map(take_till1(|c| c == '"'), |v: Input| v.to_string()),
             char('"'),
         )),
-    ))(input)
+    ))(input)?;
+
+    Ok((
+        input,
+        Include {
+            path,
+            span: input.get_span_from(start),
+        },
+    ))
 }
 
 /// Parse an import declaration
@@ -203,8 +222,14 @@ mod tests {
             "",
             YaraFile {
                 components: vec![
-                    YaraFileComponent::Include("v".to_owned()),
-                    YaraFileComponent::Include("i".to_owned()),
+                    YaraFileComponent::Include(Include {
+                        path: "v".to_owned(),
+                        span: 0..11,
+                    }),
+                    YaraFileComponent::Include(Include {
+                        path: "i".to_owned(),
+                        span: 12..22,
+                    }),
                 ],
             },
         );
