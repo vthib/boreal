@@ -4,8 +4,8 @@ use super::expression::{compile_expression, Type};
 use super::module::compile_module;
 use super::rule::RuleCompiler;
 use super::{
-    AddRuleError, AvailableModule, CompilationError, Compiler, ImportedModule, ModuleLocation,
-    Namespace,
+    AddRuleError, AddRuleErrorKind, AvailableModule, CompilationError, Compiler, ImportedModule,
+    ModuleLocation, Namespace,
 };
 use crate::test_helpers::test_type_traits_non_clonable;
 use boreal_parser::parse;
@@ -19,7 +19,11 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
     let file = parse(&rule_str).unwrap_or_else(|err| {
         panic!(
             "failed parsing: {}",
-            AddRuleError::ParseError(err).to_short_description("mem", &rule_str)
+            AddRuleError {
+                path: None,
+                kind: AddRuleErrorKind::Parse(err)
+            }
+            .to_short_description("mem", &rule_str)
         )
     });
 
@@ -284,10 +288,11 @@ fn test_types_traits() {
         module: Arc::new(compile_module(&crate::module::Time)),
         module_index: 0,
     });
-    test_type_traits_non_clonable(AddRuleError::CompilationError(
-        CompilationError::DuplicatedRuleName {
+    test_type_traits_non_clonable(AddRuleError {
+        path: None,
+        kind: AddRuleErrorKind::Compilation(CompilationError::DuplicatedRuleName {
             name: "a".to_owned(),
             span: 0..1,
-        },
-    ));
+        }),
+    });
 }

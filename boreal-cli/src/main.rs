@@ -6,7 +6,6 @@ use boreal::Compiler;
 use boreal::{module::Value as ModuleValue, Scanner};
 
 use clap::Parser;
-use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term::{
     self,
@@ -47,14 +46,26 @@ struct Args {
     threads: Option<usize>,
 }
 
-fn display_diagnostic(path: &Path, contents: &str, diagnostic: Diagnostic<()>) {
+fn display_diagnostic(path: &Path, err: boreal::compiler::AddRuleError) {
     let writer = StandardStream::stderr(ColorChoice::Always);
     let config = term::Config::default();
 
-    let path = path.display().to_string();
-    let files = SimpleFile::new(&path, contents);
+    let files = match &err.path {
+        Some(path) => match std::fs::read_to_string(path) {
+            Ok(contents) => SimpleFile::new(path.display().to_string(), contents),
+            Err(err) => {
+                eprintln!(
+                    "Cannot read {} after compilation error: {}",
+                    path.display(),
+                    err
+                );
+                return;
+            }
+        },
+        None => SimpleFile::new(path.display().to_string(), String::new()),
+    };
     let writer = &mut writer.lock();
-    if let Err(e) = term::emit(writer, &config, &files, &diagnostic) {
+    if let Err(e) = term::emit(writer, &config, &files, &err.to_diagnostic()) {
         eprintln!("cannot emit diagnostics: {}", e);
     }
 }
@@ -65,14 +76,7 @@ fn main() -> ExitCode {
     let scanner = {
         let mut compiler = Compiler::new();
         if let Err(err) = compiler.add_rules_file(&args.rules_file) {
-            match std::fs::read_to_string(&args.rules_file) {
-                Ok(rules_contents) => {
-                    display_diagnostic(&args.rules_file, &rules_contents, err.to_diagnostic());
-                }
-                Err(err) => {
-                    eprintln!("Unable to parse {}: {}", args.rules_file.display(), err);
-                }
-            }
+            display_diagnostic(&args.rules_file, err);
             return ExitCode::FAILURE;
         }
 
