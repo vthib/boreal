@@ -324,14 +324,27 @@ impl Inner {
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
         // First, check global rules
+        let mut has_unknown_globals = false;
         for rule in &self.global_rules {
-            if evaluate_rule(rule, None, scan_data, &previous_results)? {
-                if !rule.is_private {
-                    matched_rules.push(build_matched_rule(rule, Vec::new(), scan_data.mem, false));
+            match evaluate_rule(rule, None, scan_data, &previous_results) {
+                Some(true) => {
+                    if !rule.is_private {
+                        matched_rules.push(build_matched_rule(
+                            rule,
+                            Vec::new(),
+                            scan_data.mem,
+                            false,
+                        ));
+                    }
                 }
-            } else {
-                return Some(Vec::new());
+                Some(false) => return Some(Vec::new()),
+                // Do not rethrow immediately, so that if one of the globals is false, it is
+                // detected.
+                None => has_unknown_globals = true,
             }
+        }
+        if has_unknown_globals {
+            return None;
         }
 
         // Then, if all global rules matched, the normal rules
