@@ -32,17 +32,12 @@ pub(super) fn compile_regex(
         super::atom::AtomsExtractionError => VariableCompilationError::AtomsExtractionError,
     })?;
 
-    let use_ac = visit(ast, AcCompatibility::default()).unwrap_or_else(|e| match e {});
+    let use_ac = !literals.is_empty()
+        && literals.iter().all(|lit| lit.len() >= 2)
+        && visit(ast, AcCompatibility::default()).unwrap_or_else(|e| match e {});
 
     let mut has_wide_word_boundaries = false;
-    let matcher_type = if literals.is_empty() || !use_ac {
-        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, flags)?;
-        has_wide_word_boundaries |= has_ww_boundaries;
-
-        apply_ascii_wide_flags_on_literals(&mut literals, flags);
-
-        MatcherType::Raw(compile_regex_expr(&expr, case_insensitive, dot_all)?)
-    } else {
+    let matcher_type = if use_ac {
         let pre = match pre_ast {
             Some(ast) => {
                 let (pre, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags)?;
@@ -65,6 +60,17 @@ pub(super) fn compile_regex(
             left_validator: compile_validator(pre, case_insensitive, dot_all)?,
             right_validator: compile_validator(post, case_insensitive, dot_all)?,
         }
+    } else {
+        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, flags)?;
+        has_wide_word_boundaries |= has_ww_boundaries;
+
+        if literals.iter().any(|lit| lit.len() < 2) {
+            literals.clear();
+        } else {
+            apply_ascii_wide_flags_on_literals(&mut literals, flags);
+        }
+
+        MatcherType::Raw(compile_regex_expr(&expr, case_insensitive, dot_all)?)
     };
 
     let non_wide_regex = if has_wide_word_boundaries {
