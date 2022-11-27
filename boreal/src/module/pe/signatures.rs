@@ -142,7 +142,7 @@ impl MyPkcs7 {
     fn from_der(data: &mut &[u8]) -> Option<Self> {
         let mut ptr = data.as_ptr();
 
-        let pkcs7 = unsafe { d2i_PKCS7(std::ptr::null_mut(), &mut ptr, data.len() as i64) };
+        let pkcs7 = unsafe { d2i_PKCS7(std::ptr::null_mut(), &mut ptr, data.len() as _) };
         *data = &data[(ptr as usize - data.as_ptr() as usize)..];
 
         if pkcs7.is_null() {
