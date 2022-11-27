@@ -8,7 +8,7 @@ mkdir assets
 
 checkout() {
     echo "retrieving $2..."
-    git clone --depth 1 -q $1 assets/$2
+    git clone -q $1 assets/$2
     pushd assets/$2
     git checkout -q $3
     popd
