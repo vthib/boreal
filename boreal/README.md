@@ -7,10 +7,13 @@
 Boreal is an evaluator of [YARA](https://virustotal.github.io/yara/) rules, used to scan bytes for textual and
 binary pattern, predominantly for malware detections.
 
+Although it is quite young, it should already be usable in place of yara in many use cases.
+See [missing features](#missing-features) for details on what is missing.
+
 ## Features
 
 * Full compatibility with YARA 4.2 and [most modules](#modules). Any existing rule can be used as is.
-* Improved performances in many cases. See the [benchmark](#benchmark) section for details.
+* Improved performances in many cases. See the [benchmarks](/boreal/benches/README.md) for details.
 * Avoid scanning for strings when not required, greatly reducing execution time on carefully crafted
   rules. See [no scan optimization](#no-scan-optimization).
 
@@ -105,7 +108,7 @@ free. If however someone can provide a valid use-case, this difference can be re
 - [x] hash (with the _hash_ feature)
 - [x] math
 - [x] macho (with the _object_ feature)
-- [x] pe (with the _object_ feature
+- [x] pe (with the _object_ feature)
   - `pe.signatures` is behind the _openssl_ feature
   - `pe.imphash()` is behind the _hash_ feature
 - [x] time
@@ -118,7 +121,7 @@ Modules not yet supported:
 - [ ] magic
 - [ ] console
 
-#### Missing Features
+## Missing Features
 
 A few key features are still missing. If you are looking into using boreal in place of YARA,
 some of those might be blockers for you:
@@ -129,14 +132,24 @@ For now it is possible to craft rules that will cause stack overflows or behave 
 If you control the origin of all of your rules, this is not an issue. If that is not the case
 however, you shouldn't use boreal yet. This is in active development.
 
+- Optimizations
+
+Huge number of rules, big files and bad hex or regex strings deteriorates performances quite a lot,
+see the [benchmarks](/boreal/benches/README.md). This is in active development.
+
 - Process scanning
 
 Only scanning files or bytes is available for the moment.
 
-- Missing modules
+- Configurable timeout on scan
 
-This will greatly depend on declared interest, as I'm unsure how often those are used. If you
-would like to use boreal but a module that you need is not implemented, please create an issue.
+Closely related to defensive programming, and will probably be implemented at the same time.
+
+- Some missing modules
+
+See the module list [above](#modules). This will greatly depend on declared interest,
+as I'm unsure how often those are used. If you would like to use boreal but a module that you
+need is not implemented, please create an issue.
 
 - Saving and loading compiled rules
 
@@ -144,13 +157,13 @@ I am not quite sure what are the use-cases for this YARA feature, as the compila
 is not that time consuming. Please create an issue with a use-case if this is a feature you would
 need.
 
-### Pay for what you use
+## Pay for what you use
 
 YARA is an amazing software that is however mainly designed to optimize for the worst case
 scenario. This leads to a lot of useless and unnecessary work, and makes it very frustrating for
 a user that designs rules that should be really fast to evaluate.
 
-#### No scan optimization
+### No scan optimization
 
 Lets say you write this rule:
 
@@ -178,15 +191,13 @@ There are still some work to do on this. For example, the common "$a at X" rule 
 properly handle and will require a scan for the string. If you think you have a rule that should
 not require scanning but does, please report it.
 
-### Other optimizations
+## Other optimizations
 
-TODO
+Another optimization that is planned but not ready yet include slimmed down modules, where for
+example depending on the `pe` module to only use `pe.is_dll()` should not trigger the computation
+of all signatures, imports, exports, resources, etc on every scan.
 
-### Benchmarks
-
-TODO
-
-### crate feature flags
+## crate feature flags
 
 - `hash`: adds dependencies to compute hashes, enables the `hash` module and the `pe.imphash()` function
   if the `object` feature is also enabled.
