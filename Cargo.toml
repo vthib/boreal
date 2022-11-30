@@ -9,14 +9,9 @@ members = [
 # Fork of object crate, for additional features, but also hacks that probably cannot
 # be pushed upstreamed, but are required to align with yara's behavior
 #
-# - Support for delay load table:
-#   - 6f6794a46bcbf1f709dcd7e8693b79aa7b8505e0
-#   - 4f986f227998660ce26ccfc459b3410a450622cd
 # - Handling of FileAlignment on section's offset to raw data:
-#   - 57e46356d674420c628be876ac488170f5867aa1
-#   - a5be655e9a7d662d485de3240f6dcdf1f0e92499
+#   - 2004ec0adb8c2e5d7de09dfcd5e4c80c14cae296
+#   - 7b7257d768b09a2664cbab2a46a0c37779c91d9c
 # - Retrieval of raw name for sections
-#   - b28e4e82dc8979225ca8c483c49ea2e127795db7
-# - Retrieval of raw data for resource names
-#   - https://github.com/gimli-rs/object/pull/487
-object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.29" }
+#   - f9caed56c480f8e3c5e1f971cab76ad0a1ccae5a
+object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.30" }
