@@ -65,7 +65,7 @@ fn test_namespaces_errors() {
     checker.check_count(b"", 3);
 
     // Cannot depend on itself
-    // TODO: yara does not catch that!
+    // DIFF: This is different from yara, boreal refuses this type of dependency.
     let compiler = Compiler::new_without_yara();
     compiler.check_add_rules_err(
         "rule a { condition: a }",

@@ -228,7 +228,6 @@ impl Compiler {
         };
 
         match component {
-            // TODO: add span
             parser::YaraFileComponent::Include(include) => {
                 // Resolve the given path relative to the current one
                 let path = match current_filepath {
@@ -480,7 +479,6 @@ impl AddRuleError {
         };
 
         let files = SimpleFile::new(&input_name, &input);
-        // TODO: handle error better here?
         let _res = term::emit(&mut writer, &config, &files, &self.kind.to_diagnostic());
         String::from_utf8_lossy(writer.as_slice()).to_string()
     }

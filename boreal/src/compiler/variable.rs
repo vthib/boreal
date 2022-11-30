@@ -379,7 +379,6 @@ fn apply_wide_word_boundaries(
     // non greedy repetitions bounded by word boundaries), we need to add more data at the end.
     // How much? We cannot know, but including too much would be too much of a performance tank.
     // This is arbitrarily capped at 500 for the moment (or until the string is no longer wide)...
-    // TODO bench this
     let unwiden_mem = unwide(&mem[start..std::cmp::min(mem.len(), mat.end + 500)]);
 
     #[allow(clippy::bool_to_int_with_if)]

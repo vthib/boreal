@@ -248,7 +248,7 @@ fn test_arithmetic_operators() {
 }
 
 #[test]
-// TODO: ideally, catch those in future simplifying step.
+// Arithmetic operations are not reduced during compilation.
 #[ignore]
 fn test_arithmetic_operators_runtimes() {
     check(
@@ -328,11 +328,12 @@ fn test_bitwise_operators() {
     check("rule test { condition: 1 << 64 == 0 }", &[], true);
     check("rule test { condition: 1 >> 64 == 0 }", &[], true);
 
-    // TODO: generate parsing error to align on libyara?
+    // Arithmetic operations are not reduced during compilation.
     if false {
         check("rule test { condition: 1 << -1 == 0 }", &[], false);
         check("rule test { condition: 1 >> -1 == 0 }", &[], false);
     }
+
     check(
         "rule test { condition: 1 | 3 ^ 3 == 1 | (3 ^ 3) }",
         &[],
@@ -1888,7 +1889,7 @@ fn test_rule_of() {
 
     // This will compile but is false for the same reason that
     // "rule x { condition: x }" is compiles but is false.
-    // TODO: handle this...
+    // DIFF: Boreal does not allow this.
     // check("rule a { condition: 1 of (a*) }", b"", false);
 }
 
@@ -1972,7 +1973,7 @@ fn test_of() {
         "mem:1:24: error: unknown variable $*",
     );
 
-    // TODO: ideally, catch those in future simplifying step.
+    // Arithmetic operations are not reduced during compilation.
     if false {
         check_err(
             "rule test { strings: $a = \"AXS\" condition: 101% of them }",

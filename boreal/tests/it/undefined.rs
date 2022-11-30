@@ -86,8 +86,8 @@ fn test_undefined_arith_op() {
 
     // For div and mod, undefined on div by zero or overflow
     // TODO: report this issue on libyara
-    assert_is_defined_boreal("1 \\ #a0", false);
-    assert_is_defined_boreal("1 % #a0", false);
+    assert_is_defined("1 \\ #a0", false);
+    assert_is_defined("1 % #a0", false);
     assert_is_defined_boreal("(#a0 + -0x7FFFFFFFFFFFFFFF - 1) \\ -1", false);
     assert_is_defined_boreal("(#a0 + -0x7FFFFFFFFFFFFFFF - 1) % -1", false);
 }
