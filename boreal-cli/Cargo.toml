@@ -1,9 +1,13 @@
 [package]
 name = "boreal-cli"
 version = "0.0.1"
+description = "CLI utility to run boreal, a YARA rules engine"
 repository = "https://github.com/vthib/boreal"
-edition = "2021"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
+keywords = ["boreal", "yara", "string-matching", "scan"]
+categories = ["command-line-utilities", "text-processing"]
+edition = "2021"
 
 [[bin]]
 name = "boreal"

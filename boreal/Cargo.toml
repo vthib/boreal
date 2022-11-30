@@ -1,9 +1,13 @@
 [package]
 name = "boreal"
 version = "0.0.1"
+description = "A library to evaluate YARA rules, used to scan bytes for textual and binary pattern"
 repository = "https://github.com/vthib/boreal"
-edition = "2021"
+readme = "../README.md"
 license = "MIT OR Apache-2.0"
+keywords = ["boreal", "yara", "string-matching", "scan"]
+categories = ["text-processing"]
+edition = "2021"
 
 [features]
 default = ["hash", "object"]

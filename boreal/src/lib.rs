@@ -62,9 +62,7 @@
 // Would be nice to not need this, thanks macho module
 #![allow(unsafe_code)]
 #![deny(missing_docs)]
-
-// TODO: To activate before release
-// #![deny(clippy::cargo)]
+#![deny(clippy::cargo)]
 
 // Used in integration tests, not in the library.
 // This is to remove the "unused_crate_dependencies" warning, maybe a better solution
