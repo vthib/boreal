@@ -408,7 +408,7 @@ fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
                         str_match
                             .matches
                             .iter()
-                            .map(|m| (&*m.data, m.offset, m.data.len()))
+                            .map(|m| (&*m.data, m.offset, m.length))
                             .collect(),
                     )
                 })

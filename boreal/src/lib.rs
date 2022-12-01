@@ -86,13 +86,10 @@ use criterion as _;
 
 pub mod compiler;
 pub use compiler::Compiler;
-
 mod evaluator;
-
+mod limits;
 pub mod module;
-
 pub mod regex;
-
 pub mod scanner;
 pub use scanner::Scanner;
 

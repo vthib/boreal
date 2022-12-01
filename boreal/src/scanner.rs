@@ -385,9 +385,18 @@ fn build_matched_rule<'a>(
                 matches: eval
                     .matches
                     .iter()
-                    .map(|mat| StringMatch {
-                        offset: mat.start,
-                        data: mem[mat.start..mat.end].to_vec(),
+                    .map(|mat| {
+                        let length = mat.end - mat.start;
+                        let capped_length = std::cmp::min(length, crate::limits::MATCH_MAX_LENGTH);
+                        StringMatch {
+                            offset: mat.start,
+                            length: mat.end - mat.start,
+                            data: mem[mat.start..]
+                                .iter()
+                                .take(capped_length)
+                                .copied()
+                                .collect(),
+                        }
                     })
                     .collect(),
             })
@@ -441,8 +450,14 @@ pub struct StringMatch {
     /// Offset of the match
     pub offset: usize,
 
+    /// Actual length of the match.
+    ///
+    /// This is the real length of the match, which might be bigger than the length of `data`.
+    pub length: usize,
+
     /// The matched data.
-    // TODO: implement a max bound for this
+    ///
+    /// The length of this field is capped.
     pub data: Vec<u8>,
 }
 
@@ -1091,6 +1106,7 @@ mod tests {
         });
         test_type_traits_non_clonable(StringMatch {
             offset: 0,
+            length: 0,
             data: Vec::new(),
         });
         test_type_traits_non_clonable(DefineSymbolError::UnknownName);

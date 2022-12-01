@@ -20,6 +20,9 @@ mod namespaces;
 mod undefined;
 mod variables;
 
+// Tests related to different limits set.
+mod limits;
+
 // Tests related to modules
 #[cfg(feature = "object")]
 mod elf;
