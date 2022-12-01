@@ -176,6 +176,10 @@ impl AcScan {
             AcMatchStatus::Unknown => matches[variable_index] = AcResult::Unknown,
             AcMatchStatus::None => (),
         };
+
+        if let AcResult::Matches(matches) = &mut matches[variable_index] {
+            matches.truncate(crate::limits::STRING_MAX_NB_MATCHES);
+        }
     }
 }
 

@@ -12,7 +12,9 @@ use crate::compiler::variable::Variable;
 pub(crate) struct VariableEvaluation<'a> {
     pub(crate) var: &'a Variable,
 
-    /// Matches already done
+    /// Matches already done.
+    ///
+    /// This array is capped and matches are ignored once the limit is reached.
     pub(crate) matches: Vec<Match>,
 
     /// Offset for the next scan.
@@ -161,7 +163,6 @@ impl<'a> VariableEvaluation<'a> {
 
     /// Force computation of all possible matches.
     pub fn compute_all_matches(&mut self, mem: &[u8]) {
-        // TODO: have a limit on the number of matches
         while self.get_next_match(mem).is_some() {}
     }
 
@@ -169,6 +170,10 @@ impl<'a> VariableEvaluation<'a> {
     ///
     /// If the closure returns false, the search ends. Otherwise, the search continues.
     fn get_next_match(&mut self, mem: &[u8]) -> Option<Match> {
+        if self.matches.len() >= crate::limits::STRING_MAX_NB_MATCHES {
+            return None;
+        }
+
         let offset = match self.next_offset {
             None => return None,
             Some(v) => v,
