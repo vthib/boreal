@@ -1,10 +1,26 @@
 //! Parameters applicable to a scan.
 
 /// Parameters used to configure a scan.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ScanParams {
     /// Compute full matches on matching rules.
     pub(crate) compute_full_matches: bool,
+
+    /// Max length of the matches returned in matching rules.
+    pub(crate) match_max_length: usize,
+
+    /// Max number of matches for a given string.
+    pub(crate) string_max_nb_matches: usize,
+}
+
+impl Default for ScanParams {
+    fn default() -> Self {
+        Self {
+            compute_full_matches: false,
+            match_max_length: 512,
+            string_max_nb_matches: 1_000,
+        }
+    }
 }
 
 impl ScanParams {
@@ -23,6 +39,30 @@ impl ScanParams {
     #[must_use]
     pub fn compute_full_matches(mut self, compute_full_matches: bool) -> Self {
         self.compute_full_matches = compute_full_matches;
+        self
+    }
+
+    /// Max length of the matches returned in matching rules.
+    ///
+    /// This is the max length of [`crate::scanner::StringMatch::data`].
+    ///
+    /// The default value is `512`.
+    #[must_use]
+    pub fn match_max_length(mut self, match_max_length: usize) -> Self {
+        self.match_max_length = match_max_length;
+        self
+    }
+
+    /// Max number of matches for a given string.
+    ///
+    /// Matches that would occur after this value are not reported. This means that `#a` can never
+    /// be greater than this value, and `!a[i]` or `@a[i]` where `i` is greater than this value is
+    /// always undefined.
+    ///
+    /// The default value is `1_000`.
+    #[must_use]
+    pub fn string_max_nb_matches(mut self, string_max_nb_matches: usize) -> Self {
+        self.string_max_nb_matches = string_max_nb_matches;
         self
     }
 }

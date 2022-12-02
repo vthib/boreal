@@ -3,7 +3,10 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use crate::compiler::variable::{atom_rank, AcMatchStatus, Variable};
+use crate::{
+    compiler::variable::{atom_rank, AcMatchStatus, Variable},
+    scanner::ScanParams,
+};
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -91,18 +94,23 @@ impl AcScan {
         }
     }
 
-    pub(crate) fn matches(&self, mem: &[u8], variables: &[Variable]) -> Vec<AcResult> {
+    pub(crate) fn matches(
+        &self,
+        mem: &[u8],
+        variables: &[Variable],
+        params: &ScanParams,
+    ) -> Vec<AcResult> {
         let mut matches = vec![AcResult::NotFound; variables.len()];
 
         match &self.aho {
             ACVersion::Size32(v) => {
                 for mat in v.find_overlapping_iter(mem) {
-                    self.handle_possible_match(mem, variables, &mat, &mut matches);
+                    self.handle_possible_match(mem, variables, &mat, params, &mut matches);
                 }
             }
             ACVersion::Default(v) => {
                 for mat in v.find_overlapping_iter(mem) {
-                    self.handle_possible_match(mem, variables, &mat, &mut matches);
+                    self.handle_possible_match(mem, variables, &mat, params, &mut matches);
                 }
             }
         }
@@ -119,6 +127,7 @@ impl AcScan {
         mem: &[u8],
         variables: &[Variable],
         mat: &aho_corasick::Match,
+        params: &ScanParams,
         matches: &mut [AcResult],
     ) {
         let LiteralInfo {
@@ -178,7 +187,7 @@ impl AcScan {
         };
 
         if let AcResult::Matches(matches) = &mut matches[variable_index] {
-            matches.truncate(crate::limits::STRING_MAX_NB_MATCHES);
+            matches.truncate(params.string_max_nb_matches);
         }
     }
 }

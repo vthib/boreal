@@ -184,6 +184,12 @@ impl Scanner {
     pub fn set_scan_params(&mut self, params: ScanParams) {
         self.scan_params = params;
     }
+
+    /// Get the current scan parameters on this scanner.
+    #[must_use]
+    pub fn scan_params(&self) -> &ScanParams {
+        &self.scan_params
+    }
 }
 
 #[derive(Debug)]
@@ -226,16 +232,12 @@ impl Inner {
         params: &ScanParams,
         external_symbols_values: &[Value],
     ) -> ScanResult<'scanner> {
-        let ScanParams {
-            compute_full_matches,
-        } = params;
-
         let scan_data = ScanData::new(mem, &self.modules, external_symbols_values);
 
-        if !compute_full_matches {
+        if !params.compute_full_matches {
             // TODO: Ideally, we could keep the "previous_results" vec up to the first rule that
             // needs matches.
-            if let Some(matched_rules) = self.evaluate_without_matches(&scan_data) {
+            if let Some(matched_rules) = self.evaluate_without_matches(&scan_data, params) {
                 return ScanResult {
                     matched_rules,
                     module_values: scan_data.module_values,
@@ -245,7 +247,7 @@ impl Inner {
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_matches = self.variable_set.matches(mem, &self.variables);
+        let ac_matches = self.variable_set.matches(mem, &self.variables, params);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
@@ -256,7 +258,7 @@ impl Inner {
             let mut var_evals: Vec<_> = self.variables[var_index..(var_index + rule.nb_variables)]
                 .iter()
                 .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
-                .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
+                .map(|(var, ac_result)| VariableEvaluation::new(var, params, ac_result))
                 .collect();
             let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
                 .unwrap_or(false);
@@ -274,7 +276,8 @@ impl Inner {
                     rule,
                     var_evals,
                     mem,
-                    *compute_full_matches,
+                    params.compute_full_matches,
+                    params.match_max_length,
                 ));
             }
         }
@@ -286,7 +289,7 @@ impl Inner {
                     [var_index..(var_index + rule.nb_variables)]
                     .iter()
                     .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
-                    .map(|(var, ac_result)| VariableEvaluation::new(var, ac_result))
+                    .map(|(var, ac_result)| VariableEvaluation::new(var, params, ac_result))
                     .collect();
                 let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
                     .unwrap_or(false);
@@ -298,7 +301,8 @@ impl Inner {
                         rule,
                         var_evals,
                         mem,
-                        *compute_full_matches,
+                        params.compute_full_matches,
+                        params.match_max_length,
                     ));
                 }
                 res
@@ -319,6 +323,7 @@ impl Inner {
     fn evaluate_without_matches<'scanner>(
         &'scanner self,
         scan_data: &ScanData<'_>,
+        params: &ScanParams,
     ) -> Option<Vec<MatchedRule<'scanner>>> {
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
@@ -334,6 +339,7 @@ impl Inner {
                             Vec::new(),
                             scan_data.mem,
                             false,
+                            params.match_max_length,
                         ));
                     }
                 }
@@ -352,7 +358,13 @@ impl Inner {
             let matched = evaluate_rule(rule, None, scan_data, &previous_results)?;
 
             if matched && !rule.is_private {
-                matched_rules.push(build_matched_rule(rule, Vec::new(), scan_data.mem, false));
+                matched_rules.push(build_matched_rule(
+                    rule,
+                    Vec::new(),
+                    scan_data.mem,
+                    false,
+                    params.match_max_length,
+                ));
             }
             previous_results.push(matched);
         }
@@ -366,6 +378,7 @@ fn build_matched_rule<'a>(
     mut var_evals: Vec<VariableEvaluation<'a>>,
     mem: &[u8],
     compute_full_matches: bool,
+    match_max_length: usize,
 ) -> MatchedRule<'a> {
     if compute_full_matches {
         for var_eval in &mut var_evals {
@@ -387,7 +400,7 @@ fn build_matched_rule<'a>(
                     .iter()
                     .map(|mat| {
                         let length = mat.end - mat.start;
-                        let capped_length = std::cmp::min(length, crate::limits::MATCH_MAX_LENGTH);
+                        let capped_length = std::cmp::min(length, match_max_length);
                         StringMatch {
                             offset: mat.start,
                             length: mat.end - mat.start,

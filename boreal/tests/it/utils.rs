@@ -160,6 +160,10 @@ impl Checker {
         compiler.into_checker()
     }
 
+    pub fn set_scan_params(&mut self, scan_params: ScanParams) {
+        self.scanner.set_scan_params(scan_params);
+    }
+
     #[track_caller]
     pub fn check(&self, mem: &[u8], expected_res: bool) {
         self.scanner().check(mem, expected_res);
@@ -213,7 +217,7 @@ impl Checker {
         // We need to compute the full matches for this test
         {
             let mut scanner = self.scanner.clone();
-            scanner.set_scan_params(ScanParams::default().compute_full_matches(true));
+            scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
             let res = scanner.scan_mem(mem);
             let res = get_boreal_full_matches(&res);
             assert_eq!(res, expected, "test failed for boreal");
