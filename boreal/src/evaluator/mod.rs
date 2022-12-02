@@ -147,6 +147,13 @@ impl<'a> ScanData<'a> {
     }
 }
 
+/// Parameters used to tweak an evaluation.
+#[derive(Copy, Clone, Debug)]
+pub struct Params {
+    /// Max number of matches for a given string.
+    pub string_max_nb_matches: usize,
+}
+
 /// Evaluates an expression on a given byte slice.
 ///
 /// Returns true if the expression (with the associated variables) matches on the given

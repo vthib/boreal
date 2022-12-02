@@ -2,8 +2,8 @@
 use std::cmp::Ordering;
 
 use super::ac_scan::AcResult;
+use super::Params;
 use crate::compiler::variable::Variable;
-use crate::scanner::ScanParams;
 
 /// Variable evaluation context.
 ///
@@ -14,8 +14,8 @@ pub(crate) struct VariableEvaluation<'a> {
     /// Variable being evaluated.
     pub(crate) var: &'a Variable,
 
-    /// Max number of matches for a given string.
-    string_max_nb_matches: usize,
+    /// Parameters for the evaluation.
+    params: Params,
 
     /// Matches already done.
     ///
@@ -39,10 +39,10 @@ pub type Match = std::ops::Range<usize>;
 
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.
-    pub fn new(var: &'a Variable, scan_params: &ScanParams, ac_result: &AcResult) -> Self {
+    pub fn new(var: &'a Variable, params: Params, ac_result: &AcResult) -> Self {
         let mut this = Self {
             var,
-            string_max_nb_matches: scan_params.string_max_nb_matches,
+            params,
             matches: Vec::new(),
             next_offset: Some(0),
             has_been_found: false,
@@ -176,7 +176,7 @@ impl<'a> VariableEvaluation<'a> {
     ///
     /// If the closure returns false, the search ends. Otherwise, the search continues.
     fn get_next_match(&mut self, mem: &[u8]) -> Option<Match> {
-        if self.matches.len() >= self.string_max_nb_matches {
+        if self.matches.len() >= self.params.string_max_nb_matches {
             return None;
         }
 
@@ -224,7 +224,9 @@ mod tests {
                 span: 0..1,
             })
             .unwrap(),
-            string_max_nb_matches: 100,
+            params: Params {
+                string_max_nb_matches: 100,
+            },
             matches: Vec::new(),
             next_offset: None,
             has_been_found: false,

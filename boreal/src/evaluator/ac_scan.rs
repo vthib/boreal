@@ -3,10 +3,8 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use crate::{
-    compiler::variable::{atom_rank, AcMatchStatus, Variable},
-    scanner::ScanParams,
-};
+use super::Params;
+use crate::compiler::variable::{atom_rank, AcMatchStatus, Variable};
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -98,7 +96,7 @@ impl AcScan {
         &self,
         mem: &[u8],
         variables: &[Variable],
-        params: &ScanParams,
+        params: Params,
     ) -> Vec<AcResult> {
         let mut matches = vec![AcResult::NotFound; variables.len()];
 
@@ -127,7 +125,7 @@ impl AcScan {
         mem: &[u8],
         variables: &[Variable],
         mat: &aho_corasick::Match,
-        params: &ScanParams,
+        params: Params,
         matches: &mut [AcResult],
     ) {
         let LiteralInfo {

@@ -6,7 +6,7 @@ use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::ac_scan::AcScan;
-use crate::evaluator::{evaluate_rule, ScanData, Value, VariableEvaluation};
+use crate::evaluator::{evaluate_rule, Params as EvalParams, ScanData, Value, VariableEvaluation};
 use crate::module::Module;
 
 mod params;
@@ -91,7 +91,7 @@ impl Scanner {
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
     ) -> Self {
-        let variable_set = AcScan::new(&variables);
+        let ac_scan = AcScan::new(&variables);
 
         let mut external_symbols_values = Vec::new();
         let mut external_symbols_map = HashMap::new();
@@ -109,7 +109,7 @@ impl Scanner {
                 rules,
                 global_rules,
                 variables,
-                variable_set,
+                ac_scan,
                 modules,
                 external_symbols_map,
             }),
@@ -216,7 +216,7 @@ struct Inner {
     /// This is used to scan the memory in one go, and find which variables are found. This
     /// is usually sufficient for most rules. Other rules that depend on the number or length of
     /// matches will scan the memory during their evaluation.
-    variable_set: AcScan,
+    ac_scan: AcScan,
 
     /// List of modules used during scanning.
     modules: Vec<Box<dyn Module>>,
@@ -247,7 +247,10 @@ impl Inner {
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_matches = self.variable_set.matches(mem, &self.variables, params);
+        let eval_params = EvalParams {
+            string_max_nb_matches: params.string_max_nb_matches,
+        };
+        let ac_matches = self.ac_scan.matches(mem, &self.variables, eval_params);
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
@@ -258,7 +261,7 @@ impl Inner {
             let mut var_evals: Vec<_> = self.variables[var_index..(var_index + rule.nb_variables)]
                 .iter()
                 .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
-                .map(|(var, ac_result)| VariableEvaluation::new(var, params, ac_result))
+                .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result))
                 .collect();
             let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
                 .unwrap_or(false);
@@ -289,7 +292,7 @@ impl Inner {
                     [var_index..(var_index + rule.nb_variables)]
                     .iter()
                     .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
-                    .map(|(var, ac_result)| VariableEvaluation::new(var, params, ac_result))
+                    .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result))
                     .collect();
                 let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
                     .unwrap_or(false);
