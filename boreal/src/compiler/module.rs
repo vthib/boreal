@@ -129,7 +129,7 @@ pub(super) fn compile_bounded_identifier_use<'a, 'b>(
         last_immediate_value: None,
         current_value: ValueOrType::Type(starting_type),
         operations: Vec::with_capacity(identifier.operations.len()),
-        current_span: identifier.name_span.clone(),
+        current_span: identifier.name_span,
         bounded_value_index: Some(BoundedValueIndex::BoundedStack(identifier_stack_index)),
     };
 

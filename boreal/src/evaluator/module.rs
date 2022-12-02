@@ -29,7 +29,7 @@ pub(super) fn evaluate_expr(
                     .ok_or(PoisonKind::Undefined)?,
             };
             let value = Arc::clone(value);
-            evaluate_ops(evaluator, &value, operations.iter())
+            evaluate_ops(evaluator, &value, operations, 0)
         }
         ModuleExpression::Function {
             fun,
@@ -39,21 +39,19 @@ pub(super) fn evaluate_expr(
             let arguments = eval_function_args(evaluator, arguments)?;
             let value =
                 fun(&evaluator.scan_data.module_ctx, arguments).ok_or(PoisonKind::Undefined)?;
-            evaluate_ops(evaluator, &value, operations.iter())
+            evaluate_ops(evaluator, &value, operations, 0)
         }
     }
 }
 
-pub(super) fn evaluate_ops<'a, I>(
+fn evaluate_ops(
     evaluator: &mut Evaluator,
     mut value: &ModuleValue,
-    mut operations: I,
-) -> Result<ModuleValue, PoisonKind>
-where
-    I: Iterator<Item = &'a ValueOperation> + 'a,
-{
-    while let Some(op) = operations.next() {
-        match op {
+    operations: &[ValueOperation],
+    mut index: usize,
+) -> Result<ModuleValue, PoisonKind> {
+    while index < operations.len() {
+        match &operations[index] {
             ValueOperation::Subfield(subfield) => match value {
                 ModuleValue::Object(map) => {
                     value = map.get(&**subfield).ok_or(PoisonKind::Undefined)?;
@@ -74,11 +72,18 @@ where
                     let arguments = eval_function_args(evaluator, arguments)?;
                     let new_value = fun(&evaluator.scan_data.module_ctx, arguments)
                         .ok_or(PoisonKind::Undefined)?;
-                    return evaluate_ops(evaluator, &new_value, operations);
+                    // Avoid cloning the value if possible
+                    return if index + 1 >= operations.len() {
+                        Ok(new_value)
+                    } else {
+                        evaluate_ops(evaluator, &new_value, operations, index + 1)
+                    };
                 }
                 _ => return Err(PoisonKind::Undefined),
             },
         }
+
+        index += 1;
     }
 
     Ok(value.clone())

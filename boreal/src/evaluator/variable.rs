@@ -39,7 +39,7 @@ pub type Match = std::ops::Range<usize>;
 
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.
-    pub fn new(var: &'a Variable, params: Params, ac_result: &AcResult) -> Self {
+    pub fn new(var: &'a Variable, params: Params, ac_result: AcResult) -> Self {
         let mut this = Self {
             var,
             params,
@@ -54,7 +54,7 @@ impl<'a> VariableEvaluation<'a> {
                 this
             }
             AcResult::Matches(matches) => {
-                this.matches = matches.clone();
+                this.matches = matches;
                 this.next_offset = None;
                 this.has_been_found = !this.matches.is_empty();
                 this

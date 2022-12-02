@@ -235,8 +235,6 @@ impl Inner {
         let scan_data = ScanData::new(mem, &self.modules, external_symbols_values);
 
         if !params.compute_full_matches {
-            // TODO: Ideally, we could keep the "previous_results" vec up to the first rule that
-            // needs matches.
             if let Some(matched_rules) = self.evaluate_without_matches(&scan_data, params) {
                 return ScanResult {
                     matched_rules,
@@ -256,16 +254,16 @@ impl Inner {
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
         // First, check global rules
-        let mut var_index = 0;
+        let mut var_evals_iterator = self
+            .variables
+            .iter()
+            .zip(ac_matches.into_iter())
+            .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result));
+
         for rule in &self.global_rules {
-            let mut var_evals: Vec<_> = self.variables[var_index..(var_index + rule.nb_variables)]
-                .iter()
-                .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
-                .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result))
-                .collect();
+            let mut var_evals = collect_nb_elems(&mut var_evals_iterator, rule.nb_variables);
             let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
                 .unwrap_or(false);
-            var_index += rule.nb_variables;
 
             if !res {
                 matched_rules.clear();
@@ -288,16 +286,9 @@ impl Inner {
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
             let res = {
-                let mut var_evals: Vec<_> = self.variables
-                    [var_index..(var_index + rule.nb_variables)]
-                    .iter()
-                    .zip(&ac_matches[var_index..(var_index + rule.nb_variables)])
-                    .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result))
-                    .collect();
+                let mut var_evals = collect_nb_elems(&mut var_evals_iterator, rule.nb_variables);
                 let res = evaluate_rule(rule, Some(&mut var_evals), &scan_data, &previous_results)
                     .unwrap_or(false);
-
-                var_index += rule.nb_variables;
 
                 if res && !rule.is_private {
                     matched_rules.push(build_matched_rule(
@@ -373,6 +364,17 @@ impl Inner {
         }
 
         Some(matched_rules)
+    }
+}
+
+fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T> {
+    let mut res = Vec::with_capacity(nb);
+    loop {
+        if res.len() >= nb {
+            return res;
+        }
+        // TODO: do not unwrap, bubble up inconsistency error
+        res.push(iter.next().unwrap());
     }
 }
 

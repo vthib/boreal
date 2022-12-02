@@ -89,11 +89,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         modifiers.flags.insert(VariableFlags::ASCII);
     }
 
-    let CompiledVariable {
-        literals,
-        matcher_type,
-        non_wide_regex,
-    } = match value {
+    let res = match value {
         VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
         VariableDeclarationValue::Regex(boreal_parser::Regex {
             ast,
@@ -122,21 +118,27 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
                 regex::compile_regex(&ast, false, true, modifiers.flags)
             }
         }
-    }
-    .map_err(|error| CompilationError::VariableCompilation {
-        variable_name: name.clone(),
-        span: span.clone(),
-        error,
-    })?;
+    };
 
-    Ok(Variable {
-        name,
-        is_private: modifiers.flags.contains(VariableFlags::PRIVATE),
-        literals,
-        flags: modifiers.flags,
-        matcher_type,
-        non_wide_regex,
-    })
+    match res {
+        Ok(CompiledVariable {
+            literals,
+            matcher_type,
+            non_wide_regex,
+        }) => Ok(Variable {
+            name,
+            is_private: modifiers.flags.contains(VariableFlags::PRIVATE),
+            literals,
+            flags: modifiers.flags,
+            matcher_type,
+            non_wide_regex,
+        }),
+        Err(error) => Err(CompilationError::VariableCompilation {
+            variable_name: name,
+            span,
+            error,
+        }),
+    }
 }
 
 struct CompiledVariable {
