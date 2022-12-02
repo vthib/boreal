@@ -1162,4 +1162,55 @@ rule e {
     );
 }
 
+// Check that if we can find matching rules without scanning, "compute_full_matches" is still
+// properly handled.
+#[test]
+fn test_compute_full_matches_without_ac_scan() {
+    let checker = Checker::new(
+        r#"
+global rule a {
+    strings:
+        $a = "a"
+    condition:
+        true or $a
+}
+
+rule b {
+    strings:
+        $b = "b"
+    condition:
+        false and $b
+}
+
+rule c {
+    strings:
+        $c = "c"
+    condition:
+        true or $c
+}"#,
+    );
+
+    checker.check_rule_matches(b"", &["default:a", "default:c"]);
+    checker.check_full_matches(
+        b"",
+        vec![
+            ("default:a".to_owned(), vec![]),
+            ("default:c".to_owned(), vec![]),
+        ],
+    );
+    checker.check_full_matches(
+        b"abaccad",
+        vec![
+            (
+                "default:a".to_owned(),
+                vec![("a", vec![(b"a", 0, 1), (b"a", 2, 1), (b"a", 5, 1)])],
+            ),
+            (
+                "default:c".to_owned(),
+                vec![("c", vec![(b"c", 3, 1), (b"c", 4, 1)])],
+            ),
+        ],
+    );
+}
+
 // TODO: test count, offset, length with selected for variable
