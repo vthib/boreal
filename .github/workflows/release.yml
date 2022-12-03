@@ -1,0 +1,119 @@
+# This is mostly copied from
+# <https://github.com/BurntSushi/ripgrep/blob/4386b8e/.github/workflows/release.yml>
+
+name: release
+on:
+  push:
+    tags:
+    - "[0-9]+.[0-9]+.[0-9]+"
+jobs:
+  create-release:
+    name: create-release
+    runs-on: ubuntu-22.04
+    outputs:
+      upload_url: ${{ steps.release.outputs.upload_url }}
+      boreal_version: ${{ env.BOREAL_VERSION }}
+    steps:
+      - name: Get the release version from the tag
+        shell: bash
+        if: env.BOREAL_VERSION == ''
+        run: |
+          # Apparently, this is the right way to get a tag name. Really?
+          #
+          # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+          echo "BOREAL_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "version is: ${{ env.BOREAL_VERSION }}"
+      - name: Create GitHub release
+        id: release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.BOREAL_VERSION }}
+          release_name: ${{ env.BOREAL_VERSION }}
+
+  build-release:
+    name: build-release
+    needs: ['create-release']
+    runs-on: ${{ matrix.os }}
+    env:
+      TARGET_DIR: ./target/${{ matrix.target }}
+      RUST_BACKTRACE: 1
+    strategy:
+      matrix:
+        build: [linux, linux32, win-msvc, win32-msvc]
+        include:
+        - build: linux
+          os: ubuntu-22.04
+          target: x86_64-unknown-linux-gnu
+        - build: linux32
+          os: ubuntu-22.04
+          target: i686-unknown-linux-gnu
+        - build: win-msvc
+          os: windows-2022
+          target: x86_64-pc-windows-msvc
+          vcpkg_triplet: x64-windows-static-md
+        - build: win32-msvc
+          os: windows-2022
+          target: i686-pc-windows-msvc
+          vcpkg_triplet: x86-windows-static-md
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install packages (Ubuntu i686)
+      if: ${{ matrix.build == 'linux32' }}
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt update
+        sudo apt install libssl-dev:i386 gcc-multilib
+        echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
+        echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
+
+    - name: Install packages (Windows)
+      uses: lukka/run-vcpkg@v10
+      if: ${{ matrix.os == 'windows-2022' }}
+      env:
+        VCPKG_DEFAULT_TRIPLET: ${{ matrix.vcpkg_triplet }}
+        VCPKG_INSTALLED_DIR: '${{ runner.workspace }}/vcpkg/installed'
+      with:
+        appendedCacheKey: ${{matrix.vcpkg_triplet}}
+        vcpkgDirectory: '${{ runner.workspace }}/vcpkg'
+        vcpkgGitCommitId: '163fe7bd3d67c41200617caaa245b5ba2ba854e6'
+        runVcpkgInstall: true
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        target: ${{ matrix.target }}
+
+    - name: Build release binary
+      run: cargo build --verbose --release --features openssl --target=${{ matrix.target }}
+
+    - name: Strip release binary (linux)
+      if: matrix.os == 'ubuntu-22.04'
+      run: strip "target/${{ matrix.target }}/release/boreal"
+
+    - name: Expose assets
+      shell: bash
+      run: |
+        asset_name="boreal-${{ needs.create-release.outputs.boreal_version }}-${{ matrix.target }}"
+        target_path="target/${{ matrix.target }}/release"
+        if [ "${{ matrix.os }}" = "windows-2022" ]; then
+          echo "ASSET_PATH=$target_path/boreal.exe" >> $GITHUB_ENV
+          echo "ASSET_NAME=$asset_name.exe" >> $GITHUB_ENV
+        else
+          echo "ASSET_PATH=$target_path/boreal" >> $GITHUB_ENV
+          echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
+        fi
+
+    - name: Upload binary
+      uses: actions/upload-release-asset@v1.0.2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.ASSET }}
+        asset_name: ${{ env.ASSET }}
+        asset_content_type: application/octet-stream
