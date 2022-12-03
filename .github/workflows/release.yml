@@ -52,11 +52,11 @@ jobs:
         - build: win-msvc
           os: windows-2022
           target: x86_64-pc-windows-msvc
-          vcpkg_triplet: x64-windows-static-md
+          vcpkg_triplet: x64-windows-static
         - build: win32-msvc
           os: windows-2022
           target: i686-pc-windows-msvc
-          vcpkg_triplet: x86-windows-static-md
+          vcpkg_triplet: x86-windows-static
 
     steps:
     - name: Checkout repository
@@ -82,6 +82,11 @@ jobs:
         vcpkgDirectory: '${{ runner.workspace }}/vcpkg'
         vcpkgGitCommitId: '163fe7bd3d67c41200617caaa245b5ba2ba854e6'
         runVcpkgInstall: true
+
+    - name: Export VCPKGRS_TRIPLET env var
+      if: ${{ matrix.os == 'windows-2022' }}
+      shell: bash
+      run: echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
