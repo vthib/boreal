@@ -61,11 +61,15 @@ jobs:
           vcpkgGitCommitId: '163fe7bd3d67c41200617caaa245b5ba2ba854e6'
           runVcpkgInstall: true
 
+      - name: Export VCPKGRS_TRIPLET env var
+        shell: bash
+        run: echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+
+      - run: cargo test --target=${{matrix.target}}
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
-
-      - run: cargo test --target=${{matrix.target}}
 
       - name: Test build with Openssl
         # Ideally, we should run the tests as well. At the moment, this
@@ -79,10 +83,10 @@ jobs:
         build: [windows, windows32]
         include:
           - build: windows
-            vcpkg_triplet: x64-windows-static-md
+            vcpkg_triplet: x64-windows-static
             target: x86_64-pc-windows-msvc
           - build: windows32
-            vcpkg_triplet: x86-windows-static-md
+            vcpkg_triplet: x86-windows-static
             target: i686-pc-windows-msvc
 
   clippy:
