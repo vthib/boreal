@@ -17,12 +17,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install openssl x86 and 32 support for gcc
+        if: ${{ matrix.build == 'linux32' }}
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt update
+          sudo apt install libssl-dev:i386 gcc-multilib
+          echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
-      - run: cargo test
-      - run: cargo test --features openssl
+      - run: cargo test --target=${{matrix.target}}
+      - run: cargo test --features openssl --target=${{matrix.target}}
 
     strategy:
       fail-fast: false
