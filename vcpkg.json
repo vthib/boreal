@@ -1,0 +1,12 @@
+{
+    "name": "boreal",
+    "version": "0.0.1",
+    "dependencies": [{
+        "name": "openssl"
+    }],
+    "overrides": [{
+        "name": "openssl",
+        "version-string": "1.1.1n"
+    }],
+    "builtin-baseline": "163fe7bd3d67c41200617caaa245b5ba2ba854e6"
+}

@@ -12,9 +12,9 @@ env:
   RUSTFLAGS: -Dwarnings
 
 jobs:
-  test:
+  test-linux:
     name: Test ${{matrix.build}}
-    runs-on: ${{matrix.os}}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -22,26 +22,59 @@ jobs:
         with:
           target: ${{matrix.target}}
       - run: cargo test
-      - name: Test with Openssl
-        if: ${{ matrix.os != 'windows-latest' }}
-        run: cargo test --features openssl
+      - run: cargo test --features openssl
 
     strategy:
       fail-fast: false
       matrix:
-        build: [linux, linux32, windows, windows32]
+        build: [linux, linux32]
         include:
           - build: linux
-            os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - build: linux32
-            os: ubuntu-latest
             target: i686-unknown-linux-gnu
+
+  test-windows:
+    name: Test ${{matrix.build}}
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install OpenSSL on windows
+        uses: lukka/run-vcpkg@v10
+        id: runvcpkg
+        env:
+          VCPKG_DEFAULT_TRIPLET: ${{matrix.vcpkg_triplet}}
+          VCPKG_INSTALLED_DIR: '${{ runner.workspace }}/vcpkg/installed'
+        with:
+          appendedCacheKey: ${{matrix.vcpkg_triplet}}
+          vcpkgDirectory: '${{ runner.workspace }}/vcpkg'
+          vcpkgGitCommitId: '163fe7bd3d67c41200617caaa245b5ba2ba854e6'
+          runVcpkgInstall: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{matrix.target}}
+
+      - run: cargo test --target=${{matrix.target}}
+
+      - name: Test build with Openssl
+        # Ideally, we should run the tests as well. At the moment, this
+        # does not work as the vcpkg installation does not seem to be very well handled with
+        # yara-rust's vendored feature. Some patches in yara-sys are probably required
+        run: cargo build --features openssl --target=${{matrix.target}}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [windows, windows32]
+        include:
           - build: windows
-            os: windows-latest
+            vcpkg_triplet: x64-windows-static-md
             target: x86_64-pc-windows-msvc
           - build: windows32
-            os: windows-latest
+            vcpkg_triplet: x86-windows-static-md
             target: i686-pc-windows-msvc
 
   clippy:
