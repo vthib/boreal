@@ -10,12 +10,23 @@ binary pattern, predominantly for malware detections.
 Although it is quite young, it should already be usable in place of yara in many use cases.
 See [missing features](#missing-features) for details on what is missing.
 
+## Description
+
+Boreal is designed to be a drop-in replacement of YARA, while also adding improvements.
+The main goals of the project are:
+
+* Complete compatibility with YARA rules
+* Only pay for what you use
+* Improved performances & reliability
+
 ## Features
 
 * Full compatibility with YARA 4.2 and [most modules](#modules). Any existing rule can be used as is.
-* Improved performances in many cases. See the [benchmarks](/boreal/benches/README.md) for details.
 * Avoid scanning for strings when not required, greatly reducing execution time on carefully crafted
   rules. See [no scan optimization](#no-scan-optimization).
+* Improved performances when using a few hundred rules. See the [benchmarks](/boreal/benches/README.md) for details.
+
+  There is a lot of room to improve performances much more, as working on performances has not been the main focus yet.
 
 ## Installation & use
 
@@ -30,8 +41,8 @@ The commandline tool can be built from source:
 And uses the same flags and syntax as the yara executable:
 
 ```bash
-> ./boreal path/to/rules path/to/file
-rule_1 path/to/file/suspicious_file
+> ./boreal path/to/rules path/to/dir
+rule_1 path/to/dir/suspicious_file
 ```
 
 Boreal can also be used as a library, please take a look at the [documentation](https://docs.rs/boreal).
@@ -59,15 +70,6 @@ let scanner = compiler.into_scanner();
 let res = scanner.scan_mem(b"<\0t\0m\0p\0.\0d\0a\0t\0>\0");
 assert!(res.matched_rules.iter().any(|rule| rule.name == "example"));
 ```
-
-## Description
-
-Boreal is designed to be a drop-in replacement of YARA, while also adding improvements.
-The main goals of the project are:
-
-* Complete compatibility with YARA rules
-* Only pay for what you use
-* Improved performances & reliability
 
 ### Yara compatibility
 
@@ -126,36 +128,44 @@ Modules not yet supported:
 A few key features are still missing. If you are looking into using boreal in place of YARA,
 some of those might be blockers for you:
 
-- Defensive programming and protection against all possible rules.
+#### Optimizations
+
+A few optimizations were done, mostly to have acceptable performances. However, there is still a
+lot that is planned and yet to be done. As can be seen in the [benchmarks](/boreal/benches/README.md),
+huge number of rules, big files and bad hex or regex strings deteriorates performances quite a lot.
+This is mainly because of missing optimizations that is planned in the next releases.
+
+#### Defensive programming and protection against all possible rules.
 
 For now it is possible to craft rules that will cause stack overflows or behave badly in general.
 If you control the origin of all of your rules, this is not an issue. If that is not the case
 however, you shouldn't use boreal yet. This is in active development.
 
-- Optimizations
-
-Huge number of rules, big files and bad hex or regex strings deteriorates performances quite a lot,
-see the [benchmarks](/boreal/benches/README.md). This is in active development.
-
-- Process scanning
+#### Process scanning
 
 Only scanning files or bytes is available for the moment.
 
-- Configurable timeout on scan
+#### Configurable timeout on scan
 
 Closely related to defensive programming, and will probably be implemented at the same time.
 
-- Some missing modules
+#### Missing modules
 
 See the module list [above](#modules). This will greatly depend on declared interest,
 as I'm unsure how often those are used. If you would like to use boreal but a module that you
 need is not implemented, please create an issue.
 
-- Saving and loading compiled rules
+#### Saving and loading compiled rules
 
 I am not quite sure what are the use-cases for this YARA feature, as the compilation of YARA rules
 is not that time consuming. Please create an issue with a use-case if this is a feature you would
 need.
+
+#### Using mmap/MapViewOfFile to avoid duplicating the scanned file in memory.
+
+This is unfortunately not done because of the trickiness of doing this properly in Rust, as reading
+of a file mapping can trigger signals (SIGBUS) or exceptions. I hope to have a solution for
+this in the future.
 
 ## Pay for what you use
 
@@ -181,8 +191,6 @@ files would be skipped, without a need to scan the whole contents of all the fil
 
 This is however, not what happens with YARA. With boreal however, all files that are bigger than
 50KB will not be scanned, and evaluation of this rule will be very fast.
-
-TODO add benches, running this file on a big dir
 
 This optimization applies as long as all rules can be evaluated without needing to scan for their
 strings. If a single rule needs a scan, then all strings of all rules will be scanned.
