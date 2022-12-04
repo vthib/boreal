@@ -13,6 +13,9 @@ edition = "2021"
 name = "boreal"
 path = "src/main.rs"
 
+[features]
+openssl = ["boreal/openssl"]
+
 [dependencies]
 boreal = { path = "../boreal", version = "0.1.0" }
 
