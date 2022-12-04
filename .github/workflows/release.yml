@@ -31,6 +31,7 @@ jobs:
         with:
           tag_name: ${{ env.BOREAL_VERSION }}
           release_name: ${{ env.BOREAL_VERSION }}
+          draft: true
 
   build-release:
     name: build-release
@@ -119,6 +120,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ${{ env.ASSET }}
-        asset_name: ${{ env.ASSET }}
+        asset_path: ${{ env.ASSET_PATH }}
+        asset_name: ${{ env.ASSET_NAME }}
         asset_content_type: application/octet-stream
