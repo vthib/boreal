@@ -41,7 +41,7 @@ fn read_integer_type(input: Input) -> ParseResult<ReadIntegerType> {
 }
 
 pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, (ty, expr)) = pair(
         read_integer_type,
         cut(delimited(

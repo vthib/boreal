@@ -17,7 +17,7 @@ use super::types::{Input, ParseResult};
 ///
 /// This function matches the pattern `/\d+(MB|KB)?`/.
 fn decimal_number(input: Input) -> ParseResult<i64> {
-    let start = input;
+    let start = input.pos();
     let (input, (n, suffix)) = rtrim(pair(digit1, opt(alt((ttag("MB"), ttag("KB"))))))(input)?;
 
     let n = match str::parse::<i64>(&n) {
@@ -51,7 +51,7 @@ fn decimal_number(input: Input) -> ParseResult<i64> {
 ///
 /// This function matches the pattern `/0x\d+`/.
 fn hexadecimal_number(input: Input) -> ParseResult<i64> {
-    let start = input;
+    let start = input.pos();
     let (input, n) = preceded(tag("0x"), cut(rtrim(hex_digit1)))(input)?;
 
     let n = match i64::from_str_radix(&n, 16) {
@@ -71,7 +71,7 @@ fn hexadecimal_number(input: Input) -> ParseResult<i64> {
 ///
 /// This function matches the pattern `/0o\d+`/.
 fn octal_number(input: Input) -> ParseResult<i64> {
-    let start = input;
+    let start = input.pos();
     let (input, n) = preceded(tag("0o"), cut(rtrim(oct_digit1)))(input)?;
 
     let n = match i64::from_str_radix(&n, 8) {

@@ -144,7 +144,7 @@ impl Error {
 
 impl ParseError<Input<'_>> for Error {
     fn from_error_kind(input: Input, kind: NomErrorKind) -> Self {
-        Self::from_nom_error_kind(input.get_position(), kind)
+        Self::from_nom_error_kind(input.get_position_offset(), kind)
     }
 
     fn append(_: Input, _: NomErrorKind, other: Self) -> Self {

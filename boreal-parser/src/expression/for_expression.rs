@@ -17,7 +17,7 @@ use nom::{
 use crate::{
     nom_recipes::{rtrim, textual_tag as ttag},
     string::{self, string_identifier_with_wildcard},
-    types::{Input, ParseResult},
+    types::{Input, ParseResult, Position},
 };
 
 use super::{
@@ -61,7 +61,7 @@ pub(super) fn for_expression_non_ambiguous(input: Input) -> ParseResult<Expressi
 ///
 /// But with 'selection' not being an expression.
 fn for_expression_abbrev(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, selection) = for_selection_simple(input)?;
     for_expression_with_selection(selection, start, input)
 }
@@ -74,7 +74,7 @@ fn for_expression_abbrev(input: Input) -> ParseResult<Expression> {
 /// result, so as to return the moved value without needing duplication.
 pub(super) fn for_expression_with_expr_selection<'a>(
     expr: Expression,
-    start: Input<'a>,
+    start: Position<'a>,
     input: Input<'a>,
 ) -> ParseResult<'a, Expression> {
     let (input, percent) = opt(rtrim(char('%')))(input)?;
@@ -91,7 +91,7 @@ pub(super) fn for_expression_with_expr_selection<'a>(
 
 fn for_expression_with_selection<'a>(
     selection: ForSelection,
-    start: Input<'a>,
+    start: Position<'a>,
     input: Input<'a>,
 ) -> ParseResult<'a, Expression> {
     let (input, _) = rtrim(ttag("of"))(input)?;
@@ -134,7 +134,7 @@ fn for_expression_with_selection<'a>(
 /// - 'for' selection 'of' set ':' '(' body ')'
 /// - 'for' selection identifier 'in' iterator ':' '(' body ')'
 fn for_expression_full(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection_full))(input)?;
     let (i2, has_of) = opt(rtrim(ttag("of")))(input)?;
 
@@ -240,7 +240,7 @@ fn string_enumeration(input: Input) -> ParseResult<Vec<SetElement>> {
 }
 
 fn string_enum_element(input: Input) -> ParseResult<SetElement> {
-    let start = input;
+    let start = input.pos();
     let (input, (name, is_wildcard)) = string_identifier_with_wildcard(input)?;
 
     Ok((
@@ -257,7 +257,7 @@ fn string_enum_element(input: Input) -> ParseResult<SetElement> {
 ///
 /// Equivalent to the `for_variables` pattern in grammar.y in libyara.
 fn for_variables(input: Input) -> ParseResult<(Vec<String>, Range<usize>)> {
-    let start = input;
+    let start = input.pos();
     let (input, identifiers) = separated_list1(rtrim(char(',')), crate::string::identifier)(input)?;
     Ok((input, (identifiers, input.get_span_from(start))))
 }
@@ -266,7 +266,7 @@ fn for_variables(input: Input) -> ParseResult<(Vec<String>, Range<usize>)> {
 ///
 /// Equivalent to the `iterator` pattern in grammar.y in libyara.
 fn iterator(input: Input) -> ParseResult<(ForIterator, Range<usize>)> {
-    let start = input;
+    let start = input.pos();
     let (input, iterator) = alt((
         map(identifier, ForIterator::Identifier),
         iterator_list,
@@ -308,7 +308,7 @@ fn rule_enumeration(input: Input) -> ParseResult<Vec<SetElement>> {
 }
 
 fn rule_enum_element(input: Input) -> ParseResult<SetElement> {
-    let start = input;
+    let start = input.pos();
     let (input, name) = string::identifier(input)?;
     let (input, is_wildcard) = map(opt(rtrim(char('*'))), |v| v.is_some())(input)?;
 

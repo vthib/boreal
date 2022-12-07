@@ -25,7 +25,7 @@ use super::{
 
 /// parse or operator
 pub fn boolean_expression(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, res) = expression_and(input)?;
 
     match rtrim(ttag("or"))(input) {
@@ -54,7 +54,7 @@ pub fn boolean_expression(input: Input) -> ParseResult<Expression> {
 
 /// parse and operator
 fn expression_and(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, res) = expression_not(input)?;
 
     match rtrim(ttag("and"))(input) {
@@ -83,7 +83,7 @@ fn expression_and(input: Input) -> ParseResult<Expression> {
 
 /// parse defined & not operator
 fn expression_not(mut input: Input) -> ParseResult<Expression> {
-    let mut start = input;
+    let mut start = input.pos();
     let mut ops = Vec::new();
     // Push ops into a vec, to prevent a possible stack overflow if we used recursion.
     while let Ok((i, op)) = rtrim(alt((ttag("not"), ttag("defined"))))(input) {
@@ -96,7 +96,7 @@ fn expression_not(mut input: Input) -> ParseResult<Expression> {
             start,
         ));
         input = i;
-        start = i;
+        start = i.pos();
     }
 
     let (input, mut expr) = expression_item(input)?;
@@ -125,7 +125,7 @@ fn expression_item(input: Input) -> ParseResult<Expression> {
     }
 
     // primary_expression ...
-    let start = input;
+    let start = input.pos();
     let (input, expr) = primary_expression_eq_all(input)?;
 
     // try to parse it as a for expression with a leading expression
@@ -142,7 +142,7 @@ enum EqExprBuilder {
 /// parse `==`, `!=`, `(i)contains`, `(i)startswith`, `(i)endswith`,
 /// `iequals`, `matches` operators.
 fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression_cmp(input)?;
 
     while let Ok((i, op)) = rtrim(alt((
@@ -226,7 +226,7 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
 
 /// parse `<=`, `>=`, `<`, `>`, operators.
 fn primary_expression_cmp(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression(input)?;
 
     while let Ok((i, op)) = rtrim(alt((tag("<="), tag(">="), tag("<"), tag(">"))))(input) {
@@ -250,7 +250,7 @@ fn primary_expression_cmp(input: Input) -> ParseResult<Expression> {
 
 /// Parse expressions using variables
 fn variable_expression(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, variable_name) = string_identifier(input)?;
 
     // string_identifier 'at' primary_expression

@@ -23,6 +23,12 @@ pub struct Input<'a> {
     cursor_before_last_rtrim: &'a str,
 }
 
+/// Position inside the input.
+#[derive(Clone, Copy, Debug)]
+pub struct Position<'a> {
+    cursor: &'a str,
+}
+
 pub type ParseResult<'a, O> = IResult<Input<'a>, O, Error>;
 
 impl<'a> Input<'a> {
@@ -31,6 +37,12 @@ impl<'a> Input<'a> {
             input,
             cursor: input,
             cursor_before_last_rtrim: input,
+        }
+    }
+
+    pub fn pos(&self) -> Position<'a> {
+        Position {
+            cursor: self.cursor,
         }
     }
 
@@ -56,7 +68,7 @@ impl<'a> Input<'a> {
         self.cursor_before_last_rtrim = self.cursor;
     }
 
-    pub fn get_position(&self) -> usize {
+    pub fn get_position_offset(&self) -> usize {
         (self.cursor.as_ptr() as usize) - (self.input.as_ptr() as usize)
     }
 
@@ -64,12 +76,11 @@ impl<'a> Input<'a> {
     ///
     /// The given input is the start of the span.
     /// The end of the span is the cursor saved before the last rtrim.
-    pub fn get_span_from(&self, start: Self) -> Range<usize> {
-        debug_assert!(self.input == start.input);
+    pub fn get_span_from(&self, start: Position) -> Range<usize> {
         let input = self.input.as_ptr() as usize;
 
         Range {
-            start: start.cursor().as_ptr() as usize - input,
+            start: start.cursor.as_ptr() as usize - input,
             end: self.cursor_before_last_rtrim.as_ptr() as usize - input,
         }
     }
@@ -78,12 +89,11 @@ impl<'a> Input<'a> {
     ///
     /// The given input is the start of the span.
     /// The end of the span is the current position of the cursor.
-    pub fn get_span_from_no_rtrim(&self, start: Self) -> Range<usize> {
-        debug_assert!(self.input == start.input);
+    pub fn get_span_from_no_rtrim(&self, start: Position) -> Range<usize> {
         let input = self.input.as_ptr() as usize;
 
         Range {
-            start: start.cursor().as_ptr() as usize - input,
+            start: start.cursor.as_ptr() as usize - input,
             end: self.cursor.as_ptr() as usize - input,
         }
     }

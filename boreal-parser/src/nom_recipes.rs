@@ -142,7 +142,7 @@ where
     G: FnMut(O1) -> Result<O2, ErrorKind>,
 {
     move |input: Input| {
-        let start = input;
+        let start = input.pos();
         let (input, o1) = parser.parse(input)?;
         match f(o1) {
             Ok(o2) => Ok((input, o2)),

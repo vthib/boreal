@@ -19,7 +19,7 @@ use crate::{
 
 /// parse | operator
 pub fn primary_expression(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
     while let Ok((i, _)) = rtrim(char('|'))(input) {
@@ -36,7 +36,7 @@ pub fn primary_expression(input: Input) -> ParseResult<Expression> {
 
 /// parse ^ operator
 fn primary_expression_bitwise_xor(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression_bitwise_and(input)?;
 
     while let Ok((i, _)) = rtrim(char('^'))(input) {
@@ -53,7 +53,7 @@ fn primary_expression_bitwise_xor(input: Input) -> ParseResult<Expression> {
 
 /// parse & operator
 fn primary_expression_bitwise_and(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression_shift(input)?;
 
     while let Ok((i, _)) = rtrim(char('&'))(input) {
@@ -70,7 +70,7 @@ fn primary_expression_bitwise_and(input: Input) -> ParseResult<Expression> {
 
 /// parse <<, >> operators
 fn primary_expression_shift(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression_add(input)?;
 
     while let Ok((i, shift_right)) =
@@ -95,7 +95,7 @@ fn primary_expression_shift(input: Input) -> ParseResult<Expression> {
 
 /// parse +, - operators
 fn primary_expression_add(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression_mul(input)?;
 
     while let Ok((i, is_sub)) = rtrim(alt((value(false, tag("+")), value(true, tag("-")))))(input) {
@@ -122,7 +122,7 @@ enum MulExpr {
 
 /// parse *, \, % operators
 fn primary_expression_mul(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (mut input, mut res) = primary_expression_neg(input)?;
 
     while let Ok((i, op)) = rtrim(alt((
@@ -159,7 +159,7 @@ fn primary_expression_mul(input: Input) -> ParseResult<Expression> {
 
 /// parse ~, - operators
 fn primary_expression_neg(mut input: Input) -> ParseResult<Expression> {
-    let mut start = input;
+    let mut start = input.pos();
     let mut ops = Vec::new();
     // Push ops into a vec, to prevent a possible stack overflow if we used recursion.
     while let Ok((i, op)) = rtrim(alt((char('~'), char('-'))))(input) {
@@ -172,7 +172,7 @@ fn primary_expression_neg(mut input: Input) -> ParseResult<Expression> {
             start,
         ));
         input = i;
-        start = i;
+        start = i.pos();
     }
 
     let (input, mut expr) = primary_expression_item(input)?;
@@ -228,7 +228,7 @@ where
     C: Fn(O) -> ExpressionKind,
 {
     move |input| {
-        let start = input;
+        let start = input.pos();
         let (input, output) = f.parse(input)?;
         Ok((
             input,

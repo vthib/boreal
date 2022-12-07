@@ -102,7 +102,7 @@ fn masked_byte(input: Input) -> ParseResult<(u8, Mask)> {
 ///
 /// This is equivalent to the range state in libyara.
 fn range(input: Input) -> ParseResult<Jump> {
-    let start = input;
+    let start = input.pos();
     let (input, _) = rtrim(char('['))(input)?;
 
     // Parse 'a'
@@ -183,7 +183,7 @@ fn alternatives(input: Input) -> ParseResult<Token> {
 }
 
 fn range_as_hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
-    let start = input;
+    let start = input.pos();
     let (input, range) = range(input)?;
 
     // Some jumps are forbidden inside an alternatives
@@ -243,7 +243,7 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
 ///
 /// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
 fn tokens(input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
-    let start = input;
+    let start = input.pos();
     let (input, tokens) = many1(|input| hex_token(input, in_alternatives))(input)?;
 
     if matches!(tokens[0], Token::Jump(_))

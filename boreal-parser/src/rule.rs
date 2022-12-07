@@ -16,7 +16,7 @@ use super::{
     hex_string,
     nom_recipes::{map_res, rtrim, textual_tag as ttag},
     number, regex, string,
-    types::{Input, ParseResult},
+    types::{Input, ParseResult, Position},
     Regex,
 };
 
@@ -195,7 +195,7 @@ pub fn rule(mut input: Input) -> ParseResult<Rule> {
 }
 
 fn rule_name(input: Input) -> ParseResult<(String, Range<usize>)> {
-    let start = input;
+    let start = input.pos();
     let (input, name) = string::identifier(input)?;
 
     Ok((input, (name, input.get_span_from(start))))
@@ -212,7 +212,7 @@ fn tags(input: Input) -> ParseResult<Vec<RuleTag>> {
 }
 
 fn tag(input: Input) -> ParseResult<RuleTag> {
-    let start = input;
+    let start = input.pos();
     let (input, tag) = string::identifier(input)?;
 
     Ok((
@@ -270,7 +270,7 @@ fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
 ///
 /// Related to the `string_declaration` pattern in `grammar.y` in libyara.
 fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
-    let start = input;
+    let start = input.pos();
 
     let (input, (name, (value, modifiers))) = separated_pair(
         string::string_identifier,
@@ -318,7 +318,7 @@ where
     F: Fn(Input) -> ParseResult<Modifier>,
 {
     let add_flag =
-        |modifiers: &mut VariableModifiers, start: Input, input: Input, flag: VariableFlags| {
+        |modifiers: &mut VariableModifiers, start: Position, input: Input, flag: VariableFlags| {
             if modifiers.flags.contains(flag) {
                 return Err(nom::Err::Failure(Error::new(
                     input.get_span_from(start),
@@ -332,16 +332,16 @@ where
         };
 
     let mut modifiers = VariableModifiers::default();
-    let start = input;
+    let start = input.pos();
     let mut parser = opt(parser);
 
     while let (i, Some(modifier)) = parser(input)? {
         match modifier {
             Modifier::Flag(flag) => {
-                add_flag(&mut modifiers, input, i, flag)?;
+                add_flag(&mut modifiers, input.pos(), i, flag)?;
             }
             Modifier::Xor(from, to) => {
-                add_flag(&mut modifiers, input, i, VariableFlags::XOR)?;
+                add_flag(&mut modifiers, input.pos(), i, VariableFlags::XOR)?;
                 modifiers.xor_range = (from, to);
             }
             Modifier::Base64(alphabet) => {
@@ -349,11 +349,11 @@ where
                     && modifiers.base64_alphabet != alphabet
                 {
                     return Err(nom::Err::Failure(Error::new(
-                        i.get_span_from(input),
+                        i.get_span_from(input.pos()),
                         ErrorKind::Base64AlphabetIncompatible,
                     )));
                 }
-                add_flag(&mut modifiers, input, i, VariableFlags::BASE64)?;
+                add_flag(&mut modifiers, input.pos(), i, VariableFlags::BASE64)?;
                 modifiers.base64_alphabet = alphabet;
             }
             Modifier::Base64Wide(alphabet) => {
@@ -361,11 +361,11 @@ where
                     && modifiers.base64_alphabet != alphabet
                 {
                     return Err(nom::Err::Failure(Error::new(
-                        i.get_span_from(input),
+                        i.get_span_from(input.pos()),
                         ErrorKind::Base64AlphabetIncompatible,
                     )));
                 }
-                add_flag(&mut modifiers, input, i, VariableFlags::BASE64WIDE)?;
+                add_flag(&mut modifiers, input.pos(), i, VariableFlags::BASE64WIDE)?;
                 modifiers.base64_alphabet = alphabet;
             }
         }
@@ -493,7 +493,7 @@ fn hex_string_modifier(input: Input) -> ParseResult<Modifier> {
 fn xor_modifier(input: Input) -> ParseResult<Modifier> {
     let (input, _) = rtrim(ttag("xor"))(input)?;
 
-    let start = input;
+    let start = input.pos();
     let (input, open_paren) = opt(rtrim(char('(')))(input)?;
     if open_paren.is_none() {
         return Ok((input, Modifier::Xor(0, 255)));
@@ -531,7 +531,7 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
 
     let mut alphabet: Option<[u8; 64]> = None;
     if open_paren.is_some() {
-        let start = input;
+        let start = input.pos();
         let (input2, val) = cut(string::quoted)(input)?;
         let length = val.len();
         match val.try_into() {

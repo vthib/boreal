@@ -18,7 +18,7 @@ use crate::{
 
 /// Parse a `string_count ( 'in' range )` expression
 pub(super) fn string_count_expression(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input_after_count, variable_name) = string::count(input)?;
     let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input_after_count)?;
 
@@ -44,7 +44,7 @@ pub(super) fn string_count_expression(input: Input) -> ParseResult<Expression> {
 
 /// Parse a `string_offset ( '[' primary_expression ']' )` expression
 pub(super) fn string_offset_expression(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, variable_name) = string::offset(input)?;
     let (input, expr) = opt(delimited(
         rtrim(char('[')),
@@ -68,7 +68,7 @@ pub(super) fn string_offset_expression(input: Input) -> ParseResult<Expression> 
 
 /// Parse a `string_length ( '[' primary_expression ']' )` expression
 pub(super) fn string_length_expression(input: Input) -> ParseResult<Expression> {
-    let start = input;
+    let start = input.pos();
     let (input, variable_name) = string::length(input)?;
     let (input, expr) = opt(delimited(
         rtrim(char('[')),

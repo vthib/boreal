@@ -84,7 +84,7 @@ pub fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
 
 /// Parse an include declaration
 fn include_file(input: Input) -> ParseResult<Include> {
-    let start = input;
+    let start = input.pos();
 
     let (input, path) = rtrim(preceded(
         rtrim(ttag("include")),
@@ -106,7 +106,7 @@ fn include_file(input: Input) -> ParseResult<Include> {
 
 /// Parse an import declaration
 fn import(input: Input) -> ParseResult<Import> {
-    let start = input;
+    let start = input.pos();
 
     let (input, name) = rtrim(preceded(
         rtrim(ttag("import")),

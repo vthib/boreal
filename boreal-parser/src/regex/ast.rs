@@ -293,7 +293,7 @@ fn bracketed_class_item(input: Input) -> ParseResult<BracketedClassItem> {
 }
 
 fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassItem> {
-    let start = input;
+    let start = input.pos();
     let (input, lit) = bracketed_class_literal(input)?;
     let (input2, dash) = opt(char('-'))(input)?;
 
@@ -318,7 +318,7 @@ fn bracketed_class_literal(input: Input) -> ParseResult<u8> {
 }
 
 fn bracketed_class_char(input: Input) -> ParseResult<u8> {
-    let start = input;
+    let start = input.pos();
 
     // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
     // and newlines are not allowed
@@ -331,7 +331,7 @@ fn bracketed_class_char(input: Input) -> ParseResult<u8> {
 }
 
 fn literal(input: Input) -> ParseResult<u8> {
-    let start = input;
+    let start = input.pos();
 
     // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
     // and newlines are not allowed
@@ -344,7 +344,7 @@ fn literal(input: Input) -> ParseResult<u8> {
 }
 
 fn escaped_char(input: Input) -> ParseResult<u8> {
-    let start = input;
+    let start = input.pos();
     let (input2, _) = char('\\')(input)?;
     let (input, b) = anychar(input2)?;
 
@@ -397,7 +397,7 @@ fn range_single(input: Input) -> ParseResult<RepetitionRange> {
 }
 
 fn range_multi(input: Input) -> ParseResult<RepetitionRange> {
-    let start = input;
+    let start = input.pos();
     let (input, (from, to)) = delimited(
         char('{'),
         separated_pair(parse_opt_u32, char(','), parse_opt_u32),
@@ -426,7 +426,7 @@ fn range_multi(input: Input) -> ParseResult<RepetitionRange> {
 }
 
 fn parse_u32(input: Input) -> ParseResult<u32> {
-    let start = input;
+    let start = input.pos();
     let (input, v) = digit1(input)?;
 
     let n = match str::parse::<u32>(&v) {
@@ -443,7 +443,7 @@ fn parse_u32(input: Input) -> ParseResult<u32> {
 }
 
 fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
-    let start = input;
+    let start = input.pos();
     let (input, v) = digit0(input)?;
 
     if v.is_empty() {

@@ -57,13 +57,13 @@ fn operation(input: Input) -> ParseResult<IdentifierOperationType> {
 
 /// Parse an identifier used in expressions.
 pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
-    let start = input;
+    let start = input.pos();
     let (mut input, name) = raw_identifier(input)?;
     let name_span = input.get_span_from(start);
     let mut operations = Vec::new();
 
     loop {
-        let start = input;
+        let start = input.pos();
         let (i, op) = opt(operation)(input)?;
         match op {
             Some(op) => {
