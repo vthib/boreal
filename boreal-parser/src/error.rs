@@ -52,6 +52,10 @@ impl Error {
                 .with_message("invalid regex range, start must be <= to end")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
+            ErrorKind::RegexTooDeep => Diagnostic::error()
+                .with_message("too many imbricated groups in the regex")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
             ErrorKind::HexStringTooManyImbricatedAlternations => Diagnostic::error()
                 .with_message("too many imbricated alternations in the hex string")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
@@ -215,6 +219,9 @@ pub enum ErrorKind {
 
     /// Invalid range in a regex, from > to.
     RegexRangeInvalid,
+
+    /// Regex has too much depth, meaning there are too many imbricated groups.
+    RegexTooDeep,
 
     /// Error converting a string to an integer
     StrToIntError(ParseIntError),

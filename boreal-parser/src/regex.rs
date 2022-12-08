@@ -16,6 +16,8 @@ use super::error::Error;
 use super::nom_recipes::rtrim;
 use super::types::{Input, ParseResult};
 
+const MAX_REGEX_RECURSION: usize = 10;
+
 /// A regular expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Regex {
@@ -185,10 +187,24 @@ pub(crate) fn regex(input: Input) -> ParseResult<Regex> {
 }
 
 fn alternative(mut input: Input) -> ParseResult<Node> {
-    let mut alts = Vec::new();
+    // This combinator is recursive:
+    //
+    // tokens => hex_token => alternatives => tokens
+    //
+    // Use the inner recursive counter to make sure this recursion cannot grow too much.
+    if input.inner_recursion_counter >= MAX_REGEX_RECURSION {
+        return Err(nom::Err::Failure(Error::new(
+            input.get_span_from(input.pos()),
+            ErrorKind::RegexTooDeep,
+        )));
+    }
 
+    let mut alts = Vec::new();
     loop {
-        let (input2, node) = concatenation(input)?;
+        input.inner_recursion_counter += 1;
+        let (mut input2, node) = concatenation(input)?;
+        input2.inner_recursion_counter -= 1;
+
         let (input2, has_alt_char) = eat_opt_char('|', input2);
         if has_alt_char {
             alts.push(node);
@@ -1140,6 +1156,47 @@ mod tests {
         parse(parse_opt_u32, "-5a", "-5a", None);
 
         parse_err(parse_opt_u32, "5000000000000");
+    }
+
+    #[test]
+    fn test_stack_overflow() {
+        // Parsing of a regex includes recursion, so it must be protected against
+        // stack overflowing.
+        let mut v = String::new();
+        v.push('/');
+        for _ in 0..1_000 {
+            v.push_str("a(b");
+        }
+        for _ in 0..1_000 {
+            v.push_str(")c");
+        }
+        v.push('/');
+
+        parse_err(regex, &v);
+
+        // counter should reset, so many imbricated groups, but all below the limit should be fine.
+        let mut v = String::new();
+        v.push('/');
+        let nb = MAX_REGEX_RECURSION - 1;
+        for _ in 0..nb {
+            v.push_str("a(b");
+        }
+        for _ in 0..nb {
+            v.push_str(")c");
+        }
+        v.push('d');
+        for _ in 0..nb {
+            v.push_str("e(f");
+        }
+        for _ in 0..nb {
+            v.push_str(")h");
+        }
+        v.push('/');
+
+        let input = Input::new(&v);
+        let res = regex(input);
+        assert!(res.is_ok(), "{:?}", res);
+        assert_eq!(input.inner_recursion_counter, 0);
     }
 
     #[test]
