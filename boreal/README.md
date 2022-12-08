@@ -89,6 +89,11 @@ There are however, some exceptions to this compatibility:
   itself. Behavior of evaluations on overflows/underflows is no longer UB in boreal, but is
   for the moment not specified.
 
+* Defensive limits on adversarial rules. Boreal sets limits to ensure it is impossible to write
+  rules that can cause issues in a program parsing or evaluating this rule. Although those limits
+  do technically reject rules that YARA would accept, those limits should never impact proper
+  rules.
+
 In addition, there is for the moment a single evaluation difference between YARA and boreal:
 
 * A rule that depends on itself no longer compiles.
