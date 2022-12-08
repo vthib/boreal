@@ -21,6 +21,14 @@ pub struct Input<'a> {
 
     /// Saved position before the last applied rtrim.
     cursor_before_last_rtrim: &'a str,
+
+    /// Counter on inner recursion.
+    ///
+    /// This is used in combinators using recursions, but only if no other recursive combinator
+    /// can be present in it.
+    /// For example, recursion to parse hex-strings and regexes uses this counter, but recursion
+    /// to parse expressions do not (as expressions can contain regexes).
+    pub inner_recursion_counter: usize,
 }
 
 /// Position inside the input.
@@ -37,6 +45,7 @@ impl<'a> Input<'a> {
             input,
             cursor: input,
             cursor_before_last_rtrim: input,
+            inner_recursion_counter: 0,
         }
     }
 

@@ -53,6 +53,7 @@ pub struct Jump {
 }
 
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
+const MAX_HEX_TOKEN_RECURSION: usize = 10;
 
 /// Parse an hex-digit, and return its value in [0-15].
 fn hex_digit(mut input: Input) -> ParseResult<u8> {
@@ -242,9 +243,24 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
 /// A jump is not allowed at the beginning or at the end of the list.
 ///
 /// This is equivalent to the `tokens` rule in `hex_grammar.y` in libyara.
-fn tokens(input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
+fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     let start = input.pos();
-    let (input, tokens) = many1(|input| hex_token(input, in_alternatives))(input)?;
+
+    // This combinator is recursive:
+    //
+    // tokens => hex_token => alternatives => tokens
+    //
+    // Use the inner recursive counter to make sure this recursion cannot grow too much.
+    if input.inner_recursion_counter >= MAX_HEX_TOKEN_RECURSION {
+        return Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            ErrorKind::HexStringTooManyImbricatedAlternations,
+        )));
+    }
+
+    input.inner_recursion_counter += 1;
+    let (mut input, tokens) = many1(|input| hex_token(input, in_alternatives))(input)?;
+    input.inner_recursion_counter -= 1;
 
     if matches!(tokens[0], Token::Jump(_))
         || (tokens.len() > 1 && matches!(tokens[tokens.len() - 1], Token::Jump(_)))
@@ -501,6 +517,48 @@ mod tests {
         parse_err(hex_string, "{A}");
         parse_err(hex_string, "{ABA}");
         parse_err(hex_string, "{AB");
+    }
+
+    #[test]
+    fn test_stack_overflow() {
+        // Parsing of a hex string includes recursion, so it must be protected against
+        // stack overflowing.
+        let mut hex = String::new();
+        hex.push_str("{ AB ");
+        for _ in 0..10_000 {
+            hex.push_str("( CD | ");
+        }
+        for _ in 0..10_000 {
+            hex.push(')');
+        }
+        hex.push('}');
+
+        parse_err(hex_string, &hex);
+
+        // counter should reset, so many imbricated alternations, but all below the limit should be
+        // fine.
+        let mut hex = String::new();
+        hex.push_str("{ AB ");
+        let nb = MAX_HEX_TOKEN_RECURSION - 1;
+        for _ in 0..nb {
+            hex.push_str("( CD | ");
+        }
+        for _ in 0..nb {
+            hex.push_str(" EF )");
+        }
+        hex.push_str(" EF ");
+        for _ in 0..nb {
+            hex.push_str("( CD | ");
+        }
+        for _ in 0..nb {
+            hex.push_str("EF )");
+        }
+        hex.push('}');
+
+        let input = Input::new(&hex);
+        let res = hex_string(input);
+        assert!(res.is_ok(), "{:?}", res);
+        assert_eq!(input.inner_recursion_counter, 0);
     }
 
     #[test]
