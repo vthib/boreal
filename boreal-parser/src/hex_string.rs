@@ -254,7 +254,7 @@ fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     if input.inner_recursion_counter >= MAX_HEX_TOKEN_RECURSION {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
-            ErrorKind::HexStringTooManyImbricatedAlternations,
+            ErrorKind::HexStringTooDeep,
         )));
     }
 

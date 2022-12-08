@@ -56,8 +56,8 @@ impl Error {
                 .with_message("too many imbricated groups in the regex")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
-            ErrorKind::HexStringTooManyImbricatedAlternations => Diagnostic::error()
-                .with_message("too many imbricated alternations in the hex string")
+            ErrorKind::HexStringTooDeep => Diagnostic::error()
+                .with_message("too many imbricated groups in the hex string")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::JumpAtBound => Diagnostic::error()
@@ -170,8 +170,8 @@ pub enum ErrorKind {
     /// Alphabets used for base64 and base64wide for the same string are not identical.
     Base64AlphabetIncompatible,
 
-    /// A hex string contains too many imbricated alternations.
-    HexStringTooManyImbricatedAlternations,
+    /// A hex string contains too many imbricated groups.
+    HexStringTooDeep,
 
     /// A jump is not allowed at the beginning or end of hex tokens
     JumpAtBound,

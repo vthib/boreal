@@ -11,10 +11,7 @@ fn test_invalid_files() {
             .unwrap_or_else(|e| panic!("cannot read file {:?}: {}", file, e));
 
         println!("checking file {:?}", file);
-        if file.to_string_lossy().contains("str_to_int_range") {
-            // Disable this test against yara because of
-            // https://github.com/VirusTotal/yara/issues/1791, yara returning an error depends
-            // on the platform
+        if contents.starts_with("// [no libyara conformance]") {
             check_err_without_yara(&contents, "");
         } else {
             // Maybe including the expected prefix in each file (as a comment) would be a nice
