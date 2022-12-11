@@ -5,37 +5,6 @@ use crate::utils::check;
 
 #[test]
 fn test_elf() {
-    {
-        let mut f = std::fs::File::create("elf32").unwrap();
-        std::io::Write::write_all(&mut f, ELF32_FILE).unwrap();
-        std::io::Write::flush(&mut f).unwrap();
-    }
-    {
-        let mut f = std::fs::File::create("elf32_mips").unwrap();
-        std::io::Write::write_all(&mut f, ELF32_MIPS_FILE).unwrap();
-        std::io::Write::flush(&mut f).unwrap();
-    }
-    {
-        let mut f = std::fs::File::create("elf32_nosecs").unwrap();
-        std::io::Write::write_all(&mut f, ELF32_NOSECTIONS).unwrap();
-        std::io::Write::flush(&mut f).unwrap();
-    }
-    {
-        let mut f = std::fs::File::create("elf32_so").unwrap();
-        std::io::Write::write_all(&mut f, ELF32_SHAREDOBJ).unwrap();
-        std::io::Write::flush(&mut f).unwrap();
-    }
-    {
-        let mut f = std::fs::File::create("elf64").unwrap();
-        std::io::Write::write_all(&mut f, ELF64_FILE).unwrap();
-        std::io::Write::flush(&mut f).unwrap();
-    }
-    {
-        let mut f = std::fs::File::create("elfx64").unwrap();
-        std::io::Write::write_all(&mut f, ELF_X64_FILE).unwrap();
-        std::io::Write::flush(&mut f).unwrap();
-    }
-
     check(
         "import \"elf\" rule test { condition: elf.type }",
         ELF32_FILE,
