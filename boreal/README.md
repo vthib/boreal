@@ -3,6 +3,7 @@
 [![Build status](https://github.com/vthib/boreal/actions/workflows/ci.yml/badge.svg)](https://github.com/vthib/boreal/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/boreal.svg)](https://crates.io/crates/boreal)
 [![Documentation](https://docs.rs/boreal/badge.svg)](https://docs.rs/boreal)
+[![Coverage](https://codecov.io/gh/vthib/boreal/branch/master/graph/badge.svg?token=FVI7Z45KFW)](https://codecov.io/gh/vthib/boreal)
 
 Boreal is an evaluator of [YARA](https://virustotal.github.io/yara/) rules, used to scan bytes for textual and
 binary pattern, predominantly for malware detections.
