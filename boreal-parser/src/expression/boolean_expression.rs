@@ -8,7 +8,7 @@ use nom::{
     sequence::preceded,
 };
 
-use crate::Regex;
+use crate::{error::ErrorKind, Error, Regex};
 
 use super::{
     super::{
@@ -24,31 +24,55 @@ use super::{
 };
 
 /// parse or operator
-pub fn boolean_expression(input: Input) -> ParseResult<Expression> {
+pub fn boolean_expression(mut input: Input) -> ParseResult<Expression> {
+    // Expression parsing involves multiple recursives paths, making it quite complex.
+    // There are however a few observations we can make:
+    // - only two combinators receive recursive calls: this one and `primary_expression`.
+    // - some paths can loop boolean_expression -> ... -> boolean_expression without going through
+    // primary_expression
+    // - some paths can loop primary_expression -> ... -> boolean_expression
+    // - some paths can loop primary_expression -> ... -> primary_expression
+    //
+    // To prevent stack overflows, both this combinator and `primary_expression` increment the
+    // same recursion counter. This means this counter can be incremented twice on a single
+    // recursive loop, on for example `module.function(true)`
     let start = input.pos();
-    let (input, res) = expression_and(input)?;
+
+    if input.expr_recursion_counter >= super::MAX_EXPR_RECURSION {
+        return Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            ErrorKind::ExprTooDeep,
+        )));
+    }
+
+    input.expr_recursion_counter += 1;
+    let (mut input, res) = expression_and(input)?;
 
     match rtrim(ttag("or"))(input) {
         Ok((mut input, _)) => {
             let mut ops = vec![res];
             loop {
-                let (i2, elem) = cut(expression_and)(input)?;
+                let (mut i2, elem) = cut(expression_and)(input)?;
                 ops.push(elem);
                 match rtrim(ttag("or"))(i2) {
                     Ok((i3, _)) => input = i3,
                     Err(_) => {
+                        i2.expr_recursion_counter -= 1;
                         return Ok((
                             i2,
                             Expression {
                                 expr: ExpressionKind::Or(ops),
                                 span: i2.get_span_from(start),
                             },
-                        ))
+                        ));
                     }
                 }
             }
         }
-        Err(_) => Ok((input, res)),
+        Err(_) => {
+            input.expr_recursion_counter -= 1;
+            Ok((input, res))
+        }
     }
 }
 
@@ -296,9 +320,9 @@ fn variable_expression(input: Input) -> ParseResult<Expression> {
 mod tests {
     use super::*;
     use crate::{
-        expression::Identifier,
+        expression::{Identifier, MAX_EXPR_RECURSION},
         regex::{self, Regex},
-        test_helpers::{parse, parse_check, parse_err, test_public_type},
+        test_helpers::{parse, parse_check, parse_err, parse_err_type, test_public_type},
     };
     use std::ops::Range;
 
@@ -959,6 +983,90 @@ mod tests {
                 span: 0..4,
             },
         );
+    }
+
+    #[test]
+    fn test_stack_overflow_1() {
+        // boolean_expression -> for_expression_full -> boolean_expression is a recursion loop,
+        // test it.
+        let mut v = String::new();
+        for _ in 0..100_000 {
+            v.push_str("for any of them : ( ");
+        }
+        v.push_str("true");
+        for _ in 0..100_000 {
+            v.push_str(" ) ");
+        }
+
+        parse_err_type(
+            boolean_expression,
+            &v,
+            &Error::new(400..400, ErrorKind::ExprTooDeep),
+        );
+
+        // counter should reset, so many imbricated groups, but all below the limit should be fine.
+        let mut v = String::new();
+        let nb = MAX_EXPR_RECURSION - 2;
+        for _ in 0..nb {
+            v.push_str("for any of them : ( ");
+        }
+        v.push_str("true");
+        for _ in 0..nb {
+            v.push_str(" ) ");
+        }
+
+        v.push_str(" and ");
+
+        for _ in 0..nb {
+            v.push_str("for any of them : ( ");
+        }
+        v.push_str("true");
+        for _ in 0..nb {
+            v.push_str(" ) ");
+        }
+
+        let input = Input::new(&v);
+        let res = boolean_expression(input);
+        assert!(res.is_ok(), "{:?}", res);
+        assert_eq!(input.expr_recursion_counter, 0);
+    }
+
+    #[test]
+    fn test_stack_overflow_2() {
+        // boolean_expression -> primary_expression -> function_call -> boolean_expression
+        // is a recursion loop, test it.
+        let mut v = String::new();
+        for _ in 0..100_000 {
+            v.push_str("a.b(");
+        }
+        v.push_str("true");
+        for _ in 0..100_000 {
+            v.push(')');
+        }
+
+        parse_err_type(
+            boolean_expression,
+            &v,
+            &Error::new(40..40, ErrorKind::ExprTooDeep),
+        );
+
+        // counter should reset, so many imbricated groups, but all below the limit should be fine.
+        let mut v = String::new();
+        // Since this goes into both boolean_expression and primary_expression, the counter is
+        // incremented twice per recursion.
+        let nb = MAX_EXPR_RECURSION / 2 - 1;
+        for _ in 0..nb {
+            v.push_str("a.b(");
+        }
+        v.push_str("true");
+        for _ in 0..nb {
+            v.push(')');
+        }
+
+        let input = Input::new(&v);
+        let res = boolean_expression(input);
+        assert!(res.is_ok(), "{:?}", res);
+        assert_eq!(input.expr_recursion_counter, 0);
     }
 
     #[test]

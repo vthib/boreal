@@ -29,6 +29,9 @@ pub struct Input<'a> {
     /// For example, recursion to parse hex-strings and regexes uses this counter, but recursion
     /// to parse expressions do not (as expressions can contain regexes).
     pub inner_recursion_counter: usize,
+
+    /// Counter on expression recursion.
+    pub expr_recursion_counter: usize,
 }
 
 /// Position inside the input.
@@ -46,6 +49,7 @@ impl<'a> Input<'a> {
             cursor: input,
             cursor_before_last_rtrim: input,
             inner_recursion_counter: 0,
+            expr_recursion_counter: 0,
         }
     }
 
@@ -88,9 +92,14 @@ impl<'a> Input<'a> {
     pub fn get_span_from(&self, start: Position) -> Range<usize> {
         let input = self.input.as_ptr() as usize;
 
-        Range {
-            start: start.cursor.as_ptr() as usize - input,
-            end: self.cursor_before_last_rtrim.as_ptr() as usize - input,
+        let start = start.cursor.as_ptr() as usize - input;
+        let end = self.cursor_before_last_rtrim.as_ptr() as usize - input;
+        if start <= end {
+            Range { start, end }
+        } else {
+            // Can happen when generating errors when entering a combinator, before any parsing is
+            // done, which is the case for recursion checks
+            Range { start, end: start }
         }
     }
 

@@ -12,14 +12,25 @@ use nom::{
 
 use super::{expression, identifier, read_integer, string_expression, Expression, ExpressionKind};
 use crate::{
+    error::ErrorKind,
     nom_recipes::{rtrim, textual_tag as ttag},
     number, regex, string,
     types::{Input, ParseResult},
+    Error,
 };
 
 /// parse | operator
-pub fn primary_expression(input: Input) -> ParseResult<Expression> {
+pub fn primary_expression(mut input: Input) -> ParseResult<Expression> {
     let start = input.pos();
+
+    if input.expr_recursion_counter >= super::MAX_EXPR_RECURSION {
+        return Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            ErrorKind::ExprTooDeep,
+        )));
+    }
+
+    input.expr_recursion_counter += 1;
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
     while let Ok((i, _)) = rtrim(char('|'))(input) {
@@ -31,6 +42,8 @@ pub fn primary_expression(input: Input) -> ParseResult<Expression> {
             span: input.get_span_from(start),
         }
     }
+
+    input.expr_recursion_counter -= 1;
     Ok((input, res))
 }
 
@@ -224,7 +237,7 @@ fn map_expr<'a, F, C, O>(
     constructor: C,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, Expression>
 where
-    F: Parser<Input<'a>, O, crate::Error>,
+    F: Parser<Input<'a>, O, Error>,
     C: Fn(O) -> ExpressionKind,
 {
     move |input| {
@@ -244,7 +257,12 @@ where
 mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression, ExpressionKind as Expr};
+    use crate::error::ErrorKind;
+    use crate::expression::MAX_EXPR_RECURSION;
     use crate::regex::{AssertionKind, Node, RepetitionKind};
+    use crate::test_helpers::parse_err_type;
+    use crate::types::Input;
+    use crate::Error;
     use crate::{
         expression::ReadIntegerType,
         regex::Regex,
@@ -970,6 +988,39 @@ mod tests {
                 span: 0..4,
             },
         );
+    }
+
+    #[test]
+    fn test_stack_overflow() {
+        // primary_expression -> read_integer -> primary_expression is a recursion loop, test it.
+        let mut v = String::new();
+        for _ in 0..100_000 {
+            v.push_str("uint8(");
+        }
+        v.push('0');
+        for _ in 0..100_000 {
+            v.push(')');
+        }
+
+        parse_err_type(pe, &v, &Error::new(120..120, ErrorKind::ExprTooDeep));
+
+        // counter should reset, so many imbricated groups, but all below the limit should be fine.
+        let mut v = String::new();
+        // Since this goes into both boolean_expression and primary_expression, the counter is
+        // incremented twice per recursion.
+        let nb = MAX_EXPR_RECURSION / 2 - 1;
+        for _ in 0..nb {
+            v.push_str("a.b(");
+        }
+        v.push_str("true");
+        for _ in 0..nb {
+            v.push(')');
+        }
+
+        let input = Input::new(&v);
+        let res = pe(input);
+        assert!(res.is_ok(), "{:?}", res);
+        assert_eq!(input.expr_recursion_counter, 0);
     }
 
     #[test]

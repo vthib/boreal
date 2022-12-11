@@ -532,7 +532,7 @@ fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{parse, parse_err, test_public_type};
+    use crate::test_helpers::{parse, parse_err, parse_err_type, test_public_type};
 
     #[test]
     fn test_parse_regex() {
@@ -1172,7 +1172,7 @@ mod tests {
         }
         v.push('/');
 
-        parse_err(regex, &v);
+        parse_err_type(regex, &v, &Error::new(30..30, ErrorKind::RegexTooDeep));
 
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();

@@ -7,7 +7,7 @@ use nom::error::{ErrorKind as NomErrorKind, ParseError};
 use super::types::Input;
 
 /// Parsing error.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
     /// Span of the error in the input.
     ///
@@ -38,6 +38,10 @@ impl Error {
 
             ErrorKind::Base64AlphabetIncompatible => Diagnostic::error()
                 .with_message("alphabets used for base64 and base64wide must be identical")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
+            ErrorKind::ExprTooDeep => Diagnostic::error()
+                .with_message("too many imbricated expressions")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::RegexClassRangeInvalid => Diagnostic::error()
@@ -160,7 +164,7 @@ impl ParseError<Input<'_>> for Error {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     /// A base64 modifier alphabet has an invalid length.
     ///
@@ -169,6 +173,9 @@ pub enum ErrorKind {
 
     /// Alphabets used for base64 and base64wide for the same string are not identical.
     Base64AlphabetIncompatible,
+
+    /// An expression contains too many imbricated expressions.
+    ExprTooDeep,
 
     /// A hex string contains too many imbricated groups.
     HexStringTooDeep,

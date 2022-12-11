@@ -1,7 +1,6 @@
 use std::ops::Range;
 
 mod boolean_expression;
-pub(super) use boolean_expression::boolean_expression as expression;
 mod common;
 mod for_expression;
 mod identifier;
@@ -10,6 +9,10 @@ mod read_integer;
 mod string_expression;
 
 use crate::regex::Regex;
+
+pub(super) use boolean_expression::boolean_expression as expression;
+
+const MAX_EXPR_RECURSION: usize = 20;
 
 /// Integer read type, see [`ExpressionKind::ReadInteger`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

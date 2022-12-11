@@ -1,4 +1,6 @@
-use super::types::{Input, ParseResult};
+use crate::Error;
+
+use crate::types::{Input, ParseResult};
 use nom::Finish;
 
 #[track_caller]
@@ -22,6 +24,17 @@ where
     let input = Input::new(input);
     let res = f(input).finish();
     assert!(res.is_err());
+}
+
+#[track_caller]
+pub fn parse_err_type<'a, F, O>(f: F, input: &'a str, err: &Error)
+where
+    F: FnOnce(Input<'a>) -> ParseResult<'a, O>,
+    O: PartialEq + std::fmt::Debug,
+{
+    let input = Input::new(input);
+    let res = f(input).finish();
+    assert_eq!(&res.unwrap_err(), err);
 }
 
 #[track_caller]

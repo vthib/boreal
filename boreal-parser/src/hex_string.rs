@@ -288,7 +288,7 @@ pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<Token>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{parse, parse_err, test_public_type};
+    use crate::test_helpers::{parse, parse_err, parse_err_type, test_public_type};
 
     #[test]
     fn test_parse_hex_byte() {
@@ -533,7 +533,11 @@ mod tests {
         }
         hex.push('}');
 
-        parse_err(hex_string, &hex);
+        parse_err_type(
+            hex_string,
+            &hex,
+            &Error::new(70..70, ErrorKind::HexStringTooDeep),
+        );
 
         // counter should reset, so many imbricated alternations, but all below the limit should be
         // fine.
