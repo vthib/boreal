@@ -1679,70 +1679,69 @@ fn test_hex_strings() {
         false,
     );
 
-    // FIXME: to enable
-    // check(
-    //     "rule test {
-    //     strings: $a = { 31 32 ~32 34 35 }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test {
+        strings: $a = { 31 32 ~32 34 35 }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        true,
+    );
 
-    // check(
-    //     "rule test {
-    //     strings: $a = { 31 32 ~33 34 35 }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     false,
-    // );
+    check(
+        "rule test {
+        strings: $a = { 31 32 ~33 34 35 }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        false,
+    );
 
-    // check(
-    //     "rule test {
-    //     strings: $a = { ( 31 32 ~32 34 35 | 31 32 ~33 34 35 ) }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test {
+        strings: $a = { ( 31 32 ~32 34 35 | 31 32 ~33 34 35 ) }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        true,
+    );
 
-    // check(
-    //     "rule test {
-    //     strings: $a = { 31 32 ~?2 34 35 }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test {
+        strings: $a = { 31 32 ~?2 34 35 }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        true,
+    );
 
-    // check(
-    //     "rule test {
-    //     strings: $a = { 31 32 ~?3 34 35 }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     false,
-    // );
+    check(
+        "rule test {
+        strings: $a = { 31 32 ~?3 34 35 }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        false,
+    );
 
-    // check(
-    //     "rule test {
-    //     strings: $a = { 31 32 ~4? 34 35 }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test {
+        strings: $a = { 31 32 ~4? 34 35 }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        true,
+    );
 
-    // check(
-    //     "rule test {
-    //     strings: $a = { 31 32 ~3? 34 35 }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     false,
-    // );
+    check(
+        "rule test {
+        strings: $a = { 31 32 ~3? 34 35 }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        false,
+    );
 
-    // check(
-    //     "rule test {
-    //     strings: $a = { ( 31 32 ~3? 34 35 | 31 32 ~?2 34 35 ) }
-    //     condition: $a }",
-    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
-    //     true,
-    // );
+    check(
+        "rule test {
+        strings: $a = { ( 31 32 ~3? 34 35 | 31 32 ~?2 34 35 ) }
+        condition: $a }",
+        &join_str(TEXT_1024_BYTES, "1234567890"),
+        true,
+    );
 
     check(
         "rule test {
@@ -1895,30 +1894,29 @@ fn test_hex_strings() {
         "mem:2:40: error: unbounded jumps not allowed inside alternations (|)",
     );
 
-    // FIXME: to enable
-    // // ERROR_INVALID_HEX_STRING
-    // check_err(
-    //     "rule test {
-    //     strings: $a = { 01 02 ~ }
-    //     condition: $a ",
-    //     "z",
-    // );
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 02 ~ }
+        condition: $a ",
+        "mem:2:32: error: syntax error",
+    );
 
-    // // ERROR_INVALID_HEX_STRING
-    // check_err(
-    //     "rule test {
-    //     strings: $a = { 01 ~0 11 }
-    //     condition: $a ",
-    //     "z",
-    // );
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 ~0 11 }
+        condition: $a ",
+        "mem:2:30: error: syntax error",
+    );
 
-    // // ERROR_INVALID_HEX_STRING
-    // check_err(
-    //     "rule test {
-    //     strings: $a = { 01 ~?? 11 }
-    //     condition: $a ",
-    //     "z",
-    // );
+    // ERROR_INVALID_HEX_STRING
+    check_err(
+        "rule test {
+        strings: $a = { 01 ~?? 11 }
+        condition: $a ",
+        "mem:2:28: error: negating an unknown byte is not allowed",
+    );
 }
 
 #[test]

@@ -18,8 +18,12 @@ use super::types::{Input, ParseResult};
 pub enum Token {
     /// A fully declared byte, eg `9C`
     Byte(u8),
+    /// Negation of a byte, eg `~9C`
+    NotByte(u8),
     /// A masked byte, eg `?5`, `C?`, `??`
     MaskedByte(u8, Mask),
+    /// Negation of a masked byte, eg `~?C`. The mask cannot be [`Mask::All`].
+    NotMaskedByte(u8, Mask),
     /// A jump of unknown bytes, eg `[5-10]`, `[3-]`, ...
     Jump(Jump),
     /// Two possible list of tokens, eg `( 12 34 | 98 76 )`
@@ -80,6 +84,26 @@ fn byte(input: Input) -> ParseResult<u8> {
     let (input, digit0) = hex_digit(input)?;
 
     map(rtrim(hex_digit), move |digit1| (digit0 << 4) | digit1)(input)
+}
+
+/// Parse the not tokens.
+fn not_token(input: Input) -> ParseResult<Token> {
+    let start = input.pos();
+
+    let (input, _) = char('~')(input)?;
+    let (input, token) = cut(alt((
+        map(byte, Token::NotByte),
+        map(masked_byte, |(b, mask)| Token::NotMaskedByte(b, mask)),
+    )))(input)?;
+
+    if let Token::NotMaskedByte(_, Mask::All) = &token {
+        return Err(nom::Err::Failure(Error::new(
+            input.get_span_from(start),
+            ErrorKind::CannotNegateMaskAll,
+        )));
+    }
+
+    Ok((input, token))
 }
 
 /// Parse a masked hex byte, ie X?, ?X or ??.
@@ -230,9 +254,9 @@ fn validate_jump_in_alternatives(jump: &Jump) -> Result<(), ErrorKind> {
 /// This is equivalent to the `token_or_range` rule in `hex_grammar.y` in libyara.
 fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
     alt((
-        map(masked_byte, |(v, mask)| Token::MaskedByte(v, mask)),
-        // Always have at least one space after a byte or a masked byte
+        not_token,
         map(byte, Token::Byte),
+        map(masked_byte, |(v, mask)| Token::MaskedByte(v, mask)),
         |input| range_as_hex_token(input, in_alternatives),
         alternatives,
     ))(input)
@@ -312,6 +336,35 @@ mod tests {
         parse_err(masked_byte, " ?");
         parse_err(masked_byte, "G?");
         parse_err(masked_byte, "?G");
+    }
+
+    #[test]
+    fn test_parse_not_token() {
+        parse(not_token, "~23a", "a", Token::NotByte(0x23));
+        parse(
+            not_token,
+            "~?3b",
+            "b",
+            Token::NotMaskedByte(0x03, Mask::Left),
+        );
+        parse(
+            not_token,
+            "~F?",
+            "",
+            Token::NotMaskedByte(0x0F, Mask::Right),
+        );
+
+        parse_err(not_token, "~");
+        parse_err(not_token, "~1");
+        parse_err(not_token, "~1 2");
+        parse_err(not_token, "~ 12");
+        parse_err(not_token, "~??");
+        parse_err(not_token, "~g1");
+        parse_err(not_token, "~1g");
+        parse_err(not_token, "12");
+        parse_err(not_token, "?a");
+        parse_err(not_token, "a?");
+        parse_err(not_token, "??");
     }
 
     #[test]
