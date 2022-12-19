@@ -486,6 +486,39 @@ fn test_syntax() {
     );
 
     check_err("rule test rule test", "mem:1:11: error: syntax error");
+
+    // FIXME: enable those tests
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: -1 of them }",
+    //     "z");
+
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: 0 + -1 of them }",
+    //     "z");
+
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: for -1 of them: ($) }",
+    //     "z");
+
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: for 0 + -1 of them: ($) }",
+    //     "z");
+
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: \"foo\" of them }",
+    //     "z");
+
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: for \"foo\" of them: ($) }",
+    //     "z");
+
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: /foo/ of them }",
+    //     "z");
+
+    // check_err(
+    //     "rule test { strings: $a = \"a\" condition: for /foo/ of them: ($) }",
+    //     "z");
 }
 
 #[test]
@@ -496,6 +529,123 @@ fn test_anonymous_strings() {
         true,
     );
 }
+
+// FIXME: add warnings and test those
+// #[test]
+// fn test_warnings() {
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//       $b = \"WXSMTS\" \
+//     condition: \
+//       2 of them at 0 \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//       $b = \"WXSMTS\" \
+//     condition: \
+//       all of them at 0 \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       0 of them \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       for 0 of ($a*): ($) \
+//     }");
+//
+//   assert_no_warnings("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       none of them \
+//     }");
+//
+//   assert_no_warnings("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       for none of ($a*): ($) \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       1 + -1 of them \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       2 of them \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       2 of ($a) \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       2 of ($a*) \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       2 of ($a*) in (0..10) \
+//     }");
+//
+//   assert_warning("rule a { \
+//     condition: \
+//       true \
+//     } \
+//     rule b { \
+//       condition: \
+//         2 of (a) \
+//     }");
+//
+//   assert_warning("rule a { \
+//     condition: \
+//       true \
+//     } \
+//     rule b { \
+//       condition: \
+//         2 of (a*) \
+//     }");
+//
+//   assert_warning("rule test { \
+//     strings: \
+//       $a = \"AXSERS\" \
+//     condition: \
+//       2 of ($a*) at 0\
+//     }");
+//
+//   assert_error(
+//       "rule test { \
+//       strings: \
+//         $a = \"AXSERS\" \
+//       condition: \
+//         1 of them at \"x\"\
+//     }",
+//       ERROR_INVALID_VALUE);
+// }
 
 #[test]
 fn test_strings() {
@@ -1529,6 +1679,71 @@ fn test_hex_strings() {
         false,
     );
 
+    // FIXME: to enable
+    // check(
+    //     "rule test {
+    //     strings: $a = { 31 32 ~32 34 35 }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test {
+    //     strings: $a = { 31 32 ~33 34 35 }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     false,
+    // );
+
+    // check(
+    //     "rule test {
+    //     strings: $a = { ( 31 32 ~32 34 35 | 31 32 ~33 34 35 ) }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test {
+    //     strings: $a = { 31 32 ~?2 34 35 }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test {
+    //     strings: $a = { 31 32 ~?3 34 35 }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     false,
+    // );
+
+    // check(
+    //     "rule test {
+    //     strings: $a = { 31 32 ~4? 34 35 }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     true,
+    // );
+
+    // check(
+    //     "rule test {
+    //     strings: $a = { 31 32 ~3? 34 35 }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     false,
+    // );
+
+    // check(
+    //     "rule test {
+    //     strings: $a = { ( 31 32 ~3? 34 35 | 31 32 ~?2 34 35 ) }
+    //     condition: $a }",
+    //     concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+    //     true,
+    // );
+
     check(
         "rule test {
         strings: $a = { 35 36 [-] 31 32 }
@@ -1679,6 +1894,31 @@ fn test_hex_strings() {
         condition: $a ",
         "mem:2:40: error: unbounded jumps not allowed inside alternations (|)",
     );
+
+    // FIXME: to enable
+    // // ERROR_INVALID_HEX_STRING
+    // check_err(
+    //     "rule test {
+    //     strings: $a = { 01 02 ~ }
+    //     condition: $a ",
+    //     "z",
+    // );
+
+    // // ERROR_INVALID_HEX_STRING
+    // check_err(
+    //     "rule test {
+    //     strings: $a = { 01 ~0 11 }
+    //     condition: $a ",
+    //     "z",
+    // );
+
+    // // ERROR_INVALID_HEX_STRING
+    // check_err(
+    //     "rule test {
+    //     strings: $a = { 01 ~?? 11 }
+    //     condition: $a ",
+    //     "z",
+    // );
 }
 
 #[test]
@@ -1698,6 +1938,15 @@ fn test_count() {
 
 #[test]
 fn test_at() {
+    // FIXME: to enable
+    // check(
+    //     "rule test {
+    //     strings: $a = \"miss\"
+    //     condition: any of them at 0}",
+    //     b"mississippi",
+    //     true,
+    // );
+
     check(
         "rule test {
         strings: $a = \"ssi\"
@@ -1857,6 +2106,13 @@ fn test_rule_of() {
     );
 
     check_count(
+        "rule a { condition: false }
+       rule b { condition: none of (a) }",
+        b"",
+        1,
+    );
+
+    check_count(
         "rule a1 { condition: true }
          rule a2 { condition: true }
          rule b { condition: 2 of (a*) }",
@@ -1916,6 +2172,13 @@ fn test_of() {
     );
 
     check(
+        "rule test { strings: $a = \"dummy1\" $b = \"dummy2\" $c = \"ssi\"
+     condition: none of them }",
+        &join_str(TEXT_1024_BYTES, "mississippi"),
+        false,
+    );
+
+    check(
         "rule test { strings: $a = \"ssi\" $b = \"mis\" private $c = \"oops\"
       condition: 1 of them }",
         &join_str(TEXT_1024_BYTES, "mississippi"),
@@ -1941,6 +2204,13 @@ fn test_of() {
       condition: none of ($a*, $b*) }",
         &join_str(TEXT_1024_BYTES, "AXSERS"),
         true,
+    );
+
+    check(
+        "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy2\" $b2 = \"ssi\"
+     condition: none of ($a*, $b*) }",
+        &join_str(TEXT_1024_BYTES, "mississippi"),
+        false,
     );
 
     check(
@@ -2068,6 +2338,18 @@ fn test_of() {
         TEXT_1024_BYTES.as_bytes(),
         true,
     );
+
+    // Lower bound can not be negative, if it can be determined statically.
+    // FIXME: to enable
+    // check_err(
+    //     "rule test {
+    //     strings:
+    //       $a = \"AXSERS\"
+    //     condition:
+    //       $a in (-1..10)
+    //   }",
+    //     "z",
+    // );
 
     // Make sure that an undefined range boundary returns an undefined value,
     // which translates to false.
@@ -2350,6 +2632,17 @@ fn test_for() {
         false,
     );
 
+    // Lower bound must be less than upper bound, if it can be determined
+    // statically.
+    // FIXME: to enable
+    // check_err(
+    //     "rule test {
+    //     condition:
+    //       for any i in (10..1): (i)
+    //   }",
+    //     "z",
+    // );
+
     // Test case for https://github.com/VirusTotal/yara/issues/1729
     check(
         "rule test {
@@ -2361,6 +2654,32 @@ fn test_for() {
         b"abcde",
         true,
     );
+
+    // FIXME: to enable
+    // check(
+    //     "rule test {
+    //     condition:
+    //       for all i in (\"a\", \"b\") : (i == \"a\" or i == \"b\")
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    // check_err(
+    //     "rule test {
+    //     condition:
+    //       for any i in (\"a\"): (i == 0)
+    //   }",
+    //     "z",
+    // );
+
+    // check_err(
+    //     "rule test {
+    //     condition:
+    //       for any i in (\"a\", 0): (i == 0)
+    //   }",
+    //     "z",
+    // );
 }
 
 #[test]
@@ -3124,6 +3443,19 @@ fn test_comments() {
         &join_str("1234567890", TEXT_1024_BYTES),
         true,
     );
+
+    // Test case for https://github.com/VirusTotal/yara/issues/1819
+    check(
+        "rule test {
+        // single line comment with brace }\n\r
+        strings:
+          $a = \"foo\" ascii
+        condition:
+          $a
+      }",
+        b"foo",
+        true,
+    );
 }
 
 #[test]
@@ -3221,7 +3553,7 @@ fn test_modules() {
     check(
         "import \"tests\"
        rule test {
-        condition: tests.constants.empty == \"\" 
+        condition: tests.constants.empty == \"\"
       }",
         b"",
         true,
@@ -3230,7 +3562,7 @@ fn test_modules() {
     check(
         "import \"tests\"
        rule test {
-        condition: tests.empty() == \"\" 
+        condition: tests.empty() == \"\"
       }",
         b"",
         true,
@@ -3239,7 +3571,7 @@ fn test_modules() {
     check(
         "import \"tests\"
        rule test {
-        condition: tests.struct_array[1].i == 1 
+        condition: tests.struct_array[1].i == 1
       }",
         b"",
         true,
@@ -3385,7 +3717,7 @@ fn test_modules() {
 
     check(
         "import \"tests\"
-      rule test { condition: tests.struct_array[0].i == 1 
+      rule test { condition: tests.struct_array[0].i == 1
       }",
         b"",
         false,
@@ -3697,6 +4029,22 @@ fn test_meta() {
 #[cfg(feature = "object")]
 fn test_defined() {
     check("rule t { condition: defined 1 }", b"", true);
+    check("rule t { condition: defined true and false }", b"", false);
+    check("rule t { condition: defined (true and false) }", b"", true);
+
+    check(
+        "import \"pe\"
+      rule t {
+        condition:
+          defined (
+            for any x in (0..10) : (
+              pe.number_of_resources == 0
+            )
+          )
+      }",
+        b"",
+        true,
+    );
 
     check(
         "import \"pe\"
@@ -3753,6 +4101,37 @@ fn test_defined() {
       rule t {
         condition:
           defined \"foo\" contains \"f\"
+      }",
+        b"",
+        true,
+    );
+
+    // Test FOUND_IN and FOUND_AT propagates undefined values
+    check(
+        "import \"pe\"
+      rule t {
+        strings:
+            $a = \"abc\"
+        condition:
+          not defined ($a in (0..pe.number_of_resources)) and
+          not defined ($a in (pe.number_of_resources..5)) and
+          not defined ($a at pe.number_of_resources)
+      }",
+        b"",
+        true,
+    );
+
+    // Test that operations that would trigger a SIGFPE are detected and
+    // returns undefined
+    check(
+        "rule t {
+        strings:
+          $a = /aaa/
+        condition:
+          (not defined (1 \\ #a)) and
+          (not defined (1 % #a)) and
+          (not defined ((#a + -0x7FFFFFFFFFFFFFFF - 1) \\ -1)) and
+          (not defined ((#a + -0x7FFFFFFFFFFFFFFF - 1) % -1))
       }",
         b"",
         true,
