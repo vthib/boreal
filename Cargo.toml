@@ -17,3 +17,8 @@ members = [
 # - Handle VirtualSize=0 when searching through sections
 #   - 89de6a730a4f60c005862b294de2f9fe444d1235
 object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.30" }
+
+# Fork of yara-rust crate, for some changes not yet released:
+#
+# - Update to yara 4.3
+yara = { git = "https://github.com/vthib/yara-rust", branch = "update-yara-4.3" }
