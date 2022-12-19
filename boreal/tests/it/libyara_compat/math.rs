@@ -209,7 +209,7 @@ fn test_math() {
         "import \"math\"
       rule test {
         condition:
-          math.serial_correlation(\"BCAB\") == -0.5
+          math.serial_correlation(\"BCA\") == -0.5
       }",
         b"",
         true,
@@ -219,7 +219,7 @@ fn test_math() {
         "import \"math\"
       rule test {
         condition:
-          math.serial_correlation(1, 4) == -0.5
+          math.serial_correlation(1, 3) == -0.5
       }",
         b"ABCABC",
         true,
@@ -264,4 +264,80 @@ fn test_math() {
         b"123ABCDEF123456987DE",
         true,
     );
+
+    // FIXME: add math.to_string
+    // check(
+    //     "import \"math\"
+    //   rule test {
+    //     condition:
+    //       math.to_string(1234) == \"1234\"
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    // // We use signed integers by default if no base is specified.
+    // check(
+    //     "import \"math\"
+    //   rule test {
+    //     condition:
+    //       math.to_string(-1) == \"-1\"
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    // check(
+    //     "import \"math\"
+    //   rule test {
+    //     condition:
+    //       math.to_string(32, 16) == \"20\"
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    // check(
+    //     "import \"math\"
+    //   rule test {
+    //     condition:
+    //       math.to_string(32, 8) == \"40\"
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    // check(
+    //     "import \"math\"
+    //   rule test {
+    //     condition:
+    //       math.to_string(32, 10) == \"32\"
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    // // Base 10 is always a signed integer, all other bases are unsigned.
+    // check(
+    //     "import \"math\"
+    //   rule test {
+    //     condition:
+    //       math.to_string(-1, 10) == \"-1\" and
+    //       math.to_string(-1, 16) == \"ffffffffffffffff\" and
+    //       math.to_string(-1, 8) == \"1777777777777777777777\"
+    //   }",
+    //     b"",
+    //     true,
+    // );
+
+    // // Passing a base that is not 10, 8 or 16 will result in UNDEFINED.
+    // check(
+    //     "import \"math\"
+    //   rule test {
+    //     condition:
+    //       not defined(math.to_string(32, 9))
+    //   }",
+    //     b"",
+    //     true,
+    // );
 }
