@@ -48,7 +48,7 @@ fn test_undefined_count_in_range() {
     assert_is_defined(&format!("#a0 in ({UNDEF_INT}..5)"), false);
 
     // emit undefined if values are not positive
-    // TODO(4.3): bug in libyara 4.2, returns internal error, fixed in 4.3
+    // FIXME: still different in libyara?
     assert_is_defined_boreal("#a0 in ((#a1 - 1)..5)", false);
     assert_is_defined_boreal("#a0 in (0..(#a1 - 1))", false);
 
@@ -85,11 +85,10 @@ fn test_undefined_arith_op() {
     assert_is_defined(&format!("{UNDEF_INT} % 1"), false);
 
     // For div and mod, undefined on div by zero or overflow
-    // TODO: report this issue on libyara
     assert_is_defined("1 \\ #a0", false);
     assert_is_defined("1 % #a0", false);
-    assert_is_defined_boreal("(#a0 + -0x7FFFFFFFFFFFFFFF - 1) \\ -1", false);
-    assert_is_defined_boreal("(#a0 + -0x7FFFFFFFFFFFFFFF - 1) % -1", false);
+    assert_is_defined("(#a0 + -0x7FFFFFFFFFFFFFFF - 1) \\ -1", false);
+    assert_is_defined("(#a0 + -0x7FFFFFFFFFFFFFFF - 1) % -1", false);
 }
 
 #[test]
@@ -163,8 +162,7 @@ fn test_undefined_not() {
 #[test]
 fn test_undefined_var_at_in() {
     // propagate undefined value from inner expr
-    // TODO(4.3): this is fixed in libyara 4.3
-    assert_is_defined_boreal(&format!("$a0 at {UNDEF_INT}"), false);
+    assert_is_defined(&format!("$a0 at {UNDEF_INT}"), false);
     assert_is_defined(&format!("$a0 in ({UNDEF_INT}..5)"), false);
     assert_is_defined(&format!("$a0 in (0..{UNDEF_INT})"), false);
 

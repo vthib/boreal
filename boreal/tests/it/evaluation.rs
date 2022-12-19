@@ -81,8 +81,7 @@ fn test_eval_div() {
     check(&build_rule("1 \\ (#c0 + 0) == 1"), &[], false);
     check(&build_rule("-2 \\ (-0 + #c0) > 0"), &[], false);
 
-    // TODO: Dont actually test this on libyara, it triggers a SIGFPE. Report it upstream
-    check_boreal(
+    check(
         &build_rule("(#c0 + -0x7FFFFFFFFFFFFFFF - 1) \\ -1 > 0"),
         &[],
         false,
@@ -98,8 +97,7 @@ fn test_eval_mod() {
     check(&build_rule("1 % (#c0 + 0) == 1"), &[], false);
     check(&build_rule("-2 % (-0 + #c0) > 0"), &[], false);
 
-    // TODO: Dont actually test this on libyara, it triggers a SIGFPE. Report it upstream
-    check_boreal(
+    check(
         &build_rule("(#c0 + -0x7FFFFFFFFFFFFFFF - 1) % -1 > 0"),
         &[],
         false,
@@ -698,16 +696,15 @@ rule a {
         #a in (2..5) == 3
 }"#,
     );
-    // TODO(4.3): this raises a FATAL_INTERNAL_ERROR in libyara 4.2, fixed on master
-    checker.check_boreal(b"", false);
-    checker.check_boreal(b"  abaabb", true);
-    checker.check_boreal(b"  ababab", false);
-    checker.check_boreal(b"  abab", false);
-    checker.check_boreal(b"  aaaab", false);
-    checker.check_boreal(b" aaabb", false);
-    checker.check_boreal(b"  aaabb", true);
-    checker.check_boreal(b"   aaabb", true);
-    checker.check_boreal(b"    aaabb", false);
+    checker.check(b"", false);
+    checker.check(b"  abaabb", true);
+    checker.check(b"  ababab", false);
+    checker.check(b"  abab", false);
+    checker.check(b"  aaaab", false);
+    checker.check(b" aaabb", false);
+    checker.check(b"  aaabb", true);
+    checker.check(b"   aaabb", true);
+    checker.check(b"    aaabb", false);
 
     let checker = Checker::new(
         r#"
@@ -718,14 +715,14 @@ rule a {
         #a in (3..6) == 2
 }"#,
     );
-    checker.check_boreal(b"<<<\xab\xcd \xab_\xcd", false);
-    checker.check_boreal(b"<<\xab\xcd \xab_\xcd", false);
-    checker.check_boreal(b"<<<\xabpad\xcd \xab_\xcd", false);
-    checker.check_boreal(b"<<<\xab\xab_\xcd", true);
-    checker.check_boreal(b"<<<\xab\xab\xab_\xcd", false);
-    checker.check_boreal(b"<<<|\xab\xab\xab_\xcd", false);
-    checker.check_boreal(b"<<<||\xab\xab\xab_\xcd", true);
-    checker.check_boreal(b"<<<|||\xab\xab\xab_\xcd", false);
+    checker.check(b"<<<\xab\xcd \xab_\xcd", false);
+    checker.check(b"<<\xab\xcd \xab_\xcd", false);
+    checker.check(b"<<<\xabpad\xcd \xab_\xcd", false);
+    checker.check(b"<<<\xab\xab_\xcd", true);
+    checker.check(b"<<<\xab\xab\xab_\xcd", false);
+    checker.check(b"<<<|\xab\xab\xab_\xcd", false);
+    checker.check(b"<<<||\xab\xab\xab_\xcd", true);
+    checker.check(b"<<<|||\xab\xab\xab_\xcd", false);
 
     // Invalid range returns undefined
     check_boreal(&build_rule("defined (#a0 in (5..#c0))"), b"", false);
@@ -1206,10 +1203,9 @@ rule e {
 }
 
 
-// TODO(4.3): re-enable this when the none bug in libyara is fixed
-// rule f {
-//     condition: none of (g*)
-// }
+rule f {
+    condition: none of (g*)
+}
 "#,
     );
 
