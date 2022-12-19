@@ -99,18 +99,17 @@ fn test_math_mean() {
 #[test]
 fn test_math_serial_correlation() {
     test(r#"math.serial_correlation("A") == -100000"#, b"");
-    // TODO(4.3): https://github.com/VirusTotal/yara/pull/1771
-    // test(r#"math.serial_correlation("AC") == -1"#, b"");
-    // test(r#"math.serial_correlation("5'%") == -0.5"#, b"");
-    // test(
-    //     r#"math.serial_correlation("\x00\x00\x00\x00") == -100000"#,
-    //     b"",
-    // );
-    // test(
-    //     r#"math.in_range(math.serial_correlation("0As5+!"), 0.17149, 0.17150)"#,
-    //     b"",
-    // );
-    // test(r#"math.serial_correlation("ABCDEFG") == 0.25"#, b"");
+    test(r#"math.serial_correlation("AC") == -1"#, b"");
+    test(r#"math.serial_correlation("5'%") == -0.5"#, b"");
+    test(
+        r#"math.serial_correlation("\x00\x00\x00\x00") == -100000"#,
+        b"",
+    );
+    test(
+        r#"math.in_range(math.serial_correlation("0As5+!"), 0.17149, 0.17150)"#,
+        b"",
+    );
+    test(r#"math.serial_correlation("ABCDEFG") == 0.25"#, b"");
     test(
         "math.in_range(math.serial_correlation(0, 20000), 0.45982, 0.45983)",
         ELF32_MIPS_FILE,

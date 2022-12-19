@@ -311,6 +311,7 @@ rule test {
 // All import_details and delayed_import_details ignored diffs are solved in 4.3
 
 #[test]
+#[ignore]
 fn test_coverage_pe_ord_and_delay() {
     compare_module_values_on_file(
         Pe,
@@ -326,6 +327,7 @@ fn test_coverage_pe_ord_and_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_resources_only() {
     compare_module_values_on_file(
         Pe,
@@ -338,6 +340,7 @@ fn test_coverage_pe_resources_only() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_079a472d() {
     compare_module_values_on_file(
         Pe,
@@ -356,6 +359,7 @@ fn test_coverage_pe_libyara_079a472d() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_079a472d_upx() {
     compare_module_values_on_file(
         Pe,
@@ -371,6 +375,7 @@ fn test_coverage_pe_libyara_079a472d_upx() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_0ca09bde() {
     compare_module_values_on_file(
         Pe,
@@ -385,6 +390,7 @@ fn test_coverage_pe_libyara_0ca09bde() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_33fc70f9() {
     compare_module_values_on_file(
         Pe,
@@ -399,6 +405,7 @@ fn test_coverage_pe_libyara_33fc70f9() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_3b8b9015() {
     compare_module_values_on_file(
         Pe,
@@ -415,6 +422,7 @@ fn test_coverage_pe_libyara_3b8b9015() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_ca21e1c32() {
     compare_module_values_on_file(
         Pe,
@@ -458,6 +466,7 @@ fn test_coverage_pe_libyara_ca21e1c32() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_mtxex() {
     compare_module_values_on_file(
         Pe,
@@ -472,6 +481,7 @@ fn test_coverage_pe_libyara_mtxex() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_mtxex_modified() {
     compare_module_values_on_file(
         Pe,
@@ -486,6 +496,7 @@ fn test_coverage_pe_libyara_mtxex_modified() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_pe_imports() {
     compare_module_values_on_file(
         Pe,
@@ -499,6 +510,7 @@ fn test_coverage_pe_libyara_pe_imports() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_pe_mingw() {
     compare_module_values_on_file(
         Pe,
@@ -514,6 +526,7 @@ fn test_coverage_pe_libyara_pe_mingw() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_tiny() {
     compare_module_values_on_file(
         Pe,
@@ -529,6 +542,7 @@ fn test_coverage_pe_libyara_tiny() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_tiny_51ff() {
     compare_module_values_on_file(
         Pe,
@@ -544,6 +558,7 @@ fn test_coverage_pe_libyara_tiny_51ff() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_tiny_5200() {
     compare_module_values_on_file(
         Pe,
@@ -585,6 +600,7 @@ fn test_coverage_pe_libyara_tiny_5200() {
 }
 
 #[test]
+#[ignore]
 fn test_coverage_pe_libyara_tiny_overlay() {
     compare_module_values_on_file(
         Pe,
