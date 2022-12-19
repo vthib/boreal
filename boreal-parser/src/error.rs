@@ -40,6 +40,10 @@ impl Error {
                 .with_message("alphabets used for base64 and base64wide must be identical")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
+            ErrorKind::CannotNegateMaskAll => Diagnostic::error()
+                .with_message("negating an unknown byte is not allowed")
+                .with_labels(vec![Label::primary((), self.span.clone())]),
+
             ErrorKind::ExprTooDeep => Diagnostic::error()
                 .with_message("too many imbricated expressions")
                 .with_labels(vec![Label::primary((), self.span.clone())]),
@@ -167,6 +171,9 @@ pub enum ErrorKind {
 
     /// Alphabets used for base64 and base64wide for the same string are not identical.
     Base64AlphabetIncompatible,
+
+    /// The '~??' syntax cannot be used in a hex string
+    CannotNegateMaskAll,
 
     /// An expression contains too many imbricated expressions.
     ExprTooDeep,

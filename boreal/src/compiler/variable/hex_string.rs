@@ -10,22 +10,12 @@ pub(super) fn hex_string_to_ast(hex_string: Vec<Token>) -> Node {
 fn hex_token_to_ast(token: Token) -> Node {
     match token {
         Token::Byte(b) => Node::Literal(b),
-        Token::MaskedByte(b, mask) => match mask {
-            Mask::Left => Node::Class(ClassKind::Bracketed(BracketedClass {
-                items: (0..=0xF)
-                    .map(|i| BracketedClassItem::Literal((i << 4) + b))
-                    .collect(),
-                negated: false,
-            })),
-            Mask::Right => {
-                let b = b << 4;
-                Node::Class(ClassKind::Bracketed(BracketedClass {
-                    items: vec![BracketedClassItem::Range(b, b + 0x0F)],
-                    negated: false,
-                }))
-            }
-            Mask::All => Node::Dot,
-        },
+        Token::NotByte(b) => Node::Class(ClassKind::Bracketed(BracketedClass {
+            items: vec![BracketedClassItem::Literal(b)],
+            negated: true,
+        })),
+        Token::MaskedByte(b, mask) => masked_byte_to_class(b, &mask, false),
+        Token::NotMaskedByte(b, mask) => masked_byte_to_class(b, &mask, true),
         Token::Jump(jump) => {
             let kind = match (jump.from, jump.to) {
                 (from, None) => RepetitionKind::Range(RepetitionRange::AtLeast(from)),
@@ -43,6 +33,25 @@ fn hex_token_to_ast(token: Token) -> Node {
     }
 }
 
+fn masked_byte_to_class(byte: u8, mask: &Mask, negated: bool) -> Node {
+    match mask {
+        Mask::Left => Node::Class(ClassKind::Bracketed(BracketedClass {
+            items: (0..=0xF)
+                .map(|i| BracketedClassItem::Literal((i << 4) + byte))
+                .collect(),
+            negated,
+        })),
+        Mask::Right => {
+            let byte = byte << 4;
+            Node::Class(ClassKind::Bracketed(BracketedClass {
+                items: vec![BracketedClassItem::Range(byte, byte + 0x0F)],
+                negated,
+            }))
+        }
+        Mask::All => Node::Dot,
+    }
+}
+
 /// Can the hex string be expressed using only literals.
 pub(super) fn can_use_only_literals(hex_string: &[Token]) -> bool {
     let nb_literals = match count_total_literals(hex_string) {
@@ -53,13 +62,14 @@ pub(super) fn can_use_only_literals(hex_string: &[Token]) -> bool {
     nb_literals < 100
 }
 
-/// Count the total of literals that would needed to exhaustively express the hex string.
+/// Count the total number of literals that would be needed to exhaustively express the hex string.
 fn count_total_literals(hex_string: &[Token]) -> Option<usize> {
     let mut nb_lits = 1_usize;
 
     for token in hex_string {
         match token {
             Token::Byte(_) => (),
+            Token::NotByte(_) => return None,
             Token::Jump(_) => return None,
             Token::MaskedByte(_, mask) => match mask {
                 Mask::Left | Mask::Right => {
@@ -67,6 +77,7 @@ fn count_total_literals(hex_string: &[Token]) -> Option<usize> {
                 }
                 Mask::All => return None,
             },
+            Token::NotMaskedByte(_, _) => return None,
             Token::Alternatives(alts) => {
                 let mut nb_alts = 0_usize;
                 for alt in alts {
@@ -87,8 +98,10 @@ pub(super) fn hex_string_to_only_literals(hex_string: Vec<Token>) -> Vec<Vec<u8>
     for token in hex_string {
         match token {
             Token::Byte(b) => literals.add_byte(b),
+            Token::NotByte(_) => unreachable!(),
             Token::Jump(_) => unreachable!(),
             Token::MaskedByte(b, mask) => literals.add_masked_byte(b, &mask),
+            Token::NotMaskedByte(_, _) => unreachable!(),
             Token::Alternatives(alts) => literals.add_alternatives(alts),
         }
     }

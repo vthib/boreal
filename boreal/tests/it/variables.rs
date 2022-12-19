@@ -1546,3 +1546,80 @@ rule a {
         )],
     );
 }
+
+#[test]
+fn test_variable_hex_string_negation() {
+    let input = (0_u8..=255_u8).collect::<Vec<_>>();
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { ~?C }
+    condition:
+        any of them
+}
+"#,
+    );
+    checker.check_full_matches(
+        &input,
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "a",
+                (0..=255)
+                    .filter(|v| v & 0x0F != 0x0C)
+                    .map(|v| (&input[v..(v + 1)], v, 1))
+                    .collect(),
+            )],
+        )],
+    );
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $b = { ~C? }
+    condition:
+        any of them
+}
+"#,
+    );
+    checker.check_full_matches(
+        &input,
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "b",
+                (0..=255)
+                    .filter(|v| v & 0xF0 != 0xC0)
+                    .map(|v| (&input[v..(v + 1)], v, 1))
+                    .collect(),
+            )],
+        )],
+    );
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $c = { ~C3 }
+    condition:
+        any of them
+}
+"#,
+    );
+    checker.check_full_matches(
+        &input,
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "c",
+                (0..=255)
+                    .filter(|v| *v != 0xC3)
+                    .map(|v| (&input[v..(v + 1)], v, 1))
+                    .collect(),
+            )],
+        )],
+    );
+}
