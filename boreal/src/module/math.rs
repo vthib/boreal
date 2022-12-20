@@ -119,6 +119,14 @@ impl Module for Math {
                     Type::Integer,
                 ),
             ),
+            (
+                "to_string",
+                StaticValue::function(
+                    Self::to_string,
+                    vec![vec![Type::Integer], vec![Type::Integer, Type::Integer]],
+                    Type::Bytes,
+                ),
+            ),
         ]
         .into()
     }
@@ -331,6 +339,24 @@ impl Math {
         // Reverse to return the first index of the maximum value and not the last one.
         let most_common = dist.iter().enumerate().rev().max_by_key(|(_, n)| *n)?.0;
         most_common.try_into().ok().map(Value::Integer)
+    }
+
+    fn to_string(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let value: i64 = args.next()?.try_into().ok()?;
+        let base: Option<i64> = match args.next() {
+            Some(v) => Some(v.try_into().ok()?),
+            None => None,
+        };
+
+        let s = match base {
+            Some(10) | None => format!("{value}"),
+            Some(16) => format!("{value:x}"),
+            Some(8) => format!("{value:o}"),
+            _ => return None,
+        };
+
+        Some(Value::Bytes(s.into_bytes()))
     }
 }
 

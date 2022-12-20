@@ -319,3 +319,29 @@ fn test_math_mode() {
         "mem:5:25: error: invalid arguments types: [floating-point number, integer]",
     );
 }
+
+#[test]
+fn test_math_to_string() {
+    test(r#"math.to_string(28974917) == "28974917""#, b"");
+    test(r#"math.to_string(28974917, 10) == "28974917""#, b"");
+    test(r#"math.to_string(28974917, 16) == "1ba1f45""#, b"");
+    test(r#"math.to_string(28974917, 8) == "156417505""#, b"");
+
+    test(r#"math.to_string(-28974917) == "-28974917""#, b"");
+    test(r#"math.to_string(-28974917, 10) == "-28974917""#, b"");
+    test(
+        r#"math.to_string(-28974917, 16) == "fffffffffe45e0bb""#,
+        b"",
+    );
+    test(
+        r#"math.to_string(-28974917, 8) == "1777777777777621360273""#,
+        b"",
+    );
+
+    test("not defined math.to_string(5, 9)", b"");
+
+    test_err(
+        "math.to_string(/a/)",
+        "mem:5:30: error: invalid arguments types: [regex]",
+    );
+}
