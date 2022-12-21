@@ -121,6 +121,7 @@ free. If however someone can provide a valid use-case, this difference can be re
 - [x] pe (with the _object_ feature)
   - `pe.signatures` is behind the _openssl_ feature
   - `pe.imphash()` is behind the _hash_ feature
+- [x] string
 - [x] time
 
 Modules not yet supported:
