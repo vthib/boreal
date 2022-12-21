@@ -74,17 +74,17 @@ impl String_ {
         for (i, c) in s.iter().enumerate() {
             match (*c as char).to_digit(base) {
                 Some(c) => {
-                    res = res
-                        .checked_mul(i64::from(base))?
-                        .checked_add(i64::from(c))?;
+                    res = res.checked_mul(i64::from(base))?;
+                    if is_negative {
+                        res = res.checked_sub(i64::from(c))?;
+                    } else {
+                        res = res.checked_add(i64::from(c))?;
+                    }
                 }
                 // If no digit was parsed at all, return an error
                 None if i == 0 => return None,
                 None => break,
             }
-        }
-        if is_negative {
-            res = res.checked_mul(-1)?;
         }
         Some(Value::Integer(res))
     }

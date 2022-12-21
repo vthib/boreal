@@ -45,6 +45,7 @@ fn test_string_to_int() {
     test(r#"string.to_int("+1287", 9) == 970"#);
 
     test(r#"string.to_int("9223372036854775807") == 9223372036854775807"#);
+    test(r#"string.to_int("-9223372036854775808") == -9223372036854775807 - 1"#);
 
     // parsing stops at the first non valid char
     test(r#"string.to_int("1ff3") == 1"#);
@@ -85,8 +86,7 @@ fn test_string_to_int() {
     // TODO: libyara does not handle overflows nicely
     test_boreal(r#"not defined string.to_int("9223372036854775808")"#);
     test_boreal(r#"not defined string.to_int("92233720368547758050")"#);
-    // FIXME: this is wrong, this value is valid
-    test_boreal(r#"not defined string.to_int("-9223372036854775808")"#);
+    test_boreal(r#"not defined string.to_int("-9223372036854775809")"#);
 
     test_err(
         "string.to_int(5)",
