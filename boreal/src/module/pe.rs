@@ -1356,19 +1356,17 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
 {
     if thunk.is_ordinal() {
         let ordinal = thunk.ordinal();
-        let name = ord::ord_lookup(dll_name, ordinal).map(<[u8]>::to_vec);
+        let name = ord::ord_lookup(dll_name, ordinal);
 
         data_functions.push(DataFunction {
             name: name.clone(),
             ordinal: Some(ordinal),
         });
 
-        let ordinal = ordinal.into();
-        let obj = match name {
-            Some(name) => Value::object([("name", name.into()), ("ordinal", ordinal)]),
-            None => Value::object([("ordinal", ordinal)]),
-        };
-        functions.push(obj);
+        functions.push(Value::object([
+            ("name", name.into()),
+            ("ordinal", ordinal.into()),
+        ]));
     } else {
         let name = match hint_name(thunk.address()) {
             Ok(name) => name,
@@ -1376,7 +1374,7 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
         };
 
         data_functions.push(DataFunction {
-            name: Some(name.clone()),
+            name: name.clone(),
             ordinal: None,
         });
         functions.push(Value::object([("name", name.into())]));
@@ -2133,11 +2131,7 @@ impl Pe {
             }
 
             for fun in &dll.functions {
-                let fun_name = match &fun.name {
-                    Some(name) => name,
-                    None => continue,
-                };
-                let fun_name = fun_name.to_ascii_lowercase();
+                let fun_name = fun.name.to_ascii_lowercase();
 
                 if !first {
                     hasher.update([b',']);
@@ -2200,7 +2194,7 @@ struct DataExport {
 }
 
 struct DataFunction {
-    name: Option<Vec<u8>>,
+    name: Vec<u8>,
     ordinal: Option<u16>,
 }
 
@@ -2229,11 +2223,7 @@ impl Data {
         self.get_imports(delayed)
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
-            .and_then(|imp| {
-                imp.functions
-                    .iter()
-                    .find(|f| f.name.as_ref().map_or(false, |name| fun_name == name))
-            })
+            .and_then(|imp| imp.functions.iter().find(|f| fun_name == f.name))
             .is_some()
     }
 
@@ -2265,10 +2255,8 @@ impl Data {
                 continue;
             }
             for fun in &imp.functions {
-                if let Some(name) = &fun.name {
-                    if fun_regex.as_regex().is_match(name) {
-                        nb_matches += 1;
-                    }
+                if fun_regex.as_regex().is_match(&fun.name) {
+                    nb_matches += 1;
                 }
             }
         }

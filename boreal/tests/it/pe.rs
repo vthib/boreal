@@ -683,12 +683,18 @@ pe.checksum == 82308 and
  // TODO: yara 4.3
 // (
 //     (
+//         pe.delayed_import_details[0].functions[0].name == "ord116" and
 //         pe.delayed_import_details[0].functions[0].ordinal == 116 and
+//         pe.delayed_import_details[0].functions[1].name == "ord102" and
 //         pe.delayed_import_details[0].functions[1].ordinal == 102 and
+//         pe.delayed_import_details[0].functions[2].name == "ord95" and
 //         pe.delayed_import_details[0].functions[2].ordinal == 95 and
+//         pe.delayed_import_details[0].functions[3].name == "ord105" and
 //         pe.delayed_import_details[0].functions[3].ordinal == 105 and
+//         pe.delayed_import_details[0].functions[4].name == "ord103" and
 //         pe.delayed_import_details[0].functions[4].ordinal == 103 and
-//         pe.delayed_import_details[0].functions[5].ordinal == 34    )
+//         pe.delayed_import_details[0].functions[5].name == "ord34" and
+//         pe.delayed_import_details[0].functions[5].ordinal == 34 )
 //  and
 //     pe.delayed_import_details[0].library_name == "QDB.dll" and
 //     pe.delayed_import_details[0].number_of_functions == 6)

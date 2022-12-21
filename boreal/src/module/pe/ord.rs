@@ -4,15 +4,19 @@
 //! <https://github.com/VirusTotal/yara/blob/v4.2.2/libyara/modules/pe/pe_utils.c#L308=>
 //! itself copied from pefile.
 
-pub(super) fn ord_lookup(dll_name: &[u8], ord: u16) -> Option<&'static [u8]> {
+pub(super) fn ord_lookup(dll_name: &[u8], ord: u16) -> Vec<u8> {
     if dll_name.eq_ignore_ascii_case(b"WS2_32.dll") || dll_name.eq_ignore_ascii_case(b"wsock32.dll")
     {
-        wsock32_ord_lookup(ord)
+        if let Some(v) = wsock32_ord_lookup(ord) {
+            return v.to_owned();
+        }
     } else if dll_name.eq_ignore_ascii_case(b"oleaut32.dll") {
-        oleaut32_ord_lookup(ord)
-    } else {
-        None
+        if let Some(v) = oleaut32_ord_lookup(ord) {
+            return v.to_owned();
+        }
     }
+
+    format!("ord{ord}").into_bytes()
 }
 
 fn wsock32_ord_lookup(ord: u16) -> Option<&'static [u8]> {
