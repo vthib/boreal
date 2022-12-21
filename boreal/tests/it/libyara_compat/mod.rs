@@ -6,4 +6,5 @@ mod math;
 #[cfg(feature = "object")]
 mod pe;
 mod rules;
+mod string;
 pub mod util;
