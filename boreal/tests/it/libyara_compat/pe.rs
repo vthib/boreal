@@ -759,128 +759,127 @@ fn test_pe() {
         true,
     );
 
-    // FIXME: to enable
-    // check_file(
-    //   "import \"pe\"
+    check_file(
+      "import \"pe\"
 
-    //   rule import_details_rva_32_v1_catch
-    //   {
-    //       condition:
-    //         for any import_detail in pe.import_details: (
-    //             import_detail.library_name == \"MSVCR100.dll\" and
-    //             for any function in import_detail.functions : (
-    //                 function.name == \"_initterm\" and
-    //                 function.rva == 0x3084
-    //             )
-    //         )
-    //   }",
-    //   "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+      rule import_details_rva_32_v1_catch
+      {
+          condition:
+            for any import_detail in pe.import_details: (
+                import_detail.library_name == \"MSVCR100.dll\" and
+                for any function in import_detail.functions : (
+                    function.name == \"_initterm\" and
+                    function.rva == 0x3084
+                )
+            )
+      }",
+      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
 
-    // check_file(
-    //   "import \"pe\"
+    check_file(
+      "import \"pe\"
 
-    //   rule import_details_rva_32_v2_catch
-    //   {
-    //       condition:
-    //         for any import_detail in pe.import_details: (
-    //             import_detail.library_name == \"KERNEL32.dll\" and
-    //             for any function in import_detail.functions : (
-    //                 function.name == \"QueryPerformanceCounter\" and
-    //                 function.rva == 0x3054
-    //             )
-    //         )
-    //   }",
-    //   "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+      rule import_details_rva_32_v2_catch
+      {
+          condition:
+            for any import_detail in pe.import_details: (
+                import_detail.library_name == \"KERNEL32.dll\" and
+                for any function in import_detail.functions : (
+                    function.name == \"QueryPerformanceCounter\" and
+                    function.rva == 0x3054
+                )
+            )
+      }",
+      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
 
-    // check_file(
-    //     "import \"pe\"
+    check_file(
+        "import \"pe\"
 
-    //   rule import_details_rva_32_v3_catch
-    //   {
-    //       condition:
-    //         for any import_detail in pe.import_details: (
-    //             import_detail.library_name == \"KERNEL32.dll\" and
-    //             for any function in import_detail.functions : (
-    //                 function.name == \"CloseHandle\" and
-    //                 function.rva == 0xd10c
-    //             )
-    //         )
-    //   }",
-    //     "tests/assets/libyara/data/pe_imports",
-    //     true,
-    // );
+      rule import_details_rva_32_v3_catch
+      {
+          condition:
+            for any import_detail in pe.import_details: (
+                import_detail.library_name == \"KERNEL32.dll\" and
+                for any function in import_detail.functions : (
+                    function.name == \"CloseHandle\" and
+                    function.rva == 0xd10c
+                )
+            )
+      }",
+        "tests/assets/libyara/data/pe_imports",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
+    check_file(
+        "import \"pe\"
 
-    //   rule import_details_rva_64_v1_catch
-    //   {
-    //       condition:
-    //         for any import_detail in pe.import_details: (
-    //             import_detail.library_name == \"KERNEL32.dll\" and
-    //             for any function in import_detail.functions : (
-    //                 function.name == \"LoadLibraryExW\" and
-    //                 function.rva == 0x2118
-    //             )
-    //         )
-    //   }",
-    //     "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll",
-    //     true,
-    // );
+      rule import_details_rva_64_v1_catch
+      {
+          condition:
+            for any import_detail in pe.import_details: (
+                import_detail.library_name == \"KERNEL32.dll\" and
+                for any function in import_detail.functions : (
+                    function.name == \"LoadLibraryExW\" and
+                    function.rva == 0x2118
+                )
+            )
+      }",
+        "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
+    check_file(
+        "import \"pe\"
 
-    //   rule import_details_rva_64_v2_catch
-    //   {
-    //       condition:
-    //         for any import_detail in pe.import_details: (
-    //             import_detail.library_name == \"KERNEL32.dll\" and
-    //             for any function in import_detail.functions : (
-    //                 function.name == \"GetCurrentProcessId\" and
-    //                 function.rva == 0x21a0
-    //             )
-    //         )
-    //   }",
-    //     "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll",
-    //     true,
-    // );
+      rule import_details_rva_64_v2_catch
+      {
+          condition:
+            for any import_detail in pe.import_details: (
+                import_detail.library_name == \"KERNEL32.dll\" and
+                for any function in import_detail.functions : (
+                    function.name == \"GetCurrentProcessId\" and
+                    function.rva == 0x21a0
+                )
+            )
+      }",
+        "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
+    check_file(
+        "import \"pe\"
 
-    //   rule delayed_import_details_rva_32_v1_catch
-    //   {
-    //       condition:
-    //         for any import_detail in pe.delayed_import_details: (
-    //             import_detail.library_name == \"USER32.dll\" and
-    //             for any function in import_detail.functions : (
-    //                 function.name == \"MessageBoxA\" and
-    //                 function.rva == 0x13884
-    //             )
-    //         )
-    //   }",
-    //     "tests/assets/libyara/data/pe_imports",
-    //     true,
-    // );
+      rule delayed_import_details_rva_32_v1_catch
+      {
+          condition:
+            for any import_detail in pe.delayed_import_details: (
+                import_detail.library_name == \"USER32.dll\" and
+                for any function in import_detail.functions : (
+                    function.name == \"MessageBoxA\" and
+                    function.rva == 0x13884
+                )
+            )
+      }",
+        "tests/assets/libyara/data/pe_imports",
+        true,
+    );
 
-    // check_file(
-    //     "import \"pe\"
+    check_file(
+        "import \"pe\"
 
-    //   rule delayed_import_details_rva_32_v2_catch
-    //   {
-    //       condition:
-    //         for any import_detail in pe.delayed_import_details: (
-    //             import_detail.library_name == \"USER32.dll\" and
-    //             for any function in import_detail.functions : (
-    //                 function.name == \"MessageBeep\" and
-    //                 function.rva == 0x13880
-    //             )
-    //         )
-    //   }",
-    //     "tests/assets/libyara/data/pe_imports",
-    //     true,
-    // );
+      rule delayed_import_details_rva_32_v2_catch
+      {
+          condition:
+            for any import_detail in pe.delayed_import_details: (
+                import_detail.library_name == \"USER32.dll\" and
+                for any function in import_detail.functions : (
+                    function.name == \"MessageBeep\" and
+                    function.rva == 0x13880
+                )
+            )
+      }",
+        "tests/assets/libyara/data/pe_imports",
+        true,
+    );
 
     check_file(
         "import \"pe\"
