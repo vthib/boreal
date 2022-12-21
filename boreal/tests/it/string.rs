@@ -1,4 +1,4 @@
-use crate::utils::{check, check_boreal, check_err};
+use crate::utils::{check, check_err};
 
 fn make_rule(cond: &str) -> String {
     format!(
@@ -14,11 +14,6 @@ rule test {{
 #[track_caller]
 fn test(cond: &str) {
     check(&make_rule(cond), b"", true);
-}
-
-#[track_caller]
-fn test_boreal(cond: &str) {
-    check_boreal(&make_rule(cond), b"", true);
 }
 
 #[track_caller]
@@ -48,10 +43,10 @@ fn test_string_to_int() {
     test(r#"string.to_int("-9223372036854775808") == -9223372036854775807 - 1"#);
 
     // parsing with radix 0 gives special meaning to 0x or 0 prefix
-    test(r#"string.to_int("0xFCg") == 252"#);
-    test(r#"string.to_int("0XFCg") == 252"#);
-    test(r#"string.to_int("-0xFCg") == -252"#);
-    test(r#"string.to_int("-0Xfcg") == -252"#);
+    test(r#"string.to_int("0xFC") == 252"#);
+    test(r#"string.to_int("0XFC") == 252"#);
+    test(r#"string.to_int("-0xFC") == -252"#);
+    test(r#"string.to_int("-0Xfc") == -252"#);
     test(r#"string.to_int("0255") == 173"#);
     test(r#"string.to_int("0255", 0) == 173"#);
     test(r#"string.to_int("0255", 10) == 255"#);
@@ -65,21 +60,10 @@ fn test_string_to_int() {
     test(r#"string.to_int("-0") == 0"#);
     test(r#"string.to_int("-0", 0) == 0"#);
     test(r#"string.to_int("-0", 10) == 0"#);
-    test(r#"string.to_int("0p") == 0"#);
-    test(r#"string.to_int("0p", 0) == 0"#);
-    test(r#"string.to_int("0p", 10) == 0"#);
+    test(r#"string.to_int("0") == 0"#);
+    test(r#"string.to_int("0", 0) == 0"#);
+    test(r#"string.to_int("0", 10) == 0"#);
     test(r#"string.to_int("0p", 30) == 25"#);
-
-    // parsing stops at the first non valid char
-    test(r#"string.to_int("1ff3") == 1"#);
-    test(r#"string.to_int("1ff3", 16) == 8179"#);
-    test(r#"string.to_int("1ff3g", 16) == 8179"#);
-    test(r#"string.to_int("-1ff3") == -1"#);
-    test(r#"string.to_int("-1ff3", 16) == -8179"#);
-    test(r#"string.to_int("-1ff3g", 16) == -8179"#);
-    test(r#"string.to_int("+1ff3") == 1"#);
-    test(r#"string.to_int("+1ff3", 16) == 8179"#);
-    test(r#"string.to_int("+1ff3g", 16) == 8179"#);
 
     // parsing trims early whitespaces
     test(r#"string.to_int("   12") == 12"#);
@@ -87,6 +71,20 @@ fn test_string_to_int() {
     test(r#"string.to_int(" \n\x0a\t\r\x0C-12") == -12"#);
 
     // Test undefined error cases
+
+    // trailing chars
+    test(r#"not defined string.to_int("ABC")"#);
+    test(r#"not defined string.to_int("123 ", 11)"#);
+
+    test(r#"not defined string.to_int("1ff3")"#);
+    test(r#"string.to_int("1ff3", 16) == 8179"#);
+    test(r#"not defined string.to_int("1ff3g", 16)"#);
+    test(r#"not defined string.to_int("-1ff3")"#);
+    test(r#"string.to_int("-1ff3", 16) == -8179"#);
+    test(r#"not defined string.to_int("-1ff3g", 16)"#);
+    test(r#"not defined string.to_int("+1ff3")"#);
+    test(r#"string.to_int("+1ff3", 16) == 8179"#);
+    test(r#"not defined string.to_int("+1ff3g", 16)"#);
 
     // invalid base
     test(r#"not defined string.to_int("1", -1)"#);
@@ -107,13 +105,12 @@ fn test_string_to_int() {
     test(r#"not defined string.to_int(" +p")"#);
     test(r#"not defined string.to_int(" -p")"#);
 
-    test(r#"string.to_int("1\xFF") == 1"#);
+    test(r#"not defined string.to_int("1\xFF")"#);
 
     // overflow
-    // TODO: libyara does not handle overflows nicely
-    test_boreal(r#"not defined string.to_int("9223372036854775808")"#);
-    test_boreal(r#"not defined string.to_int("92233720368547758050")"#);
-    test_boreal(r#"not defined string.to_int("-9223372036854775809")"#);
+    test(r#"not defined string.to_int("9223372036854775808")"#);
+    test(r#"not defined string.to_int("92233720368547758050")"#);
+    test(r#"not defined string.to_int("-9223372036854775809")"#);
 
     test_err(
         "string.to_int(5)",

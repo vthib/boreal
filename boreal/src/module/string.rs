@@ -87,7 +87,7 @@ impl String_ {
         }
 
         let mut res: i64 = 0;
-        for (i, c) in s.iter().enumerate() {
+        for c in s {
             match (*c as char).to_digit(base) {
                 Some(c) => {
                     res = res.checked_mul(i64::from(base))?;
@@ -97,9 +97,7 @@ impl String_ {
                         res = res.checked_add(i64::from(c))?;
                     }
                 }
-                // If no digit was parsed at all, return an error
-                None if i == 0 => return None,
-                None => break,
+                None => return None,
             }
         }
         Some(Value::Integer(res))
