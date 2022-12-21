@@ -1164,3 +1164,46 @@ rule test {
         true,
     );
 }
+
+#[test]
+#[cfg(feature = "hash")]
+fn test_imphash() {
+    fn test_imphash(file: &str, value: &str) {
+        check_file(
+            &format!(
+                r#"import "pe"
+rule test {{
+    condition:
+        pe.imphash() == "{value}"
+}}"#
+            ),
+            file,
+            true,
+        );
+    }
+
+    test_imphash(
+        "tests/assets/pe/ord_and_delay.exe",
+        "ed877188521c6652f37b0e5059a48447",
+    );
+    test_imphash(
+        "tests/assets/pe/resources_only.dll",
+        "d41d8cd98f00b204e9800998ecf8427e",
+    );
+    test_imphash(
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        "d8d0e06b79eed07c6482ca040d30f52a",
+    );
+    test_imphash(
+        "tests/assets/libyara/data/0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171",
+        "dae02f32a21e03ce65412f6e56942daa",
+    );
+    test_imphash(
+        "tests/assets/libyara/data/ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386",
+        "e877d0307c6d5f448069042791efdb70",
+    );
+    test_imphash(
+        "tests/assets/libyara/data/tiny",
+        "1720bf764274b7a4052bbef0a71adc0d",
+    );
+}
