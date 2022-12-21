@@ -79,8 +79,7 @@ fn test_string_to_int() {
     test(r#"not defined string.to_int(" +p")"#);
     test(r#"not defined string.to_int(" -p")"#);
 
-    // FIXME: a non ascii byte string should be fine
-    // test(r#"string.to_int("1\xFF") == 1"#);
+    test(r#"string.to_int("1\xFF") == 1"#);
 
     // overflow
     // TODO: libyara does not handle overflows nicely
