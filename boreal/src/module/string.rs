@@ -40,10 +40,10 @@ impl String_ {
         // exhibit the same behavior as strtol used in libyara, so we need to
         // do the parsing by hand.
 
-        // FIXME: trim without going through a string
-        let s = std::str::from_utf8(&s).ok()?;
-        let s = s.trim();
-        let s = s.as_bytes();
+        let mut s = s.as_slice();
+        while !s.is_empty() && s[0].is_ascii_whitespace() {
+            s = &s[1..];
+        }
 
         let base: u32 = match args.next() {
             Some(Value::Integer(i)) => {
