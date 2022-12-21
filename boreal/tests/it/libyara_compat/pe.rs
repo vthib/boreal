@@ -959,25 +959,25 @@ fn test_pe() {
         true,
     );
 
+    check_file(
+      "import \"pe\"
+      rule test {
+        condition:
+          pe.import_rva(\"PtImageRW.dll\", \"ord4\") == 254924 and
+          pe.import_rva(\"PtPDF417Decode.dll\", 4) == 254948
+      }",
+      "tests/assets/libyara/data/ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386", true);
+
+    check_file(
+      "import \"pe\"
+      rule test {
+        condition:
+          pe.delayed_import_rva(\"QDB.dll\", \"ord116\") ==
+          pe.delayed_import_rva(\"QDB.dll\", 116)
+      }",
+      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+
     // FIXME: to enable
-    // check_file(
-    //   "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.import_rva(\"PtImageRW.dll\", \"ord4\") == 254924 and
-    //       pe.import_rva(\"PtPDF417Decode.dll\", 4) == 254948
-    //   }",
-    //   "tests/assets/libyara/data/ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386", true);
-
-    // check_file(
-    //   "import \"pe\"
-    //   rule test {
-    //     condition:
-    //       pe.delayed_import_rva(\"QDB.dll\", \"ord116\") ==
-    //       pe.delayed_import_rva(\"QDB.dll\", 116)
-    //   }",
-    //   "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
-
     // // The first 0x410 bytes of
     // // c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba are enough
     // // to trigger the bug in https://github.com/VirusTotal/yara/pull/1561

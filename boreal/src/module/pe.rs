@@ -761,6 +761,28 @@ impl Module for Pe {
                 ),
             ),
             (
+                "import_rva",
+                StaticValue::function(
+                    Self::import_rva,
+                    vec![
+                        vec![Type::Bytes, Type::Bytes],
+                        vec![Type::Bytes, Type::Integer],
+                    ],
+                    Type::Integer,
+                ),
+            ),
+            (
+                "delayed_import_rva",
+                StaticValue::function(
+                    Self::delayed_import_rva,
+                    vec![
+                        vec![Type::Bytes, Type::Bytes],
+                        vec![Type::Bytes, Type::Integer],
+                    ],
+                    Type::Integer,
+                ),
+            ),
+            (
                 "locale",
                 StaticValue::function(Self::locale, vec![vec![Type::Integer]], Type::Integer),
             ),
@@ -1351,6 +1373,7 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
         data_functions.push(DataFunction {
             name: name.clone(),
             ordinal: Some(ordinal),
+            rva,
         });
 
         functions.push(Value::object([
@@ -1367,6 +1390,7 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
         data_functions.push(DataFunction {
             name: name.clone(),
             ordinal: None,
+            rva,
         });
         functions.push(Value::object([("name", name.into()), ("rva", rva.into())]));
     }
@@ -1942,12 +1966,18 @@ impl Pe {
         let data = ctx.module_data.get::<Self>()?;
 
         match (first, second, third) {
-            (Value::Bytes(dll_name), Some(Value::Bytes(function_name)), None) => Some(
-                bool_to_int_value(data.find_function(&dll_name, &function_name, false)),
-            ),
-            (Value::Bytes(dll_name), Some(Value::Integer(ordinal)), None) => Some(
-                bool_to_int_value(data.find_function_ordinal(&dll_name, ordinal, false)),
-            ),
+            (Value::Bytes(dll_name), Some(Value::Bytes(function_name)), None) => {
+                Some(bool_to_int_value(
+                    data.find_function(&dll_name, &function_name, false)
+                        .is_some(),
+                ))
+            }
+            (Value::Bytes(dll_name), Some(Value::Integer(ordinal)), None) => {
+                Some(bool_to_int_value(
+                    data.find_function_ordinal(&dll_name, ordinal, false)
+                        .is_some(),
+                ))
+            }
             (Value::Bytes(dll_name), None, None) => {
                 data.nb_functions(&dll_name, false).try_into().ok()
             }
@@ -1961,12 +1991,16 @@ impl Pe {
                 Some(Value::Bytes(function_name)),
             ) => {
                 if flags & (ImportType::Standard as i64) != 0
-                    && data.find_function(&dll_name, &function_name, false)
+                    && data
+                        .find_function(&dll_name, &function_name, false)
+                        .is_some()
                 {
                     return Some(Value::Integer(1));
                 }
                 if flags & (ImportType::Delayed as i64) != 0
-                    && data.find_function(&dll_name, &function_name, true)
+                    && data
+                        .find_function(&dll_name, &function_name, true)
+                        .is_some()
                 {
                     return Some(Value::Integer(1));
                 }
@@ -1979,12 +2013,16 @@ impl Pe {
                 Some(Value::Integer(ordinal)),
             ) => {
                 if flags & (ImportType::Standard as i64) != 0
-                    && data.find_function_ordinal(&dll_name, ordinal, false)
+                    && data
+                        .find_function_ordinal(&dll_name, ordinal, false)
+                        .is_some()
                 {
                     return Some(Value::Integer(1));
                 }
                 if flags & (ImportType::Delayed as i64) != 0
-                    && data.find_function_ordinal(&dll_name, ordinal, true)
+                    && data
+                        .find_function_ordinal(&dll_name, ordinal, true)
+                        .is_some()
                 {
                     return Some(Value::Integer(1));
                 }
@@ -2015,6 +2053,42 @@ impl Pe {
                 }
                 res.try_into().ok()
             }
+            _ => None,
+        }
+    }
+
+    fn import_rva(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let first = args.next()?;
+        let second = args.next()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        match (first, second) {
+            (Value::Bytes(dll_name), Value::Bytes(function_name)) => data
+                .find_function(&dll_name, &function_name, false)
+                .map(|v| v.rva.into()),
+            (Value::Bytes(dll_name), Value::Integer(ordinal)) => data
+                .find_function_ordinal(&dll_name, ordinal, false)
+                .map(|v| v.rva.into()),
+            _ => None,
+        }
+    }
+
+    fn delayed_import_rva(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let first = args.next()?;
+        let second = args.next()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        match (first, second) {
+            (Value::Bytes(dll_name), Value::Bytes(function_name)) => data
+                .find_function(&dll_name, &function_name, true)
+                .map(|v| v.rva.into()),
+            (Value::Bytes(dll_name), Value::Integer(ordinal)) => data
+                .find_function_ordinal(&dll_name, ordinal, true)
+                .map(|v| v.rva.into()),
             _ => None,
         }
     }
@@ -2177,6 +2251,7 @@ struct DataExport {
 struct DataFunction {
     name: Vec<u8>,
     ordinal: Option<u16>,
+    rva: u32,
 }
 
 struct DataSection {
@@ -2200,15 +2275,24 @@ impl Data {
         }
     }
 
-    fn find_function(&self, dll_name: &[u8], fun_name: &[u8], delayed: bool) -> bool {
+    fn find_function(
+        &self,
+        dll_name: &[u8],
+        fun_name: &[u8],
+        delayed: bool,
+    ) -> Option<&DataFunction> {
         self.get_imports(delayed)
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
             .and_then(|imp| imp.functions.iter().find(|f| fun_name == f.name))
-            .is_some()
     }
 
-    fn find_function_ordinal(&self, dll_name: &[u8], ordinal: i64, delayed: bool) -> bool {
+    fn find_function_ordinal(
+        &self,
+        dll_name: &[u8],
+        ordinal: i64,
+        delayed: bool,
+    ) -> Option<&DataFunction> {
         self.get_imports(delayed)
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
@@ -2218,7 +2302,6 @@ impl Data {
                     None => false,
                 })
             })
-            .is_some()
     }
 
     fn nb_functions(&self, dll_name: &[u8], delayed: bool) -> usize {
