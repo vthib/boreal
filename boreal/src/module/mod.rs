@@ -50,6 +50,9 @@ pub use time::Time;
 mod math;
 pub use math::Math;
 
+mod string;
+pub use string::String_;
+
 #[cfg(feature = "hash")]
 mod hash;
 #[cfg(feature = "hash")]
@@ -670,6 +673,7 @@ mod tests {
 
         test_type_traits_non_clonable(Time);
         test_type_traits_non_clonable(Math);
+        test_type_traits_non_clonable(String_);
         #[cfg(feature = "hash")]
         test_type_traits_non_clonable(Hash);
         #[cfg(feature = "object")]

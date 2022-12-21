@@ -35,6 +35,7 @@ mod macho;
 mod math;
 #[cfg(feature = "object")]
 mod pe;
+mod string;
 
 #[cfg(feature = "hash")]
 mod hash;
