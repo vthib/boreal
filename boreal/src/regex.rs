@@ -111,9 +111,9 @@ impl Visitor for AstPrinter {
                     RepetitionKind::OneOrMore => self.res.push('+'),
                     RepetitionKind::Range(range) => {
                         let _r = match range {
-                            RepetitionRange::Exactly(n) => write!(self.res, "{{{}}}", n),
-                            RepetitionRange::AtLeast(n) => write!(self.res, "{{{},}}", n),
-                            RepetitionRange::Bounded(n, m) => write!(self.res, "{{{},{}}}", n, m),
+                            RepetitionRange::Exactly(n) => write!(self.res, "{{{n}}}"),
+                            RepetitionRange::AtLeast(n) => write!(self.res, "{{{n},}}"),
+                            RepetitionRange::Bounded(n, m) => write!(self.res, "{{{n},{m}}}"),
                         };
                     }
                 };
@@ -145,7 +145,7 @@ impl AstPrinter {
         {
             self.res.push(char::from(lit));
         } else {
-            let _r = write!(&mut self.res, r"\x{:02x}", lit);
+            let _r = write!(&mut self.res, r"\x{lit:02x}");
         }
     }
 

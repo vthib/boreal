@@ -323,7 +323,7 @@ where
                 return Err(nom::Err::Failure(Error::new(
                     input.get_span_from(start),
                     ErrorKind::ModifiersDuplicated {
-                        modifier_name: format!("{:?}", flag),
+                        modifier_name: format!("{flag:?}"),
                     },
                 )));
             }
@@ -736,7 +736,7 @@ mod tests {
         let alphabet_array: [u8; 64] = alphabet.as_bytes().try_into().unwrap();
         parse(
             string_modifiers,
-            &format!("base64( \"{}\" )", alphabet),
+            &format!("base64( \"{alphabet}\" )"),
             "",
             VariableModifiers {
                 flags: VariableFlags::BASE64,
@@ -746,7 +746,7 @@ mod tests {
         );
         parse(
             string_modifiers,
-            &format!("base64wide ( \"{}\" ) private", alphabet),
+            &format!("base64wide ( \"{alphabet}\" ) private"),
             "",
             VariableModifiers {
                 flags: VariableFlags::BASE64WIDE | VariableFlags::PRIVATE,
@@ -756,7 +756,7 @@ mod tests {
         );
         parse(
             string_modifiers,
-            &format!("base64wide ( \"{}\" ) base64 (\"{}\")", alphabet, alphabet),
+            &format!("base64wide ( \"{alphabet}\" ) base64 (\"{alphabet}\")"),
             "",
             VariableModifiers {
                 flags: VariableFlags::BASE64WIDE | VariableFlags::BASE64,
@@ -846,19 +846,19 @@ mod tests {
 
         parse_err(
             string_modifiers,
-            &format!(r#"base64 base64wide("{}")"#, alphabet),
+            &format!(r#"base64 base64wide("{alphabet}")"#),
         );
         parse_err(
             string_modifiers,
-            &format!(r#"base64("{}") base64wide"#, alphabet),
+            &format!(r#"base64("{alphabet}") base64wide"#),
         );
         parse_err(
             string_modifiers,
-            &format!(r#"base64wide("{}") base64"#, alphabet),
+            &format!(r#"base64wide("{alphabet}") base64"#),
         );
         parse_err(
             string_modifiers,
-            &format!(r#"base64("{}") base64wide("{}")"#, alphabet, alphabet2),
+            &format!(r#"base64("{alphabet}") base64wide("{alphabet2}")"#),
         );
     }
 
@@ -1102,13 +1102,13 @@ mod tests {
         );
         parse(
             base64_modifier,
-            &format!(r#"base64("{}")"#, alphabet),
+            &format!(r#"base64("{alphabet}")"#),
             "",
             Modifier::Base64(Some(alphabet_array)),
         );
         parse(
             base64_modifier,
-            &format!(r#"base64wide ( "{}")b"#, alphabet),
+            &format!(r#"base64wide ( "{alphabet}")b"#),
             "b",
             Modifier::Base64Wide(Some(alphabet_array)),
         );
@@ -1119,7 +1119,7 @@ mod tests {
         parse_err(base64_modifier, "base64(");
         parse_err(base64_modifier, "base64wide(");
         parse_err(base64_modifier, "base64wide(//");
-        parse_err(base64_modifier, &format!(r#"base64("{}""#, alphabet));
+        parse_err(base64_modifier, &format!(r#"base64("{alphabet}""#));
         parse_err(base64_modifier, "base64(\"123\")");
         parse_err(base64_modifier, "base64wide(15)");
     }

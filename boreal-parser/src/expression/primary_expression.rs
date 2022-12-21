@@ -755,7 +755,7 @@ mod tests {
             F: FnOnce(Box<Expression>, Box<Expression>) -> Expr,
             F2: FnOnce(Box<Expression>, Box<Expression>) -> Expr,
         {
-            let input = format!("1 {} 2 {} 3", lower_op, higher_op);
+            let input = format!("1 {lower_op} 2 {higher_op} 3");
 
             parse(
                 pe,
@@ -1019,7 +1019,7 @@ mod tests {
 
         let input = Input::new(&v);
         let res = pe(input);
-        assert!(res.is_ok(), "{:?}", res);
+        assert!(res.is_ok(), "{res:?}");
         assert_eq!(input.expr_recursion_counter, 0);
     }
 

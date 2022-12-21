@@ -561,7 +561,7 @@ mod tests {
 
         let input = Input::new(&hex);
         let res = hex_string(input);
-        assert!(res.is_ok(), "{:?}", res);
+        assert!(res.is_ok(), "{res:?}");
         assert_eq!(input.inner_recursion_counter, 0);
     }
 

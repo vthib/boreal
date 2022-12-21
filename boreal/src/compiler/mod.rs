@@ -297,7 +297,7 @@ impl Compiler {
                                 CompilationError::MatchOnWildcardRuleSet {
                                     rule_name: rule.name,
                                     name_span: rule.name_span,
-                                    rule_set: format!("{}*", prefix),
+                                    rule_set: format!("{prefix}*"),
                                 },
                             ),
                         });
@@ -496,9 +496,9 @@ impl AddRuleError {
 impl AddRuleErrorKind {
     fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
-            Self::IO(error) => Diagnostic::error().with_message(format!("IO error: {}", error)),
+            Self::IO(error) => Diagnostic::error().with_message(format!("IO error: {error}")),
             Self::InvalidInclude { path, span, error } => Diagnostic::error()
-                .with_message(format!("cannot include `{}`: {}", path.display(), error))
+                .with_message(format!("cannot include `{}`: {error}", path.display()))
                 .with_labels(vec![Label::primary((), span.clone())]),
             Self::Parse(err) => err.to_diagnostic(),
             Self::Compilation(err) => err.to_diagnostic(),

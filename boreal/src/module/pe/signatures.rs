@@ -244,7 +244,7 @@ fn serial_number_to_string(serial: &Asn1IntegerRef) -> Option<String> {
         if i != 0 {
             out.push(':');
         }
-        let _ = write!(out, "{:02x}", c);
+        let _ = write!(out, "{c:02x}");
     }
 
     Some(out)

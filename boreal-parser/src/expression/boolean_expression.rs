@@ -336,7 +336,7 @@ mod tests {
         F: FnOnce(Box<Expression>, Box<Expression>) -> ExpressionKind,
         F2: FnOnce(Box<Expression>, Box<Expression>) -> ExpressionKind,
     {
-        let input = format!("0 {} 1 {} 2", lower_op, higher_op);
+        let input = format!("0 {lower_op} 1 {higher_op} 2");
 
         parse(
             boolean_expression,
@@ -574,7 +574,7 @@ mod tests {
         where
             F: FnOnce(Box<Expression>, Box<Expression>) -> ExpressionKind,
         {
-            let input = format!("\"a\" {} \"b\" b", op);
+            let input = format!("\"a\" {op} \"b\" b");
 
             parse(
                 boolean_expression,
@@ -1027,7 +1027,7 @@ mod tests {
 
         let input = Input::new(&v);
         let res = boolean_expression(input);
-        assert!(res.is_ok(), "{:?}", res);
+        assert!(res.is_ok(), "{res:?}");
         assert_eq!(input.expr_recursion_counter, 0);
     }
 
@@ -1065,7 +1065,7 @@ mod tests {
 
         let input = Input::new(&v);
         let res = boolean_expression(input);
-        assert!(res.is_ok(), "{:?}", res);
+        assert!(res.is_ok(), "{res:?}");
         assert_eq!(input.expr_recursion_counter, 0);
     }
 

@@ -1195,7 +1195,7 @@ mod tests {
 
         let input = Input::new(&v);
         let res = regex(input);
-        assert!(res.is_ok(), "{:?}", res);
+        assert!(res.is_ok(), "{res:?}");
         assert_eq!(input.inner_recursion_counter, 0);
     }
 

@@ -34,7 +34,7 @@ impl Error {
             ErrorKind::Base64AlphabetInvalidLength { length } => Diagnostic::error()
                 .with_message("base64 modifier alphabet must contain exactly 64 characters")
                 .with_labels(vec![Label::primary((), self.span.clone())
-                    .with_message(format!("this contains {} characters", length))]),
+                    .with_message(format!("this contains {length} characters"))]),
 
             ErrorKind::Base64AlphabetIncompatible => Diagnostic::error()
                 .with_message("alphabets used for base64 and base64wide must be identical")
@@ -73,13 +73,12 @@ impl Error {
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::JumpRangeInvalid { from, to } => Diagnostic::error()
-                .with_message(format!("invalid range for the jump: {} > {}", from, to))
+                .with_message(format!("invalid range for the jump: {from} > {to}"))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::JumpTooBigInAlternation { limit } => Diagnostic::error()
                 .with_message(format!(
-                    "jumps over {} not allowed inside alternations (|)",
-                    limit
+                    "jumps over {limit} not allowed inside alternations (|)",
                 ))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
@@ -89,8 +88,7 @@ impl Error {
 
             ErrorKind::ModifiersDuplicated { modifier_name } => Diagnostic::error()
                 .with_message(format!(
-                    "string modifier {} appears multiple times",
-                    modifier_name
+                    "string modifier {modifier_name} appears multiple times",
                 ))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
@@ -99,13 +97,12 @@ impl Error {
                 second_modifier_name,
             } => Diagnostic::error()
                 .with_message(format!(
-                    "string modifiers {} and {} are incompatible",
-                    first_modifier_name, second_modifier_name,
+                    "string modifiers {first_modifier_name} and {second_modifier_name} are incompatible",
                 ))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::MulOverflow { left, right } => Diagnostic::error()
-                .with_message(format!("multiplication {} * {} overflows", left, right))
+                .with_message(format!("multiplication {left} * {right} overflows"))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::NomError(_) => Diagnostic::error()
@@ -116,7 +113,7 @@ impl Error {
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::StrToIntError(err) => Diagnostic::error()
-                .with_message(format!("error converting to integer: {}", err))
+                .with_message(format!("error converting to integer: {err}"))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::StrToHexIntError(err) => Diagnostic::error()
@@ -128,20 +125,18 @@ impl Error {
 
             ErrorKind::StrToOctIntError(err) => Diagnostic::error()
                 .with_message(format!(
-                    "error converting octal notation to integer: {}",
-                    err
+                    "error converting octal notation to integer: {err}"
                 ))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::XorRangeInvalidValue { value } => Diagnostic::error()
                 .with_message(format!(
-                    "xor range value {} invalid, must be in [0-255]",
-                    value
+                    "xor range value {value} invalid, must be in [0-255]"
                 ))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 
             ErrorKind::XorRangeInvalid { from, to } => Diagnostic::error()
-                .with_message(format!("xor range invalid: {} > {}", from, to))
+                .with_message(format!("xor range invalid: {from} > {to}"))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
         }
     }

@@ -251,7 +251,7 @@ impl CompilationError {
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
             Self::RegexError { error, span } => Diagnostic::error()
-                .with_message(format!("regex failed to build: {:?}", error))
+                .with_message(format!("regex failed to build: {error:?}"))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::ExpressionInvalidType {
@@ -261,7 +261,7 @@ impl CompilationError {
             } => Diagnostic::error()
                 .with_message("expression has an invalid type")
                 .with_labels(vec![Label::primary((), span.clone())
-                    .with_message(format!("expected {}, found {}", expected_type, ty))]),
+                    .with_message(format!("expected {expected_type}, found {ty}"))]),
 
             Self::ExpressionIncompatibleTypes {
                 left_type,
@@ -272,9 +272,9 @@ impl CompilationError {
                 .with_message("expressions have invalid types")
                 .with_labels(vec![
                     Label::secondary((), left_span.clone())
-                        .with_message(format!("this has type {}", left_type)),
+                        .with_message(format!("this has type {left_type}")),
                     Label::secondary((), right_span.clone())
-                        .with_message(format!("this has type {}", right_type)),
+                        .with_message(format!("this has type {right_type}")),
                 ]),
 
             Self::DuplicatedRuleName { name, span } => Diagnostic::error()
@@ -285,18 +285,18 @@ impl CompilationError {
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::DuplicatedRuleTag { tag, span1, span2 } => Diagnostic::error()
-                .with_message(format!("tag `{}` specified multiple times", tag))
+                .with_message(format!("tag `{tag}` specified multiple times"))
                 .with_labels(vec![
                     Label::secondary((), span1.clone()).with_message("first occurrence"),
                     Label::secondary((), span2.clone()).with_message("second occurrence"),
                 ]),
 
             Self::DuplicatedVariable { name, span } => Diagnostic::error()
-                .with_message(format!("variable ${} is declared more than once", name))
+                .with_message(format!("variable ${name} is declared more than once"))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::DuplicatedIdentifierBinding { identifier, span } => Diagnostic::error()
-                .with_message(format!("duplicated loop identifier {}", identifier))
+                .with_message(format!("duplicated loop identifier {identifier}"))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::InvalidIdentifierIndexType {
@@ -304,9 +304,9 @@ impl CompilationError {
                 span,
                 expected_type,
             } => Diagnostic::error()
-                .with_message(format!("expected an expression of type {}", expected_type))
+                .with_message(format!("expected an expression of type {expected_type}"))
                 .with_labels(vec![
-                    Label::primary((), span.clone()).with_message(format!("this has type {}", ty))
+                    Label::primary((), span.clone()).with_message(format!("this has type {ty}"))
                 ]),
 
             Self::InvalidIdentifierType {
@@ -316,7 +316,7 @@ impl CompilationError {
             } => Diagnostic::error()
                 .with_message("invalid identifier type")
                 .with_labels(vec![Label::primary((), span.clone()).with_message(
-                    format!("expected {}, found {}", expected_type, actual_type),
+                    format!("expected {expected_type}, found {actual_type}"),
                 )]),
 
             Self::InvalidIdentifierBinding {
@@ -338,7 +338,7 @@ impl CompilationError {
                         },
                     ),
                     Label::secondary((), identifiers_span.clone())
-                        .with_message(format!("{} identifier(s) being bound", actual_number)),
+                        .with_message(format!("{actual_number} identifier(s) being bound")),
                     Label::secondary((), iterator_span.clone()).with_message(format!(
                         "this yields {} elements on every iteration",
                         expected_number
@@ -375,26 +375,26 @@ impl CompilationError {
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnknownIdentifier { name, span } => Diagnostic::error()
-                .with_message(format!("unknown identifier \"{}\"", name))
+                .with_message(format!("unknown identifier \"{name}\""))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnknownImport { name, span } => Diagnostic::error()
-                .with_message(format!("unknown import {}", name))
+                .with_message(format!("unknown import {name}"))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnknownIdentifierField { field_name, span } => Diagnostic::error()
-                .with_message(format!("unknown field \"{}\"", field_name))
+                .with_message(format!("unknown field \"{field_name}\""))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnknownVariable {
                 variable_name,
                 span,
             } => Diagnostic::error()
-                .with_message(format!("unknown variable ${}", variable_name))
+                .with_message(format!("unknown variable ${variable_name}"))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::UnusedVariable { name, span } => Diagnostic::error()
-                .with_message(format!("variable ${} is unused", name))
+                .with_message(format!("variable ${name} is unused"))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::VariableCompilation {

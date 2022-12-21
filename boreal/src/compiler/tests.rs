@@ -54,7 +54,7 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
 
 #[track_caller]
 fn compile_expr_err(expression_str: &str) {
-    compile_rule_err(&format!("rule a {{ condition: {} }}", expression_str));
+    compile_rule_err(&format!("rule a {{ condition: {expression_str} }}"));
 }
 
 #[track_caller]
@@ -170,11 +170,11 @@ fn test_compilation_for_expression() {
 #[test]
 fn test_compilation_types() {
     fn test_cmp(op: &str) {
-        compile_expr(&format!("1 {} 3", op), Type::Boolean);
-        compile_expr(&format!("1 {} 3.5", op), Type::Boolean);
-        compile_expr(&format!("1.2 {} 3", op), Type::Boolean);
-        compile_expr(&format!("1.2 {} 3.5", op), Type::Boolean);
-        compile_expr(&format!("\"a\" {} \"b\"", op), Type::Boolean);
+        compile_expr(&format!("1 {op} 3"), Type::Boolean);
+        compile_expr(&format!("1 {op} 3.5"), Type::Boolean);
+        compile_expr(&format!("1.2 {op} 3"), Type::Boolean);
+        compile_expr(&format!("1.2 {op} 3.5"), Type::Boolean);
+        compile_expr(&format!("\"a\" {op} \"b\""), Type::Boolean);
     }
 
     compile_expr("filesize", Type::Integer);
