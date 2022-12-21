@@ -45,27 +45,43 @@ impl String_ {
             s = &s[1..];
         }
 
-        let base: u32 = match args.next() {
+        let mut base: u32 = match args.next() {
             Some(Value::Integer(i)) => {
                 let i = i.try_into().ok()?;
-                if (2..=36).contains(&i) {
+                if i == 0 || (2..=36).contains(&i) {
                     i
                 } else {
                     return None;
                 }
             }
             Some(_) => return None,
-            None => 10,
+            None => 0,
         };
 
-        if s.is_empty() {
-            return None;
-        }
-        let (is_negative, s) = match s[0] {
-            b'-' => (true, &s[1..]),
-            b'+' => (false, &s[1..]),
-            _ => (false, s),
+        let is_negative = if s.starts_with(b"-") {
+            s = &s[1..];
+            true
+        } else if s.starts_with(b"+") {
+            s = &s[1..];
+            false
+        } else {
+            false
         };
+
+        if base == 0 {
+            if s.starts_with(b"0x") || s.starts_with(b"0X") {
+                base = 16;
+                s = &s[2..];
+            } else if s.starts_with(b"0") {
+                base = 8;
+                // Do not advance s to s[1..]. Why? This is to ensure that "0" is properly
+                // parsed, and not considered as an empty string which returns an undefined
+                // value.
+            } else {
+                base = 10;
+            }
+        }
+
         if s.is_empty() {
             return None;
         }

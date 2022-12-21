@@ -47,6 +47,29 @@ fn test_string_to_int() {
     test(r#"string.to_int("9223372036854775807") == 9223372036854775807"#);
     test(r#"string.to_int("-9223372036854775808") == -9223372036854775807 - 1"#);
 
+    // parsing with radix 0 gives special meaning to 0x or 0 prefix
+    test(r#"string.to_int("0xFCg") == 252"#);
+    test(r#"string.to_int("0XFCg") == 252"#);
+    test(r#"string.to_int("-0xFCg") == -252"#);
+    test(r#"string.to_int("-0Xfcg") == -252"#);
+    test(r#"string.to_int("0255") == 173"#);
+    test(r#"string.to_int("0255", 0) == 173"#);
+    test(r#"string.to_int("0255", 10) == 255"#);
+    test(r#"string.to_int("-0255") == -173"#);
+    test(r#"string.to_int("-0255", 0) == -173"#);
+    test(r#"string.to_int("-0255", 10) == -255"#);
+    // "0" without anything acts as the number, and not the octal prefix...
+    test(r#"string.to_int("0") == 0"#);
+    test(r#"string.to_int("0", 0) == 0"#);
+    test(r#"string.to_int("0", 10) == 0"#);
+    test(r#"string.to_int("-0") == 0"#);
+    test(r#"string.to_int("-0", 0) == 0"#);
+    test(r#"string.to_int("-0", 10) == 0"#);
+    test(r#"string.to_int("0p") == 0"#);
+    test(r#"string.to_int("0p", 0) == 0"#);
+    test(r#"string.to_int("0p", 10) == 0"#);
+    test(r#"string.to_int("0p", 30) == 25"#);
+
     // parsing stops at the first non valid char
     test(r#"string.to_int("1ff3") == 1"#);
     test(r#"string.to_int("1ff3", 16) == 8179"#);
@@ -74,6 +97,11 @@ fn test_string_to_int() {
     // empty after sign
     test(r#"not defined string.to_int("   -")"#);
     test(r#"not defined string.to_int("   +")"#);
+    // empty after prefix in radix 0
+    test(r#"not defined string.to_int("   -0x")"#);
+    test(r#"not defined string.to_int("   +0X")"#);
+    test(r#"not defined string.to_int("   0X")"#);
+    test(r#"not defined string.to_int("   0x")"#);
     // empty on invalid char
     test(r#"not defined string.to_int(" p")"#);
     test(r#"not defined string.to_int(" +p")"#);
