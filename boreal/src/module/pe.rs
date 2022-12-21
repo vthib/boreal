@@ -939,6 +939,7 @@ impl Module for Pe {
                         Type::array(Type::object([
                             ("name", Type::Bytes),
                             ("ordinal", Type::Integer),
+                            ("rva", Type::Integer),
                         ])),
                     ),
                 ])),
@@ -953,6 +954,7 @@ impl Module for Pe {
                         Type::array(Type::object([
                             ("name", Type::Bytes),
                             ("ordinal", Type::Integer),
+                            ("rva", Type::Integer),
                         ])),
                     ),
                 ])),
@@ -1263,6 +1265,8 @@ fn add_imports<Pe: ImageNtHeaders>(
                     &mut thunks,
                     &library,
                     |hint| table.hint_name(hint).map(|(_, name)| name.to_vec()),
+                    import_desc.first_thunk.get(LE),
+                    data.is_32bit,
                     &mut data_functions,
                     &mut nb_functions_total,
                 )
@@ -1301,12 +1305,15 @@ fn import_functions<Pe: ImageNtHeaders, F>(
     thunks: &mut ImportThunkList,
     dll_name: &[u8],
     hint_name: F,
+    mut rva: u32,
+    is_32: bool,
     data_functions: &mut Vec<DataFunction>,
     nb_functions_total: &mut usize,
 ) -> Vec<Value>
 where
     F: Fn(u32) -> object::Result<Vec<u8>>,
 {
+    // FIXME: yara does rva adjusments, do we need to do it too?
     let mut functions = Vec::new();
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
         if *nb_functions_total >= MAX_PE_IMPORTS {
@@ -1314,7 +1321,15 @@ where
         }
         *nb_functions_total += 1;
 
-        add_thunk::<Pe, _>(thunk, dll_name, &hint_name, &mut functions, data_functions);
+        add_thunk::<Pe, _>(
+            thunk,
+            dll_name,
+            rva,
+            &hint_name,
+            &mut functions,
+            data_functions,
+        );
+        rva += if is_32 { 4 } else { 8 };
     }
     functions
 }
@@ -1322,6 +1337,7 @@ where
 fn add_thunk<Pe: ImageNtHeaders, F>(
     thunk: Pe::ImageThunkData,
     dll_name: &[u8],
+    rva: u32,
     hint_name: F,
     functions: &mut Vec<Value>,
     data_functions: &mut Vec<DataFunction>,
@@ -1340,6 +1356,7 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
         functions.push(Value::object([
             ("name", name.into()),
             ("ordinal", ordinal.into()),
+            ("rva", rva.into()),
         ]));
     } else {
         let name = match hint_name(thunk.address()) {
@@ -1351,7 +1368,7 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
             name: name.clone(),
             ordinal: None,
         });
-        functions.push(Value::object([("name", name.into())]));
+        functions.push(Value::object([("name", name.into()), ("rva", rva.into())]));
     }
 }
 
@@ -1385,6 +1402,8 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
                         &mut thunks,
                         &library,
                         |hint| table.hint_name(hint).map(|(_, name)| name.to_vec()),
+                        import_desc.import_address_table_rva.get(LE),
+                        data.is_32bit,
                         &mut data_functions,
                         &mut nb_functions_total,
                     )
