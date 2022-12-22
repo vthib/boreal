@@ -1073,7 +1073,7 @@ fn parse_file<Pe: ImageNtHeaders>(
         (
             "entry_point",
             sections
-                .and_then(|sections| va_to_file_offset(&sections, ep))
+                .and_then(|sections| va_to_file_offset(mem, &sections, ep))
                 .into(),
         ),
         ("entry_point_raw", ep.into()),
@@ -1457,7 +1457,7 @@ fn add_exports(
                         match forward_name {
                             Some(_) => Value::Undefined,
                             // -1 is set by libyara to indicate an invalid offset.
-                            None => match va_to_file_offset(sections, address) {
+                            None => match va_to_file_offset(mem, sections, address) {
                                 Some(v) => v.into(),
                                 None => Value::Integer(-1),
                             },
@@ -1645,7 +1645,7 @@ fn add_resources(
 
                     if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
                         let rva = entry_data.offset_to_data.get(LE);
-                        let offset = va_to_file_offset(sections, rva);
+                        let offset = va_to_file_offset(mem, sections, rva);
                         if ty == u32::from(pe::RT_VERSION) {
                             if let Some(offset) = offset {
                                 add_version_infos(mem, offset, out);
@@ -1742,7 +1742,18 @@ pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str
     ]);
 }
 
-fn va_to_file_offset(sections: &SectionTable, va: u32) -> Option<u32> {
+fn va_to_file_offset(mem: &[u8], sections: &SectionTable, va: u32) -> Option<u32> {
+    va_to_file_offset_inner(sections, va).and_then(|v| {
+        let len: u32 = mem.len().try_into().ok()?;
+        if v < len {
+            Some(v)
+        } else {
+            None
+        }
+    })
+}
+
+fn va_to_file_offset_inner(sections: &SectionTable, va: u32) -> Option<u32> {
     if let Some((offset, _)) = sections.pe_file_range_at(va) {
         return Some(offset);
     }
@@ -2117,7 +2128,7 @@ impl Pe {
             _ => return None,
         };
 
-        va_to_file_offset(&section_table, rva).map(Into::into)
+        va_to_file_offset(ctx.mem, &section_table, rva).map(Into::into)
     }
 }
 
