@@ -12,6 +12,7 @@ members = [
 # - Handling of FileAlignment on section's offset to raw data:
 #   - 2004ec0adb8c2e5d7de09dfcd5e4c80c14cae296
 #   - 7b7257d768b09a2664cbab2a46a0c37779c91d9c
+#   - 89de6a730a4f60c005862b294de2f9fe444d1235
 # - Retrieval of raw name for sections
 #   - f9caed56c480f8e3c5e1f971cab76ad0a1ccae5a
 # - Handle VirtualSize=0 when searching through sections
