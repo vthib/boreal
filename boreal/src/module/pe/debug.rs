@@ -23,7 +23,7 @@ pub fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable
         let raw_data_addr = debug_dir.address_of_raw_data.get(LE);
         let raw_data_ptr = debug_dir.pointer_to_raw_data.get(LE);
         if raw_data_addr != 0 {
-            if let Some(v) = super::va_to_file_offset(sections, raw_data_addr) {
+            if let Some(v) = super::va_to_file_offset(mem, sections, raw_data_addr) {
                 offset = v;
             }
         }
