@@ -47,13 +47,10 @@ fn test_undefined_count_in_range() {
     assert_is_defined(&format!("#a0 in (0..{UNDEF_INT})"), false);
     assert_is_defined(&format!("#a0 in ({UNDEF_INT}..5)"), false);
 
-    // emit undefined if values are not positive
-    // FIXME: still different in libyara?
-    assert_is_defined_boreal("#a0 in ((#a1 - 1)..5)", false);
-    assert_is_defined_boreal("#a0 in (0..(#a1 - 1))", false);
-
-    // emit undefined if from > to
-    assert_is_defined_boreal("#a0 in (5..(4 + #a1))", false);
+    // invalid or negative range is fine, will just return 0
+    assert_is_defined("#a0 in ((#a1 - 1)..5)", true);
+    assert_is_defined("#a0 in (-3..(#a1 - 1))", true);
+    assert_is_defined("#a0 in (5..(4 + #a1))", true);
 }
 
 #[test]

@@ -724,19 +724,43 @@ rule a {
     checker.check(b"<<<||\xab\xab\xab_\xcd", true);
     checker.check(b"<<<|||\xab\xab\xab_\xcd", false);
 
-    // Invalid range returns undefined
-    check_boreal(&build_rule("defined (#a0 in (5..#c0))"), b"", false);
-
-    // undefined is propagated
-    check(
-        &build_rule("defined (#a0 in (0..tests.integer_array[5]))"),
-        b"",
-        false,
+    // Range reaching negative is fine
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = "aa"
+        $c = "cc"
+    condition:
+        #a in ((#c-5)..4) == 2
+}"#,
     );
+    checker.check(b"bbbbb", false);
+    checker.check(b"aaabbb", true);
     check(
-        &build_rule("defined (#a0 in (tests.integer_array[5]..5))"),
+        r#"
+rule a {
+    strings:
+        $a = "aa"
+        $c = "cc"
+    condition:
+        #a in ((#c-5)..(#c-2)) == 0
+}"#,
         b"",
-        false,
+        true,
+    );
+    // Invalid range just returns 0
+    check(
+        r#"
+rule a {
+    strings:
+        $a = "aa"
+        $c = "cc"
+    condition:
+        #a in ((#c+5)..(#c+3)) == 0
+}"#,
+        b"aaaaaaaaaaa",
+        true,
     );
 }
 

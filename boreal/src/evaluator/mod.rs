@@ -342,15 +342,13 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 let from = self.evaluate_expr(from)?.unwrap_number()?;
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
 
-                match (usize::try_from(from), usize::try_from(to)) {
-                    (Ok(from), Ok(to)) if from <= to => {
-                        let var = get_var!(self, *variable_index);
-                        let count = var.count_matches_in(self.mem, from, to);
+                let from = usize::try_from(from).unwrap_or(0);
+                let to = usize::try_from(to).unwrap_or(0);
 
-                        Ok(Value::Integer(count.into()))
-                    }
-                    _ => Err(PoisonKind::Undefined),
-                }
+                let var = get_var!(self, *variable_index);
+                let count = var.count_matches_in(self.mem, from, to);
+
+                Ok(Value::Integer(count.into()))
             }
             Expression::Count(variable_index) => {
                 let var = get_var!(self, *variable_index);
