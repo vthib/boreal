@@ -18,7 +18,8 @@ pub(crate) mod expression;
 pub(crate) mod external_symbol;
 pub use external_symbol::ExternalValue;
 pub(crate) mod module;
-pub mod params;
+mod params;
+pub use params::CompilerParams;
 pub(crate) mod rule;
 pub(crate) mod variable;
 
@@ -54,7 +55,7 @@ pub struct Compiler {
     external_symbols: Vec<external_symbol::ExternalSymbol>,
 
     /// Compilation parameters
-    params: params::Parameters,
+    params: CompilerParams,
 }
 
 #[derive(Debug)]
@@ -378,7 +379,7 @@ impl Compiler {
     }
 
     /// Set compilation parameters.
-    pub fn set_params(&mut self, params: params::Parameters) {
+    pub fn set_params(&mut self, params: CompilerParams) {
         self.params = params;
     }
 

@@ -92,8 +92,8 @@ rule a {
 
 #[test]
 fn test_limit_max_condition_depth() {
-    let mut params = boreal::compiler::params::Parameters::default();
-    params.max_condition_depth = 15;
+    let max_depth = 15;
+    let params = boreal::compiler::CompilerParams::default().max_condition_depth(max_depth);
 
     let mut rule = String::new();
     rule.push_str(
@@ -107,11 +107,11 @@ rule a {
 
     // We need an expression that does not trigger the recursion limit during parsing,
     // but still has enough depth. This means stacking different operations.
-    for _ in 0..=(params.max_condition_depth / 10) {
+    for _ in 0..=(max_depth / 10) {
         rule.push_str("    true and not 6 <= 5 | 4 & 3 >> 2 + 1 * -math.to_number(\n");
     }
     rule.push_str("    true\n");
-    for _ in 0..=(params.max_condition_depth / 10) {
+    for _ in 0..=(max_depth / 10) {
         rule.push_str("    )\n");
     }
     rule.push('}');
@@ -126,7 +126,6 @@ rule a {
     );
 
     let mut compiler = Compiler::new_without_yara();
-    params.max_condition_depth += 10;
-    compiler.set_params(params);
+    compiler.set_params(params.max_condition_depth(max_depth + 10));
     compiler.add_rules(&rule);
 }

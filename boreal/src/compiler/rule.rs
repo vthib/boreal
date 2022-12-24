@@ -6,8 +6,8 @@ use boreal_parser as parser;
 
 use super::expression::{compile_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
-use super::params::Parameters;
 use super::variable::{compile_variable, Variable};
+use super::CompilerParams;
 use super::{CompilationError, Namespace};
 use crate::module::Type as ModuleType;
 
@@ -65,7 +65,7 @@ pub(super) struct RuleCompiler<'a> {
     pub external_symbols: &'a Vec<ExternalSymbol>,
 
     /// Compilation parameters
-    pub params: &'a Parameters,
+    pub params: &'a CompilerParams,
 
     /// Current depth in the rule's condition AST.
     ///
@@ -95,7 +95,7 @@ impl<'a> RuleCompiler<'a> {
         rule: &parser::Rule,
         namespace: &'a Namespace,
         external_symbols: &'a Vec<ExternalSymbol>,
-        params: &'a Parameters,
+        params: &'a CompilerParams,
     ) -> Result<Self, CompilationError> {
         let mut names_set = HashSet::new();
         let mut variables = Vec::with_capacity(rule.variables.len());
@@ -193,7 +193,7 @@ pub(super) fn compile_rule(
     rule: parser::Rule,
     namespace: &mut Namespace,
     external_symbols: &Vec<ExternalSymbol>,
-    params: &Parameters,
+    params: &CompilerParams,
 ) -> Result<(Rule, Vec<Variable>), CompilationError> {
     let (condition, wildcards, vars) = {
         let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols, params)?;
@@ -260,7 +260,7 @@ mod tests {
             bounded_identifiers: HashMap::new(),
             rule_wildcard_uses: Vec::new(),
             external_symbols: &vec![],
-            params: &Parameters::default(),
+            params: &CompilerParams::default(),
             condition_depth: 0,
         });
         test_type_traits_non_clonable(Rule {
