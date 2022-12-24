@@ -1,4 +1,4 @@
-use crate::utils::{check_err, check_err_without_yara};
+use crate::utils::{check_err, Compiler};
 
 #[test]
 fn test_invalid_files() {
@@ -12,7 +12,18 @@ fn test_invalid_files() {
 
         println!("checking file {:?}", file);
         if contents.starts_with("// [no libyara conformance]") {
-            check_err_without_yara(&contents, "");
+            #[cfg(debug_assertions)]
+            let compiler = {
+                let mut compiler = Compiler::new_without_yara();
+                let mut params = boreal::compiler::params::Parameters::default();
+                params.max_condition_depth = 15;
+                compiler.set_params(params);
+                compiler
+            };
+            #[cfg(not(debug_assertions))]
+            let compiler = Compiler::new_without_yara();
+
+            compiler.check_add_rules_err(&contents, "");
         } else {
             // Maybe including the expected prefix in each file (as a comment) would be a nice
             // addition.
