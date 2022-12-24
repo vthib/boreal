@@ -366,7 +366,12 @@ pub(super) fn compile_expression(
 ) -> Result<Expr, CompilationError> {
     let span = expression.span;
 
-    match expression.expr {
+    compiler.condition_depth += 1;
+    if compiler.condition_depth >= compiler.params.max_condition_depth {
+        return Err(CompilationError::ConditionTooDeep { span });
+    }
+
+    let res = match expression.expr {
         parser::ExpressionKind::Filesize => Ok(Expr {
             expr: Expression::Filesize,
             ty: Type::Integer,
@@ -846,7 +851,9 @@ pub(super) fn compile_expression(
             ty: Type::Regex,
             span,
         }),
-    }
+    };
+    compiler.condition_depth -= 1;
+    res
 }
 
 fn compile_primary_op<F>(

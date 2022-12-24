@@ -6,6 +6,7 @@ use boreal_parser as parser;
 
 use super::expression::{compile_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
+use super::params::Parameters;
 use super::variable::{compile_variable, Variable};
 use super::{CompilationError, Namespace};
 use crate::module::Type as ModuleType;
@@ -62,6 +63,15 @@ pub(super) struct RuleCompiler<'a> {
 
     /// List of external symbols defined in the compiler.
     pub external_symbols: &'a Vec<ExternalSymbol>,
+
+    /// Compilation parameters
+    pub params: &'a Parameters,
+
+    /// Current depth in the rule's condition AST.
+    ///
+    /// As evaluation of a rule condition involves recursion, this is used to limit the
+    /// depth of this recursion and prevent stack overflows.
+    pub condition_depth: u32,
 }
 
 /// Helper struct used to track variables being compiled in a rule.
@@ -85,6 +95,7 @@ impl<'a> RuleCompiler<'a> {
         rule: &parser::Rule,
         namespace: &'a Namespace,
         external_symbols: &'a Vec<ExternalSymbol>,
+        params: &'a Parameters,
     ) -> Result<Self, CompilationError> {
         let mut names_set = HashSet::new();
         let mut variables = Vec::with_capacity(rule.variables.len());
@@ -110,6 +121,8 @@ impl<'a> RuleCompiler<'a> {
             bounded_identifiers: HashMap::new(),
             rule_wildcard_uses: Vec::new(),
             external_symbols,
+            params,
+            condition_depth: 0,
         })
     }
 
@@ -180,9 +193,10 @@ pub(super) fn compile_rule(
     rule: parser::Rule,
     namespace: &mut Namespace,
     external_symbols: &Vec<ExternalSymbol>,
+    params: &Parameters,
 ) -> Result<(Rule, Vec<Variable>), CompilationError> {
     let (condition, wildcards, vars) = {
-        let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols)?;
+        let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols, params)?;
         let condition = compile_expression(&mut compiler, rule.condition)?;
 
         (condition, compiler.rule_wildcard_uses, compiler.variables)
@@ -246,6 +260,8 @@ mod tests {
             bounded_identifiers: HashMap::new(),
             rule_wildcard_uses: Vec::new(),
             external_symbols: &vec![],
+            params: &Parameters::default(),
+            condition_depth: 0,
         });
         test_type_traits_non_clonable(Rule {
             name: "a".to_owned(),

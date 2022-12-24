@@ -99,6 +99,20 @@ pub enum CompilationError {
         span: Range<usize>,
     },
 
+    /// An expression is too deep.
+    ///
+    /// Expressions are expressed as an AST tree, whose depth is limited.
+    /// This error is raised when this limit is reached, and indicates that
+    /// the expression is too complex.
+    ///
+    /// This should never be raised in user defined rules unless trying to
+    /// generate a stack-overflow. However, if this happens on a legitimate
+    /// rule, the limit can be raised using [`crate::compiler::params::Parameters`].
+    ConditionTooDeep {
+        /// Position of the expression that reaches max depth.
+        span: Range<usize>,
+    },
+
     /// Invalid binding of an identifier in a for expression.
     ///
     /// This indicates that the iterator items is a different cardinality from the bound identifiers.
@@ -297,6 +311,10 @@ impl CompilationError {
 
             Self::DuplicatedIdentifierBinding { identifier, span } => Diagnostic::error()
                 .with_message(format!("duplicated loop identifier {identifier}"))
+                .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::ConditionTooDeep { span } => Diagnostic::error()
+                .with_message("condition is too complex and reached max depth".to_owned())
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::InvalidIdentifierIndexType {
