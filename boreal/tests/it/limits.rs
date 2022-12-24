@@ -1,6 +1,6 @@
 use boreal::scanner::ScanParams;
 
-use crate::utils::Checker;
+use crate::utils::{Checker, Compiler};
 
 #[test]
 fn test_limit_match_max_length() {
@@ -88,4 +88,45 @@ rule a {
 "#,
     );
     checker.check_boreal(&mem, true);
+}
+
+#[test]
+fn test_limit_max_condition_depth() {
+    let mut params = boreal::compiler::params::Parameters::default();
+    params.max_condition_depth = 15;
+
+    let mut rule = String::new();
+    rule.push_str(
+        r#"
+import "math"
+
+rule a {
+  condition:
+"#,
+    );
+
+    // We need an expression that does not trigger the recursion limit during parsing,
+    // but still has enough depth. This means stacking different operations.
+    for _ in 0..=(params.max_condition_depth / 10) {
+        rule.push_str("    true and not 6 <= 5 | 4 & 3 >> 2 + 1 * -math.to_number(\n");
+    }
+    rule.push_str("    true\n");
+    for _ in 0..=(params.max_condition_depth / 10) {
+        rule.push_str("    )\n");
+    }
+    rule.push('}');
+
+    let mut compiler = Compiler::new_without_yara();
+    // Bring the limit down from the default, as the default is still too high in debug mode.
+    // This allows running this test (and thus the whole test suite) in debug mode.
+    compiler.set_params(params.clone());
+    compiler.check_add_rules_err(
+        &rule,
+        "mem:7:23: error: condition is too complex and reached max depth",
+    );
+
+    let mut compiler = Compiler::new_without_yara();
+    params.max_condition_depth += 10;
+    compiler.set_params(params);
+    compiler.add_rules(&rule);
 }

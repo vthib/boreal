@@ -46,6 +46,7 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         &rule,
         &compiler.default_namespace,
         &compiler.external_symbols,
+        &compiler.params,
     )
     .unwrap();
     let res = compile_expression(&mut rule_compiler, rule.condition).unwrap();

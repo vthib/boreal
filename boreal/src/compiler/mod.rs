@@ -18,6 +18,7 @@ pub(crate) mod expression;
 pub(crate) mod external_symbol;
 pub use external_symbol::ExternalValue;
 pub(crate) mod module;
+pub mod params;
 pub(crate) mod rule;
 pub(crate) mod variable;
 
@@ -51,6 +52,9 @@ pub struct Compiler {
 
     /// Externally defined symbols.
     external_symbols: Vec<external_symbol::ExternalSymbol>,
+
+    /// Compilation parameters
+    params: params::Parameters,
 }
 
 #[derive(Debug)]
@@ -307,11 +311,12 @@ impl Compiler {
                 let rule_name = rule.name.clone();
                 let is_global = rule.is_global;
                 let name_span = rule.name_span.clone();
-                let (rule, vars) = rule::compile_rule(*rule, namespace, &self.external_symbols)
-                    .map_err(|error| AddRuleError {
-                        path: current_filepath.map(Path::to_path_buf),
-                        kind: AddRuleErrorKind::Compilation(error),
-                    })?;
+                let (rule, vars) =
+                    rule::compile_rule(*rule, namespace, &self.external_symbols, &self.params)
+                        .map_err(|error| AddRuleError {
+                            path: current_filepath.map(Path::to_path_buf),
+                            kind: AddRuleErrorKind::Compilation(error),
+                        })?;
 
                 // Check then insert, to avoid a double clone on the rule name. Maybe
                 // someday we'll get the raw entry API.
@@ -370,6 +375,11 @@ impl Compiler {
             default_value,
         });
         true
+    }
+
+    /// Set compilation parameters.
+    pub fn set_params(&mut self, params: params::Parameters) {
+        self.params = params;
     }
 
     /// Finalize the compiler and generate a [`Scanner`].
