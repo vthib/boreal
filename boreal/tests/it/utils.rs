@@ -390,12 +390,6 @@ pub fn check_err(rule: &str, expected_prefix: &str) {
     compiler.check_add_rules_err(rule, expected_prefix);
 }
 
-#[track_caller]
-pub fn check_err_without_yara(rule: &str, expected_prefix: &str) {
-    let compiler = Compiler::new_without_yara();
-    compiler.check_add_rules_err(rule, expected_prefix);
-}
-
 type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(&'a [u8], usize, usize)>)>)>;
 
 fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
