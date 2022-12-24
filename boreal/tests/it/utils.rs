@@ -132,7 +132,7 @@ impl Compiler {
     define_symbol_compiler_method!(define_symbol_str, &str);
     define_symbol_compiler_method!(define_symbol_bool, bool);
 
-    pub fn set_params(&mut self, params: boreal::compiler::params::Parameters) {
+    pub fn set_params(&mut self, params: boreal::compiler::CompilerParams) {
         self.compiler.set_params(params);
     }
 

@@ -4,10 +4,10 @@ use super::expression::{compile_expression, Type};
 use super::module::compile_module;
 use super::rule::RuleCompiler;
 use super::{
-    AddRuleError, AddRuleErrorKind, AvailableModule, CompilationError, Compiler, ImportedModule,
-    ModuleLocation, Namespace,
+    AddRuleError, AddRuleErrorKind, AvailableModule, CompilationError, Compiler, CompilerParams,
+    ImportedModule, ModuleLocation, Namespace,
 };
-use crate::test_helpers::test_type_traits_non_clonable;
+use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 use boreal_parser::parse;
 
 #[track_caller]
@@ -296,4 +296,5 @@ fn test_types_traits() {
             span: 0..1,
         }),
     });
+    test_type_traits(CompilerParams::default());
 }

@@ -15,8 +15,7 @@ fn test_invalid_files() {
             #[cfg(debug_assertions)]
             let compiler = {
                 let mut compiler = Compiler::new_without_yara();
-                let mut params = boreal::compiler::params::Parameters::default();
-                params.max_condition_depth = 15;
+                let params = boreal::compiler::CompilerParams::default().max_condition_depth(15);
                 compiler.set_params(params);
                 compiler
             };

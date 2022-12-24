@@ -107,7 +107,8 @@ pub enum CompilationError {
     ///
     /// This should never be raised in user defined rules unless trying to
     /// generate a stack-overflow. However, if this happens on a legitimate
-    /// rule, the limit can be raised using [`crate::compiler::params::Parameters`].
+    /// rule, the limit can be raised using
+    /// [`crate::compiler::CompilerParams::max_condition_depth`].
     ConditionTooDeep {
         /// Position of the expression that reaches max depth.
         span: Range<usize>,
