@@ -487,38 +487,53 @@ fn test_syntax() {
 
     check_err("rule test rule test", "mem:1:11: error: syntax error");
 
-    // FIXME: enable those tests
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: -1 of them }",
-    //     "z");
+    // Value is resolved at evaluation time
+    if false {
+        check_err(
+            "rule test { strings: $a = \"a\" condition: -1 of them }",
+            "z",
+        );
 
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: 0 + -1 of them }",
-    //     "z");
+        check_err(
+            "rule test { strings: $a = \"a\" condition: 0 + -1 of them }",
+            "z",
+        );
 
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: for -1 of them: ($) }",
-    //     "z");
+        check_err(
+            "rule test { strings: $a = \"a\" condition: for -1 of them: ($) }",
+            "z",
+        );
 
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: for 0 + -1 of them: ($) }",
-    //     "z");
+        check_err(
+            "rule test { strings: $a = \"a\" condition: for 0 + -1 of them: ($) }",
+            "z",
+        );
+    }
 
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: \"foo\" of them }",
-    //     "z");
+    check_err(
+        "rule test { strings: $a = \"a\" condition: \"foo\" of them }",
+        "mem:1:42: error: expression has an invalid type",
+    );
 
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: for \"foo\" of them: ($) }",
-    //     "z");
+    check_err(
+        "rule test { strings: $a = \"a\" condition: for \"foo\" of them: ($) }",
+        "mem:1:46: error: expression has an invalid type",
+    );
 
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: /foo/ of them }",
-    //     "z");
+    check_err(
+        "rule test { strings: $a = \"a\" condition: /foo/ of them }",
+        "mem:1:42: error: expression has an invalid type",
+    );
 
-    // check_err(
-    //     "rule test { strings: $a = \"a\" condition: for /foo/ of them: ($) }",
-    //     "z");
+    check_err(
+        "rule test { strings: $a = \"a\" condition: for /foo/ of them: ($) }",
+        "mem:1:46: error: expression has an invalid type",
+    );
+
+    check_err(
+        "rule test { strings: $a = \"a\" condition: for 3.14159 of them: ($) }",
+        "mem:1:46: error: expression has an invalid type",
+    );
 }
 
 #[test]
@@ -2337,16 +2352,18 @@ fn test_of() {
     );
 
     // Lower bound can not be negative, if it can be determined statically.
-    // FIXME: to enable
-    // check_err(
-    //     "rule test {
-    //     strings:
-    //       $a = \"AXSERS\"
-    //     condition:
-    //       $a in (-1..10)
-    //   }",
-    //     "z",
-    // );
+    // Values are resolved at evaluation time
+    if false {
+        check_err(
+            "rule test {
+        strings:
+          $a = \"AXSERS\"
+        condition:
+          $a in (-1..10)
+      }",
+            "z",
+        );
+    }
 
     // Make sure that an undefined range boundary returns an undefined value,
     // which translates to false.
@@ -2631,14 +2648,16 @@ fn test_for() {
 
     // Lower bound must be less than upper bound, if it can be determined
     // statically.
-    // FIXME: to enable
-    // check_err(
-    //     "rule test {
-    //     condition:
-    //       for any i in (10..1): (i)
-    //   }",
-    //     "z",
-    // );
+    // Values are resolved at evaluation time
+    if false {
+        check_err(
+            "rule test {
+        condition:
+          for any i in (10..1): (i)
+      }",
+            "z",
+        );
+    }
 
     // Test case for https://github.com/VirusTotal/yara/issues/1729
     check(
