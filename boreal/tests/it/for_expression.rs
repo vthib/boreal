@@ -685,3 +685,39 @@ fn test_for_expression_undefined() {
         true,
     );
 }
+
+#[test]
+fn test_for_identifiers_abbrev() {
+    let build = |cond: &str| {
+        format!(
+            r#"rule foo {{
+    strings:
+        $a = /aaa/
+        $b = /bbb/
+    condition:
+        {cond}
+}}"#,
+        )
+    };
+
+    let checker = Checker::new(&build("any of ($a, $b) in (0..5)"));
+    checker.check(b"", false);
+    checker.check(b"aaa a a a", true);
+    checker.check(b"a a a aaa", false);
+    checker.check(b"a bbb aaa", true);
+
+    let checker = Checker::new(&build("all of ($a, $b*) in (2..5)"));
+    checker.check(b"", false);
+    checker.check(b"aaabbb", false);
+    checker.check(b" aaabbb", false);
+    checker.check(b"  aaabbb", true);
+    checker.check(b"   aaabbb", false);
+
+    let checker = Checker::new(&build("any of them at 2"));
+    checker.check(b"", false);
+    checker.check(b"aaabbb", false);
+    checker.check(b" aaabbb", false);
+    checker.check(b"  aaabbb", true);
+    checker.check(b"   aaabbb", false);
+    checker.check(b"  bbbaaa", true);
+}

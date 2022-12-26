@@ -291,7 +291,7 @@ pub enum ExpressionKind {
         body: Option<Box<Expression>>,
     },
 
-    /// Evaluate multiple variables on a given range.
+    /// Evaluate the presence of multiple variables in a given range.
     ///
     /// This is equivalent to a [`Self::For`] value, with a body
     /// set to `$ in (from..to)`.
@@ -304,6 +304,19 @@ pub enum ExpressionKind {
         from: Box<Expression>,
         /// Ending offset, included.
         to: Box<Expression>,
+    },
+
+    /// Evaluate the presence of multiple variables at a given offset.
+    ///
+    /// This is equivalent to a [`Self::For`] value, with a body
+    /// set to `$ at expr`.
+    ForAt {
+        /// How many variables must match for this expresion to be true.
+        selection: ForSelection,
+        /// Which variables to select.
+        set: VariableSet,
+        /// Offset of the variable match.
+        offset: Box<Expression>,
     },
 
     /// Evaluate an identifier with multiple values on a given expression.
