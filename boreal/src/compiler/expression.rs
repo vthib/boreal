@@ -1156,15 +1156,33 @@ fn compile_for_iterator(
         }
         parser::ForIterator::List(exprs) => {
             let mut res = Vec::with_capacity(exprs.len());
+            let mut bounded_type = None;
             for expr in exprs {
                 let expr = compile_expression(compiler, expr)?;
-                expr.check_type(Type::Integer)?;
+                match (bounded_type, expr.ty) {
+                    (None, Type::Integer) => bounded_type = Some(Type::Integer),
+                    (None, Type::Bytes) => bounded_type = Some(Type::Bytes),
+                    (None, ty) => {
+                        return Err(CompilationError::ExpressionInvalidType {
+                            ty: ty.to_string(),
+                            expected_type: "integer or bytes".to_owned(),
+                            span: expr.span,
+                        });
+                    }
+
+                    (Some(ty), _) => expr.check_type(ty)?,
+                }
                 res.push(expr.expr);
             }
 
+            let module_type = match bounded_type {
+                Some(Type::Bytes) => ModuleType::Bytes,
+                _ => ModuleType::Integer,
+            };
+
             match &identifiers {
                 &[name] => {
-                    compiler.add_bounded_identifier(name, ModuleType::Integer, identifiers_span)?;
+                    compiler.add_bounded_identifier(name, module_type, identifiers_span)?;
                 }
 
                 _ => invalid_binding(1)?,

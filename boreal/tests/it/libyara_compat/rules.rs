@@ -2653,31 +2653,30 @@ fn test_for() {
         true,
     );
 
-    // FIXME: to enable
-    // check(
-    //     "rule test {
-    //     condition:
-    //       for all i in (\"a\", \"b\") : (i == \"a\" or i == \"b\")
-    //   }",
-    //     b"",
-    //     true,
-    // );
+    check(
+        "rule test {
+        condition:
+          for all i in (\"a\", \"b\") : (i == \"a\" or i == \"b\")
+      }",
+        b"",
+        true,
+    );
 
-    // check_err(
-    //     "rule test {
-    //     condition:
-    //       for any i in (\"a\"): (i == 0)
-    //   }",
-    //     "z",
-    // );
+    check_err(
+        "rule test {
+        condition:
+          for any i in (\"a\"): (i == 0)
+      }",
+        "error: expressions have invalid types",
+    );
 
-    // check_err(
-    //     "rule test {
-    //     condition:
-    //       for any i in (\"a\", 0): (i == 0)
-    //   }",
-    //     "z",
-    // );
+    check_err(
+        "rule test {
+        condition:
+          for any i in (\"a\", 0): (i == 0)
+      }",
+        "mem:3:30: error: expression has an invalid type",
+    );
 }
 
 #[test]

@@ -2,24 +2,48 @@ use crate::utils::{build_rule, check, check_boreal, check_err, Checker};
 
 #[test]
 fn test_for_identifiers_errors() {
+    // Mismatch between number of identifiers and iterator
     check_err(
         "rule a { condition: for any a, b in (0..3): (true) }",
         "mem:1:29: error: expected 1 identifiers to bind, got 2",
     );
 
+    // Error compiler expression in iterator list
+    check_err(
+        "rule a { condition: for any i in (j): (true) }",
+        "mem:1:35: error: unknown identifier \"j\"",
+    );
+    check_err(
+        "rule a { condition: for any i in (i): (true) }",
+        "mem:1:35: error: unknown identifier \"i\"",
+    );
+
+    // Invalid type in iterator list
     check_err(
         "rule a { condition: for any i in (/a/): (true) }",
         "mem:1:35: error: expression has an invalid type",
     );
 
+    // Type mismatch in iterator list
     check_err(
-        "rule a { condition: for any i in (j): (true) }",
-        "mem:1:35: error: unknown identifier \"j\"",
+        "rule a { condition: for any i in (1, \"a\"): (true) }",
+        "mem:1:38: error: expression has an invalid type",
     );
 
+    // Empty iterator list
     check_err(
-        "rule a { condition: for any i in (i): (true) }",
-        "mem:1:35: error: unknown identifier \"i\"",
+        "rule a { condition: for any i in (): (true) }",
+        "mem:1:35: error: syntax error",
+    );
+
+    // Wrong type use of bounded identifier
+    check_err(
+        "rule a { condition: for any i in (1, 2): (i == \"a\") }",
+        "error: expressions have invalid types",
+    );
+    check_err(
+        "rule a { condition: for any i in (\"a\", \"b\"): (i == 1) }",
+        "error: expressions have invalid types",
     );
 
     check_err(
@@ -167,6 +191,27 @@ fn test_for_identifiers() {
     checker.check(b"baaa ba baaa", false);
     checker.check(b"baaa ba", true);
     checker.check(b"baaa", false);
+
+    check(
+        &build_rule("for any a in (\"a\", \"b\"): (a startswith \"a\")"),
+        b"",
+        true,
+    );
+    check(
+        &build_rule("for all a in (\"a\", \"b\"): (a startswith \"a\")"),
+        b"",
+        false,
+    );
+    check(
+        &build_rule("for all a in (\"a\", \"b\"): (a == \"a\" or a == \"b\")"),
+        b"",
+        true,
+    );
+    check(
+        &build_rule("for all a in (\"a\", \"ab\"): (a startswith \"a\")"),
+        b"",
+        true,
+    );
 
     let checker = Checker::new(
         r#"
