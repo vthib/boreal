@@ -1936,14 +1936,13 @@ fn test_count() {
 
 #[test]
 fn test_at() {
-    // FIXME: to enable
-    // check(
-    //     "rule test {
-    //     strings: $a = \"miss\"
-    //     condition: any of them at 0}",
-    //     b"mississippi",
-    //     true,
-    // );
+    check(
+        "rule test {
+        strings: $a = \"miss\"
+        condition: any of them at 0}",
+        b"mississippi",
+        true,
+    );
 
     check(
         "rule test {

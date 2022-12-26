@@ -805,6 +805,27 @@ pub(super) fn compile_expression(
             })
         }
 
+        parser::ExpressionKind::ForAt {
+            selection,
+            set,
+            offset,
+        } => {
+            let offset = compile_expression(compiler, *offset)?;
+
+            Ok(Expr {
+                expr: Expression::For {
+                    selection: compile_for_selection(compiler, selection)?,
+                    set: compile_variable_set(compiler, set, span.clone())?,
+                    body: Box::new(Expression::VariableAt {
+                        variable_index: VariableIndex(None),
+                        offset: offset.unwrap_expr(Type::Integer)?,
+                    }),
+                },
+                ty: Type::Boolean,
+                span,
+            })
+        }
+
         parser::ExpressionKind::ForIdentifiers {
             selection,
             identifiers,

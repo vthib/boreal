@@ -9,7 +9,7 @@ use std::ops::Range;
 use nom::{
     branch::alt,
     character::complete::char,
-    combinator::{cut, map, opt},
+    combinator::{cut, map, opt, success},
     multi::separated_list1,
     sequence::{delimited, preceded, terminated},
 };
@@ -58,6 +58,7 @@ pub(super) fn for_expression_non_ambiguous(input: Input) -> ParseResult<Expressi
 /// This parses:
 /// - `selection 'of' set`
 /// - `selection 'of' set 'in' range`
+/// - `selection 'of' set 'at' expr`
 ///
 /// But with 'selection' not being an expression.
 fn for_expression_abbrev(input: Input) -> ParseResult<Expression> {
@@ -100,22 +101,28 @@ fn for_expression_with_selection<'a>(
         Ok((input, set)) => (input, ExpressionKind::ForRules { selection, set }),
         Err(_) => {
             let (input, set) = cut(string_set)(input)?;
-            let (input, range) = opt(preceded(rtrim(ttag("in")), cut(range)))(input)?;
-
-            let kind = match range {
-                None => ExpressionKind::For {
-                    selection,
-                    set,
-                    body: None,
+            let (input, kind) = for_expression_kind(input)?;
+            (
+                input,
+                match kind {
+                    ForExprKind::None => ExpressionKind::For {
+                        selection,
+                        set,
+                        body: None,
+                    },
+                    ForExprKind::In(from, to) => ExpressionKind::ForIn {
+                        selection,
+                        set,
+                        from,
+                        to,
+                    },
+                    ForExprKind::At(offset) => ExpressionKind::ForAt {
+                        selection,
+                        set,
+                        offset,
+                    },
                 },
-                Some((from, to)) => ExpressionKind::ForIn {
-                    selection,
-                    set,
-                    from,
-                    to,
-                },
-            };
-            (input, kind)
+            )
         }
     };
 
@@ -126,6 +133,25 @@ fn for_expression_with_selection<'a>(
             span: input.get_span_from(start),
         },
     ))
+}
+
+enum ForExprKind {
+    None,
+    In(Box<Expression>, Box<Expression>),
+    At(Box<Expression>),
+}
+
+fn for_expression_kind(input: Input) -> ParseResult<ForExprKind> {
+    alt((
+        map(preceded(rtrim(ttag("in")), cut(range)), |(a, b)| {
+            ForExprKind::In(a, b)
+        }),
+        map(
+            preceded(rtrim(ttag("at")), cut(primary_expression)),
+            |expr| ForExprKind::At(Box::new(expr)),
+        ),
+        map(success(()), |_| ForExprKind::None),
+    ))(input)
 }
 
 /// Parse a full fledge for expression:
@@ -605,6 +631,48 @@ mod tests {
                 span: 0..13,
             },
         );
+        parse(
+            boolean_expression,
+            "5 of ($a, $b*) at f.b",
+            "",
+            Expression {
+                expr: ExpressionKind::ForAt {
+                    selection: ForSelection::Expr {
+                        expr: Box::new(Expression {
+                            expr: ExpressionKind::Integer(5),
+                            span: 0..1,
+                        }),
+                        as_percent: false,
+                    },
+                    set: VariableSet {
+                        elements: vec![
+                            SetElement {
+                                name: "a".to_owned(),
+                                is_wildcard: false,
+                                span: 6..8,
+                            },
+                            SetElement {
+                                name: "b".to_owned(),
+                                is_wildcard: true,
+                                span: 10..13,
+                            },
+                        ],
+                    },
+                    offset: Box::new(Expression {
+                        expr: ExpressionKind::Identifier(Identifier {
+                            name: "f".to_owned(),
+                            name_span: 18..19,
+                            operations: vec![IdentifierOperation {
+                                op: IdentifierOperationType::Subfield("b".to_owned()),
+                                span: 19..21,
+                            }],
+                        }),
+                        span: 18..21,
+                    }),
+                },
+                span: 0..21,
+            },
+        );
 
         parse_err(boolean_expression, "for true");
         parse_err(boolean_expression, "2% /*");
@@ -616,6 +684,8 @@ mod tests {
         parse_err(for_expression_abbrev, "any of thema");
         parse_err(for_expression_abbrev, "all of them in");
         parse_err(for_expression_abbrev, "all of them in ()");
+        parse_err(for_expression_abbrev, "all of them at");
+        parse_err(for_expression_abbrev, "all of them at ()");
     }
 
     #[test]
