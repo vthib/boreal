@@ -18,6 +18,11 @@ fn test_for_identifiers_errors() {
     );
 
     check_err(
+        "rule a { condition: for any i in (i): (true) }",
+        "mem:1:35: error: unknown identifier \"i\"",
+    );
+
+    check_err(
         r#"
 rule a {
     condition:

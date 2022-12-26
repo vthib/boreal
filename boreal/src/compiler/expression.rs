@@ -1151,6 +1151,13 @@ fn compile_for_iterator(
             })
         }
         parser::ForIterator::List(exprs) => {
+            let mut res = Vec::with_capacity(exprs.len());
+            for expr in exprs {
+                let expr = compile_expression(compiler, expr)?;
+                expr.check_type(Type::Integer)?;
+                res.push(expr.expr);
+            }
+
             match &identifiers {
                 &[name] => {
                     compiler.add_bounded_identifier(name, ModuleType::Integer, identifiers_span)?;
@@ -1159,12 +1166,6 @@ fn compile_for_iterator(
                 _ => invalid_binding(1)?,
             };
 
-            let mut res = Vec::with_capacity(exprs.len());
-            for expr in exprs {
-                let expr = compile_expression(compiler, expr)?;
-                expr.check_type(Type::Integer)?;
-                res.push(expr.expr);
-            }
             Ok(ForIterator::List(res))
         }
     }
