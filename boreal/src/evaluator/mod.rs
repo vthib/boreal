@@ -910,10 +910,17 @@ impl Evaluator<'_, '_, '_, '_, '_> {
 
             ForIterator::List(exprs) => {
                 for expr in exprs {
-                    let value = self.evaluate_expr(expr)?.unwrap_number()?;
-
-                    self.bounded_identifiers_stack
-                        .push(Arc::new(ModuleValue::Integer(value)));
+                    match self.evaluate_expr(expr)? {
+                        Value::Integer(value) => {
+                            self.bounded_identifiers_stack
+                                .push(Arc::new(ModuleValue::Integer(value)));
+                        }
+                        Value::Bytes(value) => {
+                            self.bounded_identifiers_stack
+                                .push(Arc::new(ModuleValue::Bytes(value)));
+                        }
+                        _ => return Err(PoisonKind::Undefined),
+                    }
                     let v = self.evaluate_expr(body);
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
                     let v = match v {

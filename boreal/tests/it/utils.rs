@@ -111,6 +111,7 @@ impl Compiler {
             .map(|compiler| compiler.add_rules_file_with_namespace(path, ns).unwrap());
     }
 
+    #[track_caller]
     pub fn check_add_rules_err(mut self, rules: &str, expected_prefix: &str) {
         let err = self.compiler.add_rules_str(rules).unwrap_err();
         let desc = add_rule_error_get_desc(&err, rules);
