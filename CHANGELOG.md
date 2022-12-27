@@ -9,11 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Main changes:
 
+- Updated to be compatible with Yara 4.3
 - Lots of improved testing on modules and on the `boreal` binary, as well as running
   all tests in a big-endian architecture.
 
+Yara 4.3 compatibility:
+
+- Negation in hex strings, eg `{ ~C3 ~?F }`.
+- New `to_string` function in `math` module.
+- New `string` module with `to_int` and `length` functions.
+- `rva` field in imported functions in `pe` module.
+- `pe.import_rva` and `pe.delayed_import_rva` functions.
+- `pe.rich_signature.version_data` field.
+- Iterator on bytes literal, eg `for any s in ("foo", "bar"): (...)`.
+- `at` for expression, eg `any of them at 0`.
+- New functions `import_md5` and `telfhash` in `elf` module.
+- Use of the `authenticode-parser` lib to parse signatures in `pe` module.
+  This adds a lot of fields in `pe.signatures`.
+
+### Changed
+
+- `openssl` feature removed, replaced with the `authenticode` feature.
+- Using the `pe` module with the `signatures` parsing now requires
+  calling the unsafe function `Compiler::new_with_pe_signatures`.
+
 ### Fixed
 
+- Improved handling on invalid ranges in '$a in (from..to)' expression.
 - Fixed minor differences in edge cases in `elf.dynamic_section_entries` and
   ``elf.number_of_sections` (e639df643b05).
 - Fixed `==` operator on boolean values (cec439eee19f).
