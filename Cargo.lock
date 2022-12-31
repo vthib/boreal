@@ -114,6 +114,7 @@ dependencies = [
  "sha1",
  "sha2",
  "tempfile",
+ "tlsh2",
  "walkdir",
  "yara",
 ]
@@ -1131,6 +1132,12 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "tlsh2"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96b976096639559b66880ecaf7ed66fc367a08a2ce08e6d51375e0e6d17bb1a1"
 
 [[package]]
 name = "typenum"

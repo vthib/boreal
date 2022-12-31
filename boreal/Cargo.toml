@@ -15,7 +15,7 @@ rust-version = "1.62"
 default = ["hash", "object"]
 
 # Enables the "hash" module.
-hash = ["md-5", "sha1", "sha2", "hex", "crc32fast"]
+hash = ["md-5", "sha1", "sha2", "hex", "crc32fast", "tlsh2"]
 
 # Enables the "pe", "elf" and "macho" modules.
 #
@@ -50,6 +50,7 @@ hex = { version = "0.4", optional = true }
 md-5 = { version = "0.10", optional = true }
 sha1 = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
+tlsh2 = { version = "0.1", optional = true }
 
 # "object" feature
 object = { version = "0.30", optional = true, default-features = false, features = ["read"] }
