@@ -84,3 +84,41 @@ fn test_coverage_invalid_program_header() {
 fn test_coverage_invalid_symbols() {
     compare_module_values_on_file(Elf, "tests/assets/elf/invalid_symbols", &[]);
 }
+
+#[test]
+#[cfg(feature = "hash")]
+fn test_import_md5() {
+    use crate::utils::check;
+
+    #[track_caller]
+    fn test(mem: &[u8], condition: &str) {
+        check(
+            &format!(
+                r#"import "elf"
+rule test {{
+    condition:
+        {condition}
+}}"#
+            ),
+            mem,
+            true,
+        );
+    }
+
+    // No imports
+    test(ELF32_FILE, "not defined elf.import_md5()");
+    // No SHN_UNDEF symbols
+    test(ELF32_SHAREDOBJ, "not defined elf.import_md5()");
+
+    test(ELF32_NOSECTIONS, "not defined elf.import_md5()");
+    test(ELF64_FILE, "not defined elf.import_md5()");
+
+    test(
+        ELF32_MIPS_FILE,
+        "elf.import_md5() == \"89bd8d1f95cce5ba30f2cc5ba7e9d611\"",
+    );
+    test(
+        ELF_X64_FILE,
+        "elf.import_md5() == \"e3545a5c27dd2ed4dd1739a3c3c071b2\"",
+    );
+}
