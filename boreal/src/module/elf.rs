@@ -153,6 +153,11 @@ impl Module for Elf {
                 "import_md5",
                 StaticValue::function(Self::import_md5, vec![], Type::Bytes),
             ),
+            #[cfg(feature = "hash")]
+            (
+                "telfhash",
+                StaticValue::function(Self::telfhash, vec![], Type::Bytes),
+            ),
         ]
         .into()
     }
@@ -257,8 +262,11 @@ pub struct Data {
 }
 
 pub struct DataSymbol {
-    lowercase_name: Vec<u8>,
+    name: Vec<u8>,
     shndx: u16,
+    bind: u8,
+    type_: u8,
+    visibility: u8,
 }
 
 impl Data {
@@ -270,14 +278,19 @@ impl Data {
             .symbols
             .iter()
             .filter(|v| f(v))
-            .map(|s| &s.lowercase_name)
+            .map(|s| s.name.clone())
             .collect();
 
         if symbols.is_empty() {
             return None;
         }
 
+        // Lowercase the symbols, then sort them
+        for symbol in &mut symbols {
+            symbol.make_ascii_lowercase();
+        }
         symbols.sort_unstable();
+
         Some(
             symbols
                 .into_iter()
@@ -482,11 +495,13 @@ fn get_symbols<Elf: FileHeader>(
 
     for symbol in symbol_table.iter().take(MAX_NB_SYMBOLS) {
         let name = symbol.name(e, strings_table).ok();
+        let bind = symbol.st_bind();
+        let type_ = symbol.st_type();
         let shndx = symbol.st_shndx(e);
         let obj = Value::object([
             ("name", name.map(<[u8]>::to_vec).into()),
-            ("bind", symbol.st_bind().into()),
-            ("type", symbol.st_type().into()),
+            ("bind", bind.into()),
+            ("type", type_.into()),
             ("shndx", shndx.into()),
             ("value", symbol.st_value(e).into().into()),
             ("size", symbol.st_size(e).into().into()),
@@ -494,12 +509,12 @@ fn get_symbols<Elf: FileHeader>(
 
         symbols.push(obj);
         if let Some(name) = name {
-            let mut lowercase_name = name.to_vec();
-
-            lowercase_name.make_ascii_lowercase();
             data_symbols.push(DataSymbol {
-                lowercase_name,
+                name: name.to_vec(),
                 shndx,
+                bind,
+                type_,
+                visibility: symbol.st_other() & 0x3,
             });
         }
     }
@@ -515,12 +530,59 @@ impl Elf {
         use md5::{Digest, Md5};
 
         let data = ctx.module_data.get::<Self>()?;
-        let import_string = data.get_import_string(|sym| {
-            sym.shndx == elf::SHN_UNDEF && !sym.lowercase_name.is_empty()
-        })?;
+        let import_string =
+            data.get_import_string(|sym| sym.shndx == elf::SHN_UNDEF && !sym.name.is_empty())?;
 
         let hash = Md5::digest(import_string);
 
         Some(Value::Bytes(hex::encode(hash).into_bytes()))
+    }
+
+    #[cfg(feature = "hash")]
+    fn telfhash(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        const EXCLUDED_STRINGS: &[&[u8]; 8] = &[
+            b"__libc_start_main",
+            b"main",
+            b"abort",
+            b"cachectl",
+            b"cacheflush",
+            b"puts",
+            b"atol",
+            b"malloc_trim",
+        ];
+
+        let data = ctx.module_data.get::<Self>()?;
+        let import_string = data.get_import_string(|sym| {
+            if sym.bind != elf::STB_GLOBAL
+                || sym.type_ != elf::STT_FUNC
+                || sym.visibility != elf::STV_DEFAULT
+            {
+                return false;
+            }
+
+            if sym.name.starts_with(b".") || sym.name.starts_with(b"_") {
+                return false;
+            }
+            if sym.name.ends_with(b"64") {
+                return false;
+            }
+            if sym.name.starts_with(b"str") || sym.name.starts_with(b"mem") {
+                return false;
+            }
+
+            if EXCLUDED_STRINGS
+                .iter()
+                .any(|excluded| *excluded == sym.name)
+            {
+                return false;
+            }
+
+            true
+        })?;
+
+        let mut tlsh = tlsh2::Tlsh::new();
+        tlsh.update(&import_string);
+
+        Some(Value::Bytes(tlsh.finish(true).into_bytes()))
     }
 }

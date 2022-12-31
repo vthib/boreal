@@ -1,2 +1,83 @@
-All those files are generated using the asm files, with `nasm -f bin <asm_file>`.
+To build `elf_with_imports`, first create a dyn.c:
+
+```c
+void foo(void) {}
+void foo64(void) {}
+void FOO64(void) {}
+void FOO(int a) { printf("%d\n", a); }
+
+void strstuff(void) {}
+void stuffstr(void) {}
+void memstuff(void) {}
+void stuffmem(void) {}
+
+void STRALLCAPS(void) {}
+void ALLCAPSSTR(void) {}
+void z(void) {}
+void long_function_to_make_the_tlsh_hash_work() {}
+
+int a_value;
+
+// Non global dynsym
+#pragma weak weak_fun
+void weak_fun(void) {}
+```
+
+then create a elf.c:
+
+```c
+extern void foo(void);
+extern void foo64(void);
+extern void FOO64(void);
+extern void FOO(int);
+
+extern void strstuff(void);
+extern void stuffstr(void);
+extern void memstuff(void);
+extern void stuffmem(void);
+
+extern void STRALLCAPS(void);
+extern void ALLCAPSSTR(void);
+extern void z(void);
+extern void long_function_to_make_the_tlsh_hash_work();
+
+// Non global dynsym
+#pragma weak weak_fun
+extern void weak_fun(void);
+
+extern int a_value;
+
+// Protected dynsym
+extern void __attribute__((visibility ("protected"))) protected_fun(void) {}
+
+int main(void) {
+    foo();
+    foo64();
+    FOO64();
+    FOO(a_value);
+
+    strstuff();
+    stuffstr();
+    memstuff();
+    stuffmem();
+
+    STRALLCAPS();
+    ALLCAPSSTR();
+    z();
+    long_function_to_make_the_tlsh_hash_work();
+    weak_fun();
+    protected_fun();
+
+    return 0;
+}
+```
+
+And compile them:
+
+```
+gcc -shared -o libdyn.so -fPIC dyn.c
+gcc -shared -o elf_with_imports -fPIC elf.c -ldyn -L.
+```
+
+the other files are generated using the asm files, with `nasm -f bin <asm_file>`.
 Inspired and modified from <http://www.les-ziboux.rasama.org/elf-without-ld.html>.

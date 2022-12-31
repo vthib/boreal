@@ -26,8 +26,20 @@ fn test_non_elf() {
     checker.check(b"\xfe\xed\xfa\xce\0\0\0\0\0\0\0\0\0\0\0\0", true);
 }
 
-// These are mostly coverage tests, ensuring all the fields are correctly set and have the same
-// values as in libyara
+#[track_caller]
+fn test(mem: &[u8], condition: &str) {
+    crate::utils::check(
+        &format!(
+            r#"import "elf"
+rule test {{
+condition:
+    {condition}
+}}"#
+        ),
+        mem,
+        true,
+    );
+}
 
 #[test]
 #[ignore]
@@ -88,23 +100,6 @@ fn test_coverage_invalid_symbols() {
 #[test]
 #[cfg(feature = "hash")]
 fn test_import_md5() {
-    use crate::utils::check;
-
-    #[track_caller]
-    fn test(mem: &[u8], condition: &str) {
-        check(
-            &format!(
-                r#"import "elf"
-rule test {{
-    condition:
-        {condition}
-}}"#
-            ),
-            mem,
-            true,
-        );
-    }
-
     // No imports
     test(ELF32_FILE, "not defined elf.import_md5()");
     // No SHN_UNDEF symbols
@@ -120,5 +115,32 @@ rule test {{
     test(
         ELF_X64_FILE,
         "elf.import_md5() == \"e3545a5c27dd2ed4dd1739a3c3c071b2\"",
+    );
+}
+
+#[test]
+#[cfg(feature = "hash")]
+fn test_telfhash() {
+    use crate::utils::check_boreal;
+
+    test(ELF32_FILE, "not defined elf.telfhash()");
+    test(ELF32_SHAREDOBJ, "not defined elf.telfhash()");
+    test(ELF32_NOSECTIONS, "not defined elf.telfhash()");
+    test(ELF64_FILE, "not defined elf.telfhash()");
+    test(ELF32_MIPS_FILE, "not defined elf.telfhash()");
+    test(ELF_X64_FILE, "not defined elf.telfhash()");
+
+    let contents = std::fs::read("tests/assets/elf/elf_with_imports").unwrap();
+    // TODO: fixed on yara >4.3.0-rc1
+    check_boreal(
+        r#"
+import "elf"
+rule test {
+    condition:
+        elf.telfhash() ==
+        "T174B012188204F00184540770331E0B111373086019509C464D0ACE88181266C09774FA"
+}"#,
+        &contents,
+        true,
     );
 }
