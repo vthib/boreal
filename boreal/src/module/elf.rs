@@ -4,7 +4,7 @@ use object::elf::{self, FileHeader32, FileHeader64};
 use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, Sym};
 use object::{Endianness, FileKind};
 
-use super::{Module, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
 const MAX_NB_SEGMENTS: usize = 32_768;
 const MAX_NB_SECTIONS: usize = 32_768;
@@ -147,6 +147,12 @@ impl Module for Elf {
             ("PF_X", StaticValue::Integer(elf::PF_X.into())),
             ("PF_W", StaticValue::Integer(elf::PF_W.into())),
             ("PF_R", StaticValue::Integer(elf::PF_R.into())),
+            // Hashes of import details
+            #[cfg(feature = "hash")]
+            (
+                "import_md5",
+                StaticValue::function(Self::import_md5, vec![], Type::Bytes),
+            ),
         ]
         .into()
     }
@@ -229,14 +235,68 @@ impl Module for Elf {
     }
 
     fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        parse_file(ctx.mem).unwrap_or_default()
+        let mut data = Data::default();
+
+        match parse_file(ctx.mem, &mut data) {
+            Some(v) => {
+                ctx.module_data.insert::<Self>(data);
+                v
+            }
+            None => HashMap::new(),
+        }
     }
 }
 
-fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
+impl ModuleData for Elf {
+    type Data = Data;
+}
+
+#[derive(Default)]
+pub struct Data {
+    symbols: Vec<DataSymbol>,
+}
+
+pub struct DataSymbol {
+    lowercase_name: Vec<u8>,
+    shndx: u16,
+}
+
+impl Data {
+    fn get_import_string<F>(&self, f: F) -> Option<Vec<u8>>
+    where
+        F: Fn(&DataSymbol) -> bool,
+    {
+        let mut symbols: Vec<_> = self
+            .symbols
+            .iter()
+            .filter(|v| f(v))
+            .map(|s| &s.lowercase_name)
+            .collect();
+
+        if symbols.is_empty() {
+            return None;
+        }
+
+        symbols.sort_unstable();
+        Some(
+            symbols
+                .into_iter()
+                .fold((Vec::new(), 0), |(mut acc, i), e| {
+                    if i != 0 {
+                        acc.push(b',');
+                    }
+                    acc.extend(e);
+                    (acc, i + 1)
+                })
+                .0,
+        )
+    }
+}
+
+fn parse_file(mem: &[u8], data: &mut Data) -> Option<HashMap<&'static str, Value>> {
     match FileKind::parse(mem).ok()? {
-        FileKind::Elf32 => Some(parse_file_inner(FileHeader32::parse(mem).ok()?, mem)),
-        FileKind::Elf64 => Some(parse_file_inner(FileHeader64::parse(mem).ok()?, mem)),
+        FileKind::Elf32 => Some(parse_file_inner(FileHeader32::parse(mem).ok()?, mem, data)),
+        FileKind::Elf64 => Some(parse_file_inner(FileHeader64::parse(mem).ok()?, mem, data)),
         _ => None,
     }
 }
@@ -244,16 +304,19 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
 fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     header: &Elf,
     mem: &[u8],
+    data: &mut Data,
 ) -> HashMap<&'static str, Value> {
     // Safety: cannot fail, as we use `Endian = Endianness`, so we do not force endianness.
     let e = header.endian().unwrap();
 
-    let symtab = get_symbols(header, e, mem, elf::SHT_SYMTAB);
+    let symtab = get_symbols(header, e, mem, elf::SHT_SYMTAB, data);
     let symtab_len = symtab
         .as_ref()
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
-    let dynsym = get_symbols(header, e, mem, elf::SHT_DYNSYM);
+    // Get dynsym *after* symtab. This ensures that data.symbols uses
+    // the dynsym in priority, if both exists.
+    let dynsym = get_symbols(header, e, mem, elf::SHT_DYNSYM, data);
     let dynsym_len = dynsym
         .as_ref()
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
@@ -408,32 +471,56 @@ fn get_symbols<Elf: FileHeader>(
     e: Elf::Endian,
     mem: &[u8],
     symbol_type: u32,
+    data: &mut Data,
 ) -> Option<Vec<Value>> {
     let section_table = header.sections(e, mem).ok()?;
     let symbol_table = section_table.symbols(e, mem, symbol_type).ok()?;
     let strings_table = symbol_table.strings();
 
-    Some(
-        symbol_table
-            .iter()
-            .take(MAX_NB_SYMBOLS)
-            .map(|symbol| {
-                Value::object([
-                    (
-                        "name",
-                        symbol
-                            .name(e, strings_table)
-                            .ok()
-                            .map(<[u8]>::to_vec)
-                            .into(),
-                    ),
-                    ("bind", symbol.st_bind().into()),
-                    ("type", symbol.st_type().into()),
-                    ("shndx", symbol.st_shndx(e).into()),
-                    ("value", symbol.st_value(e).into().into()),
-                    ("size", symbol.st_size(e).into().into()),
-                ])
-            })
-            .collect(),
-    )
+    let mut data_symbols = Vec::with_capacity(symbol_table.len());
+    let mut symbols = Vec::with_capacity(symbol_table.len());
+
+    for symbol in symbol_table.iter().take(MAX_NB_SYMBOLS) {
+        let name = symbol.name(e, strings_table).ok();
+        let shndx = symbol.st_shndx(e);
+        let obj = Value::object([
+            ("name", name.map(<[u8]>::to_vec).into()),
+            ("bind", symbol.st_bind().into()),
+            ("type", symbol.st_type().into()),
+            ("shndx", shndx.into()),
+            ("value", symbol.st_value(e).into().into()),
+            ("size", symbol.st_size(e).into().into()),
+        ]);
+
+        symbols.push(obj);
+        if let Some(name) = name {
+            let mut lowercase_name = name.to_vec();
+
+            lowercase_name.make_ascii_lowercase();
+            data_symbols.push(DataSymbol {
+                lowercase_name,
+                shndx,
+            });
+        }
+    }
+
+    data.symbols = data_symbols;
+
+    Some(symbols)
+}
+
+impl Elf {
+    #[cfg(feature = "hash")]
+    fn import_md5(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+        use md5::{Digest, Md5};
+
+        let data = ctx.module_data.get::<Self>()?;
+        let import_string = data.get_import_string(|sym| {
+            sym.shndx == elf::SHN_UNDEF && !sym.lowercase_name.is_empty()
+        })?;
+
+        let hash = Md5::digest(import_string);
+
+        Some(Value::Bytes(hex::encode(hash).into_bytes()))
+    }
 }
