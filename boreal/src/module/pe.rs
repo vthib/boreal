@@ -1275,12 +1275,12 @@ fn parse_file<Pe: ImageNtHeaders>(
     }
 
     #[cfg(feature = "authenticode")]
-    if let Some(signatures) = signatures::get_signatures(&data_dirs, mem) {
-        // signatures has max MAX_PE_CERTS element, it will always fill in a i64.
+    if let Some((signatures, is_signed)) = signatures::get_signatures(&data_dirs, mem) {
         let _r = map.insert(
             "number_of_signatures",
             Value::Integer(signatures.len() as _),
         );
+        let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
         let _r = map.insert("signatures", Value::Array(signatures));
     } else {
         let _r = map.insert("number_of_signatures", Value::Integer(0));
