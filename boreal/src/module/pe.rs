@@ -1003,6 +1003,8 @@ impl Module for Pe {
             #[cfg(feature = "authenticode")]
             ("number_of_signatures", Type::Integer),
             #[cfg(feature = "authenticode")]
+            ("is_signed", Type::Integer),
+            #[cfg(feature = "authenticode")]
             (
                 "signatures",
                 Type::array(Type::object([
@@ -1015,6 +1017,73 @@ impl Module for Pe {
                     ("serial", Type::Bytes),
                     ("not_before", Type::Integer),
                     ("not_after", Type::Integer),
+                    ("verified", Type::Integer),
+                    ("digest_alg", Type::Bytes),
+                    ("digest", Type::Bytes),
+                    ("file_digest", Type::Bytes),
+                    ("number_of_certificates", Type::Integer),
+                    (
+                        "certificates",
+                        Type::array(Type::object([
+                            ("thumbprint", Type::Bytes),
+                            ("issuer", Type::Bytes),
+                            ("subject", Type::Bytes),
+                            ("version", Type::Integer),
+                            ("algorithm", Type::Bytes),
+                            ("algorithm_oid", Type::Bytes),
+                            ("serial", Type::Bytes),
+                            ("not_before", Type::Integer),
+                            ("not_after", Type::Integer),
+                        ])),
+                    ),
+                    (
+                        "signer_info",
+                        Type::object([
+                            ("program_name", Type::Bytes),
+                            ("digest", Type::Bytes),
+                            ("digest_alg", Type::Bytes),
+                            ("length_of_chain", Type::Integer),
+                            (
+                                "chain",
+                                Type::array(Type::object([
+                                    ("thumbprint", Type::Bytes),
+                                    ("issuer", Type::Bytes),
+                                    ("subject", Type::Bytes),
+                                    ("version", Type::Integer),
+                                    ("algorithm", Type::Bytes),
+                                    ("algorithm_oid", Type::Bytes),
+                                    ("serial", Type::Bytes),
+                                    ("not_before", Type::Integer),
+                                    ("not_after", Type::Integer),
+                                ])),
+                            ),
+                        ]),
+                    ),
+                    ("number_of_countersignatures", Type::Integer),
+                    (
+                        "countersignatures",
+                        Type::array(Type::object([
+                            ("verified", Type::Integer),
+                            ("sign_time", Type::Integer),
+                            ("digest", Type::Bytes),
+                            ("digest_alg", Type::Bytes),
+                            ("length_of_chain", Type::Integer),
+                            (
+                                "chain",
+                                Type::array(Type::object([
+                                    ("thumbprint", Type::Bytes),
+                                    ("issuer", Type::Bytes),
+                                    ("subject", Type::Bytes),
+                                    ("version", Type::Integer),
+                                    ("algorithm", Type::Bytes),
+                                    ("algorithm_oid", Type::Bytes),
+                                    ("serial", Type::Bytes),
+                                    ("not_before", Type::Integer),
+                                    ("not_after", Type::Integer),
+                                ])),
+                            ),
+                        ])),
+                    ),
                     (
                         "valid_on",
                         Type::function(vec![vec![Type::Integer]], Type::Integer),

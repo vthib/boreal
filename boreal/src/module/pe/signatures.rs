@@ -1,4 +1,9 @@
-use authenticode_parser::{Authenticode, AuthenticodeArray};
+use std::collections::HashMap;
+
+use authenticode_parser::{
+    Authenticode, AuthenticodeArray, AuthenticodeVerify, Certificate, CounterSignatureVerify,
+    Countersignature, Signer,
+};
 use object::{pe, read::pe::DataDirectories};
 
 use super::Value;
@@ -27,25 +32,97 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Val
 }
 
 fn process_authenticode(auth: &AuthenticodeArray, signatures: &mut Vec<Value>) {
+    // TODO: is_signed
+
     for sig in auth.signatures() {
-        signatures.push(signer_to_value(sig).unwrap_or_else(|| Value::object([])));
+        let verified =
+            Value::Integer((sig.verify_flags() == Some(AuthenticodeVerify::Valid)).into());
+        let digest = sig.digest().map(hex::encode).map(Value::bytes);
+        let digest_alg = sig.digest_alg().map(Value::bytes);
+        let file_digest = sig.file_digest().map(hex::encode).map(Value::bytes);
+
+        // TODO on length_of_chain or other lengths, behavior is not aligned:
+        // yara does not save the length if the pointer is 0.
+        let certs = process_certs(sig.certs());
+        let signer_info = sig
+            .signer()
+            .as_ref()
+            .map_or(Value::Undefined, signer_to_value);
+        let countersigs: Vec<_> = sig.countersigs().iter().map(countersig_to_value).collect();
+
+        let mut map = get_legacy_signer_data(sig);
+        map.extend([
+            ("verified", verified),
+            ("digest_alg", digest_alg.unwrap_or(Value::Undefined)),
+            ("digest", digest.unwrap_or(Value::Undefined)),
+            ("file_digest", file_digest.unwrap_or(Value::Undefined)),
+            ("number_of_certificates", certs.len().into()),
+            ("certificates", Value::Array(certs)),
+            ("signer_info", signer_info),
+            ("number_of_countersignatures", countersigs.len().into()),
+            ("countersignatures", Value::Array(countersigs)),
+        ]);
+
+        signatures.push(Value::Object(map));
     }
 }
 
-fn signer_to_value(sig: &Authenticode) -> Option<Value> {
-    let signer = sig.signer()?;
-    let cert = signer.certificate_chain().get(0)?;
+fn process_certs(certs: &[Certificate]) -> Vec<Value> {
+    certs
+        .iter()
+        .map(|v| cert_to_map(v, false))
+        .map(Value::Object)
+        .collect()
+}
 
-    let thumbprint_ascii = match cert.sha1() {
-        Some(sha) => Value::bytes(hex::encode(sha)),
-        None => Value::Undefined,
-    };
+fn signer_to_value(signer: &Signer) -> Value {
+    let program_name = signer.program_name().map(Value::bytes);
+    let digest = signer.digest().map(hex::encode).map(Value::bytes);
+    let digest_alg = signer.digest_alg().map(Value::bytes);
+    let chain = process_certs(signer.certificate_chain());
 
+    Value::object([
+        ("program_name", program_name.unwrap_or(Value::Undefined)),
+        ("digest", digest.unwrap_or(Value::Undefined)),
+        ("digest_alg", digest_alg.unwrap_or(Value::Undefined)),
+        ("length_of_chain", chain.len().into()),
+        ("chain", Value::Array(chain)),
+    ])
+}
+
+fn countersig_to_value(countersig: &Countersignature) -> Value {
+    let verified =
+        Value::Integer((countersig.verify_flags() == Some(CounterSignatureVerify::Valid)).into());
+    let sign_time = countersig.sign_time().into();
+    let digest = countersig.digest().map(hex::encode).map(Value::bytes);
+    let digest_alg = countersig.digest_alg().map(Value::bytes);
+    let chain = process_certs(countersig.certificate_chain());
+
+    Value::object([
+        ("verified", verified),
+        ("sign_time", sign_time),
+        ("digest", digest.unwrap_or(Value::Undefined)),
+        ("digest_alg", digest_alg.unwrap_or(Value::Undefined)),
+        ("length_of_chain", chain.len().into()),
+        ("chain", Value::Array(chain)),
+    ])
+}
+
+fn get_legacy_signer_data(sig: &Authenticode) -> HashMap<&'static str, Value> {
+    sig.signer()
+        .as_ref()
+        .and_then(|signer| signer.certificate_chain().get(0))
+        .map(|v| cert_to_map(v, true))
+        .unwrap_or_default()
+}
+
+fn cert_to_map(cert: &Certificate, with_valid_on: bool) -> HashMap<&'static str, Value> {
+    let thumbprint_ascii = cert.sha1().map(hex::encode).map(Value::bytes);
     let not_before = cert.not_before();
     let not_after = cert.not_after();
 
-    Some(Value::object([
-        ("thumbprint", thumbprint_ascii.into()),
+    [
+        ("thumbprint", thumbprint_ascii.unwrap_or(Value::Undefined)),
         ("issuer", cert.issuer().map(ToOwned::to_owned).into()),
         ("subject", cert.subject().map(ToOwned::to_owned).into()),
         ("version", (cert.version() + 1).into()),
@@ -55,13 +132,18 @@ fn signer_to_value(sig: &Authenticode) -> Option<Value> {
             cert.sig_alg_oid().map(ToOwned::to_owned).into(),
         ),
         ("serial", cert.serial().map(ToOwned::to_owned).into()),
+        ("not_before", not_before.into()),
+        ("not_after", not_after.into()),
         (
             "valid_on",
-            Value::function(move |_, args| valid_on(args, not_before, not_after)),
+            if with_valid_on {
+                Value::function(move |_, args| valid_on(args, not_before, not_after))
+            } else {
+                Value::Undefined
+            },
         ),
-        ("not_before", cert.not_before().into()),
-        ("not_after", cert.not_after().into()),
-    ]))
+    ]
+    .into()
 }
 
 fn valid_on(args: Vec<Value>, not_before: i64, not_after: i64) -> Option<Value> {
