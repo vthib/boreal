@@ -367,7 +367,7 @@ fn test_pe() {
     );
 
     // FIXME: authenticode library
-    // #[cfg(feature = "openssl")]
+    // #[cfg(feature = "authenticode")]
     // check_file(
     //     "import \"pe\"
     //     rule test {
@@ -469,7 +469,7 @@ fn test_pe() {
     //     true
     // );
 
-    #[cfg(feature = "openssl")]
+    #[cfg(feature = "authenticode")]
     check_file(
         "import \"pe\"
         rule test {

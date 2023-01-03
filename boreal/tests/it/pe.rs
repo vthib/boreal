@@ -260,7 +260,7 @@ rule test {
     );
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(feature = "authenticode")]
 #[test]
 fn test_signatures_valid_on() {
     fn check_valid_on(value: i64, expected_res: bool) {
@@ -289,7 +289,7 @@ fn test_signatures_valid_on() {
     check_valid_on(1559692800, false);
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(feature = "authenticode")]
 #[test]
 fn test_signatures_nested() {
     check_file(

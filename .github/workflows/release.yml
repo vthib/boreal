@@ -95,7 +95,7 @@ jobs:
         target: ${{ matrix.target }}
 
     - name: Build release binary
-      run: cargo build --verbose --release --features openssl --target=${{ matrix.target }}
+      run: cargo build --verbose --release --features authenticode --target=${{ matrix.target }}
 
     - name: Strip release binary (linux)
       if: matrix.os == 'ubuntu-22.04'

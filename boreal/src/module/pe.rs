@@ -15,10 +15,7 @@ use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
 mod debug;
 mod ord;
-#[cfg(feature = "openssl")]
-#[allow(clippy::cast_possible_wrap)]
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_sign_loss)]
+#[cfg(feature = "authenticode")]
 mod signatures;
 mod version_info;
 
@@ -1003,9 +1000,9 @@ impl Module for Pe {
             ),
             ("number_of_resources", Type::Integer),
             ("pdb_path", Type::Bytes),
-            #[cfg(feature = "openssl")]
+            #[cfg(feature = "authenticode")]
             ("number_of_signatures", Type::Integer),
-            #[cfg(feature = "openssl")]
+            #[cfg(feature = "authenticode")]
             (
                 "signatures",
                 Type::array(Type::object([
@@ -1208,7 +1205,7 @@ fn parse_file<Pe: ImageNtHeaders>(
         add_resources(&data_dirs, mem, sections, data, &mut map);
     }
 
-    #[cfg(feature = "openssl")]
+    #[cfg(feature = "authenticode")]
     if let Some(signatures) = signatures::get_signatures(&data_dirs, mem) {
         // signatures has max MAX_PE_CERTS element, it will always fill in a i64.
         let _r = map.insert(

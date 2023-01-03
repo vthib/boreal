@@ -14,7 +14,7 @@ name = "boreal"
 path = "src/main.rs"
 
 [features]
-openssl = ["boreal/openssl"]
+authenticode = ["boreal/authenticode"]
 
 [dependencies]
 boreal = { path = "../boreal", version = "0.2.0" }
