@@ -25,7 +25,7 @@ object = ["dep:object"]
 
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
-openssl = ["dep:openssl", "dep:openssl-sys", "dep:foreign-types-shared"]
+authenticode = ["dep:authenticode-parser"]
 
 # Enables criterion for benches
 # Criterion is so chunky, I don't want it in my dev builds
@@ -55,10 +55,8 @@ tlsh2 = { version = "0.1", optional = true }
 # "object" feature
 object = { version = "0.30", optional = true, default-features = false, features = ["read"] }
 
-# "openssl" feature
-openssl = { version = "0.10", optional = true }
-openssl-sys = { version = "0.9", optional = true }
-foreign-types-shared = { version = "0.1", optional = true }
+# "authenticode" feature
+authenticode-parser = { version = "0.3", optional = true }
 
 # There is no need for HTML reports, but criterion forces us to declare this
 # to remove a warning...
