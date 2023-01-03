@@ -8,7 +8,7 @@ use object::{pe, read::pe::DataDirectories};
 
 use super::Value;
 
-pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Value>> {
+pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<(Vec<Value>, bool)> {
     let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_SECURITY)?;
     let (va, size) = dir.address_range();
     let va = va as usize;
@@ -24,19 +24,18 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Val
 
     // TODO: use parse instead of parse_pe as we have the payload already?
     let auth = authenticode_parser::parse_pe(&token, mem)?;
-
-    let mut signatures = Vec::new();
-    process_authenticode(&auth, &mut signatures);
-
-    Some(signatures)
+    Some(process_authenticode(&auth))
 }
 
-fn process_authenticode(auth: &AuthenticodeArray, signatures: &mut Vec<Value>) {
-    // TODO: is_signed
+fn process_authenticode(auth: &AuthenticodeArray) -> (Vec<Value>, bool) {
+    let mut signatures = Vec::new();
+    // Whole pe is signed if at least one signature is signed.
+    let mut is_signed = false;
 
     for sig in auth.signatures() {
-        let verified =
-            Value::Integer((sig.verify_flags() == Some(AuthenticodeVerify::Valid)).into());
+        let verified = sig.verify_flags() == Some(AuthenticodeVerify::Valid);
+        is_signed = is_signed || verified;
+
         let digest = sig.digest().map(hex::encode).map(Value::bytes);
         let digest_alg = sig.digest_alg().map(Value::bytes);
         let file_digest = sig.file_digest().map(hex::encode).map(Value::bytes);
@@ -52,7 +51,7 @@ fn process_authenticode(auth: &AuthenticodeArray, signatures: &mut Vec<Value>) {
 
         let mut map = get_legacy_signer_data(sig);
         map.extend([
-            ("verified", verified),
+            ("verified", Value::Integer(verified.into())),
             ("digest_alg", digest_alg.unwrap_or(Value::Undefined)),
             ("digest", digest.unwrap_or(Value::Undefined)),
             ("file_digest", file_digest.unwrap_or(Value::Undefined)),
@@ -65,6 +64,8 @@ fn process_authenticode(auth: &AuthenticodeArray, signatures: &mut Vec<Value>) {
 
         signatures.push(Value::Object(map));
     }
+
+    (signatures, is_signed)
 }
 
 fn process_certs(certs: &[Certificate]) -> Vec<Value> {
