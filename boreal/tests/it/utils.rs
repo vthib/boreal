@@ -37,8 +37,8 @@ impl Compiler {
         Self::new_inner(false)
     }
 
-    pub fn new_inner(with_yara: bool) -> Self {
-        let mut compiler = boreal::Compiler::new();
+    fn new_inner(with_yara: bool) -> Self {
+        let mut compiler = build_compiler();
         compiler.add_module(super::module_tests::Tests);
 
         let mut this = Self {
@@ -168,6 +168,33 @@ impl Compiler {
             yara_rules: self.yara_compiler.map(|v| v.compile_rules().unwrap()),
         }
     }
+}
+
+#[cfg(all(feature = "object", feature = "authenticode"))]
+fn build_compiler() -> boreal::Compiler {
+    use boreal::module::Pe;
+    use std::sync::Mutex;
+
+    static PE_MODULE: Mutex<Option<Pe>> = Mutex::new(None);
+
+    let mut _guard = PE_MODULE.lock().unwrap();
+    let pe = _guard.get_or_insert_with(|| {
+        // Safety:
+        // - This is in a critical section that ensures a single thread can call this function
+        // - The only openssl code in this codebase is in the authenticode parsing, called when
+        //   scanning. Since to scan rules must first be compiled, and this is called on the very
+        //   first build of a compiler, there can be no other threads calling into OpenSSL while
+        //   this is called.
+        unsafe { Pe::new_with_signatures() }
+    });
+    let mut compiler = boreal::Compiler::new_without_pe_module();
+    compiler.add_module(*pe);
+    compiler
+}
+
+#[cfg(not(all(feature = "object", feature = "authenticode")))]
+fn build_compiler() -> boreal::Compiler {
+    boreal::Compiler::new()
 }
 
 impl Checker {
