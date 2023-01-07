@@ -2,13 +2,17 @@ use std::collections::HashMap;
 
 use authenticode_parser::{
     Authenticode, AuthenticodeArray, AuthenticodeVerify, Certificate, CounterSignatureVerify,
-    Countersignature, Signer,
+    Countersignature, InitializationToken, Signer,
 };
 use object::{pe, read::pe::DataDirectories};
 
 use super::Value;
 
-pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<(Vec<Value>, bool)> {
+pub fn get_signatures(
+    data_dirs: &DataDirectories,
+    mem: &[u8],
+    token: InitializationToken,
+) -> Option<(Vec<Value>, bool)> {
     let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_SECURITY)?;
     let (va, size) = dir.address_range();
     let va = va as usize;
@@ -18,9 +22,6 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<(Vec<Va
     if va == 0 || va > mem.len() || size > mem.len() || end > mem.len() {
         return None;
     }
-
-    // FIXME: this shouldn't be done here
-    let token = unsafe { authenticode_parser::InitializationToken::new() };
 
     // TODO: use parse instead of parse_pe as we have the payload already?
     let auth = authenticode_parser::parse_pe(&token, mem)?;
