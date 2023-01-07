@@ -29,7 +29,10 @@ const MAX_NB_VERSION_INFOS: usize = 32768;
 
 /// `pe` module. Allows inspecting PE inputs.
 #[derive(Debug)]
-pub struct Pe;
+pub struct Pe {
+    #[cfg(feature = "authenticode")]
+    token: authenticode_parser::InitializationToken,
+}
 
 #[repr(u8)]
 enum ImportType {
@@ -1100,11 +1103,11 @@ impl Module for Pe {
         let res = match FileKind::parse(ctx.mem) {
             Ok(FileKind::Pe32) => {
                 data.is_32bit = true;
-                parse_file::<ImageNtHeaders32>(ctx.mem, &mut data)
+                self.parse_file::<ImageNtHeaders32>(ctx.mem, &mut data)
             }
             Ok(FileKind::Pe64) => {
                 data.is_32bit = false;
-                parse_file::<ImageNtHeaders64>(ctx.mem, &mut data)
+                self.parse_file::<ImageNtHeaders64>(ctx.mem, &mut data)
             }
             _ => None,
         };
@@ -1123,170 +1126,189 @@ impl ModuleData for Pe {
     type Data = Data;
 }
 
-fn parse_file<Pe: ImageNtHeaders>(
-    mem: &[u8],
-    data: &mut Data,
-) -> Option<HashMap<&'static str, Value>> {
-    let dos_header = ImageDosHeader::parse(mem).ok()?;
-    let mut offset = dos_header.nt_headers_offset().into();
-    let (nt_headers, data_dirs) = Pe::parse(mem, &mut offset).ok()?;
-
-    let sections = nt_headers.sections(mem, offset).ok();
-
-    let hdr = nt_headers.file_header();
-    let opt_hdr = nt_headers.optional_header();
-
-    let symbols = hdr.symbols(mem).ok();
-
-    let ep = opt_hdr.address_of_entry_point();
-
-    let characteristics = hdr.characteristics.get(LE);
-    // libyara does not return a bool, but the result of the bitwise and...
-    data.is_dll = characteristics & pe::IMAGE_FILE_DLL;
-
-    let mut map: HashMap<_, _> = [
-        ("is_pe", Value::Integer(1)),
-        // File header
-        ("machine", hdr.machine.get(LE).into()),
-        ("number_of_sections", hdr.number_of_sections.get(LE).into()),
-        ("timestamp", hdr.time_date_stamp.get(LE).into()),
-        (
-            "pointer_to_symbol_table",
-            hdr.pointer_to_symbol_table.get(LE).into(),
-        ),
-        ("number_of_symbols", hdr.number_of_symbols.get(LE).into()),
-        (
-            "size_of_optional_header",
-            hdr.size_of_optional_header.get(LE).into(),
-        ),
-        ("characteristics", characteristics.into()),
-        //
-        (
-            "entry_point",
-            sections
-                .and_then(|sections| va_to_file_offset(mem, &sections, ep))
-                .map_or(-1, i64::from)
-                .into(),
-        ),
-        ("entry_point_raw", ep.into()),
-        ("image_base", opt_hdr.image_base().into()),
-        (
-            "number_of_rva_and_sizes",
-            opt_hdr.number_of_rva_and_sizes().into(),
-        ),
-        // Optional header
-        ("opthdr_magic", opt_hdr.magic().into()),
-        ("size_of_code", opt_hdr.size_of_code().into()),
-        (
-            "size_of_initialized_data",
-            opt_hdr.size_of_initialized_data().into(),
-        ),
-        (
-            "size_of_uninitialized_data",
-            opt_hdr.size_of_uninitialized_data().into(),
-        ),
-        ("base_of_code", opt_hdr.base_of_code().into()),
-        ("base_of_data", opt_hdr.base_of_data().into()),
-        ("section_alignment", opt_hdr.section_alignment().into()),
-        ("file_alignment", opt_hdr.file_alignment().into()),
-        (
-            "linker_version",
-            Value::object([
-                ("major", opt_hdr.major_linker_version().into()),
-                ("minor", opt_hdr.minor_linker_version().into()),
-            ]),
-        ),
-        (
-            "os_version",
-            Value::object([
-                ("major", opt_hdr.major_operating_system_version().into()),
-                ("minor", opt_hdr.minor_operating_system_version().into()),
-            ]),
-        ),
-        (
-            "image_version",
-            Value::object([
-                ("major", opt_hdr.major_image_version().into()),
-                ("minor", opt_hdr.minor_image_version().into()),
-            ]),
-        ),
-        (
-            "subsystem_version",
-            Value::object([
-                ("major", opt_hdr.major_subsystem_version().into()),
-                ("minor", opt_hdr.minor_subsystem_version().into()),
-            ]),
-        ),
-        ("win32_version_value", opt_hdr.win32_version_value().into()),
-        ("size_of_image", opt_hdr.size_of_image().into()),
-        ("size_of_headers", opt_hdr.size_of_headers().into()),
-        ("checksum", opt_hdr.check_sum().into()),
-        ("subsystem", opt_hdr.subsystem().into()),
-        ("dll_characteristics", opt_hdr.dll_characteristics().into()),
-        (
-            "size_of_stack_reserve",
-            opt_hdr.size_of_stack_reserve().into(),
-        ),
-        (
-            "size_of_stack_commit",
-            opt_hdr.size_of_stack_commit().into(),
-        ),
-        (
-            "size_of_heap_reserve",
-            opt_hdr.size_of_heap_reserve().into(),
-        ),
-        ("size_of_heap_commit", opt_hdr.size_of_heap_commit().into()),
-        ("loader_flags", opt_hdr.loader_flags().into()),
-        //
-        ("data_directories", data_directories(data_dirs)),
-        (
-            "sections",
-            sections.as_ref().map_or(Value::Undefined, |sections| {
-                sections_to_value(sections, symbols.as_ref().map(SymbolTable::strings), data)
-            }),
-        ),
-        (
-            "overlay",
-            sections
-                .as_ref()
-                .map_or(Value::Undefined, |sections| overlay(sections, mem)),
-        ),
-        (
-            "pdb_path",
-            sections
-                .as_ref()
-                .and_then(|sections| debug::pdb_path(&data_dirs, mem, sections))
-                .unwrap_or(Value::Undefined),
-        ),
-        (
-            "rich_signature",
-            RichHeaderInfo::parse(mem, dos_header.nt_headers_offset().into())
-                .map_or(Value::Undefined, |info| rich_signature(info, mem, data)),
-        ),
-        ("number_of_version_infos", 0.into()),
-    ]
-    .into();
-
-    if let Some(sections) = sections.as_ref() {
-        add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
-        add_delay_load_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
-        add_exports(&data_dirs, mem, sections, data, &mut map);
-        add_resources(&data_dirs, mem, sections, data, &mut map);
+impl Pe {
+    /// Create a PE module.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            // FIXME: expose this unsafeness to the user.
+            #[cfg(feature = "authenticode")]
+            token: unsafe { authenticode_parser::InitializationToken::new() },
+        }
     }
 
-    #[cfg(feature = "authenticode")]
-    if let Some((signatures, is_signed)) = signatures::get_signatures(&data_dirs, mem) {
-        let _r = map.insert(
-            "number_of_signatures",
-            Value::Integer(signatures.len() as _),
-        );
-        let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
-        let _r = map.insert("signatures", Value::Array(signatures));
-    } else {
-        let _r = map.insert("number_of_signatures", Value::Integer(0));
-    }
+    // `self` is used with feature = "authenticode", but unused without. Ignore the lints for when
+    // the feature is disabled.
+    #[allow(clippy::unused_self)]
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn parse_file<Pe: ImageNtHeaders>(
+        &self,
+        mem: &[u8],
+        data: &mut Data,
+    ) -> Option<HashMap<&'static str, Value>> {
+        let dos_header = ImageDosHeader::parse(mem).ok()?;
+        let mut offset = dos_header.nt_headers_offset().into();
+        let (nt_headers, data_dirs) = Pe::parse(mem, &mut offset).ok()?;
 
-    Some(map)
+        let sections = nt_headers.sections(mem, offset).ok();
+
+        let hdr = nt_headers.file_header();
+        let opt_hdr = nt_headers.optional_header();
+
+        let symbols = hdr.symbols(mem).ok();
+
+        let ep = opt_hdr.address_of_entry_point();
+
+        let characteristics = hdr.characteristics.get(LE);
+        // libyara does not return a bool, but the result of the bitwise and...
+        data.is_dll = characteristics & pe::IMAGE_FILE_DLL;
+
+        let mut map: HashMap<_, _> = [
+            ("is_pe", Value::Integer(1)),
+            // File header
+            ("machine", hdr.machine.get(LE).into()),
+            ("number_of_sections", hdr.number_of_sections.get(LE).into()),
+            ("timestamp", hdr.time_date_stamp.get(LE).into()),
+            (
+                "pointer_to_symbol_table",
+                hdr.pointer_to_symbol_table.get(LE).into(),
+            ),
+            ("number_of_symbols", hdr.number_of_symbols.get(LE).into()),
+            (
+                "size_of_optional_header",
+                hdr.size_of_optional_header.get(LE).into(),
+            ),
+            ("characteristics", characteristics.into()),
+            //
+            (
+                "entry_point",
+                sections
+                    .and_then(|sections| va_to_file_offset(mem, &sections, ep))
+                    .map_or(-1, i64::from)
+                    .into(),
+            ),
+            ("entry_point_raw", ep.into()),
+            ("image_base", opt_hdr.image_base().into()),
+            (
+                "number_of_rva_and_sizes",
+                opt_hdr.number_of_rva_and_sizes().into(),
+            ),
+            // Optional header
+            ("opthdr_magic", opt_hdr.magic().into()),
+            ("size_of_code", opt_hdr.size_of_code().into()),
+            (
+                "size_of_initialized_data",
+                opt_hdr.size_of_initialized_data().into(),
+            ),
+            (
+                "size_of_uninitialized_data",
+                opt_hdr.size_of_uninitialized_data().into(),
+            ),
+            ("base_of_code", opt_hdr.base_of_code().into()),
+            ("base_of_data", opt_hdr.base_of_data().into()),
+            ("section_alignment", opt_hdr.section_alignment().into()),
+            ("file_alignment", opt_hdr.file_alignment().into()),
+            (
+                "linker_version",
+                Value::object([
+                    ("major", opt_hdr.major_linker_version().into()),
+                    ("minor", opt_hdr.minor_linker_version().into()),
+                ]),
+            ),
+            (
+                "os_version",
+                Value::object([
+                    ("major", opt_hdr.major_operating_system_version().into()),
+                    ("minor", opt_hdr.minor_operating_system_version().into()),
+                ]),
+            ),
+            (
+                "image_version",
+                Value::object([
+                    ("major", opt_hdr.major_image_version().into()),
+                    ("minor", opt_hdr.minor_image_version().into()),
+                ]),
+            ),
+            (
+                "subsystem_version",
+                Value::object([
+                    ("major", opt_hdr.major_subsystem_version().into()),
+                    ("minor", opt_hdr.minor_subsystem_version().into()),
+                ]),
+            ),
+            ("win32_version_value", opt_hdr.win32_version_value().into()),
+            ("size_of_image", opt_hdr.size_of_image().into()),
+            ("size_of_headers", opt_hdr.size_of_headers().into()),
+            ("checksum", opt_hdr.check_sum().into()),
+            ("subsystem", opt_hdr.subsystem().into()),
+            ("dll_characteristics", opt_hdr.dll_characteristics().into()),
+            (
+                "size_of_stack_reserve",
+                opt_hdr.size_of_stack_reserve().into(),
+            ),
+            (
+                "size_of_stack_commit",
+                opt_hdr.size_of_stack_commit().into(),
+            ),
+            (
+                "size_of_heap_reserve",
+                opt_hdr.size_of_heap_reserve().into(),
+            ),
+            ("size_of_heap_commit", opt_hdr.size_of_heap_commit().into()),
+            ("loader_flags", opt_hdr.loader_flags().into()),
+            //
+            ("data_directories", data_directories(data_dirs)),
+            (
+                "sections",
+                sections.as_ref().map_or(Value::Undefined, |sections| {
+                    sections_to_value(sections, symbols.as_ref().map(SymbolTable::strings), data)
+                }),
+            ),
+            (
+                "overlay",
+                sections
+                    .as_ref()
+                    .map_or(Value::Undefined, |sections| overlay(sections, mem)),
+            ),
+            (
+                "pdb_path",
+                sections
+                    .as_ref()
+                    .and_then(|sections| debug::pdb_path(&data_dirs, mem, sections))
+                    .unwrap_or(Value::Undefined),
+            ),
+            (
+                "rich_signature",
+                RichHeaderInfo::parse(mem, dos_header.nt_headers_offset().into())
+                    .map_or(Value::Undefined, |info| rich_signature(info, mem, data)),
+            ),
+            ("number_of_version_infos", 0.into()),
+        ]
+        .into();
+
+        if let Some(sections) = sections.as_ref() {
+            add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
+            add_delay_load_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
+            add_exports(&data_dirs, mem, sections, data, &mut map);
+            add_resources(&data_dirs, mem, sections, data, &mut map);
+        }
+
+        #[cfg(feature = "authenticode")]
+        if let Some((signatures, is_signed)) =
+            signatures::get_signatures(&data_dirs, mem, self.token)
+        {
+            let _r = map.insert(
+                "number_of_signatures",
+                Value::Integer(signatures.len() as _),
+            );
+            let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
+            let _r = map.insert("signatures", Value::Array(signatures));
+        } else {
+            let _r = map.insert("number_of_signatures", Value::Integer(0));
+        }
+
+        Some(map)
+    }
 }
 
 fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {

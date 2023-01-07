@@ -113,7 +113,7 @@ impl Compiler {
         #[cfg(feature = "object")]
         let _r = this.add_module(crate::module::MachO);
         #[cfg(feature = "object")]
-        let _r = this.add_module(crate::module::Pe);
+        let _r = this.add_module(crate::module::Pe::new());
 
         this
     }
