@@ -72,3 +72,6 @@ yara = { version = "0.17", features = ["vendored"] }
 [[bench]]
 name = "benches"
 harness = false
+
+[package.metadata.docs.rs]
+features = ["authenticode"]

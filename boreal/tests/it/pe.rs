@@ -328,7 +328,7 @@ rule test {
 #[ignore]
 fn test_coverage_pe_ord_and_delay() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/pe/ord_and_delay.exe",
         &[
             "pe.delayed_import_details",
@@ -344,7 +344,7 @@ fn test_coverage_pe_ord_and_delay() {
 #[ignore]
 fn test_coverage_pe_resources_only() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/pe/resources_only.dll",
         &[
             #[cfg(not(feature = "openssl"))]
@@ -357,7 +357,7 @@ fn test_coverage_pe_resources_only() {
 #[ignore]
 fn test_coverage_pe_libyara_079a472d() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/\
         079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
         &[
@@ -376,7 +376,7 @@ fn test_coverage_pe_libyara_079a472d() {
 #[ignore]
 fn test_coverage_pe_libyara_079a472d_upx() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/\
         079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx",
         &[
@@ -392,7 +392,7 @@ fn test_coverage_pe_libyara_079a472d_upx() {
 #[ignore]
 fn test_coverage_pe_libyara_0ca09bde() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/\
         0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171",
         &[
@@ -407,7 +407,7 @@ fn test_coverage_pe_libyara_0ca09bde() {
 #[ignore]
 fn test_coverage_pe_libyara_33fc70f9() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/\
         33fc70f99be6d2833ae48852d611c8048d0c053ed0b2c626db4dbe902832a08b",
         &[
@@ -422,7 +422,7 @@ fn test_coverage_pe_libyara_33fc70f9() {
 #[ignore]
 fn test_coverage_pe_libyara_3b8b9015() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/\
         3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c",
         &[
@@ -439,7 +439,7 @@ fn test_coverage_pe_libyara_3b8b9015() {
 #[ignore]
 fn test_coverage_pe_libyara_ca21e1c32() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/\
         ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386",
         &[
@@ -483,7 +483,7 @@ fn test_coverage_pe_libyara_ca21e1c32() {
 #[ignore]
 fn test_coverage_pe_libyara_mtxex() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/mtxex.dll",
         &[
             "pe.import_details[1].functions",
@@ -498,7 +498,7 @@ fn test_coverage_pe_libyara_mtxex() {
 #[ignore]
 fn test_coverage_pe_libyara_mtxex_modified() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll",
         &[
             "pe.import_details[1].functions",
@@ -513,7 +513,7 @@ fn test_coverage_pe_libyara_mtxex_modified() {
 #[ignore]
 fn test_coverage_pe_libyara_pe_imports() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/pe_imports",
         &[
             "pe.delayed_import_details",
@@ -527,7 +527,7 @@ fn test_coverage_pe_libyara_pe_imports() {
 #[ignore]
 fn test_coverage_pe_libyara_pe_mingw() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/pe_mingw",
         &[
             "pe.rich_signature",
@@ -543,7 +543,7 @@ fn test_coverage_pe_libyara_pe_mingw() {
 #[ignore]
 fn test_coverage_pe_libyara_tiny() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/tiny",
         &[
             "pe.rich_signature",
@@ -559,7 +559,7 @@ fn test_coverage_pe_libyara_tiny() {
 #[ignore]
 fn test_coverage_pe_libyara_tiny_51ff() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/tiny-idata-51ff",
         &[
             "pe.rich_signature",
@@ -575,7 +575,7 @@ fn test_coverage_pe_libyara_tiny_51ff() {
 #[ignore]
 fn test_coverage_pe_libyara_tiny_5200() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/tiny-idata-5200",
         &[
             "pe.rich_signature",
@@ -617,7 +617,7 @@ fn test_coverage_pe_libyara_tiny_5200() {
 #[ignore]
 fn test_coverage_pe_libyara_tiny_overlay() {
     compare_module_values_on_file(
-        Pe::new(),
+        Pe::default(),
         "tests/assets/libyara/data/tiny-overlay",
         &[
             "pe.rich_signature",

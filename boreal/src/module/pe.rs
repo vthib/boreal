@@ -28,10 +28,10 @@ const MAX_NB_DATA_DIRECTORIES: usize = 32768;
 const MAX_NB_VERSION_INFOS: usize = 32768;
 
 /// `pe` module. Allows inspecting PE inputs.
-#[derive(Debug)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct Pe {
     #[cfg(feature = "authenticode")]
-    token: authenticode_parser::InitializationToken,
+    token: Option<authenticode_parser::InitializationToken>,
 }
 
 #[repr(u8)]
@@ -1127,13 +1127,18 @@ impl ModuleData for Pe {
 }
 
 impl Pe {
-    /// Create a PE module.
+    /// Create a PE module with signatures parsing enabled.
+    ///
+    /// # Safety
+    ///
+    /// The authenticode parsing requires creating OpenSSL objects, which is not thread-safe and
+    /// should be done while no other calls into OpenSSL can race with this call. Therefore,
+    /// this function should for example be called before setting up any multithreaded environment.
     #[must_use]
-    pub fn new() -> Self {
+    #[cfg(feature = "authenticode")]
+    pub unsafe fn new_with_signatures() -> Self {
         Self {
-            // FIXME: expose this unsafeness to the user.
-            #[cfg(feature = "authenticode")]
-            token: unsafe { authenticode_parser::InitializationToken::new() },
+            token: Some(authenticode_parser::InitializationToken::new()),
         }
     }
 
@@ -1294,17 +1299,19 @@ impl Pe {
         }
 
         #[cfg(feature = "authenticode")]
-        if let Some((signatures, is_signed)) =
-            signatures::get_signatures(&data_dirs, mem, self.token)
-        {
-            let _r = map.insert(
-                "number_of_signatures",
-                Value::Integer(signatures.len() as _),
-            );
-            let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
-            let _r = map.insert("signatures", Value::Array(signatures));
-        } else {
-            let _r = map.insert("number_of_signatures", Value::Integer(0));
+        if let Some(token) = self.token {
+            if let Some((signatures, is_signed)) =
+                signatures::get_signatures(&data_dirs, mem, token)
+            {
+                let _r = map.insert(
+                    "number_of_signatures",
+                    Value::Integer(signatures.len() as _),
+                );
+                let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
+                let _r = map.insert("signatures", Value::Array(signatures));
+            } else {
+                let _r = map.insert("number_of_signatures", Value::Integer(0));
+            }
         }
 
         Some(map)
