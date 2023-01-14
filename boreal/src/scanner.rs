@@ -591,7 +591,7 @@ mod tests {
     fn test_eval_with_poison(rule_str: &str, mem: &[u8], expected: Option<bool>) {
         let mut compiler = Compiler::default();
         let _ = compiler.add_module(Test);
-        compiler.add_rules_str(rule_str).unwrap();
+        let _r = compiler.add_rules_str(rule_str).unwrap();
         let scanner = compiler.into_scanner();
 
         let scan_data = ScanData::new(

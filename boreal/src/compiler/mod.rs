@@ -143,8 +143,13 @@ impl Compiler {
     ///
     /// An error is returned if failing to parse the rules, or on any I/O error (when trying
     /// to open and read the file, or any following includes).
-    pub fn add_rules_file<T: AsRef<Path>>(&mut self, path: T) -> Result<(), AddRuleError> {
-        self.add_rules_file_inner(path.as_ref(), None)
+    pub fn add_rules_file<T: AsRef<Path>>(
+        &mut self,
+        path: T,
+    ) -> Result<AddRuleStatus, AddRuleError> {
+        let mut status = AddRuleStatus::default();
+        self.add_rules_file_inner(path.as_ref(), None, &mut status)?;
+        Ok(status)
     }
 
     /// Add rules to compile from a file into a specific namespace.
@@ -159,20 +164,23 @@ impl Compiler {
         &mut self,
         path: T,
         namespace: S,
-    ) -> Result<(), AddRuleError> {
-        self.add_rules_file_inner(path.as_ref(), Some(namespace.as_ref()))
+    ) -> Result<AddRuleStatus, AddRuleError> {
+        let mut status = AddRuleStatus::default();
+        self.add_rules_file_inner(path.as_ref(), Some(namespace.as_ref()), &mut status)?;
+        Ok(status)
     }
 
     fn add_rules_file_inner(
         &mut self,
         path: &Path,
         namespace: Option<&str>,
+        status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
         let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError {
             path: Some(path.to_path_buf()),
             kind: AddRuleErrorKind::IO(error),
         })?;
-        self.add_rules_str_inner(&contents, namespace, Some(path))
+        self.add_rules_str_inner(&contents, namespace, Some(path), status)
     }
 
     /// Add rules to compile from a string.
@@ -182,8 +190,13 @@ impl Compiler {
     /// # Errors
     ///
     /// An error is returned if failing to parse the rules, or on any I/O error on includes.
-    pub fn add_rules_str<T: AsRef<str>>(&mut self, rules: T) -> Result<(), AddRuleError> {
-        self.add_rules_str_inner(rules.as_ref(), None, None)
+    pub fn add_rules_str<T: AsRef<str>>(
+        &mut self,
+        rules: T,
+    ) -> Result<AddRuleStatus, AddRuleError> {
+        let mut status = AddRuleStatus::default();
+        self.add_rules_str_inner(rules.as_ref(), None, None, &mut status)?;
+        Ok(status)
     }
 
     /// Add rules to compile from a string into a specific namespace.
@@ -195,8 +208,10 @@ impl Compiler {
         &mut self,
         rules: T,
         namespace: S,
-    ) -> Result<(), AddRuleError> {
-        self.add_rules_str_inner(rules.as_ref(), Some(namespace.as_ref()), None)
+    ) -> Result<AddRuleStatus, AddRuleError> {
+        let mut status = AddRuleStatus::default();
+        self.add_rules_str_inner(rules.as_ref(), Some(namespace.as_ref()), None, &mut status)?;
+        Ok(status)
     }
 
     fn add_rules_str_inner(
@@ -204,13 +219,14 @@ impl Compiler {
         s: &str,
         namespace: Option<&str>,
         current_filepath: Option<&Path>,
+        status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
         let file = parser::parse(s).map_err(|error| AddRuleError {
             path: current_filepath.map(Path::to_path_buf),
             kind: AddRuleErrorKind::Parse(error),
         })?;
         for component in file.components {
-            self.add_component(component, namespace, current_filepath)?;
+            self.add_component(component, namespace, current_filepath, status)?;
         }
         Ok(())
     }
@@ -220,6 +236,7 @@ impl Compiler {
         component: parser::YaraFileComponent,
         namespace_name: Option<&str>,
         current_filepath: Option<&Path>,
+        status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
         let namespace = match namespace_name {
             Some(name) => self
@@ -250,7 +267,7 @@ impl Compiler {
                         error,
                     },
                 })?;
-                self.add_rules_file_inner(&path, namespace_name)?;
+                self.add_rules_file_inner(&path, namespace_name, status)?;
             }
             parser::YaraFileComponent::Import(import) => {
                 match self.available_modules.get_mut(&import.name) {
@@ -312,12 +329,25 @@ impl Compiler {
                 let rule_name = rule.name.clone();
                 let is_global = rule.is_global;
                 let name_span = rule.name_span.clone();
-                let (rule, vars) =
+                let res =
                     rule::compile_rule(*rule, namespace, &self.external_symbols, &self.params)
                         .map_err(|error| AddRuleError {
                             path: current_filepath.map(Path::to_path_buf),
                             kind: AddRuleErrorKind::Compilation(error),
                         })?;
+                let rule::CompiledRule {
+                    rule,
+                    variables,
+                    warnings,
+                } = res;
+                // Append warnings for this rule to the warnings of all the currently added
+                // string or file.
+                status
+                    .warnings
+                    .extend(warnings.into_iter().map(|error| AddRuleError {
+                        path: current_filepath.map(Path::to_path_buf),
+                        kind: AddRuleErrorKind::Compilation(error),
+                    }));
 
                 // Check then insert, to avoid a double clone on the rule name. Maybe
                 // someday we'll get the raw entry API.
@@ -340,7 +370,7 @@ impl Compiler {
                         .insert(rule_name, Some(self.rules.len()));
                     self.rules.push(rule);
                 }
-                self.variables.extend(vars);
+                self.variables.extend(variables);
             }
         }
 
@@ -429,6 +459,20 @@ struct Namespace {
     /// This is a list of rule wildcards that have already been used by rules in
     /// this namespace.
     pub forbidden_rule_prefixes: Vec<String>,
+}
+
+/// Result status of adding a rule to a [`Compiler`].
+#[derive(Default, Debug)]
+#[non_exhaustive]
+pub struct AddRuleStatus {
+    warnings: Vec<AddRuleError>,
+}
+
+impl AddRuleStatus {
+    /// Return the list of warnings generated when adding the rule.
+    pub fn warnings(&self) -> impl Iterator<Item = &AddRuleError> {
+        self.warnings.iter()
+    }
 }
 
 /// Error when adding a rule to a [`Compiler`].
