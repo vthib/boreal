@@ -46,7 +46,7 @@ struct Args {
     threads: Option<usize>,
 }
 
-fn display_diagnostic(path: &Path, err: boreal::compiler::AddRuleError) {
+fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
     let writer = StandardStream::stderr(ColorChoice::Always);
     let config = term::Config::default();
 
@@ -75,9 +75,16 @@ fn main() -> ExitCode {
 
     let scanner = {
         let mut compiler = Compiler::new();
-        if let Err(err) = compiler.add_rules_file(&args.rules_file) {
-            display_diagnostic(&args.rules_file, err);
-            return ExitCode::FAILURE;
+        match compiler.add_rules_file(&args.rules_file) {
+            Ok(status) => {
+                for warn in status.warnings() {
+                    display_diagnostic(&args.rules_file, warn);
+                }
+            }
+            Err(err) => {
+                display_diagnostic(&args.rules_file, &err);
+                return ExitCode::FAILURE;
+            }
         }
 
         compiler.into_scanner()

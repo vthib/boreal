@@ -72,6 +72,9 @@ pub(super) struct RuleCompiler<'a> {
     /// As evaluation of a rule condition involves recursion, this is used to limit the
     /// depth of this recursion and prevent stack overflows.
     pub condition_depth: u32,
+
+    /// Warnings emitted while compiling the rule.
+    pub warnings: Vec<CompilationError>,
 }
 
 /// Helper struct used to track variables being compiled in a rule.
@@ -123,6 +126,7 @@ impl<'a> RuleCompiler<'a> {
             external_symbols,
             params,
             condition_depth: 0,
+            warnings: Vec::new(),
         })
     }
 
@@ -194,12 +198,17 @@ pub(super) fn compile_rule(
     namespace: &mut Namespace,
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
-) -> Result<(Rule, Vec<Variable>), CompilationError> {
-    let (condition, wildcards, vars) = {
+) -> Result<CompiledRule, CompilationError> {
+    let (condition, wildcards, vars, warnings) = {
         let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols, params)?;
         let condition = compile_expression(&mut compiler, rule.condition)?;
 
-        (condition, compiler.rule_wildcard_uses, compiler.variables)
+        (
+            condition,
+            compiler.rule_wildcard_uses,
+            compiler.variables,
+            compiler.warnings,
+        )
     };
     if !wildcards.is_empty() {
         namespace.forbidden_rule_prefixes.extend(wildcards);
@@ -232,8 +241,8 @@ pub(super) fn compile_rule(
         .into_iter()
         .map(compile_variable)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok((
-        Rule {
+    Ok(CompiledRule {
+        rule: Rule {
             name: rule.name,
             namespace: namespace.name.clone(),
             tags: rule.tags.into_iter().map(|v| v.tag).collect(),
@@ -243,7 +252,15 @@ pub(super) fn compile_rule(
             is_private: rule.is_private,
         },
         variables,
-    ))
+        warnings,
+    })
+}
+
+#[derive(Debug)]
+pub(super) struct CompiledRule {
+    pub rule: Rule,
+    pub variables: Vec<Variable>,
+    pub warnings: Vec<CompilationError>,
 }
 
 #[cfg(test)]
@@ -262,8 +279,9 @@ mod tests {
             external_symbols: &vec![],
             params: &CompilerParams::default(),
             condition_depth: 0,
+            warnings: Vec::new(),
         });
-        test_type_traits_non_clonable(Rule {
+        let build_rule = || Rule {
             name: "a".to_owned(),
             namespace: None,
             tags: Vec::new(),
@@ -271,6 +289,12 @@ mod tests {
             nb_variables: 0,
             condition: Expression::Filesize,
             is_private: false,
+        };
+        test_type_traits_non_clonable(build_rule());
+        test_type_traits_non_clonable(CompiledRule {
+            rule: build_rule(),
+            variables: Vec::new(),
+            warnings: Vec::new(),
         });
         test_type_traits_non_clonable(RuleCompilerVariable {
             name: "a".to_owned(),
