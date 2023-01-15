@@ -256,6 +256,13 @@ pub enum CompilationError {
         /// Type of error
         error: VariableCompilationError,
     },
+
+    // Errors classified as warnings
+    /// A bytes value is used as a boolean expression.
+    ImplicitBytesToBooleanCast {
+        /// Span of the expression being casted.
+        span: Range<usize>,
+    },
 }
 
 impl CompilationError {
@@ -425,6 +432,10 @@ impl CompilationError {
                     "variable ${} cannot be compiled: {}",
                     variable_name, error
                 ))
+                .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::ImplicitBytesToBooleanCast { span } => Diagnostic::warning()
+                .with_message("implicit cast from a bytes value to a boolean")
                 .with_labels(vec![Label::primary((), span.clone())]),
         }
     }
