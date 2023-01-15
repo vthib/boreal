@@ -5,7 +5,7 @@ use std::thread::JoinHandle;
 use boreal::Compiler;
 use boreal::{module::Value as ModuleValue, Scanner};
 
-use clap::Parser;
+use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term::{
     self,
@@ -14,40 +14,63 @@ use codespan_reporting::term::{
 use crossbeam_channel::{bounded, Receiver, Sender};
 use walkdir::WalkDir;
 
-#[derive(Parser, Debug)]
-#[clap(version, about)]
-struct Args {
-    /// Path to a yara file containing rules.
-    #[clap(value_parser)]
-    rules_file: PathBuf,
-
-    /// File or directory to scan.
-    #[clap(value_parser)]
-    input: PathBuf,
-
-    /// Do not follow symlinks when scanning
-    #[clap(short = 'N', long, value_parser)]
-    no_follow_symlinks: bool,
-
-    /// Print module data
-    #[clap(short = 'D', long, value_parser)]
-    print_module_data: bool,
-
-    /// Recursively search directories
-    #[clap(short = 'r', long, value_parser)]
-    recursive: bool,
-
-    /// Skip files larger than the given size when scanning a directory
-    #[clap(short = 'z', long, value_parser, value_name = "MAX_SIZE")]
-    skip_larger: Option<u64>,
-
-    /// Number of threads to use when scanning directories
-    #[clap(short = 'p', long, value_parser, value_name = "NUMBER")]
-    threads: Option<usize>,
-
-    /// Fail compilation of rules on warnings
-    #[clap(long, value_parser)]
-    fail_on_warnings: bool,
+fn build_command() -> Command {
+    command!()
+        .arg(
+            Arg::new("no_follow_symlinks")
+                .short('N')
+                .long("no-follow-symlinks")
+                .action(ArgAction::SetTrue)
+                .help("Do not follow symlinks when scanning"),
+        )
+        .arg(
+            Arg::new("print_module_data")
+                .short('D')
+                .long("print-module-data")
+                .action(ArgAction::SetTrue)
+                .help("Print module data"),
+        )
+        .arg(
+            Arg::new("recursive")
+                .short('r')
+                .long("recursive")
+                .action(ArgAction::SetTrue)
+                .help("Recursively search directories"),
+        )
+        .arg(
+            Arg::new("skip_larger")
+                .short('z')
+                .long("skip-larger")
+                .value_name("MAX_SIZE")
+                .value_parser(value_parser!(u64))
+                .help("Skip files larger than the given size when scanning a directory"),
+        )
+        .arg(
+            Arg::new("threads")
+                .short('p')
+                .long("threads")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(usize))
+                .help("Number of threads to use when scanning directories"),
+        )
+        .arg(
+            Arg::new("rules_file")
+                .value_parser(value_parser!(PathBuf))
+                .required(true)
+                .help("Path to a yara file containing rules"),
+        )
+        .arg(
+            Arg::new("input")
+                .value_parser(value_parser!(PathBuf))
+                .required(true)
+                .help("File or directory to scan"),
+        )
+        .arg(
+            Arg::new("fail_on_warnings")
+                .long("fail-on-warnings")
+                .action(ArgAction::SetTrue)
+                .help("Fail compilation of rules on warnings"),
+        )
 }
 
 fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
@@ -75,21 +98,24 @@ fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args = build_command().get_matches();
 
     let scanner = {
+        let rules_file: &PathBuf = args.get_one("rules_file").unwrap();
         let mut compiler = Compiler::new();
-        if args.fail_on_warnings {
+
+        if args.get_flag("fail_on_warnings") {
             compiler.set_params(boreal::compiler::CompilerParams::default().fail_on_warnings(true));
         }
-        match compiler.add_rules_file(&args.rules_file) {
+
+        match compiler.add_rules_file(rules_file) {
             Ok(status) => {
                 for warn in status.warnings() {
-                    display_diagnostic(&args.rules_file, warn);
+                    display_diagnostic(rules_file, warn);
                 }
             }
             Err(err) => {
-                display_diagnostic(&args.rules_file, &err);
+                display_diagnostic(rules_file, &err);
                 return ExitCode::FAILURE;
             }
         }
@@ -97,9 +123,10 @@ fn main() -> ExitCode {
         compiler.into_scanner()
     };
 
-    if args.input.is_dir() {
-        let mut walker = WalkDir::new(&args.input).follow_links(!args.no_follow_symlinks);
-        if !args.recursive {
+    let input: &PathBuf = args.get_one("input").unwrap();
+    if input.is_dir() {
+        let mut walker = WalkDir::new(input).follow_links(!args.get_flag("no_follow_symlinks"));
+        if !args.get_flag("recursive") {
             walker = walker.max_depth(1);
         }
 
@@ -118,10 +145,10 @@ fn main() -> ExitCode {
                 continue;
             }
 
-            if let Some(max_size) = args.skip_larger {
-                if max_size > 0 && entry.depth() > 0 {
+            if let Some(max_size) = args.get_one::<u64>("skip_larger") {
+                if *max_size > 0 && entry.depth() > 0 {
                     let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
-                    if file_length >= max_size {
+                    if file_length >= *max_size {
                         eprintln!(
                             "skipping {} ({} bytes) because it's larger than {} bytes.",
                             entry.path().display(),
@@ -141,10 +168,10 @@ fn main() -> ExitCode {
 
         ExitCode::SUCCESS
     } else {
-        match scan_file(&scanner, &args.input, args.print_module_data) {
+        match scan_file(&scanner, input, args.get_flag("print_module_data")) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
-                eprintln!("Cannot scan {}: {}", args.input.display(), err);
+                eprintln!("Cannot scan {}: {}", input.display(), err);
                 ExitCode::FAILURE
             }
         }
@@ -179,9 +206,9 @@ struct ThreadPool {
 }
 
 impl ThreadPool {
-    fn new(scanner: &Scanner, args: &Args) -> (Self, Sender<PathBuf>) {
-        let nb_cpus = if let Some(nb) = args.threads {
-            std::cmp::min(1, nb)
+    fn new(scanner: &Scanner, args: &ArgMatches) -> (Self, Sender<PathBuf>) {
+        let nb_cpus = if let Some(nb) = args.get_one::<usize>("threads") {
+            std::cmp::min(1, *nb)
         } else {
             std::thread::available_parallelism()
                 .map(|v| v.get())
@@ -192,7 +219,9 @@ impl ThreadPool {
         (
             Self {
                 threads: (0..nb_cpus)
-                    .map(|_| Self::worker_thread(scanner, &receiver, args))
+                    .map(|_| {
+                        Self::worker_thread(scanner, &receiver, args.get_flag("print_module_data"))
+                    })
                     .collect(),
             },
             sender,
@@ -208,11 +237,10 @@ impl ThreadPool {
     fn worker_thread(
         scanner: &Scanner,
         receiver: &Receiver<PathBuf>,
-        args: &Args,
+        print_module_data: bool,
     ) -> JoinHandle<()> {
         let scanner = scanner.clone();
         let receiver = receiver.clone();
-        let print_module_data = args.print_module_data;
 
         std::thread::spawn(move || {
             while let Ok(path) = receiver.recv() {
@@ -299,11 +327,8 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use clap::CommandFactory;
-
     #[test]
     fn verify_cli() {
-        Args::command().debug_assert();
+        super::build_command().debug_assert();
     }
 }
