@@ -13,10 +13,7 @@ fn test_warning_files() {
 
         let expected_warnings: Vec<_> = contents
             .lines()
-            .filter_map(|line| {
-                dbg!(&line);
-                dbg!(line.strip_prefix("// [expected warning]: "))
-            })
+            .filter_map(|line| line.strip_prefix("// [expected warning]: "))
             .collect();
 
         println!("checking file {:?}", file);
@@ -54,8 +51,8 @@ rule root {{
             included_path.display()
         ),
         &[
-            "mem:4:9: warning: implicit cast from a bytes value to a boolean",
-            "mem:6:2: warning: implicit cast from a bytes value to a boolean",
+            "included.yar:4:18: warning: implicit cast from a bytes value to a boolean",
+            "included.yar:5:37: warning: implicit cast from a bytes value to a boolean",
             "mem:5:16: warning: implicit cast from a bytes value to a boolean",
         ],
     );
