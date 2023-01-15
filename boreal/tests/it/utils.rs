@@ -127,6 +127,32 @@ impl Compiler {
         }
     }
 
+    pub fn check_add_rules_warnings(mut self, rules: &str, expected_warnings_prefix: &[&str]) {
+        let status = self.compiler.add_rules_str(rules).unwrap();
+        let warnings: Vec<_> = status
+            .warnings()
+            .map(|warn| warn.to_short_description("mem", rules))
+            .collect();
+        assert_eq!(warnings.len(), expected_warnings_prefix.len());
+        for (desc, expected_prefix) in warnings.iter().zip(expected_warnings_prefix.iter()) {
+            assert!(
+                desc.starts_with(expected_prefix),
+                "warning: {}\nexpected prefix: {}",
+                desc,
+                expected_prefix
+            );
+        }
+
+        // Check libyara also rejects it
+        // TODO: add a way to get the warnings in yara-rust
+        // For the moment, check the rule is not rejected at least.
+        if let Some(compiler) = self.yara_compiler.take() {
+            if let Err(err) = compiler.add_rules_str(rules) {
+                panic!("conformity test failed for libyara: {:?}", err);
+            }
+        }
+    }
+
     define_symbol_compiler_method!(define_symbol_int, i64);
     define_symbol_compiler_method!(define_symbol_float, f64);
     define_symbol_compiler_method!(define_symbol_str, &str);
@@ -388,6 +414,12 @@ pub fn check_file(rule: &str, filepath: &str, expected_res: bool) {
 pub fn check_err(rule: &str, expected_prefix: &str) {
     let compiler = Compiler::new();
     compiler.check_add_rules_err(rule, expected_prefix);
+}
+
+#[track_caller]
+pub fn check_warnings(rule: &str, expected_warnings: &[&str]) {
+    let compiler = Compiler::new();
+    compiler.check_add_rules_warnings(rule, expected_warnings);
 }
 
 type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(&'a [u8], usize, usize)>)>)>;

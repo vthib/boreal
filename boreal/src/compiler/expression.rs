@@ -358,6 +358,13 @@ pub enum Expression {
     Regex(Regex),
 }
 
+pub(super) fn compile_bool_expression(
+    compiler: &mut RuleCompiler<'_>,
+    expression: parser::Expression,
+) -> Result<Expression, CompilationError> {
+    compile_expression(compiler, expression).map(|e| to_bool_expr(compiler, e))
+}
+
 // TODO: have a limit to ensure we do not grow the stack too much. About 33 chained ANDs was
 // enough previously.
 pub(super) fn compile_expression(
@@ -537,7 +544,7 @@ pub(super) fn compile_expression(
         parser::ExpressionKind::And(ops) => {
             let ops = ops
                 .into_iter()
-                .map(|op| compile_expression(compiler, op).map(|e| e.expr))
+                .map(|op| compile_expression(compiler, op).map(|e| to_bool_expr(compiler, e)))
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Expr {
@@ -549,7 +556,7 @@ pub(super) fn compile_expression(
         parser::ExpressionKind::Or(ops) => {
             let ops = ops
                 .into_iter()
-                .map(|op| compile_expression(compiler, op).map(|e| e.expr))
+                .map(|op| compile_expression(compiler, op).map(|e| to_bool_expr(compiler, e)))
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Expr {
@@ -561,9 +568,10 @@ pub(super) fn compile_expression(
 
         parser::ExpressionKind::Not(expr) => {
             let expr = compile_expression(compiler, *expr)?;
+            let expr = to_bool_expr(compiler, expr);
 
             Ok(Expr {
-                expr: Expression::Not(Box::new(expr.expr)),
+                expr: Expression::Not(Box::new(expr)),
                 ty: Type::Boolean,
                 span,
             })
@@ -762,7 +770,7 @@ pub(super) fn compile_expression(
                 body: match body {
                     Some(body) => {
                         let body = compile_expression(compiler, *body)?;
-                        Box::new(body.expr)
+                        Box::new(to_bool_expr(compiler, body))
                     }
                     None => Box::new(Expression::Variable(VariableIndex(None))),
                 },
@@ -820,7 +828,7 @@ pub(super) fn compile_expression(
                 expr: Expression::ForIdentifiers {
                     selection,
                     iterator,
-                    body: Box::new(body.expr),
+                    body: Box::new(to_bool_expr(compiler, body)),
                 },
                 ty: Type::Boolean,
                 span,
@@ -854,6 +862,17 @@ pub(super) fn compile_expression(
     };
     compiler.condition_depth -= 1;
     res
+}
+
+fn to_bool_expr(compiler: &mut RuleCompiler<'_>, expr: Expr) -> Expression {
+    if expr.ty == Type::Bytes {
+        compiler
+            .warnings
+            .push(CompilationError::ImplicitBytesToBooleanCast {
+                span: expr.span.clone(),
+            });
+    }
+    expr.expr
 }
 
 fn compile_primary_op<F>(

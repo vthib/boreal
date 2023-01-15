@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use boreal_parser as parser;
 
-use super::expression::{compile_expression, Expression, VariableIndex};
+use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
 use super::variable::{compile_variable, Variable};
 use super::CompilerParams;
@@ -201,7 +201,7 @@ pub(super) fn compile_rule(
 ) -> Result<CompiledRule, CompilationError> {
     let (condition, wildcards, vars, warnings) = {
         let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols, params)?;
-        let condition = compile_expression(&mut compiler, rule.condition)?;
+        let condition = compile_bool_expression(&mut compiler, rule.condition)?;
 
         (
             condition,
@@ -248,7 +248,7 @@ pub(super) fn compile_rule(
             tags: rule.tags.into_iter().map(|v| v.tag).collect(),
             metadatas: rule.metadatas,
             nb_variables: variables.len(),
-            condition: condition.expr,
+            condition,
             is_private: rule.is_private,
         },
         variables,
