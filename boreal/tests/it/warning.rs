@@ -1,4 +1,4 @@
-use crate::utils::check_warnings;
+use crate::utils::{check_warnings, Compiler};
 
 // Test all the files stored in the assets to make sure they emit warnings
 #[test]
@@ -55,5 +55,20 @@ rule root {{
             "included.yar:5:37: warning: implicit cast from a bytes value to a boolean",
             "mem:5:16: warning: implicit cast from a bytes value to a boolean",
         ],
+    );
+}
+
+#[test]
+fn test_fail_on_warning_param() {
+    let mut compiler = Compiler::new();
+
+    // By default, warnings do not make the add fail.
+    compiler.add_rules(r#"rule a { condition: "foo" }"#);
+
+    let params = boreal::compiler::CompilerParams::default().fail_on_warnings(true);
+    compiler.set_params(params);
+    compiler.check_add_rules_err(
+        r#"rule a { condition: "foo" }"#,
+        "mem:1:21: warning: implicit cast from a bytes value to a boolean",
     );
 }
