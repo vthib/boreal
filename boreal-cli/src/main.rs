@@ -56,13 +56,13 @@ fn build_command() -> Command {
         .arg(
             Arg::new("rules_file")
                 .value_parser(value_parser!(PathBuf))
-                .required(true)
+                .required_unless_present("module_names")
                 .help("Path to a yara file containing rules"),
         )
         .arg(
             Arg::new("input")
                 .value_parser(value_parser!(PathBuf))
-                .required(true)
+                .required_unless_present("module_names")
                 .help("File or directory to scan"),
         )
         .arg(
@@ -70,6 +70,13 @@ fn build_command() -> Command {
                 .long("fail-on-warnings")
                 .action(ArgAction::SetTrue)
                 .help("Fail compilation of rules on warnings"),
+        )
+        .arg(
+            Arg::new("module_names")
+                .short('M')
+                .long("module-names")
+                .action(ArgAction::SetTrue)
+                .help("Display the names of all available modules"),
         )
 }
 
@@ -92,6 +99,19 @@ fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
 
 fn main() -> ExitCode {
     let args = build_command().get_matches();
+
+    if args.get_flag("module_names") {
+        let compiler = Compiler::new();
+
+        let mut names: Vec<_> = compiler.available_modules().collect();
+        names.sort_unstable();
+
+        for name in names {
+            println!("{name}");
+        }
+
+        return ExitCode::SUCCESS;
+    }
 
     let scanner = {
         let rules_file: &PathBuf = args.get_one("rules_file").unwrap();

@@ -470,6 +470,11 @@ impl Compiler {
         self.params = params;
     }
 
+    /// Names of modules that are available for use in rules.
+    pub fn available_modules(&self) -> impl Iterator<Item = &str> {
+        self.available_modules.keys().map(|v| &**v)
+    }
+
     /// Finalize the compiler and generate a [`Scanner`].
     ///
     /// # Errors
