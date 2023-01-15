@@ -191,6 +191,15 @@ impl<'a> RuleCompiler<'a> {
     pub(super) fn remove_bounded_identifier(&mut self, name: &str) {
         drop(self.bounded_identifiers.remove(name));
     }
+
+    pub(super) fn add_warning(&mut self, err: CompilationError) -> Result<(), CompilationError> {
+        if self.params.fail_on_warnings {
+            Err(err)
+        } else {
+            self.warnings.push(err);
+            Ok(())
+        }
+    }
 }
 
 pub(super) fn compile_rule(

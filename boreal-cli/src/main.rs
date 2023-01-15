@@ -44,6 +44,10 @@ struct Args {
     /// Number of threads to use when scanning directories
     #[clap(short = 'p', long, value_parser, value_name = "NUMBER")]
     threads: Option<usize>,
+
+    /// Fail compilation of rules on warnings
+    #[clap(long, value_parser)]
+    fail_on_warnings: bool,
 }
 
 fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
@@ -75,6 +79,9 @@ fn main() -> ExitCode {
 
     let scanner = {
         let mut compiler = Compiler::new();
+        if args.fail_on_warnings {
+            compiler.set_params(boreal::compiler::CompilerParams::default().fail_on_warnings(true));
+        }
         match compiler.add_rules_file(&args.rules_file) {
             Ok(status) => {
                 for warn in status.warnings() {
