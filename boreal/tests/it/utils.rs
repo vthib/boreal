@@ -64,7 +64,7 @@ impl Compiler {
 
     pub fn add_rules(&mut self, rules: &str) {
         if let Err(err) = self.compiler.add_rules_str(rules) {
-            panic!("parsing failed: {}", err.to_short_description("mem", rules));
+            panic!("parsing failed: {}", add_rule_error_get_desc(&err, rules));
         }
         self.yara_compiler = self
             .yara_compiler
@@ -85,7 +85,7 @@ impl Compiler {
             panic!(
                 "add of file {} failed: {}",
                 path.display(),
-                err.to_short_description("mem", &std::fs::read_to_string(path).unwrap())
+                add_rule_error_get_desc(&err, ""),
             );
         }
         self.yara_compiler = self
@@ -99,7 +99,7 @@ impl Compiler {
             panic!(
                 "add of file {} failed: {}",
                 path.display(),
-                err.to_short_description("mem", &std::fs::read_to_string(path).unwrap())
+                add_rule_error_get_desc(&err, ""),
             );
         }
         self.yara_compiler = self
@@ -110,7 +110,7 @@ impl Compiler {
 
     pub fn check_add_rules_err(mut self, rules: &str, expected_prefix: &str) {
         let err = self.compiler.add_rules_str(rules).unwrap_err();
-        let desc = err.to_short_description("mem", rules);
+        let desc = add_rule_error_get_desc(&err, rules);
         assert!(
             desc.starts_with(expected_prefix),
             "error: {}\nexpected prefix: {}",
@@ -131,7 +131,7 @@ impl Compiler {
         let status = self.compiler.add_rules_str(rules).unwrap();
         let warnings: Vec<_> = status
             .warnings()
-            .map(|warn| warn.to_short_description("mem", rules))
+            .map(|warn| add_rule_error_get_desc(warn, rules))
             .collect();
         assert_eq!(warnings.len(), expected_warnings_prefix.len());
         for (desc, expected_prefix) in warnings.iter().zip(expected_warnings_prefix.iter()) {
@@ -495,4 +495,14 @@ rule a {{
 }}"#,
         condition
     )
+}
+
+fn add_rule_error_get_desc(err: &boreal::compiler::AddRuleError, rules: &str) -> String {
+    match &err.path {
+        Some(path) => err.to_short_description(
+            &path.file_name().unwrap().to_string_lossy(),
+            &std::fs::read_to_string(path).unwrap(),
+        ),
+        None => err.to_short_description("mem", rules),
+    }
 }
