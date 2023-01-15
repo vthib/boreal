@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use boreal::scanner::ScanParams;
 
 use crate::utils::{Checker, Compiler};
@@ -128,4 +130,154 @@ rule a {
     let mut compiler = Compiler::new_without_yara();
     compiler.set_params(params.max_condition_depth(max_depth + 10));
     compiler.add_rules(&rule);
+}
+
+#[test]
+fn test_timeout_eval_rule_without_matches() {
+    let params = ScanParams::default().timeout_duration(Some(Duration::from_millis(100)));
+    let infinite_cond = r#"
+for all i in (0..9223372036854775807) : (
+    for all j in (0..9223372036854775807) : (
+        for all k in (0..9223372036854775807) : (
+            for all l in (0..9223372036854775807) : (
+                i + j + k + l >= 0
+            )
+        )
+    )
+)"#;
+
+    // Rule that takes too long while evaluating without variables
+    let mut checker = Checker::new_without_yara(&format!(
+        "
+rule a {{
+    condition: {}
+}}",
+        infinite_cond
+    ));
+    checker.set_scan_params(params.clone());
+    let res = checker.check_rule_matches(b"", &[]);
+    assert!(res.timeout);
+
+    // Same with global rule
+    let mut checker = Checker::new_without_yara(&format!(
+        "
+global rule a {{
+    condition: {}
+}}",
+        infinite_cond
+    ));
+    checker.set_scan_params(params);
+    let res = checker.check_rule_matches(b"", &[]);
+    assert!(res.timeout);
+}
+
+#[test]
+fn test_timeout_eval_rule() {
+    let params = ScanParams::default().timeout_duration(Some(Duration::from_millis(100)));
+    let infinite_cond = r#"
+for all i in (#var..9223372036854775807) : (
+    for all j in (0..9223372036854775807) : (
+        for all k in (0..9223372036854775807) : (
+            for all l in (0..9223372036854775807) : (
+                i + j + k + l >= 0
+            )
+        )
+    )
+)"#;
+
+    // Global rule that takes too long
+    let mut compiler = Compiler::new_without_yara();
+    compiler.add_rules(
+        r#"
+global rule first {
+    strings:
+        $a = "aaa"
+    condition:
+        $a
+}"#,
+    );
+    compiler.add_rules(&format!(
+        r#"
+global rule second {{
+    strings:
+        $var = "var"
+    condition:
+        {}
+}}"#,
+        infinite_cond,
+    ));
+    let mut checker = compiler.into_checker();
+    checker.set_scan_params(params.clone());
+    let res = checker.check_rule_matches(b"aaa", &["default:first"]);
+    assert!(res.timeout);
+
+    // Normal rule that takes too long
+    let mut compiler = Compiler::new_without_yara();
+    compiler.add_rules(
+        r#"
+global rule first {
+    strings:
+        $a = "aaa"
+    condition:
+        $a
+}
+
+rule second { condition: true }
+"#,
+    );
+    compiler.add_rules(&format!(
+        r#"
+rule third {{
+    strings:
+        $var = "var"
+    condition:
+        {}
+}}"#,
+        infinite_cond,
+    ));
+    compiler.add_rules(
+        r#"
+rule fourth { condition: true }
+"#,
+    );
+    let mut checker = compiler.into_checker();
+    checker.set_scan_params(params);
+    let res = checker.check_rule_matches(b"aaa", &["default:first", "default:second"]);
+    assert!(res.timeout);
+}
+
+#[test]
+fn test_timeout_eval_ac_matches() {
+    let infinite_match_rule = r#"
+    strings:
+        $a = { 00 00 [0-] 00 }
+        $c = { 00 00 [1-] 00 }
+        $d = { 00 00 [2-] 00 }
+        $e = { 00 00 [3-] 00 }
+    condition:
+        all of them
+"#;
+
+    let mut compiler = Compiler::new_without_yara();
+    compiler.add_rules(
+        r#"
+rule first {
+    condition: true
+}"#,
+    );
+    compiler.add_rules(&format!(
+        r#"
+rule second {{
+    {}
+}}"#,
+        infinite_match_rule,
+    ));
+
+    let mut checker = compiler.into_checker();
+    checker
+        .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
+
+    let mem = vec![0; 10 * 1024 * 1024];
+    let res = checker.check_rule_matches(&mem, &[]);
+    assert!(res.timeout);
 }

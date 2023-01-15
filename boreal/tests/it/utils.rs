@@ -212,13 +212,13 @@ impl Checker {
 
     // Check matches against a list of "<namespace>:<rule_name>" strings.
     #[track_caller]
-    pub fn check_rule_matches(&self, mem: &[u8], expected_matches: &[&str]) {
+    pub fn check_rule_matches(&self, mem: &[u8], expected_matches: &[&str]) -> ScanResult {
         let mut expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
         expected.sort_unstable();
-        let res = self.scanner.scan_mem(mem);
-        let mut res: Vec<String> = res
+        let scan_res = self.scanner.scan_mem(mem);
+        let mut res: Vec<String> = scan_res
             .matched_rules
-            .into_iter()
+            .iter()
             .map(|v| {
                 if let Some(ns) = &v.namespace {
                     format!("{}:{}", ns, v.name)
@@ -239,6 +239,8 @@ impl Checker {
             res.sort_unstable();
             assert_eq!(res, expected, "conformity test failed for libyara");
         }
+
+        scan_res
     }
 
     // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", [(offset, length), ...]), ...]]

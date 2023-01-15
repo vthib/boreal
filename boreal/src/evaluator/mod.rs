@@ -36,6 +36,7 @@
 //!
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
@@ -57,6 +58,7 @@ mod entrypoint;
 
 mod read_integer;
 use read_integer::evaluate_read_integer;
+mod timeout;
 mod variable;
 pub(crate) use variable::VariableEvaluation;
 
@@ -118,6 +120,9 @@ pub struct ScanData<'a> {
 
     // List of values for external symbols.
     external_symbols: &'a [Value],
+
+    // Object used to check if the scan times out.
+    timeout_checker: Option<timeout::TimeoutChecker>,
 }
 
 impl<'a> ScanData<'a> {
@@ -125,7 +130,12 @@ impl<'a> ScanData<'a> {
         mem: &'a [u8],
         modules: &[Box<dyn Module>],
         external_symbols: &'a [Value],
+        timeout: Option<Duration>,
     ) -> Self {
+        // Create the timeout checker first. This starts the timer, and thus includes the modules
+        // evaluation.
+        let timeout_checker = timeout.map(timeout::TimeoutChecker::new);
+
         let mut module_ctx = ScanContext {
             mem,
             module_data: ModuleDataMap::default(),
@@ -146,7 +156,14 @@ impl<'a> ScanData<'a> {
                 .collect(),
             module_ctx,
             external_symbols,
+            timeout_checker,
         }
+    }
+
+    fn check_timeout(&mut self) -> bool {
+        self.timeout_checker
+            .as_mut()
+            .map_or(false, timeout::TimeoutChecker::check_timeout)
     }
 }
 
@@ -164,7 +181,7 @@ pub struct Params {
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
     variables: Option<&'rule mut [VariableEvaluation]>,
-    scan_data: &'scan ScanData,
+    scan_data: &'scan mut ScanData,
     previous_rules_results: &'scan [bool],
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
@@ -179,18 +196,19 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
         Ok(v) => Ok(v.to_bool()),
         Err(PoisonKind::Undefined) => Ok(false),
         Err(PoisonKind::VarNeeded) => Err(EvalError::Undecidable),
+        Err(PoisonKind::Timeout) => Err(EvalError::Timeout),
     }
 }
 
-struct Evaluator<'scan, 'rule> {
-    variables: Option<&'scan mut [VariableEvaluation<'rule>]>,
+struct Evaluator<'a, 'b, 'c, 'd, 'e> {
+    variables: Option<&'a mut [VariableEvaluation<'d>]>,
 
-    mem: &'scan [u8],
+    mem: &'b [u8],
 
     // Array of previous rules results.
     //
     // This only stores results of rules that are depended upon, not all rules.
-    previous_rules_results: &'scan [bool],
+    previous_rules_results: &'c [bool],
 
     // Index of the currently selected variable.
     //
@@ -201,7 +219,7 @@ struct Evaluator<'scan, 'rule> {
     bounded_identifiers_stack: Vec<Arc<ModuleValue>>,
 
     // Data related only to the scan, independent of the rule.
-    scan_data: &'scan ScanData<'scan>,
+    scan_data: &'e mut ScanData<'b>,
 }
 
 enum PoisonKind {
@@ -222,6 +240,11 @@ enum PoisonKind {
     /// This is used during the second evaluation pass, where it represents operations that
     /// could not be computed.
     Undefined,
+
+    /// Evaluation timed out.
+    ///
+    /// This value should always be rethrown, no matter what, to end the execution asap.
+    Timeout,
 }
 
 macro_rules! bytes_op {
@@ -285,7 +308,7 @@ macro_rules! get_var {
     }};
 }
 
-impl Evaluator<'_, '_> {
+impl Evaluator<'_, '_, '_, '_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, PoisonKind> {
         var_index
             .0
@@ -294,6 +317,10 @@ impl Evaluator<'_, '_> {
     }
 
     fn evaluate_expr(&mut self, expr: &Expression) -> Result<Value, PoisonKind> {
+        if self.scan_data.check_timeout() {
+            return Err(PoisonKind::Timeout);
+        }
+
         match expr {
             Expression::Filesize => Ok(Value::Integer(self.mem.len() as i64)),
 
@@ -473,6 +500,7 @@ impl Evaluator<'_, '_> {
                         }
                         Err(PoisonKind::Undefined) => return Ok(Value::Boolean(false)),
                         Err(PoisonKind::VarNeeded) => var_needed = true,
+                        Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
                     };
                 }
                 if var_needed {
@@ -493,6 +521,7 @@ impl Evaluator<'_, '_> {
                         }
                         Err(PoisonKind::Undefined) => (),
                         Err(PoisonKind::VarNeeded) => var_needed = true,
+                        Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
                     };
                 }
                 if var_needed {
@@ -780,6 +809,7 @@ impl Evaluator<'_, '_> {
                     nb_vars_needed += 1;
                     continue;
                 }
+                Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
             };
 
             if let Some(result) = selection.add_result_and_check(v) {
@@ -816,6 +846,7 @@ impl Evaluator<'_, '_> {
                                     nb_vars_needed += 1;
                                     continue;
                                 }
+                                Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
                             };
 
                             if let Some(result) = selection.add_result_and_check(v) {
@@ -837,6 +868,7 @@ impl Evaluator<'_, '_> {
                                     nb_vars_needed += 1;
                                     continue;
                                 }
+                                Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
                             };
 
                             if let Some(result) = selection.add_result_and_check(v) {
@@ -869,6 +901,7 @@ impl Evaluator<'_, '_> {
                             nb_vars_needed += 1;
                             continue;
                         }
+                        Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
                     };
 
                     if let Some(result) = selection.add_result_and_check(v) {
@@ -893,6 +926,7 @@ impl Evaluator<'_, '_> {
                             nb_vars_needed += 1;
                             continue;
                         }
+                        Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
                     };
 
                     if let Some(result) = selection.add_result_and_check(v) {
@@ -1008,6 +1042,7 @@ mod tests {
                 module_data: ModuleDataMap::default(),
             },
             external_symbols: &[],
+            timeout_checker: None,
         });
         test_type_traits_non_clonable(ForSelectionEvaluation::Value(Value::Integer(0)));
         test_type_traits_non_clonable(ForSelectionEvaluator::None);

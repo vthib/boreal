@@ -8,6 +8,9 @@ pub enum EvalError {
     /// Can be returned when evaluating rules without the variable evaluations, and the rules
     /// need those to be computed.
     Undecidable,
+
+    /// Timeout while scanning.
+    Timeout,
 }
 
 impl std::error::Error for EvalError {}
@@ -16,6 +19,7 @@ impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Undecidable => write!(f, "undecidable"),
+            Self::Timeout => write!(f, "timeout"),
         }
     }
 }

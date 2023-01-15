@@ -1,5 +1,7 @@
 //! Parameters applicable to a scan.
 
+use std::time::Duration;
+
 /// Parameters used to configure a scan.
 #[derive(Clone, Debug)]
 pub struct ScanParams {
@@ -11,6 +13,9 @@ pub struct ScanParams {
 
     /// Max number of matches for a given string.
     pub(crate) string_max_nb_matches: usize,
+
+    /// Max duration for a scan before it is aborted.
+    pub(crate) timeout_duration: Option<Duration>,
 }
 
 impl Default for ScanParams {
@@ -19,6 +24,7 @@ impl Default for ScanParams {
             compute_full_matches: false,
             match_max_length: 512,
             string_max_nb_matches: 1_000,
+            timeout_duration: None,
         }
     }
 }
@@ -63,6 +69,18 @@ impl ScanParams {
     #[must_use]
     pub fn string_max_nb_matches(mut self, string_max_nb_matches: usize) -> Self {
         self.string_max_nb_matches = string_max_nb_matches;
+        self
+    }
+
+    /// Maximum duration of a scan before it is stopped.
+    ///
+    /// If a scan lasts longer that the timeout, the scan will be stopped, and only results
+    /// computed before the timeout will be returned.
+    ///
+    /// By default, no timeout is set.
+    #[must_use]
+    pub fn timeout_duration(mut self, timeout_duration: Option<Duration>) -> Self {
+        self.timeout_duration = timeout_duration;
         self
     }
 }

@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
-use super::Params;
+use super::{EvalError, Params, ScanData};
 use crate::compiler::variable::{atom_rank, AcMatchStatus, Variable};
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
@@ -94,20 +94,27 @@ impl AcScan {
 
     pub(crate) fn matches(
         &self,
-        mem: &[u8],
+        scan_data: &mut ScanData,
         variables: &[Variable],
         params: Params,
-    ) -> Vec<AcResult> {
+    ) -> Result<Vec<AcResult>, EvalError> {
         let mut matches = vec![AcResult::NotFound; variables.len()];
+        let mem = scan_data.mem;
 
         match &self.aho {
             ACVersion::Size32(v) => {
                 for mat in v.find_overlapping_iter(mem) {
+                    if scan_data.check_timeout() {
+                        return Err(EvalError::Timeout);
+                    }
                     self.handle_possible_match(mem, variables, &mat, params, &mut matches);
                 }
             }
             ACVersion::Default(v) => {
                 for mat in v.find_overlapping_iter(mem) {
+                    if scan_data.check_timeout() {
+                        return Err(EvalError::Timeout);
+                    }
                     self.handle_possible_match(mem, variables, &mat, params, &mut matches);
                 }
             }
@@ -117,7 +124,7 @@ impl AcScan {
             matches[*i] = AcResult::Unknown;
         }
 
-        matches
+        Ok(matches)
     }
 
     fn handle_possible_match(
