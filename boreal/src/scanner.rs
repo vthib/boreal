@@ -6,7 +6,9 @@ use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::ac_scan::AcScan;
-use crate::evaluator::{evaluate_rule, Params as EvalParams, ScanData, Value, VariableEvaluation};
+use crate::evaluator::{
+    evaluate_rule, EvalError, Params as EvalParams, ScanData, Value, VariableEvaluation,
+};
 use crate::module::Module;
 
 mod params;
@@ -235,7 +237,7 @@ impl Inner {
         let scan_data = ScanData::new(mem, &self.modules, external_symbols_values);
 
         if !params.compute_full_matches {
-            if let Some(matched_rules) = self.evaluate_without_matches(&scan_data, params) {
+            if let Ok(matched_rules) = self.evaluate_without_matches(&scan_data, params) {
                 return ScanResult {
                     matched_rules,
                     module_values: scan_data.module_values,
@@ -318,7 +320,7 @@ impl Inner {
         &'scanner self,
         scan_data: &ScanData<'_>,
         params: &ScanParams,
-    ) -> Option<Vec<MatchedRule<'scanner>>> {
+    ) -> Result<Vec<MatchedRule<'scanner>>, EvalError> {
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
@@ -326,7 +328,7 @@ impl Inner {
         let mut has_unknown_globals = false;
         for rule in &self.global_rules {
             match evaluate_rule(rule, None, scan_data, &previous_results) {
-                Some(true) => {
+                Ok(true) => {
                     if !rule.is_private {
                         matched_rules.push(build_matched_rule(
                             rule,
@@ -337,14 +339,14 @@ impl Inner {
                         ));
                     }
                 }
-                Some(false) => return Some(Vec::new()),
+                Ok(false) => return Ok(Vec::new()),
                 // Do not rethrow immediately, so that if one of the globals is false, it is
                 // detected.
-                None => has_unknown_globals = true,
+                Err(EvalError::Undecidable) => has_unknown_globals = true,
             }
         }
         if has_unknown_globals {
-            return None;
+            return Err(EvalError::Undecidable);
         }
 
         // Then, if all global rules matched, the normal rules
@@ -363,7 +365,7 @@ impl Inner {
             previous_results.push(matched);
         }
 
-        Some(matched_rules)
+        Ok(matched_rules)
     }
 }
 
@@ -607,7 +609,7 @@ mod tests {
         }
         let last_res = evaluate_rule(&rules[rules.len() - 1], None, &scan_data, &previous_results);
 
-        assert_eq!(last_res, expected);
+        assert_eq!(last_res.ok(), expected);
     }
 
     #[test]

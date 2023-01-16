@@ -47,6 +47,9 @@ use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 pub mod ac_scan;
 
+mod error;
+pub use error::EvalError;
+
 mod module;
 
 #[cfg(feature = "object")]
@@ -163,7 +166,7 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     variables: Option<&'rule mut [VariableEvaluation]>,
     scan_data: &'scan ScanData,
     previous_rules_results: &'scan [bool],
-) -> Option<bool> {
+) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
         variables,
         mem: scan_data.mem,
@@ -173,9 +176,9 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
         scan_data,
     };
     match evaluator.evaluate_expr(&rule.condition) {
-        Ok(v) => Some(v.to_bool()),
-        Err(PoisonKind::Undefined) => Some(false),
-        Err(PoisonKind::VarNeeded) => None,
+        Ok(v) => Ok(v.to_bool()),
+        Err(PoisonKind::Undefined) => Ok(false),
+        Err(PoisonKind::VarNeeded) => Err(EvalError::Undecidable),
     }
 }
 
