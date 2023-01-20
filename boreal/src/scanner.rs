@@ -283,7 +283,12 @@ impl Inner {
             .zip(ac_matches.into_iter())
             .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result));
 
-        for rule in &self.global_rules {
+        for (rule, is_global) in self
+            .global_rules
+            .iter()
+            .map(|v| (v, true))
+            .chain(self.rules.iter().map(|v| (v, false)))
+        {
             let mut var_evals = collect_nb_elems(&mut var_evals_iterator, rule.nb_variables);
             let res = match evaluate_rule(
                 rule,
@@ -298,7 +303,7 @@ impl Inner {
                 }
             };
 
-            if !res {
+            if is_global && !res {
                 matched_rules.clear();
                 return ScanResult {
                     matched_rules,
@@ -306,7 +311,7 @@ impl Inner {
                     timeout: false,
                 };
             }
-            if !rule.is_private {
+            if res && !rule.is_private {
                 matched_rules.push(build_matched_rule(
                     rule,
                     var_evals,
@@ -315,37 +320,10 @@ impl Inner {
                     params.match_max_length,
                 ));
             }
-        }
 
-        // Then, if all global rules matched, the normal rules
-        for rule in &self.rules {
-            let res = {
-                let mut var_evals = collect_nb_elems(&mut var_evals_iterator, rule.nb_variables);
-                let res = match evaluate_rule(
-                    rule,
-                    Some(&mut var_evals),
-                    &mut scan_data,
-                    &previous_results,
-                ) {
-                    Ok(v) => v,
-                    Err(EvalError::Undecidable) => unreachable!(),
-                    Err(EvalError::Timeout) => {
-                        return ScanResult::timeout(matched_rules, scan_data.module_values);
-                    }
-                };
-
-                if res && !rule.is_private {
-                    matched_rules.push(build_matched_rule(
-                        rule,
-                        var_evals,
-                        mem,
-                        params.compute_full_matches,
-                        params.match_max_length,
-                    ));
-                }
-                res
-            };
-            previous_results.push(res);
+            if !is_global {
+                previous_results.push(res);
+            }
         }
 
         ScanResult {
