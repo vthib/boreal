@@ -30,6 +30,8 @@ const MAX_PE_IMPORTS: usize = 16384;
 const MAX_PE_EXPORTS: usize = 8192;
 const MAX_EXPORT_NAME_LENGTH: usize = 512;
 const MAX_RESOURCES: usize = 65536;
+const MAX_NB_DATA_DIRECTORIES: usize = 32768;
+const MAX_NB_VERSION_INFOS: usize = 32768;
 
 /// `pe` module. Allows inspecting PE inputs.
 #[derive(Debug)]
@@ -1302,6 +1304,9 @@ fn add_imports<Pe: ImageNtHeaders>(
                 .filter_map(|(k, v)| v.map(|v| (k, v)))
                 .collect(),
             ));
+            if imports.len() >= MAX_PE_IMPORTS {
+                break;
+            }
         }
     }
 
@@ -1408,11 +1413,9 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
                 import_desc,
                 &library,
                 &mut data_functions,
+                &mut nb_functions_total,
             );
             let nb_functions = functions.as_ref().map(Vec::len);
-            if let Some(n) = nb_functions {
-                nb_functions_total += n;
-            }
 
             data.delayed_imports.push(DataImport {
                 dll_name: library.clone(),
@@ -1432,6 +1435,9 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
                 .filter_map(|(k, v)| v.map(|v| (k, v)))
                 .collect(),
             ));
+            if imports.len() >= MAX_PE_IMPORTS {
+                break;
+            }
         }
     }
 
@@ -1449,6 +1455,7 @@ fn delay_load_import_functions<Pe: ImageNtHeaders>(
     desc: &ImageDelayloadDescriptor,
     dll_name: &[u8],
     data_functions: &mut Vec<DataFunction>,
+    nb_functions_total: &mut usize,
 ) -> Option<Vec<Value>> {
     let mut thunks = import_table
         .thunks(desc.import_name_table_rva.get(LE))
@@ -1456,6 +1463,11 @@ fn delay_load_import_functions<Pe: ImageNtHeaders>(
 
     let mut functions = Vec::new();
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
+        if *nb_functions_total >= MAX_PE_IMPORTS {
+            return Some(functions);
+        }
+        *nb_functions_total += 1;
+
         add_thunk::<Pe, _>(
             thunk,
             dll_name,
@@ -1545,6 +1557,7 @@ fn add_exports(
 fn data_directories(dirs: DataDirectories) -> Value {
     Value::Array(
         dirs.iter()
+            .take(MAX_NB_DATA_DIRECTORIES)
             .map(|dir| {
                 Value::object([
                     ("virtual_address", dir.virtual_address.get(LE).into()),
@@ -1662,7 +1675,7 @@ fn add_resources(
     if let (Some(dir), Some(root)) = (dir, root) {
         let mut resources = Vec::new();
 
-        for entry in root.entries {
+        'outer: for entry in root.entries {
             // First level is type
             let ty = entry.name_or_id.get(LE);
             let ty_name = match entry.name_or_id() {
@@ -1703,10 +1716,6 @@ fn add_resources(
                             }
                         }
 
-                        if resources.len() > MAX_RESOURCES {
-                            continue;
-                        }
-
                         data.resource_languages.push(lang);
 
                         let mut obj: HashMap<_, _> = [
@@ -1733,6 +1742,9 @@ fn add_resources(
                         };
 
                         resources.push(Value::Object(obj));
+                        if resources.len() >= MAX_RESOURCES {
+                            break 'outer;
+                        }
                     }
                 }
             }

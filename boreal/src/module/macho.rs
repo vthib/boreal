@@ -11,6 +11,10 @@ use object::{
 
 use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
 
+const MAX_NB_ARCHS: usize = 100;
+const MAX_NB_SEGMENTS: usize = 32_768;
+const MAX_NB_SECTIONS: usize = 32_768;
+
 /// `macho` module. Allows inspecting Mach-O inputs
 #[derive(Debug)]
 pub struct MachO;
@@ -839,6 +843,10 @@ fn segments<Mach: MachHeader<Endian = Endianness>>(
     let mut segments = Vec::new();
     let mut cmds = header.load_commands(e, mem, 0).ok()?;
     while let Ok(Some(cmd)) = cmds.next() {
+        if segments.len() >= MAX_NB_SEGMENTS {
+            break;
+        }
+
         if let Ok(Some((segment32, section_data))) = cmd.segment_32() {
             let mut map = segment_to_map(segment32, e);
             match sections32(segment32, e, section_data) {
@@ -1050,6 +1058,7 @@ fn sections32(
             .sections(e, section_data)
             .ok()?
             .iter()
+            .take(MAX_NB_SECTIONS)
             .map(|section| {
                 let mut map = sections_to_map(section, e);
                 let _r = map.insert("reserved1", section.reserved1.get(e).into());
@@ -1070,6 +1079,7 @@ fn sections64(
             .sections(e, section_data)
             .ok()?
             .iter()
+            .take(MAX_NB_SECTIONS)
             .map(|section| {
                 let mut map = sections_to_map(section, e);
                 let _r = map.insert("reserved1", section.reserved1.get(e).into());
@@ -1094,7 +1104,7 @@ fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static
     let mut files = Vec::new();
 
     if is64 {
-        for arch in FatHeader::parse_arch64(mem).ok()? {
+        for arch in FatHeader::parse_arch64(mem).ok()?.iter().take(MAX_NB_ARCHS) {
             archs.push(fat_arch_to_value(
                 arch,
                 data,
@@ -1103,7 +1113,7 @@ fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static
             files.push(fat_arch_to_file_value(arch, data, mem));
         }
     } else {
-        for arch in FatHeader::parse_arch32(mem).ok()? {
+        for arch in FatHeader::parse_arch32(mem).ok()?.iter().take(MAX_NB_ARCHS) {
             archs.push(fat_arch_to_value(arch, data, None));
             files.push(fat_arch_to_file_value(arch, data, mem));
         }

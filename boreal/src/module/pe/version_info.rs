@@ -1,5 +1,7 @@
 use object::{Bytes, LittleEndian as LE, U16};
 
+use super::MAX_NB_VERSION_INFOS;
+
 pub struct VersionInfo {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
@@ -31,6 +33,10 @@ pub fn read_version_info(mem: &[u8], offset: usize) -> Option<Vec<VersionInfo>> 
     // Then read StringFileInfo
     let mut infos = Vec::new();
     while offset < end {
+        if infos.len() >= MAX_NB_VERSION_INFOS {
+            break;
+        }
+
         match read_string_file_info(mem, offset, &mut infos) {
             Some(length) => offset = align32(offset + length),
             None => break,
@@ -74,6 +80,10 @@ fn read_string_file_info(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) 
     let mut offset = align32(offset + HEADER_SIZE + STRING_FILE_INFO_KEY.len());
 
     while offset < end {
+        if out.len() >= MAX_NB_VERSION_INFOS {
+            break;
+        }
+
         match read_string_table(mem, offset, out) {
             Some(length) => offset = align32(offset + length),
             None => break,
@@ -96,6 +106,10 @@ fn read_string_table(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> O
     let mut offset = align32(offset + HEADER_SIZE + 2 * 9);
 
     while offset < end {
+        if out.len() >= MAX_NB_VERSION_INFOS {
+            break;
+        }
+
         match read_string(mem, offset, out) {
             Some(length) => offset = align32(offset + length),
             None => break,

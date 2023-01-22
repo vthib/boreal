@@ -10,6 +10,11 @@ use object::{
 
 use super::{Module, ScanContext, StaticValue, Type, Value};
 
+const MAX_NB_SEGMENTS: usize = 32_768;
+const MAX_NB_SECTIONS: usize = 32_768;
+const MAX_NB_DYNAMIC: usize = 32_768;
+const MAX_NB_SYMBOLS: usize = 32_768;
+
 /// `elf` module. Allows inspecting ELF inputs
 #[derive(Debug)]
 pub struct Elf;
@@ -354,6 +359,7 @@ fn sections<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
     Some(Value::Array(
         section_table
             .iter()
+            .take(MAX_NB_SECTIONS)
             .map(|section| {
                 let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
 
@@ -386,6 +392,7 @@ fn segments<Elf: FileHeader>(f: &ElfFile<Elf>) -> Value {
     Value::Array(
         f.raw_segments()
             .iter()
+            .take(MAX_NB_SEGMENTS)
             .map(|segment| {
                 let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
 
@@ -438,7 +445,7 @@ fn dynamic<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Vec<Value>> 
         }
         res.push(Value::Object(obj));
 
-        if ty == u64::from(elf::DT_NULL) {
+        if ty == u64::from(elf::DT_NULL) || res.len() >= MAX_NB_DYNAMIC {
             break;
         }
     }
@@ -458,6 +465,7 @@ fn get_symbols<Elf: FileHeader>(
     Some(
         symbol_table
             .iter()
+            .take(MAX_NB_SYMBOLS)
             .map(|symbol| {
                 let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
 
