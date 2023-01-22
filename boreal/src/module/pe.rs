@@ -3,13 +3,10 @@ use std::collections::HashMap;
 use crate::regex::Regex;
 use object::{
     coff::{SectionTable, SymbolTable},
-    pe::{
-        self, ImageDelayloadDescriptor, ImageDosHeader, ImageImportDescriptor, ImageNtHeaders32,
-        ImageNtHeaders64,
-    },
+    pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64},
     read::pe::{
-        DataDirectories, DelayLoadImportTable, ImageNtHeaders, ImageOptionalHeader, ImageThunkData,
-        ImportTable, ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
+        DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportThunkList,
+        ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
     FileKind, LittleEndian as LE, StringTable,
 };
@@ -1277,13 +1274,21 @@ fn add_imports<Pe: ImageNtHeaders>(
                 Err(_) => continue,
             };
             let mut data_functions = Vec::new();
-            let functions = import_functions::<Pe>(
-                &table,
-                import_desc,
-                &library,
-                &mut data_functions,
-                &mut nb_functions_total,
-            );
+
+            let mut first_thunk = import_desc.original_first_thunk.get(LE);
+            if first_thunk == 0 {
+                first_thunk = import_desc.first_thunk.get(LE);
+            }
+
+            let functions = table.thunks(first_thunk).ok().map(|mut thunks| {
+                import_functions::<Pe, _>(
+                    &mut thunks,
+                    &library,
+                    |hint| table.hint_name(hint).map(|(_, name)| name.to_vec()),
+                    &mut data_functions,
+                    &mut nb_functions_total,
+                )
+            });
             let nb_functions = functions.as_ref().map(Vec::len);
 
             data.imports.push(DataImport {
@@ -1319,35 +1324,26 @@ fn add_imports<Pe: ImageNtHeaders>(
     let _r = out.insert("import_details", Value::Array(imports));
 }
 
-fn import_functions<Pe: ImageNtHeaders>(
-    import_table: &ImportTable,
-    desc: &ImageImportDescriptor,
+fn import_functions<Pe: ImageNtHeaders, F>(
+    thunks: &mut ImportThunkList,
     dll_name: &[u8],
+    hint_name: F,
     data_functions: &mut Vec<DataFunction>,
     nb_functions_total: &mut usize,
-) -> Option<Vec<Value>> {
-    let mut first_thunk = desc.original_first_thunk.get(LE);
-    if first_thunk == 0 {
-        first_thunk = desc.first_thunk.get(LE);
-    }
-    let mut thunks = import_table.thunks(first_thunk).ok()?;
-
+) -> Vec<Value>
+where
+    F: Fn(u32) -> object::Result<Vec<u8>>,
+{
     let mut functions = Vec::new();
     while let Ok(Some(thunk)) = thunks.next::<Pe>() {
         if *nb_functions_total >= MAX_PE_IMPORTS {
-            return Some(functions);
+            break;
         }
         *nb_functions_total += 1;
 
-        add_thunk::<Pe, _>(
-            thunk,
-            dll_name,
-            |hint| import_table.hint_name(hint).map(|(_, name)| name.to_vec()),
-            &mut functions,
-            data_functions,
-        );
+        add_thunk::<Pe, _>(thunk, dll_name, &hint_name, &mut functions, data_functions);
     }
-    Some(functions)
+    functions
 }
 
 fn add_thunk<Pe: ImageNtHeaders, F>(
@@ -1408,13 +1404,18 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
                 Err(_) => continue,
             };
             let mut data_functions = Vec::new();
-            let functions = delay_load_import_functions::<Pe>(
-                &table,
-                import_desc,
-                &library,
-                &mut data_functions,
-                &mut nb_functions_total,
-            );
+            let functions = table
+                .thunks(import_desc.import_name_table_rva.get(LE))
+                .ok()
+                .map(|mut thunks| {
+                    import_functions::<Pe, _>(
+                        &mut thunks,
+                        &library,
+                        |hint| table.hint_name(hint).map(|(_, name)| name.to_vec()),
+                        &mut data_functions,
+                        &mut nb_functions_total,
+                    )
+                });
             let nb_functions = functions.as_ref().map(Vec::len);
 
             data.delayed_imports.push(DataImport {
@@ -1448,35 +1449,6 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
         let _r = out.insert("number_of_delayed_imports", v);
     }
     let _r = out.insert("delayed_import_details", Value::Array(imports));
-}
-
-fn delay_load_import_functions<Pe: ImageNtHeaders>(
-    import_table: &DelayLoadImportTable,
-    desc: &ImageDelayloadDescriptor,
-    dll_name: &[u8],
-    data_functions: &mut Vec<DataFunction>,
-    nb_functions_total: &mut usize,
-) -> Option<Vec<Value>> {
-    let mut thunks = import_table
-        .thunks(desc.import_name_table_rva.get(LE))
-        .ok()?;
-
-    let mut functions = Vec::new();
-    while let Ok(Some(thunk)) = thunks.next::<Pe>() {
-        if *nb_functions_total >= MAX_PE_IMPORTS {
-            return Some(functions);
-        }
-        *nb_functions_total += 1;
-
-        add_thunk::<Pe, _>(
-            thunk,
-            dll_name,
-            |hint| import_table.hint_name(hint).map(|(_, name)| name.to_vec()),
-            &mut functions,
-            data_functions,
-        );
-    }
-    Some(functions)
 }
 
 fn add_exports(
