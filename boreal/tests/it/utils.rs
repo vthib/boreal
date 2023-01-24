@@ -1,5 +1,8 @@
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
+use boreal::module::{Module, StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanParams, ScanResult};
 
 pub struct Checker {
@@ -501,5 +504,251 @@ fn add_rule_error_get_desc(err: &boreal::compiler::AddRuleError, rules: &str) ->
             &std::fs::read_to_string(path).unwrap(),
         ),
         None => err.to_short_description("mem", rules),
+    }
+}
+
+/// Compare boreal & yara module values on a given file
+pub fn compare_module_values_on_file<M: Module>(module: M, path: &str) {
+    let mem = std::fs::read(path).unwrap();
+    compare_module_values_on_mem(module, path, &mem);
+}
+
+/// Compare boreal & yara module values on a given bytestring
+pub fn compare_module_values_on_mem<M: Module>(module: M, mem_name: &str, mem: &[u8]) {
+    let mut compiler = boreal::Compiler::new();
+    compiler
+        .add_rules_str(&format!(
+            "import \"{}\" rule a {{ condition: true }}",
+            module.get_name()
+        ))
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let res = scanner.scan_mem(mem);
+    let boreal_value = res
+        .module_values
+        .into_iter()
+        .find_map(|(name, module_value)| {
+            if name == module.get_name() {
+                Some(module_value)
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
+    // Enrich value using the static values, so that it can be compared with yara's
+    let mut boreal_value = Arc::try_unwrap(boreal_value).unwrap();
+    enrich_with_static_values(&mut boreal_value, module.get_static_values());
+
+    let c = yara::Compiler::new().unwrap();
+    let c = c
+        .add_rules_str(&format!(
+            "import \"{}\" rule a {{ condition: true }}",
+            module.get_name()
+        ))
+        .unwrap();
+    let rules = c.compile_rules().unwrap();
+
+    rules
+        .scan_mem_callback(mem, 0, |msg| {
+            if let yara::CallbackMsg::ModuleImported(obj) = msg {
+                let yara_value = convert_yara_obj_to_module_value(obj);
+                let mut diffs = Vec::new();
+                compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
+                if !diffs.is_empty() {
+                    panic!(
+                        "found differences for module {} on {}: {:#?}",
+                        module.get_name(),
+                        mem_name,
+                        diffs
+                    );
+                }
+            }
+            yara::CallbackReturn::Continue
+        })
+        .unwrap();
+}
+
+fn enrich_with_static_values(
+    value: &mut ModuleValue,
+    static_values: HashMap<&'static str, StaticValue>,
+) {
+    match value {
+        ModuleValue::Object(obj) => {
+            for (k, v) in static_values {
+                if obj.insert(k, static_value_to_value(v)).is_some() {
+                    panic!("collision on key {k}");
+                }
+            }
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn static_value_to_value(value: StaticValue) -> ModuleValue {
+    match value {
+        StaticValue::Integer(v) => ModuleValue::Integer(v),
+        StaticValue::Float(v) => ModuleValue::Float(v),
+        StaticValue::Bytes(v) => ModuleValue::Bytes(v),
+        StaticValue::Regex(v) => ModuleValue::Regex(v),
+        StaticValue::Boolean(v) => ModuleValue::Boolean(v),
+        StaticValue::Object(v) => ModuleValue::Object(
+            v.into_iter()
+                .map(|(k, v)| (k, static_value_to_value(v)))
+                .collect(),
+        ),
+        StaticValue::Function { fun, .. } => ModuleValue::Function(Arc::new(Box::new(fun))),
+    }
+}
+
+fn convert_yara_obj_to_module_value(obj: yara::YrObject) -> ModuleValue {
+    use yara::YrObjectValue;
+
+    match obj.value() {
+        YrObjectValue::Integer(v) => ModuleValue::Integer(v),
+        YrObjectValue::Float(v) => ModuleValue::Float(v),
+        YrObjectValue::String(v) => ModuleValue::Bytes(v.to_vec()),
+        YrObjectValue::Array(vec) => ModuleValue::Array(
+            vec.into_iter()
+                .map(|obj| {
+                    obj.map(convert_yara_obj_to_module_value)
+                        .unwrap_or(ModuleValue::Undefined)
+                })
+                .collect(),
+        ),
+        YrObjectValue::Dictionary(map) => ModuleValue::Dictionary(
+            map.into_iter()
+                .map(|(key, obj)| (key.to_vec(), convert_yara_obj_to_module_value(obj)))
+                .collect(),
+        ),
+        YrObjectValue::Structure(vec) => ModuleValue::Object(
+            vec.into_iter()
+                .map(|obj| {
+                    let key: &str = Box::leak(
+                        String::from_utf8(obj.identifier().unwrap().to_vec())
+                            .unwrap()
+                            .into_boxed_str(),
+                    );
+                    (key, convert_yara_obj_to_module_value(obj))
+                })
+                .collect(),
+        ),
+        YrObjectValue::Function => ModuleValue::Function(Arc::new(Box::new(|_, _| None))),
+        YrObjectValue::Undefined => ModuleValue::Undefined,
+    }
+}
+
+fn compare_module_values(
+    boreal_value: &ModuleValue,
+    yara_value: ModuleValue,
+    path: &str,
+    diffs: &mut Vec<Diff>,
+) {
+    match (boreal_value, yara_value) {
+        (ModuleValue::Undefined, ModuleValue::Undefined) => (),
+        (ModuleValue::Function(_), ModuleValue::Function(_)) => (),
+        (ModuleValue::Integer(a), ModuleValue::Integer(b)) if *a == b => (),
+        (ModuleValue::Float(a), ModuleValue::Float(b)) if *a == b => (),
+        (ModuleValue::Bytes(a), ModuleValue::Bytes(b)) if *a == b => (),
+        (ModuleValue::Object(a), ModuleValue::Object(mut b)) => {
+            for (key, boreal_value) in a {
+                let subpath = format!("{path}.{key}");
+                match b.remove(key) {
+                    Some(yara_value) => {
+                        compare_module_values(boreal_value, yara_value, &subpath, diffs)
+                    }
+                    None => {
+                        if !is_undefined(boreal_value) {
+                            diffs
+                                .push(Diff::new(&subpath, format!("extra value {boreal_value:?}")));
+                        }
+                    }
+                }
+            }
+            for (key, yara_value) in b {
+                if !is_undefined(&yara_value) {
+                    diffs.push(Diff::new(
+                        &format!("{path}.{key}"),
+                        format!("missing value {yara_value:?}"),
+                    ));
+                }
+            }
+        }
+        (ModuleValue::Array(a), ModuleValue::Array(b)) => {
+            if a.len() == b.len() {
+                for (i, (boreal_value, yara_value)) in a.iter().zip(b.into_iter()).enumerate() {
+                    let subpath = format!("{path}[{i}]");
+                    compare_module_values(boreal_value, yara_value, &subpath, diffs);
+                }
+            } else {
+                diffs.push(Diff::new(
+                    path,
+                    format!("different lengths: {} != {}", a.len(), b.len()),
+                ));
+            }
+        }
+        (ModuleValue::Dictionary(a), ModuleValue::Dictionary(mut b)) => {
+            for (key, boreal_value) in a {
+                let subpath = format!("{}[\"{}\"]", path, std::str::from_utf8(key).unwrap());
+                match b.remove(key) {
+                    Some(yara_value) => {
+                        compare_module_values(boreal_value, yara_value, &subpath, diffs)
+                    }
+                    None => {
+                        if !is_undefined(boreal_value) {
+                            diffs
+                                .push(Diff::new(&subpath, format!("extra value {boreal_value:?}")));
+                        }
+                    }
+                }
+            }
+        }
+        (ModuleValue::Undefined, yara_value) => {
+            if !is_undefined(&yara_value) {
+                diffs.push(Diff::new(path, format!("missing value {yara_value:?}")));
+            }
+        }
+
+        (a, b) => {
+            diffs.push(Diff::new(path, format!("{a:?} != {b:?}")));
+        }
+    }
+}
+
+fn is_undefined(value: &ModuleValue) -> bool {
+    match value {
+        ModuleValue::Undefined => true,
+        ModuleValue::Array(vec) => vec.is_empty(),
+        ModuleValue::Dictionary(obj) => obj.is_empty(),
+        ModuleValue::Object(obj) => {
+            // An object where all values are the undefined value is allowed (same eval behavior).
+            obj.values()
+                .all(|value| matches!(value, ModuleValue::Undefined))
+        }
+        _ => false,
+    }
+}
+
+impl Diff {
+    fn new(path: &str, desc: String) -> Self {
+        Self {
+            path: path.to_owned(),
+            desc,
+        }
+    }
+}
+
+struct Diff {
+    path: String,
+    desc: String,
+}
+
+impl std::fmt::Debug for Diff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Diff")
+            .field("path", &self.path)
+            .field("desc", &self.desc)
+            .finish()
     }
 }
