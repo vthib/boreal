@@ -795,16 +795,11 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     reserved: Option<u32>,
     data: Option<&mut Data>,
 ) -> HashMap<&'static str, Value> {
-    let magic = header.magic().to_be().into();
     let cputype = header.cputype(e);
     let cpusubtype = header.cpusubtype(e);
-    let filetype = header.filetype(e).into();
-    let ncmds = header.ncmds(e).into();
-    let sizeofcmds = header.sizeofcmds(e).into();
-    let flags = header.flags(e).into();
 
     let segments = segments(header, e, mem);
-    let nb_segments = segments.as_ref().and_then(|v| v.len().try_into().ok());
+    let nb_segments = segments.as_ref().map(Vec::len);
 
     let (entry_point, stack_size) = entry_point_data(header, e, mem, cputype);
 
@@ -817,22 +812,20 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     }
 
     [
-        ("magic", Some(magic)),
-        ("cputype", Some(cputype.into())),
-        ("cpusubtype", Some(cpusubtype.into())),
-        ("filetype", Some(filetype)),
-        ("ncmds", Some(ncmds)),
-        ("sizeofcmds", Some(sizeofcmds)),
-        ("flags", Some(flags)),
-        ("reserved", reserved.map(Into::into)),
-        ("segments", segments.map(Value::Array)),
-        ("number_of_segments", nb_segments),
-        ("entry_point", entry_point.and_then(|v| v.try_into().ok())),
-        ("stack_size", stack_size.and_then(|v| v.try_into().ok())),
+        ("magic", header.magic().to_be().into()),
+        ("cputype", cputype.into()),
+        ("cpusubtype", cpusubtype.into()),
+        ("filetype", header.filetype(e).into()),
+        ("ncmds", header.ncmds(e).into()),
+        ("sizeofcmds", header.sizeofcmds(e).into()),
+        ("flags", header.flags(e).into()),
+        ("reserved", reserved.into()),
+        ("segments", segments.map_or(Value::Undefined, Value::Array)),
+        ("number_of_segments", nb_segments.into()),
+        ("entry_point", entry_point.into()),
+        ("stack_size", stack_size.into()),
     ]
-    .into_iter()
-    .filter_map(|(k, v)| v.map(|v| (k, v)))
-    .collect()
+    .into()
 }
 
 fn segments<Mach: MachHeader<Endian = Endianness>>(
@@ -1001,51 +994,36 @@ fn segment_to_map<S: Segment<Endian = Endianness>>(
     segment: &S,
     e: Endianness,
 ) -> HashMap<&'static str, Value> {
-    let vmaddr: u64 = segment.vmaddr(e).into();
-    let vmsize: u64 = segment.vmsize(e).into();
-    let fileoff: u64 = segment.fileoff(e).into();
-    let fsize: u64 = segment.filesize(e).into();
-    let segname = segment.name().to_vec();
-
     [
-        ("segname", Some(segname.into())),
-        ("vmaddr", vmaddr.try_into().ok()),
-        ("vmsize", vmsize.try_into().ok()),
-        ("fileoff", fileoff.try_into().ok()),
-        ("fsize", fsize.try_into().ok()),
-        ("maxprot", Some(segment.maxprot(e).into())),
-        ("initprot", Some(segment.initprot(e).into())),
-        ("nsects", Some(segment.nsects(e).into())),
-        ("flags", Some(segment.flags(e).into())),
+        ("segname", segment.name().to_vec().into()),
+        ("vmaddr", segment.vmaddr(e).into().into()),
+        ("vmsize", segment.vmsize(e).into().into()),
+        ("fileoff", segment.fileoff(e).into().into()),
+        ("fsize", segment.filesize(e).into().into()),
+        ("maxprot", segment.maxprot(e).into()),
+        ("initprot", segment.initprot(e).into()),
+        ("nsects", segment.nsects(e).into()),
+        ("flags", segment.flags(e).into()),
     ]
-    .into_iter()
-    .filter_map(|(k, v)| v.map(|v| (k, v)))
-    .collect()
+    .into()
 }
 
 fn sections_to_map<S: Section<Endian = Endianness>>(
     section: &S,
     e: Endianness,
 ) -> HashMap<&'static str, Value> {
-    let addr: u64 = section.addr(e).into();
-    let size: u64 = section.size(e).into();
-    let segname = section.segment_name().to_vec();
-    let sectname = section.name().to_vec();
-
     [
-        ("segname", Some(segname.into())),
-        ("sectname", Some(sectname.into())),
-        ("addr", addr.try_into().ok()),
-        ("size", size.try_into().ok()),
-        ("offset", Some(section.offset(e).into())),
-        ("align", Some(section.align(e).into())),
-        ("reloff", Some(section.reloff(e).into())),
-        ("nreloc", Some(section.nreloc(e).into())),
-        ("flags", Some(section.flags(e).into())),
+        ("segname", section.segment_name().to_vec().into()),
+        ("sectname", section.name().to_vec().into()),
+        ("addr", section.addr(e).into().into()),
+        ("size", section.size(e).into().into()),
+        ("offset", section.offset(e).into()),
+        ("align", section.align(e).into()),
+        ("reloff", section.reloff(e).into()),
+        ("nreloc", section.nreloc(e).into()),
+        ("flags", section.flags(e).into()),
     ]
-    .into_iter()
-    .filter_map(|(k, v)| v.map(|v| (k, v)))
-    .collect()
+    .into()
 }
 
 fn sections32(
@@ -1094,10 +1072,10 @@ fn sections64(
 fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static str, Value>> {
     let (magic, nfat_arch) = match FatHeader::parse(mem) {
         Ok(header) => (
-            Some(header.magic.get(BigEndian).into()),
-            Some(header.nfat_arch.get(BigEndian).into()),
+            header.magic.get(BigEndian).into(),
+            header.nfat_arch.get(BigEndian).into(),
         ),
-        Err(_) => (None, None),
+        Err(_) => (Value::Undefined, Value::Undefined),
     };
 
     let mut archs = Vec::new();
@@ -1123,12 +1101,10 @@ fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static
         [
             ("fat_magic", magic),
             ("nfat_arch", nfat_arch),
-            ("fat_arch", Some(Value::Array(archs))),
-            ("file", Some(Value::Array(files))),
+            ("fat_arch", Value::Array(archs)),
+            ("file", Value::Array(files)),
         ]
-        .into_iter()
-        .filter_map(|(k, v)| v.map(|v| (k, v)))
-        .collect(),
+        .into(),
     )
 }
 
@@ -1142,25 +1118,16 @@ fn fat_arch_to_file_value<A: FatArch>(arch: &A, data: &mut Data, mem: &[u8]) -> 
 }
 
 fn fat_arch_to_value<A: FatArch>(arch: &A, data: &mut Data, reserved: Option<u32>) -> Value {
-    let cputype = arch.cputype().into();
-    let cpusubtype = arch.cpusubtype().into();
     let offset = arch.offset().into();
-    let size = arch.size().into();
-    let align = arch.align().into();
 
     data.arch_offsets.push(offset);
 
-    Value::Object(
-        [
-            ("cputype", Some(cputype)),
-            ("cpusubtype", Some(cpusubtype)),
-            ("offset", offset.try_into().ok()),
-            ("size", size.try_into().ok()),
-            ("align", Some(align)),
-            ("reserved", reserved.map(Into::into)),
-        ]
-        .into_iter()
-        .filter_map(|(k, v)| v.map(|v| (k, v)))
-        .collect(),
-    )
+    Value::object([
+        ("cputype", arch.cputype().into()),
+        ("cpusubtype", arch.cpusubtype().into()),
+        ("offset", offset.into()),
+        ("size", arch.size().into().into()),
+        ("align", arch.align().into()),
+        ("reserved", reserved.into()),
+    ])
 }
