@@ -252,67 +252,41 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     let header = file.raw_header();
     let e = file.endian();
 
-    let ty = header.e_type(e).into();
-    let machine = header.e_machine(e).into();
-    let nb_sections = header.shnum(e, mem).ok().and_then(|v| v.try_into().ok());
-    let sh_offset = header.e_shoff(e).into().try_into().ok();
-    let sections_entsize = u64::from(header.e_shentsize(e)).try_into().ok();
-    let nb_segments = header.phnum(e, mem).ok().and_then(|v| v.try_into().ok());
-    let ph_offset = header.e_phoff(e).into().try_into().ok();
-    let segments_entsize = u64::from(header.e_phentsize(e)).try_into().ok();
-
     let symtab = get_symbols(file, mem, elf::SHT_SYMTAB);
-    let symtab_len = symtab.as_ref().and_then(|v| {
-        if v.is_empty() {
-            None
-        } else {
-            v.len().try_into().ok()
-        }
-    });
+    let symtab_len = symtab
+        .as_ref()
+        .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
     let dynsym = get_symbols(file, mem, elf::SHT_DYNSYM);
-    let dynsym_len = dynsym.as_ref().and_then(|v| {
-        if v.is_empty() {
-            None
-        } else {
-            v.len().try_into().ok()
-        }
-    });
+    let dynsym_len = dynsym
+        .as_ref()
+        .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
     let dynamic = dynamic(file, mem);
-    let dynamic_len = dynamic.as_ref().and_then(|v| {
-        if v.is_empty() {
-            None
-        } else {
-            v.len().try_into().ok()
-        }
-    });
+    let dynamic_len = dynamic
+        .as_ref()
+        .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
     [
-        ("type", Some(ty)),
-        ("machine", Some(machine)),
-        (
-            "entry_point",
-            entry_point(file, mem).and_then(|v| v.try_into().ok()),
-        ),
-        ("number_of_sections", nb_sections),
-        ("sh_offset", sh_offset),
-        ("sh_entry_size", sections_entsize),
-        ("number_of_segments", nb_segments),
-        ("ph_offset", ph_offset),
-        ("ph_entry_size", segments_entsize),
-        ("sections", sections(file, mem)),
-        ("segments", Some(segments(file))),
-        ("symtab", symtab.map(Value::Array)),
-        ("symtab_entries", symtab_len),
-        ("dynsym", dynsym.map(Value::Array)),
-        ("dynsym_entries", dynsym_len),
-        ("dynamic", dynamic.map(Value::Array)),
-        ("dynamic_section_entries", dynamic_len),
+        ("type", Value::from(header.e_type(e))),
+        ("machine", header.e_machine(e).into()),
+        ("entry_point", entry_point(file, mem).into()),
+        ("number_of_sections", header.shnum(e, mem).ok().into()),
+        ("sh_offset", header.e_shoff(e).into().into()),
+        ("sh_entry_size", u64::from(header.e_shentsize(e)).into()),
+        ("number_of_segments", header.phnum(e, mem).ok().into()),
+        ("ph_offset", header.e_phoff(e).into().into()),
+        ("ph_entry_size", u64::from(header.e_phentsize(e)).into()),
+        ("sections", sections(file, mem).unwrap_or(Value::Undefined)),
+        ("segments", segments(file)),
+        ("symtab", symtab.map_or(Value::Undefined, Value::Array)),
+        ("symtab_entries", symtab_len.into()),
+        ("dynsym", dynsym.map_or(Value::Undefined, Value::Array)),
+        ("dynsym_entries", dynsym_len.into()),
+        ("dynamic", dynamic.map_or(Value::Undefined, Value::Array)),
+        ("dynamic_section_entries", dynamic_len.into()),
     ]
-    .into_iter()
-    .filter_map(|(k, v)| v.map(|v| (k, v)))
-    .collect()
+    .into()
 }
 
 pub(crate) fn entry_point<Elf: FileHeader>(file: &ElfFile<Elf>, mem: &[u8]) -> Option<u64> {
@@ -361,26 +335,21 @@ fn sections<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
             .iter()
             .take(MAX_NB_SECTIONS)
             .map(|section| {
-                let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
-
-                let _r = obj.insert("type", section.sh_type(e).into());
-                if let Ok(v) = section.sh_flags(e).into().try_into() {
-                    let _r = obj.insert("flags", v);
-                }
-                if let Ok(v) = section.sh_addr(e).into().try_into() {
-                    let _r = obj.insert("address", v);
-                }
-                if let Ok(v) = section.sh_size(e).into().try_into() {
-                    let _r = obj.insert("size", v);
-                }
-                if let Ok(v) = section.sh_offset(e).into().try_into() {
-                    let _r = obj.insert("offset", v);
-                }
-                if let Ok(v) = section_table.section_name(e, section) {
-                    let _r = obj.insert("name", v.to_vec().into());
-                }
-
-                Value::Object(obj)
+                Value::object([
+                    ("type", section.sh_type(e).into()),
+                    ("flags", section.sh_flags(e).into().into()),
+                    ("address", section.sh_addr(e).into().into()),
+                    ("size", section.sh_size(e).into().into()),
+                    ("offset", section.sh_offset(e).into().into()),
+                    (
+                        "name",
+                        section_table
+                            .section_name(e, section)
+                            .ok()
+                            .map(<[u8]>::to_vec)
+                            .into(),
+                    ),
+                ])
             })
             .collect(),
     ))
@@ -394,30 +363,16 @@ fn segments<Elf: FileHeader>(f: &ElfFile<Elf>) -> Value {
             .iter()
             .take(MAX_NB_SEGMENTS)
             .map(|segment| {
-                let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
-
-                let _r = obj.insert("type", segment.p_type(e).into());
-                let _r = obj.insert("flags", segment.p_flags(e).into());
-                if let Ok(v) = segment.p_offset(e).into().try_into() {
-                    let _r = obj.insert("offset", v);
-                }
-                if let Ok(v) = segment.p_vaddr(e).into().try_into() {
-                    let _r = obj.insert("virtual_address", v);
-                }
-                if let Ok(v) = segment.p_paddr(e).into().try_into() {
-                    let _r = obj.insert("physical_address", v);
-                }
-                if let Ok(v) = segment.p_filesz(e).into().try_into() {
-                    let _r = obj.insert("file_size", v);
-                }
-                if let Ok(v) = segment.p_memsz(e).into().try_into() {
-                    let _r = obj.insert("memory_size", v);
-                }
-                if let Ok(v) = segment.p_align(e).into().try_into() {
-                    let _r = obj.insert("alignment", v);
-                }
-
-                Value::Object(obj)
+                Value::object([
+                    ("type", segment.p_type(e).into()),
+                    ("flags", segment.p_flags(e).into()),
+                    ("offset", segment.p_offset(e).into().into()),
+                    ("virtual_address", segment.p_vaddr(e).into().into()),
+                    ("physical_address", segment.p_paddr(e).into().into()),
+                    ("file_size", segment.p_filesz(e).into().into()),
+                    ("memory_size", segment.p_memsz(e).into().into()),
+                    ("alignment", segment.p_align(e).into().into()),
+                ])
             })
             .collect(),
     )
@@ -436,14 +391,10 @@ fn dynamic<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Vec<Value>> 
     for sym in dyn_table {
         let ty = sym.d_tag(e).into();
 
-        let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(3);
-        if let Ok(ty) = ty.try_into() {
-            let _r = obj.insert("type", ty);
-        }
-        if let Ok(val) = sym.d_val(e).into().try_into() {
-            let _r = obj.insert("val", val);
-        }
-        res.push(Value::Object(obj));
+        res.push(Value::object([
+            ("type", ty.into()),
+            ("val", sym.d_val(e).into().into()),
+        ]));
 
         if ty == u64::from(elf::DT_NULL) || res.len() >= MAX_NB_DYNAMIC {
             break;
@@ -467,22 +418,21 @@ fn get_symbols<Elf: FileHeader>(
             .iter()
             .take(MAX_NB_SYMBOLS)
             .map(|symbol| {
-                let mut obj: HashMap<&'static str, Value> = HashMap::with_capacity(6);
-
-                if let Ok(v) = symbol.name(e, strings_table) {
-                    let _r = obj.insert("name", v.to_vec().into());
-                }
-                let _r = obj.insert("bind", symbol.st_bind().into());
-                let _r = obj.insert("type", symbol.st_type().into());
-                let _r = obj.insert("shndx", symbol.st_shndx(e).into());
-                if let Ok(v) = symbol.st_value(e).into().try_into() {
-                    let _r = obj.insert("value", v);
-                }
-                if let Ok(v) = symbol.st_size(e).into().try_into() {
-                    let _r = obj.insert("size", v);
-                }
-
-                Value::Object(obj)
+                Value::object([
+                    (
+                        "name",
+                        symbol
+                            .name(e, strings_table)
+                            .ok()
+                            .map(<[u8]>::to_vec)
+                            .into(),
+                    ),
+                    ("bind", symbol.st_bind().into()),
+                    ("type", symbol.st_type().into()),
+                    ("shndx", symbol.st_shndx(e).into()),
+                    ("value", symbol.st_value(e).into().into()),
+                    ("size", symbol.st_size(e).into().into()),
+                ])
             })
             .collect(),
     )
