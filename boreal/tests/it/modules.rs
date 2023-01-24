@@ -519,5 +519,6 @@ fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
             }
         }
         ModuleValue::Function(_) => println!("true"),
+        ModuleValue::Undefined => todo!(),
     }
 }

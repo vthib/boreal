@@ -310,6 +310,12 @@ pub enum Value {
         #[allow(clippy::type_complexity)]
         Arc<Box<dyn Fn(&ScanContext, Vec<Value>) -> Option<Value> + Send + Sync>>,
     ),
+
+    /// An undefined value.
+    ///
+    /// This is useful when filling up structure or dictionaries where some keys have no values for
+    /// some given scanned bytes. Using the undefined value works as if the key was not filled.
+    Undefined,
 }
 
 // XXX: custom Debug impl needed because derive does not work with the fn fields.
@@ -331,6 +337,7 @@ impl std::fmt::Debug for Value {
             Self::Array(arg0) => f.debug_tuple("Array").field(arg0).finish(),
             Self::Dictionary(arg0) => f.debug_tuple("Dictionary").field(arg0).finish(),
             Self::Function(_) => f.debug_struct("Function").finish(),
+            Self::Undefined => write!(f, "Undefined"),
         }
     }
 }
@@ -627,20 +634,27 @@ from_prim!(Vec<u8>, Bytes);
 from_prim!(Regex, Regex);
 from_prim!(bool, Boolean);
 
-macro_rules! try_from_value_integer {
+macro_rules! from_big_integer {
     ($ty:ty) => {
-        impl TryFrom<$ty> for Value {
-            type Error = <i64 as TryFrom<$ty>>::Error;
-
-            fn try_from(v: $ty) -> Result<Value, Self::Error> {
-                v.try_into().map(Value::Integer)
+        impl From<$ty> for Value {
+            fn from(v: $ty) -> Value {
+                v.try_into().map_or(Value::Undefined, Value::Integer)
             }
         }
     };
 }
 
-try_from_value_integer!(u64);
-try_from_value_integer!(usize);
+from_big_integer!(u64);
+from_big_integer!(usize);
+
+impl<T> From<Option<T>> for Value
+where
+    Value: From<T>,
+{
+    fn from(v: Option<T>) -> Value {
+        v.map_or(Value::Undefined, Value::from)
+    }
+}
 
 #[cfg(test)]
 mod tests {
