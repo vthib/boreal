@@ -293,6 +293,7 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
             }
         }
         ModuleValue::Function(_) => println!("[function]"),
+        ModuleValue::Undefined => println!("[undef]"),
     }
 }
 

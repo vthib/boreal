@@ -103,7 +103,11 @@ pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Result<Value, Po
         ModuleValue::Regex(v) => Ok(Value::Regex(v)),
         ModuleValue::Boolean(v) => Ok(Value::Boolean(v)),
 
-        _ => Err(PoisonKind::Undefined),
+        ModuleValue::Object(_)
+        | ModuleValue::Array(_)
+        | ModuleValue::Dictionary(_)
+        | ModuleValue::Function(_)
+        | ModuleValue::Undefined => Err(PoisonKind::Undefined),
     }
 }
 
