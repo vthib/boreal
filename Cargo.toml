@@ -19,4 +19,5 @@ object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.3
 # Fork of yara-rust crate, for a few in advance changes.
 #
 # - Add OPENSSL_DIR handling for windows w/ openssl compilation.
+# - Helpers to get module values during scan: https://github.com/Hugal31/yara-rust/pull/96
 yara = { git = 'https://github.com/vthib/yara-rust', branch = "version-0.16" }
