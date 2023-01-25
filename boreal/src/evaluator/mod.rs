@@ -222,6 +222,7 @@ struct Evaluator<'a, 'b, 'c, 'd, 'e> {
     scan_data: &'e mut ScanData<'b>,
 }
 
+#[derive(Debug)]
 enum PoisonKind {
     /// The poison comes from the need to compute variables.
     ///
@@ -1046,5 +1047,6 @@ mod tests {
         });
         test_type_traits_non_clonable(ForSelectionEvaluation::Value(Value::Integer(0)));
         test_type_traits_non_clonable(ForSelectionEvaluator::None);
+        test_type_traits_non_clonable(PoisonKind::Undefined);
     }
 }
