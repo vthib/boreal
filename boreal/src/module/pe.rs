@@ -1054,142 +1054,125 @@ fn parse_file<Pe: ImageNtHeaders>(
     data.is_dll = characteristics & pe::IMAGE_FILE_DLL;
 
     let mut map: HashMap<_, _> = [
-        ("is_pe", Some(Value::Integer(1))),
+        ("is_pe", Value::Integer(1)),
         // File header
-        ("machine", Some(hdr.machine.get(LE).into())),
-        (
-            "number_of_sections",
-            Some(hdr.number_of_sections.get(LE).into()),
-        ),
-        ("timestamp", Some(hdr.time_date_stamp.get(LE).into())),
+        ("machine", hdr.machine.get(LE).into()),
+        ("number_of_sections", hdr.number_of_sections.get(LE).into()),
+        ("timestamp", hdr.time_date_stamp.get(LE).into()),
         (
             "pointer_to_symbol_table",
-            Some(hdr.pointer_to_symbol_table.get(LE).into()),
+            hdr.pointer_to_symbol_table.get(LE).into(),
         ),
-        (
-            "number_of_symbols",
-            Some(hdr.number_of_symbols.get(LE).into()),
-        ),
+        ("number_of_symbols", hdr.number_of_symbols.get(LE).into()),
         (
             "size_of_optional_header",
-            Some(hdr.size_of_optional_header.get(LE).into()),
+            hdr.size_of_optional_header.get(LE).into(),
         ),
-        ("characteristics", Some(characteristics.into())),
+        ("characteristics", characteristics.into()),
         //
         (
             "entry_point",
             sections
                 .and_then(|sections| va_to_file_offset(&sections, ep))
-                .map(Into::into),
+                .into(),
         ),
-        ("entry_point_raw", Some(ep.into())),
-        ("image_base", opt_hdr.image_base().try_into().ok()),
+        ("entry_point_raw", ep.into()),
+        ("image_base", opt_hdr.image_base().into()),
         (
             "number_of_rva_and_sizes",
-            Some(opt_hdr.number_of_rva_and_sizes().into()),
+            opt_hdr.number_of_rva_and_sizes().into(),
         ),
         // Optional header
-        ("opthdr_magic", Some(opt_hdr.magic().into())),
-        ("size_of_code", Some(opt_hdr.size_of_code().into())),
+        ("opthdr_magic", opt_hdr.magic().into()),
+        ("size_of_code", opt_hdr.size_of_code().into()),
         (
             "size_of_initialized_data",
-            Some(opt_hdr.size_of_initialized_data().into()),
+            opt_hdr.size_of_initialized_data().into(),
         ),
         (
             "size_of_uninitialized_data",
-            Some(opt_hdr.size_of_uninitialized_data().into()),
+            opt_hdr.size_of_uninitialized_data().into(),
         ),
-        ("base_of_code", Some(opt_hdr.base_of_code().into())),
-        ("base_of_data", opt_hdr.base_of_data().map(Into::into)),
-        (
-            "section_alignment",
-            Some(opt_hdr.section_alignment().into()),
-        ),
-        ("file_alignment", Some(opt_hdr.file_alignment().into())),
+        ("base_of_code", opt_hdr.base_of_code().into()),
+        ("base_of_data", opt_hdr.base_of_data().into()),
+        ("section_alignment", opt_hdr.section_alignment().into()),
+        ("file_alignment", opt_hdr.file_alignment().into()),
         (
             "linker_version",
-            Some(Value::object([
+            Value::object([
                 ("major", opt_hdr.major_linker_version().into()),
                 ("minor", opt_hdr.minor_linker_version().into()),
-            ])),
+            ]),
         ),
         (
             "os_version",
-            Some(Value::object([
+            Value::object([
                 ("major", opt_hdr.major_operating_system_version().into()),
                 ("minor", opt_hdr.minor_operating_system_version().into()),
-            ])),
+            ]),
         ),
         (
             "image_version",
-            Some(Value::object([
+            Value::object([
                 ("major", opt_hdr.major_image_version().into()),
                 ("minor", opt_hdr.minor_image_version().into()),
-            ])),
+            ]),
         ),
         (
             "subsystem_version",
-            Some(Value::object([
+            Value::object([
                 ("major", opt_hdr.major_subsystem_version().into()),
                 ("minor", opt_hdr.minor_subsystem_version().into()),
-            ])),
+            ]),
         ),
-        (
-            "win32_version_value",
-            Some(opt_hdr.win32_version_value().into()),
-        ),
-        ("size_of_image", Some(opt_hdr.size_of_image().into())),
-        ("size_of_headers", Some(opt_hdr.size_of_headers().into())),
-        ("checksum", Some(opt_hdr.check_sum().into())),
-        ("subsystem", Some(opt_hdr.subsystem().into())),
-        (
-            "dll_characteristics",
-            Some(opt_hdr.dll_characteristics().into()),
-        ),
+        ("win32_version_value", opt_hdr.win32_version_value().into()),
+        ("size_of_image", opt_hdr.size_of_image().into()),
+        ("size_of_headers", opt_hdr.size_of_headers().into()),
+        ("checksum", opt_hdr.check_sum().into()),
+        ("subsystem", opt_hdr.subsystem().into()),
+        ("dll_characteristics", opt_hdr.dll_characteristics().into()),
         (
             "size_of_stack_reserve",
-            opt_hdr.size_of_stack_reserve().try_into().ok(),
+            opt_hdr.size_of_stack_reserve().into(),
         ),
         (
             "size_of_stack_commit",
-            opt_hdr.size_of_stack_commit().try_into().ok(),
+            opt_hdr.size_of_stack_commit().into(),
         ),
         (
             "size_of_heap_reserve",
-            opt_hdr.size_of_heap_reserve().try_into().ok(),
+            opt_hdr.size_of_heap_reserve().into(),
         ),
-        (
-            "size_of_heap_commit",
-            opt_hdr.size_of_heap_commit().try_into().ok(),
-        ),
-        ("loader_flags", Some(opt_hdr.loader_flags().into())),
+        ("size_of_heap_commit", opt_hdr.size_of_heap_commit().into()),
+        ("loader_flags", opt_hdr.loader_flags().into()),
         //
-        ("data_directories", Some(data_directories(data_dirs))),
+        ("data_directories", data_directories(data_dirs)),
         (
             "sections",
-            sections.as_ref().map(|sections| {
+            sections.as_ref().map_or(Value::Undefined, |sections| {
                 sections_to_value(sections, symbols.as_ref().map(SymbolTable::strings), data)
             }),
         ),
         (
             "overlay",
-            sections.as_ref().map(|sections| overlay(sections, mem)),
+            sections
+                .as_ref()
+                .map_or(Value::Undefined, |sections| overlay(sections, mem)),
         ),
         (
             "pdb_path",
             sections
                 .as_ref()
-                .and_then(|sections| debug::pdb_path(&data_dirs, mem, sections)),
+                .and_then(|sections| debug::pdb_path(&data_dirs, mem, sections))
+                .unwrap_or(Value::Undefined),
         ),
         (
             "rich_signature",
             RichHeaderInfo::parse(mem, dos_header.nt_headers_offset().into())
-                .map(|info| rich_signature(info, mem, data)),
+                .map_or(Value::Undefined, |info| rich_signature(info, mem, data)),
         ),
     ]
-    .into_iter()
-    .filter_map(|(k, v)| v.map(|v| (k, v)))
-    .collect();
+    .into();
 
     if let Some(sections) = sections.as_ref() {
         add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
@@ -1239,20 +1222,15 @@ fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
         clear
     });
 
-    Value::Object(
-        [
-            ("offset", info.offset.try_into().ok()),
-            ("length", length.try_into().ok()),
-            ("key", Some(info.xor_key.into())),
-            ("raw_data", raw.map(Into::into)),
-            ("clear_data", clear.map(Into::into)),
-            ("version", Some(Value::function(Pe::rich_signature_version))),
-            ("toolid", Some(Value::function(Pe::rich_signature_toolid))),
-        ]
-        .into_iter()
-        .filter_map(|(k, v)| v.map(|v| (k, v)))
-        .collect(),
-    )
+    Value::object([
+        ("offset", info.offset.into()),
+        ("length", length.into()),
+        ("key", info.xor_key.into()),
+        ("raw_data", raw.into()),
+        ("clear_data", clear.into()),
+        ("version", Value::function(Pe::rich_signature_version)),
+        ("toolid", Value::function(Pe::rich_signature_toolid)),
+    ])
 }
 
 fn add_imports<Pe: ImageNtHeaders>(
@@ -1289,39 +1267,34 @@ fn add_imports<Pe: ImageNtHeaders>(
                     &mut nb_functions_total,
                 )
             });
-            let nb_functions = functions.as_ref().map(Vec::len);
 
             data.imports.push(DataImport {
                 dll_name: library.clone(),
                 functions: data_functions,
             });
 
-            imports.push(Value::Object(
-                [
-                    ("library_name", Some(library.into())),
-                    (
-                        "number_of_functions",
-                        nb_functions.and_then(|v| v.try_into().ok()),
-                    ),
-                    ("functions", functions.map(Value::Array)),
-                ]
-                .into_iter()
-                .filter_map(|(k, v)| v.map(|v| (k, v)))
-                .collect(),
-            ));
+            imports.push(Value::object([
+                ("library_name", library.into()),
+                (
+                    "number_of_functions",
+                    functions.as_ref().map(Vec::len).into(),
+                ),
+                (
+                    "functions",
+                    functions.map_or(Value::Undefined, Value::Array),
+                ),
+            ]));
             if imports.len() >= MAX_PE_IMPORTS {
                 break;
             }
         }
     }
 
-    if let Ok(v) = nb_functions_total.try_into() {
-        let _r = out.insert("number_of_imported_functions", v);
-    }
-    if let Ok(v) = imports.len().try_into() {
-        let _r = out.insert("number_of_imports", v);
-    }
-    let _r = out.insert("import_details", Value::Array(imports));
+    out.extend([
+        ("number_of_imported_functions", nb_functions_total.into()),
+        ("number_of_imports", imports.len().into()),
+        ("import_details", Value::Array(imports)),
+    ]);
 }
 
 fn import_functions<Pe: ImageNtHeaders, F>(
@@ -1416,39 +1389,37 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
                         &mut nb_functions_total,
                     )
                 });
-            let nb_functions = functions.as_ref().map(Vec::len);
 
             data.delayed_imports.push(DataImport {
                 dll_name: library.clone(),
                 functions: data_functions,
             });
 
-            imports.push(Value::Object(
-                [
-                    ("library_name", Some(library.into())),
-                    (
-                        "number_of_functions",
-                        nb_functions.and_then(|v| v.try_into().ok()),
-                    ),
-                    ("functions", functions.map(Value::Array)),
-                ]
-                .into_iter()
-                .filter_map(|(k, v)| v.map(|v| (k, v)))
-                .collect(),
-            ));
+            imports.push(Value::object([
+                ("library_name", library.into()),
+                (
+                    "number_of_functions",
+                    functions.as_ref().map(Vec::len).into(),
+                ),
+                (
+                    "functions",
+                    functions.map_or(Value::Undefined, Value::Array),
+                ),
+            ]));
             if imports.len() >= MAX_PE_IMPORTS {
                 break;
             }
         }
     }
 
-    if let Ok(v) = nb_functions_total.try_into() {
-        let _r = out.insert("number_of_delayed_imported_functions", v);
-    }
-    if let Ok(v) = imports.len().try_into() {
-        let _r = out.insert("number_of_delayed_imports", v);
-    }
-    let _r = out.insert("delayed_import_details", Value::Array(imports));
+    out.extend([
+        (
+            "number_of_delayed_imported_functions",
+            nb_functions_total.into(),
+        ),
+        ("number_of_delayed_imports", imports.len().into()),
+        ("delayed_import_details", Value::Array(imports)),
+    ]);
 }
 
 fn add_exports(
@@ -1466,28 +1437,31 @@ fn add_exports(
             .take(MAX_PE_EXPORTS)
             .enumerate()
             .map(|(i, address)| {
-                let mut map = HashMap::with_capacity(4);
-
-                if let Ok(v) = i64::try_from(ordinal_base + i) {
-                    let _r = map.insert("ordinal", v.into());
-                }
-
                 let address = address.get(LE);
-                if let Ok(Some(mut forward)) = table.forward_string(address) {
+                let forward_name = table.forward_string(address).ok().flatten().map(|forward| {
                     if forward.len() > MAX_EXPORT_NAME_LENGTH {
-                        forward = &forward[..MAX_EXPORT_NAME_LENGTH];
+                        forward[..MAX_EXPORT_NAME_LENGTH].to_vec()
+                    } else {
+                        forward.to_vec()
                     }
-                    let _r = map.insert("forward_name", Value::bytes(forward));
-                } else if let Some(v) = va_to_file_offset(sections, address) {
-                    let _r = map.insert("offset", v.into());
-                }
+                });
 
                 data.exports.push(DataExport {
                     name: None,
                     ordinal: ordinal_base + i,
                 });
 
-                Value::Object(map)
+                Value::object([
+                    ("ordinal", (ordinal_base + i).into()),
+                    (
+                        "offset",
+                        match forward_name {
+                            Some(_) => Value::Undefined,
+                            None => va_to_file_offset(sections, address).into(),
+                        },
+                    ),
+                    ("forward_name", forward_name.into()),
+                ])
             })
             .collect();
 
@@ -1511,16 +1485,19 @@ fn add_exports(
         }
 
         let dir = table.directory();
-        let _r = out.insert("export_timestamp", dir.time_date_stamp.get(LE).into());
-        let name_pointer = dir.name.get(LE);
-        if let Ok(dll_name) = table.name_from_pointer(name_pointer) {
-            let _r = out.insert("dll_name", dll_name.to_vec().into());
-        }
-
-        if let Ok(v) = details.len().try_into() {
-            let _r = out.insert("number_of_exports", v);
-        }
-        let _r = out.insert("export_details", Value::Array(details));
+        out.extend([
+            ("export_timestamp", dir.time_date_stamp.get(LE).into()),
+            (
+                "dll_name",
+                table
+                    .name_from_pointer(dir.name.get(LE))
+                    .ok()
+                    .map(<[u8]>::to_vec)
+                    .into(),
+            ),
+            ("number_of_exports", details.len().into()),
+            ("export_details", Value::Array(details)),
+        ]);
     } else {
         let _r = out.insert("number_of_exports", Value::Integer(0));
     }
@@ -1576,42 +1553,31 @@ fn sections_to_value(
                     raw_data_size,
                 });
 
-                Value::Object(
-                    [
-                        ("name", Some(name.to_vec().into())),
-                        ("full_name", full_name.map(|v| v.to_vec().into())),
-                        (
-                            "characteristics",
-                            Some(section.characteristics.get(LE).into()),
-                        ),
-                        (
-                            "virtual_address",
-                            Some(section.virtual_address.get(LE).into()),
-                        ),
-                        ("virtual_size", Some(section.virtual_size.get(LE).into())),
-                        ("raw_data_size", Some(raw_data_size.into())),
-                        ("raw_data_offset", Some(raw_data_offset.into())),
-                        (
-                            "pointer_to_relocations",
-                            Some(section.pointer_to_relocations.get(LE).into()),
-                        ),
-                        (
-                            "pointer_to_line_numbers",
-                            Some(section.pointer_to_linenumbers.get(LE).into()),
-                        ),
-                        (
-                            "number_of_relocations",
-                            Some(section.number_of_relocations.get(LE).into()),
-                        ),
-                        (
-                            "number_of_line_numbers",
-                            Some(section.number_of_linenumbers.get(LE).into()),
-                        ),
-                    ]
-                    .into_iter()
-                    .filter_map(|(k, v)| v.map(|v| (k, v)))
-                    .collect(),
-                )
+                Value::object([
+                    ("name", name.to_vec().into()),
+                    ("full_name", full_name.map(<[u8]>::to_vec).into()),
+                    ("characteristics", section.characteristics.get(LE).into()),
+                    ("virtual_address", section.virtual_address.get(LE).into()),
+                    ("virtual_size", section.virtual_size.get(LE).into()),
+                    ("raw_data_size", raw_data_size.into()),
+                    ("raw_data_offset", raw_data_offset.into()),
+                    (
+                        "pointer_to_relocations",
+                        section.pointer_to_relocations.get(LE).into(),
+                    ),
+                    (
+                        "pointer_to_line_numbers",
+                        section.pointer_to_linenumbers.get(LE).into(),
+                    ),
+                    (
+                        "number_of_relocations",
+                        section.number_of_relocations.get(LE).into(),
+                    ),
+                    (
+                        "number_of_line_numbers",
+                        section.number_of_linenumbers.get(LE).into(),
+                    ),
+                ])
             })
             .collect(),
     )
@@ -1621,15 +1587,10 @@ fn overlay(sections: &SectionTable, mem: &[u8]) -> Value {
     let offset = sections.max_section_file_offset();
 
     if offset < mem.len() as u64 {
-        Value::Object(
-            [
-                ("offset", offset.try_into().ok()),
-                ("size", (mem.len() as u64 - offset).try_into().ok()),
-            ]
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k, v)))
-            .collect(),
-        )
+        Value::object([
+            ("offset", offset.into()),
+            ("size", (mem.len() as u64 - offset).into()),
+        ])
     } else {
         Value::object([("offset", 0.into()), ("size", 0.into())])
     }
@@ -1690,30 +1651,35 @@ fn add_resources(
 
                         data.resource_languages.push(lang);
 
-                        let mut obj: HashMap<_, _> = [
+                        resources.push(Value::object([
                             ("rva", rva.into()),
                             ("length", entry_data.size.get(LE).into()),
-                        ]
-                        .into();
-
-                        if let Some(offset) = offset {
-                            let _r = obj.insert("offset", offset.into());
-                        }
-
-                        let _r = match ty_name {
-                            Some(name) => obj.insert("type_string", name.to_vec().into()),
-                            None => obj.insert("type", ty.into()),
-                        };
-                        let _r = match id_name {
-                            Some(name) => obj.insert("name_string", name.to_vec().into()),
-                            None => obj.insert("id", id.into()),
-                        };
-                        let _r = match lang_name {
-                            Some(name) => obj.insert("language_string", name.to_vec().into()),
-                            None => obj.insert("language", lang.into()),
-                        };
-
-                        resources.push(Value::Object(obj));
+                            ("offset", offset.into()),
+                            ("type_string", ty_name.map(<[u8]>::to_vec).into()),
+                            (
+                                "type",
+                                match ty_name {
+                                    Some(_) => Value::Undefined,
+                                    None => ty.into(),
+                                },
+                            ),
+                            ("name_string", id_name.map(<[u8]>::to_vec).into()),
+                            (
+                                "id",
+                                match id_name {
+                                    Some(_) => Value::Undefined,
+                                    None => id.into(),
+                                },
+                            ),
+                            ("language_string", lang_name.map(<[u8]>::to_vec).into()),
+                            (
+                                "language",
+                                match lang_name {
+                                    Some(_) => Value::Undefined,
+                                    None => lang.into(),
+                                },
+                            ),
+                        ]));
                         if resources.len() >= MAX_RESOURCES {
                             break 'outer;
                         }
@@ -1722,11 +1688,8 @@ fn add_resources(
             }
         }
 
-        if let Ok(v) = i64::try_from(resources.len()) {
-            let _r = out.insert("number_of_resources", v.into());
-        }
-
         out.extend([
+            ("number_of_resources", resources.len().into()),
             (
                 "resource_timestamp",
                 root.header.time_date_stamp.get(LE).into(),
