@@ -166,37 +166,31 @@ fn x509_to_value(cert: &X509) -> Value {
 
     let sig_nid = Nid::from_raw(unsafe { X509_get_signature_nid(cert.as_ptr()) });
 
-    Value::Object(
-        [
-            ("subject", Some(get_x509_name(cert.subject_name()).into())),
-            ("issuer", Some(get_x509_name(cert.issuer_name()).into())),
-            (
-                "algorithm",
-                sig_nid
-                    .long_name()
-                    .ok()
-                    .map(|v| v.to_owned().into_bytes().into()),
-            ),
-            ("algorithm_oid", get_nid_oid(&sig_nid).map(Into::into)),
-            (
-                "thumbprint",
-                digest.map(|v| hex::encode(v).into_bytes().into()),
-            ),
-            ("version", Some(version.into())),
-            ("serial", serial_number.map(|v| v.into_bytes().into())),
-            ("not_before", not_before.map(Into::into)),
-            ("not_after", not_after.map(Into::into)),
-            (
-                "valid_on",
-                Some(Value::function(move |_, args| {
-                    valid_on(args, not_before, not_after)
-                })),
-            ),
-        ]
-        .into_iter()
-        .filter_map(|(k, v)| v.map(|v| (k, v)))
-        .collect(),
-    )
+    Value::object([
+        ("subject", get_x509_name(cert.subject_name()).into()),
+        ("issuer", get_x509_name(cert.issuer_name()).into()),
+        (
+            "algorithm",
+            sig_nid
+                .long_name()
+                .ok()
+                .map(|v| v.to_owned().into_bytes())
+                .into(),
+        ),
+        ("algorithm_oid", get_nid_oid(&sig_nid).into()),
+        (
+            "thumbprint",
+            digest.map(|v| hex::encode(v).into_bytes()).into(),
+        ),
+        ("version", version.into()),
+        ("serial", serial_number.map(String::into_bytes).into()),
+        ("not_before", not_before.into()),
+        ("not_after", not_after.into()),
+        (
+            "valid_on",
+            Value::function(move |_, args| valid_on(args, not_before, not_after)),
+        ),
+    ])
 }
 
 fn get_x509_name(name: &X509NameRef) -> Vec<u8> {
