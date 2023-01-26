@@ -126,9 +126,8 @@ fn test_for_identifiers() {
     strings:
         $a = /ba+/
     condition:
-        {}
-}}"#,
-            cond
+        {cond}
+}}"#
         )
     };
 

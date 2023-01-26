@@ -140,11 +140,10 @@ fn build_checker(regex: &str, modifiers: &str) -> Checker {
         r#"
 rule a {{
     strings:
-        $a = /{}/ {}
+        $a = /{regex}/ {modifiers}
     condition:
         $a
-}}"#,
-        regex, modifiers
+}}"#
     ))
 }
 
@@ -350,12 +349,11 @@ fn test_variable_regex_word_boundaries_edge_cases() {
             r#"
 rule a {{
     strings:
-        $a = /{}/ {}
+        $a = /{regex}/ {modifiers}
         $z = "z"
     condition:
         (#z == 0 and #a == 0) or (!a == #z)
 }}"#,
-            regex, modifiers,
         ))
     };
 
@@ -968,9 +966,8 @@ fn test_variable_find_at() {
             $a = "34"
             $b = /[a-z]{{2}}/
         condition:
-            for any of them: ($ at {})
-    }}"#,
-            at
+            for any of them: ($ at {at})
+    }}"#
         );
         check(&rule, mem, res);
     }
@@ -996,9 +993,8 @@ fn test_variable_find_in() {
         strings:
             $a = "345"
         condition:
-            $a in ({}..{})
-    }}"#,
-            from, to
+            $a in ({from}..{to})
+    }}"#
         );
         check(&rule, mem, res);
     }

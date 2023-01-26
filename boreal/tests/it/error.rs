@@ -8,9 +8,9 @@ fn test_invalid_files() {
         let file = file.unwrap();
 
         let contents = std::fs::read_to_string(&file)
-            .unwrap_or_else(|e| panic!("cannot read file {:?}: {}", file, e));
+            .unwrap_or_else(|e| panic!("cannot read file {file:?}: {e}"));
 
-        println!("checking file {:?}", file);
+        println!("checking file {file:?}");
         if contents.starts_with("// [no libyara conformance]") {
             #[cfg(debug_assertions)]
             let compiler = {

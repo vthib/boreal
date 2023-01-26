@@ -127,8 +127,8 @@ fn test_signatures_valid_on() {
 
             rule test {{
                 condition:
-                    pe.signatures[0].valid_on({})
-            }}"#, value),
+                    pe.signatures[0].valid_on({value})
+            }}"#),
             "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
             expected_res
         )

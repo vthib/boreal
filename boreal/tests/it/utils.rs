@@ -113,9 +113,7 @@ impl Compiler {
         let desc = add_rule_error_get_desc(&err, rules);
         assert!(
             desc.starts_with(expected_prefix),
-            "error: {}\nexpected prefix: {}",
-            desc,
-            expected_prefix
+            "error: {desc}\nexpected prefix: {expected_prefix}"
         );
 
         // Check libyara also rejects it
@@ -137,9 +135,7 @@ impl Compiler {
         for (desc, expected_prefix) in warnings.iter().zip(expected_warnings_prefix.iter()) {
             assert!(
                 desc.starts_with(expected_prefix),
-                "warning: {}\nexpected prefix: {}",
-                desc,
-                expected_prefix
+                "warning: {desc}\nexpected prefix: {expected_prefix}"
             );
         }
 
@@ -148,7 +144,7 @@ impl Compiler {
         // For the moment, check the rule is not rejected at least.
         if let Some(compiler) = self.yara_compiler.take() {
             if let Err(err) = compiler.add_rules_str(rules) {
-                panic!("conformity test failed for libyara: {:?}", err);
+                panic!("conformity test failed for libyara: {err:?}");
             }
         }
     }
@@ -492,10 +488,9 @@ rule a {{
         $b1 = "b1"
         $c0 = "c0"
     condition:
-        {}
+        {condition}
         and for all of ($*) : (# >= 0) // this part is just to remove "unused strings" errors
-}}"#,
-        condition
+}}"#
     )
 }
 

@@ -301,8 +301,7 @@ impl CompilationError {
 
             Self::DuplicatedRuleName { name, span } => Diagnostic::error()
                 .with_message(format!(
-                    "rule `{}` is already declared in this namespace",
-                    name
+                    "rule `{name}` is already declared in this namespace"
                 ))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
@@ -352,8 +351,7 @@ impl CompilationError {
                 iterator_span,
             } => Diagnostic::error()
                 .with_message(format!(
-                    "expected {} identifiers to bind, got {}",
-                    expected_number, actual_number
+                    "expected {expected_number} identifiers to bind, got {actual_number}"
                 ))
                 .with_labels(vec![
                     Label::primary(
@@ -366,8 +364,7 @@ impl CompilationError {
                     Label::secondary((), identifiers_span.clone())
                         .with_message(format!("{actual_number} identifier(s) being bound")),
                     Label::secondary((), iterator_span.clone()).with_message(format!(
-                        "this yields {} elements on every iteration",
-                        expected_number
+                        "this yields {expected_number} elements on every iteration"
                     )),
                 ]),
 
@@ -391,8 +388,7 @@ impl CompilationError {
                 rule_set,
             } => Diagnostic::error()
                 .with_message(format!(
-                    "rule \"{}\" matches a previous rule set \"{}\"",
-                    rule_name, rule_set
+                    "rule \"{rule_name}\" matches a previous rule set \"{rule_set}\""
                 ))
                 .with_labels(vec![Label::primary((), name_span.clone())]),
 
@@ -429,8 +425,7 @@ impl CompilationError {
                 error,
             } => Diagnostic::error()
                 .with_message(format!(
-                    "variable ${} cannot be compiled: {}",
-                    variable_name, error
+                    "variable ${variable_name} cannot be compiled: {error}"
                 ))
                 .with_labels(vec![Label::primary((), span.clone())]),
 

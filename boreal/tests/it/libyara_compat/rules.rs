@@ -2362,10 +2362,7 @@ fn test_re() {
     fn build_regex_rule(regex: &str) -> String {
         // XXX: this is modified from the libyara version, to force boreal
         // to compute all matches of the string
-        format!(
-            "rule test {{ strings: $a = /{}/ condition: $a and #a > 0 }}",
-            regex
-        )
+        format!("rule test {{ strings: $a = /{regex}/ condition: $a and #a > 0 }}")
     }
 
     #[track_caller]

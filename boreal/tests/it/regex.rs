@@ -5,11 +5,10 @@ fn build_rule(var: &str) -> String {
         r#"
 rule a {{
     strings:
-        $ = {}
+        $ = {var}
     condition:
         all of them
-}}"#,
-        var
+}}"#
     )
 }
 

@@ -9,9 +9,8 @@ fn make_rule(cond: &str) -> String {
 import "math"
 
 rule test {{
-    condition: {}
-}}"#,
-        cond
+    condition: {cond}
+}}"#
     )
 }
 

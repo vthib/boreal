@@ -604,10 +604,9 @@ mod tests {
             rule no {{ condition: false }}
 
             rule a {{
-                condition: {}
+                condition: {cond}
             }}
-        "#,
-            cond
+        "#
         )
     }
 
@@ -623,10 +622,9 @@ mod tests {
                 strings:
                     $a = /abc/
                 condition:
-                    {}
+                    {cond}
             }}
-        "#,
-            cond
+        "#
         )
     }
 

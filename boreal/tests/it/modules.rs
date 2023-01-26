@@ -9,9 +9,8 @@ fn check_tests_err(condition: &str, expected_err: &str) {
         &format!(
             r#"import "tests"
 rule foo {{
-    condition: {}
-}}"#,
-            condition
+    condition: {condition}
+}}"#
         ),
         expected_err,
     );
@@ -25,9 +24,8 @@ fn check_ok(condition: &str) {
 rule foo {{
 strings:
     $a = "abc"
-condition: {} and #a >= 0
-}}"#,
-            condition
+condition: {condition} and #a >= 0
+}}"#
         ),
         b"",
         true,
@@ -332,9 +330,8 @@ fn test_module_hash() {
             &format!(
                 "import \"hash\"
     rule a {{
-        condition: {}
-    }}",
-                cond
+        condition: {cond}
+    }}"
             ),
             b"gabuzomeu",
             true,
@@ -434,8 +431,7 @@ fn test_generate_module_coverage_test() {
     let mut compiler = Compiler::new();
     compiler
         .add_rules_str(&format!(
-            "import \"{}\" rule a {{ condition: true }}",
-            MODULE_NAME
+            "import \"{MODULE_NAME}\" rule a {{ condition: true }}"
         ))
         .unwrap();
     let scanner = compiler.into_scanner();
@@ -458,7 +454,7 @@ fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
             Err(_) => {
                 print!("{:indent$}{} == \"", "", name);
                 for b in bytes {
-                    print!("\\x{:02x}", b);
+                    print!("\\x{b:02x}");
                 }
                 print!("\"");
             }
@@ -483,7 +479,7 @@ fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
                 if !first {
                     println!(" and");
                 }
-                generate_mapping(&obj[key], &format!("{}.{}", name, key), indent);
+                generate_mapping(&obj[key], &format!("{name}.{key}"), indent);
                 first = false;
             }
         }
@@ -498,7 +494,7 @@ fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
                 if index != 0 {
                     println!(" and");
                 }
-                generate_mapping(subval, &format!("{}[{}]", name, index), indent + 4);
+                generate_mapping(subval, &format!("{name}[{index}]"), indent + 4);
             }
             println!("{:indent$})", "");
         }
@@ -515,7 +511,7 @@ fn generate_mapping(module_value: &ModuleValue, name: &str, indent: usize) {
                     println!(" and");
                 }
                 let subname = match std::str::from_utf8(key) {
-                    Ok(s) => format!("{}[\"{}\"]", name, s),
+                    Ok(s) => format!("{name}[\"{s}\"]"),
                     Err(_) => panic!("non utf8 key?"),
                 };
                 generate_mapping(&dict[key], &subname, indent + 4);

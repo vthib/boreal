@@ -5,9 +5,8 @@ fn build_empty_rule(condition: &str) -> String {
         r#"
 rule a {{
     condition:
-        {}
-}}"#,
-        condition
+        {condition}
+}}"#
     )
 }
 
@@ -490,9 +489,8 @@ rule a {
                 $a = {{ AB ( FF | ?F [1-3] CD ) }}
                 $b = {{ AB ( ?F [1-3] CD | FF ) }}
             condition:
-                !a == {} and !b == {}
+                !a == {a_len} and !b == {b_len}
         }}"#,
-                a_len, b_len,
             ),
             input,
             true,
