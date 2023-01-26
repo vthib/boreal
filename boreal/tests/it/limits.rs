@@ -150,9 +150,8 @@ for all i in (0..9223372036854775807) : (
     let mut checker = Checker::new_without_yara(&format!(
         "
 rule a {{
-    condition: {}
-}}",
-        infinite_cond
+    condition: {infinite_cond}
+}}"
     ));
     checker.set_scan_params(params.clone());
     let res = checker.check_rule_matches(b"", &[]);
@@ -162,9 +161,8 @@ rule a {{
     let mut checker = Checker::new_without_yara(&format!(
         "
 global rule a {{
-    condition: {}
-}}",
-        infinite_cond
+    condition: {infinite_cond}
+}}"
     ));
     checker.set_scan_params(params);
     let res = checker.check_rule_matches(b"", &[]);
@@ -202,9 +200,8 @@ global rule second {{
     strings:
         $var = "var"
     condition:
-        {}
+        {infinite_cond}
 }}"#,
-        infinite_cond,
     ));
     let mut checker = compiler.into_checker();
     checker.set_scan_params(params.clone());
@@ -231,9 +228,8 @@ rule third {{
     strings:
         $var = "var"
     condition:
-        {}
+        {infinite_cond}
 }}"#,
-        infinite_cond,
     ));
     compiler.add_rules(
         r#"
@@ -268,9 +264,8 @@ rule first {
     compiler.add_rules(&format!(
         r#"
 rule second {{
-    {}
+    {infinite_match_rule}
 }}"#,
-        infinite_match_rule,
     ));
 
     let mut checker = compiler.into_checker();

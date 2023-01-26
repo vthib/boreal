@@ -70,7 +70,7 @@ fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
     };
     let writer = &mut writer.lock();
     if let Err(e) = term::emit(writer, &config, &files, &err.to_diagnostic()) {
-        eprintln!("cannot emit diagnostics: {}", e);
+        eprintln!("cannot emit diagnostics: {e}");
     }
 }
 
@@ -109,7 +109,7 @@ fn main() -> ExitCode {
             let entry = match entry {
                 Ok(v) => v,
                 Err(err) => {
-                    eprintln!("{}", err);
+                    eprintln!("{err}");
                     continue;
                 }
             };
@@ -160,7 +160,7 @@ fn scan_file(scanner: &Scanner, path: &Path, print_module_data: bool) -> std::io
             // generated any values.
             match &*module_value {
                 ModuleValue::Object(map) if !map.is_empty() => {
-                    print!("{}", module_name);
+                    print!("{module_name}");
                     print_module_value(&module_value, 4);
                 }
                 _ => (),
@@ -235,14 +235,14 @@ impl ThreadPool {
 /// - print "\n..." for compound values
 fn print_module_value(value: &ModuleValue, indent: usize) {
     match value {
-        ModuleValue::Integer(i) => println!(" = {} (0x{:x})", i, i),
-        ModuleValue::Float(v) => println!(" = {}", v),
+        ModuleValue::Integer(i) => println!(" = {i} (0x{i:x})"),
+        ModuleValue::Float(v) => println!(" = {v}"),
         ModuleValue::Bytes(bytes) => match std::str::from_utf8(bytes) {
-            Ok(s) => println!(" = {:?}", s),
+            Ok(s) => println!(" = {s:?}"),
             Err(_) => println!(" = {{ {} }}", hex::encode(bytes)),
         },
         ModuleValue::Regex(regex) => println!(" = /{}/", regex.as_regex().as_str()),
-        ModuleValue::Boolean(b) => println!(" = {:?}", b),
+        ModuleValue::Boolean(b) => println!(" = {b:?}"),
         ModuleValue::Object(obj) => {
             if obj.is_empty() {
                 println!(" = {{}}");

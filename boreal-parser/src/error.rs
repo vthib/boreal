@@ -118,8 +118,7 @@ impl Error {
 
             ErrorKind::StrToHexIntError(err) => Diagnostic::error()
                 .with_message(format!(
-                    "error converting hexadecimal notation to integer: {}",
-                    err
+                    "error converting hexadecimal notation to integer: {err}"
                 ))
                 .with_labels(vec![Label::primary((), self.span.clone())]),
 

@@ -9,14 +9,14 @@ fn test_warning_files() {
         let file = file.unwrap();
 
         let contents = std::fs::read_to_string(&file)
-            .unwrap_or_else(|e| panic!("cannot read file {:?}: {}", file, e));
+            .unwrap_or_else(|e| panic!("cannot read file {file:?}: {e}"));
 
         let expected_warnings: Vec<_> = contents
             .lines()
             .filter_map(|line| line.strip_prefix("// [expected warning]: "))
             .collect();
 
-        println!("checking file {:?}", file);
+        println!("checking file {file:?}");
         check_warnings(&contents, &expected_warnings);
     }
 }
