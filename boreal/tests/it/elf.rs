@@ -10,30 +10,30 @@ use crate::utils::compare_module_values_on_mem;
 
 #[test]
 fn test_coverage_elf32() {
-    compare_module_values_on_mem(Elf, "ELF32_FILE", ELF32_FILE);
+    compare_module_values_on_mem(Elf, "ELF32_FILE", ELF32_FILE, &[]);
 }
 
 #[test]
 fn test_coverage_elf64() {
-    compare_module_values_on_mem(Elf, "ELF64_FILE", ELF64_FILE);
+    compare_module_values_on_mem(Elf, "ELF64_FILE", ELF64_FILE, &[]);
 }
 
 #[test]
 fn test_coverage_elf32_nosections() {
-    compare_module_values_on_mem(Elf, "ELF32_NOSECTIONS", ELF32_NOSECTIONS);
+    compare_module_values_on_mem(Elf, "ELF32_NOSECTIONS", ELF32_NOSECTIONS, &[]);
 }
 
 #[test]
 fn test_coverage_elf32_sharedobj() {
-    compare_module_values_on_mem(Elf, "ELF32_SHAREDOBJ", ELF32_SHAREDOBJ);
+    compare_module_values_on_mem(Elf, "ELF32_SHAREDOBJ", ELF32_SHAREDOBJ, &[]);
 }
 
 #[test]
 fn test_coverage_elf32_mips() {
-    compare_module_values_on_mem(Elf, "ELF32_MIPS_FILE", ELF32_MIPS_FILE);
+    compare_module_values_on_mem(Elf, "ELF32_MIPS_FILE", ELF32_MIPS_FILE, &[]);
 }
 
 #[test]
 fn test_coverage_elf_x64_file() {
-    compare_module_values_on_mem(Elf, "ELF_X64_FILE", ELF_X64_FILE);
+    compare_module_values_on_mem(Elf, "ELF_X64_FILE", ELF_X64_FILE, &[]);
 }
