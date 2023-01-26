@@ -333,7 +333,7 @@ mod sys {
         stack_st_X509_ATTRIBUTE, ASN1_INTEGER, ASN1_OBJECT, ASN1_STRING, ASN1_TYPE, PKCS7,
         X509_NAME,
     };
-    use std::ffi::{c_int, c_void};
+    use std::os::raw::{c_int, c_void};
 
     extern "C" {
         pub fn i2d_ASN1_INTEGER(a: *mut ASN1_INTEGER, out: *mut *mut u8) -> c_int;
