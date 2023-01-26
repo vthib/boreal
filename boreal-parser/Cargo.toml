@@ -8,6 +8,8 @@ license = "MIT OR Apache-2.0"
 keywords = ["boreal", "yara", "parser"]
 categories = ["parser-implementations"]
 edition = "2021"
+# MSRV
+rust-version = "1.62"
 
 [dependencies]
 # Parsing library

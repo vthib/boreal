@@ -8,6 +8,8 @@ license = "MIT OR Apache-2.0"
 keywords = ["boreal", "yara", "string-matching", "scan"]
 categories = ["text-processing"]
 edition = "2021"
+# MSRV
+rust-version = "1.62"
 
 [features]
 default = ["hash", "object"]
