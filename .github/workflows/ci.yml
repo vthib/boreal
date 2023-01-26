@@ -138,3 +138,11 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: true
+
+  msrv:
+    name: Rust 1.62.0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@1.62.0
+      - run: cargo check --tests --all-features
