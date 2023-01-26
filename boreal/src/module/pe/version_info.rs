@@ -127,21 +127,22 @@ fn read_string(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> Option<
 
     let length = usize::from(header.length);
     let end = offset + length;
-
     // We have the size for the value, hence easily getting the value.
     let value_length = usize::from(header.value_length);
     // This length is in characters, multiply by 2 to get byte length.
     let value_length = value_length * 2;
-    if value_length + 6 > length {
+    if value_length + 6 > length || end < value_length {
         return None;
     }
-    let value_start = end - value_length;
 
-    // We can now get the key: its end is at the start of the value.
-    // It is possibly padded, but the `unwide` helper will trim those.
+    // The payload is the key followed by the value. We have the length of the value, but
+    // it is relative to the end of the key (the overall length can be greater than key + value
+    // and padded with nul bytes).
+    // So we need to find the end of the key first.
     let key_start = offset + HEADER_SIZE;
-    let key_end = value_start;
-    if key_end <= key_start {
+    let key_end = key_start + find_wide_nul(&mem[key_start..(end - value_length)]);
+    let value_start = key_end + 2;
+    if value_start + value_length > end {
         return None;
     }
 
@@ -152,11 +153,22 @@ fn read_string(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> Option<
     // But yara simply strips the second byte of every pair (expecting it to always be 0). We could
     // differ here, but for the moment keep this broken behavior
     let key = unwide(&mem[key_start..key_end]);
-    let value = unwide(&mem[value_start..end]);
+    let value = unwide(&mem[value_start..(value_start + value_length)]);
 
     out.push(VersionInfo { key, value });
 
     Some(length)
+}
+
+fn find_wide_nul(mem: &[u8]) -> usize {
+    let mut i = mem.len();
+    while i >= 2 {
+        i -= 2;
+        if mem[i] == b'\0' && mem[i + 1] == b'\0' {
+            return i;
+        }
+    }
+    0
 }
 
 fn unwide(mem: &[u8]) -> Vec<u8> {
