@@ -508,13 +508,18 @@ fn add_rule_error_get_desc(err: &boreal::compiler::AddRuleError, rules: &str) ->
 }
 
 /// Compare boreal & yara module values on a given file
-pub fn compare_module_values_on_file<M: Module>(module: M, path: &str) {
+pub fn compare_module_values_on_file<M: Module>(module: M, path: &str, ignored_diffs: &[&str]) {
     let mem = std::fs::read(path).unwrap();
-    compare_module_values_on_mem(module, path, &mem);
+    compare_module_values_on_mem(module, path, &mem, ignored_diffs);
 }
 
 /// Compare boreal & yara module values on a given bytestring
-pub fn compare_module_values_on_mem<M: Module>(module: M, mem_name: &str, mem: &[u8]) {
+pub fn compare_module_values_on_mem<M: Module>(
+    module: M,
+    mem_name: &str,
+    mem: &[u8],
+    ignored_diffs: &[&str],
+) {
     let mut compiler = boreal::Compiler::new();
     compiler
         .add_rules_str(&format!(
@@ -556,6 +561,21 @@ pub fn compare_module_values_on_mem<M: Module>(module: M, mem_name: &str, mem: &
                 let yara_value = convert_yara_obj_to_module_value(obj);
                 let mut diffs = Vec::new();
                 compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
+
+                // Remove ignored diffs from the reported ones.
+                for path in ignored_diffs {
+                    match diffs.iter().position(|d| &d.path == path) {
+                        Some(pos) => {
+                            diffs.remove(pos);
+                        }
+                        None => {
+                            panic!(
+                                "ignored diff on path {path} but there is no diff on this path",
+                            );
+                        }
+                    }
+                }
+
                 if !diffs.is_empty() {
                     panic!(
                         "found differences for module {} on {}: {:#?}",
