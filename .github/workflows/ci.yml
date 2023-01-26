@@ -65,11 +65,11 @@ jobs:
         shell: bash
         run: echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
 
-      - run: cargo test --target=${{matrix.target}}
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
+
+      - run: cargo test --target=${{matrix.target}}
 
       - name: Test build with Openssl
         # Ideally, we should run the tests as well. At the moment, this
