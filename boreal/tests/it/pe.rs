@@ -193,13 +193,22 @@ fn test_coverage_pe_ord_and_delay() {
             "pe.delayed_import_details",
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
 
 #[test]
 fn test_coverage_pe_resources_only() {
-    compare_module_values_on_file(Pe, "tests/assets/pe/resources_only.dll", &[]);
+    compare_module_values_on_file(
+        Pe,
+        "tests/assets/pe/resources_only.dll",
+        &[
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
+        ],
+    );
 }
 
 #[test]
@@ -212,6 +221,10 @@ fn test_coverage_pe_libyara_079a472d() {
             "pe.delayed_import_details",
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
+            #[cfg(not(feature = "openssl"))]
+            "pe.signatures",
         ],
     );
 }
@@ -225,6 +238,8 @@ fn test_coverage_pe_libyara_079a472d_upx() {
         &[
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -235,7 +250,11 @@ fn test_coverage_pe_libyara_0ca09bde() {
         Pe,
         "tests/assets/libyara/data/\
         0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171",
-        &["pe.rich_signature"],
+        &[
+            "pe.rich_signature",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
+        ],
     );
 }
 
@@ -249,6 +268,8 @@ fn test_coverage_pe_libyara_33fc70f9() {
             "pe.rich_signature",
             // FIXME: this difference should not be
             "pe.entry_point",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -259,7 +280,13 @@ fn test_coverage_pe_libyara_3b8b9015() {
         Pe,
         "tests/assets/libyara/data/\
         3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c",
-        &["pe.rich_signature"],
+        &[
+            "pe.rich_signature",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
+            #[cfg(not(feature = "openssl"))]
+            "pe.signatures",
+        ],
     );
 }
 
@@ -300,6 +327,8 @@ fn test_coverage_pe_libyara_ca21e1c32() {
             "pe.import_details[14].number_of_functions",
             "pe.import_details[15].functions",
             "pe.import_details[15].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -312,6 +341,8 @@ fn test_coverage_pe_libyara_mtxex() {
         &[
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -324,6 +355,8 @@ fn test_coverage_pe_libyara_mtxex_modified() {
         &[
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -333,7 +366,11 @@ fn test_coverage_pe_libyara_pe_imports() {
     compare_module_values_on_file(
         Pe,
         "tests/assets/libyara/data/pe_imports",
-        &["pe.delayed_import_details"],
+        &[
+            "pe.delayed_import_details",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
+        ],
     );
 }
 
@@ -346,6 +383,8 @@ fn test_coverage_pe_libyara_pe_mingw() {
             "pe.rich_signature",
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -359,6 +398,8 @@ fn test_coverage_pe_libyara_tiny() {
             "pe.rich_signature",
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -372,6 +413,8 @@ fn test_coverage_pe_libyara_tiny_51ff() {
             "pe.rich_signature",
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -411,6 +454,8 @@ fn test_coverage_pe_libyara_tiny_5200() {
             // TODO: invalid imports are still counted by libyara. Is that desirable? I don't think
             // so
             "pe.number_of_imports",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
@@ -424,6 +469,8 @@ fn test_coverage_pe_libyara_tiny_overlay() {
             "pe.rich_signature",
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
+            #[cfg(not(feature = "openssl"))]
+            "pe.number_of_signatures",
         ],
     );
 }
