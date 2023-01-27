@@ -36,8 +36,8 @@ pub struct Pe;
 
 #[repr(u8)]
 enum ImportType {
-    Delayed = 0b0001,
-    Standard = 0b0010,
+    Standard = 0b0001,
+    Delayed = 0b0010,
 }
 
 impl Module for Pe {
