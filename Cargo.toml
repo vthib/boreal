@@ -14,6 +14,8 @@ members = [
 #   - 7b7257d768b09a2664cbab2a46a0c37779c91d9c
 # - Retrieval of raw name for sections
 #   - f9caed56c480f8e3c5e1f971cab76ad0a1ccae5a
+# - Handle VirtualSize=0 when searching through sections
+#   - 89de6a730a4f60c005862b294de2f9fe444d1235
 object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.30" }
 
 # Fork of yara-rust crate, for a few in advance changes.
