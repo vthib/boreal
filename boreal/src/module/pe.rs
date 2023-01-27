@@ -1458,7 +1458,11 @@ fn add_exports(
                         "offset",
                         match forward_name {
                             Some(_) => Value::Undefined,
-                            None => va_to_file_offset(sections, address).into(),
+                            // -1 is set by libyara to indicate an invalid offset.
+                            None => match va_to_file_offset(sections, address) {
+                                Some(v) => v.into(),
+                                None => Value::Integer(-1),
+                            },
                         },
                     ),
                     ("forward_name", forward_name.into()),
