@@ -1254,12 +1254,10 @@ fn add_imports<Pe: ImageNtHeaders>(
             };
             let mut data_functions = Vec::new();
 
-            let mut first_thunk = import_desc.original_first_thunk.get(LE);
-            if first_thunk == 0 {
-                first_thunk = import_desc.first_thunk.get(LE);
-            }
-
-            let functions = table.thunks(first_thunk).ok().map(|mut thunks| {
+            let import_thunk_list = table
+                .thunks(import_desc.original_first_thunk.get(LE))
+                .or_else(|_| table.thunks(import_desc.first_thunk.get(LE)));
+            let functions = import_thunk_list.ok().map(|mut thunks| {
                 import_functions::<Pe, _>(
                     &mut thunks,
                     &library,
