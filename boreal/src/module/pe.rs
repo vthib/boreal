@@ -1171,6 +1171,7 @@ fn parse_file<Pe: ImageNtHeaders>(
             RichHeaderInfo::parse(mem, dos_header.nt_headers_offset().into())
                 .map_or(Value::Undefined, |info| rich_signature(info, mem, data)),
         ),
+        ("number_of_version_infos", 0.into()),
     ]
     .into();
 
