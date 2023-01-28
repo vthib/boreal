@@ -1074,6 +1074,7 @@ fn parse_file<Pe: ImageNtHeaders>(
             "entry_point",
             sections
                 .and_then(|sections| va_to_file_offset(mem, &sections, ep))
+                .map_or(-1, i64::from)
                 .into(),
         ),
         ("entry_point_raw", ep.into()),
