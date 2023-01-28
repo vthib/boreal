@@ -61,21 +61,25 @@ jobs:
           vcpkgGitCommitId: '163fe7bd3d67c41200617caaa245b5ba2ba854e6'
           runVcpkgInstall: true
 
-      - name: Export VCPKGRS_TRIPLET env var
+      - name: Export VCPKGRS_TRIPLET and OPENSSL_DIR env var
         shell: bash
-        run: echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+        run: |
+          echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+          echo "OPENSSL_DIR=${{ runner.workspace }}\\vcpkg\\installed\\${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
 
-      - run: cargo test --target=${{matrix.target}}
+      - name: Run tests
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: cargo test --target=${{matrix.target}}
 
-      - name: Test build with Openssl
-        # Ideally, we should run the tests as well. At the moment, this
-        # does not work as the vcpkg installation does not seem to be very well handled with
-        # yara-rust's vendored feature. Some patches in yara-sys are probably required
-        run: cargo build --features openssl --target=${{matrix.target}}
+      - name: Run tests with Openssl
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: cargo test --features openssl --target=${{matrix.target}}
 
     strategy:
       fail-fast: false
