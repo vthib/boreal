@@ -547,7 +547,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     mem: &[u8],
     ignored_diffs: &[&str],
 ) {
-    let mut compiler = boreal::Compiler::new();
+    let mut compiler = build_compiler();
     compiler
         .add_rules_str(&format!(
             "import \"{}\" rule a {{ condition: true }}",

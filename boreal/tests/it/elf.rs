@@ -42,37 +42,31 @@ condition:
 }
 
 #[test]
-#[ignore]
 fn test_coverage_elf32() {
     compare_module_values_on_mem(Elf, "ELF32_FILE", ELF32_FILE, &[]);
 }
 
 #[test]
-#[ignore]
 fn test_coverage_elf64() {
     compare_module_values_on_mem(Elf, "ELF64_FILE", ELF64_FILE, &[]);
 }
 
 #[test]
-#[ignore]
 fn test_coverage_elf32_nosections() {
     compare_module_values_on_mem(Elf, "ELF32_NOSECTIONS", ELF32_NOSECTIONS, &[]);
 }
 
 #[test]
-#[ignore]
 fn test_coverage_elf32_sharedobj() {
     compare_module_values_on_mem(Elf, "ELF32_SHAREDOBJ", ELF32_SHAREDOBJ, &[]);
 }
 
 #[test]
-#[ignore]
 fn test_coverage_elf32_mips() {
     compare_module_values_on_mem(Elf, "ELF32_MIPS_FILE", ELF32_MIPS_FILE, &[]);
 }
 
 #[test]
-#[ignore]
 fn test_coverage_elf_x64_file() {
     compare_module_values_on_mem(Elf, "ELF_X64_FILE", ELF_X64_FILE, &[]);
 }
