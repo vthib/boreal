@@ -15,3 +15,8 @@ members = [
 # - Retrieval of raw name for sections
 #   - f9caed56c480f8e3c5e1f971cab76ad0a1ccae5a
 object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.30" }
+
+# Fork of yara-rust crate, for a few in advance changes.
+#
+# - Add OPENSSL_DIR handling for windows w/ openssl compilation.
+yara = { git = 'https://github.com/vthib/yara-rust', branch = "version-0.16" }
