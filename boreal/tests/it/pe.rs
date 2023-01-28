@@ -266,8 +266,6 @@ fn test_coverage_pe_libyara_33fc70f9() {
         33fc70f99be6d2833ae48852d611c8048d0c053ed0b2c626db4dbe902832a08b",
         &[
             "pe.rich_signature",
-            // FIXME: this difference should not be
-            "pe.entry_point",
             #[cfg(not(feature = "openssl"))]
             "pe.number_of_signatures",
         ],
