@@ -125,6 +125,7 @@ dependencies = [
  "md-5",
  "memchr",
  "object",
+ "once_cell",
  "regex",
  "regex-syntax",
  "sha1",

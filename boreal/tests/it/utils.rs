@@ -173,12 +173,10 @@ impl Compiler {
 #[cfg(all(feature = "object", feature = "authenticode"))]
 fn build_compiler() -> boreal::Compiler {
     use boreal::module::Pe;
-    use std::sync::Mutex;
+    use once_cell::sync::Lazy;
 
-    static PE_MODULE: Mutex<Option<Pe>> = Mutex::new(None);
-
-    let mut _guard = PE_MODULE.lock().unwrap();
-    let pe = _guard.get_or_insert_with(|| {
+    // Can be replaced with a std Mutex once MSRV is bumped to 1.63.
+    static PE_MODULE: Lazy<Pe> = Lazy::new(|| {
         // Safety:
         // - This is in a critical section that ensures a single thread can call this function
         // - The only openssl code in this codebase is in the authenticode parsing, called when
@@ -187,8 +185,9 @@ fn build_compiler() -> boreal::Compiler {
         //   this is called.
         unsafe { Pe::new_with_signatures() }
     });
+
     let mut compiler = boreal::Compiler::new_without_pe_module();
-    compiler.add_module(*pe);
+    compiler.add_module(*PE_MODULE);
     compiler
 }
 

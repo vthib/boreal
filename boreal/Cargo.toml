@@ -69,6 +69,10 @@ tempfile = "3.4"
 walkdir = "2.3"
 yara = { version = "0.17", features = ["vendored"] }
 
+# Only needed in tests because Mutex::new is not const
+# in 1.62 MSRV. Can be remove once MSRV is bumped above it.
+once_cell = "1.16"
+
 [[bench]]
 name = "benches"
 harness = false
