@@ -192,6 +192,11 @@ impl Module for Tests {
                     ),
                 ])),
             ),
+            // Function using types that are not scalar: won't ever be usable
+            (
+                "invalid_fun",
+                Type::function(vec![vec![Type::array(Type::Integer)]], Type::Bytes),
+            ),
         ]
         .into()
     }
@@ -308,6 +313,7 @@ impl Module for Tests {
             // The rest is not in libyara
             ("lazy", Value::function(Self::lazy)),
             ("log", Value::function(Self::log)),
+            ("invalid_fun", Value::function(Self::foobar)),
         ]
         .into()
     }
