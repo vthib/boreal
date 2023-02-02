@@ -323,7 +323,6 @@ impl ModuleUse<'_, '_> {
                     StaticValue::Integer(v) => Expression::Integer(*v),
                     StaticValue::Float(v) => Expression::Double(*v),
                     StaticValue::Bytes(v) => Expression::Bytes(v.clone()),
-                    StaticValue::Regex(v) => Expression::Regex(v.clone()),
                     StaticValue::Boolean(v) => Expression::Boolean(*v),
 
                     StaticValue::Object(_) => return None,
@@ -356,7 +355,6 @@ impl ModuleUse<'_, '_> {
             ValueType::Integer => Type::Integer,
             ValueType::Float => Type::Float,
             ValueType::Bytes => Type::Bytes,
-            ValueType::Regex => Type::Regex,
             ValueType::Boolean => Type::Boolean,
             _ => return None,
         };
@@ -517,7 +515,6 @@ impl ValueOrType<'_> {
                 StaticValue::Integer(_) => "integer",
                 StaticValue::Float(_) => "float",
                 StaticValue::Bytes(_) => "bytes",
-                StaticValue::Regex(_) => "regex",
                 StaticValue::Boolean(_) => "boolean",
                 StaticValue::Object(_) => "object",
                 StaticValue::Function { .. } => "function",
@@ -543,7 +540,6 @@ impl ValueOrType<'_> {
                 StaticValue::Integer(_) => Some(ValueType::Integer),
                 StaticValue::Float(_) => Some(ValueType::Float),
                 StaticValue::Bytes(_) => Some(ValueType::Bytes),
-                StaticValue::Regex(_) => Some(ValueType::Regex),
                 StaticValue::Boolean(_) => Some(ValueType::Boolean),
                 _ => None,
             },
