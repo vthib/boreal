@@ -308,6 +308,11 @@ fn test_functions() {
     check_ok("tests.log(true, /a/, \"b\")");
     check_ok("tests.log(true, /a/)");
     check_ok("tests.log(3, true)");
+
+    check_tests_err(
+        "tests.invalid_fun(false)",
+        "mem:3:33: error: invalid arguments types: [boolean]",
+    );
 }
 
 #[test]

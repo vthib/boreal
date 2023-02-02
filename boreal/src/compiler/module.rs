@@ -573,12 +573,13 @@ fn arguments_types_are_equal(valid_types: &[ValueType], actual_types: &[Type]) -
     }
     for (expected, actual) in valid_types.iter().zip(actual_types.iter()) {
         let expected = module_type_to_expr_type(expected);
-        if let Some(expected) = expected {
-            if expected != *actual {
-                return false;
+        match expected {
+            Some(expected) => {
+                if expected != *actual {
+                    return false;
+                }
             }
-        } else {
-            return false;
+            None => return false,
         }
     }
 
