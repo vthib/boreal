@@ -74,6 +74,10 @@ fn test_value_wrong_op() {
         "tests.do_not_exist",
         "mem:3:21: error: unknown field \"do_not_exist\"",
     );
+    check_tests_err(
+        "tests.constants.do_not_exist",
+        "mem:3:31: error: unknown field \"do_not_exist\"",
+    );
 
     // Using array syntax on an object, scalar and function
     check_tests_err(
