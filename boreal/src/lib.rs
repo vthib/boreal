@@ -63,6 +63,7 @@
 #![allow(unsafe_code)]
 #![deny(missing_docs)]
 #![deny(clippy::cargo)]
+#![cfg_attr(coverage_nightly, feature(no_coverage))]
 
 // Used in integration tests, not in the library.
 // This is to remove the "unused_crate_dependencies" warning, maybe a better solution
