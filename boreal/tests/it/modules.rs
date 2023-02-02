@@ -315,6 +315,23 @@ fn test_functions() {
     );
 }
 
+// Test that compilation errors inside the compilation of modules is properly bubbled up
+#[test]
+fn test_inner_compilation_err() {
+    check_tests_err(
+        "tests.match(foo)",
+        "mem:3:28: error: unknown identifier \"foo\"",
+    );
+    check_tests_err(
+        "tests.integer_dict[foo]",
+        "mem:3:35: error: unknown identifier \"foo\"",
+    );
+    check_tests_err(
+        "tests.lazy().str_array[foo]",
+        "mem:3:39: error: unknown identifier \"foo\"",
+    );
+}
+
 #[test]
 fn test_module_time() {
     check(
