@@ -11,6 +11,9 @@ mod warning;
 // Tests related to conversions of YARA regexes into rust ones.
 mod regex;
 
+// Tests for the public API
+mod api;
+
 // Tests related to evaluation of rules
 mod evaluation;
 mod external_symbol;

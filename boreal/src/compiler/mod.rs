@@ -534,7 +534,7 @@ impl AddRuleError {
         };
 
         let files = SimpleFile::new(&input_name, &input);
-        let _res = term::emit(&mut writer, &config, &files, &self.kind.to_diagnostic());
+        let _res = term::emit(&mut writer, &config, &files, &self.to_diagnostic());
         String::from_utf8_lossy(writer.as_slice()).to_string()
     }
 
