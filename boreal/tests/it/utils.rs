@@ -611,7 +611,6 @@ fn static_value_to_value(value: StaticValue) -> ModuleValue {
         StaticValue::Integer(v) => ModuleValue::Integer(v),
         StaticValue::Float(v) => ModuleValue::Float(v),
         StaticValue::Bytes(v) => ModuleValue::Bytes(v),
-        StaticValue::Regex(v) => ModuleValue::Regex(v),
         StaticValue::Boolean(v) => ModuleValue::Boolean(v),
         StaticValue::Object(v) => ModuleValue::Object(
             v.into_iter()

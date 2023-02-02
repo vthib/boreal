@@ -354,8 +354,6 @@ pub enum StaticValue {
     Float(f64),
     /// A byte string.
     Bytes(Vec<u8>),
-    /// A regex.
-    Regex(Regex),
     /// A boolean.
     Boolean(bool),
     /// An object, mapping to other values. See [`Value::Object`].
@@ -383,7 +381,6 @@ impl std::fmt::Debug for StaticValue {
             Self::Integer(arg0) => f.debug_tuple("Integer").field(arg0).finish(),
             Self::Float(arg0) => f.debug_tuple("Float").field(arg0).finish(),
             Self::Bytes(arg0) => f.debug_tuple("Bytes").field(arg0).finish(),
-            Self::Regex(arg0) => f.debug_tuple("Regex").field(arg0).finish(),
             Self::Boolean(arg0) => f.debug_tuple("Boolean").field(arg0).finish(),
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
             Self::Function {
@@ -702,13 +699,6 @@ mod tests {
         assert_eq!(format!("{:?}", StaticValue::Float(0.0)), "Float(0.0)");
         assert_eq!(format!("{:?}", StaticValue::Bytes(Vec::new())), "Bytes([])");
         assert_eq!(format!("{:?}", StaticValue::Bytes(vec![2])), "Bytes([2])");
-        assert_eq!(
-            format!(
-                "{:?}",
-                StaticValue::Regex(Regex::from_str("", false, false).unwrap())
-            ),
-            "Regex(Regex())"
-        );
         assert_eq!(format!("{:?}", StaticValue::Boolean(true)), "Boolean(true)");
         assert_eq!(
             format!("{:?}", StaticValue::Object(HashMap::new())),
