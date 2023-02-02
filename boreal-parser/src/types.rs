@@ -291,5 +291,6 @@ mod tests {
     #[test]
     fn test_public_types() {
         test_public_type(Input::new(r"a"));
+        test_public_type(Input::new(r"a").pos());
     }
 }
