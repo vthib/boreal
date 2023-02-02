@@ -611,6 +611,11 @@ mod tests {
             index: BoundedValueIndex::Module(0),
             operations: Vec::new(),
         });
+        test_type_traits_non_clonable(ModuleExpression::Function {
+            fun: |_, _| None,
+            arguments: Vec::new(),
+            operations: Vec::new(),
+        });
         test_type_traits_non_clonable(IteratorType::Array(ValueType::Integer));
         test_type_traits_non_clonable(TypeError::UnknownSubfield("a".to_owned()));
         test_type_traits_non_clonable(ValueOrType::Type(&ValueType::Integer));

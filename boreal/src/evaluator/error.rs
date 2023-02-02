@@ -13,13 +13,14 @@ pub enum EvalError {
     Timeout,
 }
 
-impl std::error::Error for EvalError {}
+#[cfg(test)]
+mod tests {
+    use crate::test_helpers::test_type_traits_non_clonable;
 
-impl std::fmt::Display for EvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Undecidable => write!(f, "undecidable"),
-            Self::Timeout => write!(f, "timeout"),
-        }
+    use super::*;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(EvalError::Undecidable);
     }
 }

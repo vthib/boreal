@@ -1035,6 +1035,9 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits(Value::Integer(0));
+        test_type_traits(Params {
+            string_max_nb_matches: 0,
+        });
         test_type_traits_non_clonable(ScanData {
             mem: b"",
             module_values: Vec::new(),

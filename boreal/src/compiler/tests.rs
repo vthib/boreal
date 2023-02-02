@@ -4,8 +4,8 @@ use super::expression::{compile_expression, Type};
 use super::module::compile_module;
 use super::rule::RuleCompiler;
 use super::{
-    AddRuleError, AddRuleErrorKind, AvailableModule, CompilationError, Compiler, CompilerParams,
-    ImportedModule, ModuleLocation, Namespace,
+    AddRuleError, AddRuleErrorKind, AddRuleStatus, AvailableModule, CompilationError, Compiler,
+    CompilerParams, ImportedModule, ModuleLocation, Namespace,
 };
 use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 use boreal_parser::parse;
@@ -13,16 +13,7 @@ use boreal_parser::parse;
 #[track_caller]
 fn compile_expr(expression_str: &str, expected_type: Type) {
     let rule_str = format!("rule a {{ strings: $a = /a/ condition: {expression_str} }}");
-    let file = parse(&rule_str).unwrap_or_else(|err| {
-        panic!(
-            "failed parsing: {}",
-            AddRuleError {
-                path: None,
-                kind: AddRuleErrorKind::Parse(err)
-            }
-            .to_short_description("mem", &rule_str)
-        )
-    });
+    let file = parse(&rule_str).unwrap();
 
     let rule = file
         .components
@@ -294,4 +285,7 @@ fn test_types_traits() {
         }),
     });
     test_type_traits(CompilerParams::default());
+    test_type_traits_non_clonable(AddRuleStatus {
+        warnings: Vec::new(),
+    });
 }
