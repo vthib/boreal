@@ -25,9 +25,11 @@ The main goals of the project are:
 * Full compatibility with YARA 4.2 and [most modules](#modules). Any existing rule can be used as is.
 * Avoid scanning for strings when not required, greatly reducing execution time on carefully crafted
   rules. See [no scan optimization](#no-scan-optimization).
+* Protection against any untrusted inputs, be it rules or scanned bytes. Ill-crafted rules or inputs should never
+  lead to a crash or deteriorated performances.
 * Improved performances when using a few hundred rules. See the [benchmarks](/boreal/benches/README.md) for details.
 
-  There is a lot of room to improve performances much more, as working on performances has not been the main focus yet.
+There is a lot of room to improve performances much more, as working on performances has not been the main focus yet.
 
 ## Installation & use
 
@@ -141,19 +143,9 @@ lot that is planned and yet to be done. As can be seen in the [benchmarks](/bore
 huge number of rules, big files and bad hex or regex strings deteriorates performances quite a lot.
 This is mainly because of missing optimizations that is planned in the next releases.
 
-#### Defensive programming and protection against all possible rules.
-
-For now it is possible to craft rules that will cause stack overflows or behave badly in general.
-If you control the origin of all of your rules, this is not an issue. If that is not the case
-however, you shouldn't use boreal yet. This is in active development.
-
 #### Process scanning
 
 Only scanning files or bytes is available for the moment.
-
-#### Configurable timeout on scan
-
-Closely related to defensive programming, and will probably be implemented at the same time.
 
 #### Missing modules
 
