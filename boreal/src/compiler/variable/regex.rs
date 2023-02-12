@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use boreal_parser::regex::{AssertionKind, Node};
 use boreal_parser::VariableFlags;
 
@@ -32,7 +30,7 @@ pub(super) fn compile_regex(
 
     let use_ac = !literals.is_empty()
         && literals.iter().all(|lit| lit.len() >= 2)
-        && visit(ast, AcCompatibility::default()).unwrap_or_else(|e| match e {});
+        && visit(ast, AcCompatibility::default());
 
     let mut has_wide_word_boundaries = false;
     let matcher_type = if use_ac {
@@ -95,9 +93,8 @@ impl Default for AcCompatibility {
 
 impl Visitor for AcCompatibility {
     type Output = bool;
-    type Err = Infallible;
 
-    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
         match node {
             Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
                 // Do not use an AC if anchors are present, it will be much efficient to just run
@@ -112,11 +109,11 @@ impl Visitor for AcCompatibility {
             _ => (),
         }
 
-        Ok(VisitAction::Continue)
+        VisitAction::Continue
     }
 
-    fn finish(self) -> Result<Self::Output, Self::Err> {
-        Ok(self.0)
+    fn finish(self) -> Self::Output {
+        self.0
     }
 }
 
@@ -158,7 +155,7 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 /// Convert the AST of a regex variable to a string, taking into account variable modifiers.
 fn convert_ast_to_string_with_flags(ast: &Node, flags: VariableFlags) -> (String, bool) {
     if flags.contains(VariableFlags::WIDE) {
-        let (wide_ast, has_wide_word_boundaries) = visit(ast, AstWidener::new()).unwrap();
+        let (wide_ast, has_wide_word_boundaries) = visit(ast, AstWidener::new());
 
         let expr = if flags.contains(VariableFlags::ASCII) {
             format!(
@@ -271,16 +268,13 @@ impl AstWidener {
 
 impl Visitor for AstWidener {
     type Output = (Node, bool);
-    type Err = ();
 
-    fn finish(self) -> Result<(Node, bool), Self::Err> {
-        match self.node {
-            Some(v) => Ok((v, self.has_word_boundaries)),
-            None => Err(()),
-        }
+    fn finish(self) -> (Node, bool) {
+        // Safety: there is a top-level node, the one we visit first.
+        (self.node.unwrap(), self.has_word_boundaries)
     }
 
-    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
         match node {
             Node::Dot | Node::Empty | Node::Literal(_) | Node::Class(_) | Node::Assertion(_) => (),
 
@@ -291,10 +285,10 @@ impl Visitor for AstWidener {
                 self.stack.push(StackLevel::new(true));
             }
         }
-        Ok(VisitAction::Continue)
+        VisitAction::Continue
     }
 
-    fn visit_post(&mut self, node: &Node) -> Result<(), Self::Err> {
+    fn visit_post(&mut self, node: &Node) {
         match node {
             Node::Empty => self.add(Node::Empty),
 
@@ -371,8 +365,7 @@ impl Visitor for AstWidener {
                 let vec = self.stack.pop().unwrap().nodes;
                 self.add(Node::Alternation(vec));
             }
-        };
-        Ok(())
+        }
     }
 }
 

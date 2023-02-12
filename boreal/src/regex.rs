@@ -1,7 +1,6 @@
 //! YARA regex handling
 //!
 //! This module contains a set of types and helpers to handle the YARA regex syntax.
-use std::convert::Infallible;
 use std::fmt::Write;
 
 use regex::bytes::RegexBuilder;
@@ -61,7 +60,7 @@ impl Regex {
 
 /// Convert a yara regex AST into a rust regex expression.
 pub(crate) fn regex_ast_to_string(ast: &Node) -> String {
-    visit(ast, AstPrinter::default()).unwrap_or_else(|e| match e {})
+    visit(ast, AstPrinter::default())
 }
 
 #[derive(Default)]
@@ -71,9 +70,8 @@ struct AstPrinter {
 
 impl Visitor for AstPrinter {
     type Output = String;
-    type Err = Infallible;
 
-    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
         match node {
             Node::Assertion(AssertionKind::StartLine) => self.res.push('^'),
             Node::Assertion(AssertionKind::EndLine) => self.res.push('$'),
@@ -87,10 +85,10 @@ impl Visitor for AstPrinter {
             Node::Alternation(_) | Node::Concat(_) | Node::Empty | Node::Repetition { .. } => (),
         }
 
-        Ok(VisitAction::Continue)
+        VisitAction::Continue
     }
 
-    fn visit_post(&mut self, node: &Node) -> Result<(), Self::Err> {
+    fn visit_post(&mut self, node: &Node) {
         match node {
             Node::Alternation(_)
             | Node::Assertion(_)
@@ -122,16 +120,14 @@ impl Visitor for AstPrinter {
                 }
             }
         }
-
-        Ok(())
     }
 
     fn visit_alternation_in(&mut self) {
         self.res.push('|');
     }
 
-    fn finish(self) -> Result<Self::Output, Self::Err> {
-        Ok(self.res)
+    fn finish(self) -> Self::Output {
+        self.res
     }
 }
 
