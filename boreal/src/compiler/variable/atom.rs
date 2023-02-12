@@ -12,15 +12,13 @@
 //! Atoms are selected by computing a rank for each atom: the higher the rank, the preferred the
 //! atom. This rank is related to how rare the atom should be found during scanning, and thus
 //! the rate of false positive matches.
-use std::convert::Infallible;
-
 use boreal_parser::regex::{AssertionKind, Node};
 
 use crate::regex::{visit, VisitAction, Visitor};
 
 pub fn get_atoms_details(node: &Node) -> AtomsDetails {
     let visitor = AtomsExtractor::new();
-    let visitor = visit(node, visitor).unwrap_or_else(|e| match e {});
+    let visitor = visit(node, visitor);
     visitor.into_atoms_details(node)
 }
 
@@ -77,10 +75,9 @@ impl AtomsExtractor {
 
 impl Visitor for AtomsExtractor {
     type Output = Self;
-    type Err = Infallible;
 
-    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
-        Ok(match node {
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+        match node {
             Node::Literal(b) => {
                 self.add_byte(*b);
                 VisitAction::Skip
@@ -97,16 +94,15 @@ impl Visitor for AtomsExtractor {
                 VisitAction::Skip
             }
             Node::Group(_) | Node::Concat(_) => VisitAction::Continue,
-        })
+        }
     }
 
-    fn visit_post(&mut self, _node: &Node) -> Result<(), Self::Err> {
+    fn visit_post(&mut self, _node: &Node) {
         self.current_position += 1;
-        Ok(())
     }
 
-    fn finish(self) -> Result<Self, Self::Err> {
-        Ok(self)
+    fn finish(self) -> Self {
+        self
     }
 }
 
@@ -253,16 +249,7 @@ impl AtomSet {
         }
 
         let visitor = PrePostExtractor::new(self.start_position, self.end_position);
-        let (pre_node, post_node) = match visit(original_node, visitor) {
-            Ok(v) => v,
-            Err(()) => {
-                // This should not happen, it indicates a logic error in the visitor.
-                panic!(
-                    "cannot extract pre and post AST from {:?}, starting_position: {}, end_position: {}",
-                    original_node, self.start_position, self.end_position
-                );
-            }
-        };
+        let (pre_node, post_node) = visit(original_node, visitor);
 
         let pre_node = pre_node.map(|pre| {
             let mut pre_nodes = Vec::new();
@@ -397,12 +384,11 @@ impl PrePostExtractor {
 
 impl Visitor for PrePostExtractor {
     type Output = (Option<Node>, Option<Node>);
-    type Err = ();
 
-    fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
+    fn visit_pre(&mut self, node: &Node) -> VisitAction {
         // XXX: be careful here, the visit *must* have the exact same behavior as for the
         // `AtomsExtractor` visitor, to ensure the pre post expressions are correct.
-        Ok(match node {
+        match node {
             Node::Literal(_)
             | Node::Repetition { .. }
             | Node::Dot
@@ -417,10 +403,10 @@ impl Visitor for PrePostExtractor {
                 self.push_stack();
                 VisitAction::Continue
             }
-        })
+        }
     }
 
-    fn visit_post(&mut self, node: &Node) -> Result<(), Self::Err> {
+    fn visit_post(&mut self, node: &Node) {
         match node {
             Node::Literal(_)
             | Node::Repetition { .. }
@@ -456,11 +442,10 @@ impl Visitor for PrePostExtractor {
         }
 
         self.current_position += 1;
-        Ok(())
     }
 
-    fn finish(self) -> Result<Self::Output, Self::Err> {
-        Ok((self.pre_node, self.post_node))
+    fn finish(self) -> Self::Output {
+        (self.pre_node, self.post_node)
     }
 }
 
