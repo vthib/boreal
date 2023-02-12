@@ -173,6 +173,13 @@ fn test_variable_regex_wide() {
     checker.check(b"", false);
     checker.check(b"\0", true);
 
+    let checker = build_checker(".", "wide");
+    checker.check(b"", false);
+    checker.check(b"\0", false);
+    checker.check(b"a", false);
+    checker.check(b"a\0", true);
+    checker.check(b"ab", false);
+
     let checker = build_checker("abc", "wide");
     checker.check(b"abc", false);
     checker.check(b"a\0b\0c\0", true);
