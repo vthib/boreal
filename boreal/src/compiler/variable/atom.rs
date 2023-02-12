@@ -369,24 +369,15 @@ impl PrePostExtractor {
         self.post_stack.push(Vec::new());
     }
 
-    fn pop_stack(&mut self) -> Result<(Vec<Node>, Vec<Node>), ()> {
-        match (self.pre_stack.pop(), self.post_stack.pop()) {
-            (Some(pre), Some(post)) => Ok((pre, post)),
-            _ => Err(()),
-        }
-    }
-
-    fn add_pre_post_node(&mut self, node: &Node) -> Result<(), ()> {
+    fn add_pre_post_node(&mut self, node: &Node) {
         if self.current_position < self.start_position {
-            self.add_node(node.clone(), false)
+            self.add_node(node.clone(), false);
         } else if self.current_position >= self.end_position {
-            self.add_node(node.clone(), true)
-        } else {
-            Ok(())
+            self.add_node(node.clone(), true);
         }
     }
 
-    fn add_node(&mut self, node: Node, post: bool) -> Result<(), ()> {
+    fn add_node(&mut self, node: Node, post: bool) {
         let (stack, final_node) = if post {
             (&mut self.post_stack, &mut self.post_node)
         } else {
@@ -395,14 +386,11 @@ impl PrePostExtractor {
 
         if stack.is_empty() {
             // Empty stack: we should only have a single HIR to set at top-level.
-            match final_node.replace(node) {
-                Some(_) => Err(()),
-                None => Ok(()),
-            }
+            let res = final_node.replace(node);
+            assert!(res.is_none(), "top level HIR node already set");
         } else {
             let pos = stack.len() - 1;
             stack[pos].push(node);
-            Ok(())
         }
     }
 }
@@ -422,7 +410,7 @@ impl Visitor for PrePostExtractor {
             | Node::Empty
             | Node::Assertion(_)
             | Node::Alternation(_) => {
-                self.add_pre_post_node(node)?;
+                self.add_pre_post_node(node);
                 VisitAction::Skip
             }
             Node::Group(_) | Node::Concat(_) => {
@@ -442,23 +430,27 @@ impl Visitor for PrePostExtractor {
             | Node::Assertion(_)
             | Node::Alternation(_) => (),
             Node::Group(_) => {
-                let (mut pre, mut post) = self.pop_stack()?;
+                // Safety: this is a post visit, the pre visit pushed an element on the stack.
+                let mut pre = self.pre_stack.pop().unwrap();
+                let mut post = self.post_stack.pop().unwrap();
 
                 if let Some(node) = pre.pop() {
-                    self.add_node(Node::Group(Box::new(node)), false)?;
+                    self.add_node(Node::Group(Box::new(node)), false);
                 }
                 if let Some(node) = post.pop() {
-                    self.add_node(Node::Group(Box::new(node)), true)?;
+                    self.add_node(Node::Group(Box::new(node)), true);
                 }
             }
 
             Node::Concat(_) => {
-                let (pre, post) = self.pop_stack()?;
+                // Safety: this is a post visit, the pre visit pushed an element on the stack.
+                let pre = self.pre_stack.pop().unwrap();
+                let post = self.post_stack.pop().unwrap();
                 if !pre.is_empty() {
-                    self.add_node(Node::Concat(pre), false)?;
+                    self.add_node(Node::Concat(pre), false);
                 }
                 if !post.is_empty() {
-                    self.add_node(Node::Concat(post), true)?;
+                    self.add_node(Node::Concat(post), true);
                 }
             }
         }

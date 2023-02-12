@@ -237,28 +237,23 @@ impl AstWidener {
         }
     }
 
-    fn add(&mut self, node: Node) -> Result<(), ()> {
+    fn add(&mut self, node: Node) {
         if self.stack.is_empty() {
             // Empty stack: we should only have a single AST to set at top-level.
-            match self.node.replace(node) {
-                Some(_) => Err(()),
-                None => Ok(()),
-            }
+            let res = self.node.replace(node);
+            assert!(res.is_none(), "top level HIR node already set");
         } else {
             let pos = self.stack.len() - 1;
             self.stack[pos].push(node);
-            Ok(())
         }
     }
 
-    fn add_wide(&mut self, node: Node) -> Result<(), ()> {
+    fn add_wide(&mut self, node: Node) {
         let nul_byte = Node::Literal(b'\0');
 
         if self.stack.is_empty() {
-            match self.node.replace(Node::Concat(vec![node, nul_byte])) {
-                Some(_) => Err(()),
-                None => Ok(()),
-            }
+            let res = self.node.replace(Node::Concat(vec![node, nul_byte]));
+            assert!(res.is_none(), "top level HIR node already set");
         } else {
             let pos = self.stack.len() - 1;
             let level = &mut self.stack[pos];
@@ -270,12 +265,7 @@ impl AstWidener {
                     .nodes
                     .push(Node::Group(Box::new(Node::Concat(vec![node, nul_byte]))));
             }
-            Ok(())
         }
-    }
-
-    fn pop(&mut self) -> Option<Vec<Node>> {
-        self.stack.pop().map(|v| v.nodes)
     }
 }
 
@@ -315,7 +305,7 @@ impl Visitor for AstWidener {
 
             // Anchor: no need to add anything
             Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
-                self.add(node.clone())
+                self.add(node.clone());
             }
 
             // Boundary is tricky as it looks for a match between two characters:
@@ -338,7 +328,7 @@ impl Visitor for AstWidener {
             Node::Assertion(AssertionKind::WordBoundary)
             | Node::Assertion(AssertionKind::NonWordBoundary) => {
                 self.has_word_boundaries = true;
-                self.add(Node::Empty)
+                self.add(Node::Empty);
             }
 
             Node::Repetition {
@@ -346,26 +336,43 @@ impl Visitor for AstWidener {
                 kind,
                 greedy,
             } => {
-                let node = self.pop().and_then(|mut v| v.pop()).ok_or(())?;
+                // Safety:
+                // - first pop is guaranteed to contain an element, since this is a "post" visit,
+                //   and the pre visit push an element on the stack.
+                // - second pop is guaranteed to contain an element, since we walked into the
+                //   repetition node, which pushed an element into the stack.
+                let node = self.stack.pop().unwrap().nodes.pop().unwrap();
                 self.add(Node::Repetition {
                     kind: kind.clone(),
                     greedy: *greedy,
                     node: Box::new(node),
-                })
+                });
             }
             Node::Group(_) => {
-                let node = self.pop().and_then(|mut v| v.pop()).ok_or(())?;
-                self.add(Node::Group(Box::new(node)))
+                // Safety:
+                // - first pop is guaranteed to contain an element, since this is a "post" visit,
+                //   and the pre visit push an element on the stack.
+                // - second pop is guaranteed to contain an element, since we walked into the
+                //   group node, which pushed an element into the stack.
+                let node = self.stack.pop().unwrap().nodes.pop().unwrap();
+                self.add(Node::Group(Box::new(node)));
             }
             Node::Concat(_) => {
-                let vec = self.pop().ok_or(())?;
-                self.add(Node::Concat(vec))
+                // Safety:
+                // - pop is guaranteed to contain an element, since this is a "post" visit,
+                //   and the pre visit push an element on the stack.
+                let vec = self.stack.pop().unwrap().nodes;
+                self.add(Node::Concat(vec));
             }
             Node::Alternation(_) => {
-                let vec = self.pop().ok_or(())?;
-                self.add(Node::Alternation(vec))
+                // Safety:
+                // - pop is guaranteed to contain an element, since this is a "post" visit,
+                //   and the pre visit push an element on the stack.
+                let vec = self.stack.pop().unwrap().nodes;
+                self.add(Node::Alternation(vec));
             }
-        }
+        };
+        Ok(())
     }
 }
 
