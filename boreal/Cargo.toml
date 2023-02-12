@@ -1,6 +1,6 @@
 [package]
 name = "boreal"
-version = "0.1.0"
+version = "0.2.0"
 description = "A library to evaluate YARA rules, used to scan bytes for textual and binary pattern"
 repository = "https://github.com/vthib/boreal"
 readme = "README.md"
@@ -32,7 +32,7 @@ openssl = ["dep:openssl", "dep:openssl-sys", "dep:foreign-types-shared"]
 bench = ["dep:criterion"]
 
 [dependencies]
-boreal-parser = { path = "../boreal-parser", version = "0.1.0" }
+boreal-parser = { path = "../boreal-parser", version = "0.2.0" }
 
 # Proper error reporting on compilation
 codespan-reporting = "0.11"

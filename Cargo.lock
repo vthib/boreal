@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "boreal"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aho-corasick",
  "base64",
@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "boreal-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boreal",
  "clap 4.0.23",
@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "boreal-parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bitflags",
  "codespan-reporting",
