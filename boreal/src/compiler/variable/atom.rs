@@ -18,7 +18,7 @@ use boreal_parser::regex::{AssertionKind, Node};
 
 use crate::regex::{visit, VisitAction, Visitor};
 
-pub fn get_atoms_details(node: &Node) -> Result<AtomsDetails, AtomsExtractionError> {
+pub fn get_atoms_details(node: &Node) -> AtomsDetails {
     let visitor = AtomsExtractor::new();
     let visitor = visit(node, visitor).unwrap_or_else(|e| match e {});
     visitor.into_atoms_details(node)
@@ -36,20 +36,6 @@ pub struct AtomsDetails {
     pub pre_ast: Option<Node>,
     pub post_ast: Option<Node>,
 }
-
-/// Logic error while extracting atoms from a regex.
-///
-/// This should never happen. If you get this error, please file a bug report.
-#[derive(Debug)]
-pub struct AtomsExtractionError;
-
-impl std::fmt::Display for AtomsExtractionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "unable to extract atoms from string expression")
-    }
-}
-
-impl std::error::Error for AtomsExtractionError {}
 
 /// Visitor on a regex AST to extract atoms.
 ///
@@ -200,19 +186,16 @@ impl AtomsExtractor {
         }
     }
 
-    pub fn into_atoms_details(
-        mut self,
-        original_node: &Node,
-    ) -> Result<AtomsDetails, AtomsExtractionError> {
+    pub fn into_atoms_details(mut self, original_node: &Node) -> AtomsDetails {
         self.close();
 
-        let (pre_ast, post_ast) = self.set.build_pre_post_ast(original_node)?;
+        let (pre_ast, post_ast) = self.set.build_pre_post_ast(original_node);
 
-        Ok(AtomsDetails {
+        AtomsDetails {
             literals: self.set.atoms,
             pre_ast,
             post_ast,
-        })
+        }
     }
 }
 
@@ -264,25 +247,20 @@ impl AtomSet {
         }
     }
 
-    fn build_pre_post_ast(
-        &self,
-        original_node: &Node,
-    ) -> Result<(Option<Node>, Option<Node>), AtomsExtractionError> {
+    fn build_pre_post_ast(&self, original_node: &Node) -> (Option<Node>, Option<Node>) {
         if self.atoms.is_empty() {
-            return Ok((None, None));
+            return (None, None);
         }
 
         let visitor = PrePostExtractor::new(self.start_position, self.end_position);
         let (pre_node, post_node) = match visit(original_node, visitor) {
             Ok(v) => v,
-            Err(err) => {
+            Err(()) => {
                 // This should not happen, it indicates a logic error in the visitor.
-                debug_assert!(
-                    false,
+                panic!(
                     "cannot extract pre and post AST from {:?}, starting_position: {}, end_position: {}",
                     original_node, self.start_position, self.end_position
                 );
-                return Err(err);
             }
         };
 
@@ -301,7 +279,7 @@ impl AtomSet {
             Node::Concat(post_nodes)
         });
 
-        Ok((pre_node, post_node))
+        (pre_node, post_node)
     }
 }
 
@@ -391,14 +369,14 @@ impl PrePostExtractor {
         self.post_stack.push(Vec::new());
     }
 
-    fn pop_stack(&mut self) -> Result<(Vec<Node>, Vec<Node>), AtomsExtractionError> {
+    fn pop_stack(&mut self) -> Result<(Vec<Node>, Vec<Node>), ()> {
         match (self.pre_stack.pop(), self.post_stack.pop()) {
             (Some(pre), Some(post)) => Ok((pre, post)),
-            _ => Err(AtomsExtractionError),
+            _ => Err(()),
         }
     }
 
-    fn add_pre_post_node(&mut self, node: &Node) -> Result<(), AtomsExtractionError> {
+    fn add_pre_post_node(&mut self, node: &Node) -> Result<(), ()> {
         if self.current_position < self.start_position {
             self.add_node(node.clone(), false)
         } else if self.current_position >= self.end_position {
@@ -408,7 +386,7 @@ impl PrePostExtractor {
         }
     }
 
-    fn add_node(&mut self, node: Node, post: bool) -> Result<(), AtomsExtractionError> {
+    fn add_node(&mut self, node: Node, post: bool) -> Result<(), ()> {
         let (stack, final_node) = if post {
             (&mut self.post_stack, &mut self.post_node)
         } else {
@@ -418,7 +396,7 @@ impl PrePostExtractor {
         if stack.is_empty() {
             // Empty stack: we should only have a single HIR to set at top-level.
             match final_node.replace(node) {
-                Some(_) => Err(AtomsExtractionError),
+                Some(_) => Err(()),
                 None => Ok(()),
             }
         } else {
@@ -431,7 +409,7 @@ impl PrePostExtractor {
 
 impl Visitor for PrePostExtractor {
     type Output = (Option<Node>, Option<Node>);
-    type Err = AtomsExtractionError;
+    type Err = ();
 
     fn visit_pre(&mut self, node: &Node) -> Result<VisitAction, Self::Err> {
         // XXX: be careful here, the visit *must* have the exact same behavior as for the
@@ -515,7 +493,7 @@ mod tests {
             let hex_string = parse_hex_string(hex_string_expr);
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
-            let exprs = get_atoms_details(&ast).unwrap();
+            let exprs = get_atoms_details(&ast);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -761,7 +739,7 @@ mod tests {
         #[track_caller]
         fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
             let regex = parse_regex_string(expr);
-            let exprs = get_atoms_details(&regex.ast).unwrap();
+            let exprs = get_atoms_details(&regex.ast);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -825,11 +803,6 @@ mod tests {
             pre_ast: None,
             post_ast: None,
         });
-        test_type_traits_non_clonable(AtomsExtractionError);
-        assert_eq!(
-            AtomsExtractionError.to_string(),
-            "unable to extract atoms from string expression"
-        );
 
         test_type_traits_non_clonable(AtomsExtractor::new());
         test_type_traits_non_clonable(AtomSet::default());

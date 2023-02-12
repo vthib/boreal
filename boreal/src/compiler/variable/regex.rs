@@ -28,9 +28,7 @@ pub(super) fn compile_regex(
         mut literals,
         pre_ast,
         post_ast,
-    } = super::atom::get_atoms_details(ast).map_err(|e| match e {
-        super::atom::AtomsExtractionError => VariableCompilationError::AtomsExtractionError,
-    })?;
+    } = super::atom::get_atoms_details(ast);
 
     let use_ac = !literals.is_empty()
         && literals.iter().all(|lit| lit.len() >= 2)
@@ -40,7 +38,7 @@ pub(super) fn compile_regex(
     let matcher_type = if use_ac {
         let pre = match pre_ast {
             Some(ast) => {
-                let (pre, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags)?;
+                let (pre, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags);
                 has_wide_word_boundaries |= has_ww_boundaries;
                 Some(pre)
             }
@@ -48,7 +46,7 @@ pub(super) fn compile_regex(
         };
         let post = match post_ast {
             Some(ast) => {
-                let (post, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags)?;
+                let (post, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags);
                 has_wide_word_boundaries |= has_ww_boundaries;
                 Some(post)
             }
@@ -61,7 +59,7 @@ pub(super) fn compile_regex(
             right_validator: compile_validator(post, case_insensitive, dot_all)?,
         }
     } else {
-        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, flags)?;
+        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, flags);
         has_wide_word_boundaries |= has_ww_boundaries;
 
         if literals.iter().any(|lit| lit.len() < 2) {
@@ -158,12 +156,9 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 }
 
 /// Convert the AST of a regex variable to a string, taking into account variable modifiers.
-fn convert_ast_to_string_with_flags(
-    ast: &Node,
-    flags: VariableFlags,
-) -> Result<(String, bool), VariableCompilationError> {
+fn convert_ast_to_string_with_flags(ast: &Node, flags: VariableFlags) -> (String, bool) {
     if flags.contains(VariableFlags::WIDE) {
-        let (wide_ast, has_wide_word_boundaries) = visit(ast, AstWidener::new())?;
+        let (wide_ast, has_wide_word_boundaries) = visit(ast, AstWidener::new()).unwrap();
 
         let expr = if flags.contains(VariableFlags::ASCII) {
             format!(
@@ -174,9 +169,9 @@ fn convert_ast_to_string_with_flags(
         } else {
             regex_ast_to_string(&wide_ast)
         };
-        Ok((expr, has_wide_word_boundaries))
+        (expr, has_wide_word_boundaries)
     } else {
-        Ok((regex_ast_to_string(ast), false))
+        (regex_ast_to_string(ast), false)
     }
 }
 
@@ -242,11 +237,11 @@ impl AstWidener {
         }
     }
 
-    fn add(&mut self, node: Node) -> Result<(), VariableCompilationError> {
+    fn add(&mut self, node: Node) -> Result<(), ()> {
         if self.stack.is_empty() {
             // Empty stack: we should only have a single AST to set at top-level.
             match self.node.replace(node) {
-                Some(_) => Err(VariableCompilationError::WidenError),
+                Some(_) => Err(()),
                 None => Ok(()),
             }
         } else {
@@ -256,12 +251,12 @@ impl AstWidener {
         }
     }
 
-    fn add_wide(&mut self, node: Node) -> Result<(), VariableCompilationError> {
+    fn add_wide(&mut self, node: Node) -> Result<(), ()> {
         let nul_byte = Node::Literal(b'\0');
 
         if self.stack.is_empty() {
             match self.node.replace(Node::Concat(vec![node, nul_byte])) {
-                Some(_) => Err(VariableCompilationError::WidenError),
+                Some(_) => Err(()),
                 None => Ok(()),
             }
         } else {
@@ -286,12 +281,12 @@ impl AstWidener {
 
 impl Visitor for AstWidener {
     type Output = (Node, bool);
-    type Err = VariableCompilationError;
+    type Err = ();
 
     fn finish(self) -> Result<(Node, bool), Self::Err> {
         match self.node {
             Some(v) => Ok((v, self.has_word_boundaries)),
-            None => Err(VariableCompilationError::WidenError),
+            None => Err(()),
         }
     }
 
@@ -351,10 +346,7 @@ impl Visitor for AstWidener {
                 kind,
                 greedy,
             } => {
-                let node = self
-                    .pop()
-                    .and_then(|mut v| v.pop())
-                    .ok_or(VariableCompilationError::WidenError)?;
+                let node = self.pop().and_then(|mut v| v.pop()).ok_or(())?;
                 self.add(Node::Repetition {
                     kind: kind.clone(),
                     greedy: *greedy,
@@ -362,18 +354,15 @@ impl Visitor for AstWidener {
                 })
             }
             Node::Group(_) => {
-                let node = self
-                    .pop()
-                    .and_then(|mut v| v.pop())
-                    .ok_or(VariableCompilationError::WidenError)?;
+                let node = self.pop().and_then(|mut v| v.pop()).ok_or(())?;
                 self.add(Node::Group(Box::new(node)))
             }
             Node::Concat(_) => {
-                let vec = self.pop().ok_or(VariableCompilationError::WidenError)?;
+                let vec = self.pop().ok_or(())?;
                 self.add(Node::Concat(vec))
             }
             Node::Alternation(_) => {
-                let vec = self.pop().ok_or(VariableCompilationError::WidenError)?;
+                let vec = self.pop().ok_or(())?;
                 self.add(Node::Alternation(vec))
             }
         }

@@ -443,27 +443,12 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
 pub enum VariableCompilationError {
     /// Error when compiling a regex variable.
     Regex(crate::regex::Error),
-
-    /// Logic error while attempting to extract atoms from a variable.
-    ///
-    /// This really should not happen, and indicates a bug in the extraction code.
-    AtomsExtractionError,
-
-    /// Structural error when applying the `wide` modifier to a regex.
-    ///
-    /// This really should not happen, and indicates a bug in the code
-    /// applying this modifier.
-    WidenError,
 }
 
 impl std::fmt::Display for VariableCompilationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Regex(e) => e.fmt(f),
-            // This should not happen. Please report it upstream if it does.
-            Self::AtomsExtractionError => write!(f, "unable to extract atoms"),
-            // This should not happen. Please report it upstream if it does.
-            Self::WidenError => write!(f, "unable to apply the wide modifier to the regex"),
         }
     }
 }
@@ -484,14 +469,8 @@ mod tests {
         test_type_traits_non_clonable(MatcherType::Literals);
         test_type_traits(AcMatchStatus::Unknown);
 
-        test_type_traits_non_clonable(VariableCompilationError::WidenError);
-        assert_eq!(
-            VariableCompilationError::AtomsExtractionError.to_string(),
-            "unable to extract atoms",
-        );
-        assert_eq!(
-            VariableCompilationError::WidenError.to_string(),
-            "unable to apply the wide modifier to the regex"
-        );
+        test_type_traits_non_clonable(VariableCompilationError::Regex(
+            Regex::from_str("{", true, true).unwrap_err(),
+        ));
     }
 }
