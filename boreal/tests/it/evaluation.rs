@@ -905,16 +905,54 @@ fn test_eval_filesize() {
     );
 }
 
+// Test the specific behavior of the entrypoing expression compared to the modules entrypoint
+// values (which is tested in the tests for each module).
 #[test]
 #[cfg(feature = "object")]
 fn test_eval_entrypoint() {
+    use crate::libyara_compat::util::{ELF32_FILE, ELF64_FILE};
     use crate::utils::check_file;
 
-    // Test the specific behavior of the entrypoing expression compared to the modules entrypoint
-    // values (which is tested in the tests for each module
+    fn build_rule(module_name: &str, v1: u32, v2: u32) -> String {
+        format!(
+            r#"
+            import "{module_name}"
+            rule a {{
+                condition:
+                    {module_name}.entry_point == {v1} and entrypoint == {v2}
+            }}
+        "#
+        )
+    }
 
-    // For this file, the section raw data containing the entry point as been modified to test
-    // the "realign" from the section alignment.
+    // Not a PE or ELF
+    check(&build_empty_rule("not defined entrypoint"), b"", true);
+    check_file(
+        &build_empty_rule("not defined entrypoint"),
+        "tests/assets/libyara/data/tiny-macho",
+        true,
+    );
+
+    // pe 32
+    check_file(
+        &build_rule("pe", 2976, 2976),
+        "tests/assets/libyara/data/pe_imports",
+        true,
+    );
+    // pe 64
+    check_file(
+        &build_rule("pe", 2800, 2800),
+        "tests/assets/libyara/data/pe_mingw",
+        true,
+    );
+    // elf 32
+    check(&build_rule("elf", 96, 96), ELF32_FILE, true);
+    // elf 64
+    check(&build_rule("elf", 128, 128), ELF64_FILE, true);
+
+    // For this file, the section raw data containing the entry point has been modified to test
+    // the "realign" from the section alignment. The values are different between the module value
+    // and the deprecated entrypoint one, as this one did not get the bugfixes.
     check_file(
         r#"
 import "pe"

@@ -70,9 +70,7 @@ fn parse_elf<Elf: FileHeader<Endian = Endianness>>(
     file: &ElfFile<Elf>,
     mem: &[u8],
 ) -> Option<Value> {
-    let ep = elf::entry_point(file, mem)?;
-    match i64::try_from(ep) {
-        Ok(v) => Some(Value::Integer(v)),
-        Err(_) => None,
-    }
+    elf::entry_point(file, mem)
+        .and_then(|ep| i64::try_from(ep).ok())
+        .map(Value::Integer)
 }
