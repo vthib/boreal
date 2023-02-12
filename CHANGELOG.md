@@ -64,6 +64,9 @@ Main changes:
 ### Removed
 
 - `boreal::module::StaticValue::Regex` has been removed (a7e543b1dee).
+- Removed errors `VariableCompilationError::AtomsExtractionError` and
+  `VariableCompilationError::WidenError`. Those were logic errors that shouldn't
+  be exposed to users.
 
 ## [0.1.0] - 2022-12-04
 
