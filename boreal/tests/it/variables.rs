@@ -160,6 +160,19 @@ fn to_wide(e: &[u8]) -> Vec<u8> {
 
 #[test]
 fn test_variable_regex_wide() {
+    // Without yara, it does not allow empty regex nodes
+    let checker = Checker::new_without_yara(
+        r#"
+        rule a {
+            strings:
+                $a = /()/ wide
+            condition:
+                $a
+        }"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"\0", true);
+
     let checker = build_checker("abc", "wide");
     checker.check(b"abc", false);
     checker.check(b"a\0b\0c\0", true);
