@@ -583,6 +583,14 @@ rule a {
     }
 }
 
+fn base64_encode<T: AsRef<[u8]>>(s: T) -> Vec<u8> {
+    use base64::engine::Engine;
+
+    base64::engine::general_purpose::STANDARD
+        .encode(s)
+        .into_bytes()
+}
+
 #[test]
 fn test_variable_base64_small() {
     let checker = Checker::new(
@@ -600,17 +608,17 @@ rule a {
     // after base64 encoding, and will not match where the base64 encoding matches the
     // [GWm2][EFGH] regular expression.
     checker.check(b"", false);
-    checker.check(base64::encode("`").as_bytes(), true);
-    checker.check(base64::encode("b").as_bytes(), true);
-    checker.check(base64::encode("c").as_bytes(), true);
+    checker.check(&base64_encode("`"), true);
+    checker.check(&base64_encode("b"), true);
+    checker.check(&base64_encode("c"), true);
 
     // TODO: this is not matching, contrary to yara doc. report this
-    checker.check(base64::encode("!").as_bytes(), false);
-    checker.check(base64::encode(b"\xA1").as_bytes(), false);
-    checker.check(base64::encode(b"\xE1").as_bytes(), false);
+    checker.check(&base64_encode("!"), false);
+    checker.check(&base64_encode(b"\xA1"), false);
+    checker.check(&base64_encode(b"\xE1"), false);
 
-    checker.check(base64::encode(b"\xA0").as_bytes(), false);
-    checker.check(base64::encode(b"ha").as_bytes(), false);
+    checker.check(&base64_encode(b"\xA0"), false);
+    checker.check(&base64_encode(b"ha"), false);
 }
 
 #[test]
@@ -647,33 +655,33 @@ rule a {
 
     checker.check(b"mangue", false);
     // not matching on ascii base64
-    checker.check(base64::encode("mangue").as_bytes(), false);
-    checker.check(base64::encode(" mangue").as_bytes(), false);
-    checker.check(base64::encode("  mangue").as_bytes(), false);
+    checker.check(&base64_encode("mangue"), false);
+    checker.check(&base64_encode(" mangue"), false);
+    checker.check(&base64_encode("  mangue"), false);
     // not matching on ascii base64wide
     checker.check(b"b\0W\0F\0u\0Z\x003\0V\0l\0", false);
     checker.check(b"1\0h\0b\0m\0d\x001\0Z\0", false);
     checker.check(b"t\0Y\0W\x005\0n\0d\0W\0", false);
     // matching on wide, then base64
-    checker.check(base64::encode("m\0a\0n\0g\0u\0e\0").as_bytes(), true);
-    checker.check(base64::encode(" m\0a\0n\0g\0u\0e\0").as_bytes(), true);
-    checker.check(base64::encode("  m\0a\0n\0g\0u\0e\0").as_bytes(), true);
+    checker.check(&base64_encode("m\0a\0n\0g\0u\0e\0"), true);
+    checker.check(&base64_encode(" m\0a\0n\0g\0u\0e\0"), true);
+    checker.check(&base64_encode("  m\0a\0n\0g\0u\0e\0"), true);
 
     // "fraise" ascii and wide, then base64
 
     checker.check(b"fraise", false);
     // matching on ascii, then base64
-    checker.check(base64::encode("fraise").as_bytes(), true);
-    checker.check(base64::encode(" fraise").as_bytes(), true);
-    checker.check(base64::encode("  fraise").as_bytes(), true);
+    checker.check(&base64_encode("fraise"), true);
+    checker.check(&base64_encode(" fraise"), true);
+    checker.check(&base64_encode("  fraise"), true);
     // not matching on ascii base64wide
     checker.check(b"Z\0n\0J\0h\0a\0X\0N\0l\0", false);
     checker.check(b"Z\0y\0Y\0W\0l\0z\0Z\0", false);
     checker.check(b"m\0c\0m\0F\0p\0c\x002\0", false);
     // matching on wide, then base64
-    checker.check(base64::encode("f\0r\0a\0i\0s\0e\0").as_bytes(), true);
-    checker.check(base64::encode(" f\0r\0a\0i\0s\0e\0").as_bytes(), true);
-    checker.check(base64::encode("  f\0r\0a\0i\0s\0e\0").as_bytes(), true);
+    checker.check(&base64_encode("f\0r\0a\0i\0s\0e\0"), true);
+    checker.check(&base64_encode(" f\0r\0a\0i\0s\0e\0"), true);
+    checker.check(&base64_encode("  f\0r\0a\0i\0s\0e\0"), true);
 }
 
 #[test]
@@ -694,43 +702,34 @@ rule a {
 
     checker.check(b"framboise", false);
     // not matching on ascii, then base64
-    checker.check(base64::encode("framboise").as_bytes(), false);
-    checker.check(base64::encode(" framboise").as_bytes(), false);
-    checker.check(base64::encode("  framboise").as_bytes(), false);
+    checker.check(&base64_encode("framboise"), false);
+    checker.check(&base64_encode(" framboise"), false);
+    checker.check(&base64_encode("  framboise"), false);
     // matching on ascii base64wide
     checker.check(b"Z\0n\0J\0h\0b\0W\0J\0v\0a\0X\0N\0l\0", true);
     checker.check(b"Z\0y\0Y\0W\x001\0i\0b\x002\0l\0z\0Z\0", true);
     checker.check(b"m\0c\0m\0F\0t\0Y\0m\09\0p\0c\x002\0", true);
     // not matching on wide, then base64
-    checker.check(
-        base64::encode("f\0r\0a\0m\0b\0o\0i\0s\0e\0").as_bytes(),
-        false,
-    );
-    checker.check(
-        base64::encode(" f\0r\0a\0m\0b\0o\0i\0s\0e\0").as_bytes(),
-        false,
-    );
-    checker.check(
-        base64::encode("  f\0r\0a\0m\0b\0o\0i\0s\0e\0").as_bytes(),
-        false,
-    );
+    checker.check(&base64_encode("f\0r\0a\0m\0b\0o\0i\0s\0e\0"), false);
+    checker.check(&base64_encode(" f\0r\0a\0m\0b\0o\0i\0s\0e\0"), false);
+    checker.check(&base64_encode("  f\0r\0a\0m\0b\0o\0i\0s\0e\0"), false);
 
     // "mures" wide base64wide
 
     checker.check(b"mures", false);
     // not matching on ascii, then base64
-    checker.check(base64::encode("mures").as_bytes(), false);
-    checker.check(base64::encode(" mures").as_bytes(), false);
-    checker.check(base64::encode("  mures").as_bytes(), false);
+    checker.check(&base64_encode("mures"), false);
+    checker.check(&base64_encode(" mures"), false);
+    checker.check(&base64_encode("  mures"), false);
     // not matching on ascii base64wide
-    checker.check(base64::encode("b\0X\0V\0y\0Z\0X\0").as_bytes(), false);
-    checker.check(base64::encode("1\x01\0c\0m\0V\0z\0").as_bytes(), false);
-    checker.check(base64::encode("t\0d\0X\0J\0l\0c\0").as_bytes(), false);
+    checker.check(&base64_encode("b\0X\0V\0y\0Z\0X\0"), false);
+    checker.check(&base64_encode("1\x01\0c\0m\0V\0z\0"), false);
+    checker.check(&base64_encode("t\0d\0X\0J\0l\0c\0"), false);
 
     // not matching on "mures" wide, then base64
-    checker.check(base64::encode("m\0u\0r\0e\0s\0").as_bytes(), false);
-    checker.check(base64::encode(" m\0u\0r\0e\0s\0").as_bytes(), false);
-    checker.check(base64::encode("  m\0u\0r\0e\0s\0").as_bytes(), false);
+    checker.check(&base64_encode("m\0u\0r\0e\0s\0"), false);
+    checker.check(&base64_encode(" m\0u\0r\0e\0s\0"), false);
+    checker.check(&base64_encode("  m\0u\0r\0e\0s\0"), false);
 
     // Matches on "mures" wide, then base64wide
     checker.check(b"b\0Q\0B\x001\0A\0H\0I\0A\0Z\0Q\0B\0z\0A\0", true);
@@ -741,24 +740,18 @@ rule a {
 
     checker.check(b"myrtille", false);
     // not matching on ascii, then base64
-    checker.check(base64::encode("myrtille").as_bytes(), false);
-    checker.check(base64::encode(" myrtille").as_bytes(), false);
-    checker.check(base64::encode("  myrtille").as_bytes(), false);
+    checker.check(&base64_encode("myrtille"), false);
+    checker.check(&base64_encode(" myrtille"), false);
+    checker.check(&base64_encode("  myrtille"), false);
     // matching on ascii base64wide
     checker.check(b"b\0X\0l\0y\0d\0G\0l\0s\0b\0G\0", true);
     checker.check(b"1\x005\0c\0n\0R\0p\0b\0G\0x\0l\0", true);
     checker.check(b"t\0e\0X\0J\x000\0a\0W\0x\0s\0Z\0", true);
 
     // not matching on wide, then base64
-    checker.check(base64::encode("m\0y\0r\0t\0i\0l\0l\0e\0").as_bytes(), false);
-    checker.check(
-        base64::encode(" m\0y\0r\0t\0i\0l\0l\0e\0").as_bytes(),
-        false,
-    );
-    checker.check(
-        base64::encode("  m\0y\0r\0t\0i\0l\0l\0e\0").as_bytes(),
-        false,
-    );
+    checker.check(&base64_encode("m\0y\0r\0t\0i\0l\0l\0e\0"), false);
+    checker.check(&base64_encode(" m\0y\0r\0t\0i\0l\0l\0e\0"), false);
+    checker.check(&base64_encode("  m\0y\0r\0t\0i\0l\0l\0e\0"), false);
 
     // Matches on "myrtille" wide, then base64wide
     checker.check(
@@ -793,9 +786,9 @@ rule a {
 
     checker.check(b"boreal forest", false);
     // matching on ascii base64
-    checker.check(base64::encode("boreal forest").as_bytes(), true);
-    checker.check(base64::encode(" boreal forest").as_bytes(), true);
-    checker.check(base64::encode("  boreal forest").as_bytes(), true);
+    checker.check(&base64_encode("boreal forest"), true);
+    checker.check(&base64_encode(" boreal forest"), true);
+    checker.check(&base64_encode("  boreal forest"), true);
     // matching on ascii base64wide
     checker.check(b"Y\0m\09\0y\0Z\0W\0F\0s\0I\0G\0Z\0v\0c\0m\0V\0z\0d\0", true);
     checker.check(
@@ -808,15 +801,15 @@ rule a {
     );
     // not matching on wide, then base64
     checker.check(
-        base64::encode("b\0o\0r\0e\0a\0l\0 \0f\0o\0r\0e\0s\0t\0").as_bytes(),
+        &base64_encode("b\0o\0r\0e\0a\0l\0 \0f\0o\0r\0e\0s\0t\0"),
         false,
     );
     checker.check(
-        base64::encode(" b\0o\0r\0e\0a\0l\0 \0f\0o\0r\0e\0s\0t\0").as_bytes(),
+        &base64_encode(" b\0o\0r\0e\0a\0l\0 \0f\0o\0r\0e\0s\0t\0"),
         false,
     );
     checker.check(
-        base64::encode("  b\0o\0r\0e\0a\0l\0 \0f\0o\0r\0e\0s\0t\0").as_bytes(),
+        &base64_encode("  b\0o\0r\0e\0a\0l\0 \0f\0o\0r\0e\0s\0t\0"),
         false,
     );
     // not matching on wide, then base64wide
@@ -837,9 +830,9 @@ rule a {
 
     checker.check(b"noix de coco", false);
     // not matching on ascii base64
-    checker.check(base64::encode("noix de coco").as_bytes(), false);
-    checker.check(base64::encode(" noix de coco").as_bytes(), false);
-    checker.check(base64::encode("  noix de coco").as_bytes(), false);
+    checker.check(&base64_encode("noix de coco"), false);
+    checker.check(&base64_encode(" noix de coco"), false);
+    checker.check(&base64_encode("  noix de coco"), false);
     // not matching on ascii base64wide
     checker.check(b"b\0m\09\0p\0e\0C\0B\0k\0Z\0S\0B\0j\0b\x002\0N\0v\0", false);
     checker.check(b"5\0v\0a\0X\0g\0g\0Z\0G\0U\0g\0Y\x002\09\0j\0b\0", false);
@@ -848,16 +841,13 @@ rule a {
         false,
     );
     // matching on wide, then base64
+    checker.check(&base64_encode("n\0o\0i\0x\0 \0d\0e\0 \0c\0o\0c\0o\0"), true);
     checker.check(
-        base64::encode("n\0o\0i\0x\0 \0d\0e\0 \0c\0o\0c\0o\0").as_bytes(),
+        &base64_encode(" n\0o\0i\0x\0 \0d\0e\0 \0c\0o\0c\0o\0"),
         true,
     );
     checker.check(
-        base64::encode(" n\0o\0i\0x\0 \0d\0e\0 \0c\0o\0c\0o\0").as_bytes(),
-        true,
-    );
-    checker.check(
-        base64::encode("  n\0o\0i\0x\0 \0d\0e\0 \0c\0o\0c\0o\0").as_bytes(),
+        &base64_encode("  n\0o\0i\0x\0 \0d\0e\0 \0c\0o\0c\0o\0"),
         true,
     );
     // matching on wide, then base64wide
@@ -878,26 +868,17 @@ rule a {
 
     checker.check(b"comcombre", false);
     // not matching on ascii base64
-    checker.check(base64::encode("comcombre").as_bytes(), true);
-    checker.check(base64::encode(" comcombre").as_bytes(), true);
-    checker.check(base64::encode("  comcombre").as_bytes(), true);
+    checker.check(&base64_encode("comcombre"), true);
+    checker.check(&base64_encode(" comcombre"), true);
+    checker.check(&base64_encode("  comcombre"), true);
     // matching on ascii base64wide
     checker.check(b"Y\x002\09\0t\0Y\x002\09\0t\0Y\0n\0J\0l\0", true);
     checker.check(b"N\0v\0b\0W\0N\0v\0b\0W\0J\0y\0Z\0", true);
     checker.check(b"j\0b\x002\x001\0j\0b\x002\x001\0i\0c\0m\0", true);
     // matching on wide, then base64
-    checker.check(
-        base64::encode("c\0o\0m\0c\0o\0m\0b\0r\0e\0").as_bytes(),
-        true,
-    );
-    checker.check(
-        base64::encode(" c\0o\0m\0c\0o\0m\0b\0r\0e\0").as_bytes(),
-        true,
-    );
-    checker.check(
-        base64::encode("  c\0o\0m\0c\0o\0m\0b\0r\0e\0").as_bytes(),
-        true,
-    );
+    checker.check(&base64_encode("c\0o\0m\0c\0o\0m\0b\0r\0e\0"), true);
+    checker.check(&base64_encode(" c\0o\0m\0c\0o\0m\0b\0r\0e\0"), true);
+    checker.check(&base64_encode("  c\0o\0m\0c\0o\0m\0b\0r\0e\0"), true);
     // matching on wide, then base64wide
     checker.check(
         b"Y\0w\0B\0v\0A\0G\x000\0A\0Y\0w\0B\0v\0A\0G\x000\0A\0Y\0g\0B\0y\0A\0G\0U\0A\0",
