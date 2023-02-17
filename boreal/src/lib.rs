@@ -71,8 +71,6 @@
 #[cfg(test)]
 use base64 as _;
 #[cfg(test)]
-use const_format as _;
-#[cfg(test)]
 use glob as _;
 #[cfg(test)]
 use tempfile as _;
