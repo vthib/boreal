@@ -3,10 +3,8 @@
 //! Those tests are directly copied from the yara codebase, and adapted to test them using boreal
 //! as well. Do not modify those tests in any way. Custom tests should go in the other integration
 //! tests, outside of the `libyara` directory.
-use const_format::concatcp;
-
 use super::util::{ISSUE_1006, PE32_FILE, TEXT_1024_BYTES};
-use crate::utils::{check, check_count, check_err, check_file, Checker};
+use crate::utils::{check, check_count, check_err, check_file, join_str, Checker};
 
 #[test]
 fn test_boolean_operators() {
@@ -501,188 +499,196 @@ fn test_anonymous_strings() {
 
 #[test]
 fn test_strings() {
-    let s = concatcp!(TEXT_1024_BYTES, "---- abc ---- xyz").as_bytes();
-    let blob = concatcp!(TEXT_1024_BYTES, "---- a\0b\0c\0 -\0-\0-\0-\0x\0y\0z\0").as_bytes();
+    let s = join_str(TEXT_1024_BYTES, "---- abc ---- xyz");
+    let blob = join_str(TEXT_1024_BYTES, "---- a\0b\0c\0 -\0-\0-\0-\0x\0y\0z\0");
 
-    check("rule test { strings: $a = \"a\" condition: $a }", s, true);
+    check("rule test { strings: $a = \"a\" condition: $a }", &s, true);
 
-    check("rule test { strings: $a = \"ab\" condition: $a }", s, true);
+    check("rule test { strings: $a = \"ab\" condition: $a }", &s, true);
 
-    check("rule test { strings: $a = \"abc\" condition: $a }", s, true);
+    check(
+        "rule test { strings: $a = \"abc\" condition: $a }",
+        &s,
+        true,
+    );
 
-    check("rule test { strings: $a = \"xyz\" condition: $a }", s, true);
+    check(
+        "rule test { strings: $a = \"xyz\" condition: $a }",
+        &s,
+        true,
+    );
 
     check(
         "rule test { strings: $a = \"abc\" nocase fullword condition: $a }",
-        s,
+        &s,
         true,
     );
 
     check(
         "rule test { strings: $a = \"aBc\" nocase  condition: $a }",
-        s,
+        &s,
         true,
     );
 
     check(
         "rule test { strings: $a = \"abc\" fullword condition: $a }",
-        s,
+        &s,
         true,
     );
 
     check(
         "rule test { strings: $a = \"a\" fullword condition: $a }",
-        s,
+        &s,
         false,
     );
 
     check(
         "rule test { strings: $a = \"ab\" fullword condition: $a }",
-        s,
+        &s,
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
-        s,
+        &s,
         false,
     );
 
     check(
         "rule test { strings: $a = \"a\" wide condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"a\" wide ascii condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"ab\" wide condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"ab\" wide ascii condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide nocase fullword condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"aBc\" wide nocase condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"aBc\" wide ascii nocase condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"---xyz\" wide nocase condition: $a }",
-        blob,
+        &blob,
         true,
     );
 
     check(
         "rule test { strings: $a = \"abc\" fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abc").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abc"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"abc\" fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "xabcx").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "xabcx"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "xabc").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "xabc"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcx").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcx"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\x01b\0c\0d\0e\0f\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\x01b\0c\0d\0e\0f\0"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abcdef\" wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0d\0e\0f\x01").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0d\0e\0f\x01"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" ascii wide fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcx").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcx"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" ascii wide fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0abc").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0abc"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0x\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "x\0a\0b\0c\0x\0"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"ab\" wide fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "x\0a\0b\0"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "x\0a\0b\0c\0"),
         false,
     );
 
     check(
         "rule test { strings: $a = \"abc\" wide fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "x\x01a\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "x\x01a\0b\0c\0"),
         true,
     );
 
     check(
         r#"rule test { strings: $a = "\t\r\n\"\\" condition: $a }"#,
-        concatcp!(TEXT_1024_BYTES, "\t\r\n\"\\").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "\t\r\n\"\\"),
         true,
     );
 
@@ -695,7 +701,7 @@ fn test_strings() {
          condition:
              all of them
        }",
-        concatcp!(TEXT_1024_BYTES, "abcdef").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcdef"),
         true,
     );
 
@@ -708,7 +714,7 @@ fn test_strings() {
          condition:
              all of them in (0..10)
        }",
-        concatcp!("foobarbaz", TEXT_1024_BYTES).as_bytes(),
+        &join_str("foobarbaz", TEXT_1024_BYTES),
         true,
     );
 
@@ -721,7 +727,7 @@ fn test_strings() {
            condition:
                none of them in (0..10)
          }",
-        concatcp!("AXSERS", TEXT_1024_BYTES).as_bytes(),
+        &join_str("AXSERS", TEXT_1024_BYTES),
         false,
     );
 
@@ -759,7 +765,7 @@ fn test_strings() {
          condition:
              #a == 3 and #a in (0..10) == 2
        }",
-        concatcp!("foofoo", TEXT_1024_BYTES, "foo").as_bytes(),
+        format!("foofoo{TEXT_1024_BYTES}foo").as_bytes(),
         true,
     );
 
@@ -957,7 +963,7 @@ fn test_strings() {
       condition:
         all of them
       }",
-        concatcp!(TEXT_1024_BYTES, "AXS").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "AXS"),
         true,
     );
 
@@ -968,7 +974,7 @@ fn test_strings() {
       condition:
         all of them
       }",
-        concatcp!(TEXT_1024_BYTES, "ERS").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "ERS"),
         true,
     );
 
@@ -979,7 +985,7 @@ fn test_strings() {
       condition:
         all of them
       }",
-        concatcp!(TEXT_1024_BYTES, "AXS1111ERS2222").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "AXS1111ERS2222"),
         true,
     );
 
@@ -1332,7 +1338,7 @@ fn test_wildcard_strings() {
          condition:
              for all of ($*) : ($)
       }",
-        concatcp!(TEXT_1024_BYTES, "---- abc ---- A\x00B\x00C\x00 ---- xyz").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "---- abc ---- A\x00B\x00C\x00 ---- xyz"),
         true,
     );
 }
@@ -1423,7 +1429,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [-] 38 39 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1431,7 +1437,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = {\n 31 32 [-] 38 39 \n\r}
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1439,7 +1445,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [-] 33 34 [-] 38 39 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1447,7 +1453,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [-] 33 34 [-] 38 39 } private
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1455,7 +1461,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [1] 34 35 [2] 38 39 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1463,7 +1469,7 @@ fn test_hex_strings() {
         "rule test {
          strings: $a = { 31 32 [1-] 34 35 [1-] 38 39 }
          condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1471,7 +1477,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-3] 34 35 [1-] 38 39 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1479,7 +1485,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-2] 35 [1-] 37 38 39 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1487,7 +1493,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-1] 33 }
         condition: !a == 3}",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1495,7 +1501,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-1] 34 }
         condition: !a == 4}",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1503,7 +1509,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-2] 34 }
         condition: !a == 4 }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1511,7 +1517,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [-] 38 39 }
         condition: all of them }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1519,7 +1525,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [-] 32 33 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         false,
     );
 
@@ -1527,7 +1533,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 35 36 [-] 31 32 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         false,
     );
 
@@ -1535,7 +1541,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [2-] 34 35 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         false,
     );
 
@@ -1543,7 +1549,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-1] 33 34 [0-2] 36 37 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1551,7 +1557,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-1] 34 35 [0-2] 36 37 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -1559,7 +1565,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [0-3] 37 38 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         false,
     );
 
@@ -1567,7 +1573,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = { 31 32 [1] 33 34 }
         condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "12\n34").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "12\n34"),
         true,
     );
 
@@ -1575,7 +1581,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = {31 32 [3-6] 32}
         condition: !a == 6 }",
-        concatcp!(TEXT_1024_BYTES, "12111222").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "12111222"),
         true,
     );
 
@@ -1583,7 +1589,7 @@ fn test_hex_strings() {
         "rule test {
         strings: $a = {31 [0-3] (32|33)}
         condition: !a == 2 }",
-        concatcp!("122222222", TEXT_1024_BYTES).as_bytes(),
+        &join_str("122222222", TEXT_1024_BYTES),
         true,
     );
 
@@ -1679,13 +1685,13 @@ fn test_hex_strings() {
 fn test_count() {
     check(
         "rule test { strings: $a = \"ssi\" condition: #a == 2 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"ssi\" private condition: #a == 2 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 }
@@ -1696,7 +1702,7 @@ fn test_at() {
         "rule test {
         strings: $a = \"ssi\"
         condition: $a at (1024+2) and $a at (1024+5) }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
@@ -1704,7 +1710,7 @@ fn test_at() {
         "rule test {
         strings: $a = \"ssi\" private
         condition: $a at (1024+2) and $a at (1024+5) }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
@@ -1712,7 +1718,7 @@ fn test_at() {
         "rule test {
         strings: $a = \"mis\"
         condition: $a at (1024+(~0xFF & 0xFF)) }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
@@ -1749,25 +1755,25 @@ fn test_in() {
 fn test_offset() {
     check(
         "rule test { strings: $a = \"ssi\" condition: @a == (1024+2) }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"ssi\" private condition: @a == (1024+2) }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"ssi\" condition: @a == @a[1] }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"ssi\" condition: @a[2] == (1024+5) }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 }
@@ -1776,67 +1782,67 @@ fn test_offset() {
 fn test_length() {
     check(
         "rule test { strings: $a = /m.*?ssi/ condition: !a == 5 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = /m.*?ssi/ private condition: !a == 5 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = /m.*?ssi/ condition: !a[1] == 5 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = /m.*ssi/ condition: !a == 8 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = /m.*ssi/ condition: !a[1] == 8 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = /ssi.*ppi/ condition: !a[1] == 9 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = /ssi.*ppi/ condition: !a[2] == 6 }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = { 6D [1-3] 73 73 69 } condition: !a == 5}",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = { 6D [-] 73 73 69 } condition: !a == 5}",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = { 6D [-] 70 70 69 } condition: !a == 11}",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = { 6D 69 73 73 [-] 70 69 } condition: !a == 11}",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 }
@@ -1898,42 +1904,42 @@ fn test_of() {
     check(
         "rule test { strings: $a = \"ssi\" $b = \"mis\" $c = \"oops\"
       condition: any of them }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"ssi\" $b = \"mis\" $c = \"oops\"
       condition: none of them }",
-        concatcp!(TEXT_1024_BYTES, "AXSERS").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "AXSERS"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"ssi\" $b = \"mis\" private $c = \"oops\"
       condition: 1 of them }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a = \"ssi\" $b = \"mis\" $c = \"oops\"
       condition: 2 of them }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
       condition: any of ($a*, $b*) }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
     check(
         "rule test { strings: $a1 = \"dummy1\" $b1 = \"dummy1\" $b2 = \"ssi\"
       condition: none of ($a*, $b*) }",
-        concatcp!(TEXT_1024_BYTES, "AXSERS").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "AXSERS"),
         true,
     );
 
@@ -1946,7 +1952,7 @@ fn test_of() {
          condition:
            for any of ($*) : ( for any i in (1..#): (uint8(@[i] - 1) == 0x00) )
        }",
-        concatcp!(TEXT_1024_BYTES, "abc\0def\0ghi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abc\0def\0ghi"),
         true,
     );
 
@@ -1959,7 +1965,7 @@ fn test_of() {
         condition:
           all of them
       }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         false,
     );
 
@@ -2087,7 +2093,7 @@ fn test_for() {
         condition:
           for all i in (1..#a) : (@a[i] >= (1024+2) and @a[i] <= (1024+5))
       }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
@@ -2099,7 +2105,7 @@ fn test_for() {
         condition:
           for all i in (1..#a) : ( for all j in (1..#b) : (@a[i] >= @b[j]))
       }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         true,
     );
 
@@ -2110,7 +2116,7 @@ fn test_for() {
         condition:
           for all i in (1..#a) : (@a[i] == (1024+5))
       }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         false,
     );
 
@@ -2373,223 +2379,211 @@ fn test_re() {
 
     check(
         "rule test { strings: $a = /ssi/ condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /ssi(s|p)/ condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /ssim*/ condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /ssa?/ condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /Miss/ nocase condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /(M|N)iss/ nocase condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /[M-N]iss/ nocase condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /(Mi|ssi)ssippi/ nocase condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /ppi\\tmi/ condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /ppi\\.mi/ condition: $a }",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /^mississippi/ fullword condition: $a }",
-        concatcp!(
+        &join_str(
             "mississippi\tmississippi.mississippi\nmississippi",
-            TEXT_1024_BYTES
-        )
-        .as_bytes(),
+            TEXT_1024_BYTES,
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /mississippi.*mississippi$/s condition: $a}",
-        concatcp!(
+        &join_str(
             TEXT_1024_BYTES,
-            "mississippi\tmississippi.mississippi\nmississippi"
-        )
-        .as_bytes(),
+            "mississippi\tmississippi.mississippi\nmississippi",
+        ),
         true,
     );
 
     check(
         "rule test { strings: $a = /^ssi/ condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         false,
     );
 
     check(
         "rule test { strings: $a = /ssi$/ condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         false,
     );
 
     check(
         "rule test { strings: $a = /ssissi/ fullword condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         false,
     );
 
     check(
         "rule test { strings: $a = /^[isp]+/ condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "mississippi").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "mississippi"),
         false,
     );
 
     check(
         "rule test { strings: $a = /a.{1,2}b/ wide condition: !a == 6 }",
-        concatcp!(TEXT_1024_BYTES, "a\0x\0b\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0x\0b\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /a.{1,2}b/ wide condition: !a == 8 }",
-        concatcp!(TEXT_1024_BYTES, "a\0x\0x\0b\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0x\0x\0b\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /\\babc/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /\\babc/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "\0a\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "\0a\0b\0c\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /\\babc/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "\ta\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "\ta\0b\0c\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /\\babc/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "x\0a\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "x\0a\0b\0c\0"),
         false,
     );
 
     check(
         "rule test { strings: $a = /\\babc/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "x\ta\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "x\ta\0b\0c\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0\0"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0\t").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0\t"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0x\0").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0x\0"),
         false,
     );
 
     check(
         "rule test { strings: $a = /abc\\b/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "a\0b\0c\0b\t").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "a\0b\0c\0b\t"),
         true,
     );
 
     check(
         "rule test { strings: $a = /\\b/ wide condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abc").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abc"),
         false,
     );
 
@@ -2960,49 +2954,49 @@ fn test_re() {
 
     check(
         "rule test { strings: $a = /abc[^d]/ nocase condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         false,
     );
 
     check(
         "rule test { strings: $a = /abc[^d]/ condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         false,
     );
 
     check(
         "rule test { strings: $a = /abc[^D]/ nocase condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         false,
     );
 
     check(
         "rule test { strings: $a = /abc[^D]/ condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc[^f]/ nocase condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc[^f]/ condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc[^F]/ nocase condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         true,
     );
 
     check(
         "rule test { strings: $a = /abc[^F]/ condition: $a }",
-        concatcp!(TEXT_1024_BYTES, "abcd").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "abcd"),
         true,
     );
 
@@ -3085,7 +3079,7 @@ fn test_comments() {
         strings: $a = { 31 32 [-] // Inline comment
 \r 38 39 }
         condition: !a == 9 }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -3093,7 +3087,7 @@ fn test_comments() {
         "rule test {
         strings: $a = { 31 32 /* Inline comment */ [-] 38 39 }
         condition: !a == 9 }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -3102,7 +3096,7 @@ fn test_comments() {
         strings: $a = { 31 32 /* Inline comment */ [-] 38 39 }
                  $b = { 31 32 /* Inline comment */ [-] 35 36 }
         condition: (!a == 9) and (!b == 6) }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -3110,7 +3104,7 @@ fn test_comments() {
         "rule test {
         strings: $a = { 31 32 /* Inline comment with *asterisks* */ [-] 38 39 }
         condition: !a == 9}",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -3119,7 +3113,7 @@ fn test_comments() {
         strings: $a = { 31 32 /* Inline multi-line
 \r     comment */ [-] 38 39 }
         condition: !a == 9 }",
-        concatcp!(TEXT_1024_BYTES, "1234567890").as_bytes(),
+        &join_str(TEXT_1024_BYTES, "1234567890"),
         true,
     );
 
@@ -3127,7 +3121,7 @@ fn test_comments() {
         "rule test {
         strings: $a = { /*Some*/ 31 /*interleaved*/ [-] /*comments*/ 38 39 }
         condition: !a == 9 }",
-        concatcp!("1234567890", TEXT_1024_BYTES).as_bytes(),
+        &join_str("1234567890", TEXT_1024_BYTES),
         true,
     );
 }
@@ -3561,7 +3555,7 @@ fn test_module_hash() {
         true,
     );
 
-    let multi_block_blob = concatcp!(TEXT_1024_BYTES, TEXT_1024_BYTES, "\0").as_bytes();
+    let multi_block_blob = format!("{TEXT_1024_BYTES}{TEXT_1024_BYTES}\0");
 
     check(
         "import \"hash\"
@@ -3607,7 +3601,7 @@ fn test_module_hash() {
             and
           hash.crc32(\"TEST STRING\") == 0x51f9be31
       }",
-        multi_block_blob,
+        multi_block_blob.as_bytes(),
         true,
     );
 }

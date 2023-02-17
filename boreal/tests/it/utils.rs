@@ -771,3 +771,7 @@ impl std::fmt::Debug for Diff {
             .finish()
     }
 }
+
+pub fn join_str(a: &str, b: &str) -> Vec<u8> {
+    format!("{}{}", a, b).into_bytes()
+}
