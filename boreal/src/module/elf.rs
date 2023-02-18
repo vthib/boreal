@@ -259,15 +259,13 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
     let dynamic = dynamic(header, e, mem);
-    let dynamic_len = dynamic
-        .as_ref()
-        .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
+    let dynamic_len = dynamic.as_ref().map(Vec::len);
 
     [
         ("type", Value::from(header.e_type(e))),
         ("machine", header.e_machine(e).into()),
         ("entry_point", entry_point(header, e, mem).into()),
-        ("number_of_sections", header.shnum(e, mem).ok().into()),
+        ("number_of_sections", header.e_shnum(e).into()),
         ("sh_offset", header.e_shoff(e).into().into()),
         ("sh_entry_size", u64::from(header.e_shentsize(e)).into()),
         ("number_of_segments", header.phnum(e, mem).ok().into()),

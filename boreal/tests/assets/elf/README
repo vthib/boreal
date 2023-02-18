@@ -1,0 +1,2 @@
+All those files are generated using the asm files, with `nasm -f bin <asm_file>`.
+Inspired and modified from <http://www.les-ziboux.rasama.org/elf-without-ld.html>.
