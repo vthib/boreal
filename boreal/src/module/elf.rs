@@ -1,12 +1,8 @@
 use std::collections::HashMap;
 
-use object::{
-    elf,
-    read::elf::{
-        Dyn, ElfFile, ElfFile32, ElfFile64, FileHeader, ProgramHeader, SectionHeader, Sym,
-    },
-    Endianness, FileKind, Object,
-};
+use object::elf::{self, FileHeader32, FileHeader64};
+use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, Sym};
+use object::{Endianness, FileKind};
 
 use super::{Module, ScanContext, StaticValue, Type, Value};
 
@@ -239,30 +235,30 @@ impl Module for Elf {
 
 fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     match FileKind::parse(mem).ok()? {
-        FileKind::Elf32 => Some(parse_file_inner(&ElfFile32::parse(mem).ok()?, mem)),
-        FileKind::Elf64 => Some(parse_file_inner(&ElfFile64::parse(mem).ok()?, mem)),
+        FileKind::Elf32 => Some(parse_file_inner(FileHeader32::parse(mem).ok()?, mem)),
+        FileKind::Elf64 => Some(parse_file_inner(FileHeader64::parse(mem).ok()?, mem)),
         _ => None,
     }
 }
 
 fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
-    file: &ElfFile<Elf>,
+    header: &Elf,
     mem: &[u8],
 ) -> HashMap<&'static str, Value> {
-    let header = file.raw_header();
-    let e = file.endian();
+    // Safety: cannot fail, as we use `Endian = Endianness`, so we do not force endianness.
+    let e = header.endian().unwrap();
 
-    let symtab = get_symbols(file, mem, elf::SHT_SYMTAB);
+    let symtab = get_symbols(header, e, mem, elf::SHT_SYMTAB);
     let symtab_len = symtab
         .as_ref()
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
-    let dynsym = get_symbols(file, mem, elf::SHT_DYNSYM);
+    let dynsym = get_symbols(header, e, mem, elf::SHT_DYNSYM);
     let dynsym_len = dynsym
         .as_ref()
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
-    let dynamic = dynamic(file, mem);
+    let dynamic = dynamic(header, e, mem);
     let dynamic_len = dynamic
         .as_ref()
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
@@ -270,15 +266,21 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     [
         ("type", Value::from(header.e_type(e))),
         ("machine", header.e_machine(e).into()),
-        ("entry_point", entry_point(file, mem).into()),
+        ("entry_point", entry_point(header, e, mem).into()),
         ("number_of_sections", header.shnum(e, mem).ok().into()),
         ("sh_offset", header.e_shoff(e).into().into()),
         ("sh_entry_size", u64::from(header.e_shentsize(e)).into()),
         ("number_of_segments", header.phnum(e, mem).ok().into()),
         ("ph_offset", header.e_phoff(e).into().into()),
         ("ph_entry_size", u64::from(header.e_phentsize(e)).into()),
-        ("sections", sections(file, mem).unwrap_or(Value::Undefined)),
-        ("segments", segments(file)),
+        (
+            "sections",
+            sections(header, e, mem).unwrap_or(Value::Undefined),
+        ),
+        (
+            "segments",
+            segments(header, e, mem).map_or(Value::Undefined, Value::Array),
+        ),
         ("symtab", symtab.map_or(Value::Undefined, Value::Array)),
         ("symtab_entries", symtab_len.into()),
         ("dynsym", dynsym.map_or(Value::Undefined, Value::Array)),
@@ -289,47 +291,48 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     .into()
 }
 
-pub(crate) fn entry_point<Elf: FileHeader>(file: &ElfFile<Elf>, mem: &[u8]) -> Option<u64> {
-    let e = file.endian();
-    let entrypoint = file.entry();
+pub(crate) fn entry_point<Elf: FileHeader>(
+    header: &Elf,
+    e: Elf::Endian,
+    mem: &[u8],
+) -> Option<u64> {
+    let entrypoint: u64 = header.e_entry(e).into();
 
     // The entrypoint is a VA, find the right segment/section containing it, and
     // adapt the adress to point to the right offset into the ELF file.
-    if file.raw_header().e_type(e) == elf::ET_EXEC {
-        file.raw_segments().iter().find_map(|segment| {
-            let addr = segment.p_vaddr(e).into();
-            let size = segment.p_memsz(e).into();
-            if (addr..addr.saturating_add(size)).contains(&entrypoint) {
-                Some((entrypoint - addr).saturating_add(segment.p_offset(e).into()))
-            } else {
-                None
-            }
-        })
-    } else {
-        file.raw_header()
-            .sections(e, mem)
+    if header.e_type(e) == elf::ET_EXEC {
+        header
+            .program_headers(e, mem)
             .ok()?
             .iter()
-            .find_map(|section| {
-                if matches!(section.sh_type(e), elf::SHT_NULL | elf::SHT_NOBITS) {
-                    return None;
-                }
-
-                let addr = section.sh_addr(e).into();
-                let size = section.sh_size(e).into();
+            .find_map(|segment| {
+                let addr = segment.p_vaddr(e).into();
+                let size = segment.p_memsz(e).into();
                 if (addr..addr.saturating_add(size)).contains(&entrypoint) {
-                    Some((entrypoint - addr).saturating_add(section.sh_offset(e).into()))
+                    Some((entrypoint - addr).saturating_add(segment.p_offset(e).into()))
                 } else {
                     None
                 }
             })
+    } else {
+        header.sections(e, mem).ok()?.iter().find_map(|section| {
+            if matches!(section.sh_type(e), elf::SHT_NULL | elf::SHT_NOBITS) {
+                return None;
+            }
+
+            let addr = section.sh_addr(e).into();
+            let size = section.sh_size(e).into();
+            if (addr..addr.saturating_add(size)).contains(&entrypoint) {
+                Some((entrypoint - addr).saturating_add(section.sh_offset(e).into()))
+            } else {
+                None
+            }
+        })
     }
 }
 
-fn sections<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
-    let e = f.endian();
-
-    let section_table = f.raw_header().sections(e, mem).ok()?;
+fn sections<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option<Value> {
+    let section_table = header.sections(e, mem).ok()?;
     Some(Value::Array(
         section_table
             .iter()
@@ -355,11 +358,11 @@ fn sections<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Value> {
     ))
 }
 
-fn segments<Elf: FileHeader>(f: &ElfFile<Elf>) -> Value {
-    let e = f.endian();
-
-    Value::Array(
-        f.raw_segments()
+fn segments<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option<Vec<Value>> {
+    Some(
+        header
+            .program_headers(e, mem)
+            .ok()?
             .iter()
             .take(MAX_NB_SEGMENTS)
             .map(|segment| {
@@ -378,11 +381,10 @@ fn segments<Elf: FileHeader>(f: &ElfFile<Elf>) -> Value {
     )
 }
 
-fn dynamic<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Vec<Value>> {
-    let e = f.endian();
-
-    let dyn_table = f
-        .raw_segments()
+fn dynamic<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option<Vec<Value>> {
+    let dyn_table = header
+        .program_headers(e, mem)
+        .ok()?
         .iter()
         .find_map(|segment| segment.dynamic(e, mem).ok().flatten())?;
 
@@ -404,12 +406,12 @@ fn dynamic<Elf: FileHeader>(f: &ElfFile<Elf>, mem: &[u8]) -> Option<Vec<Value>> 
 }
 
 fn get_symbols<Elf: FileHeader>(
-    f: &ElfFile<Elf>,
+    header: &Elf,
+    e: Elf::Endian,
     mem: &[u8],
     symbol_type: u32,
 ) -> Option<Vec<Value>> {
-    let e = f.endian();
-    let section_table = f.raw_header().sections(e, mem).ok()?;
+    let section_table = header.sections(e, mem).ok()?;
     let symbol_table = section_table.symbols(e, mem, symbol_type).ok()?;
     let strings_table = symbol_table.strings();
 
