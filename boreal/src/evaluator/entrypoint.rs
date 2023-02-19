@@ -2,18 +2,15 @@
 //!
 //! This depends on the `object` feature.
 
-use object::{
-    coff::SectionTable,
-    pe::{
-        ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64, IMAGE_FILE_MACHINE_AMD64,
-        IMAGE_FILE_MACHINE_I386,
-    },
-    read::{
-        elf::{ElfFile, ElfFile32, ElfFile64, FileHeader},
-        pe::{ImageNtHeaders, ImageOptionalHeader},
-    },
-    Endianness, FileKind, LittleEndian as LE,
+use object::coff::SectionTable;
+use object::elf::{FileHeader32, FileHeader64};
+use object::pe::{
+    ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64, IMAGE_FILE_MACHINE_AMD64,
+    IMAGE_FILE_MACHINE_I386,
 };
+use object::read::elf::FileHeader;
+use object::read::pe::{ImageNtHeaders, ImageOptionalHeader};
+use object::{Endianness, FileKind, LittleEndian as LE};
 
 use super::Value;
 use crate::module::elf;
@@ -22,8 +19,8 @@ pub(super) fn get_pe_or_elf_entry_point(mem: &[u8]) -> Option<Value> {
     match FileKind::parse(mem).ok()? {
         FileKind::Pe32 => parse_pe::<ImageNtHeaders32>(mem),
         FileKind::Pe64 => parse_pe::<ImageNtHeaders64>(mem),
-        FileKind::Elf32 => parse_elf(&ElfFile32::parse(mem).ok()?, mem),
-        FileKind::Elf64 => parse_elf(&ElfFile64::parse(mem).ok()?, mem),
+        FileKind::Elf32 => parse_elf(FileHeader32::parse(mem).ok()?, mem),
+        FileKind::Elf64 => parse_elf(FileHeader64::parse(mem).ok()?, mem),
         _ => None,
     }
 }
@@ -66,11 +63,10 @@ fn pe_rva_to_file_offset(sections: &SectionTable, va: u32) -> Option<i64> {
     i64::from(nearest_section_offset).checked_add(i64::from(va - nearest_section_va))
 }
 
-fn parse_elf<Elf: FileHeader<Endian = Endianness>>(
-    file: &ElfFile<Elf>,
-    mem: &[u8],
-) -> Option<Value> {
-    elf::entry_point(file, mem)
+fn parse_elf<Elf: FileHeader<Endian = Endianness>>(header: &Elf, mem: &[u8]) -> Option<Value> {
+    let e = header.endian().ok()?;
+
+    elf::entry_point(header, e, mem)
         .and_then(|ep| i64::try_from(ep).ok())
         .map(Value::Integer)
 }
