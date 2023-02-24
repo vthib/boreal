@@ -7,7 +7,7 @@ use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::ac_scan::AcScan;
 use crate::evaluator::{
-    evaluate_rule, EvalError, Params as EvalParams, ScanData, Value, VariableEvaluation,
+    evaluate_rule, EvalError, Params as EvalParams, ScanData, VariableEvaluation,
 };
 use crate::module::Module;
 
@@ -82,7 +82,7 @@ pub struct Scanner {
     /// Default value of external symbols.
     ///
     /// Compiled rules uses indexing into this vec to retrieve the symbols values.
-    external_symbols_values: Vec<Value>,
+    external_symbols_values: Vec<ExternalValue>,
 }
 
 impl Scanner {
@@ -102,7 +102,7 @@ impl Scanner {
                 name,
                 default_value,
             } = sym;
-            external_symbols_values.push(default_value.into());
+            external_symbols_values.push(default_value);
             let _ = external_symbols_map.insert(name, index);
         }
 
@@ -171,10 +171,10 @@ impl Scanner {
 
         if let Some(v) = self.external_symbols_values.get_mut(index) {
             match (v, value) {
-                (Value::Boolean(a), ExternalValue::Boolean(b)) => *a = b,
-                (Value::Integer(a), ExternalValue::Integer(b)) => *a = b,
-                (Value::Float(a), ExternalValue::Float(b)) => *a = b,
-                (Value::Bytes(a), ExternalValue::Bytes(b)) => *a = b,
+                (ExternalValue::Boolean(a), ExternalValue::Boolean(b)) => *a = b,
+                (ExternalValue::Integer(a), ExternalValue::Integer(b)) => *a = b,
+                (ExternalValue::Float(a), ExternalValue::Float(b)) => *a = b,
+                (ExternalValue::Bytes(a), ExternalValue::Bytes(b)) => *a = b,
                 _ => return Err(DefineSymbolError::InvalidType),
             }
         }
@@ -232,7 +232,7 @@ impl Inner {
         &'scanner self,
         mem: &[u8],
         params: &ScanParams,
-        external_symbols_values: &[Value],
+        external_symbols_values: &[ExternalValue],
     ) -> ScanResult<'scanner> {
         let mut scan_data = ScanData::new(
             mem,
