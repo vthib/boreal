@@ -67,12 +67,12 @@ impl Module for Hash {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Data {
     cache: RwLock<Cache>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Cache {
     md5: HashMap<(usize, usize), Value>,
     sha1: HashMap<(usize, usize), Value>,
