@@ -602,6 +602,12 @@ mod tests {
     use super::*;
     use crate::test_helpers::test_type_traits_non_clonable;
 
+    #[cfg_attr(coverage_nightly, no_coverage)]
+    fn test_fun(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        drop(args);
+        None
+    }
+
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(compile_module(&crate::module::Time));
@@ -612,7 +618,7 @@ mod tests {
             operations: Vec::new(),
         });
         test_type_traits_non_clonable(ModuleExpression::Function {
-            fun: |_, _| None,
+            fun: test_fun,
             arguments: Vec::new(),
             operations: Vec::new(),
         });

@@ -88,6 +88,22 @@ fn test_value_wrong_op() {
         "tests.constants.one[0]",
         "mem:3:16: error: invalid identifier type",
     );
+    check_tests_err(
+        "tests.constants.foo[0]",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.constants.one_half[0]",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.constants.true[0]",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.invalid_fun[0]",
+        "mem:3:16: error: invalid identifier type",
+    );
     check_tests_err("tests.isum[0]", "mem:3:16: error: invalid identifier type");
 
     // Using object syntax on a array, dict, scalar and function
@@ -116,6 +132,18 @@ fn test_value_wrong_op() {
     );
     check_tests_err(
         "tests.struct_array()",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.integer_array[0]()",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.lazy().true[0]",
+        "mem:3:16: error: invalid identifier type",
+    );
+    check_tests_err(
+        "tests.lazy().one_half[0]",
         "mem:3:16: error: invalid identifier type",
     );
 
