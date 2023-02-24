@@ -658,6 +658,12 @@ mod tests {
     use super::*;
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
+    #[cfg_attr(coverage_nightly, no_coverage)]
+    fn test_fun(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+        drop(args);
+        None
+    }
+
     #[test]
     fn test_types_traits() {
         test_type_traits(Value::Integer(0));
@@ -693,7 +699,7 @@ mod tests {
             format!("{:?}", Value::Dictionary(HashMap::new())),
             "Dictionary({})"
         );
-        assert!(format!("{:?}", Value::function(|_, _| None)).starts_with("Function"));
+        assert!(format!("{:?}", Value::function(test_fun)).starts_with("Function"));
 
         assert_eq!(format!("{:?}", StaticValue::Integer(0)), "Integer(0)");
         assert_eq!(format!("{:?}", StaticValue::Float(0.0)), "Float(0.0)");
@@ -707,7 +713,7 @@ mod tests {
         assert!(format!(
             "{:?}",
             StaticValue::Function {
-                fun: |_, _| None,
+                fun: test_fun,
                 arguments_types: Vec::new(),
                 return_type: Type::Boolean
             }

@@ -48,7 +48,7 @@ fn test_for_identifiers_modules_errors() {
         "mem:12:22: error: identifier is not iterable",
     );
     check_err(
-        &build_rule("for any i in tests.constants.foo: (true)"),
+        &build_rule("for any i in tests.string_array[0]: (true)"),
         "mem:12:22: error: identifier is not iterable",
     );
     check_err(
