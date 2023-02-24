@@ -63,7 +63,7 @@ mod variable;
 pub(crate) use variable::VariableEvaluation;
 
 #[derive(Clone, Debug)]
-pub(super) enum Value {
+enum Value {
     Integer(i64),
     Float(f64),
     Bytes(Vec<u8>),
@@ -119,7 +119,7 @@ pub struct ScanData<'a> {
     module_ctx: ScanContext<'a>,
 
     // List of values for external symbols.
-    external_symbols: &'a [Value],
+    external_symbols: &'a [ExternalValue],
 
     // Object used to check if the scan times out.
     timeout_checker: Option<timeout::TimeoutChecker>,
@@ -129,7 +129,7 @@ impl<'a> ScanData<'a> {
     pub(crate) fn new(
         mem: &'a [u8],
         modules: &[Box<dyn Module>],
-        external_symbols: &'a [Value],
+        external_symbols: &'a [ExternalValue],
         timeout: Option<Duration>,
     ) -> Self {
         // Create the timeout checker first. This starts the timer, and thus includes the modules
@@ -729,6 +729,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 .external_symbols
                 .get(*index)
                 .cloned()
+                .map(Into::into)
                 .ok_or(PoisonKind::Undefined),
 
             Expression::Rule(index) => Ok(Value::Boolean(self.previous_rules_results[*index])),
