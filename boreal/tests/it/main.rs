@@ -36,5 +36,8 @@ mod math;
 #[cfg(feature = "object")]
 mod pe;
 
+#[cfg(feature = "hash")]
+mod hash;
+
 // utils to run tests both with boreal and with yara
 mod utils;

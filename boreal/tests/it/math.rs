@@ -36,7 +36,11 @@ fn test_math_in_range() {
 #[test]
 fn test_math_max_min() {
     test("math.max(5, 6) == 6", b"");
+    test("math.max(6, 6) == 6", b"");
+    test("math.max(6, 5) == 6", b"");
     test("math.min(5, 6) == 5", b"");
+    test("math.min(5, 5) == 5", b"");
+    test("math.min(6, 5) == 5", b"");
 
     // Yes, this is "working as expected". libyara defines those operators as operating
     // on uint64 values, and if those values are negative, undefined is not returned, but values
