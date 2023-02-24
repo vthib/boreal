@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_boreal, Checker};
+use crate::utils::{build_rule, check, check_boreal, check_err, Checker};
 
 fn build_empty_rule(condition: &str) -> String {
     format!(
@@ -594,6 +594,64 @@ fn test_eval_not() {
         &build_rule("defined not tests.integer_array[5]"),
         &[],
         false,
+    );
+}
+
+#[test]
+fn test_eval_eq() {
+    check(&build_empty_rule("var_true == var_true"), &[], true);
+    check(&build_empty_rule("var_true == var_false"), &[], false);
+
+    check(&build_empty_rule("1 == 2"), &[], false);
+    check(&build_empty_rule("-1 == -1"), &[], true);
+
+    check(&build_empty_rule("0.5 == 0.5"), &[], true);
+    check(&build_empty_rule("1.23 == -1.0"), &[], false);
+
+    check(&build_empty_rule("1.5 == 1"), &[], false);
+    check(&build_empty_rule("1.0 == 1"), &[], true);
+    check(&build_empty_rule("1 == 1.0"), &[], true);
+
+    check(&build_empty_rule("\"\" == \"\""), &[], true);
+    check(&build_empty_rule("\"anc\" == \"anc\""), &[], true);
+    check(&build_empty_rule("\"anc\" == \"anC\""), &[], false);
+
+    check_err(
+        &build_empty_rule("1 == \"a\""),
+        "error: expressions have invalid types",
+    );
+    check_err(
+        &build_empty_rule("/a/ == /a/"),
+        "error: expressions have invalid types",
+    );
+}
+
+#[test]
+fn test_eval_neq() {
+    check(&build_empty_rule("var_true != var_true"), &[], false);
+    check(&build_empty_rule("var_true != var_false"), &[], true);
+
+    check(&build_empty_rule("1 != 2"), &[], true);
+    check(&build_empty_rule("-1 != -1"), &[], false);
+
+    check(&build_empty_rule("0.5 != 0.5"), &[], false);
+    check(&build_empty_rule("1.23 != -1.0"), &[], true);
+
+    check(&build_empty_rule("1.5 != 1"), &[], true);
+    check(&build_empty_rule("1.0 != 1"), &[], false);
+    check(&build_empty_rule("1 != 1.0"), &[], false);
+
+    check(&build_empty_rule("\"\" != \"\""), &[], false);
+    check(&build_empty_rule("\"anc\" != \"anc\""), &[], false);
+    check(&build_empty_rule("\"anc\" != \"anC\""), &[], true);
+
+    check_err(
+        &build_empty_rule("1 != \"a\""),
+        "error: expressions have invalid types",
+    );
+    check_err(
+        &build_empty_rule("/a/ != /a/"),
+        "error: expressions have invalid types",
     );
 }
 

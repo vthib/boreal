@@ -498,16 +498,16 @@ pub(super) fn compile_expression(
         }
 
         parser::ExpressionKind::Add(left, right) => {
-            compile_primary_op(compiler, *left, *right, span, Expression::Add, false)
+            compile_primary_op(compiler, *left, *right, span, Expression::Add, false, false)
         }
         parser::ExpressionKind::Sub(left, right) => {
-            compile_primary_op(compiler, *left, *right, span, Expression::Sub, false)
+            compile_primary_op(compiler, *left, *right, span, Expression::Sub, false, false)
         }
         parser::ExpressionKind::Mul(left, right) => {
-            compile_primary_op(compiler, *left, *right, span, Expression::Mul, false)
+            compile_primary_op(compiler, *left, *right, span, Expression::Mul, false, false)
         }
         parser::ExpressionKind::Div(left, right) => {
-            compile_primary_op(compiler, *left, *right, span, Expression::Div, false)
+            compile_primary_op(compiler, *left, *right, span, Expression::Div, false, false)
         }
 
         parser::ExpressionKind::Mod(left, right) => {
@@ -595,20 +595,22 @@ pub(super) fn compile_expression(
                     can_be_equal,
                 },
                 true,
+                false,
             )?;
             res.ty = Type::Boolean;
             Ok(res)
         }
 
         parser::ExpressionKind::Eq(left, right) => {
-            let mut res = compile_primary_op(compiler, *left, *right, span, Expression::Eq, true)?;
+            let mut res =
+                compile_primary_op(compiler, *left, *right, span, Expression::Eq, true, true)?;
             res.ty = Type::Boolean;
             Ok(res)
         }
 
         parser::ExpressionKind::NotEq(left, right) => {
             let mut res =
-                compile_primary_op(compiler, *left, *right, span, Expression::NotEq, true)?;
+                compile_primary_op(compiler, *left, *right, span, Expression::NotEq, true, true)?;
             res.ty = Type::Boolean;
             Ok(res)
         }
@@ -883,6 +885,7 @@ fn compile_primary_op<F>(
     span: Range<usize>,
     constructor: F,
     string_allowed: bool,
+    bool_allowed: bool,
 ) -> Result<Expr, CompilationError>
 where
     F: Fn(Box<Expression>, Box<Expression>) -> Expression,
@@ -894,6 +897,7 @@ where
         (Type::Integer, Type::Integer) => Type::Integer,
         (Type::Float | Type::Integer, Type::Integer | Type::Float) => Type::Float,
         (Type::Bytes, Type::Bytes) if string_allowed => Type::Bytes,
+        (Type::Boolean, Type::Boolean) if bool_allowed => Type::Boolean,
         _ => {
             return Err(CompilationError::ExpressionIncompatibleTypes {
                 left_type: a.ty.to_string(),
