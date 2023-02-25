@@ -285,6 +285,8 @@ fn test_math_percentage() {
         ELF32_MIPS_FILE,
     );
 
+    test("not defined math.percentage(-1)", b"");
+    test("not defined math.percentage(12345678)", b"");
     test("not defined math.percentage(0, -1, 5)", b"");
     test("not defined math.percentage(0, 0, -2)", b"");
     test("not defined math.percentage(0, 1, 5)", b"");
