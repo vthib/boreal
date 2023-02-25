@@ -194,7 +194,6 @@ const fn align32(offset: usize) -> usize {
     (offset + 3) & !3
 }
 
-#[derive(Copy, Clone)]
 #[repr(C)]
 struct Header {
     length: u16,
