@@ -92,6 +92,132 @@ fn test_is_dll() {
 }
 
 #[test]
+fn test_imports() {
+    let file1 = "tests/assets/libyara/data/\
+                 ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386";
+    let file2 = "tests/assets/pe/ord_and_delay.exe";
+
+    #[track_caller]
+    fn test(file: &str, cond: &str) {
+        check_file(
+            &format!("import \"pe\" rule test {{ condition: {cond} }}"),
+            file,
+            true,
+        );
+    }
+
+    // dll_name, function_name
+    test(file1, r#"pe.imports("KERNEL32.dll", "ExitProcess") == 1"#);
+    test(file1, r#"pe.imports("USER32.dll", "ExitProcess") == 0"#);
+    test(file1, r#"pe.imports("USER32.dll", "KillTimer") == 1"#);
+    // TODO
+    // test(file1, r#"pe.imports("user32.dll", "killtimer") == 0"#);
+    test(file1, r#"pe.imports("user32.dll", 3) == 0"#);
+    // delayed imports are not found
+    test(file2, r#"pe.imports("OLEAUT32.dll", "VariantInit") == 0"#);
+
+    // dll_name, ordinal
+    test(file1, r#"pe.imports("PtDMDecode.dll", 3) == 1"#);
+    test(file1, r#"pe.imports("PtDMDecode.dll", 2) == 0"#);
+    test(file1, r#"pe.imports("KERNEL32.dll", 2) == 0"#);
+    test(file1, r#"pe.imports("PtImageRW.dll", 7) == 1"#);
+    // delayed imports are not found
+    test(file2, r#"pe.imports("OLEAUT32.dll", 8) == 0"#);
+
+    // dll_name
+    test(file1, r#"pe.imports("KERNEL32.dll") == 127"#);
+    test(file1, r#"pe.imports("PtDMDecode.dll") == 4"#);
+    test(file1, r#"pe.imports("a.dll") == 0"#);
+    // delayed imports are not found
+    test(file2, r#"pe.imports("OLEAUT32.dll") == 0"#);
+
+    // dll_regex, function_regex
+    test(file1, r#"pe.imports(/32/, /Scroll/) == 8"#);
+    test(file1, r#"pe.imports(/32/, /Scrull/) == 0"#);
+    test(file1, r#"pe.imports(/kernel32/, /STR/) == 0"#);
+    test(file1, r#"pe.imports(/kernel32/i, /STR/i) == 21"#);
+    test(file1, r#"pe.imports(/PtImage/, /./) == 5"#);
+    // delayed imports are not found
+    test(file2, r#"pe.imports(/32/, /VARIANT/i) == 0"#);
+
+    // import_flag, dll_name, function_name
+    test(
+        file1,
+        r#"pe.imports(pe.IMPORT_STANDARD, "KERNEL32.dll", "ExitProcess") == 1"#,
+    );
+    test(
+        file1,
+        r#"pe.imports(pe.IMPORT_DELAYED, "KERNEL32.dll", "ExitProcess") == 0"#,
+    );
+    test(
+        file1,
+        r#"pe.imports(pe.IMPORT_STANDARD | pe.IMPORT_DELAYED,
+                              "KERNEL32.dll", "ExitProcess") == 1"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll", "VariantInit") == 1"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_STANDARD, "OLEAUT32.dll", "VariantInit") == 0"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_STANDARD, "WS2_32.dll", "gethostbyname") == 1"#,
+    );
+
+    // import_flag, dll_name
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll") == 2"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_STANDARD, "KERNEL32.dll") == 69"#,
+    );
+
+    // import_flag, dll_name, ordinal
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll", 411) == 1"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll", 7) == 0"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll", 8) == 1"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_STANDARD, "WS2_32.dll", 52) == 1"#,
+    );
+
+    // import_flag, dll_regex, function_regex
+    test(file2, r#"pe.imports(pe.IMPORT_DELAYED, /32/, /a/) == 2"#);
+    test(file2, r#"pe.imports(pe.IMPORT_DELAYED, /33/, /a/) == 0"#);
+    test(file2, r#"pe.imports(pe.IMPORT_DELAYED, /32/, /ab/) == 0"#);
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, /ole/i, /VARIANT/i) == 1"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_STANDARD, /(OLE|WS).*32/, /./) == 2"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, /(OLE|WS).*32/, /./) == 2"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_STANDARD | pe.IMPORT_DELAYED, /(OLE|WS).*32/, /./) == 4"#,
+    );
+}
+
+#[test]
 fn test_section_names() {
     check_file(
         r#"import "pe"
