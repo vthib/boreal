@@ -918,6 +918,7 @@ impl Module for Pe {
                     ("key", Type::Integer),
                     ("raw_data", Type::Bytes),
                     ("clear_data", Type::Bytes),
+                    ("version_data", Type::Bytes),
                     (
                         "version",
                         Type::function(
@@ -1248,12 +1249,18 @@ fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
         clear
     });
 
+    let mut version = Vec::new();
+    for entry in info.unmasked_entries() {
+        version.extend(entry.comp_id.to_le_bytes().as_slice());
+    }
+
     Value::object([
         ("offset", info.offset.into()),
         ("length", length.into()),
         ("key", info.xor_key.into()),
         ("raw_data", raw.into()),
         ("clear_data", clear.into()),
+        ("version_data", version.into()),
         ("version", Value::function(Pe::rich_signature_version)),
         ("toolid", Value::function(Pe::rich_signature_toolid)),
     ])
