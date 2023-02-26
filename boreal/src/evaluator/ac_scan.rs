@@ -192,7 +192,7 @@ impl AcScan {
         };
 
         if let AcResult::Matches(matches) = &mut matches[variable_index] {
-            matches.truncate(params.string_max_nb_matches);
+            matches.truncate(params.string_max_nb_matches as usize);
         }
     }
 }

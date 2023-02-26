@@ -171,7 +171,7 @@ impl<'a> ScanData<'a> {
 #[derive(Copy, Clone, Debug)]
 pub struct Params {
     /// Max number of matches for a given string.
-    pub string_max_nb_matches: usize,
+    pub string_max_nb_matches: u32,
 }
 
 /// Evaluates an expression on a given byte slice.
@@ -347,9 +347,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                         let var = get_var!(self, *variable_index);
                         let count = var.count_matches_in(self.mem, from, to);
 
-                        i64::try_from(count)
-                            .map(Value::Integer)
-                            .map_err(|_| PoisonKind::Undefined)
+                        Ok(Value::Integer(count.into()))
                     }
                     _ => Err(PoisonKind::Undefined),
                 }
@@ -357,9 +355,8 @@ impl Evaluator<'_, '_, '_, '_, '_> {
             Expression::Count(variable_index) => {
                 let var = get_var!(self, *variable_index);
                 let count = var.count_matches(self.mem);
-                i64::try_from(count)
-                    .map(Value::Integer)
-                    .map_err(|_| PoisonKind::Undefined)
+
+                Ok(Value::Integer(count.into()))
             }
             Expression::Offset {
                 variable_index,
