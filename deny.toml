@@ -179,7 +179,10 @@ skip = []
 # by default infinite
 skip-tree = [
     # Because of criterion...
-    { name = "clap", version = "3.2" }
+    { name = "clap", version = "3.2" },
+    # Because of tempfile depending on 0.42, but also depending on rustix
+    # which uses 0.45.
+    { name = "windows-sys", version = "0.42" },
 ]
 
 # This section is considered when running `cargo deny check sources`.
