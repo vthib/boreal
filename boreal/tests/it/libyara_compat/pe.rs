@@ -687,6 +687,17 @@ fn test_pe() {
         true,
     );
 
+    check_file(
+      "import \"pe\"
+      rule test {
+        condition:
+          pe.rich_signature.version_data == \"\\x1b\\x9d\\x9c\\x00\\x1b\\x9d\\x9e\\x00\\x1b\\x9d\
+\\xaa\\x00ov\\xab\\x00\\x09x\\x93\\x00\\x00\\x00\\x01\\x00\\x1b\\x9d\\xab\\x00\\x1b\\x9d\\x9b\
+\\x00\\x1b\\x9d\\x9a\\x00\\x1b\\x9d\\x9d\\x00\"
+      }",
+      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+      true);
+
     // This is the first 840 bytes (just enough to make sure the rich header is
     // parsed) of
     // 3593d3d08761d8ddc269dde945c0cb07e5cef5dd46ad9eefc22d17901f542093.
