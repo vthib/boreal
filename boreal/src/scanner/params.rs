@@ -12,7 +12,7 @@ pub struct ScanParams {
     pub(crate) match_max_length: usize,
 
     /// Max number of matches for a given string.
-    pub(crate) string_max_nb_matches: usize,
+    pub(crate) string_max_nb_matches: u32,
 
     /// Max duration for a scan before it is aborted.
     pub(crate) timeout_duration: Option<Duration>,
@@ -67,7 +67,7 @@ impl ScanParams {
     ///
     /// The default value is `1_000`.
     #[must_use]
-    pub fn string_max_nb_matches(mut self, string_max_nb_matches: usize) -> Self {
+    pub fn string_max_nb_matches(mut self, string_max_nb_matches: u32) -> Self {
         self.string_max_nb_matches = string_max_nb_matches;
         self
     }

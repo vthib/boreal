@@ -83,18 +83,23 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Count number of matches.
-    pub fn count_matches(&mut self, mem: &[u8]) -> u64 {
+    pub fn count_matches(&mut self, mem: &[u8]) -> u32 {
         loop {
             if self.get_next_match(mem).is_none() {
                 break;
             }
         }
 
-        self.matches.len() as u64
+        // This is safe to allow because the number of matches is guaranteed to be capped by the
+        // string_max_nb_matches parameter, which is a u32.
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            self.matches.len() as u32
+        }
     }
 
     /// Count number of matches in between two bounds.
-    pub fn count_matches_in(&mut self, mem: &[u8], from: usize, to: usize) -> u64 {
+    pub fn count_matches_in(&mut self, mem: &[u8], from: usize, to: usize) -> u32 {
         if from >= mem.len() {
             return 0;
         }
@@ -176,7 +181,10 @@ impl<'a> VariableEvaluation<'a> {
     ///
     /// If the closure returns false, the search ends. Otherwise, the search continues.
     fn get_next_match(&mut self, mem: &[u8]) -> Option<Match> {
-        if self.matches.len() >= self.params.string_max_nb_matches {
+        // This is safe to allow because this is called on every iterator of self.matches, so once
+        // it cannot overflow u32 before this condition is true.
+        #[allow(clippy::cast_possible_truncation)]
+        if (self.matches.len() as u32) >= self.params.string_max_nb_matches {
             return None;
         }
 
