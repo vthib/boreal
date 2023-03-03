@@ -33,3 +33,9 @@ hex = "0.4"
 
 # Walking through directories
 walkdir = "2.3"
+
+[dev-dependencies]
+# Testing for the CLI
+assert_cmd = "2.0"
+tempfile = "3.4"
+predicates = "2.1"
