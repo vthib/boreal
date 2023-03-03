@@ -172,7 +172,11 @@ deny = [
     #{ name = "ansi_term", version = "=0.11.0", wrappers = [] },
 ]
 # Certain crates/versions that will be skipped when doing duplicate detection.
-skip = []
+skip = [
+    # This pollutes a lot of dependencies but is only used when targetting
+    # RustyHermit.
+    { name = "hermit-abi", version = "*" },
+]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
 # dependencies starting at the specified crate, up to a certain depth, which is
