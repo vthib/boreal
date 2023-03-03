@@ -74,21 +74,14 @@ fn build_command() -> Command {
 }
 
 fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
-    let writer = StandardStream::stderr(ColorChoice::Always);
+    let writer = StandardStream::stderr(ColorChoice::Auto);
     let config = term::Config::default();
 
     let files = match &err.path {
-        Some(path) => match std::fs::read_to_string(path) {
-            Ok(contents) => SimpleFile::new(path.display().to_string(), contents),
-            Err(err) => {
-                eprintln!(
-                    "Cannot read {} after compilation error: {}",
-                    path.display(),
-                    err
-                );
-                return;
-            }
-        },
+        Some(path) => {
+            let contents = std::fs::read_to_string(path).unwrap_or_else(|_| String::new());
+            SimpleFile::new(path.display().to_string(), contents)
+        }
         None => SimpleFile::new(path.display().to_string(), String::new()),
     };
     let writer = &mut writer.lock();
@@ -185,12 +178,11 @@ fn scan_file(scanner: &Scanner, path: &Path, print_module_data: bool) -> std::io
         for (module_name, module_value) in res.module_values {
             // A module value must be an object. Filter out empty ones, it means the module has not
             // generated any values.
-            match &*module_value {
-                ModuleValue::Object(map) if !map.is_empty() => {
+            if let ModuleValue::Object(map) = &*module_value {
+                if !map.is_empty() {
                     print!("{module_name}");
                     print_module_value(&module_value, 4);
                 }
-                _ => (),
             }
         }
     }
