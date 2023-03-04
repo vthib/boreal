@@ -683,23 +683,22 @@ impl Module for MachO {
     fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
         let mut data = Data::default();
 
-        let res = parse_file(ctx.mem, &mut data, false).unwrap_or_default();
+        let res = parse_file(ctx.mem, &mut data, false, 0).unwrap_or_default();
         ctx.module_data.insert::<Self>(data);
         res
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Data {
     files: Vec<FileData>,
-    arch_offsets: Vec<u64>,
 }
 
-#[derive(Debug, Default)]
 struct FileData {
     cputype: u32,
     cpusubtype: u32,
     entry_point: Option<u64>,
+    arch_offset: u64,
 }
 
 impl ModuleData for MachO {
@@ -734,7 +733,7 @@ impl MachO {
         let v2 = args.next().and_then(|v| i64::try_from(v).ok());
 
         let data = ctx.module_data.get::<Self>()?;
-        for (i, file) in data.files.iter().enumerate() {
+        for file in &data.files {
             if i64::from(file.cputype) != v1 {
                 continue;
             }
@@ -744,10 +743,8 @@ impl MachO {
                 }
             }
 
-            let offset = data.arch_offsets.get(i)?;
             let entry_point = file.entry_point?;
-
-            return offset.saturating_add(entry_point).try_into().ok();
+            return file.arch_offset.saturating_add(entry_point).try_into().ok();
         }
         None
     }
@@ -757,6 +754,7 @@ fn parse_file(
     mem: &[u8],
     data: &mut Data,
     add_file_to_data: bool,
+    arch_offset: u64,
 ) -> Option<HashMap<&'static str, Value>> {
     match FileKind::parse(mem).ok()? {
         FileKind::MachO32 => {
@@ -768,6 +766,7 @@ fn parse_file(
                 mem,
                 None,
                 add_file_to_data.then_some(data),
+                arch_offset,
             ))
         }
         FileKind::MachO64 => {
@@ -779,6 +778,7 @@ fn parse_file(
                 mem,
                 Some(header.reserved.get(e)),
                 add_file_to_data.then_some(data),
+                arch_offset,
             ))
         }
         FileKind::MachOFat32 => parse_fat(mem, data, false),
@@ -794,6 +794,7 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     mem: &[u8],
     reserved: Option<u32>,
     data: Option<&mut Data>,
+    arch_offset: u64,
 ) -> HashMap<&'static str, Value> {
     let cputype = header.cputype(e);
     let cpusubtype = header.cpusubtype(e);
@@ -808,6 +809,7 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
             cputype,
             cpusubtype,
             entry_point,
+            arch_offset,
         });
     }
 
@@ -1083,16 +1085,12 @@ fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static
 
     if is64 {
         for arch in FatHeader::parse_arch64(mem).ok()?.iter().take(MAX_NB_ARCHS) {
-            archs.push(fat_arch_to_value(
-                arch,
-                data,
-                Some(arch.reserved.get(BigEndian)),
-            ));
+            archs.push(fat_arch_to_value(arch, Some(arch.reserved.get(BigEndian))));
             files.push(fat_arch_to_file_value(arch, data, mem));
         }
     } else {
         for arch in FatHeader::parse_arch32(mem).ok()?.iter().take(MAX_NB_ARCHS) {
-            archs.push(fat_arch_to_value(arch, data, None));
+            archs.push(fat_arch_to_value(arch, None));
             files.push(fat_arch_to_file_value(arch, data, mem));
         }
     }
@@ -1112,20 +1110,16 @@ fn fat_arch_to_file_value<A: FatArch>(arch: &A, data: &mut Data, mem: &[u8]) -> 
     Value::Object(
         arch.data(mem)
             .ok()
-            .and_then(|new_mem| parse_file(new_mem, data, true))
+            .and_then(|new_mem| parse_file(new_mem, data, true, arch.offset().into()))
             .unwrap_or_default(),
     )
 }
 
-fn fat_arch_to_value<A: FatArch>(arch: &A, data: &mut Data, reserved: Option<u32>) -> Value {
-    let offset = arch.offset().into();
-
-    data.arch_offsets.push(offset);
-
+fn fat_arch_to_value<A: FatArch>(arch: &A, reserved: Option<u32>) -> Value {
     Value::object([
         ("cputype", arch.cputype().into()),
         ("cpusubtype", arch.cpusubtype().into()),
-        ("offset", offset.into()),
+        ("offset", arch.offset().into().into()),
         ("size", arch.size().into().into()),
         ("align", arch.align().into()),
         ("reserved", reserved.into()),
