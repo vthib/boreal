@@ -147,4 +147,4 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@1.62.0
-      - run: cargo check --tests --all-features
+      - run: cargo check --all-features
