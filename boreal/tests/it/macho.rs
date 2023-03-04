@@ -158,3 +158,8 @@ fn test_coverage_macho_entry_points() {
         ],
     );
 }
+
+#[test]
+fn test_coverage_macho_fat64() {
+    compare_module_values_on_file(MachO, "tests/assets/macho/fat64", &[]);
+}
