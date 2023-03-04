@@ -235,7 +235,9 @@ rule included {
         .stdout("")
         .stderr(
             // Contains the path to the faulty file
-            predicate::str::contains(rule_b.display().to_string())
+            // Need canonicalize as the path is canonicalized in boreal, and this causes
+            // differences on Windows.
+            predicate::str::contains(rule_b.canonicalize().unwrap().display().to_string())
                 .and(
                     // And the proper string that caused the error
                     predicate::str::contains("z-a"),
