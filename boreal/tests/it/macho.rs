@@ -108,6 +108,11 @@ fn test_entry_point_for_arch() {
 }
 
 #[test]
+fn test_coverage_non_macho() {
+    compare_module_values_on_mem(MachO, "ELF32_FILE", ELF32_FILE, &[]);
+}
+
+#[test]
 fn test_coverage_macho_x86() {
     compare_module_values_on_mem(MachO, "MACHO_X86_FILE", MACHO_X86_FILE, &[]);
 }
