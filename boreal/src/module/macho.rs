@@ -1085,12 +1085,12 @@ fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static
 
     if is64 {
         for arch in FatHeader::parse_arch64(mem).ok()?.iter().take(MAX_NB_ARCHS) {
-            archs.push(fat_arch_to_value(arch, Some(arch.reserved.get(BigEndian))));
+            archs.push(fat_arch_to_value(arch));
             files.push(fat_arch_to_file_value(arch, data, mem));
         }
     } else {
         for arch in FatHeader::parse_arch32(mem).ok()?.iter().take(MAX_NB_ARCHS) {
-            archs.push(fat_arch_to_value(arch, None));
+            archs.push(fat_arch_to_value(arch));
             files.push(fat_arch_to_file_value(arch, data, mem));
         }
     }
@@ -1115,13 +1115,12 @@ fn fat_arch_to_file_value<A: FatArch>(arch: &A, data: &mut Data, mem: &[u8]) -> 
     )
 }
 
-fn fat_arch_to_value<A: FatArch>(arch: &A, reserved: Option<u32>) -> Value {
+fn fat_arch_to_value<A: FatArch>(arch: &A) -> Value {
     Value::object([
         ("cputype", arch.cputype().into()),
         ("cpusubtype", arch.cpusubtype().into()),
         ("offset", arch.offset().into().into()),
         ("size", arch.size().into().into()),
         ("align", arch.align().into()),
-        ("reserved", reserved.into()),
     ])
 }

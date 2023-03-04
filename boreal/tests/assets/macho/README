@@ -12,3 +12,5 @@ for all the cpu types handled in YARA.
 - arch 8: SPARC
 - arch 9: HPPA (not handled)
 - arch 10: X86 with invalid LC_UNIXTHREAD => no entrypoint
+
+`fat64` is manually created to use the fat_arch64 header.
