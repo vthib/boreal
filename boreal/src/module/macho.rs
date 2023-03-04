@@ -953,39 +953,39 @@ fn handle_unix_thread(
     // TODO: would be nice to test all this...
     match cputype {
         macho::CPU_TYPE_MC680X0 => {
-            // pc is after 16 u32 and 2 u16
+            // pc is after 16 u32 and 2 u16. See m68k_thread_state_regs
             get_at(16 * 4 + 2 * 2, false)
         }
         macho::CPU_TYPE_MC88000 => {
-            // entry point is after 31 u32s
+            // entry point is after 31 u32s, see _m88k_thread_state_grf
             get_at(31 * 4, false)
         }
         macho::CPU_TYPE_SPARC => {
-            // entry point is fater a single u32
+            // entry point is past a single u32, see sparc_thread_state_regs
             get_at(4, false)
         }
         macho::CPU_TYPE_POWERPC => {
-            // srr0 is the first u32
+            // srr0 is the first u32, see ppc_thread_state
             get_at(0, false)
         }
         macho::CPU_TYPE_X86 => {
-            // eip is after 10 u32s
+            // eip is after 10 u32s, see i386_thread_state_t
             get_at(10 * 4, false)
         }
         macho::CPU_TYPE_ARM => {
-            // pc is after 15 u32s
+            // pc is after 15 u32s, see arm_thread_state_t
             get_at(15 * 4, false)
         }
         macho::CPU_TYPE_X86_64 => {
-            // rip is after 16 u64s
+            // rip is after 16 u64s, see x86_thread_state64_t
             get_at(16 * 8, true)
         }
         macho::CPU_TYPE_ARM64 => {
-            // pc is after 32 u64s
+            // pc is after 32 u64s, see arm_thread_state64_t
             get_at(32 * 8, true)
         }
         macho::CPU_TYPE_POWERPC64 => {
-            // srr0 is the first u64
+            // srr0 is the first u64, see ppc_thread_state64
             get_at(0, true)
         }
         _ => None,

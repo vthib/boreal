@@ -1,0 +1,14 @@
+`entry_points` is a manually created fat macho, with a `LC_UNIXTHREAD` `LoadCommand`
+for all the cpu types handled in YARA.
+
+- arch 0: MC680X0
+- arch 1: MC88000
+- arch 2: POWERPC
+- arch 3: POWERPC64
+- arch 4: X86
+- arch 5: X86_64
+- arch 6: ARM
+- arch 7: ARM64
+- arch 8: SPARC
+- arch 9: HPPA (not handled)
+- arch 10: X86 with invalid LC_UNIXTHREAD => no entrypoint

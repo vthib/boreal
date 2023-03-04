@@ -141,3 +141,15 @@ fn test_coverage_macho_tiny_macho() {
 fn test_coverage_macho_tiny_universal() {
     compare_module_values_on_file(MachO, "tests/assets/libyara/data/tiny-universal", &[]);
 }
+
+#[test]
+fn test_coverage_macho_entry_points() {
+    compare_module_values_on_file(
+        MachO,
+        "tests/assets/macho/entry_points",
+        &[
+            // TODO: Bug in LIBYARA
+            "macho.file[7].entry_point",
+        ],
+    );
+}
