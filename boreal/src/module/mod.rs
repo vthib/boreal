@@ -86,9 +86,7 @@ pub trait Module: Send + Sync {
     /// Static values exported by the module.
     ///
     /// This function is called once, when the module is added to a scanner.
-    fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
-        HashMap::new()
-    }
+    fn get_static_values(&self) -> HashMap<&'static str, StaticValue>;
 
     /// Type of the dynamic values exported by the module.
     ///
