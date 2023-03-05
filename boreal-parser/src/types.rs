@@ -3,7 +3,7 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use super::error::Error;
 use nom::{
     error::{ErrorKind, ParseError as NomParseError},
-    Err, IResult, InputIter, InputLength, InputTake,
+    Compare, CompareResult, Err, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -151,21 +151,21 @@ impl InputTake for Input<'_> {
     }
 
     fn take_split(&self, count: usize) -> (Self, Self) {
-        let (prefix, suffix) = self.cursor.take_split(count);
+        let (suffix, prefix) = self.cursor.take_split(count);
         (
             Self {
-                cursor: prefix,
+                cursor: suffix,
                 ..*self
             },
             Self {
-                cursor: suffix,
+                cursor: prefix,
                 ..*self
             },
         )
     }
 }
 
-impl nom::InputTakeAtPosition for Input<'_> {
+impl InputTakeAtPosition for Input<'_> {
     type Item = char;
 
     fn split_at_position<P, E: NomParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
@@ -234,12 +234,12 @@ impl<'a> nom::FindSubstring<&'a str> for Input<'_> {
     }
 }
 
-impl<'a> nom::Compare<&'a str> for Input<'_> {
-    fn compare(&self, t: &'a str) -> nom::CompareResult {
+impl<'a> Compare<&'a str> for Input<'_> {
+    fn compare(&self, t: &'a str) -> CompareResult {
         self.cursor.compare(t)
     }
 
-    fn compare_no_case(&self, t: &'a str) -> nom::CompareResult {
+    fn compare_no_case(&self, t: &'a str) -> CompareResult {
         self.cursor.compare_no_case(t)
     }
 }
@@ -287,6 +287,169 @@ mod tests {
     use crate::test_helpers::test_public_type;
 
     use super::*;
+
+    #[test]
+    fn test_input_advance() {
+        let mut input = Input::new("rule a { condition: true }");
+
+        input.advance(0);
+        assert_eq!(input.cursor(), "rule a { condition: true }");
+        assert_eq!(input.get_position_offset(), 0);
+        input.advance(1);
+        assert_eq!(input.cursor(), "ule a { condition: true }");
+        assert_eq!(input.get_position_offset(), 1);
+        input.advance(20);
+        assert_eq!(input.cursor(), "rue }");
+        assert_eq!(input.get_position_offset(), 21);
+        input.advance(9);
+        assert_eq!(input.cursor(), "");
+        assert_eq!(input.get_position_offset(), 26);
+        input.advance(9);
+        assert_eq!(input.cursor(), "");
+        assert_eq!(input.get_position_offset(), 26);
+    }
+
+    #[test]
+    fn test_input_strip_prefix() {
+        let input = Input::new("rule a { condition: true }");
+
+        let input = input.strip_prefix("rule").unwrap();
+        assert_eq!(input.cursor(), " a { condition: true }");
+        assert_eq!(input.get_position_offset(), 4);
+
+        assert!(input.strip_prefix("condition").is_none());
+
+        let input = input.strip_prefix(" a { condition: ").unwrap();
+        assert_eq!(input.cursor(), "true }");
+        assert_eq!(input.get_position_offset(), 20);
+    }
+
+    #[test]
+    fn test_input_take_trait() {
+        let mut input = Input::new("rule a { condition: true }");
+
+        let take = input.take(15);
+        assert_eq!(take.cursor(), "rule a { condit");
+        assert_eq!(input.get_position_offset(), 0);
+
+        input.advance(7);
+        let (post, pre) = input.take_split(13);
+        assert_eq!(pre.cursor(), "{ condition: ");
+        assert_eq!(pre.get_position_offset(), 7);
+        assert_eq!(post.cursor(), "true }");
+        assert_eq!(post.get_position_offset(), 20);
+    }
+
+    #[test]
+    fn test_input_take_at_position_trait() {
+        let mut input = Input::new("rule a { condition: true }");
+        input.advance(5);
+
+        // split_at_position
+        assert!(input.split_at_position::<_, Error>(|c| c == '/').is_err());
+
+        let (post, pre) = input.split_at_position::<_, Error>(|c| c == ':').unwrap();
+        assert_eq!(pre.cursor(), "a { condition");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), ": true }");
+        assert_eq!(post.get_position_offset(), 18);
+
+        let (post, pre) = input.split_at_position::<_, Error>(|c| c == 'a').unwrap();
+        assert_eq!(pre.cursor(), "");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), "a { condition: true }");
+        assert_eq!(post.get_position_offset(), 5);
+
+        // split_at_position1
+        assert!(input
+            .split_at_position1::<_, Error>(|c| c == '/', ErrorKind::Char)
+            .is_err());
+
+        let (post, pre) = input
+            .split_at_position1::<_, Error>(|c| c == ':', ErrorKind::Char)
+            .unwrap();
+        assert_eq!(pre.cursor(), "a { condition");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), ": true }");
+        assert_eq!(post.get_position_offset(), 18);
+
+        assert!(input
+            .split_at_position1::<_, Error>(|c| c == 'a', ErrorKind::Char)
+            .is_err());
+
+        // split_at_position_complete
+        let (post, pre) = input
+            .split_at_position_complete::<_, Error>(|c| c == '/')
+            .unwrap();
+        assert_eq!(pre.cursor(), "a { condition: true }");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), "");
+        assert_eq!(post.get_position_offset(), 26);
+
+        let (post, pre) = input
+            .split_at_position_complete::<_, Error>(|c| c == ':')
+            .unwrap();
+        assert_eq!(pre.cursor(), "a { condition");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), ": true }");
+        assert_eq!(post.get_position_offset(), 18);
+
+        let (post, pre) = input
+            .split_at_position_complete::<_, Error>(|c| c == 'a')
+            .unwrap();
+        assert_eq!(pre.cursor(), "");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), "a { condition: true }");
+        assert_eq!(post.get_position_offset(), 5);
+
+        // split_at_position1_complete
+        let (post, pre) = input
+            .split_at_position1_complete::<_, Error>(|c| c == '/', ErrorKind::Char)
+            .unwrap();
+        assert_eq!(pre.cursor(), "a { condition: true }");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), "");
+        assert_eq!(post.get_position_offset(), 26);
+
+        let (post, pre) = input
+            .split_at_position1_complete::<_, Error>(|c| c == ':', ErrorKind::Char)
+            .unwrap();
+        assert_eq!(pre.cursor(), "a { condition");
+        assert_eq!(pre.get_position_offset(), 5);
+        assert_eq!(post.cursor(), ": true }");
+        assert_eq!(post.get_position_offset(), 18);
+
+        assert!(input
+            .split_at_position1_complete::<_, Error>(|c| c == 'a', ErrorKind::Char)
+            .is_err());
+    }
+
+    #[test]
+    fn test_compare_trait() {
+        let mut input = Input::new("rule a { condition: true }");
+        input.advance(9);
+
+        assert_eq!(input.compare("true"), CompareResult::Error);
+        assert_eq!(input.compare("condition"), CompareResult::Ok);
+        assert_eq!(input.compare("CONDITION"), CompareResult::Error);
+        assert_eq!(
+            input.take(5).compare("condition"),
+            CompareResult::Incomplete
+        );
+        assert_eq!(input.take(5).compare("CONDITION"), CompareResult::Error);
+
+        assert_eq!(input.compare_no_case("true"), CompareResult::Error);
+        assert_eq!(input.compare_no_case("condition"), CompareResult::Ok);
+        assert_eq!(input.compare_no_case("CONDITION"), CompareResult::Ok);
+        assert_eq!(
+            input.take(5).compare_no_case("condition"),
+            CompareResult::Incomplete
+        );
+        assert_eq!(
+            input.take(5).compare_no_case("CONDITION"),
+            CompareResult::Incomplete
+        );
+    }
 
     #[test]
     fn test_public_types() {
