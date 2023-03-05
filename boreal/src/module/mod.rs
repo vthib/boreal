@@ -680,7 +680,7 @@ mod tests {
         {
             test_type_traits_non_clonable(Elf);
             test_type_traits_non_clonable(MachO);
-            test_type_traits_non_clonable(Pe::default());
+            test_type_traits(Pe::default());
         }
 
         assert_eq!(format!("{:?}", Value::Integer(0)), "Integer(0)");
