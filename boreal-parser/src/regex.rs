@@ -1194,8 +1194,7 @@ mod tests {
         v.push('/');
 
         let input = Input::new(&v);
-        let res = regex(input);
-        assert!(res.is_ok(), "{res:?}");
+        let _res = regex(input).unwrap();
         assert_eq!(input.inner_recursion_counter, 0);
     }
 

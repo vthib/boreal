@@ -1026,8 +1026,7 @@ mod tests {
         }
 
         let input = Input::new(&v);
-        let res = boolean_expression(input);
-        assert!(res.is_ok(), "{res:?}");
+        let _res = boolean_expression(input).unwrap();
         assert_eq!(input.expr_recursion_counter, 0);
     }
 
@@ -1064,8 +1063,7 @@ mod tests {
         }
 
         let input = Input::new(&v);
-        let res = boolean_expression(input);
-        assert!(res.is_ok(), "{res:?}");
+        let _res = boolean_expression(input).unwrap();
         assert_eq!(input.expr_recursion_counter, 0);
     }
 

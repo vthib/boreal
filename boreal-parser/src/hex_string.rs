@@ -560,8 +560,7 @@ mod tests {
         hex.push('}');
 
         let input = Input::new(&hex);
-        let res = hex_string(input);
-        assert!(res.is_ok(), "{res:?}");
+        let _res = hex_string(input).unwrap();
         assert_eq!(input.inner_recursion_counter, 0);
     }
 

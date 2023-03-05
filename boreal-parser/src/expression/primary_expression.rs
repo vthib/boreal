@@ -1018,8 +1018,7 @@ mod tests {
         }
 
         let input = Input::new(&v);
-        let res = pe(input);
-        assert!(res.is_ok(), "{res:?}");
+        let _res = pe(input).unwrap();
         assert_eq!(input.expr_recursion_counter, 0);
     }
 
