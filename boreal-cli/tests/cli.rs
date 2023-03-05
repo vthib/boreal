@@ -539,3 +539,18 @@ fn test_input_cannot_read() {
         // Still successful, since some other files in the directory may have been scanned
         .success();
 }
+
+#[test]
+fn test_module_names() {
+    cmd()
+        .arg("-M")
+        .assert()
+        .stdout(
+            predicate::str::contains("math\n")
+                .and(predicate::str::contains("string\n"))
+                .and(predicate::str::contains("time\n")),
+        )
+        .stderr("")
+        // Still successful, since some other files in the directory may have been scanned
+        .success();
+}
