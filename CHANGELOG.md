@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Main changes:
+
+- Lots of improved testing on modules and on the `boreal` binary, as well as running
+  all tests in a big-endian architecture.
+
+### Fixed
+
+- Fixed minor differences in edge cases in `elf.dynamic_section_entries` and
+  ``elf.number_of_sections` (e639df643b05).
+- Fixed `==` operator on boolean values (cec439eee19f).
+
 ## [0.2.0] - 2023-02-12
 
 Main changes:
