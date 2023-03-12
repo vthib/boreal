@@ -283,7 +283,7 @@ pub fn atom_rank(lits: &[u8]) -> u32 {
     for lit in lits {
         match *lit {
             0x00 | 0x20 | 0xCC | 0xFF => quality += 12,
-            v if (b'a'..=b'z').contains(&v) => quality += 18,
+            v if v.is_ascii_lowercase() => quality += 18,
             _ => quality += 20,
         }
 

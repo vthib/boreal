@@ -333,20 +333,25 @@ fn check_fullword(mem: &[u8], mat: &Range<usize>, flags: VariableFlags) -> bool 
     if flags.contains(VariableFlags::WIDE) {
         match_is_wide = is_match_wide(mat, mem);
         if match_is_wide {
-            if mat.start > 1 && mem[mat.start - 1] == b'\0' && is_ascii_alnum(mem[mat.start - 2]) {
+            if mat.start > 1
+                && mem[mat.start - 1] == b'\0'
+                && mem[mat.start - 2].is_ascii_alphanumeric()
+            {
                 return false;
             }
-            if mat.end + 1 < mem.len() && is_ascii_alnum(mem[mat.end]) && mem[mat.end + 1] == b'\0'
+            if mat.end + 1 < mem.len()
+                && mem[mat.end].is_ascii_alphanumeric()
+                && mem[mat.end + 1] == b'\0'
             {
                 return false;
             }
         }
     }
     if flags.contains(VariableFlags::ASCII) && !match_is_wide {
-        if mat.start > 0 && is_ascii_alnum(mem[mat.start - 1]) {
+        if mat.start > 0 && mem[mat.start - 1].is_ascii_alphanumeric() {
             return false;
         }
-        if mat.end < mem.len() && is_ascii_alnum(mem[mat.end]) {
+        if mat.end < mem.len() && mem[mat.end].is_ascii_alphanumeric() {
             return false;
         }
     }
@@ -422,10 +427,6 @@ fn is_match_wide(mat: &Range<usize>, mem: &[u8]) -> bool {
         .iter()
         .step_by(2)
         .any(|c| *c != b'\0')
-}
-
-fn is_ascii_alnum(c: u8) -> bool {
-    (b'0'..=b'9').contains(&c) || (b'A'..=b'Z').contains(&c) || (b'a'..=b'z').contains(&c)
 }
 
 /// Convert an ascii string to a wide string
