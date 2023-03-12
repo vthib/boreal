@@ -580,9 +580,8 @@ impl Elf {
             true
         })?;
 
-        let mut tlsh = tlsh2::Tlsh::new();
-        tlsh.update(&import_string);
-
-        Some(Value::Bytes(tlsh.finish(true).into_bytes()))
+        tlsh2::TlshBuilder128_1::build_from(&import_string)
+            .map(|v| v.hash())
+            .map(Value::bytes)
     }
 }

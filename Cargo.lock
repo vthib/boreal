@@ -1092,9 +1092,9 @@ dependencies = [
 
 [[package]]
 name = "tlsh2"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b976096639559b66880ecaf7ed66fc367a08a2ce08e6d51375e0e6d17bb1a1"
+checksum = "7d7eda97e2e35d25f70ce703bf2b823ae9372bbcadaf14640b69353bb5b3f504"
 
 [[package]]
 name = "typenum"
