@@ -44,9 +44,9 @@ dependencies = [
 
 [[package]]
 name = "authenticode-parser"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05a29883ffbcc054213dafde59a1baef84855f51dcce32289d0640b901a61362"
+checksum = "a157336d4bedbed5d11a2389a589dadfdd26aa4ed5e1425fe04681fb1a5518a0"
 dependencies = [
  "authenticode-parser-sys",
 ]
