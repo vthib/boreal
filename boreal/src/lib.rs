@@ -79,6 +79,7 @@ use tempfile as _;
 #[cfg(test)]
 use yara as _;
 
+pub(crate) mod atoms;
 pub mod compiler;
 pub use compiler::Compiler;
 mod evaluator;

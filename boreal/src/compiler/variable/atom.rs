@@ -1,19 +1,7 @@
 //! Atom extraction and computation from variable expressions.
-//!
-//! An atom is a byte string that is contained in the original variable, which additional
-//! constraints:
-//!
-//! - If an atom is found, then the variable may be present.
-//! - If no atoms are found, then the variable cannot be found.
-//!
-//! That is, for any possible match of a variable, an atom in the set of the variable must be
-//! contained in the match.
-//!
-//! Atoms are selected by computing a rank for each atom: the higher the rank, the preferred the
-//! atom. This rank is related to how rare the atom should be found during scanning, and thus
-//! the rate of false positive matches.
 use boreal_parser::regex::{AssertionKind, Node};
 
+use crate::atoms::atom_rank;
 use crate::regex::{visit, VisitAction, Visitor};
 
 pub fn get_atoms_details(node: &Node) -> AtomsDetails {
@@ -268,43 +256,6 @@ impl AtomSet {
 
         (pre_node, post_node)
     }
-}
-
-/// Compute the rank of an atom.
-///
-/// The higher the value, the best quality (i.e., the less false positives).
-pub fn atom_rank(lits: &[u8]) -> u32 {
-    // This algorithm is straight copied from libyara.
-    // TODO: Probably want to revisit this.
-    let mut quality = 0_u32;
-    let mut bitmask = [false; 256];
-    let mut nb_uniq = 0;
-
-    for lit in lits {
-        match *lit {
-            0x00 | 0x20 | 0xCC | 0xFF => quality += 12,
-            v if v.is_ascii_lowercase() => quality += 18,
-            _ => quality += 20,
-        }
-
-        if !bitmask[*lit as usize] {
-            bitmask[*lit as usize] = true;
-            nb_uniq += 1;
-        }
-    }
-
-    // If all the bytes in the atom are equal and very common, let's penalize
-    // it heavily.
-    if nb_uniq == 1 && (bitmask[0] || bitmask[0x20] || bitmask[0xCC] || bitmask[0xFF]) {
-        quality -= 10 * u32::try_from(lits.len()).unwrap_or(30);
-    }
-    // In general atoms with more unique bytes have a better quality, so let's
-    // boost the quality in the amount of unique bytes.
-    else {
-        quality += 2 * nb_uniq;
-    }
-
-    quality
 }
 
 /// Visitor used to extract the AST nodes that are before and after extracted atoms.
