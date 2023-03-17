@@ -4,7 +4,8 @@ use std::ops::Range;
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
 use super::{EvalError, Params, ScanData};
-use crate::compiler::variable::{atom_rank, AcMatchStatus, Variable};
+use crate::atoms::pick_atom_in_literal;
+use crate::compiler::variable::{AcMatchStatus, Variable};
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -61,7 +62,7 @@ impl AcScan {
                 non_handled_var_indexes.push(variable_index);
             } else {
                 for (literal_index, lit) in var.literals.iter().enumerate() {
-                    let (start, end) = pick_best_atom_in_literal(lit);
+                    let (start, end) = pick_atom_in_literal(lit);
                     aho_index_to_literal_info.push(LiteralInfo {
                         variable_index,
                         literal_index,
@@ -195,17 +196,6 @@ impl AcScan {
             matches.truncate(params.string_max_nb_matches as usize);
         }
     }
-}
-
-fn pick_best_atom_in_literal(lit: &[u8]) -> (usize, usize) {
-    if lit.len() <= 4 {
-        return (0, 0);
-    }
-
-    lit.windows(4)
-        .enumerate()
-        .max_by_key(|(_, s)| atom_rank(s))
-        .map_or((0, 0), |(i, _)| (i, lit.len() - i - 4))
 }
 
 #[derive(Clone, Debug)]

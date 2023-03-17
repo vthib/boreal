@@ -9,7 +9,6 @@ use super::base64::encode_base64;
 use super::CompilationError;
 
 mod atom;
-pub use atom::atom_rank;
 mod hex_string;
 mod regex;
 
