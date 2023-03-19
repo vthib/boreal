@@ -3,7 +3,7 @@ use boreal_parser::VariableModifiers;
 
 use crate::regex::{regex_ast_to_string, visit, Regex, VisitAction, Visitor};
 
-use super::atom::AtomsDetails;
+use super::literals::LiteralsDetails;
 use super::{CompiledVariable, MatcherType, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -22,11 +22,11 @@ pub(super) fn compile_regex(
         case_insensitive = true;
     }
 
-    let AtomsDetails {
+    let LiteralsDetails {
         mut literals,
         pre_ast,
         post_ast,
-    } = super::atom::get_atoms_details(ast);
+    } = super::literals::get_literals_details(ast);
 
     let use_ac = !literals.is_empty()
         && literals.iter().all(|lit| lit.len() >= 2)

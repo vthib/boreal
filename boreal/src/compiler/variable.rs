@@ -8,8 +8,8 @@ use crate::regex::Regex;
 use super::base64::encode_base64;
 use super::CompilationError;
 
-mod atom;
 mod hex_string;
+mod literals;
 mod regex;
 
 /// A compiled variable used in a rule.

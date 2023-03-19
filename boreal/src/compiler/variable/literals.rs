@@ -1,17 +1,17 @@
-//! Atom extraction and computation from variable expressions.
+//! Literal extraction and computation from variable expressions.
 use boreal_parser::regex::{AssertionKind, Node};
 
 use crate::atoms::atom_rank;
 use crate::regex::{visit, VisitAction, Visitor};
 
-pub fn get_atoms_details(node: &Node) -> AtomsDetails {
-    let visitor = AtomsExtractor::new();
+pub fn get_literals_details(node: &Node) -> LiteralsDetails {
+    let visitor = LiteralsExtractor::new();
     let visitor = visit(node, visitor);
-    visitor.into_atoms_details(node)
+    visitor.into_literals_details(node)
 }
 
 #[derive(Debug)]
-pub struct AtomsDetails {
+pub struct LiteralsDetails {
     /// Literals extracted from the regex.
     pub literals: Vec<Vec<u8>>,
 
@@ -23,25 +23,25 @@ pub struct AtomsDetails {
     pub post_ast: Option<Node>,
 }
 
-/// Visitor on a regex AST to extract atoms.
+/// Visitor on a regex AST to extract literals.
 ///
-/// To extract atoms:
+/// To extract literals:
 /// - only group and concatenations are visited
 /// - alternations are visited shallowly, and only taken into account if it is an alternation of
 ///   literals.
 /// - repetitions and classes are not handled.
 ///
-/// This strive to strike a balance between exhaustively finding any possible atom to compute the
-/// best one, and a simple algorithm that makes creating the pre and post regex possible.
+/// This strive to strike a balance between exhaustively finding any possible literal to compute
+/// the best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
-struct AtomsExtractor {
-    /// Set of best atoms extracted so far.
-    set: AtomSet,
+struct LiteralsExtractor {
+    /// Set of best literals extracted so far.
+    set: LiteralSet,
 
-    /// Atoms currently being built.
-    atoms: Vec<Vec<u8>>,
-    /// Starting position of the currently built atoms.
-    atoms_start_position: usize,
+    /// Literals currently being built.
+    literals: Vec<Vec<u8>>,
+    /// Starting position of the currently built literals.
+    literals_start_position: usize,
 
     /// Current position of the visitor.
     ///
@@ -49,19 +49,19 @@ struct AtomsExtractor {
     current_position: usize,
 }
 
-impl AtomsExtractor {
+impl LiteralsExtractor {
     fn new() -> Self {
         Self {
-            set: AtomSet::default(),
-            atoms: Vec::new(),
-            atoms_start_position: 0,
+            set: LiteralSet::default(),
+            literals: Vec::new(),
+            literals_start_position: 0,
 
             current_position: 0,
         }
     }
 }
 
-impl Visitor for AtomsExtractor {
+impl Visitor for LiteralsExtractor {
     type Output = Self;
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
@@ -94,20 +94,20 @@ impl Visitor for AtomsExtractor {
     }
 }
 
-impl AtomsExtractor {
-    /// Add a byte to the atoms being built.
+impl LiteralsExtractor {
+    /// Add a byte to the literals being built.
     fn add_byte(&mut self, byte: u8) {
-        if self.atoms.is_empty() {
-            self.atoms.push(Vec::new());
-            self.atoms_start_position = self.current_position;
+        if self.literals.is_empty() {
+            self.literals.push(Vec::new());
+            self.literals_start_position = self.current_position;
         }
 
-        for atom in &mut self.atoms {
-            atom.push(byte);
+        for lit in &mut self.literals {
+            lit.push(byte);
         }
     }
 
-    /// Visit an alternation to add it to the currently being build atoms.
+    /// Visit an alternation to add it to the currently being build literals.
     ///
     /// Only allow alternations if each one is a literal or a concat of literals.
     fn visit_alternation(&mut self, alts: &[Node]) -> bool {
@@ -131,9 +131,9 @@ impl AtomsExtractor {
             }
         }
 
-        // Limit the amount of atoms being built to avoid exponential buildup.
+        // Limit the amount of literals being built to avoid exponential buildup.
         if self
-            .atoms
+            .literals
             .len()
             .checked_mul(lits.len())
             .map_or(true, |v| v > 32)
@@ -141,14 +141,14 @@ impl AtomsExtractor {
             return false;
         }
 
-        if self.atoms.is_empty() {
-            self.atoms = lits;
-            self.atoms_start_position = self.current_position;
+        if self.literals.is_empty() {
+            self.literals = lits;
+            self.literals_start_position = self.current_position;
         } else {
             // Compute the cardinal product between the prefixes and the literals of the
             // alternation.
-            self.atoms = self
-                .atoms
+            self.literals = self
+                .literals
                 .iter()
                 .flat_map(|prefix| {
                     lits.iter()
@@ -159,55 +159,59 @@ impl AtomsExtractor {
         true
     }
 
-    /// Close currently being built atoms.
+    /// Close currently being built literals.
     fn close(&mut self) {
-        if !self.atoms.is_empty() {
-            self.set.add_atoms(
-                std::mem::take(&mut self.atoms),
-                self.atoms_start_position,
+        if !self.literals.is_empty() {
+            self.set.add_literals(
+                std::mem::take(&mut self.literals),
+                self.literals_start_position,
                 self.current_position,
             );
         }
     }
 
-    pub fn into_atoms_details(mut self, original_node: &Node) -> AtomsDetails {
+    pub fn into_literals_details(mut self, original_node: &Node) -> LiteralsDetails {
         self.close();
 
         let (pre_ast, post_ast) = self.set.build_pre_post_ast(original_node);
 
-        AtomsDetails {
-            literals: self.set.atoms,
+        LiteralsDetails {
+            literals: self.set.literals,
             pre_ast,
             post_ast,
         }
     }
 }
 
-/// Set of atoms extracted from a regex AST.
+/// Set of literals extracted from a regex AST.
 #[derive(Debug, Default)]
-struct AtomSet {
-    /// List of atoms extracted.
-    atoms: Vec<Vec<u8>>,
+struct LiteralSet {
+    /// List of literals extracted.
+    literals: Vec<Vec<u8>>,
 
-    /// Starting position of the atoms (including the first bytes of the atoms).
+    /// Starting position of the literals (including the first bytes of the literals).
     start_position: usize,
-    /// Ending position of the atoms (excluding the last bytes of the atoms).
+    /// Ending position of the literals (excluding the last bytes of the literals).
     end_position: usize,
 
-    /// Rank of the saved atoms.
+    /// Rank of the saved literals.
     rank: u32,
 }
 
-impl AtomSet {
-    fn add_atoms(&mut self, atoms: Vec<Vec<u8>>, start_position: usize, end_position: usize) {
+impl LiteralSet {
+    fn add_literals(&mut self, literals: Vec<Vec<u8>>, start_position: usize, end_position: usize) {
         // Get the min rank. This is probably the best solution, it isn't clear if a better one
         // is easy to find.
-        let rank = atoms.iter().map(|atom| atom_rank(atom)).min().unwrap_or(0);
+        let rank = literals
+            .iter()
+            .map(|lit| atom_rank(lit))
+            .min()
+            .unwrap_or(0);
 
-        // this.atoms is one possible set, and the provided atoms are another one.
+        // this.literals is one possible set, and the provided literals are another one.
         // Keep the one with the best rank.
-        if self.atoms.is_empty() || rank > self.rank {
-            self.atoms = atoms;
+        if self.literals.is_empty() || rank > self.rank {
+            self.literals = literals;
             self.start_position = start_position;
             self.end_position = end_position;
             self.rank = rank;
@@ -215,16 +219,16 @@ impl AtomSet {
     }
 
     fn add_literals_ast(&self, nodes: &mut Vec<Node>) {
-        match &self.atoms[..] {
+        match &self.literals[..] {
             [] => (),
-            [atom] => {
-                nodes.extend(atom.iter().copied().map(Node::Literal));
+            [literal] => {
+                nodes.extend(literal.iter().copied().map(Node::Literal));
             }
-            atoms => {
+            literals => {
                 nodes.push(Node::Group(Box::new(Node::Alternation(
-                    atoms
+                    literals
                         .iter()
-                        .map(|atom| Node::Concat(atom.iter().copied().map(Node::Literal).collect()))
+                        .map(|literal| Node::Concat(literal.iter().copied().map(Node::Literal).collect()))
                         .collect(),
                 ))));
             }
@@ -232,7 +236,7 @@ impl AtomSet {
     }
 
     fn build_pre_post_ast(&self, original_node: &Node) -> (Option<Node>, Option<Node>) {
-        if self.atoms.is_empty() {
+        if self.literals.is_empty() {
             return (None, None);
         }
 
@@ -258,10 +262,10 @@ impl AtomSet {
     }
 }
 
-/// Visitor used to extract the AST nodes that are before and after extracted atoms.
+/// Visitor used to extract the AST nodes that are before and after extracted literals.
 ///
 /// The goal is to be able to generate regex expressions to validate the regex, knowing the
-/// position of atoms found by the AC pass.
+/// position of literals found by the AC pass.
 #[derive(Debug)]
 struct PrePostExtractor {
     /// Stacks used during the visit to reconstruct compound nodes.
@@ -270,17 +274,17 @@ struct PrePostExtractor {
 
     /// Top level pre node.
     ///
-    /// May end up None if the extracted atoms are from the start of the regex.
+    /// May end up None if the extracted literals are from the start of the regex.
     pre_node: Option<Node>,
 
     /// Top level post node.
     ///
-    /// May end up None if the extracted atoms are from the end of the regex.
+    /// May end up None if the extracted literals are from the end of the regex.
     post_node: Option<Node>,
 
-    /// Start position of the extracted atoms.
+    /// Start position of the extracted literals.
     start_position: usize,
-    /// End position of the extracted atoms.
+    /// End position of the extracted literals.
     end_position: usize,
 
     /// Current position during the visit of the original AST.
@@ -338,7 +342,7 @@ impl Visitor for PrePostExtractor {
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
         // XXX: be careful here, the visit *must* have the exact same behavior as for the
-        // `AtomsExtractor` visitor, to ensure the pre post expressions are correct.
+        // `LiteralsExtractor` visitor, to ensure the pre post expressions are correct.
         match node {
             Node::Literal(_)
             | Node::Repetition { .. }
@@ -410,7 +414,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hex_string_atoms() {
+    fn test_hex_string_literals() {
         #[track_caller]
         fn test(
             hex_string_expr: &str,
@@ -421,7 +425,7 @@ mod tests {
             let hex_string = parse_hex_string(hex_string_expr);
             let ast = super::super::hex_string::hex_string_to_ast(hex_string);
 
-            let exprs = get_atoms_details(&ast);
+            let exprs = get_literals_details(&ast);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -575,7 +579,7 @@ mod tests {
             r#"^(\x11!3|\x11"3|\x12!3|\x12"3)(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
         );
 
-        // TODO: to improve, there are diminishing returns in computing the longest atoms.
+        // TODO: to improve, there are diminishing returns in computing the longest literals.
         test(
             "{ 11 22 33 44 55 66 77 ( 88 | 99 | AA | BB ) }",
             &[
@@ -640,7 +644,7 @@ mod tests {
              \\x24)\\x06",
         );
 
-        // TODO: expanding the masked byte would improve the atoms
+        // TODO: expanding the masked byte would improve the literals
         test(
             "{ 8B C? [2-3] F6 D? 1A C? [2-3] [2-3] 30 0? ?? 4? }",
             &[b"\x8B"],
@@ -663,11 +667,11 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_atoms() {
+    fn test_regex_literals() {
         #[track_caller]
         fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
             let regex = parse_regex_string(expr);
-            let exprs = get_atoms_details(&regex.ast);
+            let exprs = get_literals_details(&regex.ast);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -687,22 +691,22 @@ mod tests {
             );
         }
 
-        // Atom on the left side of a group
+        // Literal on the left side of a group
         test("abc(a+)b", &[b"abc"], "", "^abc(a+)b");
-        // Atom spanning inside a group
+        // Literal spanning inside a group
         test("ab(ca+)b", &[b"abc"], "", "^abc(a+)b");
-        // Atom spanning up to the end of a group
+        // Literal spanning up to the end of a group
         test("ab(c)a+b", &[b"abc"], "", "^abca+b");
-        // Atom spanning in and out of a group
+        // Literal spanning in and out of a group
         test("a(b)ca+b", &[b"abc"], "", "^abca+b");
 
-        // Atom on the right side of a group
+        // Literal on the right side of a group
         test("b(a+)abc", &[b"abc"], "b(a+)abc$", "");
-        // Atom spanning inside a group
+        // Literal spanning inside a group
         test("b(a+a)bc", &[b"abc"], "b(a+)abc$", "");
-        // Atom starting in a group
+        // Literal starting in a group
         test("ba+(ab)c", &[b"abc"], "ba+abc$", "");
-        // Atom spanning in and out of a group
+        // Literal spanning in and out of a group
         test("ba+a(bc)", &[b"abc"], "ba+abc$", "");
 
         // A few tests on closing nodes
@@ -726,14 +730,14 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(AtomsDetails {
+        test_type_traits_non_clonable(LiteralsDetails {
             literals: Vec::new(),
             pre_ast: None,
             post_ast: None,
         });
 
-        test_type_traits_non_clonable(AtomsExtractor::new());
-        test_type_traits_non_clonable(AtomSet::default());
+        test_type_traits_non_clonable(LiteralsExtractor::new());
+        test_type_traits_non_clonable(LiteralSet::default());
         test_type_traits_non_clonable(PrePostExtractor::new(0, 0));
     }
 }
