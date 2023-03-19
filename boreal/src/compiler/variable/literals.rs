@@ -1,7 +1,7 @@
 //! Literal extraction and computation from variable expressions.
 use boreal_parser::regex::{AssertionKind, Node};
 
-use crate::atoms::atom_rank;
+use crate::atoms::atoms_rank;
 use crate::regex::{visit, VisitAction, Visitor};
 
 pub fn get_literals_details(node: &Node) -> LiteralsDetails {
@@ -200,13 +200,7 @@ struct LiteralSet {
 
 impl LiteralSet {
     fn add_literals(&mut self, literals: Vec<Vec<u8>>, start_position: usize, end_position: usize) {
-        // Get the min rank. This is probably the best solution, it isn't clear if a better one
-        // is easy to find.
-        let rank = literals
-            .iter()
-            .map(|lit| atom_rank(lit))
-            .min()
-            .unwrap_or(0);
+        let rank = atoms_rank(&literals);
 
         // this.literals is one possible set, and the provided literals are another one.
         // Keep the one with the best rank.
@@ -228,7 +222,9 @@ impl LiteralSet {
                 nodes.push(Node::Group(Box::new(Node::Alternation(
                     literals
                         .iter()
-                        .map(|literal| Node::Concat(literal.iter().copied().map(Node::Literal).collect()))
+                        .map(|literal| {
+                            Node::Concat(literal.iter().copied().map(Node::Literal).collect())
+                        })
                         .collect(),
                 ))));
             }
