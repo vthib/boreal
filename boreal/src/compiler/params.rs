@@ -8,6 +8,9 @@ pub struct CompilerParams {
 
     /// Fail adding rules on warnings.
     pub(crate) fail_on_warnings: bool,
+
+    /// Compute statistics when compiling rules.
+    pub(crate) compute_statistics: bool,
 }
 
 impl Default for CompilerParams {
@@ -15,6 +18,7 @@ impl Default for CompilerParams {
         Self {
             max_condition_depth: 40,
             fail_on_warnings: false,
+            compute_statistics: false,
         }
     }
 }
@@ -49,6 +53,18 @@ impl CompilerParams {
     #[must_use]
     pub fn fail_on_warnings(mut self, fail_on_warnings: bool) -> Self {
         self.fail_on_warnings = fail_on_warnings;
+        self
+    }
+
+    /// Compute statistics during compilation.
+    ///
+    /// This option allows retrieve statistics related to the compilation of strings.
+    /// See `AddRuleStatus::statistics`.
+    ///
+    /// Default value is false.
+    #[must_use]
+    pub fn compute_statistics(mut self, compute_statistics: bool) -> Self {
+        self.compute_statistics = compute_statistics;
         self
     }
 }
