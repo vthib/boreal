@@ -1,15 +1,15 @@
 use std::collections::HashSet;
 use std::ops::Range;
+use std::path::PathBuf;
 use std::{collections::HashMap, sync::Arc};
 
 use boreal_parser as parser;
 
 use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
-use super::variable::{compile_variable, Variable};
-use super::CompilerParams;
-use super::{CompilationError, Namespace};
+use super::{variable, CompilationError, CompilerParams, Namespace};
 use crate::module::Type as ModuleType;
+use crate::statistics;
 
 /// A compiled scanning rule.
 #[derive(Debug)]
@@ -248,8 +248,9 @@ pub(super) fn compile_rule(
     let variables = rule
         .variables
         .into_iter()
-        .map(compile_variable)
+        .map(variable::compile_variable)
         .collect::<Result<Vec<_>, _>>()?;
+
     Ok(CompiledRule {
         rule: Rule {
             name: rule.name,
@@ -268,8 +269,23 @@ pub(super) fn compile_rule(
 #[derive(Debug)]
 pub(super) struct CompiledRule {
     pub rule: Rule,
-    pub variables: Vec<Variable>,
+    pub variables: Vec<variable::Variable>,
     pub warnings: Vec<CompilationError>,
+}
+
+impl CompiledRule {
+    pub(super) fn to_statistics(&self, filepath: Option<PathBuf>) -> statistics::CompiledRule {
+        statistics::CompiledRule {
+            filepath,
+            namespace: self.rule.namespace.clone(),
+            name: self.rule.name.clone(),
+            strings: self
+                .variables
+                .iter()
+                .map(variable::Variable::to_statistics)
+                .collect(),
+        }
+    }
 }
 
 #[cfg(test)]

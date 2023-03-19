@@ -87,6 +87,7 @@ pub mod module;
 pub mod regex;
 pub mod scanner;
 pub use scanner::Scanner;
+pub mod statistics;
 
 #[cfg(test)]
 mod test_helpers;

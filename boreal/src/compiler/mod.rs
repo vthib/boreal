@@ -23,7 +23,7 @@ pub use params::CompilerParams;
 pub(crate) mod rule;
 pub(crate) mod variable;
 
-use crate::Scanner;
+use crate::{statistics, Scanner};
 
 /// Object used to compile rules.
 #[derive(Debug, Default)]
@@ -386,17 +386,24 @@ impl Compiler {
                 let rule_name = rule.name.clone();
                 let is_global = rule.is_global;
                 let name_span = rule.name_span.clone();
-                let res =
+                let compiled_rule =
                     rule::compile_rule(*rule, namespace, &self.external_symbols, &self.params)
                         .map_err(|error| AddRuleError {
                             path: current_filepath.map(Path::to_path_buf),
                             kind: AddRuleErrorKind::Compilation(error),
                         })?;
+
+                if self.params.compute_statistics {
+                    status
+                        .statistics
+                        .push(compiled_rule.to_statistics(current_filepath.map(ToOwned::to_owned)));
+                }
+
                 let rule::CompiledRule {
                     rule,
                     variables,
                     warnings,
-                } = res;
+                } = compiled_rule;
                 // Append warnings for this rule to the warnings of all the currently added
                 // string or file.
                 status
@@ -528,12 +535,22 @@ struct Namespace {
 #[non_exhaustive]
 pub struct AddRuleStatus {
     warnings: Vec<AddRuleError>,
+
+    statistics: Vec<statistics::CompiledRule>,
 }
 
 impl AddRuleStatus {
     /// Return the list of warnings generated when adding the rule.
     pub fn warnings(&self) -> impl Iterator<Item = &AddRuleError> {
         self.warnings.iter()
+    }
+
+    /// Returns statistics on compiled rules.
+    ///
+    /// Statistics are only computed if [`CompilerParams::compute_statistics`] has been set.
+    /// Otherwise, this will just return an empty iterator.
+    pub fn statistics(&self) -> impl Iterator<Item = &statistics::CompiledRule> {
+        self.statistics.iter()
     }
 }
 

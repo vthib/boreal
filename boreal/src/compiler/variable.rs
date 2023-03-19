@@ -3,7 +3,9 @@ use std::ops::Range;
 use boreal_parser::VariableModifiers;
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 
+use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::regex::Regex;
+use crate::statistics::{self, MatchingKind};
 
 use super::base64::encode_base64;
 use super::CompilationError;
@@ -331,6 +333,30 @@ impl Variable {
         match self.non_wide_regex.as_ref() {
             Some(regex) => apply_wide_word_boundaries(mat, mem, regex),
             None => Some(mat),
+        }
+    }
+
+    pub fn to_statistics(&self) -> statistics::CompiledString {
+        let atoms: Vec<_> = self
+            .literals
+            .iter()
+            .map(|lit| {
+                let (start_offset, end_offset) = pick_atom_in_literal(lit);
+                lit[start_offset..(lit.len() - end_offset)].to_vec()
+            })
+            .collect();
+        let atoms_quality = atoms_rank(&atoms);
+
+        statistics::CompiledString {
+            string_name: self.name.clone(),
+            literals: self.literals.clone(),
+            atoms,
+            atoms_quality,
+            matching_kind: match self.matcher_type {
+                MatcherType::Literals => MatchingKind::Literals,
+                MatcherType::Atomized { .. } => MatchingKind::Atomized,
+                MatcherType::Raw(_) => MatchingKind::Regex,
+            },
         }
     }
 }

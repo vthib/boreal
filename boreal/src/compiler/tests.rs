@@ -287,5 +287,6 @@ fn test_types_traits() {
     test_type_traits(CompilerParams::default());
     test_type_traits_non_clonable(AddRuleStatus {
         warnings: Vec::new(),
+        statistics: Vec::new(),
     });
 }
