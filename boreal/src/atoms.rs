@@ -32,10 +32,19 @@ pub fn pick_atom_in_literal(lit: &[u8]) -> (usize, usize) {
         .map_or((0, 0), |(i, _)| (i, lit.len() - i - ATOM_SIZE))
 }
 
+/// Compute the rank of a set of atoms.
+///
+/// The higher the value, the best quality (i.e., the less false positives).
+pub fn atoms_rank(literals: &[Vec<u8>]) -> u32 {
+    // Get the min rank. This is probably the best solution, it isn't clear if a better one
+    // is easy to find.
+    literals.iter().map(|lit| atom_rank(lit)).min().unwrap_or(0)
+}
+
 /// Compute the rank of an atom.
 ///
 /// The higher the value, the best quality (i.e., the less false positives).
-pub fn atom_rank(atom: &[u8]) -> u32 {
+fn atom_rank(atom: &[u8]) -> u32 {
     // This algorithm is straight copied from libyara.
     // TODO: Probably want to revisit this.
     let mut quality = 0_u32;
