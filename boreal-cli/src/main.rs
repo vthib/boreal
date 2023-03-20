@@ -283,10 +283,9 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
     match value {
         ModuleValue::Integer(i) => println!(" = {i} (0x{i:x})"),
         ModuleValue::Float(v) => println!(" = {v}"),
-        ModuleValue::Bytes(bytes) => match std::str::from_utf8(bytes) {
-            Ok(s) => println!(" = {s:?}"),
-            Err(_) => println!(" = {{ {} }}", hex::encode(bytes)),
-        },
+        ModuleValue::Bytes(bytes) => {
+            println!(" = {}", ByteString(bytes));
+        }
         ModuleValue::Regex(regex) => println!(" = /{}/", regex.as_regex().as_str()),
         ModuleValue::Boolean(b) => println!(" = {b:?}"),
         ModuleValue::Object(obj) => {
@@ -331,15 +330,23 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
             let mut keys: Vec<_> = dict.keys().collect();
             keys.sort_unstable();
             for key in keys {
-                match std::str::from_utf8(key) {
-                    Ok(s) => print!("{:indent$}[{:?}]", "", s),
-                    Err(_) => print!("{:indent$}[{{ {} }}]", "", hex::encode(key)),
-                };
+                print!("{:indent$}[{}]", "", ByteString(key));
                 print_module_value(&dict[key], indent + 4);
             }
         }
         ModuleValue::Function(_) => println!("[function]"),
         ModuleValue::Undefined => println!("[undef]"),
+    }
+}
+
+struct ByteString<'a>(&'a [u8]);
+
+impl std::fmt::Display for ByteString<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match std::str::from_utf8(self.0) {
+            Ok(s) => write!(f, "{s:?}"),
+            Err(_) => write!(f, "{{ {} }}", hex::encode(self.0)),
+        }
     }
 }
 
