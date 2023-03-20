@@ -348,7 +348,7 @@ impl Variable {
         let atoms_quality = atoms_rank(&atoms);
 
         statistics::CompiledString {
-            string_name: self.name.clone(),
+            name: self.name.clone(),
             literals: self.literals.clone(),
             atoms,
             atoms_quality,
