@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread::JoinHandle;
 
-use boreal::Compiler;
-use boreal::{module::Value as ModuleValue, Scanner};
+use boreal::module::Value as ModuleValue;
+use boreal::{statistics, Compiler, Scanner};
 
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
 use codespan_reporting::files::SimpleFile;
@@ -78,23 +78,13 @@ fn build_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Display the names of all available modules"),
         )
-}
-
-fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
-    let writer = StandardStream::stderr(ColorChoice::Auto);
-    let config = term::Config::default();
-
-    let files = match &err.path {
-        Some(path) => {
-            let contents = std::fs::read_to_string(path).unwrap_or_else(|_| String::new());
-            SimpleFile::new(path.display().to_string(), contents)
-        }
-        None => SimpleFile::new(path.display().to_string(), String::new()),
-    };
-    let writer = &mut writer.lock();
-    if let Err(e) = term::emit(writer, &config, &files, &err.to_diagnostic()) {
-        eprintln!("cannot emit diagnostics: {e}");
-    }
+        .arg(
+            Arg::new("statistics")
+                .short('S')
+                .long("print-stats")
+                .action(ArgAction::SetTrue)
+                .help("Display statistics on rules' compilation and evaluation"),
+        )
 }
 
 fn main() -> ExitCode {
@@ -123,14 +113,19 @@ fn main() -> ExitCode {
         #[cfg(not(feature = "authenticode"))]
         let mut compiler = Compiler::new();
 
-        if args.get_flag("fail_on_warnings") {
-            compiler.set_params(boreal::compiler::CompilerParams::default().fail_on_warnings(true));
-        }
+        compiler.set_params(
+            boreal::compiler::CompilerParams::default()
+                .fail_on_warnings(args.get_flag("fail_on_warnings"))
+                .compute_statistics(args.get_flag("statistics")),
+        );
 
         match compiler.add_rules_file(rules_file) {
             Ok(status) => {
                 for warn in status.warnings() {
                     display_diagnostic(rules_file, warn);
+                }
+                for rule_stat in status.statistics() {
+                    display_rule_stats(rule_stat);
                 }
             }
             Err(err) => {
@@ -270,6 +265,44 @@ impl ThreadPool {
     }
 }
 
+fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
+    let writer = StandardStream::stderr(ColorChoice::Auto);
+    let config = term::Config::default();
+
+    let files = match &err.path {
+        Some(path) => {
+            let contents = std::fs::read_to_string(path).unwrap_or_else(|_| String::new());
+            SimpleFile::new(path.display().to_string(), contents)
+        }
+        None => SimpleFile::new(path.display().to_string(), String::new()),
+    };
+    let writer = &mut writer.lock();
+    if let Err(e) = term::emit(writer, &config, &files, &err.to_diagnostic()) {
+        eprintln!("cannot emit diagnostics: {e}");
+    }
+}
+
+fn display_rule_stats(stats: &statistics::CompiledRule) {
+    print!(
+        "{}:{}",
+        stats.namespace.as_deref().unwrap_or("default"),
+        stats.name
+    );
+    match &stats.filepath {
+        Some(path) => println!(" (from {})", path.display()),
+        None => println!(),
+    };
+    for var in &stats.strings {
+        let lits: Vec<_> = var.literals.iter().map(|v| ByteString(v)).collect();
+        let atoms: Vec<_> = var.atoms.iter().map(|v| ByteString(v)).collect();
+        println!("  ${}", var.name);
+        println!("    literals: {:?}", &lits);
+        println!("    atoms: {:?}", &atoms);
+        println!("    atoms quality: {}", var.atoms_quality);
+        println!("    kind: {:?}", var.matching_kind);
+    }
+}
+
 /// Print a module value.
 ///
 /// This is a recursive function.
@@ -284,7 +317,7 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
         ModuleValue::Integer(i) => println!(" = {i} (0x{i:x})"),
         ModuleValue::Float(v) => println!(" = {v}"),
         ModuleValue::Bytes(bytes) => {
-            println!(" = {}", ByteString(bytes));
+            println!(" = {:?}", ByteString(bytes));
         }
         ModuleValue::Regex(regex) => println!(" = /{}/", regex.as_regex().as_str()),
         ModuleValue::Boolean(b) => println!(" = {b:?}"),
@@ -330,7 +363,7 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
             let mut keys: Vec<_> = dict.keys().collect();
             keys.sort_unstable();
             for key in keys {
-                print!("{:indent$}[{}]", "", ByteString(key));
+                print!("{:indent$}[{:?}]", "", ByteString(key));
                 print_module_value(&dict[key], indent + 4);
             }
         }
@@ -341,7 +374,7 @@ fn print_module_value(value: &ModuleValue, indent: usize) {
 
 struct ByteString<'a>(&'a [u8]);
 
-impl std::fmt::Display for ByteString<'_> {
+impl std::fmt::Debug for ByteString<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match std::str::from_utf8(self.0) {
             Ok(s) => write!(f, "{s:?}"),
