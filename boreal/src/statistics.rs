@@ -1,6 +1,6 @@
 //! Statistics used to investigate performance of rules.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 /// Compilation statistics for a rule.
 #[derive(Clone, Debug)]
@@ -65,6 +65,26 @@ pub enum MatchingKind {
     Regex,
 }
 
+/// Statistics on the evaluation of a byte string.
+#[derive(Clone, Debug, Default)]
+pub struct Evaluation {
+    /// Time spent evaluating rules before any scanning.
+    ///
+    /// This is used for the no-scan optimization.
+    pub no_scan_eval_duration: Duration,
+
+    /// Time spent running the Aho-Corasick algorithm.
+    pub ac_duration: Duration,
+
+    /// Time spent evaluation rules.
+    pub rules_eval_duration: Duration,
+
+    /// Time spent evaluating singled regexes.
+    ///
+    /// This is an aggregation of the time spent evaluating "raw" variables regexes.
+    pub raw_regexes_eval_duration: Duration,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +107,6 @@ mod tests {
             matching_kind: MatchingKind::Literals,
         });
         test_type_traits(MatchingKind::Atomized);
+        test_type_traits(Evaluation::default());
     }
 }

@@ -103,7 +103,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let scanner = {
+    let mut scanner = {
         let rules_file: &PathBuf = args.get_one("rules_file").unwrap();
 
         #[cfg(feature = "authenticode")]
@@ -136,6 +136,9 @@ fn main() -> ExitCode {
 
         compiler.into_scanner()
     };
+    scanner.set_scan_params(
+        boreal::scanner::ScanParams::default().compute_statistics(args.get_flag("statistics")),
+    );
 
     let input: &PathBuf = args.get_one("input").unwrap();
     if input.is_dir() {
@@ -209,6 +212,9 @@ fn scan_file(scanner: &Scanner, path: &Path, print_module_data: bool) -> std::io
     }
     for rule in res.matched_rules {
         println!("{} {}", &rule.name, path.display());
+    }
+    if let Some(stats) = res.statistics {
+        println!("{}: {:#?}", path.display(), stats);
     }
 
     Ok(())
