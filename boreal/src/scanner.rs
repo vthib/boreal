@@ -1,6 +1,7 @@
 //! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
@@ -10,6 +11,7 @@ use crate::evaluator::{
     evaluate_rule, EvalError, Params as EvalParams, ScanData, VariableEvaluation,
 };
 use crate::module::Module;
+use crate::statistics;
 
 mod params;
 pub use params::ScanParams;
@@ -239,44 +241,63 @@ impl Inner {
             &self.modules,
             external_symbols_values,
             params.timeout_duration,
+            if params.compute_statistics {
+                Some(statistics::Evaluation::default())
+            } else {
+                None
+            },
         );
 
         if !params.compute_full_matches {
-            match self.evaluate_without_matches(&mut scan_data, params) {
+            let start = Instant::now();
+            let res = self.evaluate_without_matches(&mut scan_data, params);
+            if let Some(stats) = scan_data.statistics.as_mut() {
+                stats.no_scan_eval_duration = start.elapsed();
+            }
+            match res {
                 Ok(matched_rules) => {
                     return ScanResult {
                         matched_rules,
                         module_values: scan_data.module_values,
                         timeout: false,
+                        statistics: scan_data.statistics,
                     }
                 }
                 Err(EvalError::Undecidable) => (),
                 Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(Vec::new(), scan_data.module_values)
+                    return ScanResult::timeout(Vec::new(), scan_data);
                 }
             }
         }
 
-        // First, run the regex set on the memory. This does a single pass on it, finding out
-        // which variables have no miss at all.
         let eval_params = EvalParams {
             string_max_nb_matches: params.string_max_nb_matches,
         };
-        let ac_matches = match self
-            .ac_scan
-            .matches(&mut scan_data, &self.variables, eval_params)
-        {
+
+        // First, run the regex set on the memory. This does a single pass on it, finding out
+        // which variables have no miss at all.
+        let ac_res = {
+            let start = Instant::now();
+            let res = self
+                .ac_scan
+                .matches(&mut scan_data, &self.variables, eval_params);
+            if let Some(stats) = scan_data.statistics.as_mut() {
+                stats.ac_duration = start.elapsed();
+            }
+            res
+        };
+        let ac_matches = match ac_res {
             Ok(v) => v,
             Err(EvalError::Undecidable) => unreachable!(),
             Err(EvalError::Timeout) => {
-                return ScanResult::timeout(Vec::new(), scan_data.module_values);
+                return ScanResult::timeout(Vec::new(), scan_data);
             }
         };
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
+        let start = Instant::now();
 
-        // First, check global rules
         let mut var_evals_iterator = self
             .variables
             .iter()
@@ -299,23 +320,27 @@ impl Inner {
                 Ok(v) => v,
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(matched_rules, scan_data.module_values);
+                    return ScanResult::timeout(matched_rules, scan_data);
                 }
             };
 
             if is_global && !res {
                 matched_rules.clear();
+                if let Some(stats) = scan_data.statistics.as_mut() {
+                    stats.rules_eval_duration = start.elapsed();
+                }
                 return ScanResult {
                     matched_rules,
                     module_values: scan_data.module_values,
                     timeout: false,
+                    statistics: scan_data.statistics,
                 };
             }
             if res && !rule.is_private {
                 matched_rules.push(build_matched_rule(
                     rule,
                     var_evals,
-                    &scan_data,
+                    &mut scan_data,
                     params.compute_full_matches,
                     params.match_max_length,
                 ));
@@ -326,10 +351,14 @@ impl Inner {
             }
         }
 
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.rules_eval_duration = start.elapsed();
+        }
         ScanResult {
             matched_rules,
             module_values: scan_data.module_values,
             timeout: false,
+            statistics: scan_data.statistics,
         }
     }
 
@@ -405,7 +434,7 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     mut var_evals: Vec<VariableEvaluation<'a>>,
-    scan_data: &ScanData,
+    scan_data: &mut ScanData,
     compute_full_matches: bool,
     match_max_length: usize,
 ) -> MatchedRule<'a> {
@@ -462,17 +491,18 @@ pub struct ScanResult<'scanner> {
     /// If true, this means that scanning was cut short because of a timeout, hence the returned
     /// matched rules may be incomplete.
     pub timeout: bool,
+
+    /// Statistics related to the scanning.
+    pub statistics: Option<statistics::Evaluation>,
 }
 
 impl<'scanner> ScanResult<'scanner> {
-    fn timeout(
-        matched_rules: Vec<MatchedRule<'scanner>>,
-        module_values: Vec<(&'static str, Arc<crate::module::Value>)>,
-    ) -> Self {
+    fn timeout(matched_rules: Vec<MatchedRule<'scanner>>, scan_data: ScanData) -> Self {
         Self {
             matched_rules,
-            module_values,
+            module_values: scan_data.module_values,
             timeout: true,
+            statistics: scan_data.statistics,
         }
     }
 }
@@ -639,6 +669,7 @@ mod tests {
             mem,
             &scanner.inner.modules,
             &scanner.external_symbols_values,
+            None,
             None,
         );
         let mut previous_results = Vec::new();
@@ -1160,6 +1191,7 @@ mod tests {
             matched_rules: Vec::new(),
             module_values: Vec::new(),
             timeout: false,
+            statistics: None,
         });
         test_type_traits_non_clonable(MatchedRule {
             namespace: None,

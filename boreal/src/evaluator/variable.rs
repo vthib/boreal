@@ -1,5 +1,6 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
+use std::time::Instant;
 
 use super::ac_scan::AcResult;
 use super::{Params, ScanData};
@@ -63,7 +64,7 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Return true if the variable can be found in the scanned memory.
-    pub fn find(&mut self, scan_data: &ScanData) -> bool {
+    pub fn find(&mut self, scan_data: &mut ScanData) -> bool {
         if self.has_been_found || !self.matches.is_empty() {
             true
         } else {
@@ -76,7 +77,7 @@ impl<'a> VariableEvaluation<'a> {
     /// This starts at 0, and not at 1 as in the yara file.
     pub fn find_match_occurence(
         &mut self,
-        scan_data: &ScanData,
+        scan_data: &mut ScanData,
         occurence_number: usize,
     ) -> Option<Match> {
         while self.matches.len() <= occurence_number {
@@ -87,7 +88,7 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Count number of matches.
-    pub fn count_matches(&mut self, scan_data: &ScanData) -> u32 {
+    pub fn count_matches(&mut self, scan_data: &mut ScanData) -> u32 {
         loop {
             if self.get_next_match(scan_data).is_none() {
                 break;
@@ -103,7 +104,7 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Count number of matches in between two bounds.
-    pub fn count_matches_in(&mut self, scan_data: &ScanData, from: usize, to: usize) -> u32 {
+    pub fn count_matches_in(&mut self, scan_data: &mut ScanData, from: usize, to: usize) -> u32 {
         if from >= scan_data.mem.len() {
             return 0;
         }
@@ -129,7 +130,7 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable at a given offset
-    pub fn find_at(&mut self, scan_data: &ScanData, offset: usize) -> bool {
+    pub fn find_at(&mut self, scan_data: &mut ScanData, offset: usize) -> bool {
         if offset >= scan_data.mem.len() {
             return false;
         }
@@ -153,7 +154,7 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable in between given offset
-    pub fn find_in(&mut self, scan_data: &ScanData, from: usize, to: usize) -> bool {
+    pub fn find_in(&mut self, scan_data: &mut ScanData, from: usize, to: usize) -> bool {
         if from >= scan_data.mem.len() {
             return false;
         }
@@ -177,14 +178,14 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Force computation of all possible matches.
-    pub fn compute_all_matches(&mut self, scan_data: &ScanData) {
+    pub fn compute_all_matches(&mut self, scan_data: &mut ScanData) {
         while self.get_next_match(scan_data).is_some() {}
     }
 
     /// Find next matches, save them, and call the given closure on each new one found.
     ///
     /// If the closure returns false, the search ends. Otherwise, the search continues.
-    fn get_next_match(&mut self, scan_data: &ScanData) -> Option<Match> {
+    fn get_next_match(&mut self, scan_data: &mut ScanData) -> Option<Match> {
         // This is safe to allow because this is called on every iterator of self.matches, so once
         // it cannot overflow u32 before this condition is true.
         #[allow(clippy::cast_possible_truncation)]
@@ -197,7 +198,11 @@ impl<'a> VariableEvaluation<'a> {
             Some(v) => v,
         };
 
+        let start = Instant::now();
         let mat = self.var.find_next_match_at(scan_data.mem, offset);
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.raw_regexes_eval_duration += start.elapsed();
+        }
         match &mat {
             None => {
                 // No match, nothing to scan anymore

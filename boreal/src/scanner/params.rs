@@ -16,6 +16,9 @@ pub struct ScanParams {
 
     /// Max duration for a scan before it is aborted.
     pub(crate) timeout_duration: Option<Duration>,
+
+    /// Compute statistics on scanning.
+    pub(crate) compute_statistics: bool,
 }
 
 impl Default for ScanParams {
@@ -25,6 +28,7 @@ impl Default for ScanParams {
             match_max_length: 512,
             string_max_nb_matches: 1_000,
             timeout_duration: None,
+            compute_statistics: false,
         }
     }
 }
@@ -81,6 +85,18 @@ impl ScanParams {
     #[must_use]
     pub fn timeout_duration(mut self, timeout_duration: Option<Duration>) -> Self {
         self.timeout_duration = timeout_duration;
+        self
+    }
+
+    /// Compute statistics during scanning.
+    ///
+    /// This option allows retrieve statistics related to the scanning of bytes.
+    /// See `AddRuleStatus::statistics`.
+    ///
+    /// Default value is false.
+    #[must_use]
+    pub fn compute_statistics(mut self, compute_statistics: bool) -> Self {
+        self.compute_statistics = compute_statistics;
         self
     }
 }
