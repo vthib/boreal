@@ -90,6 +90,7 @@ pub enum AcMatchStatus {
 
 pub(crate) fn compile_variable(
     decl: VariableDeclaration,
+    parsed_contents: &str,
     compute_statistics: bool,
 ) -> Result<(Variable, Option<statistics::CompiledString>), CompilationError> {
     let VariableDeclaration {
@@ -174,6 +175,7 @@ pub(crate) fn compile_variable(
 
         Some(statistics::CompiledString {
             name: res.name.clone(),
+            expr: parsed_contents[span.start..span.end].to_owned(),
             literals: res.literals.clone(),
             atoms,
             atoms_quality,
@@ -516,6 +518,7 @@ mod tests {
                     modifiers: VariableModifiers::default(),
                     span: 0..1,
                 },
+                "",
                 false,
             )
             .unwrap()

@@ -295,7 +295,7 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
     for var in &stats.strings {
         let lits: Vec<_> = var.literals.iter().map(|v| ByteString(v)).collect();
         let atoms: Vec<_> = var.atoms.iter().map(|v| ByteString(v)).collect();
-        println!("  ${}", var.name);
+        println!("  {}", var.expr);
         println!("    literals: {:?}", &lits);
         println!("    atoms: {:?}", &atoms);
         println!("    atoms quality: {}", var.atoms_quality);

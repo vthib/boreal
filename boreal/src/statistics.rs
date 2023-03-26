@@ -30,6 +30,9 @@ pub struct CompiledString {
     /// Name of the string in the rule, without the leading `$`.
     pub name: String,
 
+    /// Expression of the string, as it is declared in the rule.
+    pub expr: String,
+
     /// Literals extracted from the string.
     pub literals: Vec<Vec<u8>>,
 
@@ -77,6 +80,7 @@ mod tests {
         });
         test_type_traits(CompiledString {
             name: String::new(),
+            expr: String::new(),
             literals: Vec::new(),
             atoms: Vec::new(),
             atoms_quality: 0,
