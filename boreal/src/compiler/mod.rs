@@ -283,7 +283,7 @@ impl Compiler {
             kind: AddRuleErrorKind::Parse(error),
         })?;
         for component in file.components {
-            self.add_component(component, namespace, current_filepath, status)?;
+            self.add_component(component, namespace, current_filepath, s, status)?;
         }
         Ok(())
     }
@@ -293,6 +293,7 @@ impl Compiler {
         component: parser::YaraFileComponent,
         namespace_name: Option<&str>,
         current_filepath: Option<&Path>,
+        parsed_contents: &str,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
         let namespace = match namespace_name {
@@ -392,11 +393,17 @@ impl Compiler {
                     variables,
                     variables_statistics,
                     warnings,
-                } = rule::compile_rule(*rule, namespace, &self.external_symbols, &self.params)
-                    .map_err(|error| AddRuleError {
-                        path: current_filepath.map(Path::to_path_buf),
-                        kind: AddRuleErrorKind::Compilation(error),
-                    })?;
+                } = rule::compile_rule(
+                    *rule,
+                    namespace,
+                    &self.external_symbols,
+                    &self.params,
+                    parsed_contents,
+                )
+                .map_err(|error| AddRuleError {
+                    path: current_filepath.map(Path::to_path_buf),
+                    kind: AddRuleErrorKind::Compilation(error),
+                })?;
 
                 if self.params.compute_statistics {
                     status.statistics.push(statistics::CompiledRule {

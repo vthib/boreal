@@ -206,6 +206,7 @@ pub(super) fn compile_rule(
     namespace: &mut Namespace,
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
+    parsed_contents: &str,
 ) -> Result<CompiledRule, CompilationError> {
     let (condition, wildcards, vars, warnings) = {
         let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols, params)?;
@@ -248,7 +249,8 @@ pub(super) fn compile_rule(
     let mut variables_statistics = Vec::new();
 
     for var in rule.variables {
-        let (var, stats) = variable::compile_variable(var, params.compute_statistics)?;
+        let (var, stats) =
+            variable::compile_variable(var, parsed_contents, params.compute_statistics)?;
         if let Some(stats) = stats {
             variables_statistics.push(stats);
         }

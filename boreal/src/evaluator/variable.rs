@@ -232,6 +232,7 @@ mod tests {
                     modifiers: VariableModifiers::default(),
                     span: 0..1,
                 },
+                "",
                 false,
             )
             .unwrap()
