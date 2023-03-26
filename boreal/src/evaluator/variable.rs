@@ -225,13 +225,17 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(VariableEvaluation {
-            var: &compile_variable(VariableDeclaration {
-                name: "a".to_owned(),
-                value: VariableDeclarationValue::Bytes(Vec::new()),
-                modifiers: VariableModifiers::default(),
-                span: 0..1,
-            })
-            .unwrap(),
+            var: &compile_variable(
+                VariableDeclaration {
+                    name: "a".to_owned(),
+                    value: VariableDeclarationValue::Bytes(Vec::new()),
+                    modifiers: VariableModifiers::default(),
+                    span: 0..1,
+                },
+                false,
+            )
+            .unwrap()
+            .0,
             params: Params {
                 string_max_nb_matches: 100,
             },
