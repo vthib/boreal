@@ -88,7 +88,10 @@ pub enum AcMatchStatus {
     Unknown,
 }
 
-pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, CompilationError> {
+pub(crate) fn compile_variable(
+    decl: VariableDeclaration,
+    compute_statistics: bool,
+) -> Result<(Variable, Option<statistics::CompiledString>), CompilationError> {
     let VariableDeclaration {
         name,
         value,
@@ -131,12 +134,12 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         }
     };
 
-    match res {
+    let res = match res {
         Ok(CompiledVariable {
             literals,
             matcher_type,
             non_wide_regex,
-        }) => Ok(Variable {
+        }) => Variable {
             name,
             is_private: modifiers.private,
             literals,
@@ -148,13 +151,43 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             },
             matcher_type,
             non_wide_regex,
-        }),
-        Err(error) => Err(CompilationError::VariableCompilation {
-            variable_name: name,
-            span,
-            error,
-        }),
-    }
+        },
+        Err(error) => {
+            return Err(CompilationError::VariableCompilation {
+                variable_name: name,
+                span,
+                error,
+            })
+        }
+    };
+
+    let stats = if compute_statistics {
+        let atoms: Vec<_> = res
+            .literals
+            .iter()
+            .map(|lit| {
+                let (start_offset, end_offset) = pick_atom_in_literal(lit);
+                lit[start_offset..(lit.len() - end_offset)].to_vec()
+            })
+            .collect();
+        let atoms_quality = atoms_rank(&atoms);
+
+        Some(statistics::CompiledString {
+            name: res.name.clone(),
+            literals: res.literals.clone(),
+            atoms,
+            atoms_quality,
+            matching_kind: match res.matcher_type {
+                MatcherType::Literals => MatchingKind::Literals,
+                MatcherType::Atomized { .. } => MatchingKind::Atomized,
+                MatcherType::Raw(_) => MatchingKind::Regex,
+            },
+        })
+    } else {
+        None
+    };
+
+    Ok((res, stats))
 }
 
 struct CompiledVariable {
@@ -335,30 +368,6 @@ impl Variable {
             None => Some(mat),
         }
     }
-
-    pub fn to_statistics(&self) -> statistics::CompiledString {
-        let atoms: Vec<_> = self
-            .literals
-            .iter()
-            .map(|lit| {
-                let (start_offset, end_offset) = pick_atom_in_literal(lit);
-                lit[start_offset..(lit.len() - end_offset)].to_vec()
-            })
-            .collect();
-        let atoms_quality = atoms_rank(&atoms);
-
-        statistics::CompiledString {
-            name: self.name.clone(),
-            literals: self.literals.clone(),
-            atoms,
-            atoms_quality,
-            matching_kind: match self.matcher_type {
-                MatcherType::Literals => MatchingKind::Literals,
-                MatcherType::Atomized { .. } => MatchingKind::Atomized,
-                MatcherType::Raw(_) => MatchingKind::Regex,
-            },
-        }
-    }
 }
 
 /// Check the match respects a possible fullword modifier for the variable.
@@ -499,12 +508,19 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(compile_variable(VariableDeclaration {
-            name: "a".to_owned(),
-            value: VariableDeclarationValue::Bytes(Vec::new()),
-            modifiers: VariableModifiers::default(),
-            span: 0..1,
-        }));
+        test_type_traits_non_clonable(
+            compile_variable(
+                VariableDeclaration {
+                    name: "a".to_owned(),
+                    value: VariableDeclarationValue::Bytes(Vec::new()),
+                    modifiers: VariableModifiers::default(),
+                    span: 0..1,
+                },
+                false,
+            )
+            .unwrap()
+            .0,
+        );
         test_type_traits_non_clonable(MatcherType::Literals);
         test_type_traits(AcMatchStatus::Unknown);
 

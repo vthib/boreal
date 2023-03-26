@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::ops::Range;
-use std::path::PathBuf;
 use std::{collections::HashMap, sync::Arc};
 
 use boreal_parser as parser;
@@ -245,11 +244,16 @@ pub(super) fn compile_rule(
         }
     }
 
-    let variables = rule
-        .variables
-        .into_iter()
-        .map(variable::compile_variable)
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut variables = Vec::with_capacity(rule.variables.len());
+    let mut variables_statistics = Vec::new();
+
+    for var in rule.variables {
+        let (var, stats) = variable::compile_variable(var, params.compute_statistics)?;
+        if let Some(stats) = stats {
+            variables_statistics.push(stats);
+        }
+        variables.push(var);
+    }
 
     Ok(CompiledRule {
         rule: Rule {
@@ -262,6 +266,7 @@ pub(super) fn compile_rule(
             is_private: rule.is_private,
         },
         variables,
+        variables_statistics,
         warnings,
     })
 }
@@ -270,22 +275,8 @@ pub(super) fn compile_rule(
 pub(super) struct CompiledRule {
     pub rule: Rule,
     pub variables: Vec<variable::Variable>,
+    pub variables_statistics: Vec<statistics::CompiledString>,
     pub warnings: Vec<CompilationError>,
-}
-
-impl CompiledRule {
-    pub(super) fn to_statistics(&self, filepath: Option<PathBuf>) -> statistics::CompiledRule {
-        statistics::CompiledRule {
-            filepath,
-            namespace: self.rule.namespace.clone(),
-            name: self.rule.name.clone(),
-            strings: self
-                .variables
-                .iter()
-                .map(variable::Variable::to_statistics)
-                .collect(),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -319,6 +310,7 @@ mod tests {
         test_type_traits_non_clonable(CompiledRule {
             rule: build_rule(),
             variables: Vec::new(),
+            variables_statistics: Vec::new(),
             warnings: Vec::new(),
         });
         test_type_traits_non_clonable(RuleCompilerVariable {

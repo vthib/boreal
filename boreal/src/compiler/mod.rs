@@ -386,24 +386,27 @@ impl Compiler {
                 let rule_name = rule.name.clone();
                 let is_global = rule.is_global;
                 let name_span = rule.name_span.clone();
-                let compiled_rule =
-                    rule::compile_rule(*rule, namespace, &self.external_symbols, &self.params)
-                        .map_err(|error| AddRuleError {
-                            path: current_filepath.map(Path::to_path_buf),
-                            kind: AddRuleErrorKind::Compilation(error),
-                        })?;
-
-                if self.params.compute_statistics {
-                    status
-                        .statistics
-                        .push(compiled_rule.to_statistics(current_filepath.map(ToOwned::to_owned)));
-                }
 
                 let rule::CompiledRule {
                     rule,
                     variables,
+                    variables_statistics,
                     warnings,
-                } = compiled_rule;
+                } = rule::compile_rule(*rule, namespace, &self.external_symbols, &self.params)
+                    .map_err(|error| AddRuleError {
+                        path: current_filepath.map(Path::to_path_buf),
+                        kind: AddRuleErrorKind::Compilation(error),
+                    })?;
+
+                if self.params.compute_statistics {
+                    status.statistics.push(statistics::CompiledRule {
+                        filepath: current_filepath.map(ToOwned::to_owned),
+                        namespace: rule.namespace.clone(),
+                        name: rule.name.clone(),
+                        strings: variables_statistics,
+                    });
+                }
+
                 // Append warnings for this rule to the warnings of all the currently added
                 // string or file.
                 status
