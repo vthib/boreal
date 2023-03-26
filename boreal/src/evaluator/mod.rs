@@ -346,13 +346,13 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 let to = usize::try_from(to).unwrap_or(0);
 
                 let var = get_var!(self, *variable_index);
-                let count = var.count_matches_in(self.mem, from, to);
+                let count = var.count_matches_in(self.scan_data, from, to);
 
                 Ok(Value::Integer(count.into()))
             }
             Expression::Count(variable_index) => {
                 let var = get_var!(self, *variable_index);
-                let count = var.count_matches(self.mem);
+                let count = var.count_matches(self.scan_data);
 
                 Ok(Value::Integer(count.into()))
             }
@@ -365,7 +365,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let var = get_var!(self, *variable_index);
-                        var.find_match_occurence(self.mem, v - 1)
+                        var.find_match_occurence(self.scan_data, v - 1)
                             .map(|mat| Value::Integer(mat.start as i64))
                             .ok_or(PoisonKind::Undefined)
                     }
@@ -381,7 +381,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
                         let var = get_var!(self, *variable_index);
-                        var.find_match_occurence(self.mem, v - 1)
+                        var.find_match_occurence(self.scan_data, v - 1)
                             .map(|mat| Value::Integer(mat.len() as i64))
                             .ok_or(PoisonKind::Undefined)
                     }
@@ -611,7 +611,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 // For this expression, we can use the variables set to retrieve the truth value,
                 // no need to rescan.
                 let var = get_var!(self, *variable_index);
-                Ok(Value::Boolean(var.find(self.mem)))
+                Ok(Value::Boolean(var.find(self.scan_data)))
             }
 
             Expression::VariableAt {
@@ -623,7 +623,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 match usize::try_from(offset) {
                     Ok(offset) => {
                         let var = get_var!(self, *variable_index);
-                        Ok(Value::Boolean(var.find_at(self.mem, offset)))
+                        Ok(Value::Boolean(var.find_at(self.scan_data, offset)))
                     }
                     Err(_) => Ok(Value::Boolean(false)),
                 }
@@ -641,7 +641,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                     (Ok(from), Ok(to)) if from <= to => {
                         let var = get_var!(self, *variable_index);
 
-                        Ok(Value::Boolean(var.find_in(self.mem, from, to)))
+                        Ok(Value::Boolean(var.find_in(self.scan_data, from, to)))
                     }
                     _ => Ok(Value::Boolean(false)),
                 }

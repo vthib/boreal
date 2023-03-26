@@ -315,7 +315,7 @@ impl Inner {
                 matched_rules.push(build_matched_rule(
                     rule,
                     var_evals,
-                    mem,
+                    &scan_data,
                     params.compute_full_matches,
                     params.match_max_length,
                 ));
@@ -354,7 +354,7 @@ impl Inner {
                         matched_rules.push(build_matched_rule(
                             rule,
                             Vec::new(),
-                            scan_data.mem,
+                            scan_data,
                             false,
                             params.match_max_length,
                         ));
@@ -379,7 +379,7 @@ impl Inner {
                 matched_rules.push(build_matched_rule(
                     rule,
                     Vec::new(),
-                    scan_data.mem,
+                    scan_data,
                     false,
                     params.match_max_length,
                 ));
@@ -405,13 +405,13 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     mut var_evals: Vec<VariableEvaluation<'a>>,
-    mem: &[u8],
+    scan_data: &ScanData,
     compute_full_matches: bool,
     match_max_length: usize,
 ) -> MatchedRule<'a> {
     if compute_full_matches {
         for var_eval in &mut var_evals {
-            var_eval.compute_all_matches(mem);
+            var_eval.compute_all_matches(scan_data);
         }
     }
 
@@ -433,7 +433,7 @@ fn build_matched_rule<'a>(
                         StringMatch {
                             offset: mat.start,
                             length: mat.end - mat.start,
-                            data: mem[mat.start..]
+                            data: scan_data.mem[mat.start..]
                                 .iter()
                                 .take(capped_length)
                                 .copied()
