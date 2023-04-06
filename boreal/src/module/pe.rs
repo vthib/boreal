@@ -1605,7 +1605,7 @@ fn add_exports(
                             // -1 is set by libyara to indicate an invalid offset.
                             None => match va_to_file_offset(mem, sections, address) {
                                 Some(v) => v.into(),
-                                None => Value::Integer(-1),
+                                None => Value::Undefined,
                             },
                         },
                     ),
