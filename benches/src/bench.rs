@@ -6,21 +6,21 @@ use walkdir::WalkDir;
 
 const RULES_SETS: [(&str, &str); 7] = [
     // 100 rules, 1998 variables
-    ("panopticon", "benches/assets/panopticon/baseline_100.yar"),
+    ("panopticon", "assets/panopticon/baseline_100.yar"),
     // 4297 rules, 23630 vars
-    ("signature-base", "benches/assets/signature-base/yara"),
+    ("signature-base", "assets/signature-base/yara"),
     // 147 rules, 644 variables
-    ("orion", "benches/assets/orion"),
+    ("orion", "assets/orion"),
     // 632 rules, 1536 variables
-    ("reversinglabs", "benches/assets/reversinglabs"),
+    ("reversinglabs", "assets/reversinglabs"),
     // 167 rules, 1408 variables
-    ("atr", "benches/assets/atr"),
+    ("atr", "assets/atr"),
     // 16431 rules, 13155 variables
-    ("icewater", "benches/assets/icewater"),
+    ("icewater", "assets/icewater"),
     // 121 rules, 5390 variables
-    ("c0ffee", "benches/assets/c0ffee/rules.yar"),
+    ("c0ffee", "assets/c0ffee/rules.yar"),
     // Extremely slow
-    // ("benches/assets/yara-rules/index.yar", 12771),
+    // ("assets/yara-rules/index.yar", 12771),
 ];
 
 /// Bench parsing + compilation duration
@@ -57,7 +57,7 @@ fn bench_compilation(c: &mut Criterion) {
 fn bench_scan_pes(c: &mut Criterion) {
     for (name, rules_path) in &RULES_SETS {
         // Test files in assets/pes
-        for pe_path in glob::glob("benches/assets/pes/*").unwrap() {
+        for pe_path in glob::glob("assets/pes/*").unwrap() {
             let pe_path = pe_path.unwrap();
             let mem = std::fs::read(&pe_path).expect("can read asset file");
 

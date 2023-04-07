@@ -77,13 +77,7 @@ use once_cell as _;
 #[cfg(test)]
 use tempfile as _;
 #[cfg(test)]
-use walkdir as _;
-#[cfg(test)]
 use yara as _;
-
-// Used in benches
-#[cfg(feature = "bench")]
-use criterion as _;
 
 pub mod compiler;
 pub use compiler::Compiler;
