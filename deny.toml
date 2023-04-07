@@ -182,11 +182,8 @@ skip = [
 # dependencies starting at the specified crate, up to a certain depth, which is
 # by default infinite
 skip-tree = [
-    # Because of criterion...
-    { name = "clap", version = "3.2" },
-    # Because of tempfile depending on 0.42, but also depending on rustix
-    # which uses 0.45.
-    { name = "windows-sys", version = "0.42" },
+    # Because of rustix depending on both 0.45 and 0.48...
+    { name = "windows-sys", version = "0.45" },
 ]
 
 # This section is considered when running `cargo deny check sources`.
