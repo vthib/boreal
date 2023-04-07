@@ -1,7 +1,7 @@
 use std::ops::Range;
 
+use boreal_parser::VariableModifiers;
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
-use boreal_parser::{VariableFlags, VariableModifiers};
 
 use crate::regex::Regex;
 
@@ -30,7 +30,7 @@ pub struct Variable {
     pub literals: Vec<Vec<u8>>,
 
     /// Flags related to variable modifiers.
-    flags: VariableFlags,
+    flags: Flags,
 
     /// Type of matching for the variable.
     matcher_type: MatcherType,
@@ -42,6 +42,16 @@ pub struct Variable {
     /// In this case, the regex expression cannot be "widened", and this regex is used to post
     /// check matches.
     non_wide_regex: Option<Regex>,
+}
+
+#[derive(Copy, Clone, Debug)]
+// Completely useless lint
+#[allow(clippy::struct_excessive_bools)]
+struct Flags {
+    fullword: bool,
+    ascii: bool,
+    wide: bool,
+    nocase: bool,
 }
 
 #[derive(Debug)]
@@ -85,8 +95,8 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
         span,
     } = decl;
 
-    if !modifiers.flags.contains(VariableFlags::WIDE) {
-        modifiers.flags.insert(VariableFlags::ASCII);
+    if !modifiers.wide {
+        modifiers.ascii = true;
     }
 
     let res = match value {
@@ -98,14 +108,14 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             span: _,
         }) => {
             if case_insensitive {
-                modifiers.flags.insert(VariableFlags::NOCASE);
+                modifiers.nocase = true;
             }
-            regex::compile_regex(&ast, case_insensitive, dot_all, modifiers.flags)
+            regex::compile_regex(&ast, case_insensitive, dot_all, &modifiers)
         }
         VariableDeclarationValue::HexString(hex_string) => {
             // Fullword and wide is not compatible with hex strings
-            modifiers.flags.remove(VariableFlags::FULLWORD);
-            modifiers.flags.remove(VariableFlags::WIDE);
+            modifiers.fullword = false;
+            modifiers.wide = false;
 
             if hex_string::can_use_only_literals(&hex_string) {
                 Ok(CompiledVariable {
@@ -115,7 +125,7 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
                 })
             } else {
                 let ast = hex_string::hex_string_to_ast(hex_string);
-                regex::compile_regex(&ast, false, true, modifiers.flags)
+                regex::compile_regex(&ast, false, true, &modifiers)
             }
         }
     };
@@ -127,9 +137,14 @@ pub(crate) fn compile_variable(decl: VariableDeclaration) -> Result<Variable, Co
             non_wide_regex,
         }) => Ok(Variable {
             name,
-            is_private: modifiers.flags.contains(VariableFlags::PRIVATE),
+            is_private: modifiers.private,
             literals,
-            flags: modifiers.flags,
+            flags: Flags {
+                fullword: modifiers.fullword,
+                ascii: modifiers.ascii,
+                wide: modifiers.wide,
+                nocase: modifiers.nocase,
+            },
             matcher_type,
             non_wide_regex,
         }),
@@ -150,8 +165,8 @@ struct CompiledVariable {
 fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVariable {
     let mut literals = Vec::with_capacity(2);
 
-    if modifiers.flags.contains(VariableFlags::WIDE) {
-        if modifiers.flags.contains(VariableFlags::ASCII) {
+    if modifiers.wide {
+        if modifiers.ascii {
             literals.push(string_to_wide(&value));
             literals.push(value);
         } else {
@@ -161,9 +176,9 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVaria
         literals.push(value);
     }
 
-    if modifiers.flags.contains(VariableFlags::XOR) {
+    if let Some(xor_range) = modifiers.xor {
         // For each literal, for each byte in the xor range, build a new literal
-        let xor_range = modifiers.xor_range.0..=modifiers.xor_range.1;
+        let xor_range = xor_range.0..=xor_range.1;
         let xor_range_len = xor_range.len(); // modifiers.xor_range.1.saturating_sub(modifiers.xor_range.0) + 1;
         let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
         for lit in literals {
@@ -178,27 +193,25 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVaria
         };
     }
 
-    if modifiers.flags.contains(VariableFlags::BASE64)
-        || modifiers.flags.contains(VariableFlags::BASE64WIDE)
-    {
+    if let Some(base64) = &modifiers.base64 {
         let mut old_literals = Vec::with_capacity(literals.len() * 3);
         std::mem::swap(&mut old_literals, &mut literals);
 
-        if modifiers.flags.contains(VariableFlags::BASE64) {
+        if base64.ascii {
             for lit in &old_literals {
                 for offset in 0..=2 {
-                    if let Some(lit) = encode_base64(lit, &modifiers.base64_alphabet, offset) {
-                        if modifiers.flags.contains(VariableFlags::BASE64WIDE) {
+                    if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
+                        if base64.wide {
                             literals.push(string_to_wide(&lit));
                         }
                         literals.push(lit);
                     }
                 }
             }
-        } else if modifiers.flags.contains(VariableFlags::BASE64WIDE) {
+        } else {
             for lit in &old_literals {
                 for offset in 0..=2 {
-                    if let Some(lit) = encode_base64(lit, &modifiers.base64_alphabet, offset) {
+                    if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
                         literals.push(string_to_wide(&lit));
                     }
                 }
@@ -222,7 +235,7 @@ impl Variable {
     pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
         let literal = &self.literals[literal_index];
 
-        if self.flags.contains(VariableFlags::NOCASE) {
+        if self.flags.nocase {
             if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
                 return false;
             }
@@ -312,7 +325,7 @@ impl Variable {
     }
 
     fn validate_and_update_match(&self, mem: &[u8], mat: Range<usize>) -> Option<Range<usize>> {
-        if self.flags.contains(VariableFlags::FULLWORD) && !check_fullword(mem, &mat, self.flags) {
+        if self.flags.fullword && !check_fullword(mem, &mat, self.flags) {
             return None;
         }
 
@@ -324,13 +337,13 @@ impl Variable {
 }
 
 /// Check the match respects a possible fullword modifier for the variable.
-fn check_fullword(mem: &[u8], mat: &Range<usize>, flags: VariableFlags) -> bool {
+fn check_fullword(mem: &[u8], mat: &Range<usize>, flags: Flags) -> bool {
     // TODO: We need to know if the match is done on an ascii or wide string to properly check for
     // fullword constraints. This is done in a very ugly way, by going through the match.
     // A better way would be to know which alternation in the match was found.
     let mut match_is_wide = false;
 
-    if flags.contains(VariableFlags::WIDE) {
+    if flags.wide {
         match_is_wide = is_match_wide(mat, mem);
         if match_is_wide {
             if mat.start > 1
@@ -347,7 +360,7 @@ fn check_fullword(mem: &[u8], mat: &Range<usize>, flags: VariableFlags) -> bool 
             }
         }
     }
-    if flags.contains(VariableFlags::ASCII) && !match_is_wide {
+    if flags.ascii && !match_is_wide {
         if mat.start > 0 && mem[mat.start - 1].is_ascii_alphanumeric() {
             return false;
         }

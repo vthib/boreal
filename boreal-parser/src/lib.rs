@@ -58,7 +58,8 @@ pub mod regex;
 pub use regex::Regex;
 mod rule;
 pub use rule::{
-    Metadata, Rule, VariableDeclaration, VariableDeclarationValue, VariableFlags, VariableModifiers,
+    Metadata, Rule, VariableDeclaration, VariableDeclarationValue, VariableModifierBase64,
+    VariableModifiers,
 };
 mod string;
 mod types;

@@ -147,7 +147,6 @@ dependencies = [
 name = "boreal-parser"
 version = "0.2.0"
 dependencies = [
- "bitflags",
  "codespan-reporting",
  "nom",
 ]

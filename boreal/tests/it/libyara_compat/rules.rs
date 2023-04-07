@@ -1070,7 +1070,7 @@ fn test_strings() {
       condition:
         $a
     }",
-        "mem:3:23: error: string modifier XOR appears multiple times",
+        "mem:3:23: error: string modifier xor appears multiple times",
     );
 
     // We should have no matches here because we are not generating the wide

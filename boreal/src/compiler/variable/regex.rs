@@ -1,5 +1,5 @@
 use boreal_parser::regex::{AssertionKind, Node};
-use boreal_parser::VariableFlags;
+use boreal_parser::VariableModifiers;
 
 use crate::regex::{regex_ast_to_string, visit, Regex, VisitAction, Visitor};
 
@@ -16,9 +16,9 @@ pub(super) fn compile_regex(
     ast: &Node,
     mut case_insensitive: bool,
     dot_all: bool,
-    flags: VariableFlags,
+    modifiers: &VariableModifiers,
 ) -> Result<CompiledVariable, VariableCompilationError> {
-    if flags.contains(VariableFlags::NOCASE) {
+    if modifiers.nocase {
         case_insensitive = true;
     }
 
@@ -36,7 +36,7 @@ pub(super) fn compile_regex(
     let matcher_type = if use_ac {
         let pre = match pre_ast {
             Some(ast) => {
-                let (pre, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags);
+                let (pre, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, modifiers);
                 has_wide_word_boundaries |= has_ww_boundaries;
                 Some(pre)
             }
@@ -44,26 +44,26 @@ pub(super) fn compile_regex(
         };
         let post = match post_ast {
             Some(ast) => {
-                let (post, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, flags);
+                let (post, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, modifiers);
                 has_wide_word_boundaries |= has_ww_boundaries;
                 Some(post)
             }
             None => None,
         };
-        apply_ascii_wide_flags_on_literals(&mut literals, flags);
+        apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
 
         MatcherType::Atomized {
             left_validator: compile_validator(pre, case_insensitive, dot_all)?,
             right_validator: compile_validator(post, case_insensitive, dot_all)?,
         }
     } else {
-        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, flags);
+        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, modifiers);
         has_wide_word_boundaries |= has_ww_boundaries;
 
         if literals.iter().any(|lit| lit.len() < 2) {
             literals.clear();
         } else {
-            apply_ascii_wide_flags_on_literals(&mut literals, flags);
+            apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
         }
 
         MatcherType::Raw(compile_regex_expr(&expr, case_insensitive, dot_all)?)
@@ -128,12 +128,12 @@ fn compile_validator(
     }
 }
 
-fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, flags: VariableFlags) {
-    if !flags.contains(VariableFlags::WIDE) {
+fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, modifiers: &VariableModifiers) {
+    if !modifiers.wide {
         return;
     }
 
-    if flags.contains(VariableFlags::ASCII) {
+    if modifiers.ascii {
         let wide_literals: Vec<_> = literals.iter().map(|v| widen_literal(v)).collect();
         literals.extend(wide_literals);
     } else {
@@ -153,11 +153,11 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 }
 
 /// Convert the AST of a regex variable to a string, taking into account variable modifiers.
-fn convert_ast_to_string_with_flags(ast: &Node, flags: VariableFlags) -> (String, bool) {
-    if flags.contains(VariableFlags::WIDE) {
+fn convert_ast_to_string_with_flags(ast: &Node, modifiers: &VariableModifiers) -> (String, bool) {
+    if modifiers.wide {
         let (wide_ast, has_wide_word_boundaries) = visit(ast, AstWidener::new());
 
-        let expr = if flags.contains(VariableFlags::ASCII) {
+        let expr = if modifiers.ascii {
             format!(
                 "{}|{}",
                 regex_ast_to_string(ast),

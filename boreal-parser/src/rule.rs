@@ -1,7 +1,6 @@
 //! Parse yara rules.
 use std::ops::Range;
 
-use bitflags::bitflags;
 use nom::{
     branch::alt,
     character::complete::char,
@@ -81,29 +80,6 @@ pub struct Metadata {
     pub value: MetadataValue,
 }
 
-bitflags! {
-    /// Modifier flags, see [`VariableModifiers`].
-    #[derive(Default)]
-    pub struct VariableFlags: u32 {
-        /// Wide modifier
-        const WIDE = 0b0000_0001;
-        /// Ascii modifier
-        const ASCII = 0b000_0010;
-        /// Nocase modifier
-        const NOCASE = 0b0000_0100;
-        /// Fullword modifier
-        const FULLWORD = 0b0000_1000;
-        /// Private modifier
-        const PRIVATE = 0b0001_0000;
-        /// Xor modifier, related to [`VariableModifiers::xor_range`]
-        const XOR = 0b0010_0000;
-        /// base64 modifier, related to [`VariableModifiers::base64_alphabet`]
-        const BASE64 = 0b0100_0000;
-        /// base64wide modifier, related to [`VariableModifiers::base64_alphabet`]
-        const BASE64WIDE = 0b1000_0000;
-    }
-}
-
 /// Value for a string associated with a rule.
 #[derive(Clone, Debug, PartialEq)]
 pub enum VariableDeclarationValue {
@@ -117,18 +93,45 @@ pub enum VariableDeclarationValue {
 
 /// Modifiers applicable on a string.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
+// Completely useless lint
+#[allow(clippy::struct_excessive_bools)]
 pub struct VariableModifiers {
-    /// Bitflags of possibles flags modifying the string.
-    pub flags: VariableFlags,
-    /// Xor range.
-    ///
-    /// This is only applicable if `flags` contains [`VariableFlags::XOR`].
-    pub xor_range: (u8, u8),
-    /// Base64 alphabet.
+    /// Wide modifier.
+    pub wide: bool,
+
+    /// Ascii modifier.
+    pub ascii: bool,
+
+    /// Nocase modifier.
+    pub nocase: bool,
+
+    /// Fullword modifier.
+    pub fullword: bool,
+
+    /// Private modifier.
+    pub private: bool,
+
+    /// Xor modifier, providing the range.
+    pub xor: Option<(u8, u8)>,
+
+    /// Base64 modifier.alphabet.
     ///
     /// This is only applicable if `flags` contains [`VariableFlags::BASE64`]
     /// or [`VariableFlags::BASE64WIDE`].
-    pub base64_alphabet: Option<[u8; 64]>,
+    pub base64: Option<VariableModifierBase64>,
+}
+
+/// Base64 variable modifier.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VariableModifierBase64 {
+    /// Wide version.
+    pub wide: bool,
+
+    /// Ascii verison.
+    pub ascii: bool,
+
+    /// Alphabet to use to deserialize, if provided.
+    pub alphabet: Option<[u8; 64]>,
 }
 
 /// String declared in a rule.
@@ -304,75 +307,100 @@ fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
 /// A single parsed modifier
 #[derive(Clone, Debug, PartialEq)]
 enum Modifier {
-    // Must not use this enum value for the flags XOR and BASE64(WIDE).
-    // Instead, use the other enum values to ensure the associated data
-    // is properly set.
-    Flag(VariableFlags),
+    Wide,
+    Ascii,
+    Nocase,
+    Fullword,
+    Private,
     Xor(u8, u8),
-    Base64(Option<[u8; 64]>),
-    Base64Wide(Option<[u8; 64]>),
+    Base64 {
+        wide: bool,
+        alphabet: Option<[u8; 64]>,
+    },
+}
+
+fn modifiers_duplicated(modifier_name: &str, start: Position, input: Input) -> nom::Err<Error> {
+    nom::Err::Failure(Error::new(
+        input.get_span_from(start),
+        ErrorKind::ModifiersDuplicated {
+            modifier_name: modifier_name.to_string(),
+        },
+    ))
 }
 
 fn accumulate_modifiers<F>(parser: F, mut input: Input) -> ParseResult<VariableModifiers>
 where
     F: Fn(Input) -> ParseResult<Modifier>,
 {
-    let add_flag =
-        |modifiers: &mut VariableModifiers, start: Position, input: Input, flag: VariableFlags| {
-            if modifiers.flags.contains(flag) {
-                return Err(nom::Err::Failure(Error::new(
-                    input.get_span_from(start),
-                    ErrorKind::ModifiersDuplicated {
-                        modifier_name: format!("{flag:?}"),
-                    },
-                )));
-            }
-            modifiers.flags |= flag;
-            Ok(())
-        };
-
     let mut modifiers = VariableModifiers::default();
     let start = input.pos();
     let mut parser = opt(parser);
 
     while let (i, Some(modifier)) = parser(input)? {
         match modifier {
-            Modifier::Flag(flag) => {
-                add_flag(&mut modifiers, input.pos(), i, flag)?;
+            Modifier::Wide => {
+                if modifiers.wide {
+                    return Err(modifiers_duplicated("wide", input.pos(), i));
+                }
+                modifiers.wide = true;
+            }
+            Modifier::Ascii => {
+                if modifiers.ascii {
+                    return Err(modifiers_duplicated("ascii", input.pos(), i));
+                }
+                modifiers.ascii = true;
+            }
+            Modifier::Nocase => {
+                if modifiers.nocase {
+                    return Err(modifiers_duplicated("nocase", input.pos(), i));
+                }
+                modifiers.nocase = true;
+            }
+            Modifier::Fullword => {
+                if modifiers.fullword {
+                    return Err(modifiers_duplicated("fullword", input.pos(), i));
+                }
+                modifiers.fullword = true;
+            }
+            Modifier::Private => {
+                if modifiers.private {
+                    return Err(modifiers_duplicated("private", input.pos(), i));
+                }
+                modifiers.private = true;
             }
             Modifier::Xor(from, to) => {
-                add_flag(&mut modifiers, input.pos(), i, VariableFlags::XOR)?;
-                modifiers.xor_range = (from, to);
-            }
-            Modifier::Base64(alphabet) => {
-                if modifiers.flags.contains(VariableFlags::BASE64WIDE)
-                    && modifiers.base64_alphabet != alphabet
-                {
-                    return Err(nom::Err::Failure(Error::new(
-                        i.get_span_from(input.pos()),
-                        ErrorKind::Base64AlphabetIncompatible,
-                    )));
+                if modifiers.xor.is_some() {
+                    return Err(modifiers_duplicated("xor", input.pos(), i));
                 }
-                add_flag(&mut modifiers, input.pos(), i, VariableFlags::BASE64)?;
-                modifiers.base64_alphabet = alphabet;
+                modifiers.xor = Some((from, to));
             }
-            Modifier::Base64Wide(alphabet) => {
-                if modifiers.flags.contains(VariableFlags::BASE64)
-                    && modifiers.base64_alphabet != alphabet
-                {
-                    return Err(nom::Err::Failure(Error::new(
-                        i.get_span_from(input.pos()),
-                        ErrorKind::Base64AlphabetIncompatible,
-                    )));
+            Modifier::Base64 { wide, alphabet } => match &mut modifiers.base64 {
+                Some(base64) => {
+                    if wide && std::mem::replace(&mut base64.wide, true) {
+                        return Err(modifiers_duplicated("base64wide", input.pos(), i));
+                    } else if !wide && std::mem::replace(&mut base64.ascii, true) {
+                        return Err(modifiers_duplicated("base64", input.pos(), i));
+                    } else if alphabet != base64.alphabet {
+                        return Err(nom::Err::Failure(Error::new(
+                            i.get_span_from(input.pos()),
+                            ErrorKind::Base64AlphabetIncompatible,
+                        )));
+                    }
+                    base64.alphabet = alphabet;
                 }
-                add_flag(&mut modifiers, input.pos(), i, VariableFlags::BASE64WIDE)?;
-                modifiers.base64_alphabet = alphabet;
-            }
+                None => {
+                    modifiers.base64 = Some(VariableModifierBase64 {
+                        ascii: !wide,
+                        wide,
+                        alphabet,
+                    });
+                }
+            },
         }
         input = i;
     }
 
-    if let Err(kind) = validate_flags(modifiers.flags) {
+    if let Err(kind) = validate_modifiers(&modifiers) {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
             kind,
@@ -382,52 +410,34 @@ where
     Ok((input, modifiers))
 }
 
-fn validate_flags(flags: VariableFlags) -> Result<(), ErrorKind> {
-    if flags.contains(VariableFlags::XOR) {
-        if flags.contains(VariableFlags::NOCASE) {
+fn validate_modifiers(modifiers: &VariableModifiers) -> Result<(), ErrorKind> {
+    if modifiers.xor.is_some() {
+        if modifiers.nocase {
             return Err(ErrorKind::ModifiersIncompatible {
                 first_modifier_name: "xor".to_owned(),
                 second_modifier_name: "nocase".to_owned(),
             });
         }
-        if flags.contains(VariableFlags::BASE64) {
+        if let Some(base64) = &modifiers.base64 {
             return Err(ErrorKind::ModifiersIncompatible {
-                first_modifier_name: "base64".to_owned(),
-                second_modifier_name: "xor".to_owned(),
-            });
-        }
-        if flags.contains(VariableFlags::BASE64WIDE) {
-            return Err(ErrorKind::ModifiersIncompatible {
-                first_modifier_name: "base64wide".to_owned(),
+                first_modifier_name: if base64.ascii { "base64" } else { "base64wide" }.to_owned(),
                 second_modifier_name: "xor".to_owned(),
             });
         }
     }
-    if flags.contains(VariableFlags::NOCASE) {
-        if flags.contains(VariableFlags::BASE64) {
+    if modifiers.nocase {
+        if let Some(base64) = &modifiers.base64 {
             return Err(ErrorKind::ModifiersIncompatible {
-                first_modifier_name: "base64".to_owned(),
-                second_modifier_name: "nocase".to_owned(),
-            });
-        }
-        if flags.contains(VariableFlags::BASE64WIDE) {
-            return Err(ErrorKind::ModifiersIncompatible {
-                first_modifier_name: "base64wide".to_owned(),
+                first_modifier_name: if base64.ascii { "base64" } else { "base64wide" }.to_owned(),
                 second_modifier_name: "nocase".to_owned(),
             });
         }
     }
 
-    if flags.contains(VariableFlags::FULLWORD) {
-        if flags.contains(VariableFlags::BASE64) {
+    if modifiers.fullword {
+        if let Some(base64) = &modifiers.base64 {
             return Err(ErrorKind::ModifiersIncompatible {
-                first_modifier_name: "base64".to_owned(),
-                second_modifier_name: "fullword".to_owned(),
-            });
-        }
-        if flags.contains(VariableFlags::BASE64WIDE) {
-            return Err(ErrorKind::ModifiersIncompatible {
-                first_modifier_name: "base64wide".to_owned(),
+                first_modifier_name: if base64.ascii { "base64" } else { "base64wide" }.to_owned(),
                 second_modifier_name: "fullword".to_owned(),
             });
         }
@@ -450,19 +460,11 @@ fn hex_string_modifiers(input: Input) -> ParseResult<VariableModifiers> {
 
 fn string_modifier(input: Input) -> ParseResult<Modifier> {
     alt((
-        map(rtrim(ttag("wide")), |_| Modifier::Flag(VariableFlags::WIDE)),
-        map(rtrim(ttag("ascii")), |_| {
-            Modifier::Flag(VariableFlags::ASCII)
-        }),
-        map(rtrim(ttag("nocase")), |_| {
-            Modifier::Flag(VariableFlags::NOCASE)
-        }),
-        map(rtrim(ttag("fullword")), |_| {
-            Modifier::Flag(VariableFlags::FULLWORD)
-        }),
-        map(rtrim(ttag("private")), |_| {
-            Modifier::Flag(VariableFlags::PRIVATE)
-        }),
+        map(rtrim(ttag("wide")), |_| Modifier::Wide),
+        map(rtrim(ttag("ascii")), |_| Modifier::Ascii),
+        map(rtrim(ttag("nocase")), |_| Modifier::Nocase),
+        map(rtrim(ttag("fullword")), |_| Modifier::Fullword),
+        map(rtrim(ttag("private")), |_| Modifier::Private),
         xor_modifier,
         base64_modifier,
     ))(input)
@@ -470,20 +472,16 @@ fn string_modifier(input: Input) -> ParseResult<Modifier> {
 
 fn regex_modifier(input: Input) -> ParseResult<Modifier> {
     rtrim(alt((
-        map(ttag("wide"), |_| Modifier::Flag(VariableFlags::WIDE)),
-        map(ttag("ascii"), |_| Modifier::Flag(VariableFlags::ASCII)),
-        map(ttag("nocase"), |_| Modifier::Flag(VariableFlags::NOCASE)),
-        map(ttag("fullword"), |_| {
-            Modifier::Flag(VariableFlags::FULLWORD)
-        }),
-        map(ttag("private"), |_| Modifier::Flag(VariableFlags::PRIVATE)),
+        map(ttag("wide"), |_| Modifier::Wide),
+        map(ttag("ascii"), |_| Modifier::Ascii),
+        map(ttag("nocase"), |_| Modifier::Nocase),
+        map(ttag("fullword"), |_| Modifier::Fullword),
+        map(ttag("private"), |_| Modifier::Private),
     )))(input)
 }
 
 fn hex_string_modifier(input: Input) -> ParseResult<Modifier> {
-    map(rtrim(ttag("private")), |_| {
-        Modifier::Flag(VariableFlags::PRIVATE)
-    })(input)
+    map(rtrim(ttag("private")), |_| Modifier::Private)(input)
 }
 
 /// Parse a XOR modifier, ie:
@@ -522,7 +520,7 @@ fn xor_modifier(input: Input) -> ParseResult<Modifier> {
 /// - `'base64(wide)'`
 /// - `'base64(wide)' '(' string ')'`
 fn base64_modifier(input: Input) -> ParseResult<Modifier> {
-    let (input, is_wide) = rtrim(alt((
+    let (input, wide) = rtrim(alt((
         map(ttag("base64"), |_| false),
         map(ttag("base64wide"), |_| true),
     )))(input)?;
@@ -547,14 +545,7 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
         input = input2;
     }
 
-    Ok((
-        input,
-        if is_wide {
-            Modifier::Base64Wide(alphabet)
-        } else {
-            Modifier::Base64(alphabet)
-        },
-    ))
+    Ok((input, Modifier::Base64 { wide, alphabet }))
 }
 
 fn number_to_u8(value: i64) -> Result<u8, ErrorKind> {
@@ -682,12 +673,13 @@ mod tests {
             "private wide ascii xor Xor",
             "Xor",
             VariableModifiers {
-                flags: VariableFlags::PRIVATE
-                    | VariableFlags::WIDE
-                    | VariableFlags::ASCII
-                    | VariableFlags::XOR,
-                xor_range: (0, 255),
-                base64_alphabet: None,
+                wide: true,
+                ascii: true,
+                nocase: false,
+                fullword: false,
+                private: true,
+                xor: Some((0, 255)),
+                base64: None,
             },
         );
         parse(
@@ -695,9 +687,13 @@ mod tests {
             "nocase fullword",
             "",
             VariableModifiers {
-                flags: VariableFlags::NOCASE | VariableFlags::FULLWORD,
-                xor_range: (0, 0),
-                base64_alphabet: None,
+                wide: false,
+                ascii: false,
+                nocase: true,
+                fullword: true,
+                private: false,
+                xor: None,
+                base64: None,
             },
         );
         parse(
@@ -705,9 +701,17 @@ mod tests {
             "base64wide ascii",
             "",
             VariableModifiers {
-                flags: VariableFlags::BASE64WIDE | VariableFlags::ASCII,
-                xor_range: (0, 0),
-                base64_alphabet: None,
+                wide: false,
+                ascii: true,
+                nocase: false,
+                fullword: false,
+                private: false,
+                xor: None,
+                base64: Some(VariableModifierBase64 {
+                    wide: true,
+                    ascii: false,
+                    alphabet: None,
+                }),
             },
         );
 
@@ -716,9 +720,13 @@ mod tests {
             "xor ( 15 )",
             "",
             VariableModifiers {
-                flags: VariableFlags::XOR,
-                xor_range: (15, 15),
-                base64_alphabet: None,
+                wide: false,
+                ascii: false,
+                nocase: false,
+                fullword: false,
+                private: false,
+                xor: Some((15, 15)),
+                base64: None,
             },
         );
         parse(
@@ -726,9 +734,13 @@ mod tests {
             "xor (50 - 120) private",
             "",
             VariableModifiers {
-                flags: VariableFlags::XOR | VariableFlags::PRIVATE,
-                xor_range: (50, 120),
-                base64_alphabet: None,
+                wide: false,
+                ascii: false,
+                nocase: false,
+                fullword: false,
+                private: true,
+                xor: Some((50, 120)),
+                base64: None,
             },
         );
 
@@ -739,9 +751,17 @@ mod tests {
             &format!("base64( \"{alphabet}\" )"),
             "",
             VariableModifiers {
-                flags: VariableFlags::BASE64,
-                xor_range: (0, 0),
-                base64_alphabet: Some(alphabet_array),
+                wide: false,
+                ascii: false,
+                nocase: false,
+                fullword: false,
+                private: false,
+                xor: None,
+                base64: Some(VariableModifierBase64 {
+                    wide: false,
+                    ascii: true,
+                    alphabet: Some(alphabet_array),
+                }),
             },
         );
         parse(
@@ -749,9 +769,17 @@ mod tests {
             &format!("base64wide ( \"{alphabet}\" ) private"),
             "",
             VariableModifiers {
-                flags: VariableFlags::BASE64WIDE | VariableFlags::PRIVATE,
-                xor_range: (0, 0),
-                base64_alphabet: Some(alphabet_array),
+                wide: false,
+                ascii: false,
+                nocase: false,
+                fullword: false,
+                private: true,
+                xor: None,
+                base64: Some(VariableModifierBase64 {
+                    wide: true,
+                    ascii: false,
+                    alphabet: Some(alphabet_array),
+                }),
             },
         );
         parse(
@@ -759,9 +787,17 @@ mod tests {
             &format!("base64wide ( \"{alphabet}\" ) base64 (\"{alphabet}\")"),
             "",
             VariableModifiers {
-                flags: VariableFlags::BASE64WIDE | VariableFlags::BASE64,
-                xor_range: (0, 0),
-                base64_alphabet: Some(alphabet_array),
+                wide: false,
+                ascii: false,
+                nocase: false,
+                fullword: false,
+                private: false,
+                xor: None,
+                base64: Some(VariableModifierBase64 {
+                    wide: true,
+                    ascii: true,
+                    alphabet: Some(alphabet_array),
+                }),
             },
         );
 
@@ -770,12 +806,13 @@ mod tests {
             "private wide ascii nocase fullword base64",
             "base64",
             VariableModifiers {
-                flags: VariableFlags::PRIVATE
-                    | VariableFlags::WIDE
-                    | VariableFlags::ASCII
-                    | VariableFlags::NOCASE
-                    | VariableFlags::FULLWORD,
-                ..VariableModifiers::default()
+                wide: true,
+                ascii: true,
+                nocase: true,
+                fullword: true,
+                private: true,
+                xor: None,
+                base64: None,
             },
         );
 
@@ -784,8 +821,13 @@ mod tests {
             "private wide",
             "wide",
             VariableModifiers {
-                flags: VariableFlags::PRIVATE,
-                ..VariableModifiers::default()
+                wide: false,
+                ascii: false,
+                nocase: false,
+                fullword: false,
+                private: true,
+                xor: None,
+                base64: None,
             },
         );
 
@@ -873,8 +915,8 @@ mod tests {
                     name: "a".to_owned(),
                     value: VariableDeclarationValue::Bytes(b"b\td".to_vec()),
                     modifiers: VariableModifiers {
-                        flags: VariableFlags::XOR | VariableFlags::ASCII,
-                        xor_range: (0, 255),
+                        ascii: true,
+                        xor: Some((0, 255)),
                         ..VariableModifiers::default()
                     },
                     span: 10..30,
@@ -895,7 +937,6 @@ mod tests {
                         span: 38..43,
                     }),
                     modifiers: VariableModifiers {
-                        flags: VariableFlags::empty(),
                         ..VariableModifiers::default()
                     },
                     span: 34..43,
@@ -907,7 +948,7 @@ mod tests {
                         Mask::Left,
                     )]),
                     modifiers: VariableModifiers {
-                        flags: VariableFlags::PRIVATE,
+                        private: true,
                         ..VariableModifiers::default()
                     },
                     span: 45..61,
@@ -955,10 +996,7 @@ mod tests {
                     VariableDeclaration {
                         name: "b".to_owned(),
                         value: VariableDeclarationValue::Bytes(b"t".to_vec()),
-                        modifiers: VariableModifiers {
-                            flags: VariableFlags::empty(),
-                            ..VariableModifiers::default()
-                        },
+                        modifiers: VariableModifiers::default(),
                         span: 60..68,
                     }
                 ],
@@ -1093,24 +1131,41 @@ mod tests {
         let alphabet = "!@#$%^&*(){}[].,|ABCDEFGHIJ\x09LMNOPQRSTUVWXYZabcdefghijklmnopqrstu";
         let alphabet_array: [u8; 64] = alphabet.as_bytes().try_into().unwrap();
 
-        parse(base64_modifier, "base64 a", "a", Modifier::Base64(None));
+        parse(
+            base64_modifier,
+            "base64 a",
+            "a",
+            Modifier::Base64 {
+                wide: false,
+                alphabet: None,
+            },
+        );
         parse(
             base64_modifier,
             "base64wide a",
             "a",
-            Modifier::Base64Wide(None),
+            Modifier::Base64 {
+                wide: true,
+                alphabet: None,
+            },
         );
         parse(
             base64_modifier,
             &format!(r#"base64("{alphabet}")"#),
             "",
-            Modifier::Base64(Some(alphabet_array)),
+            Modifier::Base64 {
+                wide: false,
+                alphabet: Some(alphabet_array),
+            },
         );
         parse(
             base64_modifier,
             &format!(r#"base64wide ( "{alphabet}")b"#),
             "b",
-            Modifier::Base64Wide(Some(alphabet_array)),
+            Modifier::Base64 {
+                wide: true,
+                alphabet: Some(alphabet_array),
+            },
         );
 
         parse_err(base64_modifier, "");
