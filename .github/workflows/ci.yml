@@ -25,12 +25,17 @@ jobs:
           sudo apt install libssl-dev:i386 gcc-multilib
           echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
           echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
+          echo "YARA_OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
       - run: cargo test --target=${{matrix.target}}
+        env:
+          YARA_CRYPTO_LIB: openssl
       - run: cargo test --features authenticode --target=${{matrix.target}}
+        env:
+          YARA_CRYPTO_LIB: openssl
 
     strategy:
       fail-fast: false
@@ -66,6 +71,8 @@ jobs:
         run: |
           echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
           echo "OPENSSL_DIR=${{ runner.workspace }}\\vcpkg\\installed\\${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+          echo "YARA_OPENSSL_DIR=${{ runner.workspace }}\\vcpkg\\installed\\${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+          echo "YARA_CRYPTO_LIB=openssl" >> $GITHUB_ENV
 
       - uses: dtolnay/rust-toolchain@stable
         with:
