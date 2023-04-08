@@ -79,11 +79,16 @@ fn build_command() -> Command {
                 .help("Display the names of all available modules"),
         )
         .arg(
-            Arg::new("statistics")
-                .short('S')
-                .long("print-stats")
+            Arg::new("string_statistics")
+                .long("string-stats")
                 .action(ArgAction::SetTrue)
-                .help("Display statistics on rules' compilation and evaluation"),
+                .help("Display statistics on rules' compilation"),
+        )
+        .arg(
+            Arg::new("scan_statistics")
+                .long("scan-stats")
+                .action(ArgAction::SetTrue)
+                .help("Display statistics on rules' evaluation"),
         )
 }
 
@@ -116,7 +121,7 @@ fn main() -> ExitCode {
         compiler.set_params(
             boreal::compiler::CompilerParams::default()
                 .fail_on_warnings(args.get_flag("fail_on_warnings"))
-                .compute_statistics(args.get_flag("statistics")),
+                .compute_statistics(args.get_flag("string_statistics")),
         );
 
         match compiler.add_rules_file(rules_file) {
@@ -137,7 +142,7 @@ fn main() -> ExitCode {
         compiler.into_scanner()
     };
     scanner.set_scan_params(
-        boreal::scanner::ScanParams::default().compute_statistics(args.get_flag("statistics")),
+        boreal::scanner::ScanParams::default().compute_statistics(args.get_flag("scan_statistics")),
     );
 
     let input: &PathBuf = args.get_one("input").unwrap();
