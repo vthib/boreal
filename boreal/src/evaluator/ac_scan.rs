@@ -1,5 +1,6 @@
 //! Provides the [`AcScan`] object, used to scan for all variables in a single AC pass.
 use std::ops::Range;
+use std::time::Instant;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
@@ -108,7 +109,7 @@ impl AcScan {
                     if scan_data.check_timeout() {
                         return Err(EvalError::Timeout);
                     }
-                    self.handle_possible_match(mem, variables, &mat, params, &mut matches);
+                    self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
                 }
             }
             ACVersion::Default(v) => {
@@ -116,7 +117,7 @@ impl AcScan {
                     if scan_data.check_timeout() {
                         return Err(EvalError::Timeout);
                     }
-                    self.handle_possible_match(mem, variables, &mat, params, &mut matches);
+                    self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
                 }
             }
         }
@@ -130,7 +131,7 @@ impl AcScan {
 
     fn handle_possible_match(
         &self,
-        mem: &[u8],
+        scan_data: &mut ScanData,
         variables: &[Variable],
         mat: &aho_corasick::Match,
         params: Params,
@@ -143,6 +144,11 @@ impl AcScan {
         } = self.aho_index_to_literal_info[mat.pattern()];
         let var = &variables[variable_index];
 
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.nb_ac_matches += 1;
+        }
+        let start_instant = Instant::now();
+
         // Upscale to the original literal shape before feeding it to the matcher verification
         // function.
         let start = match mat.start().checked_sub(start_offset) {
@@ -150,14 +156,14 @@ impl AcScan {
             None => return,
         };
         let end = match mat.end().checked_add(end_offset) {
-            Some(v) if v > mem.len() => return,
+            Some(v) if v > scan_data.mem.len() => return,
             Some(v) => v,
             None => return,
         };
         let m = start..end;
 
         // Verify the literal is valid.
-        if !var.confirm_ac_literal(mem, &m, literal_index) {
+        if !var.confirm_ac_literal(scan_data.mem, &m, literal_index) {
             return;
         }
 
@@ -179,7 +185,11 @@ impl AcScan {
             _ => 0,
         };
 
-        match variables[variable_index].process_ac_match(mem, m, start_position) {
+        let res = variables[variable_index].process_ac_match(scan_data.mem, m, start_position);
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.ac_confirm_duration += start_instant.elapsed();
+        }
+        match res {
             AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
                 AcResult::Matches(v) => v.extend(found_matches),
                 _ => matches[variable_index] = AcResult::Matches(found_matches),
