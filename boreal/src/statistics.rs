@@ -76,6 +76,14 @@ pub struct Evaluation {
     /// Time spent running the Aho-Corasick algorithm.
     pub ac_duration: Duration,
 
+    /// Time spent confirming matches of the Aho-Corasick algorithm.
+    ///
+    /// This is a subtotal of `ac_duration`.
+    pub ac_confirm_duration: Duration,
+
+    /// Number of matches done by the Aho-Corasick algorithm.
+    pub nb_ac_matches: u64,
+
     /// Time spent evaluation rules.
     pub rules_eval_duration: Duration,
 
