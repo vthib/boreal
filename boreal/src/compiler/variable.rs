@@ -526,6 +526,12 @@ mod tests {
         );
         test_type_traits_non_clonable(MatcherType::Literals);
         test_type_traits(AcMatchStatus::Unknown);
+        test_type_traits(Flags {
+            fullword: false,
+            ascii: false,
+            wide: false,
+            nocase: false,
+        });
 
         test_type_traits_non_clonable(VariableCompilationError::Regex(
             Regex::from_str("{", true, true).unwrap_err(),
