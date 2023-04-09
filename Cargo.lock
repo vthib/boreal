@@ -604,6 +604,7 @@ dependencies = [
  "difflib",
  "itertools",
  "predicates-core",
+ "regex",
 ]
 
 [[package]]

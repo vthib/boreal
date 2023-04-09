@@ -504,6 +504,96 @@ rule a {
         .success();
 }
 
+#[test]
+fn test_print_string_stats() {
+    let rule_file = test_file(
+        r#"
+rule a {
+    strings:
+        $a = "abc"
+        $b = { 01 ( FE | EF ) }
+        $c = /foo\d??bar/ fullword
+        $d = /.{10}/ fullword
+    condition:
+        any of them
+}
+"#,
+    );
+
+    let stats = r#"
+  $a = "abc"
+    literals: ["abc"]
+    atoms: ["abc"]
+    atoms quality: 60
+    kind: Literals
+  $b = { 01 ( FE | EF ) }
+    literals: [{ 01fe }, { 01ef }]
+    atoms: [{ 01fe }, { 01ef }]
+    atoms quality: 44
+    kind: Literals
+  $c = /foo\d??bar/ fullword
+    literals: ["bar"]
+    atoms: ["bar"]
+    atoms quality: 60
+    kind: Atomized
+  $d = /.{10}/ fullword
+    literals: []
+    atoms: []
+    atoms quality: 0
+    kind: Regex
+"#;
+
+    let input = test_file("");
+    cmd()
+        .arg("--string-stats")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!(
+            "default:a (from {}){}",
+            rule_file.path().display(),
+            stats
+        )))
+        .stderr("")
+        .success();
+}
+
+#[test]
+fn test_print_scan_stats() {
+    let rule_file = test_file(
+        r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        any of them
+}
+"#,
+    );
+
+    let input = test_file("abc");
+    cmd()
+        .arg("--scan-stats")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(
+            predicate::str::is_match(
+                r#"Evaluation \{
+    no_scan_eval_duration: .*,
+    ac_duration: .*,
+    ac_confirm_duration: .*,
+    nb_ac_matches: .*,
+    rules_eval_duration: .*,
+    raw_regexes_eval_duration: .*,
+\}
+"#,
+            )
+            .unwrap(),
+        )
+        .stderr("")
+        .success();
+}
 // Test when some inputs in a dir cannot be read
 #[test]
 #[cfg(unix)]
