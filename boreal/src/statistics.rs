@@ -66,6 +66,8 @@ pub enum MatchingKind {
 }
 
 /// Statistics on the evaluation of a byte string.
+///
+/// This is only filled if the `profiling` feature is enabled.
 #[derive(Clone, Debug, Default)]
 pub struct Evaluation {
     /// Time spent evaluating rules before any scanning.
