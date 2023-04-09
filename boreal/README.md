@@ -27,7 +27,7 @@ The main goals of the project are:
   rules. See [no scan optimization](#no-scan-optimization).
 * Protection against any untrusted inputs, be it rules or scanned bytes. Ill-crafted rules or inputs should never
   lead to a crash or deteriorated performances.
-* Improved performances when using a few hundred rules. See the [benchmarks](/boreal/benches/README.md) for details.
+* Improved performances when using a few hundred rules. See the [benchmarks](/benches/README.md) for details.
 
 There is a lot of room to improve performances much more, as working on performances has not been the main focus yet.
 
