@@ -31,10 +31,14 @@ Percentage displayed shows the differences between boreal and yara.
 
 A few observations:
 
-- The few -99% are for cases where boreal detects that all rules can be computed without having to scan for strings. See [no scan optimization](/boreal/README.md#no-scan-optimization).
-- Increase in number of strings, in file size, and decrease in strings quality all lead to deteriorating performances compared to YARA.
-  This is somewhat expected as optimizations was not the main focus in development in early versions. Improving performances on
-  all those cases is now however the priority.
+- The few -99% are for cases where boreal detects that all rules can be
+  computed without having to scan for strings.
+  See [no scan optimization](/boreal/README.md#no-scan-optimization).
+- Increase in number of strings, in file size, and decrease in strings
+  quality all lead to deteriorating performances compared to YARA.
+  This is somewhat expected as optimizations was not the main focus in
+  development in early versions. Improving performances on all those cases
+  is now however the priority.
 
 ## Memory usage:
 
@@ -48,4 +52,5 @@ A few observations:
 | icewater       | 78 MB   | 54.8MB |
 | signature      | 134 MB  | 32MB   |
 
-Note that optimizing memory usage has not been a big focus, and optimizing performances will remain the main focus.
+Note that optimizing memory usage has not been a big focus, and optimizing
+performances will remain the main focus.
