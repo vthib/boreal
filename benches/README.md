@@ -31,7 +31,7 @@ Percentage displayed shows the differences between boreal and yara.
 
 A few observations:
 
-- The few -99% are for cases where boreal detects that all rules can be computed without having to scan for strings. See [no scan optimization](#no-scan-optimization).
+- The few -99% are for cases where boreal detects that all rules can be computed without having to scan for strings. See [no scan optimization](/boreal/README.md#no-scan-optimization).
 - Increase in number of strings, in file size, and decrease in strings quality all lead to deteriorating performances compared to YARA.
   This is somewhat expected as optimizations was not the main focus in development in early versions. Improving performances on
   all those cases is now however the priority.
