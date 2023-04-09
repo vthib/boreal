@@ -1,6 +1,5 @@
 //! Provides the [`AcScan`] object, used to scan for all variables in a single AC pass.
 use std::ops::Range;
-use std::time::Instant;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 
@@ -144,10 +143,12 @@ impl AcScan {
         } = self.aho_index_to_literal_info[mat.pattern()];
         let var = &variables[variable_index];
 
+        #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
             stats.nb_ac_matches += 1;
         }
-        let start_instant = Instant::now();
+        #[cfg(feature = "profiling")]
+        let start_instant = std::time::Instant::now();
 
         // Upscale to the original literal shape before feeding it to the matcher verification
         // function.
@@ -186,9 +187,14 @@ impl AcScan {
         };
 
         let res = variables[variable_index].process_ac_match(scan_data.mem, m, start_position);
-        if let Some(stats) = scan_data.statistics.as_mut() {
-            stats.ac_confirm_duration += start_instant.elapsed();
+
+        #[cfg(feature = "profiling")]
+        {
+            if let Some(stats) = scan_data.statistics.as_mut() {
+                stats.ac_confirm_duration += start_instant.elapsed();
+            }
         }
+
         match res {
             AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
                 AcResult::Matches(v) => v.extend(found_matches),

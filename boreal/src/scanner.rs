@@ -1,7 +1,6 @@
 //! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
@@ -249,11 +248,16 @@ impl Inner {
         );
 
         if !params.compute_full_matches {
-            let start = Instant::now();
+            #[cfg(feature = "profiling")]
+            let start = std::time::Instant::now();
+
             let res = self.evaluate_without_matches(&mut scan_data, params);
+
+            #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
                 stats.no_scan_eval_duration = start.elapsed();
             }
+
             match res {
                 Ok(matched_rules) => {
                     return ScanResult {
@@ -277,13 +281,18 @@ impl Inner {
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
         let ac_res = {
-            let start = Instant::now();
+            #[cfg(feature = "profiling")]
+            let start = std::time::Instant::now();
+
             let res = self
                 .ac_scan
                 .matches(&mut scan_data, &self.variables, eval_params);
+
+            #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
                 stats.ac_duration = start.elapsed();
             }
+
             res
         };
         let ac_matches = match ac_res {
@@ -296,7 +305,9 @@ impl Inner {
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
-        let start = Instant::now();
+
+        #[cfg(feature = "profiling")]
+        let start = std::time::Instant::now();
 
         let mut var_evals_iterator = self
             .variables
@@ -326,9 +337,12 @@ impl Inner {
 
             if is_global && !res {
                 matched_rules.clear();
+
+                #[cfg(feature = "profiling")]
                 if let Some(stats) = scan_data.statistics.as_mut() {
                     stats.rules_eval_duration = start.elapsed();
                 }
+
                 return ScanResult {
                     matched_rules,
                     module_values: scan_data.module_values,
@@ -351,6 +365,7 @@ impl Inner {
             }
         }
 
+        #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
             stats.rules_eval_duration = start.elapsed();
         }

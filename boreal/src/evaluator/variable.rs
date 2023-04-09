@@ -1,6 +1,5 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
-use std::time::Instant;
 
 use super::ac_scan::AcResult;
 use super::{Params, ScanData};
@@ -198,8 +197,12 @@ impl<'a> VariableEvaluation<'a> {
             Some(v) => v,
         };
 
-        let start = Instant::now();
+        #[cfg(feature = "profiling")]
+        let start = std::time::Instant::now();
+
         let mat = self.var.find_next_match_at(scan_data.mem, offset);
+
+        #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
             stats.raw_regexes_eval_duration += start.elapsed();
         }

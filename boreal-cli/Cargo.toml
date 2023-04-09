@@ -14,7 +14,13 @@ name = "boreal"
 path = "src/main.rs"
 
 [features]
+default = ["authenticode", "profiling"]
+
+# Enable authenticode parsing in boreal, requires OpenSSL
 authenticode = ["boreal/authenticode"]
+# Enables scan statistics. Should not impact performances
+# significantly, and very useful in a CLI tool to debug rules.
+profiling = ["boreal/profiling"]
 
 [dependencies]
 boreal = { path = "../boreal", version = "0.2.0" }

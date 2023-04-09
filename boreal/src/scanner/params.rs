@@ -18,6 +18,8 @@ pub struct ScanParams {
     pub(crate) timeout_duration: Option<Duration>,
 
     /// Compute statistics on scanning.
+    ///
+    /// This requires the `profiling` feature.
     pub(crate) compute_statistics: bool,
 }
 
