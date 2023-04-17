@@ -176,6 +176,8 @@ skip = [
     # This pollutes a lot of dependencies but is only used when targetting
     # RustyHermit.
     { name = "hermit-abi", version = "*" },
+    # aho-corasick 1.0 used for performances, regex will upgrade later
+    { name = "aho-corasick", version = "1.0" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive

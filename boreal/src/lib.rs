@@ -63,6 +63,8 @@
 #![allow(unsafe_code)]
 #![deny(missing_docs)]
 #![deny(clippy::cargo)]
+// Handled by cargo-deny
+#![allow(clippy::multiple_crate_versions)]
 #![cfg_attr(coverage_nightly, feature(no_coverage))]
 
 // Used in integration tests, not in the library.
