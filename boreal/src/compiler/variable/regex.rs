@@ -28,9 +28,28 @@ pub(super) fn compile_regex(
         post_ast,
     } = super::literals::get_literals_details(ast);
 
-    let use_ac = !literals.is_empty()
-        && literals.iter().all(|lit| lit.len() >= 2)
-        && visit(ast, AcCompatibility::default());
+    let mut use_ac = !literals.is_empty() && literals.iter().all(|lit| lit.len() >= 2);
+
+    let stats = visit(ast, AstStats::default());
+    if stats.has_start_or_end_line {
+        // Do not use an AC if anchors are present, it will be much efficient to just run
+        // the regex directly.
+        use_ac = false;
+    }
+
+    if let Some(pre) = &pre_ast {
+        let left_stats = visit(pre, AstStats::default());
+        if left_stats.has_greedy_repetitions {
+            // Greedy repetitions on the left side of the literals is not for the moment handled.
+            // This is because the repetition can "eat" the literals against which we matched,
+            // meaning that the pre/post split is not valid.
+            //
+            // For example, a regex that looks like: `a.+foo.+b` will extract the literal foo,
+            // but against the string `aafoobbaafoobb`, it will match on the entire string,
+            // while we will match against both "foo" occurrences.
+            use_ac = false;
+        }
+    }
 
     let mut has_wide_word_boundaries = false;
     let matcher_type = if use_ac {
@@ -83,28 +102,22 @@ pub(super) fn compile_regex(
     })
 }
 
-struct AcCompatibility(bool);
-
-impl Default for AcCompatibility {
-    fn default() -> Self {
-        Self(true)
-    }
+#[derive(Default)]
+struct AstStats {
+    has_start_or_end_line: bool,
+    has_greedy_repetitions: bool,
 }
 
-impl Visitor for AcCompatibility {
-    type Output = bool;
+impl Visitor for AstStats {
+    type Output = Self;
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
         match node {
             Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
-                // Do not use an AC if anchors are present, it will be much efficient to just run
-                // the regex directly.
-                self.0 = false;
+                self.has_start_or_end_line = true;
             }
             Node::Repetition { greedy: true, .. } => {
-                // TODO: allow greedy when it does not contain characters from the literals?
-                // This would allow matching \s* which would be useful.
-                self.0 = false;
+                self.has_greedy_repetitions = true;
             }
             _ => (),
         }
@@ -113,7 +126,7 @@ impl Visitor for AcCompatibility {
     }
 
     fn finish(self) -> Self::Output {
-        self.0
+        self
     }
 }
 
