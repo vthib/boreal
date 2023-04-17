@@ -14,6 +14,18 @@ mod hex_string;
 mod literals;
 mod regex;
 
+// Maximum length against which a regex validator of a AC literal match will be run.
+//
+// For example, lets say you have the `{ AA [1-] BB CC DD [1-] FF }` hex string. The
+// `\xbb\xcc\xdd` literal is extracted, with:
+// - the pre validator `\xaa.{1,}?\xbb\xcc\xdd$`
+// - the post validator `^\xbb\xcc\xdd.{1,}?\xff`
+//
+// Both the pre and post validator will be run against a slice which maximum length is
+// limited by the constant. Which means that `\xaa0\xbb\xcc\xdd` + ('0' * MAX+1) + '\xff'
+// will not match.
+const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
+
 /// A compiled variable used in a rule.
 #[derive(Debug)]
 pub struct Variable {
@@ -286,7 +298,7 @@ impl Variable {
         &self,
         mem: &[u8],
         mat: Range<usize>,
-        mut start_position: usize,
+        start_position: usize,
     ) -> AcMatchStatus {
         match &self.matcher_type {
             MatcherType::Literals => match self.validate_and_update_match(mem, mat) {
@@ -298,10 +310,16 @@ impl Variable {
                 right_validator,
             } => {
                 let end = match right_validator {
-                    Some(validator) => match validator.as_regex().find(&mem[mat.start..]) {
-                        Some(m) => mat.start + m.end(),
-                        None => return AcMatchStatus::None,
-                    },
+                    Some(validator) => {
+                        let end = std::cmp::min(
+                            mem.len(),
+                            mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH),
+                        );
+                        match validator.as_regex().find(&mem[mat.start..end]) {
+                            Some(m) => mat.start + m.end(),
+                            None => return AcMatchStatus::None,
+                        }
+                    }
                     None => mat.end,
                 };
 
@@ -320,10 +338,13 @@ impl Variable {
                         //
                         // XXX: This only works if the left validator does not contain any greedy repetitions!
                         let mut matches = Vec::new();
-                        while let Some(m) = validator.as_regex().find(&mem[start_position..mat.end])
-                        {
-                            let m = (m.start() + start_position)..end;
-                            start_position = m.start + 1;
+                        let mut start = std::cmp::max(
+                            start_position,
+                            mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
+                        );
+                        while let Some(m) = validator.as_regex().find(&mem[start..mat.end]) {
+                            let m = (m.start() + start)..end;
+                            start = m.start + 1;
                             if let Some(m) = self.validate_and_update_match(mem, m) {
                                 matches.push(m);
                             }

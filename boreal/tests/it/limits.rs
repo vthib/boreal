@@ -276,3 +276,82 @@ rule second {{
     let res = checker.check_rule_matches(&mem, &[]);
     assert!(res.timeout);
 }
+
+#[test]
+fn test_max_split_match_length_hex_string() {
+    // Turns out yara works fine for the commented string.
+    // TODO: investigate why
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        // $a = { AA [1-] BB CC DD EE [1-] FF }
+        $a = { AA ?? [1-] BB CC DD EE [1-] ?? FF }
+    condition:
+        any of them
+}
+"#,
+    );
+
+    // A normal sized string will match
+    checker.check(b"        \xAA   \xBB\xCC\xDD\xEE   \xFF   ", true);
+
+    // If the \xFF is too far, it won't match.
+    let mut mem = Vec::new();
+    mem.extend(b"\xAA \xBB\xCC\xDD\xEE");
+    mem.resize(5_000, 0);
+    mem.push(b'\xFF');
+    // checker.check(&mem, false);
+
+    // If the \xFF is too far, it won't match.
+    let mut mem = Vec::new();
+    mem.push(b'\xAA');
+    mem.resize(5_000, 0);
+    mem.extend(b"\xBB\xCC\xDD\xEE \xFF");
+    checker.check(&mem, false);
+}
+
+#[test]
+fn test_max_split_match_length_regex() {
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a[^r]*?string/
+    condition:
+        any of them
+}
+"#,
+    );
+
+    // A normal sized string will match
+    checker.check(b"abcvlkjstring", true);
+
+    // If the \xFF is too far, it won't match.
+    let mut mem = Vec::new();
+    mem.push(b'a');
+    mem.resize(5_000, 0);
+    mem.extend(b"string");
+    checker.check(&mem, false);
+
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /string[^r]*?a/
+    condition:
+        any of them
+}
+"#,
+    );
+
+    // A normal sized string will match
+    checker.check(b"stringmflgkdopa", true);
+
+    // If the \xFF is too far, it won't match.
+    let mut mem = Vec::new();
+    mem.extend(b"string");
+    mem.resize(5_000, 0);
+    mem.push(b'a');
+    checker.check(&mem, false);
+}
