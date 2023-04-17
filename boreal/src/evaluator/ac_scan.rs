@@ -1,7 +1,7 @@
 //! Provides the [`AcScan`] object, used to scan for all variables in a single AC pass.
 use std::ops::Range;
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
 use super::{EvalError, Params, ScanData};
 use crate::atoms::pick_atom_in_literal;
@@ -23,7 +23,7 @@ use crate::compiler::variable::{AcMatchStatus, Variable};
 #[derive(Debug)]
 pub(crate) struct AcScan {
     /// Aho Corasick for variables that are literals.
-    aho: ACVersion,
+    aho: AhoCorasick,
 
     /// Map from a aho pattern index to details on the literals.
     aho_index_to_literal_info: Vec<LiteralInfo>,
@@ -43,12 +43,6 @@ struct LiteralInfo {
 
     /// Left and right offset for the slice picked in the Aho-Corasick.
     slice_offset: (usize, usize),
-}
-
-#[derive(Debug)]
-enum ACVersion {
-    Size32(AhoCorasick<u32>),
-    Default(AhoCorasick),
 }
 
 impl AcScan {
@@ -77,14 +71,13 @@ impl AcScan {
         // optimizations are done.
 
         let mut builder = AhoCorasickBuilder::new();
-        let builder = builder.ascii_case_insensitive(true).dfa(true);
+        let builder = builder
+            .ascii_case_insensitive(true)
+            .kind(Some(AhoCorasickKind::DFA));
 
         // First try with a smaller size to reduce memory use and improve performances, otherwise
         // use the default version.
-        let aho = match builder.build_with_size::<u32, _, _>(&lits) {
-            Ok(v) => ACVersion::Size32(v),
-            Err(_) => ACVersion::Default(builder.build(&lits)),
-        };
+        let aho = builder.build(&lits).unwrap();
 
         Self {
             aho,
@@ -102,23 +95,11 @@ impl AcScan {
         let mut matches = vec![AcResult::NotFound; variables.len()];
         let mem = scan_data.mem;
 
-        match &self.aho {
-            ACVersion::Size32(v) => {
-                for mat in v.find_overlapping_iter(mem) {
-                    if scan_data.check_timeout() {
-                        return Err(EvalError::Timeout);
-                    }
-                    self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
-                }
+        for mat in self.aho.find_overlapping_iter(mem) {
+            if scan_data.check_timeout() {
+                return Err(EvalError::Timeout);
             }
-            ACVersion::Default(v) => {
-                for mat in v.find_overlapping_iter(mem) {
-                    if scan_data.check_timeout() {
-                        return Err(EvalError::Timeout);
-                    }
-                    self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
-                }
-            }
+            self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
         }
 
         for i in &self.non_handled_var_indexes {
