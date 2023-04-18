@@ -51,20 +51,17 @@ pub(super) fn compile_regex(
         }
     }
 
-    let mut has_wide_word_boundaries = false;
     let matcher_type = if use_ac {
         let pre = match pre_ast {
             Some(ast) => {
-                let (pre, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, modifiers);
-                has_wide_word_boundaries |= has_ww_boundaries;
+                let pre = convert_ast_to_string_with_flags(&ast, modifiers);
                 Some(pre)
             }
             None => None,
         };
         let post = match post_ast {
             Some(ast) => {
-                let (post, has_ww_boundaries) = convert_ast_to_string_with_flags(&ast, modifiers);
-                has_wide_word_boundaries |= has_ww_boundaries;
+                let post = convert_ast_to_string_with_flags(&ast, modifiers);
                 Some(post)
             }
             None => None,
@@ -76,8 +73,7 @@ pub(super) fn compile_regex(
             right_validator: compile_validator(post, case_insensitive, dot_all)?,
         }
     } else {
-        let (expr, has_ww_boundaries) = convert_ast_to_string_with_flags(ast, modifiers);
-        has_wide_word_boundaries |= has_ww_boundaries;
+        let expr = convert_ast_to_string_with_flags(ast, modifiers);
 
         if literals.iter().any(|lit| lit.len() < 2) {
             literals.clear();
@@ -88,7 +84,7 @@ pub(super) fn compile_regex(
         MatcherType::Raw(compile_regex_expr(&expr, case_insensitive, dot_all)?)
     };
 
-    let non_wide_regex = if has_wide_word_boundaries {
+    let non_wide_regex = if stats.has_word_boundaries && modifiers.wide {
         let expr = regex_ast_to_string(ast);
         Some(compile_regex_expr(&expr, case_insensitive, dot_all)?)
     } else {
@@ -106,6 +102,7 @@ pub(super) fn compile_regex(
 struct AstStats {
     has_start_or_end_line: bool,
     has_greedy_repetitions: bool,
+    has_word_boundaries: bool,
 }
 
 impl Visitor for AstStats {
@@ -115,6 +112,10 @@ impl Visitor for AstStats {
         match node {
             Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
                 self.has_start_or_end_line = true;
+            }
+            Node::Assertion(AssertionKind::WordBoundary)
+            | Node::Assertion(AssertionKind::NonWordBoundary) => {
+                self.has_word_boundaries = true;
             }
             Node::Repetition { greedy: true, .. } => {
                 self.has_greedy_repetitions = true;
@@ -166,11 +167,11 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 }
 
 /// Convert the AST of a regex variable to a string, taking into account variable modifiers.
-fn convert_ast_to_string_with_flags(ast: &Node, modifiers: &VariableModifiers) -> (String, bool) {
+fn convert_ast_to_string_with_flags(ast: &Node, modifiers: &VariableModifiers) -> String {
     if modifiers.wide {
-        let (wide_ast, has_wide_word_boundaries) = visit(ast, AstWidener::new());
+        let wide_ast = visit(ast, AstWidener::new());
 
-        let expr = if modifiers.ascii {
+        if modifiers.ascii {
             format!(
                 "{}|{}",
                 regex_ast_to_string(ast),
@@ -178,10 +179,9 @@ fn convert_ast_to_string_with_flags(ast: &Node, modifiers: &VariableModifiers) -
             )
         } else {
             regex_ast_to_string(&wide_ast)
-        };
-        (expr, has_wide_word_boundaries)
+        }
     } else {
-        (regex_ast_to_string(ast), false)
+        regex_ast_to_string(ast)
     }
 }
 
@@ -211,9 +211,6 @@ struct AstWidener {
     /// to the stack. Then when we finish visiting the compound value, the level will be pop-ed,
     /// and the new compound AST value built.
     stack: Vec<StackLevel>,
-
-    /// Does the regex contains word boundaries
-    has_word_boundaries: bool,
 }
 
 #[derive(Debug)]
@@ -243,7 +240,6 @@ impl AstWidener {
         Self {
             node: None,
             stack: Vec::new(),
-            has_word_boundaries: false,
         }
     }
 
@@ -280,11 +276,11 @@ impl AstWidener {
 }
 
 impl Visitor for AstWidener {
-    type Output = (Node, bool);
+    type Output = Node;
 
-    fn finish(self) -> (Node, bool) {
+    fn finish(self) -> Node {
         // Safety: there is a top-level node, the one we visit first.
-        (self.node.unwrap(), self.has_word_boundaries)
+        self.node.unwrap()
     }
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
@@ -334,7 +330,6 @@ impl Visitor for AstWidener {
             // `test_variable_regex_word_boundaries_edge_cases` tests some of those.
             Node::Assertion(AssertionKind::WordBoundary)
             | Node::Assertion(AssertionKind::NonWordBoundary) => {
-                self.has_word_boundaries = true;
                 self.add(Node::Empty);
             }
 
