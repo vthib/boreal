@@ -117,7 +117,7 @@ pub(crate) fn compile_variable(
     }
 
     let res = match value {
-        VariableDeclarationValue::Bytes(s) => Ok(compile_bytes(s, &modifiers)),
+        VariableDeclarationValue::Bytes(s) => compile_bytes(s, &modifiers),
         VariableDeclarationValue::Regex(boreal_parser::Regex {
             ast,
             case_insensitive,
@@ -210,9 +210,15 @@ struct CompiledVariable {
     non_wide_regex: Option<Regex>,
 }
 
-fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVariable {
-    let mut literals = Vec::with_capacity(2);
+fn compile_bytes(
+    value: Vec<u8>,
+    modifiers: &VariableModifiers,
+) -> Result<CompiledVariable, VariableCompilationError> {
+    if value.is_empty() {
+        return Err(VariableCompilationError::Empty);
+    }
 
+    let mut literals = Vec::with_capacity(2);
     if modifiers.wide {
         if modifiers.ascii {
             literals.push(string_to_wide(&value));
@@ -234,11 +240,11 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVaria
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        return CompiledVariable {
+        return Ok(CompiledVariable {
             literals: new_literals,
             matcher_type: MatcherType::Literals,
             non_wide_regex: None,
-        };
+        });
     }
 
     if let Some(base64) = &modifiers.base64 {
@@ -267,11 +273,11 @@ fn compile_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> CompiledVaria
         }
     }
 
-    CompiledVariable {
+    Ok(CompiledVariable {
         literals,
         matcher_type: MatcherType::Literals,
         non_wide_regex: None,
-    }
+    })
 }
 
 impl Variable {
@@ -512,6 +518,9 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
 /// Error during the compilation of a variable.
 #[derive(Debug)]
 pub enum VariableCompilationError {
+    /// Variable is empty.
+    Empty,
+
     /// Error when compiling a regex variable.
     Regex(crate::regex::Error),
 }
@@ -519,6 +528,7 @@ pub enum VariableCompilationError {
 impl std::fmt::Display for VariableCompilationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Self::Empty => write!(f, "variable is empty"),
             Self::Regex(e) => e.fmt(f),
         }
     }
@@ -535,7 +545,7 @@ mod tests {
             compile_variable(
                 VariableDeclaration {
                     name: "a".to_owned(),
-                    value: VariableDeclarationValue::Bytes(Vec::new()),
+                    value: VariableDeclarationValue::Bytes(b"foo".to_vec()),
                     modifiers: VariableModifiers::default(),
                     span: 0..1,
                 },

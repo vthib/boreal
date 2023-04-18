@@ -240,7 +240,7 @@ mod tests {
             var: &compile_variable(
                 VariableDeclaration {
                     name: "a".to_owned(),
-                    value: VariableDeclarationValue::Bytes(Vec::new()),
+                    value: VariableDeclarationValue::Bytes(b"a".to_vec()),
                     modifiers: VariableModifiers::default(),
                     span: 0..1,
                 },
