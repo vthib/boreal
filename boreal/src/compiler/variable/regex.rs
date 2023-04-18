@@ -28,7 +28,14 @@ pub(super) fn compile_regex(
         post_ast,
     } = super::literals::get_literals_details(ast);
 
-    let mut use_ac = !literals.is_empty() && literals.iter().all(|lit| lit.len() >= 2);
+    // If some literals are too small, don't use them, they would match too
+    // many times.
+    if literals.iter().any(|lit| lit.len() < 2) {
+        literals.clear();
+    }
+    apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
+
+    let mut use_ac = !literals.is_empty();
 
     let stats = visit(ast, AstStats::default());
     if stats.has_start_or_end_line {
@@ -52,21 +59,8 @@ pub(super) fn compile_regex(
     }
 
     let matcher_type = if use_ac {
-        let pre = match pre_ast {
-            Some(ast) => {
-                let pre = convert_ast_to_string_with_flags(&ast, modifiers);
-                Some(pre)
-            }
-            None => None,
-        };
-        let post = match post_ast {
-            Some(ast) => {
-                let post = convert_ast_to_string_with_flags(&ast, modifiers);
-                Some(post)
-            }
-            None => None,
-        };
-        apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
+        let pre = pre_ast.map(|ast| convert_ast_to_string_with_flags(&ast, modifiers));
+        let post = post_ast.map(|ast| convert_ast_to_string_with_flags(&ast, modifiers));
 
         MatcherType::Atomized {
             left_validator: compile_validator(pre, case_insensitive, dot_all)?,
@@ -74,12 +68,6 @@ pub(super) fn compile_regex(
         }
     } else {
         let expr = convert_ast_to_string_with_flags(ast, modifiers);
-
-        if literals.iter().any(|lit| lit.len() < 2) {
-            literals.clear();
-        } else {
-            apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
-        }
 
         MatcherType::Raw(compile_regex_expr(&expr, case_insensitive, dot_all)?)
     };
