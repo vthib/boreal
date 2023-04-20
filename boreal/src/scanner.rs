@@ -104,7 +104,7 @@ impl Scanner {
                 default_value,
             } = sym;
             external_symbols_values.push(default_value);
-            let _ = external_symbols_map.insert(name, index);
+            _ = external_symbols_map.insert(name, index);
         }
 
         Self {
@@ -676,7 +676,7 @@ mod tests {
     #[track_caller]
     fn test_eval_with_poison(rule_str: &str, mem: &[u8], expected: Option<bool>) {
         let mut compiler = Compiler::default();
-        let _ = compiler.add_module(Test);
+        _ = compiler.add_module(Test);
         let _r = compiler.add_rules_str(rule_str).unwrap();
         let scanner = compiler.into_scanner();
 
