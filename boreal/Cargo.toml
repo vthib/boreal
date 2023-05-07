@@ -52,7 +52,7 @@ sha2 = { version = "0.10", optional = true }
 tlsh2 = { version = "0.2", optional = true }
 
 # "object" feature
-object = { version = "0.30", optional = true, default-features = false, features = ["read"] }
+object = { version = "0.31", optional = true, default-features = false, features = ["read"] }
 
 # "authenticode" feature
 authenticode-parser = { version = "0.3", optional = true }
