@@ -39,9 +39,9 @@ codespan-reporting = "0.11"
 # Scanning for bytes
 aho-corasick = "1.0"
 memchr = "2.4"
-regex = "1.5"
+regex = { version = "1.8", default-features = false, features = ["std", "perf"] }
 # No default features to disable unicode, we do not need it
-regex-syntax = { version = "0.6", default-features = false }
+regex-syntax = { version = "0.7", default-features = false }
 
 # "hash" feature
 crc32fast = { version = "1.3", optional = true }
