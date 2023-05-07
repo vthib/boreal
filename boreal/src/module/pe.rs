@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::regex::Regex;
 use object::{
-    coff::{SectionTable, SymbolTable},
+    coff::{CoffHeader, SectionTable, SymbolTable},
     pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64},
     read::pe::{
         DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportThunkList,
