@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "aho-corasick"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5bce8d450891e3b36f85a2230cec441fddd60e0c455b61b15bb3ffba955ca85"
+checksum = "67fc08ce920c31afb70f013dcce1bfc3a3195de6a228474e45e1f145b36f8d04"
 dependencies = [
  "memchr",
 ]
@@ -149,7 +149,7 @@ dependencies = [
 name = "boreal"
 version = "0.2.0"
 dependencies = [
- "aho-corasick 1.0.0",
+ "aho-corasick 1.0.1",
  "authenticode-parser",
  "base64",
  "boreal-parser",
@@ -665,7 +665,7 @@ version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af83e617f331cc6ae2da5443c602dfa5af81e517212d9d611a5b3ba1777b5370"
 dependencies = [
- "aho-corasick 1.0.0",
+ "aho-corasick 1.0.1",
  "memchr",
  "regex-syntax",
 ]
@@ -822,9 +822,9 @@ dependencies = [
 
 [[package]]
 name = "tlsh2"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d7eda97e2e35d25f70ce703bf2b823ae9372bbcadaf14640b69353bb5b3f504"
+checksum = "40030031152b5dc65fb4c2827ab747e677fb1ad875c2313633ba30b6b127d1b6"
 
 [[package]]
 name = "typenum"
