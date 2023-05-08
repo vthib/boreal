@@ -21,13 +21,13 @@ Percentage displayed shows the differences between boreal and yara.
 
 | Rules set \ File scanned                                                                             | vulkan-1.dll (737KB) | libGLESv2.dll (5.5MB) | firefox.msi (56MB) | tests.exe (157MB) |
 | ---------------------------------------------------------------------------------------------------- | -------------------- | --------------------- | ------------------ | ----------------- |
-| [orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 2.58 ms (-46%)       | 18.5 ms (-39%)        | 246 ms (-18%)      | 549 ms (-35%)     |
-| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 3.65 ms (-19%)       | 25.4 ms (-15%)        | 297 ms (+4%)       | 756 ms (-4%)      |
-| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 6.62 ms (-34%)       | 29.9 ms (-14%)        | 272 ms (-7%)       | 1.13 s (+9%)      |
-| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 2.20 ms (-36%)       | 18.4 ms (-27%)        | 180 ms (-38%)      | 492 ms (-37%)     |
-| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 811 ms (-36%)        | 0.4 ms (-99%)         | 0.4 ms (-99%)      | 0.4 ms (-99%)     |
-| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | 8.51 ms (-54%)       | 27.5 ms (-24%)        | 430 ms (+77%)      | 1.80 ms (-99.7%)  |
-| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 18.1 ms (+31%)       | 110 ms (+93%)         | 918 ms (+177%)     | 3.86 s (+134%)    |
+| [orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 1.89 ms (-62%)       | 13.3 ms (-58%)        | 163 ms (-49%)      | 365 ms (-57%)     |
+| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 2.74 ms (-45%)       | 17.6 ms (-40%)        | 188 ms (-37%)      | 503 ms (-38%)     |
+| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 5.36 ms (-50%)       | 22.7 ms (-38%)        | 181 ms (-42%)      | 663 ms (-38%)     |
+| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 1.57 ms (-57%)       | 14.4 ms (-45%)        | 122 ms (-60%)      | 337 ms (-58%)     |
+| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             |  684 ms (+284%)      |  0.2 ms (-99%)        | 0.2 ms (-99%)      | 0.2 ms (-99%)     |
+| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | 6.57 ms (-60%)       | 18.7 ms (-45%)        | 274 ms (+13%)      | 477 ms (-34%)     |
+| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 12.2 ms (+11%)       | 55.2 ms (+3%)         | 406 ms (+27%)      | 1.67 s (+8%)      |
 
 A few observations:
 
