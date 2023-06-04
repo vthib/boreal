@@ -3,9 +3,38 @@ use crate::atoms::atoms_rank;
 use crate::regex::{visit, Hir, VisitAction, Visitor};
 
 pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
-    let visitor = LiteralsExtractor::new();
+    let visitor = Splitter::new();
     let visitor = visit(hir, visitor);
-    visitor.into_literals_details(hir)
+    let end_position = visitor.current_position;
+    let parts = visitor.into_parts();
+
+    // Find best set by iterating on all found literals set.
+    let set = parts
+        .into_iter()
+        .filter_map(|part| match part {
+            HirPart::Literals(set) => Some(set),
+            _ => None,
+        })
+        // We use min of -rank to ensure that the first element is returned if multiple elements
+        // have the same rank. This is preferable to ease validation of the matching against
+        // a literal match.
+        .min_by_key(|set| -i64::from(set.rank));
+
+    match set {
+        None => LiteralsDetails {
+            literals: Vec::new(),
+            pre_hir: None,
+            post_hir: None,
+        },
+        Some(set) => {
+            let (pre_hir, post_hir) = set.build_pre_post_hir(hir, end_position);
+            LiteralsDetails {
+                literals: set.literals,
+                pre_hir,
+                post_hir,
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -21,7 +50,9 @@ pub struct LiteralsDetails {
     pub post_hir: Option<Hir>,
 }
 
-/// Visitor on a regex AST to extract literals.
+/// Visitor on a regex AST to split it into multiple literals.
+///
+/// This splits the AST into multiple chunks of either literals or regex nodes.
 ///
 /// To extract literals:
 /// - only group and concatenations are visited
@@ -32,9 +63,9 @@ pub struct LiteralsDetails {
 /// This strive to strike a balance between exhaustively finding any possible literal to compute
 /// the best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
-struct LiteralsExtractor {
+struct Splitter {
     /// Set of best literals extracted so far.
-    set: LiteralSet,
+    parts: Vec<HirPart>,
 
     /// Literals currently being built.
     literals: Vec<Vec<u8>>,
@@ -47,10 +78,19 @@ struct LiteralsExtractor {
     current_position: usize,
 }
 
-impl LiteralsExtractor {
+#[derive(Debug)]
+enum HirPart {
+    Literals(LiteralSet),
+    Dot,
+    Class,
+    Mask,
+    Other,
+}
+
+impl Splitter {
     fn new() -> Self {
         Self {
-            set: LiteralSet::default(),
+            parts: Vec::new(),
             literals: Vec::new(),
             literals_start_position: 0,
 
@@ -59,7 +99,7 @@ impl LiteralsExtractor {
     }
 }
 
-impl Visitor for LiteralsExtractor {
+impl Visitor for Splitter {
     type Output = Self;
 
     fn visit_pre(&mut self, node: &Hir) -> VisitAction {
@@ -69,17 +109,25 @@ impl Visitor for LiteralsExtractor {
                 VisitAction::Skip
             }
             Hir::Empty => VisitAction::Skip,
-            Hir::Dot
-            | Hir::Mask { .. }
-            | Hir::Class(_)
-            | Hir::Assertion(_)
-            | Hir::Repetition { .. } => {
-                self.close();
+            Hir::Dot => {
+                self.add_part(HirPart::Dot);
+                VisitAction::Skip
+            }
+            Hir::Class(_) => {
+                self.add_part(HirPart::Class);
+                VisitAction::Skip
+            }
+            Hir::Mask { .. } => {
+                self.add_part(HirPart::Mask);
+                VisitAction::Skip
+            }
+            Hir::Assertion(_) | Hir::Repetition { .. } => {
+                self.add_part(HirPart::Other);
                 VisitAction::Skip
             }
             Hir::Alternation(alts) => {
                 if !self.visit_alternation(alts) {
-                    self.close();
+                    self.add_part(HirPart::Other);
                 }
                 VisitAction::Skip
             }
@@ -96,7 +144,7 @@ impl Visitor for LiteralsExtractor {
     }
 }
 
-impl LiteralsExtractor {
+impl Splitter {
     /// Add a byte to the literals being built.
     fn add_byte(&mut self, byte: u8) {
         if self.literals.is_empty() {
@@ -107,6 +155,11 @@ impl LiteralsExtractor {
         for lit in &mut self.literals {
             lit.push(byte);
         }
+    }
+
+    fn add_part(&mut self, part: HirPart) {
+        self.close();
+        self.parts.push(part);
     }
 
     /// Visit an alternation to add it to the currently being build literals.
@@ -164,26 +217,17 @@ impl LiteralsExtractor {
     /// Close currently being built literals.
     fn close(&mut self) {
         if !self.literals.is_empty() {
-            self.set.add_literals(
+            self.parts.push(HirPart::Literals(LiteralSet::new(
                 std::mem::take(&mut self.literals),
                 self.literals_start_position,
                 self.current_position,
-            );
+            )));
         }
     }
 
-    pub fn into_literals_details(mut self, original_hir: &Hir) -> LiteralsDetails {
+    pub fn into_parts(mut self) -> Vec<HirPart> {
         self.close();
-
-        let (pre_hir, post_hir) = self
-            .set
-            .build_pre_post_hir(original_hir, self.current_position);
-
-        LiteralsDetails {
-            literals: self.set.literals,
-            pre_hir,
-            post_hir,
-        }
+        self.parts
     }
 }
 
@@ -204,16 +248,14 @@ struct LiteralSet {
 }
 
 impl LiteralSet {
-    fn add_literals(&mut self, literals: Vec<Vec<u8>>, start_position: usize, end_position: usize) {
+    fn new(literals: Vec<Vec<u8>>, start_position: usize, end_position: usize) -> Self {
         let rank = atoms_rank(&literals);
 
-        // this.literals is one possible set, and the provided literals are another one.
-        // Keep the one with the best rank.
-        if self.literals.is_empty() || rank > self.rank {
-            self.literals = literals;
-            self.start_position = start_position;
-            self.end_position = end_position;
-            self.rank = rank;
+        Self {
+            literals,
+            start_position,
+            end_position,
+            rank,
         }
     }
 
@@ -700,7 +742,7 @@ mod tests {
             post_hir: None,
         });
 
-        test_type_traits_non_clonable(LiteralsExtractor::new());
+        test_type_traits_non_clonable(Splitter::new());
         test_type_traits_non_clonable(LiteralSet::default());
         test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
     }
