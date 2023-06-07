@@ -154,7 +154,7 @@ impl Splitter {
     }
 
     fn add_part(&mut self, part: AstPart) {
-        self.close();
+        self.close(false);
         self.parts.push(part);
     }
 
@@ -211,18 +211,25 @@ impl Splitter {
     }
 
     /// Close currently being built literals.
-    fn close(&mut self) {
+    fn close(&mut self, eor: bool) {
         if !self.literals.is_empty() {
             self.parts.push(AstPart::Literals(LiteralSet::new(
                 std::mem::take(&mut self.literals),
-                self.literals_start_position,
-                self.current_position,
+                match self.literals_start_position {
+                    0 => None,
+                    n => Some(n),
+                },
+                if eor {
+                    None
+                } else {
+                    Some(self.current_position)
+                },
             )));
         }
     }
 
     pub fn into_parts(mut self) -> Vec<AstPart> {
-        self.close();
+        self.close(true);
         self.parts
     }
 }
@@ -234,16 +241,25 @@ struct LiteralSet {
     literals: Vec<Vec<u8>>,
 
     /// Starting position of the literals (including the first bytes of the literals).
-    start_position: usize,
+    ///
+    /// Unset if the literals start at the start of the regex.
+    start_position: Option<usize>,
+
     /// Ending position of the literals (excluding the last bytes of the literals).
-    end_position: usize,
+    ///
+    /// Unset if the literals end at the end of the regex.
+    end_position: Option<usize>,
 
     /// Rank of the saved literals.
     rank: u32,
 }
 
 impl LiteralSet {
-    fn new(literals: Vec<Vec<u8>>, start_position: usize, end_position: usize) -> Self {
+    fn new(
+        literals: Vec<Vec<u8>>,
+        start_position: Option<usize>,
+        end_position: Option<usize>,
+    ) -> Self {
         let rank = atoms_rank(&literals);
 
         Self {
@@ -254,49 +270,38 @@ impl LiteralSet {
         }
     }
 
-    fn add_literals_ast(&self, nodes: &mut Vec<Node>) {
-        match &self.literals[..] {
-            [] => (),
-            [literal] => {
-                nodes.extend(literal.iter().copied().map(Node::Literal));
-            }
-            literals => {
-                nodes.push(Node::Group(Box::new(Node::Alternation(
-                    literals
-                        .iter()
-                        .map(|literal| {
-                            Node::Concat(literal.iter().copied().map(Node::Literal).collect())
-                        })
-                        .collect(),
-                ))));
-            }
-        }
-    }
-
     fn build_pre_post_ast(&self, original_node: &Node) -> (Option<Node>, Option<Node>) {
         if self.literals.is_empty() {
             return (None, None);
         }
 
-        let visitor = PrePostExtractor::new(self.start_position, self.end_position);
-        let (pre_node, post_node) = visit(original_node, visitor);
-
-        let pre_node = pre_node.map(|pre| {
-            let mut pre_nodes = Vec::new();
-            pre_nodes.push(pre);
-            self.add_literals_ast(&mut pre_nodes);
-            pre_nodes.push(Node::Assertion(AssertionKind::EndLine));
-            Node::Concat(pre_nodes)
-        });
-        let post_node = post_node.map(|post| {
-            let mut post_nodes = Vec::new();
-            post_nodes.push(Node::Assertion(AssertionKind::StartLine));
-            self.add_literals_ast(&mut post_nodes);
-            post_nodes.push(post);
-            Node::Concat(post_nodes)
-        });
-
-        (pre_node, post_node)
+        match (self.start_position, self.end_position) {
+            (None, Some(_)) => {
+                let nodes = vec![
+                    Node::Assertion(AssertionKind::StartLine),
+                    original_node.clone(),
+                ];
+                (None, Some(Node::Concat(nodes)))
+            }
+            (Some(start), Some(end)) => {
+                let visitor = PrePostExtractor::new(start, end);
+                let (pre, post) = visit(original_node, visitor);
+                let pre =
+                    pre.map(|pre| Node::Concat(vec![pre, Node::Assertion(AssertionKind::EndLine)]));
+                let post = post.map(|post| {
+                    Node::Concat(vec![Node::Assertion(AssertionKind::StartLine), post])
+                });
+                (pre, post)
+            }
+            (Some(_), None) => {
+                let nodes = vec![
+                    original_node.clone(),
+                    Node::Assertion(AssertionKind::EndLine),
+                ];
+                (Some(Node::Concat(nodes)), None)
+            }
+            (None, None) => (None, None),
+        }
     }
 }
 
@@ -350,9 +355,10 @@ impl PrePostExtractor {
     }
 
     fn add_pre_post_node(&mut self, node: &Node) {
-        if self.current_position < self.start_position {
+        if self.current_position < self.end_position && self.start_position > 0 {
             self.add_node(node.clone(), false);
-        } else if self.current_position >= self.end_position {
+        }
+        if self.current_position >= self.start_position {
             self.add_node(node.clone(), true);
         }
     }
@@ -550,7 +556,7 @@ mod tests {
             "{ AB ( 11 | 12 ) 13 ( 1? | 14 ) }",
             &[b"\xAB\x11\x13", b"\xAB\x12\x13"],
             "",
-            r"^(\xab\x11\x13|\xab\x12\x13)([\x10-\x1f]|\x14)",
+            r"^\xab(\x11|\x12)\x13([\x10-\x1f]|\x14)",
         );
 
         // Test imbrication of alternations
@@ -599,11 +605,7 @@ mod tests {
                 b"\x12\x22\x32\x42\x52",
             ],
             "",
-            "^(\\x11!1AQ|\\x11!1AR|\\x11!1BQ|\\x11!1BR|\\x11!2AQ|\\x11!2AR|\\x11!2BQ|\\x11!2BR|\
-               \\x11\"1AQ|\\x11\"1AR|\\x11\"1BQ|\\x11\"1BR|\\x11\"2AQ|\\x11\"2AR|\\x11\"2BQ|\
-               \\x11\"2BR|\\x12!1AQ|\\x12!1AR|\\x12!1BQ|\\x12!1BR|\\x12!2AQ|\\x12!2AR|\\x12!2BQ|\
-               \\x12!2BR|\\x12\"1AQ|\\x12\"1AR|\\x12\"1BQ|\\x12\"1BR|\\x12\"2AQ|\\x12\"2AR|\
-               \\x12\"2BQ|\\x12\"2BR)(a|b)(q|r)\\x88",
+            "^(\\x11|\\x12)(!|\")(1|2)(A|B)(Q|R)(a|b)(q|r)\\x88",
         );
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) 33 ( 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10  ) }",
@@ -614,7 +616,7 @@ mod tests {
                 b"\x12\x22\x33",
             ],
             "",
-            r#"^(\x11!3|\x11"3|\x12!3|\x12"3)(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
+            r#"^(\x11|\x12)(!|")3(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
         );
 
         // TODO: to improve, there are diminishing returns in computing the longest literals.
@@ -699,7 +701,7 @@ mod tests {
         test(
             "{ 61 ?? ( 62 63 | 64) 65 }",
             &[b"\x62\x63\x65", b"\x64\x65"],
-            r"a.(bce|de)$",
+            r"a.(bc|d)e$",
             "",
         );
     }
@@ -732,34 +734,39 @@ mod tests {
         // Literal on the left side of a group
         test("abc(a+)b", &[b"abc"], "", "^abc(a+)b");
         // Literal spanning inside a group
-        test("ab(ca+)b", &[b"abc"], "", "^abc(a+)b");
+        test("ab(ca+)b", &[b"abc"], "", "^ab(ca+)b");
         // Literal spanning up to the end of a group
-        test("ab(c)a+b", &[b"abc"], "", "^abca+b");
+        test("ab(c)a+b", &[b"abc"], "", "^ab(c)a+b");
         // Literal spanning in and out of a group
-        test("a(b)ca+b", &[b"abc"], "", "^abca+b");
+        test("a(b)ca+b", &[b"abc"], "", "^a(b)ca+b");
 
         // Literal on the right side of a group
         test("b(a+)abc", &[b"abc"], "b(a+)abc$", "");
         // Literal spanning inside a group
-        test("b(a+a)bc", &[b"abc"], "b(a+)abc$", "");
+        test("b(a+a)bc", &[b"abc"], "b(a+a)bc$", "");
         // Literal starting in a group
-        test("ba+(ab)c", &[b"abc"], "ba+abc$", "");
+        test("ba+(ab)c", &[b"abc"], "ba+(ab)c$", "");
         // Literal spanning in and out of a group
-        test("ba+a(bc)", &[b"abc"], "ba+abc$", "");
+        test("ba+a(bc)", &[b"abc"], "ba+a(bc)$", "");
 
         // A few tests on closing nodes
         test("a.+bcd{2}e", &[b"bc"], "a.+bc$", "^bcd{2}e");
         test("a.+bc.e", &[b"bc"], "a.+bc$", "^bc.e");
         test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "^bc\\B.e");
         test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "^bc[aA]e");
-        test("a.+bc()de", &[b"bcde"], "a.+bcde$", "");
+        test("a.+bc()de", &[b"bcde"], "a.+bc()de$", "");
 
-        test("a+(b.c)(d)(ef)g+", &[b"cdef"], "a+(b.)cdef$", "^cdefg+");
+        test(
+            "a+(b.c)(d)(ef)g+",
+            &[b"cdef"],
+            "a+(b.c)(d)(ef)$",
+            "^(c)(d)(ef)g+",
+        );
 
         test(
             "a((b(c)((d)()(e(g+h)ij)))kl)m",
             &[b"hijklm"],
-            "a((b(c)((d)()(e(g+)))))hijklm$",
+            "a((b(c)((d)()(e(g+h)ij)))kl)m$",
             "",
         );
 
