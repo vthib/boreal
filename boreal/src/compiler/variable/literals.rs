@@ -173,7 +173,9 @@ impl LiteralsExtractor {
     pub fn into_literals_details(mut self, original_node: &Node) -> LiteralsDetails {
         self.close();
 
-        let (pre_ast, post_ast) = self.set.build_pre_post_ast(original_node);
+        let (pre_ast, post_ast) = self
+            .set
+            .build_pre_post_ast(original_node, self.current_position);
 
         LiteralsDetails {
             literals: self.set.literals,
@@ -191,6 +193,7 @@ struct LiteralSet {
 
     /// Starting position of the literals (including the first bytes of the literals).
     start_position: usize,
+
     /// Ending position of the literals (excluding the last bytes of the literals).
     end_position: usize,
 
@@ -212,48 +215,21 @@ impl LiteralSet {
         }
     }
 
-    fn add_literals_ast(&self, nodes: &mut Vec<Node>) {
-        match &self.literals[..] {
-            [] => (),
-            [literal] => {
-                nodes.extend(literal.iter().copied().map(Node::Literal));
-            }
-            literals => {
-                nodes.push(Node::Group(Box::new(Node::Alternation(
-                    literals
-                        .iter()
-                        .map(|literal| {
-                            Node::Concat(literal.iter().copied().map(Node::Literal).collect())
-                        })
-                        .collect(),
-                ))));
-            }
-        }
-    }
-
-    fn build_pre_post_ast(&self, original_node: &Node) -> (Option<Node>, Option<Node>) {
+    fn build_pre_post_ast(
+        &self,
+        original_node: &Node,
+        last_position: usize,
+    ) -> (Option<Node>, Option<Node>) {
         if self.literals.is_empty() {
             return (None, None);
         }
 
-        let visitor = PrePostExtractor::new(self.start_position, self.end_position);
-        let (pre_node, post_node) = visit(original_node, visitor);
-
-        let pre_node = pre_node.map(|pre| {
-            let mut pre_nodes = Vec::new();
-            pre_nodes.push(pre);
-            self.add_literals_ast(&mut pre_nodes);
-            pre_nodes.push(Node::Assertion(AssertionKind::EndLine));
-            Node::Concat(pre_nodes)
-        });
-        let post_node = post_node.map(|post| {
-            let mut post_nodes = Vec::new();
-            self.add_literals_ast(&mut post_nodes);
-            post_nodes.push(post);
-            Node::Concat(post_nodes)
-        });
-
-        (pre_node, post_node)
+        let visitor = PrePostExtractor::new(self.start_position, self.end_position, last_position);
+        let (pre, post) = visit(original_node, visitor);
+        (
+            pre.map(|pre| Node::Concat(vec![pre, Node::Assertion(AssertionKind::EndLine)])),
+            post,
+        )
     }
 }
 
@@ -281,13 +257,15 @@ struct PrePostExtractor {
     start_position: usize,
     /// End position of the extracted literals.
     end_position: usize,
+    /// Last position of the regex.
+    last_position: usize,
 
     /// Current position during the visit of the original AST.
     current_position: usize,
 }
 
 impl PrePostExtractor {
-    fn new(start_position: usize, end_position: usize) -> Self {
+    fn new(start_position: usize, end_position: usize, last_position: usize) -> Self {
         Self {
             pre_stack: Vec::new(),
             post_stack: Vec::new(),
@@ -298,6 +276,7 @@ impl PrePostExtractor {
             current_position: 0,
             start_position,
             end_position,
+            last_position,
         }
     }
 
@@ -307,9 +286,10 @@ impl PrePostExtractor {
     }
 
     fn add_pre_post_node(&mut self, node: &Node) {
-        if self.current_position < self.start_position {
+        if self.current_position < self.end_position && self.start_position > 0 {
             self.add_node(node.clone(), false);
-        } else if self.current_position >= self.end_position {
+        }
+        if self.current_position >= self.start_position && self.end_position != self.last_position {
             self.add_node(node.clone(), true);
         }
     }
@@ -502,7 +482,7 @@ mod tests {
             "{ AB ( 11 | 12 ) 13 ( 1? | 14 ) }",
             &[b"\xAB\x11\x13", b"\xAB\x12\x13"],
             "",
-            r"(\xab\x11\x13|\xab\x12\x13)([\x10-\x1f]|\x14)",
+            r"\xab(\x11|\x12)\x13([\x10-\x1f]|\x14)",
         );
 
         // Test imbrication of alternations
@@ -551,11 +531,7 @@ mod tests {
                 b"\x12\x22\x32\x42\x52",
             ],
             "",
-            "(\\x11!1AQ|\\x11!1AR|\\x11!1BQ|\\x11!1BR|\\x11!2AQ|\\x11!2AR|\\x11!2BQ|\\x11!2BR|\
-              \\x11\"1AQ|\\x11\"1AR|\\x11\"1BQ|\\x11\"1BR|\\x11\"2AQ|\\x11\"2AR|\\x11\"2BQ|\
-              \\x11\"2BR|\\x12!1AQ|\\x12!1AR|\\x12!1BQ|\\x12!1BR|\\x12!2AQ|\\x12!2AR|\\x12!2BQ|\
-              \\x12!2BR|\\x12\"1AQ|\\x12\"1AR|\\x12\"1BQ|\\x12\"1BR|\\x12\"2AQ|\\x12\"2AR|\
-              \\x12\"2BQ|\\x12\"2BR)(a|b)(q|r)\\x88",
+            "(\\x11|\\x12)(!|\")(1|2)(A|B)(Q|R)(a|b)(q|r)\\x88",
         );
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) 33 ( 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10  ) }",
@@ -566,7 +542,7 @@ mod tests {
                 b"\x12\x22\x33",
             ],
             "",
-            r#"(\x11!3|\x11"3|\x12!3|\x12"3)(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
+            r#"(\x11|\x12)(!|")3(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
         );
 
         // TODO: to improve, there are diminishing returns in computing the longest literals.
@@ -651,7 +627,7 @@ mod tests {
         test(
             "{ 61 ?? ( 62 63 | 64) 65 }",
             &[b"\x62\x63\x65", b"\x64\x65"],
-            r"a.(bce|de)$",
+            r"a.(bc|d)e$",
             "",
         );
     }
@@ -684,34 +660,39 @@ mod tests {
         // Literal on the left side of a group
         test("abc(a+)b", &[b"abc"], "", "abc(a+)b");
         // Literal spanning inside a group
-        test("ab(ca+)b", &[b"abc"], "", "abc(a+)b");
+        test("ab(ca+)b", &[b"abc"], "", "ab(ca+)b");
         // Literal spanning up to the end of a group
-        test("ab(c)a+b", &[b"abc"], "", "abca+b");
+        test("ab(c)a+b", &[b"abc"], "", "ab(c)a+b");
         // Literal spanning in and out of a group
-        test("a(b)ca+b", &[b"abc"], "", "abca+b");
+        test("a(b)ca+b", &[b"abc"], "", "a(b)ca+b");
 
         // Literal on the right side of a group
         test("b(a+)abc", &[b"abc"], "b(a+)abc$", "");
         // Literal spanning inside a group
-        test("b(a+a)bc", &[b"abc"], "b(a+)abc$", "");
+        test("b(a+a)bc", &[b"abc"], "b(a+a)bc$", "");
         // Literal starting in a group
-        test("ba+(ab)c", &[b"abc"], "ba+abc$", "");
+        test("ba+(ab)c", &[b"abc"], "ba+(ab)c$", "");
         // Literal spanning in and out of a group
-        test("ba+a(bc)", &[b"abc"], "ba+abc$", "");
+        test("ba+a(bc)", &[b"abc"], "ba+a(bc)$", "");
 
         // A few tests on closing nodes
         test("a.+bcd{2}e", &[b"bc"], "a.+bc$", "bcd{2}e");
         test("a.+bc.e", &[b"bc"], "a.+bc$", "bc.e");
         test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "bc\\B.e");
         test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "bc[aA]e");
-        test("a.+bc()de", &[b"bcde"], "a.+bcde$", "");
+        test("a.+bc()de", &[b"bcde"], "a.+bc()de$", "");
 
-        test("a+(b.c)(d)(ef)g+", &[b"cdef"], "a+(b.)cdef$", "cdefg+");
+        test(
+            "a+(b.c)(d)(ef)g+",
+            &[b"cdef"],
+            "a+(b.c)(d)(ef)$",
+            "(c)(d)(ef)g+",
+        );
 
         test(
             "a((b(c)((d)()(e(g+h)ij)))kl)m",
             &[b"hijklm"],
-            "a((b(c)((d)()(e(g+)))))hijklm$",
+            "a((b(c)((d)()(e(g+h)ij)))kl)m$",
             "",
         );
 
@@ -728,6 +709,6 @@ mod tests {
 
         test_type_traits_non_clonable(LiteralsExtractor::new());
         test_type_traits_non_clonable(LiteralSet::default());
-        test_type_traits_non_clonable(PrePostExtractor::new(0, 0));
+        test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
     }
 }
