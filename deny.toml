@@ -178,15 +178,14 @@ skip = [
     { name = "hermit-abi", version = "*" },
     # aho-corasick 1.0 used for performances, regex will upgrade later
     { name = "aho-corasick", version = "1.0" },
+    # Syn v1 and v2 are used by different dependencies
+    { name = "syn", version = "1.0" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
 # dependencies starting at the specified crate, up to a certain depth, which is
 # by default infinite
-skip-tree = [
-    # Because of rustix depending on both 0.45 and 0.48...
-    { name = "windows-sys", version = "0.45" },
-]
+skip-tree = []
 
 # This section is considered when running `cargo deny check sources`.
 # More documentation about the 'sources' section can be found here:
