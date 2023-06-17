@@ -43,6 +43,7 @@ pub fn parse_regex_string(hex_string: &str) -> Regex {
 // - Ensure public types have expected impls: Clone, Debug, Send & Sync
 // - Instrument those impls to avoid having those derive be marked as missed in coverage...
 pub fn test_type_traits<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
+    #[allow(clippy::redundant_clone)]
     let _r = t.clone();
     let _r = format!("{:?}", &t);
 }

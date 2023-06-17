@@ -55,6 +55,7 @@ where
 //
 // Each module that exposes public types is expected to use it on those types.
 pub fn test_public_type<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
+    #[allow(clippy::redundant_clone)]
     let _r = t.clone();
     let _r = format!("{:?}", &t);
 }
