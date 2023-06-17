@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt update
-          sudo apt install libssl-dev:i386 gcc-multilib
+          sudo apt install libssl-dev:i386 gcc-multilib libc6:i386 libgcc-s1:i386
           echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
           echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
           echo "YARA_OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
