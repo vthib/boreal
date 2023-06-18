@@ -1,7 +1,9 @@
 //! Literal extraction and computation from variable expressions.
 use std::ops::Range;
 
-use boreal_parser::regex::{AssertionKind, ClassKind, Node};
+use boreal_parser::regex::{
+    AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Node, PerlClass, PerlClassKind,
+};
 
 use crate::atoms::atoms_rank;
 use crate::regex::{visit, VisitAction, Visitor};
@@ -75,6 +77,47 @@ enum AstPart<'a> {
     Dot,
     Class(&'a ClassKind),
     Other,
+}
+
+impl AstPart<'_> {
+    fn combinatorics(&self) -> u64 {
+        match self {
+            AstPart::Literals(set) => set.literals.len() as u64,
+            AstPart::Dot => 256,
+            AstPart::Class(ClassKind::Perl(p)) => perl_class_combinatorics(p),
+            AstPart::Class(ClassKind::Bracketed(BracketedClass { items, negated })) => {
+                let mut c = 0;
+                for item in items {
+                    // FIXME: this is wrong, there might be overlap in the items.
+                    match item {
+                        BracketedClassItem::Perl(p) => c += perl_class_combinatorics(p),
+                        BracketedClassItem::Literal(_) => c += 1,
+                        BracketedClassItem::Range(a, b) => c += u64::from(b.saturating_sub(*a)),
+                    }
+                }
+                if *negated {
+                    256_u64.saturating_sub(c)
+                } else {
+                    c
+                }
+            }
+            AstPart::Other => u64::MAX,
+        }
+    }
+}
+
+fn perl_class_combinatorics(cls: &PerlClass) -> u64 {
+    let PerlClass { kind, negated } = cls;
+    let c = match kind {
+        PerlClassKind::Word => 26 + 26 + 10 + 1, // a-zA-Z0-9_
+        PerlClassKind::Space => 4,               // \t\n\r\f
+        PerlClassKind::Digit => 10,              // 0-9
+    };
+    if *negated {
+        256 - c
+    } else {
+        c
+    }
 }
 
 impl<'a> Splitter<'a> {
@@ -186,8 +229,7 @@ impl<'a> Splitter<'a> {
         // Find runs of AstPart that do not contain "AstPart::Other", which
         // marks anything that cannot be used to expand a literal.
         ExpandableIndexes::new(&self.parts)
-            .iter()
-            .map(|range| self.parts[range])
+            .map(|range| &self.parts[range])
             // On every such run, find the best literals by expanding parts
             .filter_map(find_best_literal_set_in_run)
             // Finally, select the best one
@@ -241,6 +283,61 @@ impl LiteralSetBuilder {
     }
 }
 
+// Max out combinators on expansion of one ?? and one X? or ?X
+const MAX_COMBINATORICS: u64 = 256 * 16;
+
+fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
+    // Compute the combinatorics of every part.
+    let details: Vec<_> = run.iter().map(|part| PartDetails {
+        combinatorics: part.combinatorics(),
+        rank: part.rank()
+    }).collect();
+
+    // For every slice in the run, compute the combinatorics of it, with two rules to simplify it:
+    // - ignore slices that reach MAX_COMBINATORICS
+    // - grow a valid slice when it can be done without increasing its combinatorics
+    let mut valid_slices = Vec::new();
+    let mut current_combinatorics = 1;
+    let mut current_rank = 0;
+    'outer: for (i, i_details) in combinatorics.iter().enumerate() {
+        valid_slices.push((i..=i, i_details));
+        for (j, j_details) in combinatorics.iter().enumerate().skip(i + 1) {
+            if j_details.combinatorics == 1 {
+                // We can append the element to the current valid slices, no need to split it.
+                let last_index = valid_slices.len() - 1;
+                valid_slices[last_index].0 = i..=j;
+                // FIXME: this isn't really what the atoms_rank algorithm does. A better way of
+                // computing this would be nice.
+                valid_slices[last_index].1.rank += j_details.rank;
+                continue;
+            }
+            current_combinatorics *= j_details.combinatorics;
+            current_rank *= j_details.rank;
+            if current_combinatorics > MAX_COMBINATORICS {
+                continue 'outer;
+            }
+            valid_slices.push((i..=j, PartDetails {
+                combinatorics: current_combinatorics,
+                rank: current_rank
+            }));
+        }
+    }
+
+    // Now, select the best slices while trying to limit combinatorics.
+    // Try to find a good slice with max 256 combinations: expansion of a single `??`.
+    // Otherwise, pick any good slice.
+    let best_range = valid_slices.iter().filter(|(_, details)| details.combinatorics <= 255).min_by_key(|(_, details)| -i64::from(details.rank))
+        .map(|(range, _)| range)
+        .unwrap_or_else(|| valid_slices.iter().min_by_key(|details| -i64::from(details.rank)).map(|(range, _)| range));
+}
+
+#[derive(Copy, Clone)]
+struct PartDetails {
+    combinatorics: u64,
+    rank: u32,
+}
+
+fn slice_rank(slice: &[AstPart]) {
 /// Object used as an iterator to return runs of `AstPart` objects that are
 /// expandable into literals.
 struct ExpandableIndexes<'a, 'b> {
@@ -259,13 +356,11 @@ impl<'a, 'b> ExpandableIndexes<'a, 'b> {
     }
 }
 
-fn find_best_literal_set_in_run(run: &[&AstPart<'_>]) -> Option<LiteralSet> {}
-
 impl Iterator for ExpandableIndexes<'_, '_> {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((index, part)) = self.parts.next() {
+        for (index, part) in &mut self.parts {
             if let AstPart::Other = part {
                 if self.start_index != index {
                     let res = self.start_index..index;
