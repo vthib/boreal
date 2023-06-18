@@ -68,9 +68,7 @@ struct Splitter<'a> {
     parts: Vec<HirPart<'a>>,
 
     /// Literals currently being built.
-    literals: Vec<Vec<u8>>,
-    /// Starting position of the currently built literals.
-    literals_start_position: usize,
+    literal_set_builder: Option<LiteralSetBuilder>,
 
     /// Current position of the visitor.
     ///
@@ -91,8 +89,7 @@ impl Splitter<'_> {
     fn new() -> Self {
         Self {
             parts: Vec::new(),
-            literals: Vec::new(),
-            literals_start_position: 0,
+            literal_set_builder: None,
 
             current_position: 0,
         }
@@ -147,14 +144,11 @@ impl<'a> Visitor<'a> for Splitter<'a> {
 impl<'a> Splitter<'a> {
     /// Add a byte to the literals being built.
     fn add_byte(&mut self, byte: u8) {
-        if self.literals.is_empty() {
-            self.literals.push(Vec::new());
-            self.literals_start_position = self.current_position;
-        }
+        let builder = self
+            .literal_set_builder
+            .get_or_insert_with(|| LiteralSetBuilder::new(self.current_position));
 
-        for lit in &mut self.literals {
-            lit.push(byte);
-        }
+        builder.add_byte(byte);
     }
 
     fn add_part(&mut self, part: HirPart<'a>) {
@@ -186,48 +180,78 @@ impl<'a> Splitter<'a> {
             }
         }
 
-        // Limit the amount of literals being built to avoid exponential buildup.
-        if self
-            .literals
-            .len()
-            .checked_mul(lits.len())
-            .map_or(true, |v| v > 32)
-        {
+        let current_len = self
+            .literal_set_builder
+            .as_ref()
+            .map_or(1, |builder| builder.literals.len());
+        if current_len.checked_mul(lits.len()).map_or(true, |v| v > 32) {
             return false;
         }
 
-        if self.literals.is_empty() {
-            self.literals = lits;
-            self.literals_start_position = self.current_position;
-        } else {
-            // Compute the cardinal product between the prefixes and the literals of the
-            // alternation.
-            self.literals = self
-                .literals
-                .iter()
-                .flat_map(|prefix| {
-                    lits.iter()
-                        .map(|lit| prefix.iter().copied().chain(lit.iter().copied()).collect())
-                })
-                .collect();
-        }
+        let builder = self
+            .literal_set_builder
+            .get_or_insert_with(|| LiteralSetBuilder::new(self.current_position));
+        builder.add_alternation(lits);
         true
     }
 
     /// Close currently being built literals.
     fn close(&mut self) {
-        if !self.literals.is_empty() {
-            self.parts.push(HirPart::Literals(LiteralSet::new(
-                std::mem::take(&mut self.literals),
-                self.literals_start_position,
-                self.current_position,
-            )));
+        if let Some(builder) = self.literal_set_builder.take() {
+            self.parts
+                .push(HirPart::Literals(builder.build(self.current_position)));
         }
     }
 
     pub fn into_parts(mut self) -> Vec<HirPart<'a>> {
         self.close();
         self.parts
+    }
+}
+
+/// Builder for `LiteralSet`.
+#[derive(Debug, Default)]
+struct LiteralSetBuilder {
+    /// List of literals extracted.
+    literals: Vec<Vec<u8>>,
+
+    /// Starting position of the literals (including the first bytes of the literals).
+    start_position: usize,
+}
+
+impl LiteralSetBuilder {
+    fn new(start_position: usize) -> Self {
+        Self {
+            literals: vec![Vec::new()],
+            start_position,
+        }
+    }
+
+    fn add_byte(&mut self, byte: u8) {
+        for lit in &mut self.literals {
+            lit.push(byte);
+        }
+    }
+
+    fn add_alternation(&mut self, alts: Vec<Vec<u8>>) {
+        // Compute the cardinal product between the prefixes and the literals of the
+        // alternation.
+        if self.literals.is_empty() {
+            self.literals = alts;
+        } else {
+            self.literals = self
+                .literals
+                .iter()
+                .flat_map(|prefix| {
+                    alts.iter()
+                        .map(|lit| prefix.iter().copied().chain(lit.iter().copied()).collect())
+                })
+                .collect();
+        }
+    }
+
+    fn build(self, end_position: usize) -> LiteralSet {
+        LiteralSet::new(self.literals, self.start_position, end_position)
     }
 }
 
