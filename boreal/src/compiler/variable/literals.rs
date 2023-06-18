@@ -1,27 +1,17 @@
 //! Literal extraction and computation from variable expressions.
+use std::ops::Range;
+
 use boreal_parser::regex::{AssertionKind, ClassKind, Node};
 
 use crate::atoms::atoms_rank;
 use crate::regex::{visit, VisitAction, Visitor};
 
 pub fn get_literals_details(node: &Node) -> LiteralsDetails {
-    let visitor = Splitter::new();
-    let visitor = visit(node, visitor);
+    let splitter = Splitter::new();
+    let splitter = visit(node, splitter);
 
-    let last_position = visitor.current_position;
-
-    // Find best set by iterating on all found literals set.
-    let set = visitor
-        .into_parts()
-        .into_iter()
-        .filter_map(|part| match part {
-            AstPart::Literals(set) => Some(set),
-            _ => None,
-        })
-        // We use min of -rank to ensure that the first element is returned if multiple elements
-        // have the same rank. This is preferable to ease validation of the matching against
-        // a literal match.
-        .min_by_key(|set| -i64::from(set.rank));
+    let last_position = splitter.current_position;
+    let set = splitter.find_best_literals_set();
 
     match set {
         None => LiteralsDetails {
@@ -87,7 +77,7 @@ enum AstPart<'a> {
     Other,
 }
 
-impl Splitter<'_> {
+impl<'a> Splitter<'a> {
     fn new() -> Self {
         Self {
             parts: Vec::new(),
@@ -96,50 +86,7 @@ impl Splitter<'_> {
             current_position: 0,
         }
     }
-}
 
-impl<'a> Visitor<'a> for Splitter<'a> {
-    type Output = Self;
-
-    fn visit_pre(&mut self, node: &'a Node) -> VisitAction {
-        match node {
-            Node::Literal(b) => {
-                self.add_byte(*b);
-                VisitAction::Skip
-            }
-            Node::Empty => VisitAction::Skip,
-            Node::Dot => {
-                self.add_part(AstPart::Dot);
-                VisitAction::Skip
-            }
-            Node::Class(cls) => {
-                self.add_part(AstPart::Class(cls));
-                VisitAction::Skip
-            }
-            Node::Assertion(_) | Node::Repetition { .. } => {
-                self.add_part(AstPart::Other);
-                VisitAction::Skip
-            }
-            Node::Alternation(alts) => {
-                if !self.visit_alternation(alts) {
-                    self.add_part(AstPart::Other);
-                }
-                VisitAction::Skip
-            }
-            Node::Group(_) | Node::Concat(_) => VisitAction::Continue,
-        }
-    }
-
-    fn visit_post(&mut self, _node: &Node) {
-        self.current_position += 1;
-    }
-
-    fn finish(self) -> Self {
-        self
-    }
-}
-
-impl<'a> Splitter<'a> {
     /// Add a byte to the literals being built.
     fn add_byte(&mut self, byte: u8) {
         let builder = self
@@ -201,9 +148,50 @@ impl<'a> Splitter<'a> {
         }
     }
 
-    pub fn into_parts(mut self) -> Vec<AstPart<'a>> {
-        self.close();
-        self.parts
+    fn find_best_literals_set(self) -> Option<LiteralSet> {
+        // Firstly, try to find explicit literals present in the regex.
+        let set = self
+            .parts
+            .iter()
+            .filter_map(|part| match part {
+                AstPart::Literals(set) => Some(set),
+                _ => None,
+            })
+            // We use min of -rank to ensure that the first element is returned
+            // if multiple elements have the same rank. This is preferable to ease
+            // validation of the matching against a literal match.
+            .min_by_key(|set| -i64::from(set.rank));
+
+        if let Some(set) = set {
+            // If the length of the literals is 3 or more, this is enough for a
+            // good quality atom.
+            // TODO: should we always do the next step, and keep the best set?
+            if set.literals.len() > 2 {
+                return Some(set.clone());
+            }
+        }
+
+        // Secondly, try to generate good enough literals by expanding classes
+        // or dot expressions.
+        //
+        // This is useful to generate good literals from some hex strings such as:
+        //
+        // `{ AA ?? BB }`
+        //
+        // The first iteration will not find a good enough literals set, as
+        // `AA` and `BB` are too small. However, expanding the dot expression
+        // will generate a set of 256 literals, all starting with `AA` and
+        // ending with `BB`, which is usable in a Aho-Corasick scan.
+
+        // Find runs of AstPart that do not contain "AstPart::Other", which
+        // marks anything that cannot be used to expand a literal.
+        ExpandableIndexes::new(&self.parts)
+            .iter()
+            .map(|range| self.parts[range])
+            // On every such run, find the best literals by expanding parts
+            .filter_map(find_best_literal_set_in_run)
+            // Finally, select the best one
+            .min_by_key(|set| -i64::from(set.rank))
     }
 }
 
@@ -253,8 +241,88 @@ impl LiteralSetBuilder {
     }
 }
 
+/// Object used as an iterator to return runs of `AstPart` objects that are
+/// expandable into literals.
+struct ExpandableIndexes<'a, 'b> {
+    // Index of the first part that is expandable.
+    start_index: usize,
+    // Current iterator over `AstPart` objects.
+    parts: std::iter::Enumerate<std::slice::Iter<'a, AstPart<'b>>>,
+}
+
+impl<'a, 'b> ExpandableIndexes<'a, 'b> {
+    fn new(parts: &'a [AstPart<'b>]) -> Self {
+        Self {
+            start_index: 0,
+            parts: parts.iter().enumerate(),
+        }
+    }
+}
+
+fn find_best_literal_set_in_run(run: &[&AstPart<'_>]) -> Option<LiteralSet> {}
+
+impl Iterator for ExpandableIndexes<'_, '_> {
+    type Item = Range<usize>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((index, part)) = self.parts.next() {
+            if let AstPart::Other = part {
+                if self.start_index != index {
+                    let res = self.start_index..index;
+                    self.start_index = index + 1;
+                    return Some(res);
+                }
+            }
+        }
+
+        None
+    }
+}
+
+impl<'a> Visitor<'a> for Splitter<'a> {
+    type Output = Self;
+
+    fn visit_pre(&mut self, node: &'a Node) -> VisitAction {
+        match node {
+            Node::Literal(b) => {
+                self.add_byte(*b);
+                VisitAction::Skip
+            }
+            Node::Empty => VisitAction::Skip,
+            Node::Dot => {
+                self.add_part(AstPart::Dot);
+                VisitAction::Skip
+            }
+            Node::Class(cls) => {
+                self.add_part(AstPart::Class(cls));
+                VisitAction::Skip
+            }
+            Node::Assertion(_) | Node::Repetition { .. } => {
+                self.add_part(AstPart::Other);
+                VisitAction::Skip
+            }
+            Node::Alternation(alts) => {
+                if !self.visit_alternation(alts) {
+                    self.add_part(AstPart::Other);
+                }
+                VisitAction::Skip
+            }
+            Node::Group(_) | Node::Concat(_) => VisitAction::Continue,
+        }
+    }
+
+    fn visit_post(&mut self, _node: &Node) {
+        self.current_position += 1;
+    }
+
+    fn finish(mut self) -> Self {
+        self.close();
+        self
+    }
+}
+
 /// Set of literals extracted from a regex AST.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct LiteralSet {
     /// List of literals extracted.
     literals: Vec<Vec<u8>>,
@@ -451,7 +519,9 @@ impl Visitor<'_> for PrePostExtractor {
 mod tests {
     use crate::{
         regex::regex_ast_to_string,
-        test_helpers::{parse_hex_string, parse_regex_string, test_type_traits_non_clonable},
+        test_helpers::{
+            parse_hex_string, parse_regex_string, test_type_traits, test_type_traits_non_clonable,
+        },
     };
 
     use super::*;
@@ -781,7 +851,7 @@ mod tests {
         });
 
         test_type_traits_non_clonable(Splitter::new());
-        test_type_traits_non_clonable(LiteralSet::default());
+        test_type_traits(LiteralSet::default());
         test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
     }
 }
