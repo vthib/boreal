@@ -68,7 +68,7 @@ struct AstPrinter {
     res: String,
 }
 
-impl Visitor for AstPrinter {
+impl Visitor<'_> for AstPrinter {
     type Output = String;
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {

@@ -93,7 +93,7 @@ struct AstStats {
     has_word_boundaries: bool,
 }
 
-impl Visitor for AstStats {
+impl Visitor<'_> for AstStats {
     type Output = Self;
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
@@ -263,7 +263,7 @@ impl AstWidener {
     }
 }
 
-impl Visitor for AstWidener {
+impl Visitor<'_> for AstWidener {
     type Output = Node;
 
     fn finish(self) -> Node {

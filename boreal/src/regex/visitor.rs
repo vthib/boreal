@@ -1,19 +1,19 @@
 use boreal_parser::regex::Node;
 
 /// Trait used to visit a regex ast in constant stack space.
-pub trait Visitor {
+pub trait Visitor<'a> {
     /// Type of the result of the visit.
     type Output;
 
     /// Called for all nodes, before visiting children nodes.
     ///
     /// If an error is returned, the visit is stopped and the error bubbled up.
-    fn visit_pre(&mut self, node: &Node) -> VisitAction;
+    fn visit_pre(&mut self, node: &'a Node) -> VisitAction;
 
     /// Called for all nodes, after visiting children nodes.
     ///
     /// If an error is returned, the visit is stopped and the error bubbled up.
-    fn visit_post(&mut self, _node: &Node) {}
+    fn visit_post(&mut self, _node: &'a Node) {}
 
     /// Called between alternation nodes.
     fn visit_alternation_in(&mut self) {}
@@ -44,7 +44,7 @@ pub enum VisitAction {
 // This is greatly inspired by the HeapVisitor of the regex crate.
 // See
 // <https://github.com/rust-lang/regex/blob/regex-syntax-0.6.25/regex-syntax/src/hir/visitor.rs>
-pub fn visit<V: Visitor>(mut node: &Node, mut visitor: V) -> V::Output {
+pub fn visit<'a, V: Visitor<'a>>(mut node: &'a Node, mut visitor: V) -> V::Output {
     // Heap-base stack to visit nodes without growing the stack.
     // Each element is:
     // - a node that is currently being visited.

@@ -1,5 +1,5 @@
 //! Literal extraction and computation from variable expressions.
-use boreal_parser::regex::{AssertionKind, Node};
+use boreal_parser::regex::{AssertionKind, ClassKind, Node};
 
 use crate::atoms::atoms_rank;
 use crate::regex::{visit, VisitAction, Visitor};
@@ -64,9 +64,9 @@ pub struct LiteralsDetails {
 /// This strive to strike a balance between exhaustively finding any possible literal to compute
 /// the best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
-struct Splitter {
+struct Splitter<'a> {
     /// Set of best literals extracted so far.
-    parts: Vec<AstPart>,
+    parts: Vec<AstPart<'a>>,
 
     /// Literals currently being built.
     literals: Vec<Vec<u8>>,
@@ -80,14 +80,14 @@ struct Splitter {
 }
 
 #[derive(Debug)]
-enum AstPart {
+enum AstPart<'a> {
     Literals(LiteralSet),
     Dot,
-    Class,
+    Class(&'a ClassKind),
     Other,
 }
 
-impl Splitter {
+impl Splitter<'_> {
     fn new() -> Self {
         Self {
             parts: Vec::new(),
@@ -99,10 +99,10 @@ impl Splitter {
     }
 }
 
-impl Visitor for Splitter {
+impl<'a> Visitor<'a> for Splitter<'a> {
     type Output = Self;
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+    fn visit_pre(&mut self, node: &'a Node) -> VisitAction {
         match node {
             Node::Literal(b) => {
                 self.add_byte(*b);
@@ -113,8 +113,8 @@ impl Visitor for Splitter {
                 self.add_part(AstPart::Dot);
                 VisitAction::Skip
             }
-            Node::Class(_) => {
-                self.add_part(AstPart::Class);
+            Node::Class(cls) => {
+                self.add_part(AstPart::Class(cls));
                 VisitAction::Skip
             }
             Node::Assertion(_) | Node::Repetition { .. } => {
@@ -140,7 +140,7 @@ impl Visitor for Splitter {
     }
 }
 
-impl Splitter {
+impl<'a> Splitter<'a> {
     /// Add a byte to the literals being built.
     fn add_byte(&mut self, byte: u8) {
         if self.literals.is_empty() {
@@ -153,7 +153,7 @@ impl Splitter {
         }
     }
 
-    fn add_part(&mut self, part: AstPart) {
+    fn add_part(&mut self, part: AstPart<'a>) {
         self.close(false);
         self.parts.push(part);
     }
@@ -228,7 +228,7 @@ impl Splitter {
         }
     }
 
-    pub fn into_parts(mut self) -> Vec<AstPart> {
+    pub fn into_parts(mut self) -> Vec<AstPart<'a>> {
         self.close(true);
         self.parts
     }
@@ -381,7 +381,7 @@ impl PrePostExtractor {
     }
 }
 
-impl Visitor for PrePostExtractor {
+impl Visitor<'_> for PrePostExtractor {
     type Output = (Option<Node>, Option<Node>);
 
     fn visit_pre(&mut self, node: &Node) -> VisitAction {
