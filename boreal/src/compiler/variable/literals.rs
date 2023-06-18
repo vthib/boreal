@@ -7,10 +7,12 @@ use crate::regex::{visit, VisitAction, Visitor};
 pub fn get_literals_details(node: &Node) -> LiteralsDetails {
     let visitor = Splitter::new();
     let visitor = visit(node, visitor);
-    let parts = visitor.into_parts();
+
+    let last_position = visitor.current_position;
 
     // Find best set by iterating on all found literals set.
-    let set = parts
+    let set = visitor
+        .into_parts()
         .into_iter()
         .filter_map(|part| match part {
             AstPart::Literals(set) => Some(set),
@@ -28,7 +30,7 @@ pub fn get_literals_details(node: &Node) -> LiteralsDetails {
             post_ast: None,
         },
         Some(set) => {
-            let (pre_ast, post_ast) = set.build_pre_post_ast(node);
+            let (pre_ast, post_ast) = set.build_pre_post_ast(node, last_position);
             LiteralsDetails {
                 literals: set.literals,
                 pre_ast,
@@ -154,7 +156,7 @@ impl<'a> Splitter<'a> {
     }
 
     fn add_part(&mut self, part: AstPart<'a>) {
-        self.close(false);
+        self.close();
         self.parts.push(part);
     }
 
@@ -211,25 +213,18 @@ impl<'a> Splitter<'a> {
     }
 
     /// Close currently being built literals.
-    fn close(&mut self, eor: bool) {
+    fn close(&mut self) {
         if !self.literals.is_empty() {
             self.parts.push(AstPart::Literals(LiteralSet::new(
                 std::mem::take(&mut self.literals),
-                match self.literals_start_position {
-                    0 => None,
-                    n => Some(n),
-                },
-                if eor {
-                    None
-                } else {
-                    Some(self.current_position)
-                },
+                self.literals_start_position,
+                self.current_position,
             )));
         }
     }
 
     pub fn into_parts(mut self) -> Vec<AstPart<'a>> {
-        self.close(true);
+        self.close();
         self.parts
     }
 }
@@ -241,25 +236,19 @@ struct LiteralSet {
     literals: Vec<Vec<u8>>,
 
     /// Starting position of the literals (including the first bytes of the literals).
-    ///
-    /// Unset if the literals start at the start of the regex.
-    start_position: Option<usize>,
+    start_position: usize,
 
     /// Ending position of the literals (excluding the last bytes of the literals).
     ///
     /// Unset if the literals end at the end of the regex.
-    end_position: Option<usize>,
+    end_position: usize,
 
     /// Rank of the saved literals.
     rank: u32,
 }
 
 impl LiteralSet {
-    fn new(
-        literals: Vec<Vec<u8>>,
-        start_position: Option<usize>,
-        end_position: Option<usize>,
-    ) -> Self {
+    fn new(literals: Vec<Vec<u8>>, start_position: usize, end_position: usize) -> Self {
         let rank = atoms_rank(&literals);
 
         Self {
@@ -270,38 +259,21 @@ impl LiteralSet {
         }
     }
 
-    fn build_pre_post_ast(&self, original_node: &Node) -> (Option<Node>, Option<Node>) {
+    fn build_pre_post_ast(
+        &self,
+        original_node: &Node,
+        last_position: usize,
+    ) -> (Option<Node>, Option<Node>) {
         if self.literals.is_empty() {
             return (None, None);
         }
 
-        match (self.start_position, self.end_position) {
-            (None, Some(_)) => {
-                let nodes = vec![
-                    Node::Assertion(AssertionKind::StartLine),
-                    original_node.clone(),
-                ];
-                (None, Some(Node::Concat(nodes)))
-            }
-            (Some(start), Some(end)) => {
-                let visitor = PrePostExtractor::new(start, end);
-                let (pre, post) = visit(original_node, visitor);
-                let pre =
-                    pre.map(|pre| Node::Concat(vec![pre, Node::Assertion(AssertionKind::EndLine)]));
-                let post = post.map(|post| {
-                    Node::Concat(vec![Node::Assertion(AssertionKind::StartLine), post])
-                });
-                (pre, post)
-            }
-            (Some(_), None) => {
-                let nodes = vec![
-                    original_node.clone(),
-                    Node::Assertion(AssertionKind::EndLine),
-                ];
-                (Some(Node::Concat(nodes)), None)
-            }
-            (None, None) => (None, None),
-        }
+        let visitor = PrePostExtractor::new(self.start_position, self.end_position, last_position);
+        let (pre, post) = visit(original_node, visitor);
+        (
+            pre.map(|pre| Node::Concat(vec![pre, Node::Assertion(AssertionKind::EndLine)])),
+            post.map(|post| Node::Concat(vec![Node::Assertion(AssertionKind::StartLine), post])),
+        )
     }
 }
 
@@ -329,13 +301,15 @@ struct PrePostExtractor {
     start_position: usize,
     /// End position of the extracted literals.
     end_position: usize,
+    /// Last position of the regex.
+    last_position: usize,
 
     /// Current position during the visit of the original AST.
     current_position: usize,
 }
 
 impl PrePostExtractor {
-    fn new(start_position: usize, end_position: usize) -> Self {
+    fn new(start_position: usize, end_position: usize, last_position: usize) -> Self {
         Self {
             pre_stack: Vec::new(),
             post_stack: Vec::new(),
@@ -346,6 +320,7 @@ impl PrePostExtractor {
             current_position: 0,
             start_position,
             end_position,
+            last_position,
         }
     }
 
@@ -358,7 +333,7 @@ impl PrePostExtractor {
         if self.current_position < self.end_position && self.start_position > 0 {
             self.add_node(node.clone(), false);
         }
-        if self.current_position >= self.start_position {
+        if self.current_position >= self.start_position && self.end_position != self.last_position {
             self.add_node(node.clone(), true);
         }
     }
@@ -783,6 +758,6 @@ mod tests {
 
         test_type_traits_non_clonable(Splitter::new());
         test_type_traits_non_clonable(LiteralSet::default());
-        test_type_traits_non_clonable(PrePostExtractor::new(0, 0));
+        test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
     }
 }
