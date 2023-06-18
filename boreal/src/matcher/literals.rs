@@ -1,24 +1,17 @@
 //! Literal extraction and computation from variable expressions.
-use crate::atoms::atoms_rank;
-use crate::regex::{visit, Hir, VisitAction, Visitor};
+use std::borrow::Cow;
+use std::ops::RangeInclusive;
 
-pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
-    let visitor = Splitter::new();
-    let visitor = visit(hir, visitor);
-    let end_position = visitor.current_position;
-    let parts = visitor.into_parts();
+use crate::atoms::{atoms_rank, byte_rank};
+use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
+use bitmaps::Bitmap;
 
-    // Find best set by iterating on all found literals set.
-    let set = parts
-        .into_iter()
-        .filter_map(|part| match part {
-            HirPart::Literals(set) => Some(set),
-            _ => None,
-        })
-        // We use min of -rank to ensure that the first element is returned if multiple elements
-        // have the same rank. This is preferable to ease validation of the matching against
-        // a literal match.
-        .min_by_key(|set| -i64::from(set.rank));
+pub fn get_literals_details(hir: &Hir, dot_all: bool) -> LiteralsDetails {
+    let splitter = Splitter::new(dot_all);
+    let splitter = visit(hir, splitter);
+
+    let last_position = splitter.current_position;
+    let set = splitter.find_best_literals_set();
 
     match set {
         None => LiteralsDetails {
@@ -27,7 +20,7 @@ pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
             post_hir: None,
         },
         Some(set) => {
-            let (pre_hir, post_hir) = set.build_pre_post_hir(hir, end_position);
+            let (pre_hir, post_hir) = set.build_pre_post_hir(hir, last_position);
             LiteralsDetails {
                 literals: set.literals,
                 pre_hir,
@@ -64,7 +57,6 @@ pub struct LiteralsDetails {
 /// the best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
 struct Splitter {
-    /// Set of best literals extracted so far.
     parts: Vec<HirPart>,
 
     /// Literals currently being built.
@@ -74,74 +66,84 @@ struct Splitter {
     ///
     /// This position is a simple counter of visited nodes.
     current_position: usize,
+
+    /// True if the dot all modifier is set for this regex.
+    dot_all: bool,
 }
 
 #[derive(Debug)]
 enum HirPart {
     Literals(LiteralSet),
-    Dot,
-    Class,
-    Mask,
+    Dot {
+        start_position: usize,
+        dot_all: bool,
+    },
+    Class {
+        start_position: usize,
+        bitmap: Bitmap<256>,
+    },
     Other,
 }
 
+impl HirPart {
+    fn combinatorics(&self) -> Option<i32> {
+        match self {
+            HirPart::Literals(set) => i32::try_from(set.literals.len()).ok(),
+            HirPart::Dot { .. } => Some(256),
+            HirPart::Class { bitmap, .. } => i32::try_from(bitmap.len()).ok(),
+            HirPart::Other => None,
+        }
+    }
+
+    fn rank(&self) -> Option<u32> {
+        match self {
+            HirPart::Literals(set) => Some(set.rank),
+            HirPart::Dot { .. } => Some(byte_rank(0)),
+            // FIXME: improve this:
+            HirPart::Class { .. } => Some(byte_rank(0)),
+            HirPart::Other => None,
+        }
+    }
+
+    fn start_position(&self) -> Option<usize> {
+        match self {
+            HirPart::Literals(set) => Some(set.start_position),
+            HirPart::Dot { start_position, .. } => Some(*start_position),
+            HirPart::Class { start_position, .. } => Some(*start_position),
+            HirPart::Other => None,
+        }
+    }
+
+    fn end_position(&self) -> Option<usize> {
+        match self {
+            HirPart::Literals(set) => Some(set.end_position),
+            HirPart::Dot { start_position, .. } => Some(start_position + 1),
+            HirPart::Class { start_position, .. } => Some(start_position + 1),
+            HirPart::Other => None,
+        }
+    }
+
+    fn len(&self) -> Option<usize> {
+        match self {
+            HirPart::Literals(set) => Some(set.end_position - set.start_position),
+            HirPart::Dot { .. } => Some(1),
+            HirPart::Class { .. } => Some(1),
+            HirPart::Other => None,
+        }
+    }
+}
+
 impl Splitter {
-    fn new() -> Self {
+    fn new(dot_all: bool) -> Self {
         Self {
             parts: Vec::new(),
             literal_set_builder: None,
 
             current_position: 0,
-        }
-    }
-}
-
-impl Visitor for Splitter {
-    type Output = Self;
-
-    fn visit_pre(&mut self, node: &Hir) -> VisitAction {
-        match node {
-            Hir::Literal(b) => {
-                self.add_byte(*b);
-                VisitAction::Skip
-            }
-            Hir::Empty => VisitAction::Skip,
-            Hir::Dot => {
-                self.add_part(HirPart::Dot);
-                VisitAction::Skip
-            }
-            Hir::Class(_) => {
-                self.add_part(HirPart::Class);
-                VisitAction::Skip
-            }
-            Hir::Mask { .. } => {
-                self.add_part(HirPart::Mask);
-                VisitAction::Skip
-            }
-            Hir::Assertion(_) | Hir::Repetition { .. } => {
-                self.add_part(HirPart::Other);
-                VisitAction::Skip
-            }
-            Hir::Alternation(alts) => {
-                if !self.visit_alternation(alts) {
-                    self.add_part(HirPart::Other);
-                }
-                VisitAction::Skip
-            }
-            Hir::Group(_) | Hir::Concat(_) => VisitAction::Continue,
+            dot_all,
         }
     }
 
-    fn visit_post(&mut self, _node: &Hir) {
-        self.current_position += 1;
-    }
-
-    fn finish(self) -> Self {
-        self
-    }
-}
-
-impl Splitter {
     /// Add a byte to the literals being built.
     fn add_byte(&mut self, byte: u8) {
         let builder = self
@@ -152,7 +154,7 @@ impl Splitter {
     }
 
     fn add_part(&mut self, part: HirPart) {
-        self.close();
+        self.close_literal_set();
         self.parts.push(part);
     }
 
@@ -191,21 +193,58 @@ impl Splitter {
         let builder = self
             .literal_set_builder
             .get_or_insert_with(|| LiteralSetBuilder::new(self.current_position));
-        builder.add_alternation(lits);
+        builder.add_alternation(Cow::Owned(lits));
         true
     }
 
     /// Close currently being built literals.
-    fn close(&mut self) {
+    fn close_literal_set(&mut self) {
         if let Some(builder) = self.literal_set_builder.take() {
-            self.parts
-                .push(HirPart::Literals(builder.build(self.current_position)));
+            self.add_part(HirPart::Literals(builder.build(self.current_position)));
         }
     }
 
-    pub fn into_parts(mut self) -> Vec<HirPart> {
-        self.close();
-        self.parts
+    fn close_run(&mut self) {
+        self.close_literal_set();
+        self.parts.push(HirPart::Other);
+    }
+
+    fn find_best_literals_set(self) -> Option<LiteralSet> {
+        // Firstly, try to find explicit literals present in the regex.
+        let set = self
+            .parts
+            .iter()
+            .filter_map(|part| match part {
+                HirPart::Literals(set) => Some(set),
+                _ => None,
+            })
+            // We use min of -rank to ensure that the first element is returned
+            // if multiple elements have the same rank. This is preferable to ease
+            // validation of the matching against a literal match.
+            .min_by_key(|set| -i64::from(set.rank));
+
+        if let Some(set) = set {
+            // If the length of the literals is 2 or more, this is enough for a
+            // good quality atom.
+            if !set.literals.is_empty() && set.literals[0].len() >= 2 {
+                return Some(set.clone());
+            }
+        }
+
+        // Secondly, try to generate good enough literals by expanding classes
+        // or dot expressions.
+        //
+        // This is useful to generate good literals from some hex strings such as:
+        //
+        // `{ AA ?? BB }`
+        //
+        // The first iteration will not find a good enough literals set, as
+        // `AA` and `BB` are too small. However, expanding the dot expression
+        // will generate a set of 256 literals, all starting with `AA` and
+        // ending with `BB`, which is usable in a Aho-Corasick scan.
+
+        // On every run, find the best literals by expanding parts.
+        find_best_literal_set_in_parts(&self.parts)
     }
 }
 
@@ -233,11 +272,11 @@ impl LiteralSetBuilder {
         }
     }
 
-    fn add_alternation(&mut self, alts: Vec<Vec<u8>>) {
+    fn add_alternation(&mut self, alts: Cow<[Vec<u8>]>) {
         // Compute the cardinal product between the prefixes and the literals of the
         // alternation.
         if self.literals.is_empty() {
-            self.literals = alts;
+            self.literals = alts.into_owned();
         } else {
             self.literals = self
                 .literals
@@ -250,13 +289,265 @@ impl LiteralSetBuilder {
         }
     }
 
+    fn add_class(&mut self, cls: &[u8]) {
+        // Compute the cardinal product between the prefixes and the literals of the
+        // alternation.
+        if self.literals.is_empty() {
+            self.literals = cls.iter().map(|b| vec![*b]).collect();
+        } else {
+            self.literals = self
+                .literals
+                .iter()
+                .flat_map(|prefix| {
+                    cls.iter()
+                        .map(|b| prefix.iter().copied().chain(std::iter::once(*b)).collect())
+                })
+                .collect();
+        }
+    }
+
     fn build(self, end_position: usize) -> LiteralSet {
         LiteralSet::new(self.literals, self.start_position, end_position)
+    }
+
+    fn add_ast_part(&mut self, part: &HirPart) {
+        match part {
+            HirPart::Literals(set) => {
+                if set.literals.len() == 1 {
+                    for b in &set.literals[0] {
+                        self.add_byte(*b);
+                    }
+                } else {
+                    self.add_alternation(Cow::Borrowed(&set.literals));
+                }
+            }
+            HirPart::Dot { dot_all, .. } => {
+                // TODO: replace with a static vec
+                let cls: Vec<_> = (0..=255)
+                    .filter(|b| if *dot_all { true } else { *b != b'\n' })
+                    .collect();
+                self.add_class(&cls);
+            }
+            HirPart::Class { bitmap, .. } => {
+                // TODO: improve data objects used
+                let cls: Vec<_> = bitmap
+                    .into_iter()
+                    .map(|i|
+                            // Safety: there are only 256 elements so casting to u8 is safe.
+                            u8::try_from(i).unwrap())
+                    .collect();
+                self.add_class(&cls);
+            }
+            HirPart::Other => unreachable!(),
+        }
+    }
+}
+
+// Max out combinators on expansion of one ?? and one X? or ?X
+const MAX_COMBINATORICS: i32 = 256;
+
+fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
+    // Compute the combinatorics of every part.
+    let details: Vec<_> = parts
+        .iter()
+        .map(|part| {
+            Some(PartDetails {
+                combinatorics: part.combinatorics()?,
+                rank: part.rank()?,
+                len: part.len()?,
+            })
+        })
+        .collect();
+
+    // For every slice in the run, compute the combinatorics of it, with two rules to simplify it:
+    // - ignore slices that reach MAX_COMBINATORICS
+    // - grow a valid slice when it can be done without increasing its combinatorics
+    let mut valid_slices = Vec::new();
+    'outer: for (i, i_details) in details.iter().enumerate() {
+        let i_details = match i_details {
+            Some(v) => v,
+            None => continue,
+        };
+        if i_details.combinatorics >= 255 {
+            continue;
+        }
+        valid_slices.push(Slice {
+            span: i..=i,
+            combinatorics: i_details.combinatorics,
+            rank: i_details.rank,
+            len: i_details.len,
+            invalid: false,
+        });
+        let mut current_combinatorics = i_details.combinatorics;
+        let mut current_rank = i_details.rank;
+        let mut current_len = i_details.len;
+        for (j, j_details) in details.iter().enumerate().skip(i + 1) {
+            let j_details = match j_details {
+                Some(v) => v,
+                None => break,
+            };
+            if j_details.combinatorics == 1 {
+                // We can append the element to the current valid slices, no need to split it.
+                let last_index = valid_slices.len() - 1;
+                valid_slices[last_index].span = i..=j;
+                // FIXME: this isn't really what the atoms_rank algorithm does. A better way of
+                // computing this would be nice.
+                valid_slices[last_index].rank += j_details.rank;
+                valid_slices[last_index].invalid = false;
+                valid_slices[last_index].len += j_details.len;
+                continue;
+            }
+            current_combinatorics *= j_details.combinatorics;
+            current_rank += j_details.rank;
+            current_len += j_details.len;
+            if current_combinatorics > MAX_COMBINATORICS {
+                continue 'outer;
+            }
+            valid_slices.push(Slice {
+                span: i..=j,
+                combinatorics: current_combinatorics,
+                rank: current_rank,
+                len: current_len,
+                invalid: j_details.combinatorics >= 255,
+            });
+        }
+    }
+
+    let mut valid_slices: Vec<_> = valid_slices.into_iter().filter(|v| !v.invalid).collect();
+
+    // Now, select the best slices while trying to limit combinatorics.
+    // This is done by sorting the valid slices. We sort in reverse because, for equal
+    // slices, we prefer picking the one that is as much on the left side as possible
+    // (to reduce the reverse validator).
+    valid_slices.sort_by(|a, b| b.cmp(a));
+
+    match valid_slices.get(0) {
+        Some(Slice { span, .. }) => {
+            let parts = &parts[span.clone()];
+            let mut builder = LiteralSetBuilder::new(parts[0].start_position().unwrap());
+
+            for part in parts {
+                builder.add_ast_part(part);
+            }
+            Some(builder.build(parts[parts.len() - 1].end_position().unwrap()))
+        }
+        None => None,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Slice {
+    span: RangeInclusive<usize>,
+    combinatorics: i32,
+    rank: u32,
+    len: usize,
+    invalid: bool,
+}
+
+impl PartialOrd for Slice {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Slice {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // We want:
+        // - bigger length
+        // - smaller combinations
+        // - bigger rank
+        // Sort by length first, then combinations, then rank
+        (self.len, -self.combinatorics, self.rank).cmp(&(
+            other.len,
+            -other.combinatorics,
+            other.rank,
+        ))
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct PartDetails {
+    combinatorics: i32,
+    rank: u32,
+    len: usize,
+}
+
+impl Visitor for Splitter {
+    type Output = Self;
+
+    fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
+        match hir {
+            Hir::Literal(b) => {
+                self.add_byte(*b);
+                VisitAction::Skip
+            }
+            Hir::Empty => VisitAction::Skip,
+            Hir::Dot => {
+                self.add_part(HirPart::Dot {
+                    start_position: self.current_position,
+                    dot_all: self.dot_all,
+                });
+                VisitAction::Skip
+            }
+            Hir::Class(Class { bitmap, .. }) => {
+                self.add_part(HirPart::Class {
+                    start_position: self.current_position,
+                    bitmap: *bitmap,
+                });
+                VisitAction::Skip
+            }
+            Hir::Mask {
+                mask,
+                value,
+                negated,
+            } => {
+                let mut bitmap = Bitmap::new();
+                if *mask == 0x0F {
+                    for c in 0..=15 {
+                        let _ = bitmap.set(usize::from((c << 4) | *value), true);
+                    }
+                } else {
+                    for c in 0..=15 {
+                        let _ = bitmap.set(usize::from(c | *value), true);
+                    }
+                }
+                if *negated {
+                    bitmap.invert();
+                }
+                self.add_part(HirPart::Class {
+                    start_position: self.current_position,
+                    bitmap,
+                });
+                VisitAction::Skip
+            }
+            Hir::Assertion(_) | Hir::Repetition { .. } => {
+                self.close_run();
+                VisitAction::Skip
+            }
+            Hir::Alternation(alts) => {
+                if !self.visit_alternation(alts) {
+                    self.close_run();
+                }
+                VisitAction::Skip
+            }
+            Hir::Group(_) | Hir::Concat(_) => VisitAction::Continue,
+        }
+    }
+
+    fn visit_post(&mut self, node: &Hir) {
+        if !matches!(node, Hir::Group(_) | Hir::Concat(_)) {
+            self.current_position += 1;
+        }
+    }
+
+    fn finish(mut self) -> Self {
+        self.close_run();
+        self
     }
 }
 
 /// Set of literals extracted from a regex AST.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct LiteralSet {
     /// List of literals extracted.
     literals: Vec<Vec<u8>>,
@@ -401,8 +692,8 @@ impl Visitor for PrePostExtractor {
         }
     }
 
-    fn visit_post(&mut self, hir: &Hir) {
-        match hir {
+    fn visit_post(&mut self, node: &Hir) {
+        match node {
             Hir::Literal(_)
             | Hir::Repetition { .. }
             | Hir::Dot
@@ -410,7 +701,7 @@ impl Visitor for PrePostExtractor {
             | Hir::Class(_)
             | Hir::Empty
             | Hir::Assertion(_)
-            | Hir::Alternation(_) => (),
+            | Hir::Alternation(_) => self.current_position += 1,
             Hir::Group(_) => {
                 // Safety: this is a post visit, the pre visit pushed an element on the stack.
                 let mut pre = self.pre_stack.pop().unwrap();
@@ -436,8 +727,6 @@ impl Visitor for PrePostExtractor {
                 }
             }
         }
-
-        self.current_position += 1;
     }
 
     fn finish(self) -> Self::Output {
@@ -449,7 +738,7 @@ impl Visitor for PrePostExtractor {
 mod tests {
     use crate::{
         regex::regex_hir_to_string,
-        test_helpers::{expr_to_hir, test_type_traits_non_clonable},
+        test_helpers::{expr_to_hir, test_type_traits, test_type_traits_non_clonable},
     };
 
     use super::*;
@@ -459,7 +748,7 @@ mod tests {
         #[track_caller]
         fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
             let hir = expr_to_hir(expr);
-            let exprs = get_literals_details(&hir);
+            let exprs = get_literals_details(&hir, false);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -483,18 +772,90 @@ mod tests {
 
         test(
             "{ AB ?D 01 }",
-            &[b"\xab"],
+            &[
+                b"\xab\x0D\x01",
+                b"\xab\x1D\x01",
+                b"\xab\x2D\x01",
+                b"\xab\x3D\x01",
+                b"\xab\x4D\x01",
+                b"\xab\x5D\x01",
+                b"\xab\x6D\x01",
+                b"\xab\x7D\x01",
+                b"\xab\x8D\x01",
+                b"\xab\x9D\x01",
+                b"\xab\xAD\x01",
+                b"\xab\xBD\x01",
+                b"\xab\xCD\x01",
+                b"\xab\xDD\x01",
+                b"\xab\xED\x01",
+                b"\xab\xFD\x01",
+            ],
             "",
-            r"\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
+            "",
         );
 
-        test("{ D? FE }", &[b"\xfe"], r"[\xd0-\xdf]\xfe", "");
+        test(
+            "{ D? FE }",
+            &[
+                b"\xD0\xfe",
+                b"\xD1\xfe",
+                b"\xD2\xfe",
+                b"\xD3\xfe",
+                b"\xD4\xfe",
+                b"\xD5\xfe",
+                b"\xD6\xfe",
+                b"\xD7\xfe",
+                b"\xD8\xfe",
+                b"\xD9\xfe",
+                b"\xDA\xfe",
+                b"\xDB\xfe",
+                b"\xDC\xfe",
+                b"\xDD\xfe",
+                b"\xDE\xfe",
+                b"\xDF\xfe",
+            ],
+            "",
+            "",
+        );
 
         test(
             "{ ( AA | BB ) F? }",
-            &[b"\xAA", b"\xBB"],
+            &[
+                b"\xAA\xF0",
+                b"\xAA\xF1",
+                b"\xAA\xF2",
+                b"\xAA\xF3",
+                b"\xAA\xF4",
+                b"\xAA\xF5",
+                b"\xAA\xF6",
+                b"\xAA\xF7",
+                b"\xAA\xF8",
+                b"\xAA\xF9",
+                b"\xAA\xFA",
+                b"\xAA\xFB",
+                b"\xAA\xFC",
+                b"\xAA\xFD",
+                b"\xAA\xFE",
+                b"\xAA\xFF",
+                b"\xBB\xF0",
+                b"\xBB\xF1",
+                b"\xBB\xF2",
+                b"\xBB\xF3",
+                b"\xBB\xF4",
+                b"\xBB\xF5",
+                b"\xBB\xF6",
+                b"\xBB\xF7",
+                b"\xBB\xF8",
+                b"\xBB\xF9",
+                b"\xBB\xFA",
+                b"\xBB\xFB",
+                b"\xBB\xFC",
+                b"\xBB\xFD",
+                b"\xBB\xFE",
+                b"\xBB\xFF",
+            ],
             "",
-            r"(\xaa|\xbb)[\xf0-\xff]",
+            "",
         );
 
         test(
@@ -664,16 +1025,49 @@ mod tests {
              \\x24)\\x06",
         );
 
-        // TODO: expanding the masked byte would improve the literals
         test(
             "{ 8B C? [2-3] F6 D? 1A C? [2-3] [2-3] 30 0? ?? 4? }",
-            &[b"\x8B"],
-            "",
-            r"\x8b[\xc0-\xcf].{2,3}?\xf6[\xd0-\xdf]\x1a[\xc0-\xcf].{2,3}?.{2,3}?0[\x00-\x0f].[@-O]",
+            &[
+                b"\xF6\xD0\x1A",
+                b"\xF6\xD1\x1A",
+                b"\xF6\xD2\x1A",
+                b"\xF6\xD3\x1A",
+                b"\xF6\xD4\x1A",
+                b"\xF6\xD5\x1A",
+                b"\xF6\xD6\x1A",
+                b"\xF6\xD7\x1A",
+                b"\xF6\xD8\x1A",
+                b"\xF6\xD9\x1A",
+                b"\xF6\xDA\x1A",
+                b"\xF6\xDB\x1A",
+                b"\xF6\xDC\x1A",
+                b"\xF6\xDD\x1A",
+                b"\xF6\xDE\x1A",
+                b"\xF6\xDF\x1A",
+            ],
+            r"\x8b[\xc0-\xcf].{2,3}?\xf6[\xd0-\xdf]\x1a",
+            r"\xf6[\xd0-\xdf]\x1a[\xc0-\xcf].{2,3}?.{2,3}?0[\x00-\x0f].[@-O]",
         );
         test(
             "{ C6 0? E9 4? 8? 4? 05 [2] 89 4? 01 }",
-            &[b"\xC6"],
+            &[
+                b"\xC6\x00\xE9",
+                b"\xC6\x01\xE9",
+                b"\xC6\x02\xE9",
+                b"\xC6\x03\xE9",
+                b"\xC6\x04\xE9",
+                b"\xC6\x05\xE9",
+                b"\xC6\x06\xE9",
+                b"\xC6\x07\xE9",
+                b"\xC6\x08\xE9",
+                b"\xC6\x09\xE9",
+                b"\xC6\x0A\xE9",
+                b"\xC6\x0B\xE9",
+                b"\xC6\x0C\xE9",
+                b"\xC6\x0D\xE9",
+                b"\xC6\x0E\xE9",
+                b"\xC6\x0F\xE9",
+            ],
             "",
             r"\xc6[\x00-\x0f]\xe9[@-O][\x80-\x8f][@-O]\x05.{2,2}?\x89[@-O]\x01",
         );
@@ -689,10 +1083,15 @@ mod tests {
     #[test]
     fn test_regex_literals() {
         #[track_caller]
-        fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
+        fn test<T>(expr: &str, expected_lits: &[T], expected_pre: &str, expected_post: &str)
+        where
+            T: AsRef<[u8]>,
+        {
             let hir = expr_to_hir(expr);
-            let exprs = get_literals_details(&hir);
-            assert_eq!(exprs.literals, expected_lits);
+            let exprs = get_literals_details(&hir, false);
+            let literals: Vec<_> = exprs.literals.iter().collect();
+            let expected: Vec<_> = expected_lits.iter().map(AsRef::as_ref).collect();
+            assert_eq!(literals, expected);
             assert_eq!(
                 exprs
                     .pre_hir
@@ -761,8 +1160,8 @@ mod tests {
             post_hir: None,
         });
 
-        test_type_traits_non_clonable(Splitter::new());
-        test_type_traits_non_clonable(LiteralSet::default());
+        test_type_traits_non_clonable(Splitter::new(false));
+        test_type_traits(LiteralSet::default());
         test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
     }
 }
