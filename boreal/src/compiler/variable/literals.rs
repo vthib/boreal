@@ -1,4 +1,6 @@
 //! Literal extraction and computation from variable expressions.
+use std::borrow::Cow;
+use std::collections::HashSet;
 use std::ops::Range;
 
 use boreal_parser::regex::{
@@ -74,8 +76,13 @@ struct Splitter<'a> {
 #[derive(Debug)]
 enum AstPart<'a> {
     Literals(LiteralSet),
-    Dot,
-    Class(&'a ClassKind),
+    Dot {
+        start_position: usize,
+    },
+    Class {
+        start_position: usize,
+        kind: &'a ClassKind,
+    },
     Other,
 }
 
@@ -83,9 +90,15 @@ impl AstPart<'_> {
     fn combinatorics(&self) -> u64 {
         match self {
             AstPart::Literals(set) => set.literals.len() as u64,
-            AstPart::Dot => 256,
-            AstPart::Class(ClassKind::Perl(p)) => perl_class_combinatorics(p),
-            AstPart::Class(ClassKind::Bracketed(BracketedClass { items, negated })) => {
+            AstPart::Dot { .. } => 256,
+            AstPart::Class {
+                kind: ClassKind::Perl(p),
+                ..
+            } => perl_class_combinatorics(p),
+            AstPart::Class {
+                kind: ClassKind::Bracketed(BracketedClass { items, negated }),
+                ..
+            } => {
                 let mut c = 0;
                 for item in items {
                     // FIXME: this is wrong, there might be overlap in the items.
@@ -108,10 +121,30 @@ impl AstPart<'_> {
     fn rank(&self) -> u32 {
         match self {
             AstPart::Literals(set) => set.rank,
-            AstPart::Dot => byte_rank(0),
+            AstPart::Dot { .. } => byte_rank(0),
             // FIXME: improve this:
-            AstPart::Class(_) => byte_rank(0),
+            AstPart::Class { .. } => byte_rank(0),
             AstPart::Other => 0,
+        }
+    }
+
+    fn start_position(&self) -> usize {
+        match self {
+            AstPart::Literals(set) => set.start_position,
+            AstPart::Dot { start_position } => *start_position,
+            AstPart::Class { start_position, .. } => *start_position,
+            // TODO: avoid this
+            AstPart::Other => unreachable!(),
+        }
+    }
+
+    fn end_position(&self) -> usize {
+        match self {
+            AstPart::Literals(set) => set.end_position,
+            AstPart::Dot { start_position } => start_position + 1,
+            AstPart::Class { start_position, .. } => start_position + 1,
+            // TODO: avoid this
+            AstPart::Other => unreachable!(),
         }
     }
 }
@@ -189,7 +222,7 @@ impl<'a> Splitter<'a> {
         let builder = self
             .literal_set_builder
             .get_or_insert_with(|| LiteralSetBuilder::new(self.current_position));
-        builder.add_alternation(lits);
+        builder.add_alternation(Cow::Owned(lits));
         true
     }
 
@@ -271,11 +304,11 @@ impl LiteralSetBuilder {
         }
     }
 
-    fn add_alternation(&mut self, alts: Vec<Vec<u8>>) {
+    fn add_alternation(&mut self, alts: Cow<[Vec<u8>]>) {
         // Compute the cardinal product between the prefixes and the literals of the
         // alternation.
         if self.literals.is_empty() {
-            self.literals = alts;
+            self.literals = alts.into_owned();
         } else {
             self.literals = self
                 .literals
@@ -288,8 +321,102 @@ impl LiteralSetBuilder {
         }
     }
 
+    fn add_class(&mut self, cls: &[u8]) {
+        // Compute the cardinal product between the prefixes and the literals of the
+        // alternation.
+        if self.literals.is_empty() {
+            self.literals = cls.iter().map(|b| vec![*b]).collect();
+        } else {
+            self.literals = self
+                .literals
+                .iter()
+                .flat_map(|prefix| {
+                    cls.iter()
+                        .map(|b| prefix.iter().copied().chain(std::iter::once(*b)).collect())
+                })
+                .collect();
+        }
+    }
+
     fn build(self, end_position: usize) -> LiteralSet {
         LiteralSet::new(self.literals, self.start_position, end_position)
+    }
+
+    fn add_ast_part(&mut self, part: &AstPart) {
+        match part {
+            AstPart::Literals(set) => {
+                if set.literals.len() == 1 {
+                    for b in &set.literals[0] {
+                        self.add_byte(*b);
+                    }
+                } else {
+                    self.add_alternation(Cow::Borrowed(&set.literals));
+                }
+            }
+            AstPart::Dot { .. } => {
+                // TODO: replace with a static vec
+                let cls: Vec<_> = (0..=255).collect();
+                self.add_class(&cls);
+            }
+            AstPart::Class { kind, .. } => {
+                // TODO: improve data objects used
+                let cls = get_class_bytes(kind);
+                let cls: Vec<_> = cls.into_iter().collect();
+                self.add_class(&cls);
+            }
+            // FIXME: avoid this
+            AstPart::Other => unreachable!(),
+        }
+    }
+}
+
+// TODO: use something better than a hashset
+fn get_class_bytes(kind: &ClassKind) -> HashSet<u8> {
+    let (set, negated) = match kind {
+        ClassKind::Perl(PerlClass { kind, negated }) => {
+            let mut set = HashSet::with_capacity(256);
+            add_perl_class_kind_to_set(kind, &mut set);
+            (set, *negated)
+        }
+        ClassKind::Bracketed(BracketedClass { items, negated }) => {
+            let mut set = HashSet::with_capacity(256);
+            for item in items {
+                match item {
+                    BracketedClassItem::Perl(PerlClass { kind, negated }) => {
+                        if *negated {
+                            let mut subset = HashSet::with_capacity(256);
+                            add_perl_class_kind_to_set(kind, &mut subset);
+                            set.extend((0..=255).filter(|b| !subset.contains(b)));
+                        } else {
+                            add_perl_class_kind_to_set(kind, &mut set);
+                        }
+                    }
+                    BracketedClassItem::Literal(b) => {
+                        let _r = set.insert(*b);
+                    }
+                    BracketedClassItem::Range(a, b) => set.extend(*a..*b),
+                }
+            }
+            (set, *negated)
+        }
+    };
+    if negated {
+        (0..=255).filter(|b| !set.contains(b)).collect()
+    } else {
+        set
+    }
+}
+
+fn add_perl_class_kind_to_set(kind: &PerlClassKind, out: &mut HashSet<u8>) {
+    match kind {
+        PerlClassKind::Word => {
+            out.extend(b'a'..=b'z');
+            out.extend(b'A'..=b'Z');
+            out.extend(b'0'..=b'9');
+            let _r = out.insert(b'_');
+        }
+        PerlClassKind::Space => out.extend([b'\n', b'\t', b'\r', b'\x0C']),
+        PerlClassKind::Digit => out.extend(b'0'..=b'9'),
     }
 }
 
@@ -354,13 +481,17 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
                 .map(|(range, _)| range)
         })?;
 
-    let parts = &run[*best_range];
-    let set = LiteralSet::new(
-        Vec::new(),
-        parts[0].start_position(),
-        parts[parts.len() - 1].end_position(),
-    );
-    todo!()
+    if best_range.is_empty() {
+        return None;
+    }
+
+    let parts = &run[*best_range.start()..*best_range.end()];
+    let mut builder = LiteralSetBuilder::new(parts[0].start_position());
+
+    for part in parts {
+        builder.add_ast_part(part);
+    }
+    Some(builder.build(parts[parts.len() - 1].end_position()))
 }
 
 #[derive(Copy, Clone)]
@@ -416,11 +547,16 @@ impl<'a> Visitor<'a> for Splitter<'a> {
             }
             Node::Empty => VisitAction::Skip,
             Node::Dot => {
-                self.add_part(AstPart::Dot);
+                self.add_part(AstPart::Dot {
+                    start_position: self.current_position,
+                });
                 VisitAction::Skip
             }
             Node::Class(cls) => {
-                self.add_part(AstPart::Class(cls));
+                self.add_part(AstPart::Class {
+                    start_position: self.current_position,
+                    kind: cls,
+                });
                 VisitAction::Skip
             }
             Node::Assertion(_) | Node::Repetition { .. } => {
