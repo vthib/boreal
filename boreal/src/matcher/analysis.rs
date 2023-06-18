@@ -77,7 +77,7 @@ struct AltStack {
     branches_nb_alt_literals: Option<usize>,
 }
 
-impl Visitor for HirAnalyser {
+impl Visitor<'_> for HirAnalyser {
     type Output = HirAnalysis;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {

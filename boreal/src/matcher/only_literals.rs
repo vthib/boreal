@@ -99,7 +99,7 @@ impl Extractor {
     }
 }
 
-impl Visitor for Extractor {
+impl Visitor<'_> for Extractor {
     type Output = Option<Vec<Vec<u8>>>;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {

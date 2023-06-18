@@ -88,7 +88,7 @@ impl HirWidener {
     }
 }
 
-impl Visitor for HirWidener {
+impl Visitor<'_> for HirWidener {
     type Output = Hir;
 
     fn finish(self) -> Hir {

@@ -1,6 +1,6 @@
 //! Literal extraction and computation from variable expressions.
 use crate::atoms::atoms_rank;
-use crate::regex::{visit, Hir, VisitAction, Visitor};
+use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
     let visitor = Splitter::new();
@@ -63,9 +63,9 @@ pub struct LiteralsDetails {
 /// This strive to strike a balance between exhaustively finding any possible literal to compute
 /// the best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
-struct Splitter {
+struct Splitter<'a> {
     /// Set of best literals extracted so far.
-    parts: Vec<HirPart>,
+    parts: Vec<HirPart<'a>>,
 
     /// Literals currently being built.
     literals: Vec<Vec<u8>>,
@@ -79,15 +79,15 @@ struct Splitter {
 }
 
 #[derive(Debug)]
-enum HirPart {
+enum HirPart<'a> {
     Literals(LiteralSet),
     Dot,
-    Class,
+    Class(&'a Class),
     Mask,
     Other,
 }
 
-impl Splitter {
+impl Splitter<'_> {
     fn new() -> Self {
         Self {
             parts: Vec::new(),
@@ -99,10 +99,10 @@ impl Splitter {
     }
 }
 
-impl Visitor for Splitter {
+impl<'a> Visitor<'a> for Splitter<'a> {
     type Output = Self;
 
-    fn visit_pre(&mut self, node: &Hir) -> VisitAction {
+    fn visit_pre(&mut self, node: &'a Hir) -> VisitAction {
         match node {
             Hir::Literal(b) => {
                 self.add_byte(*b);
@@ -113,8 +113,8 @@ impl Visitor for Splitter {
                 self.add_part(HirPart::Dot);
                 VisitAction::Skip
             }
-            Hir::Class(_) => {
-                self.add_part(HirPart::Class);
+            Hir::Class(cls) => {
+                self.add_part(HirPart::Class(cls));
                 VisitAction::Skip
             }
             Hir::Mask { .. } => {
@@ -144,7 +144,7 @@ impl Visitor for Splitter {
     }
 }
 
-impl Splitter {
+impl<'a> Splitter<'a> {
     /// Add a byte to the literals being built.
     fn add_byte(&mut self, byte: u8) {
         if self.literals.is_empty() {
@@ -157,7 +157,7 @@ impl Splitter {
         }
     }
 
-    fn add_part(&mut self, part: HirPart) {
+    fn add_part(&mut self, part: HirPart<'a>) {
         self.close();
         self.parts.push(part);
     }
@@ -225,7 +225,7 @@ impl Splitter {
         }
     }
 
-    pub fn into_parts(mut self) -> Vec<HirPart> {
+    pub fn into_parts(mut self) -> Vec<HirPart<'a>> {
         self.close();
         self.parts
     }
@@ -352,7 +352,7 @@ impl PrePostExtractor {
     }
 }
 
-impl Visitor for PrePostExtractor {
+impl Visitor<'_> for PrePostExtractor {
     type Output = (Option<Hir>, Option<Hir>);
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {

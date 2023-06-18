@@ -1,19 +1,19 @@
 use super::hir::Hir;
 
 /// Trait used to visit a regex HIR in constant stack space.
-pub trait Visitor {
+pub trait Visitor<'a> {
     /// Type of the result of the visit.
     type Output;
 
     /// Called for all hirs, before visiting children hirs.
     ///
     /// If an error is returned, the visit is stopped and the error bubbled up.
-    fn visit_pre(&mut self, hir: &Hir) -> VisitAction;
+    fn visit_pre(&mut self, hir: &'a Hir) -> VisitAction;
 
     /// Called for all hirs, after visiting children hirs.
     ///
     /// If an error is returned, the visit is stopped and the error bubbled up.
-    fn visit_post(&mut self, _hir: &Hir) {}
+    fn visit_post(&mut self, _hir: &'a Hir) {}
 
     /// Called between alternation hirs.
     fn visit_alternation_in(&mut self) {}
@@ -44,7 +44,7 @@ pub enum VisitAction {
 // This is greatly inspired by the HeapVisitor of the regex crate.
 // See
 // <https://github.com/rust-lang/regex/blob/regex-syntax-0.6.25/regex-syntax/src/hir/visitor.rs>
-pub fn visit<V: Visitor>(mut hir: &Hir, mut visitor: V) -> V::Output {
+pub fn visit<'a, V: Visitor<'a>>(mut hir: &'a Hir, mut visitor: V) -> V::Output {
     // Heap-base stack to visit hirs without growing the stack.
     // Each element is:
     // - a hir that is currently being visited.
