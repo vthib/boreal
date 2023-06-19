@@ -1,6 +1,5 @@
 //! Literal extraction and computation from variable expressions.
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::ops::Range;
 
 use boreal_parser::regex::{
@@ -105,7 +104,7 @@ impl AstPart<'_> {
                     match item {
                         BracketedClassItem::Perl(p) => c += perl_class_combinatorics(p),
                         BracketedClassItem::Literal(_) => c += 1,
-                        BracketedClassItem::Range(a, b) => c += u64::from(b.saturating_sub(*a)),
+                        BracketedClassItem::Range(a, b) => c += u64::from(b.saturating_sub(*a) + 1),
                     }
                 }
                 if *negated {
@@ -153,7 +152,7 @@ fn perl_class_combinatorics(cls: &PerlClass) -> u64 {
     let PerlClass { kind, negated } = cls;
     let c = match kind {
         PerlClassKind::Word => 26 + 26 + 10 + 1, // a-zA-Z0-9_
-        PerlClassKind::Space => 4,               // \t\n\r\f
+        PerlClassKind::Space => 6,               // '\t\n\r\v\f '
         PerlClassKind::Digit => 10,              // 0-9
     };
     if *negated {
@@ -252,7 +251,7 @@ impl<'a> Splitter<'a> {
             // If the length of the literals is 3 or more, this is enough for a
             // good quality atom.
             // TODO: should we always do the next step, and keep the best set?
-            if set.literals.len() > 2 {
+            if !set.literals.is_empty() && set.literals[0].len() > 2 {
                 return Some(set.clone());
             }
         }
@@ -361,7 +360,18 @@ impl LiteralSetBuilder {
             AstPart::Class { kind, .. } => {
                 // TODO: improve data objects used
                 let cls = get_class_bytes(kind);
-                let cls: Vec<_> = cls.into_iter().collect();
+                let cls: Vec<_> = cls
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, b)| {
+                        if *b {
+                            // Safety: there are only 256 elements so casting to u8 is safe.
+                            Some(u8::try_from(i).unwrap())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 self.add_class(&cls);
             }
             // FIXME: avoid this
@@ -371,52 +381,68 @@ impl LiteralSetBuilder {
 }
 
 // TODO: use something better than a hashset
-fn get_class_bytes(kind: &ClassKind) -> HashSet<u8> {
-    let (set, negated) = match kind {
+fn get_class_bytes(kind: &ClassKind) -> [bool; 256] {
+    let mut set = [false; 256];
+
+    let negated = match kind {
         ClassKind::Perl(PerlClass { kind, negated }) => {
-            let mut set = HashSet::with_capacity(256);
             add_perl_class_kind_to_set(kind, &mut set);
-            (set, *negated)
+            *negated
         }
         ClassKind::Bracketed(BracketedClass { items, negated }) => {
-            let mut set = HashSet::with_capacity(256);
             for item in items {
                 match item {
                     BracketedClassItem::Perl(PerlClass { kind, negated }) => {
                         if *negated {
-                            let mut subset = HashSet::with_capacity(256);
+                            let mut subset = [false; 256];
                             add_perl_class_kind_to_set(kind, &mut subset);
-                            set.extend((0..=255).filter(|b| !subset.contains(b)));
+                            for (i, b) in set.iter_mut().enumerate() {
+                                if !subset[i] {
+                                    *b = true;
+                                }
+                            }
                         } else {
                             add_perl_class_kind_to_set(kind, &mut set);
                         }
                     }
-                    BracketedClassItem::Literal(b) => {
-                        let _r = set.insert(*b);
+                    BracketedClassItem::Literal(b) => set[usize::from(*b)] = true,
+                    BracketedClassItem::Range(a, b) => {
+                        for i in *a..=*b {
+                            set[usize::from(i)] = true;
+                        }
                     }
-                    BracketedClassItem::Range(a, b) => set.extend(*a..*b),
                 }
             }
-            (set, *negated)
+            *negated
         }
     };
+
     if negated {
-        (0..=255).filter(|b| !set.contains(b)).collect()
-    } else {
-        set
+        for b in &mut set {
+            *b = !*b;
+        }
     }
+    set
 }
 
-fn add_perl_class_kind_to_set(kind: &PerlClassKind, out: &mut HashSet<u8>) {
+fn add_perl_class_kind_to_set(kind: &PerlClassKind, out: &mut [bool; 256]) {
     match kind {
         PerlClassKind::Word => {
-            out.extend(b'a'..=b'z');
-            out.extend(b'A'..=b'Z');
-            out.extend(b'0'..=b'9');
-            let _r = out.insert(b'_');
+            for b in (b'a'..=b'z').chain(b'A'..=b'Z').chain(b'0'..=b'9') {
+                out[usize::from(b)] = true;
+            }
+            out[usize::from(b'_')] = true;
         }
-        PerlClassKind::Space => out.extend([b'\n', b'\t', b'\r', b'\x0C']),
-        PerlClassKind::Digit => out.extend(b'0'..=b'9'),
+        PerlClassKind::Space => {
+            for b in [b'\n', b'\t', b'\r', b'\x0B', b'\x0C', b' '] {
+                out[usize::from(b)] = true;
+            }
+        }
+        PerlClassKind::Digit => {
+            for b in b'0'..=b'9' {
+                out[usize::from(b)] = true;
+            }
+        }
     }
 }
 
@@ -437,10 +463,10 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
     // - ignore slices that reach MAX_COMBINATORICS
     // - grow a valid slice when it can be done without increasing its combinatorics
     let mut valid_slices = Vec::new();
-    let mut current_combinatorics = 1;
-    let mut current_rank = 0;
     'outer: for (i, i_details) in details.iter().enumerate() {
         valid_slices.push((i..=i, *i_details));
+        let mut current_combinatorics = i_details.combinatorics;
+        let mut current_rank = i_details.rank;
         for (j, j_details) in details.iter().enumerate().skip(i + 1) {
             if j_details.combinatorics == 1 {
                 // We can append the element to the current valid slices, no need to split it.
@@ -452,7 +478,7 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
                 continue;
             }
             current_combinatorics *= j_details.combinatorics;
-            current_rank *= j_details.rank;
+            current_rank += j_details.rank;
             if current_combinatorics > MAX_COMBINATORICS {
                 continue 'outer;
             }
@@ -485,7 +511,7 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
         return None;
     }
 
-    let parts = &run[*best_range.start()..*best_range.end()];
+    let parts = &run[best_range.clone()];
     let mut builder = LiteralSetBuilder::new(parts[0].start_position());
 
     for part in parts {
@@ -494,7 +520,7 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
     Some(builder.build(parts[parts.len() - 1].end_position()))
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct PartDetails {
     combinatorics: u64,
     rank: u32,
@@ -505,6 +531,7 @@ struct PartDetails {
 struct ExpandableIndexes<'a, 'b> {
     // Index of the first part that is expandable.
     start_index: usize,
+    len: usize,
     // Current iterator over `AstPart` objects.
     parts: std::iter::Enumerate<std::slice::Iter<'a, AstPart<'b>>>,
 }
@@ -513,6 +540,7 @@ impl<'a, 'b> ExpandableIndexes<'a, 'b> {
     fn new(parts: &'a [AstPart<'b>]) -> Self {
         Self {
             start_index: 0,
+            len: parts.len(),
             parts: parts.iter().enumerate(),
         }
     }
@@ -522,9 +550,12 @@ impl Iterator for ExpandableIndexes<'_, '_> {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // TODO: see if all this can be rewrote, it isn't clean.
         for (index, part) in &mut self.parts {
             if let AstPart::Other = part {
-                if self.start_index != index {
+                if self.start_index == index {
+                    self.start_index = index + 1;
+                } else {
                     let res = self.start_index..index;
                     self.start_index = index + 1;
                     return Some(res);
@@ -532,7 +563,13 @@ impl Iterator for ExpandableIndexes<'_, '_> {
             }
         }
 
-        None
+        if self.start_index == self.len {
+            None
+        } else {
+            let res = self.start_index..self.len;
+            self.start_index = self.len;
+            Some(res)
+        }
     }
 }
 
@@ -573,8 +610,10 @@ impl<'a> Visitor<'a> for Splitter<'a> {
         }
     }
 
-    fn visit_post(&mut self, _node: &Node) {
-        self.current_position += 1;
+    fn visit_post(&mut self, node: &Node) {
+        if !matches!(node, Node::Group(_) | Node::Concat(_)) {
+            self.current_position += 1;
+        }
     }
 
     fn finish(mut self) -> Self {
@@ -742,7 +781,7 @@ impl Visitor<'_> for PrePostExtractor {
             | Node::Class(_)
             | Node::Empty
             | Node::Assertion(_)
-            | Node::Alternation(_) => (),
+            | Node::Alternation(_) => self.current_position += 1,
             Node::Group(_) => {
                 // Safety: this is a post visit, the pre visit pushed an element on the stack.
                 let mut pre = self.pre_stack.pop().unwrap();
@@ -768,8 +807,6 @@ impl Visitor<'_> for PrePostExtractor {
                 }
             }
         }
-
-        self.current_position += 1;
     }
 
     fn finish(self) -> Self::Output {
@@ -824,18 +861,90 @@ mod tests {
 
         test(
             "{ AB ?D 01 }",
-            &[b"\xab"],
+            &[
+                b"\xab\x0D\x01",
+                b"\xab\x1D\x01",
+                b"\xab\x2D\x01",
+                b"\xab\x3D\x01",
+                b"\xab\x4D\x01",
+                b"\xab\x5D\x01",
+                b"\xab\x6D\x01",
+                b"\xab\x7D\x01",
+                b"\xab\x8D\x01",
+                b"\xab\x9D\x01",
+                b"\xab\xAD\x01",
+                b"\xab\xBD\x01",
+                b"\xab\xCD\x01",
+                b"\xab\xDD\x01",
+                b"\xab\xED\x01",
+                b"\xab\xFD\x01",
+            ],
             "",
-            r"^\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
+            "",
         );
 
-        test("{ D? FE }", &[b"\xfe"], r"[\xd0-\xdf]\xfe$", "");
+        test(
+            "{ D? FE }",
+            &[
+                b"\xD0\xfe",
+                b"\xD1\xfe",
+                b"\xD2\xfe",
+                b"\xD3\xfe",
+                b"\xD4\xfe",
+                b"\xD5\xfe",
+                b"\xD6\xfe",
+                b"\xD7\xfe",
+                b"\xD8\xfe",
+                b"\xD9\xfe",
+                b"\xDA\xfe",
+                b"\xDB\xfe",
+                b"\xDC\xfe",
+                b"\xDD\xfe",
+                b"\xDE\xfe",
+                b"\xDF\xfe",
+            ],
+            "",
+            "",
+        );
 
         test(
             "{ ( AA | BB ) F? }",
-            &[b"\xAA", b"\xBB"],
+            &[
+                b"\xAA\xF0",
+                b"\xAA\xF1",
+                b"\xAA\xF2",
+                b"\xAA\xF3",
+                b"\xAA\xF4",
+                b"\xAA\xF5",
+                b"\xAA\xF6",
+                b"\xAA\xF7",
+                b"\xAA\xF8",
+                b"\xAA\xF9",
+                b"\xAA\xFA",
+                b"\xAA\xFB",
+                b"\xAA\xFC",
+                b"\xAA\xFD",
+                b"\xAA\xFE",
+                b"\xAA\xFF",
+                b"\xBB\xF0",
+                b"\xBB\xF1",
+                b"\xBB\xF2",
+                b"\xBB\xF3",
+                b"\xBB\xF4",
+                b"\xBB\xF5",
+                b"\xBB\xF6",
+                b"\xBB\xF7",
+                b"\xBB\xF8",
+                b"\xBB\xF9",
+                b"\xBB\xFA",
+                b"\xBB\xFB",
+                b"\xBB\xFC",
+                b"\xBB\xFD",
+                b"\xBB\xFE",
+                b"\xBB\xFF",
+            ],
             "",
-            r"^(\xaa|\xbb)[\xf0-\xff]",
+            "",
         );
 
         test(
@@ -1015,18 +1124,51 @@ mod tests {
              \\x24)\\x06",
         );
 
-        // TODO: expanding the masked byte would improve the literals
         test(
             "{ 8B C? [2-3] F6 D? 1A C? [2-3] [2-3] 30 0? ?? 4? }",
-            &[b"\x8B"],
-            "",
-            r"^\x8b[\xc0-\xcf].{2,3}?\xf6[\xd0-\xdf]\x1a[\xc0-\xcf].{2,3}?.{2,3}?0[\x00-\x0f].[@-O]",
+            &[
+                b"\xF6\xD0\x1A",
+                b"\xF6\xD1\x1A",
+                b"\xF6\xD2\x1A",
+                b"\xF6\xD3\x1A",
+                b"\xF6\xD4\x1A",
+                b"\xF6\xD5\x1A",
+                b"\xF6\xD6\x1A",
+                b"\xF6\xD7\x1A",
+                b"\xF6\xD8\x1A",
+                b"\xF6\xD9\x1A",
+                b"\xF6\xDA\x1A",
+                b"\xF6\xDB\x1A",
+                b"\xF6\xDC\x1A",
+                b"\xF6\xDD\x1A",
+                b"\xF6\xDE\x1A",
+                b"\xF6\xDF\x1A",
+            ],
+            r"\x8b[\xc0-\xcf].{2,3}?\xf6[\xd0-\xdf]\x1a$",
+            r"^\xf6[\xd0-\xdf]\x1a[\xc0-\xcf].{2,3}?.{2,3}?0[\x00-\x0f].[@-O]",
         );
         test(
             "{ C6 0? E9 4? 8? 4? 05 [2] 89 4? 01 }",
-            &[b"\xC6"],
+            &[
+                b"\x89\x40\x01",
+                b"\x89\x41\x01",
+                b"\x89\x42\x01",
+                b"\x89\x43\x01",
+                b"\x89\x44\x01",
+                b"\x89\x45\x01",
+                b"\x89\x46\x01",
+                b"\x89\x47\x01",
+                b"\x89\x48\x01",
+                b"\x89\x49\x01",
+                b"\x89\x4A\x01",
+                b"\x89\x4B\x01",
+                b"\x89\x4C\x01",
+                b"\x89\x4D\x01",
+                b"\x89\x4E\x01",
+                b"\x89\x4F\x01",
+            ],
+            r"\xc6[\x00-\x0f]\xe9[@-O][\x80-\x8f][@-O]\x05.{2,2}?\x89[@-O]\x01$",
             "",
-            r"^\xc6[\x00-\x0f]\xe9[@-O][\x80-\x8f][@-O]\x05.{2,2}?\x89[@-O]\x01",
         );
 
         test(
@@ -1084,7 +1226,7 @@ mod tests {
         test("a.+bcd{2}e", &[b"bc"], "a.+bc$", "^bcd{2}e");
         test("a.+bc.e", &[b"bc"], "a.+bc$", "^bc.e");
         test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "^bc\\B.e");
-        test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "^bc[aA]e");
+        test("a.+bc[aA]e", &[b"bcAe", b"bcae"], "a.+bc[aA]e$", "");
         test("a.+bc()de", &[b"bcde"], "a.+bc()de$", "");
 
         test(
