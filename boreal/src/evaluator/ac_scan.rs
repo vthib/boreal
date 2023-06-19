@@ -1,4 +1,6 @@
 //! Provides the [`AcScan`] object, used to scan for all variables in a single AC pass.
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
@@ -26,7 +28,7 @@ pub(crate) struct AcScan {
     aho: AhoCorasick,
 
     /// Map from a aho pattern index to details on the literals.
-    aho_index_to_literal_info: Vec<LiteralInfo>,
+    aho_index_to_literal_info: Vec<Vec<LiteralInfo>>,
 
     /// List of indexes for vars that are not part of the aho corasick.
     non_handled_var_indexes: Vec<usize>,
@@ -67,6 +69,23 @@ impl AcScan {
             }
         }
 
+        // Dedup literals into a reverse index
+        let mut res: Vec<Vec<LiteralInfo>> = Vec::new();
+        let mut reverse: HashMap<&[u8], usize> = HashMap::new();
+        let mut dedup_lits = Vec::new();
+        for (lit, info) in lits.iter().zip(aho_index_to_literal_info.into_iter()) {
+            match reverse.entry(lit) {
+                Entry::Occupied(o) => {
+                    let idx = *o.get();
+                    res[idx].push(info);
+                }
+                Entry::Vacant(v) => {
+                    let _ = v.insert(res.len());
+                    res.push(vec![info]);
+                    dedup_lits.push(lit.clone());
+                }
+            }
+        }
         // TODO: Should this AC be case insensitive or not? Redo some benches once other
         // optimizations are done.
 
@@ -77,11 +96,11 @@ impl AcScan {
 
         // First try with a smaller size to reduce memory use and improve performances, otherwise
         // use the default version.
-        let aho = builder.build(&lits).unwrap();
+        let aho = builder.build(&dedup_lits).unwrap();
 
         Self {
             aho,
-            aho_index_to_literal_info,
+            aho_index_to_literal_info: res,
             non_handled_var_indexes,
         }
     }
@@ -117,13 +136,6 @@ impl AcScan {
         params: Params,
         matches: &mut [AcResult],
     ) {
-        let LiteralInfo {
-            variable_index,
-            literal_index,
-            slice_offset: (start_offset, end_offset),
-        } = self.aho_index_to_literal_info[mat.pattern()];
-        let var = &variables[variable_index];
-
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
             stats.nb_ac_matches += 1;
@@ -131,73 +143,82 @@ impl AcScan {
         #[cfg(feature = "profiling")]
         let start_instant = std::time::Instant::now();
 
-        // Upscale to the original literal shape before feeding it to the matcher verification
-        // function.
-        let start = match mat.start().checked_sub(start_offset) {
-            Some(v) => v,
-            None => return,
-        };
-        let end = match mat.end().checked_add(end_offset) {
-            Some(v) if v > scan_data.mem.len() => return,
-            Some(v) => v,
-            None => return,
-        };
-        let m = start..end;
+        for info in &self.aho_index_to_literal_info[mat.pattern()] {
+            let LiteralInfo {
+                variable_index,
+                literal_index,
+                slice_offset: (start_offset, end_offset),
+            } = *info;
+            let var = &variables[variable_index];
 
-        // Verify the literal is valid.
-        if !var.confirm_ac_literal(scan_data.mem, &m, literal_index) {
-            return;
+            // Upscale to the original literal shape before feeding it to the matcher verification
+            // function.
+            let start = match mat.start().checked_sub(start_offset) {
+                Some(v) => v,
+                None => continue,
+            };
+            let end = match mat.end().checked_add(end_offset) {
+                Some(v) if v > scan_data.mem.len() => continue,
+                Some(v) => v,
+                None => continue,
+            };
+            let m = start..end;
+
+            // Verify the literal is valid.
+            if !var.confirm_ac_literal(scan_data.mem, &m, literal_index) {
+                continue;
+            }
+
+            // Shorten the mem to prevent new matches on the same starting byte.
+            // For example, for `a.*?bb`, and input `abbb`, this can happen:
+            // - extract atom `bb`
+            // - get AC match on `a(bb)b`: call check_ac_match, this will return the
+            //   match `(abb)b`.
+            // - get AC match on `ab(bb)`: call check_ac_match, this will return the
+            //   match `(abbb)`.
+            // This is invalid, only one match per starting byte can happen.
+            // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
+            // saved match.
+            let start_position = match &matches[variable_index] {
+                AcResult::Matches(v) => match v.last() {
+                    Some(m) => m.start + 1,
+                    None => 0,
+                },
+                _ => 0,
+            };
+
+            let res = variables[variable_index].process_ac_match(scan_data.mem, m, start_position);
+            // eprintln!(
+            //     "lit {:?} {:?} confirmed match on {:?} => {:?}",
+            //     &scan_data.mem[mat.start()..mat.end()],
+            //     &mat,
+            //     &var.matcher_type,
+            //     &res
+            // );
+
+            match res {
+                AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
+                    AcResult::Matches(v) => v.extend(found_matches),
+                    _ => matches[variable_index] = AcResult::Matches(found_matches),
+                },
+                AcMatchStatus::Single(m) => match &mut matches[variable_index] {
+                    AcResult::Matches(v) => v.push(m),
+                    _ => matches[variable_index] = AcResult::Matches(vec![m]),
+                },
+                AcMatchStatus::Unknown => matches[variable_index] = AcResult::Unknown,
+                AcMatchStatus::None => (),
+            };
+
+            if let AcResult::Matches(matches) = &mut matches[variable_index] {
+                matches.truncate(params.string_max_nb_matches as usize);
+            }
         }
-
-        // Shorten the mem to prevent new matches on the same starting byte.
-        // For example, for `a.*?bb`, and input `abbb`, this can happen:
-        // - extract atom `bb`
-        // - get AC match on `a(bb)b`: call check_ac_match, this will return the
-        //   match `(abb)b`.
-        // - get AC match on `ab(bb)`: call check_ac_match, this will return the
-        //   match `(abbb)`.
-        // This is invalid, only one match per starting byte can happen.
-        // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
-        // saved match.
-        let start_position = match &matches[variable_index] {
-            AcResult::Matches(v) => match v.last() {
-                Some(m) => m.start + 1,
-                None => 0,
-            },
-            _ => 0,
-        };
-
-        let res = variables[variable_index].process_ac_match(scan_data.mem, m, start_position);
-        eprintln!(
-            "lit {:?} {:?} confirmed match on {:?} => {:?}",
-            &scan_data.mem[mat.start()..mat.end()],
-            &mat,
-            &var.matcher_type,
-            &res
-        );
 
         #[cfg(feature = "profiling")]
         {
             if let Some(stats) = scan_data.statistics.as_mut() {
                 stats.ac_confirm_duration += start_instant.elapsed();
             }
-        }
-
-        match res {
-            AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
-                AcResult::Matches(v) => v.extend(found_matches),
-                _ => matches[variable_index] = AcResult::Matches(found_matches),
-            },
-            AcMatchStatus::Single(m) => match &mut matches[variable_index] {
-                AcResult::Matches(v) => v.push(m),
-                _ => matches[variable_index] = AcResult::Matches(vec![m]),
-            },
-            AcMatchStatus::Unknown => matches[variable_index] = AcResult::Unknown,
-            AcMatchStatus::None => (),
-        };
-
-        if let AcResult::Matches(matches) = &mut matches[variable_index] {
-            matches.truncate(params.string_max_nb_matches as usize);
         }
     }
 }
