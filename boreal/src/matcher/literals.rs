@@ -5,8 +5,8 @@ use bitmaps::Bitmap;
 use crate::atoms::{atoms_rank, byte_rank};
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
-pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
-    let splitter = Splitter::new();
+pub fn get_literals_details(hir: &Hir, dot_all: bool) -> LiteralsDetails {
+    let splitter = Splitter::new(dot_all);
     let splitter = visit(hir, splitter);
 
     let last_position = splitter.current_position;
@@ -66,6 +66,9 @@ struct Splitter {
     ///
     /// This position is a simple counter of visited nodes.
     current_position: usize,
+
+    /// True if the dot all modifier is set for this regex.
+    dot_all: bool,
 }
 
 #[derive(Debug, Default)]
@@ -78,6 +81,7 @@ enum HirPart {
     Literals(LiteralSet),
     Dot {
         start_position: usize,
+        dot_all: bool,
     },
     Class {
         start_position: usize,
@@ -108,7 +112,7 @@ impl HirPart {
     fn start_position(&self) -> usize {
         match self {
             HirPart::Literals(set) => set.start_position,
-            HirPart::Dot { start_position } => *start_position,
+            HirPart::Dot { start_position, .. } => *start_position,
             HirPart::Class { start_position, .. } => *start_position,
         }
     }
@@ -116,20 +120,21 @@ impl HirPart {
     fn end_position(&self) -> usize {
         match self {
             HirPart::Literals(set) => set.end_position,
-            HirPart::Dot { start_position } => start_position + 1,
+            HirPart::Dot { start_position, .. } => start_position + 1,
             HirPart::Class { start_position, .. } => start_position + 1,
         }
     }
 }
 
 impl Splitter {
-    fn new() -> Self {
+    fn new(dot_all :bool) -> Self {
         Self {
             complete_runs: Vec::new(),
             current_run: None,
             literal_set_builder: None,
 
             current_position: 0,
+            dot_all,
         }
     }
 
@@ -319,9 +324,11 @@ impl LiteralSetBuilder {
                     self.add_alternation(Cow::Borrowed(&set.literals));
                 }
             }
-            HirPart::Dot { .. } => {
+            HirPart::Dot { dot_all, .. } => {
                 // TODO: replace with a static vec
-                let cls: Vec<_> = (0..=255).collect();
+                let cls: Vec<_> = (0..=255)
+                    .filter(|b| if *dot_all { true } else { *b != b'\n' })
+                    .collect();
                 self.add_class(&cls);
             }
             HirPart::Class { bitmap, .. } => {
@@ -392,7 +399,7 @@ fn find_best_literal_set_in_run(run: &Run) -> Option<LiteralSet> {
     // Otherwise, pick any good slice.
     let best_range = valid_slices
         .iter()
-        .filter(|(_, details)| details.combinatorics <= 255)
+        .filter(|(_, details)| details.combinatorics <= 256)
         .min_by_key(|(_, details)| -i64::from(details.rank))
         .map(|(range, _)| range)
         .or_else(|| {
@@ -434,6 +441,7 @@ impl Visitor<'_> for Splitter {
             Hir::Dot => {
                 self.add_part(HirPart::Dot {
                     start_position: self.current_position,
+                    dot_all: self.dot_all,
                 });
                 VisitAction::Skip
             }
@@ -699,7 +707,7 @@ mod tests {
             expected_post: &str,
         ) {
             let hex_string = parse_hex_string(hex_string_expr);
-            let exprs = get_literals_details(&hex_string.into());
+            let exprs = get_literals_details(&hex_string.into(), false);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -1034,10 +1042,15 @@ mod tests {
     #[test]
     fn test_regex_literals() {
         #[track_caller]
-        fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
+        fn test<T>(expr: &str, expected_lits: &[T], expected_pre: &str, expected_post: &str)
+        where
+            T: AsRef<[u8]>,
+        {
             let regex = parse_regex_string(expr);
-            let exprs = get_literals_details(&regex.ast.into());
-            assert_eq!(exprs.literals, expected_lits);
+            let exprs = get_literals_details(&regex.ast.into(), false);
+            let literals: Vec<_> = exprs.literals.iter().collect();
+            let expected: Vec<_> = expected_lits.iter().map(AsRef::as_ref).collect();
+            assert_eq!(literals, expected);
             assert_eq!(
                 exprs
                     .pre_hir
@@ -1076,7 +1089,15 @@ mod tests {
 
         // A few tests on closing nodes
         test("a.+bcd{2}e", &[b"bc"], "a.+bc", "bcd{2}e");
-        test("a.+bc.e", &[b"bc"], "a.+bc", "bc.e");
+        test(
+            "a.+bc.e",
+            &(0..=255)
+                .filter(|b| *b != b'\n')
+                .map(|byte| [b'b', b'c', byte, b'e'].to_vec())
+                .collect::<Vec<_>>(),
+            "a.+bc.e",
+            "",
+        );
         test("a.+bc\\B.e", &[b"bc"], "a.+bc", "bc\\B.e");
         test("a.+bc[aA]e", &[b"bcAe", b"bcae"], "a.+bc[aA]e", "");
         test("a.+bc()de", &[b"bcde"], "a.+bc()de", "");
@@ -1106,7 +1127,7 @@ mod tests {
             post_hir: None,
         });
 
-        test_type_traits_non_clonable(Splitter::new());
+        test_type_traits_non_clonable(Splitter::new(false));
         test_type_traits(LiteralSet::default());
         test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
     }

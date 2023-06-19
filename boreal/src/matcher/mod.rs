@@ -142,7 +142,7 @@ impl Matcher {
             mut literals,
             pre_hir,
             post_hir,
-        } = literals::get_literals_details(hir);
+        } = literals::get_literals_details(hir, modifiers.dot_all);
 
         // If some literals are too small, don't use them, they would match too
         // many times.
