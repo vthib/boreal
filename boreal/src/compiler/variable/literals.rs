@@ -1,6 +1,5 @@
 //! Literal extraction and computation from variable expressions.
 use std::borrow::Cow;
-use std::ops::Range;
 
 use boreal_parser::regex::{
     AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Node, PerlClass, PerlClassKind,
@@ -60,8 +59,8 @@ pub struct LiteralsDetails {
 /// the best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
 struct Splitter<'a> {
-    /// Set of best literals extracted so far.
-    parts: Vec<AstPart<'a>>,
+    complete_runs: Vec<Run<'a>>,
+    current_run: Option<Run<'a>>,
 
     /// Literals currently being built.
     literal_set_builder: Option<LiteralSetBuilder>,
@@ -70,6 +69,11 @@ struct Splitter<'a> {
     ///
     /// This position is a simple counter of visited nodes.
     current_position: usize,
+}
+
+#[derive(Debug, Default)]
+struct Run<'a> {
+    parts: Vec<AstPart<'a>>,
 }
 
 #[derive(Debug)]
@@ -82,7 +86,6 @@ enum AstPart<'a> {
         start_position: usize,
         kind: &'a ClassKind,
     },
-    Other,
 }
 
 impl AstPart<'_> {
@@ -113,7 +116,6 @@ impl AstPart<'_> {
                     c
                 }
             }
-            AstPart::Other => u64::MAX,
         }
     }
 
@@ -123,7 +125,6 @@ impl AstPart<'_> {
             AstPart::Dot { .. } => byte_rank(0),
             // FIXME: improve this:
             AstPart::Class { .. } => byte_rank(0),
-            AstPart::Other => 0,
         }
     }
 
@@ -132,8 +133,6 @@ impl AstPart<'_> {
             AstPart::Literals(set) => set.start_position,
             AstPart::Dot { start_position } => *start_position,
             AstPart::Class { start_position, .. } => *start_position,
-            // TODO: avoid this
-            AstPart::Other => unreachable!(),
         }
     }
 
@@ -142,8 +141,6 @@ impl AstPart<'_> {
             AstPart::Literals(set) => set.end_position,
             AstPart::Dot { start_position } => start_position + 1,
             AstPart::Class { start_position, .. } => start_position + 1,
-            // TODO: avoid this
-            AstPart::Other => unreachable!(),
         }
     }
 }
@@ -165,7 +162,8 @@ fn perl_class_combinatorics(cls: &PerlClass) -> u64 {
 impl<'a> Splitter<'a> {
     fn new() -> Self {
         Self {
-            parts: Vec::new(),
+            complete_runs: Vec::new(),
+            current_run: None,
             literal_set_builder: None,
 
             current_position: 0,
@@ -182,8 +180,9 @@ impl<'a> Splitter<'a> {
     }
 
     fn add_part(&mut self, part: AstPart<'a>) {
-        self.close();
-        self.parts.push(part);
+        self.close_literal_set();
+        let run = self.current_run.get_or_insert_with(Run::default);
+        run.parts.push(part);
     }
 
     /// Visit an alternation to add it to the currently being build literals.
@@ -226,18 +225,25 @@ impl<'a> Splitter<'a> {
     }
 
     /// Close currently being built literals.
-    fn close(&mut self) {
+    fn close_literal_set(&mut self) {
         if let Some(builder) = self.literal_set_builder.take() {
-            self.parts
-                .push(AstPart::Literals(builder.build(self.current_position)));
+            self.add_part(AstPart::Literals(builder.build(self.current_position)));
+        }
+    }
+
+    fn close_run(&mut self) {
+        self.close_literal_set();
+        if let Some(run) = self.current_run.take() {
+            self.complete_runs.push(run);
         }
     }
 
     fn find_best_literals_set(self) -> Option<LiteralSet> {
         // Firstly, try to find explicit literals present in the regex.
         let set = self
-            .parts
+            .complete_runs
             .iter()
+            .flat_map(|run| &run.parts)
             .filter_map(|part| match part {
                 AstPart::Literals(set) => Some(set),
                 _ => None,
@@ -268,11 +274,9 @@ impl<'a> Splitter<'a> {
         // will generate a set of 256 literals, all starting with `AA` and
         // ending with `BB`, which is usable in a Aho-Corasick scan.
 
-        // Find runs of AstPart that do not contain "AstPart::Other", which
-        // marks anything that cannot be used to expand a literal.
-        ExpandableIndexes::new(&self.parts)
-            .map(|range| &self.parts[range])
-            // On every such run, find the best literals by expanding parts
+        // On every run, find the best literals by expanding parts.
+        self.complete_runs
+            .iter()
             .filter_map(find_best_literal_set_in_run)
             // Finally, select the best one
             .min_by_key(|set| -i64::from(set.rank))
@@ -374,8 +378,6 @@ impl LiteralSetBuilder {
                     .collect();
                 self.add_class(&cls);
             }
-            // FIXME: avoid this
-            AstPart::Other => unreachable!(),
         }
     }
 }
@@ -449,9 +451,10 @@ fn add_perl_class_kind_to_set(kind: &PerlClassKind, out: &mut [bool; 256]) {
 // Max out combinators on expansion of one ?? and one X? or ?X
 const MAX_COMBINATORICS: u64 = 256 * 16;
 
-fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
+fn find_best_literal_set_in_run(run: &Run<'_>) -> Option<LiteralSet> {
     // Compute the combinatorics of every part.
     let details: Vec<_> = run
+        .parts
         .iter()
         .map(|part| PartDetails {
             combinatorics: part.combinatorics(),
@@ -511,7 +514,7 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
         return None;
     }
 
-    let parts = &run[best_range.clone()];
+    let parts = &run.parts[best_range.clone()];
     let mut builder = LiteralSetBuilder::new(parts[0].start_position());
 
     for part in parts {
@@ -524,53 +527,6 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
 struct PartDetails {
     combinatorics: u64,
     rank: u32,
-}
-
-/// Object used as an iterator to return runs of `AstPart` objects that are
-/// expandable into literals.
-struct ExpandableIndexes<'a, 'b> {
-    // Index of the first part that is expandable.
-    start_index: usize,
-    len: usize,
-    // Current iterator over `AstPart` objects.
-    parts: std::iter::Enumerate<std::slice::Iter<'a, AstPart<'b>>>,
-}
-
-impl<'a, 'b> ExpandableIndexes<'a, 'b> {
-    fn new(parts: &'a [AstPart<'b>]) -> Self {
-        Self {
-            start_index: 0,
-            len: parts.len(),
-            parts: parts.iter().enumerate(),
-        }
-    }
-}
-
-impl Iterator for ExpandableIndexes<'_, '_> {
-    type Item = Range<usize>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // TODO: see if all this can be rewrote, it isn't clean.
-        for (index, part) in &mut self.parts {
-            if let AstPart::Other = part {
-                if self.start_index == index {
-                    self.start_index = index + 1;
-                } else {
-                    let res = self.start_index..index;
-                    self.start_index = index + 1;
-                    return Some(res);
-                }
-            }
-        }
-
-        if self.start_index == self.len {
-            None
-        } else {
-            let res = self.start_index..self.len;
-            self.start_index = self.len;
-            Some(res)
-        }
-    }
 }
 
 impl<'a> Visitor<'a> for Splitter<'a> {
@@ -597,12 +553,12 @@ impl<'a> Visitor<'a> for Splitter<'a> {
                 VisitAction::Skip
             }
             Node::Assertion(_) | Node::Repetition { .. } => {
-                self.add_part(AstPart::Other);
+                self.close_run();
                 VisitAction::Skip
             }
             Node::Alternation(alts) => {
                 if !self.visit_alternation(alts) {
-                    self.add_part(AstPart::Other);
+                    self.close_run();
                 }
                 VisitAction::Skip
             }
@@ -617,7 +573,7 @@ impl<'a> Visitor<'a> for Splitter<'a> {
     }
 
     fn finish(mut self) -> Self {
-        self.close();
+        self.close_run();
         self
     }
 }
