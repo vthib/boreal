@@ -1,6 +1,5 @@
 //! Literal extraction and computation from variable expressions.
 use std::borrow::Cow;
-use std::ops::Range;
 
 use bitmaps::Bitmap;
 use crate::atoms::{atoms_rank, byte_rank};
@@ -57,8 +56,8 @@ pub struct LiteralsDetails {
 /// the best one, and a simple algorithm that makes creating the pre and post regex possible.
 #[derive(Debug)]
 struct Splitter {
-    /// Set of best literals extracted so far.
-    parts: Vec<HirPart>,
+    complete_runs: Vec<Run>,
+    current_run: Option<Run>,
 
     /// Literals currently being built.
     literal_set_builder: Option<LiteralSetBuilder>,
@@ -67,6 +66,11 @@ struct Splitter {
     ///
     /// This position is a simple counter of visited nodes.
     current_position: usize,
+}
+
+#[derive(Debug, Default)]
+struct Run {
+    parts: Vec<HirPart>,
 }
 
 #[derive(Debug)]
@@ -79,7 +83,6 @@ enum HirPart {
         start_position: usize,
         bitmap: Bitmap<256>,
     },
-    Other,
 }
 
 impl HirPart {
@@ -90,7 +93,6 @@ impl HirPart {
             HirPart::Class {
                 bitmap, ..
             } => bitmap.len() as u64,
-            HirPart::Other => u64::MAX,
         }
     }
 
@@ -100,7 +102,6 @@ impl HirPart {
             HirPart::Dot { .. } => byte_rank(0),
             // FIXME: improve this:
             HirPart::Class { .. } => byte_rank(0),
-            HirPart::Other => 0,
         }
     }
 
@@ -109,8 +110,6 @@ impl HirPart {
             HirPart::Literals(set) => set.start_position,
             HirPart::Dot { start_position } => *start_position,
             HirPart::Class { start_position, .. } => *start_position,
-            // TODO: avoid this
-            HirPart::Other => unreachable!(),
         }
     }
 
@@ -119,8 +118,6 @@ impl HirPart {
             HirPart::Literals(set) => set.end_position,
             HirPart::Dot { start_position } => start_position + 1,
             HirPart::Class { start_position, .. } => start_position + 1,
-            // TODO: avoid this
-            HirPart::Other => unreachable!(),
         }
     }
 }
@@ -128,7 +125,8 @@ impl HirPart {
 impl Splitter {
     fn new() -> Self {
         Self {
-            parts: Vec::new(),
+            complete_runs: Vec::new(),
+            current_run: None,
             literal_set_builder: None,
 
             current_position: 0,
@@ -145,8 +143,9 @@ impl Splitter {
     }
 
     fn add_part(&mut self, part: HirPart) {
-        self.close();
-        self.parts.push(part);
+        self.close_literal_set();
+        let run = self.current_run.get_or_insert_with(Run::default);
+        run.parts.push(part);
     }
 
     /// Visit an alternation to add it to the currently being build literals.
@@ -189,18 +188,25 @@ impl Splitter {
     }
 
     /// Close currently being built literals.
-    fn close(&mut self) {
+    fn close_literal_set(&mut self) {
         if let Some(builder) = self.literal_set_builder.take() {
-            self.parts
-                .push(HirPart::Literals(builder.build(self.current_position)));
+            self.add_part(HirPart::Literals(builder.build(self.current_position)));
+        }
+    }
+
+    fn close_run(&mut self) {
+        self.close_literal_set();
+        if let Some(run) = self.current_run.take() {
+            self.complete_runs.push(run);
         }
     }
 
     fn find_best_literals_set(self) -> Option<LiteralSet> {
         // Firstly, try to find explicit literals present in the regex.
         let set = self
-            .parts
+            .complete_runs
             .iter()
+            .flat_map(|run| &run.parts)
             .filter_map(|part| match part {
                 HirPart::Literals(set) => Some(set),
                 _ => None,
@@ -231,11 +237,9 @@ impl Splitter {
         // will generate a set of 256 literals, all starting with `AA` and
         // ending with `BB`, which is usable in a Aho-Corasick scan.
 
-        // Find runs of HirPart that do not contain "HirPart::Other", which
-        // marks anything that cannot be used to expand a literal.
-        ExpandableIndexes::new(&self.parts)
-            .map(|range| &self.parts[range])
-            // On every such run, find the best literals by expanding parts
+        // On every run, find the best literals by expanding parts.
+        self.complete_runs
+            .iter()
             .filter_map(find_best_literal_set_in_run)
             // Finally, select the best one
             .min_by_key(|set| -i64::from(set.rank))
@@ -331,8 +335,6 @@ impl LiteralSetBuilder {
                     .collect();
                 self.add_class(&cls);
             }
-            // FIXME: avoid this
-            HirPart::Other => unreachable!(),
         }
     }
 }
@@ -341,9 +343,10 @@ impl LiteralSetBuilder {
 // Max out combinators on expansion of one ?? and one X? or ?X
 const MAX_COMBINATORICS: u64 = 256 * 16;
 
-fn find_best_literal_set_in_run(run: &[HirPart]) -> Option<LiteralSet> {
+fn find_best_literal_set_in_run(run: &Run) -> Option<LiteralSet> {
     // Compute the combinatorics of every part.
     let details: Vec<_> = run
+        .parts
         .iter()
         .map(|part| PartDetails {
             combinatorics: part.combinatorics(),
@@ -403,7 +406,7 @@ fn find_best_literal_set_in_run(run: &[HirPart]) -> Option<LiteralSet> {
         return None;
     }
 
-    let parts = &run[best_range.clone()];
+    let parts = &run.parts[best_range.clone()];
     let mut builder = LiteralSetBuilder::new(parts[0].start_position());
 
     for part in parts {
@@ -416,53 +419,6 @@ fn find_best_literal_set_in_run(run: &[HirPart]) -> Option<LiteralSet> {
 struct PartDetails {
     combinatorics: u64,
     rank: u32,
-}
-
-/// Object used as an iterator to return runs of `HirPart` objects that are
-/// expandable into literals.
-struct ExpandableIndexes<'a> {
-    // Index of the first part that is expandable.
-    start_index: usize,
-    len: usize,
-    // Current iterator over `HirPart` objects.
-    parts: std::iter::Enumerate<std::slice::Iter<'a, HirPart>>,
-}
-
-impl<'a> ExpandableIndexes<'a> {
-    fn new(parts: &'a [HirPart]) -> Self {
-        Self {
-            start_index: 0,
-            len: parts.len(),
-            parts: parts.iter().enumerate(),
-        }
-    }
-}
-
-impl Iterator for ExpandableIndexes<'_> {
-    type Item = Range<usize>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // TODO: see if all this can be rewrote, it isn't clean.
-        for (index, part) in &mut self.parts {
-            if let HirPart::Other = part {
-                if self.start_index == index {
-                    self.start_index = index + 1;
-                } else {
-                    let res = self.start_index..index;
-                    self.start_index = index + 1;
-                    return Some(res);
-                }
-            }
-        }
-
-        if self.start_index == self.len {
-            None
-        } else {
-            let res = self.start_index..self.len;
-            self.start_index = self.len;
-            Some(res)
-        }
-    }
 }
 
 impl Visitor<'_> for Splitter {
@@ -509,12 +465,12 @@ impl Visitor<'_> for Splitter {
                 VisitAction::Skip
             }
             Hir::Assertion(_) | Hir::Repetition { .. } => {
-                self.add_part(HirPart::Other);
+                self.close_run();
                 VisitAction::Skip
             }
             Hir::Alternation(alts) => {
                 if !self.visit_alternation(alts) {
-                    self.add_part(HirPart::Other);
+                self.close_run();
                 }
                 VisitAction::Skip
             }
@@ -529,7 +485,7 @@ impl Visitor<'_> for Splitter {
     }
 
     fn finish(mut self) -> Self {
-        self.close();
+        self.close_run();
         self
     }
 }
