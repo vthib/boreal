@@ -26,7 +26,7 @@ pub(super) fn compile_regex(
         mut literals,
         pre_ast,
         post_ast,
-    } = super::literals::get_literals_details(ast);
+    } = super::literals::get_literals_details(ast, dot_all);
 
     // If some literals are too small, don't use them, they would match too
     // many times.
