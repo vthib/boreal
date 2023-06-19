@@ -46,7 +46,7 @@ pub struct Variable {
     flags: Flags,
 
     /// Type of matching for the variable.
-    matcher_type: MatcherType,
+    pub matcher_type: MatcherType,
 
     /// Regex of the non wide version of the regex.
     ///
@@ -68,7 +68,7 @@ struct Flags {
 }
 
 #[derive(Debug)]
-enum MatcherType {
+pub enum MatcherType {
     /// The literals cover entirely the variable.
     Literals,
     /// The regex can confirm matches from AC literal matches.

@@ -497,7 +497,7 @@ fn find_best_literal_set_in_run(run: &[AstPart<'_>]) -> Option<LiteralSet> {
     // Otherwise, pick any good slice.
     let best_range = valid_slices
         .iter()
-        .filter(|(_, details)| details.combinatorics <= 255)
+        // .filter(|(_, details)| details.combinatorics <= 255)
         .min_by_key(|(_, details)| -i64::from(details.rank))
         .map(|(range, _)| range)
         .or_else(|| {

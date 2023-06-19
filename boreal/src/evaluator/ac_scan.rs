@@ -168,6 +168,13 @@ impl AcScan {
         };
 
         let res = variables[variable_index].process_ac_match(scan_data.mem, m, start_position);
+        eprintln!(
+            "lit {:?} {:?} confirmed match on {:?} => {:?}",
+            &scan_data.mem[mat.start()..mat.end()],
+            &mat,
+            &var.matcher_type,
+            &res
+        );
 
         #[cfg(feature = "profiling")]
         {
