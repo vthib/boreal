@@ -132,6 +132,7 @@ fn main() -> ExitCode {
                 for rule_stat in status.statistics() {
                     display_rule_stats(rule_stat);
                 }
+                display_global_stats(&status);
             }
             Err(err) => {
                 display_diagnostic(rules_file, &err);
@@ -218,7 +219,9 @@ fn scan_file(scanner: &Scanner, path: &Path, print_module_data: bool) -> std::io
     for rule in res.matched_rules {
         println!("{} {}", &rule.name, path.display());
     }
-    if let Some(stats) = res.statistics {
+    if let Some(mut stats) = res.statistics {
+        stats.per_var_stats.sort_by_key(|p| p.duration_spent);
+        stats.per_var_stats.reverse();
         println!("{}: {:#?}", path.display(), stats);
     }
 
@@ -314,6 +317,31 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
     }
 }
 
+fn display_global_stats(status: &boreal::compiler::AddRuleStatus) {
+    let mut nb_vars_per_lits_len = [0; 6];
+    let mut total = 0;
+
+    for stats in status.statistics() {
+        for var in &stats.strings {
+            match var.literals.iter().map(|v| v.len()).min() {
+                None | Some(0) => nb_vars_per_lits_len[0] += 1,
+                Some(i) if (1..=4).contains(&i) => nb_vars_per_lits_len[i] += 1,
+                Some(_) => nb_vars_per_lits_len[5] += 1,
+            }
+        }
+        total += stats.strings.len();
+    }
+
+    for (i, nb) in nb_vars_per_lits_len.iter().enumerate() {
+        println!(
+            "vars with {} lits: {} ({}%)",
+            i,
+            *nb,
+            (*nb as f64) * 100. / (total as f64)
+        );
+    }
+    println!("nb vars: {}", total);
+}
 /// Print a module value.
 ///
 /// This is a recursive function.

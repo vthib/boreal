@@ -2,6 +2,8 @@
 
 use std::{path::PathBuf, time::Duration};
 
+use crate::compiler::variable::Variable;
+
 /// Compilation statistics for a rule.
 #[derive(Clone, Debug)]
 pub struct CompiledRule {
@@ -74,6 +76,45 @@ pub struct Evaluation {
     ///
     /// This is an aggregation of the time spent evaluating "raw" variables regexes.
     pub raw_regexes_eval_duration: Duration,
+
+    /// a
+    pub per_var_stats: Vec<VarStats>,
+}
+
+impl Evaluation {
+    /// a
+    #[must_use]
+    pub fn new(vars: &[Variable]) -> Self {
+        Self {
+            per_var_stats: vars
+                .iter()
+                .map(|v| VarStats {
+                    var_name: format!("{:?}", &v),
+                    ..VarStats::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+}
+
+/// a
+#[derive(Clone, Debug, Default)]
+pub struct VarStats {
+    ///
+    pub var_name: String,
+    /// a
+    pub nb_ac_lits_hits: u64,
+    /// a
+    pub nb_ac_lits_confirmed: u64,
+    /// a
+    pub nb_rejected_confirmed: u64,
+    /// a
+    pub nb_rejected_valid: u64,
+    /// a
+    pub nb_matches: u64,
+    /// a
+    pub duration_spent: Duration,
 }
 
 #[cfg(test)]

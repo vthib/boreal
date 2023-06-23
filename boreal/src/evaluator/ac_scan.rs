@@ -144,6 +144,13 @@ impl AcScan {
         params: Params,
         matches: &mut [AcResult],
     ) {
+        #[cfg(feature = "profiling")]
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.nb_ac_matches += 1;
+        }
+        #[cfg(feature = "profiling")]
+        let start_instant = std::time::Instant::now();
+
         for literal_info in &self.aho_index_to_literal_info[mat.pattern()] {
             let LiteralInfo {
                 variable_index,
@@ -153,11 +160,22 @@ impl AcScan {
             let var = &variables[variable_index].matcher;
 
             #[cfg(feature = "profiling")]
-            if let Some(stats) = scan_data.statistics.as_mut() {
-                stats.nb_ac_matches += 1;
-            }
+            let var_eval_start = if scan_data.statistics.is_some() {
+                Some(std::time::Instant::now())
+            } else {
+                None
+            };
             #[cfg(feature = "profiling")]
-            let start_instant = std::time::Instant::now();
+            let mut var_stat = if let Some(stats) = scan_data.statistics.as_mut() {
+                Some(&mut stats.per_var_stats[variable_index])
+            } else {
+                None
+            };
+
+            #[cfg(feature = "profiling")]
+            if let Some(var_stat) = &mut var_stat {
+                var_stat.nb_ac_lits_hits += 1;
+            }
 
             // Upscale to the original literal shape before feeding it to the matcher verification
             // function.
@@ -175,9 +193,20 @@ impl AcScan {
             // Verify the literal is valid.
             let match_type = match var.confirm_ac_literal(scan_data.mem, &m, literal_index) {
                 Some(ty) => ty,
-                None => continue,
+                None => {
+                    #[cfg(feature = "profiling")]
+                    if let Some(var_stat) = &mut var_stat {
+                        var_stat.nb_rejected_confirmed += 1;
+                        var_stat.duration_spent += var_eval_start.unwrap().elapsed();
+                    }
+                    continue;
+                }
             };
 
+            #[cfg(feature = "profiling")]
+            if let Some(var_stat) = &mut var_stat {
+                var_stat.nb_ac_lits_confirmed += 1;
+            }
             // Shorten the mem to prevent new matches on the same starting byte.
             // For example, for `a.*?bb`, and input `abbb`, this can happen:
             // - extract atom `bb`
@@ -198,13 +227,6 @@ impl AcScan {
 
             let res = var.process_ac_match(scan_data.mem, m, start_position, match_type);
 
-            #[cfg(feature = "profiling")]
-            {
-                if let Some(stats) = scan_data.statistics.as_mut() {
-                    stats.ac_confirm_duration += start_instant.elapsed();
-                }
-            }
-
             match res {
                 AcMatchStatus::Multiple(v) if v.is_empty() => (),
                 AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
@@ -220,7 +242,25 @@ impl AcScan {
             };
 
             if let AcResult::Matches(matches) = &mut matches[variable_index] {
+                #[cfg(feature = "profiling")]
+                if let Some(var_stat) = var_stat {
+                    var_stat.duration_spent += var_eval_start.unwrap().elapsed();
+                    var_stat.nb_matches += 1;
+                }
                 matches.truncate(params.string_max_nb_matches as usize);
+            } else {
+                #[cfg(feature = "profiling")]
+                if let Some(var_stat) = var_stat {
+                    var_stat.nb_rejected_valid += 1;
+                    var_stat.duration_spent += var_eval_start.unwrap().elapsed();
+                }
+            }
+        }
+
+        #[cfg(feature = "profiling")]
+        {
+            if let Some(stats) = scan_data.statistics.as_mut() {
+                stats.ac_confirm_duration += start_instant.elapsed();
             }
         }
     }

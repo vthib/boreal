@@ -241,7 +241,7 @@ impl Inner {
             external_symbols_values,
             params.timeout_duration,
             if params.compute_statistics {
-                Some(statistics::Evaluation::default())
+                Some(statistics::Evaluation::new(&self.variables))
             } else {
                 None
             },
