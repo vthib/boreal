@@ -1327,4 +1327,32 @@ rule c {
     );
 }
 
+#[test]
+fn test_compute_full_matches_presence_optim() {
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { 32 33 [5] 34 }"
+    condition:
+        $a
+}
+
+rule b {
+    strings:
+        $a = { 32 33 [5] 34 }"
+    condition:
+        #a > 2
+}
+
+rule c {
+    strings:
+        $a = { 32 33 [5] 34 }"
+    condition:
+        for any of them: ( # > 3 )
+}"#,
+    );
+
+    // FIXME
+}
 // TODO: test count, offset, length with selected for variable

@@ -55,6 +55,23 @@ pub struct Variable {
     /// In this case, the regex expression cannot be "widened", and this regex is used to post
     /// check matches.
     non_wide_regex: Option<Regex>,
+
+    pub match_strategy: MatchStrategy,
+}
+
+/// Describe the strategy that can be used when matching this variable.
+///
+/// In other words, this describe the minimal amount of information
+/// required to be able to evaluate a rule that uses this variable.
+/// For example, a simple presence of the variable will be much cheaper
+/// to compute than the number of matches it has, and their exact
+/// offset and length.
+#[derive(Debug)]
+pub enum MatchStrategy {
+    /// Simple presence or not of the variable is enough information
+    Presence,
+    /// Full details on the ùatches are required.
+    FullMatches,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -103,6 +120,7 @@ pub enum AcMatchStatus {
 pub(crate) fn compile_variable(
     decl: VariableDeclaration,
     parsed_contents: &str,
+    need_full_matches: bool,
     compute_statistics: bool,
 ) -> Result<(Variable, Option<statistics::CompiledString>), CompilationError> {
     let VariableDeclaration {
@@ -163,6 +181,11 @@ pub(crate) fn compile_variable(
                 nocase: modifiers.nocase,
             },
             matcher_type,
+            match_strategy: if need_full_matches {
+                MatchStrategy::FullMatches
+            } else {
+                MatchStrategy::Presence
+            },
             non_wide_regex,
         },
         Err(error) => {
@@ -196,6 +219,7 @@ pub(crate) fn compile_variable(
                 MatcherType::Atomized { .. } => MatchingKind::Atomized,
                 MatcherType::Raw(_) => MatchingKind::Regex,
             },
+            need_full_matches,
         })
     } else {
         None
@@ -550,6 +574,7 @@ mod tests {
                     span: 0..1,
                 },
                 "",
+                false,
                 false,
             )
             .unwrap()

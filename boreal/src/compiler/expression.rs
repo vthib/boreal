@@ -415,7 +415,7 @@ pub(super) fn compile_expression(
         }),
 
         parser::ExpressionKind::Count(variable_name) => {
-            let variable_index = compiler.find_variable(&variable_name, &span)?;
+            let variable_index = compiler.find_variable(&variable_name, &span, true)?;
 
             Ok(Expr {
                 expr: Expression::Count(variable_index),
@@ -430,7 +430,8 @@ pub(super) fn compile_expression(
             from,
             to,
         } => {
-            let variable_index = compiler.find_variable(&variable_name, &variable_name_span)?;
+            let variable_index =
+                compiler.find_variable(&variable_name, &variable_name_span, true)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
 
@@ -449,7 +450,7 @@ pub(super) fn compile_expression(
             variable_name,
             occurence_number,
         } => {
-            let variable_index = compiler.find_variable(&variable_name, &span)?;
+            let variable_index = compiler.find_variable(&variable_name, &span, true)?;
             let occurence_number = compile_expression(compiler, *occurence_number)?;
 
             Ok(Expr {
@@ -466,7 +467,7 @@ pub(super) fn compile_expression(
             variable_name,
             occurence_number,
         } => {
-            let variable_index = compiler.find_variable(&variable_name, &span)?;
+            let variable_index = compiler.find_variable(&variable_name, &span, true)?;
             let occurence_number = compile_expression(compiler, *occurence_number)?;
 
             Ok(Expr {
@@ -713,7 +714,7 @@ pub(super) fn compile_expression(
         }),
 
         parser::ExpressionKind::Variable(variable_name) => {
-            let variable_index = compiler.find_variable(&variable_name, &span)?;
+            let variable_index = compiler.find_variable(&variable_name, &span, false)?;
 
             Ok(Expr {
                 expr: Expression::Variable(variable_index),
@@ -727,7 +728,8 @@ pub(super) fn compile_expression(
             variable_name_span,
             offset,
         } => {
-            let variable_index = compiler.find_variable(&variable_name, &variable_name_span)?;
+            let variable_index =
+                compiler.find_variable(&variable_name, &variable_name_span, true)?;
             let offset = compile_expression(compiler, *offset)?;
 
             Ok(Expr {
@@ -746,7 +748,8 @@ pub(super) fn compile_expression(
             from,
             to,
         } => {
-            let variable_index = compiler.find_variable(&variable_name, &variable_name_span)?;
+            let variable_index =
+                compiler.find_variable(&variable_name, &variable_name_span, true)?;
             let from = compile_expression(compiler, *from)?;
             let to = compile_expression(compiler, *to)?;
 
@@ -765,21 +768,33 @@ pub(super) fn compile_expression(
             selection,
             set,
             body,
-        } => Ok(Expr {
-            expr: Expression::For {
-                selection: compile_for_selection(compiler, selection)?,
-                set: compile_variable_set(compiler, set, span.clone())?,
-                body: match body {
-                    Some(body) => {
-                        let body = compile_expression(compiler, *body)?;
-                        Box::new(to_bool_expr(compiler, body)?)
-                    }
-                    None => Box::new(Expression::Variable(VariableIndex(None))),
+        } => {
+            // Reset the value. Note that there is no need to save the previous value and
+            // restore it: imbricated for loops are forbidden.
+            compiler.anonymous_var_full_matches = false;
+            let body = match body {
+                Some(body) => {
+                    let body = compile_expression(compiler, *body)?;
+                    Box::new(to_bool_expr(compiler, body)?)
+                }
+                None => Box::new(Expression::Variable(VariableIndex(None))),
+            };
+
+            Ok(Expr {
+                expr: Expression::For {
+                    selection: compile_for_selection(compiler, selection)?,
+                    set: compile_variable_set(
+                        compiler,
+                        set,
+                        span.clone(),
+                        compiler.anonymous_var_full_matches,
+                    )?,
+                    body,
                 },
-            },
-            ty: Type::Boolean,
-            span,
-        }),
+                ty: Type::Boolean,
+                span,
+            })
+        }
 
         parser::ExpressionKind::ForIn {
             selection,
@@ -793,7 +808,7 @@ pub(super) fn compile_expression(
             Ok(Expr {
                 expr: Expression::For {
                     selection: compile_for_selection(compiler, selection)?,
-                    set: compile_variable_set(compiler, set, span.clone())?,
+                    set: compile_variable_set(compiler, set, span.clone(), true)?,
                     body: Box::new(Expression::VariableIn {
                         variable_index: VariableIndex(None),
                         from: from.unwrap_expr(Type::Integer)?,
@@ -815,7 +830,7 @@ pub(super) fn compile_expression(
             Ok(Expr {
                 expr: Expression::For {
                     selection: compile_for_selection(compiler, selection)?,
-                    set: compile_variable_set(compiler, set, span.clone())?,
+                    set: compile_variable_set(compiler, set, span.clone(), true)?,
                     body: Box::new(Expression::VariableAt {
                         variable_index: VariableIndex(None),
                         offset: offset.unwrap_expr(Type::Integer)?,
@@ -1005,6 +1020,7 @@ fn compile_variable_set(
     compiler: &mut RuleCompiler<'_>,
     set: parser::VariableSet,
     span: Range<usize>,
+    full_matches: bool,
 ) -> Result<VariableSet, CompilationError> {
     // selected indexes.
     let mut indexes = Vec::new();
@@ -1022,6 +1038,7 @@ fn compile_variable_set(
         indexes.extend(0..compiler.variables.len());
         for var in &mut compiler.variables {
             var.used = true;
+            var.need_full_matches |= full_matches;
         }
     }
 
@@ -1033,6 +1050,7 @@ fn compile_variable_set(
                 if var.name.starts_with(&elem.name) {
                     found = true;
                     var.used = true;
+                    var.need_full_matches |= full_matches;
                     indexes.push(index);
                 }
             }
@@ -1043,7 +1061,7 @@ fn compile_variable_set(
                 });
             }
         } else {
-            let index = compiler.find_named_variable(&elem.name, &elem.span)?;
+            let index = compiler.find_named_variable(&elem.name, &elem.span, full_matches)?;
             indexes.push(index);
         }
     }

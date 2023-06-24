@@ -47,7 +47,8 @@ impl ScanParams {
     /// expect.
     ///
     /// Setting this parameter to true ensures that for every matching rules, all of the
-    /// variable matches are computed and reported.
+    /// variable matches are computed and reported. Be aware that this can significantly slow down
+    /// scanning.
     #[must_use]
     pub fn compute_full_matches(mut self, compute_full_matches: bool) -> Self {
         self.compute_full_matches = compute_full_matches;

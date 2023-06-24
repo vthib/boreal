@@ -74,6 +74,9 @@ pub(super) struct RuleCompiler<'a> {
 
     /// Warnings emitted while compiling the rule.
     pub warnings: Vec<CompilationError>,
+
+    /// Whether the anonymous var requires full matches or not
+    pub anonymous_var_full_matches: bool,
 }
 
 /// Helper struct used to track variables being compiled in a rule.
@@ -90,6 +93,9 @@ pub(super) struct RuleCompilerVariable {
     /// If by the end of the compilation of the rule, the variable is unused, a compilation
     /// error is raised.
     pub used: bool,
+
+    /// Whether full details on the matches are needed for this variable.
+    pub need_full_matches: bool,
 }
 
 impl<'a> RuleCompiler<'a> {
@@ -114,6 +120,7 @@ impl<'a> RuleCompiler<'a> {
                 name: var.name.clone(),
                 used: false,
                 span: var.span.clone(),
+                need_full_matches: false,
             });
         }
 
@@ -126,6 +133,7 @@ impl<'a> RuleCompiler<'a> {
             params,
             condition_depth: 0,
             warnings: Vec::new(),
+            anonymous_var_full_matches: false,
         })
     }
 
@@ -140,11 +148,17 @@ impl<'a> RuleCompiler<'a> {
         &mut self,
         name: &str,
         span: &Range<usize>,
+        full_matches: bool,
     ) -> Result<VariableIndex, CompilationError> {
         if name.is_empty() {
+            self.anonymous_var_full_matches |= full_matches;
             Ok(VariableIndex(None))
         } else {
-            Ok(VariableIndex(Some(self.find_named_variable(name, span)?)))
+            Ok(VariableIndex(Some(self.find_named_variable(
+                name,
+                span,
+                full_matches,
+            )?)))
         }
     }
 
@@ -153,10 +167,12 @@ impl<'a> RuleCompiler<'a> {
         &mut self,
         name: &str,
         span: &Range<usize>,
+        full_matches: bool,
     ) -> Result<usize, CompilationError> {
         for (index, var) in self.variables.iter_mut().enumerate() {
             if var.name == name {
                 var.used = true;
+                var.need_full_matches |= full_matches;
                 return Ok(index);
             }
         }
@@ -235,22 +251,27 @@ pub(super) fn compile_rule(
         }
     }
 
-    // Check whether some variables were not used.
-    for var in vars {
-        if !var.used {
-            return Err(CompilationError::UnusedVariable {
-                name: var.name,
-                span: var.span,
-            });
-        }
-    }
-
     let mut variables = Vec::with_capacity(rule.variables.len());
     let mut variables_statistics = Vec::new();
 
-    for var in rule.variables {
-        let (var, stats) =
-            variable::compile_variable(var, parsed_contents, params.compute_statistics)?;
+    for (var_declaration, var) in rule.variables.into_iter().zip(vars.into_iter()) {
+        let RuleCompilerVariable {
+            name,
+            span,
+            used,
+            need_full_matches,
+        } = var;
+
+        if !used {
+            return Err(CompilationError::UnusedVariable { name, span });
+        }
+
+        let (var, stats) = variable::compile_variable(
+            var_declaration,
+            parsed_contents,
+            need_full_matches,
+            params.compute_statistics,
+        )?;
         if let Some(stats) = stats {
             variables_statistics.push(stats);
         }
@@ -298,6 +319,7 @@ mod tests {
             params: &CompilerParams::default(),
             condition_depth: 0,
             warnings: Vec::new(),
+            anonymous_var_full_matches: false,
         });
         let build_rule = || Rule {
             name: "a".to_owned(),
@@ -319,6 +341,7 @@ mod tests {
             name: "a".to_owned(),
             span: 0..1,
             used: false,
+            need_full_matches: false,
         });
     }
 }

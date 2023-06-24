@@ -276,6 +276,7 @@ impl Inner {
 
         let eval_params = EvalParams {
             string_max_nb_matches: params.string_max_nb_matches,
+            compute_full_matches: params.compute_full_matches,
         };
 
         // First, run the regex set on the memory. This does a single pass on it, finding out

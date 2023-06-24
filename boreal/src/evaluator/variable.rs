@@ -246,11 +246,13 @@ mod tests {
                 },
                 "",
                 false,
+                false,
             )
             .unwrap()
             .0,
             params: Params {
                 string_max_nb_matches: 100,
+                compute_full_matches: false,
             },
             matches: Vec::new(),
             next_offset: None,

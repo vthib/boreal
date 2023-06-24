@@ -5,7 +5,7 @@ use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
 use super::{EvalError, Params, ScanData};
 use crate::atoms::pick_atom_in_literal;
-use crate::compiler::variable::{AcMatchStatus, Variable};
+use crate::compiler::variable::{AcMatchStatus, MatchStrategy, Variable};
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -124,6 +124,19 @@ impl AcScan {
         } = self.aho_index_to_literal_info[mat.pattern()];
         let var = &variables[variable_index];
 
+        if let (MatchStrategy::Presence, AcResult::Matches(_), false) = (
+            &var.match_strategy,
+            &matches[variable_index],
+            params.compute_full_matches,
+        ) {
+            // We are:
+            // - not computing full matches
+            // - have already a match for this var
+            // - we only need to know whether this var is present or not
+            // So there is no need to try and validate other matches.
+            return;
+        }
+
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
             stats.nb_ac_matches += 1;
@@ -177,6 +190,7 @@ impl AcScan {
         }
 
         match res {
+            AcMatchStatus::Multiple(found_matches) if found_matches.is_empty() => (),
             AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
                 AcResult::Matches(v) => v.extend(found_matches),
                 _ => matches[variable_index] = AcResult::Matches(found_matches),

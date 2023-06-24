@@ -178,6 +178,9 @@ impl<'a> ScanData<'a> {
 pub struct Params {
     /// Max number of matches for a given string.
     pub string_max_nb_matches: u32,
+
+    /// Compute full matches on matching rules.
+    pub compute_full_matches: bool,
 }
 
 /// Evaluates an expression on a given byte slice.
@@ -1046,6 +1049,7 @@ mod tests {
         test_type_traits(Value::Integer(0));
         test_type_traits(Params {
             string_max_nb_matches: 0,
+            compute_full_matches: false,
         });
         test_type_traits_non_clonable(ScanData {
             mem: b"",

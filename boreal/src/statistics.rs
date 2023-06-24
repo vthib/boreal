@@ -44,6 +44,9 @@ pub struct CompiledString {
 
     /// Matching kind for the string.
     pub matching_kind: MatchingKind,
+
+    /// Do the variable need full matches
+    pub need_full_matches: bool,
 }
 
 /// Kind of matching for a string.
@@ -115,6 +118,7 @@ mod tests {
             atoms: Vec::new(),
             atoms_quality: 0,
             matching_kind: MatchingKind::Literals,
+            need_full_matches: false,
         });
         test_type_traits(MatchingKind::Atomized);
         test_type_traits(Evaluation::default());
