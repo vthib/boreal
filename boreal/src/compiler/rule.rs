@@ -76,7 +76,7 @@ pub(super) struct RuleCompiler<'a> {
     pub warnings: Vec<CompilationError>,
 
     /// Whether the anonymous var requires full matches or not
-    pub anonymous_var_full_matches: bool,
+    pub anonymous_var_usage: RuleVariableUsage,
 }
 
 /// Helper struct used to track variables being compiled in a rule.
@@ -85,17 +85,27 @@ pub(super) struct RuleCompilerVariable {
     /// Name of the variable.
     pub name: String,
 
-    /// Span of the variable declaration.
-    pub span: Range<usize>,
+    /// How the variable is used.
+    pub usage: RuleVariableUsage,
+}
 
-    /// Has the variable been used.
-    ///
-    /// If by the end of the compilation of the rule, the variable is unused, a compilation
-    /// error is raised.
-    pub used: bool,
+/// Describes how a variable is used inside of a rule condition.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum RuleVariableUsage {
+    /// Variable has not been used yet.
+    Unused,
 
-    /// Whether full details on the matches are needed for this variable.
-    pub need_full_matches: bool,
+    /// Variable is used and only its presence or not is required.
+    Presence,
+
+    /// Variable is used and full details on its matches are required.
+    FullMatches,
+}
+
+impl RuleVariableUsage {
+    pub fn merge(&mut self, other: Self) {
+        *self = std::cmp::max(*self, other);
+    }
 }
 
 impl<'a> RuleCompiler<'a> {
@@ -118,9 +128,7 @@ impl<'a> RuleCompiler<'a> {
 
             variables.push(RuleCompilerVariable {
                 name: var.name.clone(),
-                used: false,
-                span: var.span.clone(),
-                need_full_matches: false,
+                usage: RuleVariableUsage::Unused,
             });
         }
 
@@ -133,7 +141,7 @@ impl<'a> RuleCompiler<'a> {
             params,
             condition_depth: 0,
             warnings: Vec::new(),
-            anonymous_var_full_matches: false,
+            anonymous_var_usage: RuleVariableUsage::Unused,
         })
     }
 
@@ -148,17 +156,15 @@ impl<'a> RuleCompiler<'a> {
         &mut self,
         name: &str,
         span: &Range<usize>,
-        full_matches: bool,
+        usage: RuleVariableUsage,
     ) -> Result<VariableIndex, CompilationError> {
         if name.is_empty() {
-            self.anonymous_var_full_matches |= full_matches;
+            self.anonymous_var_usage.merge(usage);
             Ok(VariableIndex(None))
         } else {
-            Ok(VariableIndex(Some(self.find_named_variable(
-                name,
-                span,
-                full_matches,
-            )?)))
+            Ok(VariableIndex(Some(
+                self.find_named_variable(name, span, usage)?,
+            )))
         }
     }
 
@@ -167,12 +173,11 @@ impl<'a> RuleCompiler<'a> {
         &mut self,
         name: &str,
         span: &Range<usize>,
-        full_matches: bool,
+        usage: RuleVariableUsage,
     ) -> Result<usize, CompilationError> {
         for (index, var) in self.variables.iter_mut().enumerate() {
             if var.name == name {
-                var.used = true;
-                var.need_full_matches |= full_matches;
+                var.usage.merge(usage);
                 return Ok(index);
             }
         }
@@ -254,17 +259,21 @@ pub(super) fn compile_rule(
     let mut variables = Vec::with_capacity(rule.variables.len());
     let mut variables_statistics = Vec::new();
 
-    for (var_declaration, var) in rule.variables.into_iter().zip(vars.into_iter()) {
-        let RuleCompilerVariable {
-            name,
-            span,
-            used,
-            need_full_matches,
-        } = var;
-
-        if !used {
-            return Err(CompilationError::UnusedVariable { name, span });
-        }
+    for (var_declaration, usage) in rule
+        .variables
+        .into_iter()
+        .zip(vars.into_iter().map(|v| v.usage))
+    {
+        let need_full_matches = match usage {
+            RuleVariableUsage::Unused => {
+                return Err(CompilationError::UnusedVariable {
+                    name: var_declaration.name,
+                    span: var_declaration.span,
+                })
+            }
+            RuleVariableUsage::Presence => false,
+            RuleVariableUsage::FullMatches => true,
+        };
 
         let (var, stats) = variable::compile_variable(
             var_declaration,
@@ -304,7 +313,7 @@ pub(super) struct CompiledRule {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::test_type_traits_non_clonable;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
     use super::*;
 
@@ -319,7 +328,7 @@ mod tests {
             params: &CompilerParams::default(),
             condition_depth: 0,
             warnings: Vec::new(),
-            anonymous_var_full_matches: false,
+            anonymous_var_usage: RuleVariableUsage::Unused,
         });
         let build_rule = || Rule {
             name: "a".to_owned(),
@@ -339,9 +348,8 @@ mod tests {
         });
         test_type_traits_non_clonable(RuleCompilerVariable {
             name: "a".to_owned(),
-            span: 0..1,
-            used: false,
-            need_full_matches: false,
+            usage: RuleVariableUsage::Unused,
         });
+        test_type_traits(RuleVariableUsage::Unused);
     }
 }
