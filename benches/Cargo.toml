@@ -12,7 +12,7 @@ boreal = { path = "../boreal", version = "*", features = ["authenticode"] }
 criterion = "0.5"
 glob = "0.3.1"
 walkdir = "2.3"
-yara = { version = "0.20", features = ["vendored"] }
+yara = { version = "0.19", features = ["vendored"] }
 
 # Only needed in tests because Mutex::new is not const
 # in 1.62 MSRV. Can be remove once MSRV is bumped above it.
