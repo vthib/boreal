@@ -38,8 +38,8 @@ codespan-reporting = "0.11"
 
 # Scanning for bytes
 aho-corasick = "1.0"
-memchr = "2.4"
-regex = { version = "1.8", default-features = false, features = ["std", "perf"] }
+memchr = "2.5"
+regex = { version = "1.9", default-features = false, features = ["std", "perf"] }
 # No default features to disable unicode, we do not need it
 regex-syntax = { version = "0.7", default-features = false }
 
@@ -59,9 +59,9 @@ authenticode-parser = { version = "0.3", optional = true }
 
 [dev-dependencies]
 base64 = "0.21"
-glob = "0.3.0"
-tempfile = "3.5"
-yara = { version = "0.19", features = ["vendored"] }
+glob = "0.3.1"
+tempfile = "3.6"
+yara = { version = "0.20", features = ["vendored"] }
 
 # Only needed in tests because Mutex::new is not const
 # in 1.62 MSRV. Can be removed once MSRV is bumped above it.

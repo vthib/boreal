@@ -26,7 +26,7 @@ profiling = ["boreal/profiling"]
 boreal = { path = "../boreal", version = "0.2.0" }
 
 # CLI arguments handling
-clap = { version = "4.0", features = ["cargo"] }
+clap = { version = "4.3", features = ["cargo"] }
 
 # Proper error reporting on parsing
 codespan-reporting = "0.11"
@@ -43,5 +43,5 @@ walkdir = "2.3"
 [dev-dependencies]
 # Testing for the CLI
 assert_cmd = "2.0"
-tempfile = "3.5"
+tempfile = "3.6"
 predicates = { version = "3.0", default-features = false, features = ["regex"] }
