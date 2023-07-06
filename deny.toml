@@ -176,9 +176,11 @@ skip = [
     # This pollutes a lot of dependencies but is only used when targetting
     # RustyHermit.
     { name = "hermit-abi", version = "*" },
-    # aho-corasick 1.0 used for performances, regex will upgrade later
-    { name = "aho-corasick", version = "1.0" },
-    # Syn v1 and v2 are used by different dependencies
+    # the following have multiple versions pulled in from dependencies
+    { name = "aho-corasick", version = "0.7" },
+    { name = "bitflags", version = "1.3" },
+    { name = "linux-raw-sys", version = "0.3" },
+    { name = "rustix", version = "0.37" },
     { name = "syn", version = "1.0" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate

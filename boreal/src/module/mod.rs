@@ -692,7 +692,7 @@ mod tests {
                 "{:?}",
                 Value::Regex(Regex::from_str("", false, false).unwrap())
             ),
-            "Regex(Regex())"
+            "Regex(Regex(Regex(\"\")))"
         );
         assert_eq!(format!("{:?}", Value::Boolean(true)), "Boolean(true)");
         assert_eq!(format!("{:?}", Value::Object(HashMap::new())), "Object({})");
