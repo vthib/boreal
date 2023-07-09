@@ -2012,7 +2012,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| function_name_regex.as_regex().is_match(name))
+                    .map_or(false, |name| function_name_regex.is_match(name))
             }),
             _ => return None,
         };
@@ -2051,7 +2051,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| function_name_regex.as_regex().is_match(name))
+                    .map_or(false, |name| function_name_regex.is_match(name))
             })?,
             _ => return None,
         };
@@ -2417,11 +2417,11 @@ impl Data {
         let mut nb_matches = 0;
 
         for imp in self.get_imports(delayed) {
-            if !dll_regex.as_regex().is_match(&imp.dll_name) {
+            if !dll_regex.is_match(&imp.dll_name) {
                 continue;
             }
             for fun in &imp.functions {
-                if fun_regex.as_regex().is_match(&fun.name) {
+                if fun_regex.is_match(&fun.name) {
                     nb_matches += 1;
                 }
             }

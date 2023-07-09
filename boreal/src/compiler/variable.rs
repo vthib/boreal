@@ -321,8 +321,8 @@ impl Variable {
                             mem.len(),
                             mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH),
                         );
-                        match validator.as_regex().find(&mem[mat.start..end]) {
-                            Some(m) => mat.start + m.end(),
+                        match validator.find(&mem[mat.start..end]) {
+                            Some(m) => mat.start + m.end,
                             None => return AcMatchStatus::None,
                         }
                     }
@@ -348,8 +348,8 @@ impl Variable {
                             start_position,
                             mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
                         );
-                        while let Some(m) = validator.as_regex().find(&mem[start..mat.end]) {
-                            let m = (m.start() + start)..end;
+                        while let Some(m) = validator.find(&mem[start..mat.end]) {
+                            let m = (m.start + start)..end;
                             start = m.start + 1;
                             if let Some(m) = self.validate_and_update_match(mem, m) {
                                 matches.push(m);
@@ -466,11 +466,11 @@ fn apply_wide_word_boundaries(
 
     #[allow(clippy::bool_to_int_with_if)]
     let expected_start = if start < mat.start { 1 } else { 0 };
-    match regex.as_regex().find(&unwiden_mem) {
-        Some(m) if m.start() == expected_start => {
+    match regex.find(&unwiden_mem) {
+        Some(m) if m.start == expected_start => {
             // Modify the match end. This is needed because the application of word boundary
             // may modify the match. Since we matched on non wide mem though, double the size.
-            mat.end = mat.start + 2 * (m.end() - m.start());
+            mat.end = mat.start + 2 * (m.end - m.start);
             Some(mat)
         }
         _ => None,

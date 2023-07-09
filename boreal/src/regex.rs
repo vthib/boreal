@@ -60,17 +60,28 @@ impl Regex {
         Ok(Regex { meta, expr })
     }
 
-    /// Return the regex as a [`regex::bytes::Regex`].
+    /// Find a match in the given haystack.
     #[must_use]
-    pub fn as_regex(&self) -> &meta::Regex {
-        &self.meta
+    pub fn find(&self, haystack: &[u8]) -> Option<Range<usize>> {
+        self.find_in_input(Input::new(haystack))
     }
 
-    /// Find a match on the given haystack starting at the given offset.
+    /// Find a match in the given haystack starting at the given offset.
     #[must_use]
     pub fn find_at(&self, haystack: &[u8], offset: usize) -> Option<Range<usize>> {
-        let input = Input::new(haystack).span(offset..haystack.len());
+        self.find_in_input(Input::new(haystack).span(offset..haystack.len()))
+    }
+
+    /// Find a match on the given haystack in the given range
+    #[must_use]
+    fn find_in_input(&self, input: Input) -> Option<Range<usize>> {
         self.meta.find(input).map(|m| m.range())
+    }
+
+    /// Returns true if and only if this regex matches the given haystack.
+    #[must_use]
+    pub fn is_match(&self, mem: &[u8]) -> bool {
+        self.meta.is_match(mem)
     }
 
     /// Returns the original string of this regex.
