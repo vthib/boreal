@@ -69,12 +69,12 @@ pub(super) fn compile_regex(
     } else {
         let expr = convert_ast_to_string_with_flags(ast, modifiers);
 
-        MatcherType::Raw(compile_regex_expr(&expr, case_insensitive, dot_all)?)
+        MatcherType::Raw(compile_regex_expr(expr, case_insensitive, dot_all)?)
     };
 
     let non_wide_regex = if stats.has_word_boundaries && modifiers.wide {
         let expr = regex_ast_to_string(ast);
-        Some(compile_regex_expr(&expr, case_insensitive, dot_all)?)
+        Some(compile_regex_expr(expr, case_insensitive, dot_all)?)
     } else {
         None
     };
@@ -125,7 +125,7 @@ fn compile_validator(
     dot_all: bool,
 ) -> Result<Option<Regex>, VariableCompilationError> {
     match expr {
-        Some(expr) => Ok(Some(compile_regex_expr(&expr, case_insensitive, dot_all)?)),
+        Some(expr) => Ok(Some(compile_regex_expr(expr, case_insensitive, dot_all)?)),
         None => Ok(None),
     }
 }
@@ -174,11 +174,11 @@ fn convert_ast_to_string_with_flags(ast: &Node, modifiers: &VariableModifiers) -
 }
 
 fn compile_regex_expr(
-    expr: &str,
+    expr: String,
     case_insensitive: bool,
     dot_all: bool,
 ) -> Result<Regex, VariableCompilationError> {
-    Regex::from_str(expr, case_insensitive, dot_all).map_err(VariableCompilationError::Regex)
+    Regex::from_string(expr, case_insensitive, dot_all).map_err(VariableCompilationError::Regex)
 }
 
 /// Visitor used to transform a regex AST to make the regex match "wide" characters.

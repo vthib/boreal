@@ -1,9 +1,9 @@
 //! YARA regex handling
 //!
 //! This module contains a set of types and helpers to handle the YARA regex syntax.
-use std::fmt::Write;
+use std::{fmt::Write, ops::Range};
 
-use regex::bytes::RegexBuilder;
+use regex_automata::{meta, util::syntax, Input};
 
 use boreal_parser::regex::{
     AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Node, PerlClass, PerlClassKind,
@@ -15,7 +15,10 @@ pub(crate) use visitor::{visit, VisitAction, Visitor};
 
 /// Regex following the YARA format.
 #[derive(Clone, Debug)]
-pub struct Regex(regex::bytes::Regex);
+pub struct Regex {
+    meta: regex_automata::meta::Regex,
+    expr: String,
+}
 
 impl Regex {
     /// Build the regex from an AST.
@@ -24,7 +27,7 @@ impl Regex {
     ///
     /// Return an error if the regex is malformed.
     pub fn from_ast(ast: &Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
-        Self::from_str(&regex_ast_to_string(ast), case_insensitive, dot_all)
+        Self::from_string(regex_ast_to_string(ast), case_insensitive, dot_all)
     }
 
     /// Build the regex from a string expression.
@@ -35,26 +38,45 @@ impl Regex {
     /// # Errors
     ///
     /// Return an error if the regex is malformed.
-    pub(crate) fn from_str(
-        expr: &str,
+    pub(crate) fn from_string(
+        expr: String,
         case_insensitive: bool,
         dot_all: bool,
     ) -> Result<Self, Error> {
-        RegexBuilder::new(expr)
-            .octal(false)
-            .unicode(false)
-            .multi_line(false)
-            .case_insensitive(case_insensitive)
-            .dot_matches_new_line(dot_all)
-            .build()
-            .map(Regex)
-            .map_err(Error)
+        let meta = meta::Builder::new()
+            .configure(meta::Config::new().utf8_empty(false))
+            .syntax(
+                syntax::Config::new()
+                    .octal(false)
+                    .unicode(false)
+                    .utf8(false)
+                    .multi_line(false)
+                    .case_insensitive(case_insensitive)
+                    .dot_matches_new_line(dot_all),
+            )
+            .build(&expr)
+            .map_err(Error::from)?;
+
+        Ok(Regex { meta, expr })
     }
 
     /// Return the regex as a [`regex::bytes::Regex`].
     #[must_use]
-    pub fn as_regex(&self) -> &regex::bytes::Regex {
-        &self.0
+    pub fn as_regex(&self) -> &meta::Regex {
+        &self.meta
+    }
+
+    /// Find a match on the given haystack starting at the given offset.
+    #[must_use]
+    pub fn find_at(&self, haystack: &[u8], offset: usize) -> Option<Range<usize>> {
+        let input = Input::new(haystack).span(offset..haystack.len());
+        self.meta.find(input).map(|m| m.range())
+    }
+
+    /// Returns the original string of this regex.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.expr
     }
 }
 
@@ -196,7 +218,20 @@ impl AstPrinter {
 
 /// Error when compiling a regex.
 #[derive(Clone, Debug)]
-pub struct Error(regex::Error);
+pub struct Error(String);
+
+impl From<meta::BuildError> for Error {
+    fn from(err: meta::BuildError) -> Self {
+        // Copied from the regex crate: useful to get a good error message on size limit reached.
+        if let Some(size_limit) = err.size_limit() {
+            Self(format!(
+                "Compiled regex exceeds size limit of {size_limit} bytes.",
+            ))
+        } else {
+            Self(err.to_string())
+        }
+    }
+}
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -204,16 +239,10 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.0)
-    }
-}
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-
     use super::*;
     use crate::test_helpers::{parse_regex_string, test_type_traits};
 
@@ -269,9 +298,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits(Regex::from_str("a", false, false));
-        let error = Error(regex::Error::Syntax("a".to_owned()));
-        test_type_traits(error.clone());
-        assert!(error.source().is_some());
+        test_type_traits(Regex::from_string("a".to_owned(), false, false));
+        test_type_traits(Error("a".to_owned()));
     }
 }
