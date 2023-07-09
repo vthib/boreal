@@ -321,8 +321,8 @@ impl Variable {
                             mem.len(),
                             mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH),
                         );
-                        match validator.find(&mem[mat.start..end]) {
-                            Some(m) => mat.start + m.end,
+                        match validator.find_anchored_at(&mem[0..end], mat.start) {
+                            Some(m) => m.end,
                             None => return AcMatchStatus::None,
                         }
                     }

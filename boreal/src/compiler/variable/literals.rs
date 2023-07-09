@@ -248,7 +248,6 @@ impl LiteralSet {
         });
         let post_node = post_node.map(|post| {
             let mut post_nodes = Vec::new();
-            post_nodes.push(Node::Assertion(AssertionKind::StartLine));
             self.add_literals_ast(&mut post_nodes);
             post_nodes.push(post);
             Node::Concat(post_nodes)
@@ -447,7 +446,7 @@ mod tests {
             "{ AB ?D 01 }",
             &[b"\xab"],
             "",
-            r"^\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
+            r"\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
         );
 
         test("{ D? FE }", &[b"\xfe"], r"[\xd0-\xdf]\xfe$", "");
@@ -456,7 +455,7 @@ mod tests {
             "{ ( AA | BB ) F? }",
             &[b"\xAA", b"\xBB"],
             "",
-            r"^(\xaa|\xbb)[\xf0-\xff]",
+            r"(\xaa|\xbb)[\xf0-\xff]",
         );
 
         test(
@@ -474,29 +473,24 @@ mod tests {
         );
 
         // Do not handle alternations that contains anything other than literals
-        test(
-            "{ AB ( ?? | FF ) CC }",
-            &[b"\xAB"],
-            "",
-            r"^\xab(.|\xff)\xcc",
-        );
+        test("{ AB ( ?? | FF ) CC }", &[b"\xAB"], "", r"\xab(.|\xff)\xcc");
         test(
             "{ AB ( ?? DD | FF ) CC }",
             &[b"\xAB"],
             "",
-            r"^\xab(.\xdd|\xff)\xcc",
+            r"\xab(.\xdd|\xff)\xcc",
         );
         test(
             "{ AB ( 11 ?? DD | FF ) CC }",
             &[b"\xAB"],
             "",
-            r"^\xab(\x11.\xdd|\xff)\xcc",
+            r"\xab(\x11.\xdd|\xff)\xcc",
         );
         test(
             "{ AB ( 11 ?? | FF ) CC }",
             &[b"\xAB"],
             "",
-            r"^\xab(\x11.|\xff)\xcc",
+            r"\xab(\x11.|\xff)\xcc",
         );
         test(
             "{ ( 11 ?? | FF ) CC }",
@@ -508,7 +502,7 @@ mod tests {
             "{ AB ( 11 | 12 ) 13 ( 1? | 14 ) }",
             &[b"\xAB\x11\x13", b"\xAB\x12\x13"],
             "",
-            r"^(\xab\x11\x13|\xab\x12\x13)([\x10-\x1f]|\x14)",
+            r"(\xab\x11\x13|\xab\x12\x13)([\x10-\x1f]|\x14)",
         );
 
         // Test imbrication of alternations
@@ -557,11 +551,11 @@ mod tests {
                 b"\x12\x22\x32\x42\x52",
             ],
             "",
-            "^(\\x11!1AQ|\\x11!1AR|\\x11!1BQ|\\x11!1BR|\\x11!2AQ|\\x11!2AR|\\x11!2BQ|\\x11!2BR|\
-               \\x11\"1AQ|\\x11\"1AR|\\x11\"1BQ|\\x11\"1BR|\\x11\"2AQ|\\x11\"2AR|\\x11\"2BQ|\
-               \\x11\"2BR|\\x12!1AQ|\\x12!1AR|\\x12!1BQ|\\x12!1BR|\\x12!2AQ|\\x12!2AR|\\x12!2BQ|\
-               \\x12!2BR|\\x12\"1AQ|\\x12\"1AR|\\x12\"1BQ|\\x12\"1BR|\\x12\"2AQ|\\x12\"2AR|\
-               \\x12\"2BQ|\\x12\"2BR)(a|b)(q|r)\\x88",
+            "(\\x11!1AQ|\\x11!1AR|\\x11!1BQ|\\x11!1BR|\\x11!2AQ|\\x11!2AR|\\x11!2BQ|\\x11!2BR|\
+              \\x11\"1AQ|\\x11\"1AR|\\x11\"1BQ|\\x11\"1BR|\\x11\"2AQ|\\x11\"2AR|\\x11\"2BQ|\
+              \\x11\"2BR|\\x12!1AQ|\\x12!1AR|\\x12!1BQ|\\x12!1BR|\\x12!2AQ|\\x12!2AR|\\x12!2BQ|\
+              \\x12!2BR|\\x12\"1AQ|\\x12\"1AR|\\x12\"1BQ|\\x12\"1BR|\\x12\"2AQ|\\x12\"2AR|\
+              \\x12\"2BQ|\\x12\"2BR)(a|b)(q|r)\\x88",
         );
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) 33 ( 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10  ) }",
@@ -572,7 +566,7 @@ mod tests {
                 b"\x12\x22\x33",
             ],
             "",
-            r#"^(\x11!3|\x11"3|\x12!3|\x12"3)(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
+            r#"(\x11!3|\x11"3|\x12!3|\x12"3)(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
         );
 
         // TODO: to improve, there are diminishing returns in computing the longest literals.
@@ -592,7 +586,7 @@ mod tests {
             "{ 11 ?A 22 33 [1] 44 55 66 A? 77 88 }",
             &[b"\x44\x55\x66"],
             r#"\x11[\x0a\x1a\x2a:JZjz\x8a\x9a\xaa\xba\xca\xda\xea\xfa]"3.DUf$"#,
-            r#"^DUf[\xa0-\xaf]w\x88"#,
+            r#"DUf[\xa0-\xaf]w\x88"#,
         );
 
         // hex strings found in some real rules
@@ -601,14 +595,14 @@ mod tests {
                00 04 00 02 00 04 ?? ?? }",
             &[b"\x00\x03\x00\x02\x00\x04"],
             r"\x00\x01\x00\x01\x00\x02..\x00\x02\x00\x01\x00\x02..\x00\x03\x00\x02\x00\x04$",
-            r"^\x00\x03\x00\x02\x00\x04....\x00\x04\x00\x02\x00\x04..",
+            r"\x00\x03\x00\x02\x00\x04....\x00\x04\x00\x02\x00\x04..",
         );
 
         test(
             "{ c7 0? 00 00 01 00 [4-14] c7 0? 01 00 00 00 }",
             &[b"\x00\x00\x01\x00"],
             r"\xc7[\x00-\x0f]\x00\x00\x01\x00$",
-            r"^\x00\x00\x01\x00.{4,14}?\xc7[\x00-\x0f]\x01\x00\x00\x00",
+            r"\x00\x00\x01\x00.{4,14}?\xc7[\x00-\x0f]\x01\x00\x00\x00",
         );
         test(
             "{ 00 CC 00 ?? ?? ?? ?? ?? 00 64 65 66 61 75 6C 74 2E 70 72 6F 70 65 72 74 69 65 73 }",
@@ -622,7 +616,7 @@ mod tests {
             &[b"\x83\xC5\x04\x55\x8B"],
             "\\xfc\\xe8.\\x00\\x00\\x00.{0,32}?\\xeb\\x2b.\\x8b.\\x00\\x83\\xc5\\x04\
              \\x8b.\\x001.\\x83\\xc5\\x04U\\x8b$",
-            "^\\x83\\xc5\\x04U\\x8b.\\x001.\\x89.\\x001.\\x83\\xc5\\x04\\x83.\\x041.9.t\
+            "\\x83\\xc5\\x04U\\x8b.\\x001.\\x89.\\x001.\\x83\\xc5\\x04\\x83.\\x041.9.t\
              \\x02\\xeb\\xe8.\\xff.\\xe8\\xd0\\xff\\xff\\xff",
         );
         test(
@@ -634,7 +628,7 @@ mod tests {
             "(\\x0f\\x82..\\x00\\x00|r.)(\\x80|A\\x80)([p-\\x7f]|\\x7c\\x24)\\x04\\x02\
              (\\x0f\\x85..\\x00\\x00|u.)(\\x81|A\\x81)([0-\\x3f]|<\\x24|\\x7d\\x00)\
              \\x02\\xaa\\x02\\xc1$",
-            "^\\x02\\xaa\\x02\\xc1(\\x0f\\x85..\\x00\\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)\
+            "\\x02\\xaa\\x02\\xc1(\\x0f\\x85..\\x00\\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)\
              ([@-O]|[P-_]|[`-o]|[p-\\x7f]|[\\x04\\x14\\x244DTdt\\x84\\x94\\xa4\\xb4\\xc4\\xd4\
              \\xe4\\xf4]\\x24|[\\x0c\\x1c,<L\\x5cl\\x7c\\x8c\\x9c\\xac\\xbc\\xcc\\xdc\\xec\\xfc]\
              \\x24)\\x06",
@@ -645,13 +639,13 @@ mod tests {
             "{ 8B C? [2-3] F6 D? 1A C? [2-3] [2-3] 30 0? ?? 4? }",
             &[b"\x8B"],
             "",
-            r"^\x8b[\xc0-\xcf].{2,3}?\xf6[\xd0-\xdf]\x1a[\xc0-\xcf].{2,3}?.{2,3}?0[\x00-\x0f].[@-O]",
+            r"\x8b[\xc0-\xcf].{2,3}?\xf6[\xd0-\xdf]\x1a[\xc0-\xcf].{2,3}?.{2,3}?0[\x00-\x0f].[@-O]",
         );
         test(
             "{ C6 0? E9 4? 8? 4? 05 [2] 89 4? 01 }",
             &[b"\xC6"],
             "",
-            r"^\xc6[\x00-\x0f]\xe9[@-O][\x80-\x8f][@-O]\x05.{2,2}?\x89[@-O]\x01",
+            r"\xc6[\x00-\x0f]\xe9[@-O][\x80-\x8f][@-O]\x05.{2,2}?\x89[@-O]\x01",
         );
 
         test(
@@ -688,13 +682,13 @@ mod tests {
         }
 
         // Literal on the left side of a group
-        test("abc(a+)b", &[b"abc"], "", "^abc(a+)b");
+        test("abc(a+)b", &[b"abc"], "", "abc(a+)b");
         // Literal spanning inside a group
-        test("ab(ca+)b", &[b"abc"], "", "^abc(a+)b");
+        test("ab(ca+)b", &[b"abc"], "", "abc(a+)b");
         // Literal spanning up to the end of a group
-        test("ab(c)a+b", &[b"abc"], "", "^abca+b");
+        test("ab(c)a+b", &[b"abc"], "", "abca+b");
         // Literal spanning in and out of a group
-        test("a(b)ca+b", &[b"abc"], "", "^abca+b");
+        test("a(b)ca+b", &[b"abc"], "", "abca+b");
 
         // Literal on the right side of a group
         test("b(a+)abc", &[b"abc"], "b(a+)abc$", "");
@@ -706,13 +700,13 @@ mod tests {
         test("ba+a(bc)", &[b"abc"], "ba+abc$", "");
 
         // A few tests on closing nodes
-        test("a.+bcd{2}e", &[b"bc"], "a.+bc$", "^bcd{2}e");
-        test("a.+bc.e", &[b"bc"], "a.+bc$", "^bc.e");
-        test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "^bc\\B.e");
-        test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "^bc[aA]e");
+        test("a.+bcd{2}e", &[b"bc"], "a.+bc$", "bcd{2}e");
+        test("a.+bc.e", &[b"bc"], "a.+bc$", "bc.e");
+        test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "bc\\B.e");
+        test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "bc[aA]e");
         test("a.+bc()de", &[b"bcde"], "a.+bcde$", "");
 
-        test("a+(b.c)(d)(ef)g+", &[b"cdef"], "a+(b.)cdef$", "^cdefg+");
+        test("a+(b.c)(d)(ef)g+", &[b"cdef"], "a+(b.)cdef$", "cdefg+");
 
         test(
             "a((b(c)((d)()(e(g+h)ij)))kl)m",

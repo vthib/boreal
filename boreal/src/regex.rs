@@ -3,7 +3,7 @@
 //! This module contains a set of types and helpers to handle the YARA regex syntax.
 use std::{fmt::Write, ops::Range};
 
-use regex_automata::{meta, util::syntax, Input};
+use regex_automata::{meta, util::syntax, Anchored, Input};
 
 use boreal_parser::regex::{
     AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Node, PerlClass, PerlClassKind,
@@ -70,6 +70,16 @@ impl Regex {
     #[must_use]
     pub fn find_at(&self, haystack: &[u8], offset: usize) -> Option<Range<usize>> {
         self.find_in_input(Input::new(haystack).span(offset..haystack.len()))
+    }
+
+    /// Find a match on the given haystack in the given range
+    #[must_use]
+    pub fn find_anchored_at(&self, haystack: &[u8], start: usize) -> Option<Range<usize>> {
+        self.find_in_input(
+            Input::new(haystack)
+                .span(start..haystack.len())
+                .anchored(Anchored::Yes),
+        )
     }
 
     /// Find a match on the given haystack in the given range
