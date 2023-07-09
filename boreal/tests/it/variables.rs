@@ -424,6 +424,25 @@ rule a {{
 }
 
 #[test]
+fn test_variable_boundary_ac_confirm() {
+    // Make sure the boundary is taken into account when confirming an ac match.
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /\Wabcd\W/
+    condition:
+        $a
+}"#,
+    );
+
+    checker.check(b"aabcde", false);
+    checker.check(b"<abcde", false);
+    checker.check(b"aabcd>", false);
+    checker.check(b"<abcd>", true);
+}
+
+#[test]
 fn test_variable_string_modifiers() {
     // \x76 is 'v'
     let checker = Checker::new(
