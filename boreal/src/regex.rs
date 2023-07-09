@@ -318,6 +318,14 @@ mod tests {
     }
 
     #[test]
+    fn test_regex_as_str() {
+        // Original expression can be retrieved with the as_str method.
+        let expr = r"^a+b\wc";
+        let regex = Regex::from_string(expr.to_owned(), false, false).unwrap();
+        assert_eq!(regex.as_str(), expr);
+    }
+
+    #[test]
     fn test_types_traits() {
         test_type_traits(Regex::from_string("a".to_owned(), false, false));
         test_type_traits(Error("a".to_owned()));
