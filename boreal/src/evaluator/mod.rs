@@ -601,7 +601,7 @@ impl Evaluator<'_, '_, '_, '_, '_> {
             }
             Expression::Matches(expr, regex) => {
                 let s = self.evaluate_expr(expr)?.unwrap_bytes()?;
-                Ok(Value::Boolean(regex.as_regex().is_match(&s)))
+                Ok(Value::Boolean(regex.is_match(&s)))
             }
             Expression::Defined(expr) => match self.evaluate_expr(expr) {
                 Ok(_) => Ok(Value::Boolean(true)),

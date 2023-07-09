@@ -369,8 +369,8 @@ impl Tests {
         let regex: Regex = args.next()?.try_into().ok()?;
         let s: Vec<u8> = args.next()?.try_into().ok()?;
 
-        Some(Value::Integer(match regex.as_regex().find(&s) {
-            Some(m) => m.range().len() as i64,
+        Some(Value::Integer(match regex.find(&s) {
+            Some(m) => m.len() as i64,
             None => -1,
         }))
     }
