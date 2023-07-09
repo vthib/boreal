@@ -375,7 +375,7 @@ impl Variable {
         };
 
         while offset < mem.len() {
-            let mat = regex.as_regex().find_at(mem, offset).map(|m| m.range())?;
+            let mat = regex.find_at(mem, offset)?;
 
             match self.validate_and_update_match(mem, mat.clone()) {
                 Some(m) => return Some(m),
@@ -565,7 +565,7 @@ mod tests {
         });
 
         test_type_traits_non_clonable(VariableCompilationError::Regex(
-            Regex::from_str("{", true, true).unwrap_err(),
+            Regex::from_string("{".to_owned(), true, true).unwrap_err(),
         ));
     }
 }

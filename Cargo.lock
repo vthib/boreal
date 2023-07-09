@@ -173,7 +173,7 @@ dependencies = [
  "memchr",
  "object",
  "once_cell",
- "regex",
+ "regex-automata",
  "regex-syntax",
  "sha1",
  "sha2",
