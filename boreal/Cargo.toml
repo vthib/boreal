@@ -40,6 +40,7 @@ codespan-reporting = "0.11"
 aho-corasick = "1.0"
 memchr = "2.5"
 # Remove unicode feature
+# TODO: regex only enables dfa-onepass, and not all of dfa. Check which option we want.
 regex-automata = { version = "0.3", default-features = false, features = ["std", "syntax", "perf", "meta", "nfa", "dfa", "hybrid"] }
 # No default features to disable unicode, we do not need it
 regex-syntax = { version = "0.7", default-features = false }
