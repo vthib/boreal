@@ -4,7 +4,8 @@ use boreal_parser::VariableModifiers;
 use crate::regex::{regex_ast_to_string, visit, Regex, VisitAction, Visitor};
 
 use super::literals::LiteralsDetails;
-use super::{CompiledVariable, MatcherType, VariableCompilationError};
+use super::matcher::MatcherKind;
+use super::{CompiledVariable, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
 ///
@@ -58,18 +59,18 @@ pub(super) fn compile_regex(
         }
     }
 
-    let matcher_type = if use_ac {
+    let matcher_kind = if use_ac {
         let pre = pre_ast.map(|ast| convert_ast_to_string_with_flags(&ast, modifiers));
         let post = post_ast.map(|ast| convert_ast_to_string_with_flags(&ast, modifiers));
 
-        MatcherType::Atomized {
+        MatcherKind::Atomized {
             left_validator: compile_validator(pre, case_insensitive, dot_all)?,
             right_validator: compile_validator(post, case_insensitive, dot_all)?,
         }
     } else {
         let expr = convert_ast_to_string_with_flags(ast, modifiers);
 
-        MatcherType::Raw(compile_regex_expr(expr, case_insensitive, dot_all)?)
+        MatcherKind::Raw(compile_regex_expr(expr, case_insensitive, dot_all)?)
     };
 
     let non_wide_regex = if stats.has_word_boundaries && modifiers.wide {
@@ -81,7 +82,7 @@ pub(super) fn compile_regex(
 
     Ok(CompiledVariable {
         literals,
-        matcher_type,
+        matcher_kind,
         non_wide_regex,
     })
 }
