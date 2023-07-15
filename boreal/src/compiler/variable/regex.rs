@@ -15,14 +15,9 @@ use super::{CompiledVariable, VariableCompilationError};
 ///   containing word boundaries.
 pub(super) fn compile_regex(
     ast: &Node,
-    mut case_insensitive: bool,
     dot_all: bool,
     modifiers: &VariableModifiers,
 ) -> Result<CompiledVariable, VariableCompilationError> {
-    if modifiers.nocase {
-        case_insensitive = true;
-    }
-
     let LiteralsDetails {
         mut literals,
         pre_ast,
@@ -64,18 +59,18 @@ pub(super) fn compile_regex(
         let post = post_ast.map(|ast| convert_ast_to_string_with_flags(&ast, modifiers));
 
         MatcherKind::Atomized {
-            left_validator: compile_validator(pre, case_insensitive, dot_all)?,
-            right_validator: compile_validator(post, case_insensitive, dot_all)?,
+            left_validator: compile_validator(pre, modifiers.nocase, dot_all)?,
+            right_validator: compile_validator(post, modifiers.nocase, dot_all)?,
         }
     } else {
         let expr = convert_ast_to_string_with_flags(ast, modifiers);
 
-        MatcherKind::Raw(compile_regex_expr(expr, case_insensitive, dot_all)?)
+        MatcherKind::Raw(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
     };
 
     let non_wide_regex = if stats.has_word_boundaries && modifiers.wide {
         let expr = regex_ast_to_string(ast);
-        Some(compile_regex_expr(expr, case_insensitive, dot_all)?)
+        Some(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
     } else {
         None
     };
