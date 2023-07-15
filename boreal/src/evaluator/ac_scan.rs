@@ -52,10 +52,10 @@ impl AcScan {
         let mut non_handled_var_indexes = Vec::new();
 
         for (variable_index, var) in variables.iter().enumerate() {
-            if var.literals.is_empty() {
+            if var.matcher.literals.is_empty() {
                 non_handled_var_indexes.push(variable_index);
             } else {
-                for (literal_index, lit) in var.literals.iter().enumerate() {
+                for (literal_index, lit) in var.matcher.literals.iter().enumerate() {
                     let (start, end) = pick_atom_in_literal(lit);
                     aho_index_to_literal_info.push(LiteralInfo {
                         variable_index,

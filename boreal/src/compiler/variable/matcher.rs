@@ -8,6 +8,11 @@ const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
 #[derive(Debug)]
 pub struct Matcher {
+    /// Set of literals extracted from the variable.
+    ///
+    /// Will be used by the AC pass to scan for the variable.
+    pub literals: Vec<Vec<u8>>,
+
     /// Flags related to variable modifiers.
     pub flags: Flags,
 
@@ -29,6 +34,7 @@ pub struct Flags {
     pub fullword: bool,
     pub ascii: bool,
     pub wide: bool,
+    pub nocase: bool,
 }
 
 #[derive(Debug)]
@@ -46,6 +52,25 @@ pub enum MatcherKind {
 }
 
 impl Matcher {
+    /// Confirm that an AC match is a match on the given literal.
+    ///
+    /// This is needed because the AC might optimize literals and get false positive matches.
+    /// This function is used to confirm the tentative match does match the literal with the given
+    /// index.
+    pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
+        let literal = &self.literals[literal_index];
+
+        if self.flags.nocase {
+            if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
+                return false;
+            }
+        } else if literal != &mem[mat.start..mat.end] {
+            return false;
+        }
+
+        true
+    }
+
     pub fn process_ac_match(
         &self,
         mem: &[u8],
@@ -259,10 +284,12 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(Matcher {
+            literals: vec![],
             flags: Flags {
                 fullword: false,
                 ascii: false,
                 wide: false,
+                nocase: false,
             },
             kind: MatcherKind::Literals,
             non_wide_regex: None,
@@ -272,6 +299,7 @@ mod tests {
             fullword: false,
             ascii: false,
             wide: false,
+            nocase: false,
         });
     }
 }

@@ -36,16 +36,8 @@ pub struct Variable {
     /// Is the variable marked as private.
     pub is_private: bool,
 
-    /// Set of literals extracted from the variable.
-    ///
-    /// Will be used by the AC pass to scan for the variable.
-    pub literals: Vec<Vec<u8>>,
-
-    /// Is the variable case-insensitive.
-    nocase: bool,
-
     /// Matcher for the variable.
-    matcher: matcher::Matcher,
+    pub matcher: matcher::Matcher,
 }
 
 /// State of an aho-corasick match on a [`Matcher`] literals.
@@ -122,13 +114,13 @@ pub(crate) fn compile_variable(
         }) => Variable {
             name,
             is_private: modifiers.private,
-            literals,
-            nocase: modifiers.nocase,
             matcher: matcher::Matcher {
+                literals,
                 flags: matcher::Flags {
                     fullword: modifiers.fullword,
                     ascii: modifiers.ascii,
                     wide: modifiers.wide,
+                    nocase: modifiers.nocase,
                 },
                 kind: matcher_kind,
                 non_wide_regex,
@@ -145,6 +137,7 @@ pub(crate) fn compile_variable(
 
     let stats = if compute_statistics {
         let atoms: Vec<_> = res
+            .matcher
             .literals
             .iter()
             .map(|lit| {
@@ -157,7 +150,7 @@ pub(crate) fn compile_variable(
         Some(statistics::CompiledString {
             name: res.name.clone(),
             expr: parsed_contents[span.start..span.end].to_owned(),
-            literals: res.literals.clone(),
+            literals: res.matcher.literals.clone(),
             atoms,
             atoms_quality,
             matching_kind: match res.matcher.kind {
@@ -256,17 +249,7 @@ impl Variable {
     /// This function is used to confirm the tentative match does match the literal with the given
     /// index.
     pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
-        let literal = &self.literals[literal_index];
-
-        if self.nocase {
-            if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
-                return false;
-            }
-        } else if literal != &mem[mat.start..mat.end] {
-            return false;
-        }
-
-        true
+        self.matcher.confirm_ac_literal(mem, mat, literal_index)
     }
 
     pub fn process_ac_match(
