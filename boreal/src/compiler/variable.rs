@@ -86,10 +86,11 @@ pub(crate) fn compile_variable(
             if case_insensitive {
                 modifiers.nocase = true;
             }
-            regex::compile_regex(&ast, case_insensitive, dot_all, &modifiers)
+            regex::compile_regex(&ast, dot_all, &modifiers)
         }
         VariableDeclarationValue::HexString(hex_string) => {
-            // Fullword and wide is not compatible with hex strings
+            // Nocase, fullword and wide is not compatible with hex strings
+            modifiers.nocase = false;
             modifiers.fullword = false;
             modifiers.wide = false;
 
@@ -101,7 +102,7 @@ pub(crate) fn compile_variable(
                 })
             } else {
                 let ast = hex_string::hex_string_to_ast(hex_string);
-                regex::compile_regex(&ast, false, true, &modifiers)
+                regex::compile_regex(&ast, true, &modifiers)
             }
         }
     };
