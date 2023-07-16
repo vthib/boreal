@@ -5,7 +5,7 @@ use crate::regex::{regex_hir_to_string, visit, Hir, Regex, VisitAction, Visitor}
 
 use super::literals::LiteralsDetails;
 use super::matcher::MatcherKind;
-use super::{CompiledVariable, VariableCompilationError};
+use super::{only_literals, CompiledVariable, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
 ///
@@ -18,6 +18,18 @@ pub(super) fn compile_regex(
     dot_all: bool,
     modifiers: &VariableModifiers,
 ) -> Result<CompiledVariable, VariableCompilationError> {
+    // Try to convert into only literals if possible
+    // TODO: handle more modifiers
+    if !modifiers.nocase && !modifiers.wide {
+        if let Some(literals) = only_literals::hir_to_only_literals(hir, dot_all) {
+            return Ok(CompiledVariable {
+                literals,
+                matcher_kind: MatcherKind::Literals,
+                non_wide_regex: None,
+            });
+        }
+    }
+
     let LiteralsDetails {
         mut literals,
         pre_hir,
