@@ -89,20 +89,7 @@ pub(crate) fn compile_variable(
             regex::compile_regex(&ast.into(), dot_all, &modifiers)
         }
         VariableDeclarationValue::HexString(hex_string) => {
-            // Nocase, fullword and wide is not compatible with hex strings
-            modifiers.nocase = false;
-            modifiers.fullword = false;
-            modifiers.wide = false;
-
-            let hir = hex_string.into();
-            match only_literals::hir_to_only_literals(&hir) {
-                Some(literals) => Ok(CompiledVariable {
-                    literals,
-                    matcher_kind: matcher::MatcherKind::Literals,
-                    non_wide_regex: None,
-                }),
-                None => regex::compile_regex(&hir, true, &modifiers),
-            }
+            regex::compile_regex(&hex_string.into(), true, &modifiers)
         }
     };
 

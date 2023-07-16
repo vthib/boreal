@@ -1,9 +1,9 @@
 use crate::regex::{visit, Hir, VisitAction, Visitor};
 
 /// Can the hex string be expressed using only literals.
-pub(super) fn hir_to_only_literals(hir: &Hir) -> Option<Vec<Vec<u8>>> {
+pub(super) fn hir_to_only_literals(hir: &Hir, dot_all: bool) -> Option<Vec<Vec<u8>>> {
     // TODO: move this count into the HirStatistics visitor
-    match visit(hir, CountLiterals::new(true)) {
+    match visit(hir, CountLiterals::new(dot_all)) {
         Some(count) if count < 100 => visit(hir, Literals::new()),
         Some(_) | None => None,
     }
@@ -297,7 +297,7 @@ mod tests {
             let regex = parse_regex_string(regex);
             let hir = regex.ast.into();
 
-            let res = hir_to_only_literals(&hir);
+            let res = hir_to_only_literals(&hir, true);
             match &res {
                 Some(v) => assert_eq!(v, expected.unwrap()),
                 None => assert!(expected.is_none()),
@@ -342,7 +342,7 @@ mod tests {
             let hex_string = parse_hex_string(hex_string);
             let hir = hex_string.into();
 
-            let res = hir_to_only_literals(&hir);
+            let res = hir_to_only_literals(&hir, true);
             match &res {
                 Some(v) => assert_eq!(v, expected.unwrap()),
                 None => assert!(expected.is_none()),
