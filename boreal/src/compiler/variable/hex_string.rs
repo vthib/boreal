@@ -1,10 +1,11 @@
 use crate::regex::{visit, Hir, VisitAction, Visitor};
 
 /// Can the hex string be expressed using only literals.
-pub(super) fn can_use_only_literals(hir: &Hir) -> bool {
+pub(super) fn hir_to_only_literals(hir: &Hir) -> Option<Vec<Vec<u8>>> {
+    // TODO: move this count into the HirStatistics visitor
     match visit(hir, CountLiterals::new(true)) {
-        Some(count) => count < 100,
-        None => false,
+        Some(count) if count < 100 => visit(hir, Literals::new()),
+        Some(_) | None => None,
     }
 }
 
@@ -126,11 +127,6 @@ impl Visitor for CountLiterals {
     }
 }
 
-/// Convert a HIR into an array of literals that entirely express it.
-pub(super) fn hir_to_only_literals(hir: &Hir) -> Option<Vec<Vec<u8>>> {
-    visit(hir, Literals::new())
-}
-
 struct Literals {
     // Combination of all possible literals.
     all: Option<Vec<Vec<u8>>>,
@@ -203,16 +199,6 @@ impl Literals {
     }
 }
 
-macro_rules! check {
-    ($self:ident, $cond:expr) => {
-        debug_assert!($cond);
-        if !$cond {
-            $self.all = None;
-            return VisitAction::Skip;
-        }
-    };
-}
-
 impl Visitor for Literals {
     type Output = Option<Vec<Vec<u8>>>;
 
@@ -227,16 +213,26 @@ impl Visitor for Literals {
                 mask,
                 negated,
             } => {
-                check!(self, !*negated);
-                self.add_masked_byte(*value, *mask);
+                if *negated {
+                    self.all = None;
+                    VisitAction::Skip
+                } else {
+                    self.add_masked_byte(*value, *mask);
+                    VisitAction::Continue
+                }
             }
             Hir::Dot => {
                 // Should not happen for the moment, the limit is 100 literals, a dot bring that
                 // total over the limit.
-                check!(self, false);
+                self.all = None;
+                VisitAction::Skip
             }
-            Hir::Literal(b) => self.add_byte(*b),
-            Hir::Concat(_) | Hir::Empty | Hir::Group(_) => (),
+            Hir::Literal(b) => {
+                self.add_byte(*b);
+                VisitAction::Continue
+            }
+
+            Hir::Concat(_) | Hir::Empty | Hir::Group(_) => VisitAction::Continue,
             Hir::Alternation(_) => {
                 // First, commit the local buffer, to have a proper list of all
                 // possible literals.
@@ -248,13 +244,13 @@ impl Visitor for Literals {
                     branch_lits: Vec::new(),
                 });
                 self.all = Some(Vec::new());
+                VisitAction::Continue
             }
             Hir::Class(_) | Hir::Assertion(_) | Hir::Repetition { .. } => {
-                check!(self, false);
+                self.all = None;
+                VisitAction::Skip
             }
         }
-
-        VisitAction::Continue
     }
 
     fn visit_alternation_in(&mut self) {
@@ -292,28 +288,74 @@ impl Visitor for Literals {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{regex::regex_hir_to_string, test_helpers::parse_hex_string};
+    use crate::regex::regex_hir_to_string;
+    use crate::test_helpers::{parse_hex_string, parse_regex_string};
 
     #[test]
-    fn test_hex_string_to_only_literals() {
+    fn test_regex_extract_literals() {
         #[track_caller]
-        fn test(hex_string: &str, expected_lits: &[&[u8]]) {
+        fn test(regex: &str, expected: Option<&[&[u8]]>) {
+            let regex = parse_regex_string(regex);
+            let hir = regex.ast.into();
+
+            let res = hir_to_only_literals(&hir);
+            match &res {
+                Some(v) => assert_eq!(v, expected.unwrap()),
+                None => assert!(expected.is_none()),
+            };
+        }
+
+        // Assertions and repetitions means no literals
+        test(r"^a", None);
+        test(r"a$", None);
+        test(r"a\b", None);
+        test(r"a\B", None);
+
+        test(r"a?", None);
+        test(r"a+?", None);
+        test(r"a*", None);
+        test(r"a{2}", None);
+        test(r"a{1,}", None);
+        test(r"a{2,3}", None);
+
+        // Classes are not handled
+        test(r"[a]", None);
+        test(r"[^ab]", None);
+        test(r"\w", None);
+
+        // Dot leads to too many literals
+        test(r".", None);
+
+        // Concat, empty, literal, group, all works
+        test(r"a(b)()e", Some(&[b"abe"]));
+
+        // Alternations works
+        test(
+            r"a|f(b|c)|((ab)|)c|d",
+            Some(&[b"a", b"fb", b"fc", b"abc", b"c", b"d"]),
+        );
+    }
+
+    #[test]
+    fn test_extract_literals() {
+        #[track_caller]
+        fn test(hex_string: &str, expected: Option<&[&[u8]]>) {
             let hex_string = parse_hex_string(hex_string);
             let hir = hex_string.into();
 
-            let visitor = CountLiterals::new(true);
-            let count = visit(&hir, visitor);
-            let lits = hir_to_only_literals(&hir).unwrap();
-            assert_eq!(lits, expected_lits);
-            assert_eq!(lits.len(), count.unwrap());
+            let res = hir_to_only_literals(&hir);
+            match &res {
+                Some(v) => assert_eq!(v, expected.unwrap()),
+                None => assert!(expected.is_none()),
+            };
         }
 
-        test("{ AB CD 01 }", &[b"\xab\xcd\x01"]);
+        test("{ AB CD 01 }", Some(&[b"\xab\xcd\x01"]));
 
         // Test masks
         test(
             "{ AB ?D 01 }",
-            &[
+            Some(&[
                 b"\xab\x0d\x01",
                 b"\xab\x1d\x01",
                 b"\xab\x2d\x01",
@@ -330,11 +372,11 @@ mod tests {
                 b"\xab\xDd\x01",
                 b"\xab\xEd\x01",
                 b"\xab\xFd\x01",
-            ],
+            ]),
         );
         test(
             "{ D? FE }",
-            &[
+            Some(&[
                 b"\xD0\xFE",
                 b"\xD1\xFE",
                 b"\xD2\xFE",
@@ -351,26 +393,26 @@ mod tests {
                 b"\xDD\xFE",
                 b"\xDE\xFE",
                 b"\xDF\xFE",
-            ],
+            ]),
         );
 
         // Test alternation
         test(
             "{ AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD }",
-            &[
+            Some(&[
                 b"\xAB\x01\x67\xCD",
                 b"\xAB\x01\x89\xCD",
                 b"\xAB\x01\xF0\xCD",
                 b"\xAB\x23\x45\x67\xCD",
                 b"\xAB\x23\x45\x89\xCD",
                 b"\xAB\x23\x45\xF0\xCD",
-            ],
+            ]),
         );
 
         // Test imbrication of alternations
         test(
             "{ ( 01 | ( 23 | FF ) ( ( 45 | 67 ) | 58 ( AA | BB | CC ) | DD ) ) }",
-            &[
+            Some(&[
                 b"\x01",
                 b"\x23\x45",
                 b"\x23\x67",
@@ -384,13 +426,13 @@ mod tests {
                 b"\xFF\x58\xBB",
                 b"\xFF\x58\xCC",
                 b"\xFF\xDD",
-            ],
+            ]),
         );
 
         // Test masks + alternation
         test(
             "{ ( AA | BB ) F? }",
-            &[
+            Some(&[
                 b"\xAA\xF0",
                 b"\xAA\xF1",
                 b"\xAA\xF2",
@@ -423,8 +465,18 @@ mod tests {
                 b"\xBB\xFD",
                 b"\xBB\xFE",
                 b"\xBB\xFF",
-            ],
+            ]),
         );
+
+        // Jumps are not allowed
+        test("{ AB [1] 01 }", None);
+        test("{ AB [1-] 01 }", None);
+        test("{ AB [-2] 01 }", None);
+        test("{ AB [1-2] 01 }", None);
+
+        // Too many literals means no extraction
+        test("{ AB ?? 01 }", None);
+        test("{ AB (?A | ?B | ?C | ?D | ?E | ?F | ?0) 01 }", None);
     }
 
     #[test]
@@ -444,5 +496,33 @@ mod tests {
             "{ C7 [3-] 5? 03 [-6] C7 ( FF 15 | E8 ) [4] 6A ( FF D? | E8 [2-4] ??) }",
             r"\xc7.{3,}?[P-_]\x03.{0,6}?\xc7(\xff\x15|\xe8).{4,4}?j(\xff[\xd0-\xdf]|\xe8.{2,4}?.)",
         );
+    }
+
+    #[test]
+    fn test_regex_extract_literals_failure_cases() {
+        // A few tests to ensure the literals extractor properly handle errors.
+        #[track_caller]
+        fn test_hex_string(hex_string: &str) {
+            let hex_string = parse_hex_string(hex_string);
+            let hir = hex_string.into();
+
+            assert!(visit(&hir, Literals::new()).is_none());
+        }
+
+        #[track_caller]
+        fn test_regex(regex: &str) {
+            let regex = parse_regex_string(regex);
+            let hir = regex.ast.into();
+
+            assert!(visit(&hir, Literals::new()).is_none());
+        }
+
+        test_hex_string("{ AA ?? BB }");
+        test_hex_string("{ AA ( CC | ?? | BB ) }");
+        test_hex_string("{ AA ~?D BB }");
+
+        test_regex("^a");
+        test_regex("[^ab]");
+        test_regex("a+");
     }
 }
