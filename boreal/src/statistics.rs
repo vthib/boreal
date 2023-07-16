@@ -42,27 +42,8 @@ pub struct CompiledString {
     /// Quality of the atoms.
     pub atoms_quality: u32,
 
-    /// Matching kind for the string.
-    pub matching_kind: MatchingKind,
-}
-
-/// Kind of matching for a string.
-#[derive(Clone, Debug)]
-pub enum MatchingKind {
-    /// Literals cover the entire string.
-    ///
-    /// AC hits from atoms are confirmed using the literals.
-    Literals,
-
-    /// Atoms are used in AC pass and confirmed by left and right regexes.
-    Atomized,
-
-    /// The AC hits are not confirmed, and the regex is run on its own.
-    ///
-    /// If the string has atoms, those are used to detect whether the string is certain to
-    /// hits or not. If a single atom hits during the AC pass (or if there are no atoms), the
-    /// regex will have to be run on its own.
-    Regex,
+    /// Matching algorithm for the string.
+    pub matching_algo: String,
 }
 
 /// Statistics on the evaluation of a byte string.
@@ -114,9 +95,7 @@ mod tests {
             literals: Vec::new(),
             atoms: Vec::new(),
             atoms_quality: 0,
-            matching_kind: MatchingKind::Literals,
+            matching_algo: String::new(),
         });
-        test_type_traits(MatchingKind::Atomized);
-        test_type_traits(Evaluation::default());
     }
 }
