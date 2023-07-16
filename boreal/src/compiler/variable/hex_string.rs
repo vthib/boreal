@@ -1,74 +1,158 @@
-use boreal_parser::hex_string::{Mask, Token};
+use crate::regex::{visit, Hir, VisitAction, Visitor};
 
 /// Can the hex string be expressed using only literals.
-pub(super) fn can_use_only_literals(hex_string: &[Token]) -> bool {
-    let nb_literals = match count_total_literals(hex_string) {
-        Some(v) => v,
-        None => return false,
-    };
-
-    nb_literals < 100
+pub(super) fn can_use_only_literals(hir: &Hir) -> bool {
+    match visit(hir, CountLiterals::new(true)) {
+        Some(count) => count < 100,
+        None => false,
+    }
 }
 
-/// Count the total number of literals that would be needed to exhaustively express the hex string.
-fn count_total_literals(hex_string: &[Token]) -> Option<usize> {
-    let mut nb_lits = 1_usize;
+struct CountLiterals {
+    /// Is the dot_all flag set.
+    ///
+    /// This is an input of the visitor, and not an output as other fields are.
+    dot_all: bool,
 
-    for token in hex_string {
-        match token {
-            Token::Byte(_) => (),
-            Token::NotByte(_) => return None,
-            Token::Jump(_) => return None,
-            Token::MaskedByte(_, mask) => match mask {
-                Mask::Left | Mask::Right => {
-                    nb_lits = nb_lits.checked_mul(16)?;
+    /// Current count of the number of literals needed to cover the HIR.
+    ///
+    /// Unset if the HIR cannot be covered with simple literals.
+    count: Option<usize>,
+
+    /// Stack used to store counts of alternation branches.
+    alt_stack: Vec<AltCount>,
+}
+
+/// Counts related to an alternation
+struct AltCount {
+    /// The count before entering the alternation.
+    prev_count: Option<usize>,
+
+    /// The current count of visited branches.
+    branch_count: Option<usize>,
+}
+
+impl CountLiterals {
+    fn new(dot_all: bool) -> Self {
+        Self {
+            dot_all,
+            count: Some(1),
+            alt_stack: Vec::new(),
+        }
+    }
+}
+
+impl Visitor for CountLiterals {
+    type Output = Option<usize>;
+
+    fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
+        match hir {
+            Hir::Mask { negated, .. } => {
+                if let Some(count) = &mut self.count {
+                    self.count = count.checked_mul(if *negated { 256 - 16 } else { 16 });
                 }
-                Mask::All => return None,
-            },
-            Token::NotMaskedByte(_, _) => return None,
-            Token::Alternatives(alts) => {
-                let mut nb_alts = 0_usize;
-                for alt in alts {
-                    nb_alts = nb_alts.checked_add(count_total_literals(alt)?)?;
+                VisitAction::Continue
+            }
+            Hir::Dot => {
+                if let Some(count) = &mut self.count {
+                    self.count = count.checked_mul(if self.dot_all { 256 } else { 255 });
                 }
-                nb_lits = nb_lits.checked_mul(nb_alts)?;
+                VisitAction::Continue
+            }
+            Hir::Concat(_) | Hir::Empty | Hir::Literal(_) | Hir::Group(_) => VisitAction::Continue,
+            Hir::Alternation(_) => {
+                // Alternations are handled by:
+                // - pushing the current count into a stack
+                // - after each alternate branch, storing that branch count into the stack
+                // - once the all alternation is visited, computing the combinatorics of all
+                //   branches, and restoring the count.
+                self.alt_stack.push(AltCount {
+                    prev_count: self.count,
+                    branch_count: Some(0),
+                });
+                match &self.count {
+                    Some(_) => {
+                        self.count = Some(1);
+                        VisitAction::Continue
+                    }
+                    None => {
+                        self.count = None;
+                        VisitAction::Skip
+                    }
+                }
+            }
+            Hir::Class(_) => {
+                // TODO: handle classes
+                self.count = None;
+                VisitAction::Skip
+            }
+            Hir::Assertion(_) | Hir::Repetition { .. } => {
+                // TODO: repetitions could be handled
+                self.count = None;
+                VisitAction::Skip
             }
         }
     }
 
-    Some(nb_lits)
-}
+    fn visit_alternation_in(&mut self) {
+        let last_pos = self.alt_stack.len() - 1;
+        let v = &mut self.alt_stack[last_pos];
 
-/// Convert a hex string into an array of literals that entirely express it.
-pub(super) fn hex_string_to_only_literals(hex_string: Vec<Token>) -> Vec<Vec<u8>> {
-    let mut literals = HexLiterals::new();
+        match (v.branch_count, self.count) {
+            (Some(bc), Some(c)) => v.branch_count = bc.checked_add(c),
+            (Some(_), None) => v.branch_count = None,
+            (None, _) => (),
+        }
+        self.count = Some(1);
+    }
 
-    for token in hex_string {
-        match token {
-            Token::Byte(b) => literals.add_byte(b),
-            Token::NotByte(_) => unreachable!(),
-            Token::Jump(_) => unreachable!(),
-            Token::MaskedByte(b, mask) => literals.add_masked_byte(b, &mask),
-            Token::NotMaskedByte(_, _) => unreachable!(),
-            Token::Alternatives(alts) => literals.add_alternatives(alts),
+    fn visit_post(&mut self, hir: &Hir) {
+        if let Hir::Alternation(_) = hir {
+            // Close the final branch.
+            self.visit_alternation_in();
+            // Safety: the visit_pre has pushed an element in the stack.
+            let stack = self.alt_stack.pop().unwrap();
+            match (stack.prev_count, stack.branch_count) {
+                (None, _) | (Some(_), None) => self.count = None,
+                (Some(c), Some(bc)) => {
+                    self.count = c.checked_mul(bc);
+                }
+            }
         }
     }
 
-    literals.finish()
+    fn finish(self) -> Self::Output {
+        self.count
+    }
 }
 
-struct HexLiterals {
+/// Convert a HIR into an array of literals that entirely express it.
+pub(super) fn hir_to_only_literals(hir: &Hir) -> Option<Vec<Vec<u8>>> {
+    visit(hir, Literals::new())
+}
+
+struct Literals {
     // Combination of all possible literals.
-    all: Vec<Vec<u8>>,
+    all: Option<Vec<Vec<u8>>>,
     // Buffer of a string of bytes to be added to all the literals.
     buffer: Vec<u8>,
+
+    // Stack used when building alternations of literals
+    alt_stack: Vec<AltLiterals>,
 }
 
-impl HexLiterals {
+struct AltLiterals {
+    prev_lits: Option<Vec<Vec<u8>>>,
+
+    branch_lits: Vec<Vec<u8>>,
+}
+
+impl Literals {
     fn new() -> Self {
         Self {
-            all: Vec::new(),
+            all: Some(Vec::new()),
             buffer: Vec::new(),
+            alt_stack: Vec::new(),
         }
     }
 
@@ -76,64 +160,132 @@ impl HexLiterals {
         self.buffer.push(b);
     }
 
-    fn add_alternatives(&mut self, alts: Vec<Vec<Token>>) {
-        // First, commit the local buffer, to have a proper list of all possible literals
-        self.commit_buffer();
-
-        // Then, do the cross product between our prefixes literals and the alternatives
-        let suffixes: Vec<Vec<u8>> = alts
-            .into_iter()
-            .flat_map(hex_string_to_only_literals)
-            .collect();
-        self.cartesian_product(&suffixes);
-    }
-
-    fn add_masked_byte(&mut self, b: u8, mask: &Mask) {
+    fn add_masked_byte(&mut self, b: u8, mask: u8) {
         // First, commit the local buffer, to have a proper list of all possible literals
         self.commit_buffer();
 
         // Then, build the suffixes corresponding to the mask.
         let suffixes: Vec<Vec<u8>> = match mask {
-            Mask::Left => (0..=0xF).map(|i| vec![(i << 4) + b]).collect(),
-            Mask::Right => {
-                let b = b << 4;
-                (b..=(b + 0xF)).map(|i| vec![i]).collect()
-            }
-            Mask::All => unreachable!(),
+            0x0F => (0..=0xF).map(|i| vec![(i << 4) + b]).collect(),
+            _ => (b..=(b + 0xF)).map(|i| vec![i]).collect(),
         };
         self.cartesian_product(&suffixes);
     }
 
-    fn finish(mut self) -> Vec<Vec<u8>> {
-        self.commit_buffer();
-        self.all
-    }
-
     fn cartesian_product(&mut self, suffixes: &[Vec<u8>]) {
-        self.all = self
-            .all
-            .iter()
-            .flat_map(|prefix| {
-                suffixes.iter().map(|suffix| {
-                    prefix
-                        .iter()
-                        .copied()
-                        .chain(suffix.iter().copied())
-                        .collect()
+        if let Some(all) = self.all.as_mut() {
+            *all = all
+                .iter()
+                .flat_map(|prefix| {
+                    suffixes.iter().map(|suffix| {
+                        prefix
+                            .iter()
+                            .copied()
+                            .chain(suffix.iter().copied())
+                            .collect()
+                    })
                 })
-            })
-            .collect();
+                .collect();
+        }
     }
 
     fn commit_buffer(&mut self) {
         let buffer = std::mem::take(&mut self.buffer);
-        if self.all.is_empty() {
-            self.all.push(buffer);
-        } else {
-            for t in &mut self.all {
-                t.extend(&buffer);
+        if let Some(all) = self.all.as_mut() {
+            if all.is_empty() {
+                all.push(buffer);
+            } else {
+                for t in all {
+                    t.extend(&buffer);
+                }
             }
         }
+    }
+}
+
+macro_rules! check {
+    ($self:ident, $cond:expr) => {
+        debug_assert!($cond);
+        if !$cond {
+            $self.all = None;
+            return VisitAction::Skip;
+        }
+    };
+}
+
+impl Visitor for Literals {
+    type Output = Option<Vec<Vec<u8>>>;
+
+    fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
+        if self.all.is_none() {
+            return VisitAction::Skip;
+        }
+
+        match hir {
+            Hir::Mask {
+                value,
+                mask,
+                negated,
+            } => {
+                check!(self, !*negated);
+                self.add_masked_byte(*value, *mask);
+            }
+            Hir::Dot => {
+                // Should not happen for the moment, the limit is 100 literals, a dot bring that
+                // total over the limit.
+                check!(self, false);
+            }
+            Hir::Literal(b) => self.add_byte(*b),
+            Hir::Concat(_) | Hir::Empty | Hir::Group(_) => (),
+            Hir::Alternation(_) => {
+                // First, commit the local buffer, to have a proper list of all
+                // possible literals.
+                self.commit_buffer();
+                // Then, store the current lits and push a new stack.
+                let prev_lits = std::mem::take(&mut self.all);
+                self.alt_stack.push(AltLiterals {
+                    prev_lits,
+                    branch_lits: Vec::new(),
+                });
+                self.all = Some(Vec::new());
+            }
+            Hir::Class(_) | Hir::Assertion(_) | Hir::Repetition { .. } => {
+                check!(self, false);
+            }
+        }
+
+        VisitAction::Continue
+    }
+
+    fn visit_alternation_in(&mut self) {
+        self.commit_buffer();
+
+        let last_pos = self.alt_stack.len() - 1;
+        let v = &mut self.alt_stack[last_pos];
+
+        match std::mem::take(&mut self.all) {
+            Some(mut al) => v.branch_lits.append(&mut al),
+            None => {
+                v.prev_lits = None;
+            }
+        }
+        self.all = Some(Vec::new());
+    }
+
+    fn visit_post(&mut self, hir: &Hir) {
+        if let Hir::Alternation(_) = hir {
+            // Close the final branch.
+            self.visit_alternation_in();
+            // Safety: the visit_pre has pushed an element in the stack.
+            let stack = self.alt_stack.pop().unwrap();
+            self.all = stack.prev_lits;
+            self.cartesian_product(&stack.branch_lits);
+        }
+    }
+
+    fn finish(mut self) -> Self::Output {
+        self.commit_buffer();
+        self.all
     }
 }
 
@@ -147,9 +299,11 @@ mod tests {
         #[track_caller]
         fn test(hex_string: &str, expected_lits: &[&[u8]]) {
             let hex_string = parse_hex_string(hex_string);
+            let hir = hex_string.into();
 
-            let count = count_total_literals(&hex_string);
-            let lits = hex_string_to_only_literals(hex_string);
+            let visitor = CountLiterals::new(true);
+            let count = visit(&hir, visitor);
+            let lits = hir_to_only_literals(&hir).unwrap();
             assert_eq!(lits, expected_lits);
             assert_eq!(lits.len(), count.unwrap());
         }

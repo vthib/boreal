@@ -94,14 +94,17 @@ pub(crate) fn compile_variable(
             modifiers.fullword = false;
             modifiers.wide = false;
 
-            if hex_string::can_use_only_literals(&hex_string) {
-                Ok(CompiledVariable {
-                    literals: hex_string::hex_string_to_only_literals(hex_string),
-                    matcher_kind: matcher::MatcherKind::Literals,
-                    non_wide_regex: None,
-                })
+            let hir = hex_string.into();
+            if hex_string::can_use_only_literals(&hir) {
+                match hex_string::hir_to_only_literals(&hir) {
+                    Some(literals) => Ok(CompiledVariable {
+                        literals,
+                        matcher_kind: matcher::MatcherKind::Literals,
+                        non_wide_regex: None,
+                    }),
+                    None => regex::compile_regex(&hir, true, &modifiers),
+                }
             } else {
-                let hir = hex_string.into();
                 regex::compile_regex(&hir, true, &modifiers)
             }
         }
