@@ -122,7 +122,7 @@ impl AcScan {
             literal_index,
             slice_offset: (start_offset, end_offset),
         } = self.aho_index_to_literal_info[mat.pattern()];
-        let var = &variables[variable_index];
+        let var = &variables[variable_index].matcher;
 
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
@@ -167,7 +167,7 @@ impl AcScan {
             _ => 0,
         };
 
-        let res = variables[variable_index].process_ac_match(scan_data.mem, m, start_position);
+        let res = var.process_ac_match(scan_data.mem, m, start_position);
 
         #[cfg(feature = "profiling")]
         {

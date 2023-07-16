@@ -200,7 +200,7 @@ impl<'a> VariableEvaluation<'a> {
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
 
-        let mat = self.var.find_next_match_at(scan_data.mem, offset);
+        let mat = self.var.matcher.find_next_match_at(scan_data.mem, offset);
 
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {

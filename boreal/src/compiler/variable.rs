@@ -231,30 +231,6 @@ fn compile_bytes(
     })
 }
 
-impl Variable {
-    /// Confirm that an AC match is a match on the given literal.
-    ///
-    /// This is needed because the AC might optimize literals and get false positive matches.
-    /// This function is used to confirm the tentative match does match the literal with the given
-    /// index.
-    pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
-        self.matcher.confirm_ac_literal(mem, mat, literal_index)
-    }
-
-    pub fn process_ac_match(
-        &self,
-        mem: &[u8],
-        mat: Range<usize>,
-        start_position: usize,
-    ) -> AcMatchStatus {
-        self.matcher.process_ac_match(mem, mat, start_position)
-    }
-
-    pub fn find_next_match_at(&self, mem: &[u8], offset: usize) -> Option<Range<usize>> {
-        self.matcher.find_next_match_at(mem, offset)
-    }
-}
-
 /// Convert an ascii string to a wide string
 fn string_to_wide(s: &[u8]) -> Vec<u8> {
     let mut res = Vec::with_capacity(s.len() * 2);
