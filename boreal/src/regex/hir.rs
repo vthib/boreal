@@ -21,6 +21,24 @@ pub enum Hir {
     /// Set of allowed values for a single byte.
     Class(ClassKind),
 
+    /// Mask over a byte, e.g. `?A`, `~5?`, ...
+    Mask {
+        /// Value to compare once the mask has been applied.
+        ///
+        /// For example, for `5?`, this is `0x50`.
+        value: u8,
+
+        /// Mask to apply before comparing the value.
+        ///
+        /// For example, for `5?`, this is `0xF0`.
+        mask: u8,
+
+        /// Is the comparison negated.
+        ///
+        /// If true, this matches if the comparison does not match.
+        negated: bool,
+    },
+
     /// Concatenation, must match in order.
     Concat(Vec<Hir>),
 
@@ -83,8 +101,8 @@ impl From<Token> for Hir {
                 items: vec![BracketedClassItem::Literal(b)],
                 negated: true,
             })),
-            Token::MaskedByte(b, mask) => masked_byte_to_class(b, &mask, false),
-            Token::NotMaskedByte(b, mask) => masked_byte_to_class(b, &mask, true),
+            Token::MaskedByte(b, mask) => masked_byte_to_hir(b, &mask, false),
+            Token::NotMaskedByte(b, mask) => masked_byte_to_hir(b, &mask, true),
             Token::Jump(jump) => {
                 let kind = match (jump.from, jump.to) {
                     (from, None) => RepetitionKind::Range(RepetitionRange::AtLeast(from)),
@@ -103,21 +121,18 @@ impl From<Token> for Hir {
     }
 }
 
-fn masked_byte_to_class(byte: u8, mask: &Mask, negated: bool) -> Hir {
+fn masked_byte_to_hir(byte: u8, mask: &Mask, negated: bool) -> Hir {
     match mask {
-        Mask::Left => Hir::Class(ClassKind::Bracketed(BracketedClass {
-            items: (0..=0xF)
-                .map(|i| BracketedClassItem::Literal((i << 4) + byte))
-                .collect(),
+        Mask::Left => Hir::Mask {
+            value: byte,
+            mask: 0x0F,
             negated,
-        })),
-        Mask::Right => {
-            let byte = byte << 4;
-            Hir::Class(ClassKind::Bracketed(BracketedClass {
-                items: vec![BracketedClassItem::Range(byte, byte + 0x0F)],
-                negated,
-            }))
-        }
+        },
+        Mask::Right => Hir::Mask {
+            value: byte << 4,
+            mask: 0xF0,
+            negated,
+        },
         Mask::All => Hir::Dot,
     }
 }

@@ -123,6 +123,31 @@ impl Visitor for AstPrinter {
             Hir::Assertion(AssertionKind::EndLine) => self.res.push('$'),
             Hir::Assertion(AssertionKind::WordBoundary) => self.res.push_str(r"\b"),
             Hir::Assertion(AssertionKind::NonWordBoundary) => self.res.push_str(r"\B"),
+            Hir::Mask {
+                value,
+                mask,
+                negated,
+            } => {
+                if *mask == 0xF0 {
+                    self.res.push('[');
+                    if *negated {
+                        self.res.push('^');
+                    }
+                    self.push_literal(*value);
+                    self.res.push('-');
+                    self.push_literal(value | 0x0F);
+                    self.res.push(']');
+                } else {
+                    self.res.push('[');
+                    if *negated {
+                        self.res.push('^');
+                    }
+                    for b in 0..16 {
+                        self.push_literal((b << 4) | value);
+                    }
+                    self.res.push(']');
+                }
+            }
             Hir::Class(ClassKind::Perl(p)) => self.push_perl_class(p),
             Hir::Class(ClassKind::Bracketed(c)) => self.push_bracketed_class(c),
             Hir::Dot => self.res.push('.'),
@@ -138,6 +163,7 @@ impl Visitor for AstPrinter {
         match node {
             Hir::Alternation(_)
             | Hir::Assertion(_)
+            | Hir::Mask { .. }
             | Hir::Class(_)
             | Hir::Concat(_)
             | Hir::Dot

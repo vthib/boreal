@@ -71,7 +71,11 @@ impl Visitor for LiteralsExtractor {
                 VisitAction::Skip
             }
             Hir::Empty => VisitAction::Skip,
-            Hir::Dot | Hir::Class(_) | Hir::Assertion(_) | Hir::Repetition { .. } => {
+            Hir::Dot
+            | Hir::Mask { .. }
+            | Hir::Class(_)
+            | Hir::Assertion(_)
+            | Hir::Repetition { .. } => {
                 self.close();
                 VisitAction::Skip
             }
@@ -285,7 +289,7 @@ impl PrePostExtractor {
         self.post_stack.push(Vec::new());
     }
 
-    fn add_pre_post_node(&mut self, node: &Hir) {
+    fn add_pre_post_hir(&mut self, node: &Hir) {
         if self.current_position < self.end_position && self.start_position > 0 {
             self.add_node(node.clone(), false);
         }
@@ -315,18 +319,19 @@ impl PrePostExtractor {
 impl Visitor for PrePostExtractor {
     type Output = (Option<Hir>, Option<Hir>);
 
-    fn visit_pre(&mut self, node: &Hir) -> VisitAction {
+    fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
         // XXX: be careful here, the visit *must* have the exact same behavior as for the
         // `LiteralsExtractor` visitor, to ensure the pre post expressions are correct.
-        match node {
+        match hir {
             Hir::Literal(_)
             | Hir::Repetition { .. }
             | Hir::Dot
+            | Hir::Mask { .. }
             | Hir::Class(_)
             | Hir::Empty
             | Hir::Assertion(_)
             | Hir::Alternation(_) => {
-                self.add_pre_post_node(node);
+                self.add_pre_post_hir(hir);
                 VisitAction::Skip
             }
             Hir::Group(_) | Hir::Concat(_) => {
@@ -336,11 +341,12 @@ impl Visitor for PrePostExtractor {
         }
     }
 
-    fn visit_post(&mut self, node: &Hir) {
-        match node {
+    fn visit_post(&mut self, hir: &Hir) {
+        match hir {
             Hir::Literal(_)
             | Hir::Repetition { .. }
             | Hir::Dot
+            | Hir::Mask { .. }
             | Hir::Class(_)
             | Hir::Empty
             | Hir::Assertion(_)
