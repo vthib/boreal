@@ -10,9 +10,9 @@ use crate::statistics;
 use super::base64::encode_base64;
 use super::CompilationError;
 
-mod hex_string;
 mod literals;
 mod matcher;
+mod only_literals;
 mod regex;
 
 // Maximum length against which a regex validator of a AC literal match will be run.
@@ -95,7 +95,7 @@ pub(crate) fn compile_variable(
             modifiers.wide = false;
 
             let hir = hex_string.into();
-            match hex_string::hir_to_only_literals(&hir) {
+            match only_literals::hir_to_only_literals(&hir) {
                 Some(literals) => Ok(CompiledVariable {
                     literals,
                     matcher_kind: matcher::MatcherKind::Literals,

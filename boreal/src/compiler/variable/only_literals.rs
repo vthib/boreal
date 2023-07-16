@@ -288,7 +288,6 @@ impl Visitor for Literals {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::regex::regex_hir_to_string;
     use crate::test_helpers::{parse_hex_string, parse_regex_string};
 
     #[test]
@@ -477,25 +476,6 @@ mod tests {
         // Too many literals means no extraction
         test("{ AB ?? 01 }", None);
         test("{ AB (?A | ?B | ?C | ?D | ?E | ?F | ?0) 01 }", None);
-    }
-
-    #[test]
-    fn test_hex_string_to_regex() {
-        #[track_caller]
-        fn test(hex_string: &str, expected_regex: &str) {
-            let hex_string = parse_hex_string(hex_string);
-            assert_eq!(&regex_hir_to_string(&hex_string.into()), expected_regex);
-        }
-
-        test(
-            "{ AB ?D 01 }",
-            r"\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
-        );
-        test("{ C7 [-] ?? }", r"\xc7.{0,}?.");
-        test(
-            "{ C7 [3-] 5? 03 [-6] C7 ( FF 15 | E8 ) [4] 6A ( FF D? | E8 [2-4] ??) }",
-            r"\xc7.{3,}?[P-_]\x03.{0,6}?\xc7(\xff\x15|\xe8).{4,4}?j(\xff[\xd0-\xdf]|\xe8.{2,4}?.)",
-        );
     }
 
     #[test]
