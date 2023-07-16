@@ -3,6 +3,7 @@ use boreal_parser::VariableModifiers;
 
 use crate::regex::{regex_hir_to_string, visit, Hir, Regex, VisitAction, Visitor};
 
+use super::analysis::HirAnalysis;
 use super::literals::LiteralsDetails;
 use super::matcher::MatcherKind;
 use super::{only_literals, CompiledVariable, VariableCompilationError};
@@ -45,16 +46,17 @@ pub(super) fn compile_regex(
 
     let mut use_ac = !literals.is_empty();
 
-    let stats = visit(hir, HirStats::default());
-    if stats.has_start_or_end_line {
+    let analysis = visit(hir, HirAnalysis::default());
+
+    if analysis.has_start_or_end_line {
         // Do not use an AC if anchors are present, it will be much efficient to just run
         // the regex directly.
         use_ac = false;
     }
 
     if let Some(pre) = &pre_hir {
-        let left_stats = visit(pre, HirStats::default());
-        if left_stats.has_greedy_repetitions {
+        let left_analysis = visit(pre, HirAnalysis::default());
+        if left_analysis.has_greedy_repetitions {
             // Greedy repetitions on the left side of the literals is not for the moment handled.
             // This is because the repetition can "eat" the literals against which we matched,
             // meaning that the pre/post split is not valid.
@@ -80,7 +82,7 @@ pub(super) fn compile_regex(
         MatcherKind::Raw(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
     };
 
-    let non_wide_regex = if stats.has_word_boundaries && modifiers.wide {
+    let non_wide_regex = if analysis.has_word_boundaries && modifiers.wide {
         let expr = regex_hir_to_string(hir);
         Some(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
     } else {
@@ -92,39 +94,6 @@ pub(super) fn compile_regex(
         matcher_kind,
         non_wide_regex,
     })
-}
-
-#[derive(Default)]
-struct HirStats {
-    has_start_or_end_line: bool,
-    has_greedy_repetitions: bool,
-    has_word_boundaries: bool,
-}
-
-impl Visitor for HirStats {
-    type Output = Self;
-
-    fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
-        match hir {
-            Hir::Assertion(AssertionKind::StartLine) | Hir::Assertion(AssertionKind::EndLine) => {
-                self.has_start_or_end_line = true;
-            }
-            Hir::Assertion(AssertionKind::WordBoundary)
-            | Hir::Assertion(AssertionKind::NonWordBoundary) => {
-                self.has_word_boundaries = true;
-            }
-            Hir::Repetition { greedy: true, .. } => {
-                self.has_greedy_repetitions = true;
-            }
-            _ => (),
-        }
-
-        VisitAction::Continue
-    }
-
-    fn finish(self) -> Self::Output {
-        self
-    }
 }
 
 fn compile_validator(

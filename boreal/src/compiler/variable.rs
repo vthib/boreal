@@ -10,6 +10,7 @@ use crate::statistics;
 use super::base64::encode_base64;
 use super::CompilationError;
 
+mod analysis;
 mod literals;
 mod matcher;
 mod only_literals;
