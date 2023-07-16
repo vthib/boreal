@@ -1,13 +1,13 @@
 //! Literal extraction and computation from variable expressions.
-use boreal_parser::regex::{AssertionKind, Node};
+use boreal_parser::regex::AssertionKind;
 
 use crate::atoms::atoms_rank;
-use crate::regex::{visit, VisitAction, Visitor};
+use crate::regex::{visit, Hir, VisitAction, Visitor};
 
-pub fn get_literals_details(node: &Node) -> LiteralsDetails {
+pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
     let visitor = LiteralsExtractor::new();
-    let visitor = visit(node, visitor);
-    visitor.into_literals_details(node)
+    let visitor = visit(hir, visitor);
+    visitor.into_literals_details(hir)
 }
 
 #[derive(Debug)]
@@ -15,12 +15,12 @@ pub struct LiteralsDetails {
     /// Literals extracted from the regex.
     pub literals: Vec<Vec<u8>>,
 
-    /// AST for validators of matches on literals.
+    /// HIR for validators of matches on literals.
     ///
-    /// The `pre` is the AST of the regex that must match before (and including) the literal.
-    /// The `post` is the AST of the regex that must match after (and including) the literal.
-    pub pre_ast: Option<Node>,
-    pub post_ast: Option<Node>,
+    /// The `pre` is the HIR of the regex that must match before (and including) the literal.
+    /// The `post` is the HIR of the regex that must match after (and including) the literal.
+    pub pre_hir: Option<Hir>,
+    pub post_hir: Option<Hir>,
 }
 
 /// Visitor on a regex AST to extract literals.
@@ -64,28 +64,28 @@ impl LiteralsExtractor {
 impl Visitor for LiteralsExtractor {
     type Output = Self;
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+    fn visit_pre(&mut self, node: &Hir) -> VisitAction {
         match node {
-            Node::Literal(b) => {
+            Hir::Literal(b) => {
                 self.add_byte(*b);
                 VisitAction::Skip
             }
-            Node::Empty => VisitAction::Skip,
-            Node::Dot | Node::Class(_) | Node::Assertion(_) | Node::Repetition { .. } => {
+            Hir::Empty => VisitAction::Skip,
+            Hir::Dot | Hir::Class(_) | Hir::Assertion(_) | Hir::Repetition { .. } => {
                 self.close();
                 VisitAction::Skip
             }
-            Node::Alternation(alts) => {
+            Hir::Alternation(alts) => {
                 if !self.visit_alternation(alts) {
                     self.close();
                 }
                 VisitAction::Skip
             }
-            Node::Group(_) | Node::Concat(_) => VisitAction::Continue,
+            Hir::Group(_) | Hir::Concat(_) => VisitAction::Continue,
         }
     }
 
-    fn visit_post(&mut self, _node: &Node) {
+    fn visit_post(&mut self, _node: &Hir) {
         self.current_position += 1;
     }
 
@@ -110,18 +110,18 @@ impl LiteralsExtractor {
     /// Visit an alternation to add it to the currently being build literals.
     ///
     /// Only allow alternations if each one is a literal or a concat of literals.
-    fn visit_alternation(&mut self, alts: &[Node]) -> bool {
+    fn visit_alternation(&mut self, alts: &[Hir]) -> bool {
         let mut lits = Vec::new();
 
         for node in alts {
             match node {
-                Node::Literal(b) => lits.push(vec![*b]),
-                Node::Concat(nodes) => {
+                Hir::Literal(b) => lits.push(vec![*b]),
+                Hir::Concat(nodes) => {
                     let mut lit = Vec::with_capacity(nodes.len());
 
                     for subnode in nodes {
                         match subnode {
-                            Node::Literal(b) => lit.push(*b),
+                            Hir::Literal(b) => lit.push(*b),
                             _ => return false,
                         }
                     }
@@ -170,17 +170,17 @@ impl LiteralsExtractor {
         }
     }
 
-    pub fn into_literals_details(mut self, original_node: &Node) -> LiteralsDetails {
+    pub fn into_literals_details(mut self, original_hir: &Hir) -> LiteralsDetails {
         self.close();
 
-        let (pre_ast, post_ast) = self
+        let (pre_hir, post_hir) = self
             .set
-            .build_pre_post_ast(original_node, self.current_position);
+            .build_pre_post_hir(original_hir, self.current_position);
 
         LiteralsDetails {
             literals: self.set.literals,
-            pre_ast,
-            post_ast,
+            pre_hir,
+            post_hir,
         }
     }
 }
@@ -215,19 +215,19 @@ impl LiteralSet {
         }
     }
 
-    fn build_pre_post_ast(
+    fn build_pre_post_hir(
         &self,
-        original_node: &Node,
+        original_hir: &Hir,
         last_position: usize,
-    ) -> (Option<Node>, Option<Node>) {
+    ) -> (Option<Hir>, Option<Hir>) {
         if self.literals.is_empty() {
             return (None, None);
         }
 
         let visitor = PrePostExtractor::new(self.start_position, self.end_position, last_position);
-        let (pre, post) = visit(original_node, visitor);
+        let (pre, post) = visit(original_hir, visitor);
         (
-            pre.map(|pre| Node::Concat(vec![pre, Node::Assertion(AssertionKind::EndLine)])),
+            pre.map(|pre| Hir::Concat(vec![pre, Hir::Assertion(AssertionKind::EndLine)])),
             post,
         )
     }
@@ -240,18 +240,18 @@ impl LiteralSet {
 #[derive(Debug)]
 struct PrePostExtractor {
     /// Stacks used during the visit to reconstruct compound nodes.
-    pre_stack: Vec<Vec<Node>>,
-    post_stack: Vec<Vec<Node>>,
+    pre_stack: Vec<Vec<Hir>>,
+    post_stack: Vec<Vec<Hir>>,
 
     /// Top level pre node.
     ///
     /// May end up None if the extracted literals are from the start of the regex.
-    pre_node: Option<Node>,
+    pre_node: Option<Hir>,
 
     /// Top level post node.
     ///
     /// May end up None if the extracted literals are from the end of the regex.
-    post_node: Option<Node>,
+    post_node: Option<Hir>,
 
     /// Start position of the extracted literals.
     start_position: usize,
@@ -285,7 +285,7 @@ impl PrePostExtractor {
         self.post_stack.push(Vec::new());
     }
 
-    fn add_pre_post_node(&mut self, node: &Node) {
+    fn add_pre_post_node(&mut self, node: &Hir) {
         if self.current_position < self.end_position && self.start_position > 0 {
             self.add_node(node.clone(), false);
         }
@@ -294,7 +294,7 @@ impl PrePostExtractor {
         }
     }
 
-    fn add_node(&mut self, node: Node, post: bool) {
+    fn add_node(&mut self, node: Hir, post: bool) {
         let (stack, final_node) = if post {
             (&mut self.post_stack, &mut self.post_node)
         } else {
@@ -313,60 +313,60 @@ impl PrePostExtractor {
 }
 
 impl Visitor for PrePostExtractor {
-    type Output = (Option<Node>, Option<Node>);
+    type Output = (Option<Hir>, Option<Hir>);
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+    fn visit_pre(&mut self, node: &Hir) -> VisitAction {
         // XXX: be careful here, the visit *must* have the exact same behavior as for the
         // `LiteralsExtractor` visitor, to ensure the pre post expressions are correct.
         match node {
-            Node::Literal(_)
-            | Node::Repetition { .. }
-            | Node::Dot
-            | Node::Class(_)
-            | Node::Empty
-            | Node::Assertion(_)
-            | Node::Alternation(_) => {
+            Hir::Literal(_)
+            | Hir::Repetition { .. }
+            | Hir::Dot
+            | Hir::Class(_)
+            | Hir::Empty
+            | Hir::Assertion(_)
+            | Hir::Alternation(_) => {
                 self.add_pre_post_node(node);
                 VisitAction::Skip
             }
-            Node::Group(_) | Node::Concat(_) => {
+            Hir::Group(_) | Hir::Concat(_) => {
                 self.push_stack();
                 VisitAction::Continue
             }
         }
     }
 
-    fn visit_post(&mut self, node: &Node) {
+    fn visit_post(&mut self, node: &Hir) {
         match node {
-            Node::Literal(_)
-            | Node::Repetition { .. }
-            | Node::Dot
-            | Node::Class(_)
-            | Node::Empty
-            | Node::Assertion(_)
-            | Node::Alternation(_) => (),
-            Node::Group(_) => {
+            Hir::Literal(_)
+            | Hir::Repetition { .. }
+            | Hir::Dot
+            | Hir::Class(_)
+            | Hir::Empty
+            | Hir::Assertion(_)
+            | Hir::Alternation(_) => (),
+            Hir::Group(_) => {
                 // Safety: this is a post visit, the pre visit pushed an element on the stack.
                 let mut pre = self.pre_stack.pop().unwrap();
                 let mut post = self.post_stack.pop().unwrap();
 
                 if let Some(node) = pre.pop() {
-                    self.add_node(Node::Group(Box::new(node)), false);
+                    self.add_node(Hir::Group(Box::new(node)), false);
                 }
                 if let Some(node) = post.pop() {
-                    self.add_node(Node::Group(Box::new(node)), true);
+                    self.add_node(Hir::Group(Box::new(node)), true);
                 }
             }
 
-            Node::Concat(_) => {
+            Hir::Concat(_) => {
                 // Safety: this is a post visit, the pre visit pushed an element on the stack.
                 let pre = self.pre_stack.pop().unwrap();
                 let post = self.post_stack.pop().unwrap();
                 if !pre.is_empty() {
-                    self.add_node(Node::Concat(pre), false);
+                    self.add_node(Hir::Concat(pre), false);
                 }
                 if !post.is_empty() {
-                    self.add_node(Node::Concat(post), true);
+                    self.add_node(Hir::Concat(post), true);
                 }
             }
         }
@@ -382,7 +382,7 @@ impl Visitor for PrePostExtractor {
 #[cfg(test)]
 mod tests {
     use crate::{
-        regex::regex_ast_to_string,
+        regex::regex_hir_to_string,
         test_helpers::{parse_hex_string, parse_regex_string, test_type_traits_non_clonable},
     };
 
@@ -398,23 +398,21 @@ mod tests {
             expected_post: &str,
         ) {
             let hex_string = parse_hex_string(hex_string_expr);
-            let ast = super::super::hex_string::hex_string_to_ast(hex_string);
-
-            let exprs = get_literals_details(&ast);
+            let exprs = get_literals_details(&hex_string.into());
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
-                    .pre_ast
+                    .pre_hir
                     .as_ref()
-                    .map(regex_ast_to_string)
+                    .map(regex_hir_to_string)
                     .unwrap_or_default(),
                 expected_pre
             );
             assert_eq!(
                 exprs
-                    .post_ast
+                    .post_hir
                     .as_ref()
-                    .map(regex_ast_to_string)
+                    .map(regex_hir_to_string)
                     .unwrap_or_default(),
                 expected_post
             );
@@ -637,21 +635,21 @@ mod tests {
         #[track_caller]
         fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
             let regex = parse_regex_string(expr);
-            let exprs = get_literals_details(&regex.ast);
+            let exprs = get_literals_details(&regex.ast.into());
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
-                    .pre_ast
+                    .pre_hir
                     .as_ref()
-                    .map(regex_ast_to_string)
+                    .map(regex_hir_to_string)
                     .unwrap_or_default(),
                 expected_pre
             );
             assert_eq!(
                 exprs
-                    .post_ast
+                    .post_hir
                     .as_ref()
-                    .map(regex_ast_to_string)
+                    .map(regex_hir_to_string)
                     .unwrap_or_default(),
                 expected_post
             );
@@ -703,8 +701,8 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(LiteralsDetails {
             literals: Vec::new(),
-            pre_ast: None,
-            post_ast: None,
+            pre_hir: None,
+            post_hir: None,
         });
 
         test_type_traits_non_clonable(LiteralsExtractor::new());

@@ -1,56 +1,4 @@
 use boreal_parser::hex_string::{Mask, Token};
-use boreal_parser::regex::{
-    BracketedClass, BracketedClassItem, ClassKind, Node, RepetitionKind, RepetitionRange,
-};
-
-pub(super) fn hex_string_to_ast(hex_string: Vec<Token>) -> Node {
-    Node::Concat(hex_string.into_iter().map(hex_token_to_ast).collect())
-}
-
-fn hex_token_to_ast(token: Token) -> Node {
-    match token {
-        Token::Byte(b) => Node::Literal(b),
-        Token::NotByte(b) => Node::Class(ClassKind::Bracketed(BracketedClass {
-            items: vec![BracketedClassItem::Literal(b)],
-            negated: true,
-        })),
-        Token::MaskedByte(b, mask) => masked_byte_to_class(b, &mask, false),
-        Token::NotMaskedByte(b, mask) => masked_byte_to_class(b, &mask, true),
-        Token::Jump(jump) => {
-            let kind = match (jump.from, jump.to) {
-                (from, None) => RepetitionKind::Range(RepetitionRange::AtLeast(from)),
-                (from, Some(to)) => RepetitionKind::Range(RepetitionRange::Bounded(from, to)),
-            };
-            Node::Repetition {
-                node: Box::new(Node::Dot),
-                kind,
-                greedy: false,
-            }
-        }
-        Token::Alternatives(elems) => Node::Group(Box::new(Node::Alternation(
-            elems.into_iter().map(hex_string_to_ast).collect(),
-        ))),
-    }
-}
-
-fn masked_byte_to_class(byte: u8, mask: &Mask, negated: bool) -> Node {
-    match mask {
-        Mask::Left => Node::Class(ClassKind::Bracketed(BracketedClass {
-            items: (0..=0xF)
-                .map(|i| BracketedClassItem::Literal((i << 4) + byte))
-                .collect(),
-            negated,
-        })),
-        Mask::Right => {
-            let byte = byte << 4;
-            Node::Class(ClassKind::Bracketed(BracketedClass {
-                items: vec![BracketedClassItem::Range(byte, byte + 0x0F)],
-                negated,
-            }))
-        }
-        Mask::All => Node::Dot,
-    }
-}
 
 /// Can the hex string be expressed using only literals.
 pub(super) fn can_use_only_literals(hex_string: &[Token]) -> bool {
@@ -192,7 +140,7 @@ impl HexLiterals {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{regex::regex_ast_to_string, test_helpers::parse_hex_string};
+    use crate::{regex::regex_hir_to_string, test_helpers::parse_hex_string};
 
     #[test]
     fn test_hex_string_to_only_literals() {
@@ -330,9 +278,7 @@ mod tests {
         #[track_caller]
         fn test(hex_string: &str, expected_regex: &str) {
             let hex_string = parse_hex_string(hex_string);
-
-            let ast = hex_string_to_ast(hex_string);
-            assert_eq!(&regex_ast_to_string(&ast), expected_regex);
+            assert_eq!(&regex_hir_to_string(&hex_string.into()), expected_regex);
         }
 
         test(

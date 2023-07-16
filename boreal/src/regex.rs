@@ -10,6 +10,9 @@ use boreal_parser::regex::{
     RepetitionKind, RepetitionRange,
 };
 
+mod hir;
+pub use hir::Hir;
+
 mod visitor;
 pub(crate) use visitor::{visit, VisitAction, Visitor};
 
@@ -26,8 +29,8 @@ impl Regex {
     /// # Errors
     ///
     /// Return an error if the regex is malformed.
-    pub fn from_ast(ast: &Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
-        Self::from_string(regex_ast_to_string(ast), case_insensitive, dot_all)
+    pub fn from_ast(ast: Node, case_insensitive: bool, dot_all: bool) -> Result<Self, Error> {
+        Self::from_string(regex_hir_to_string(&ast.into()), case_insensitive, dot_all)
     }
 
     /// Build the regex from a string expression.
@@ -101,9 +104,9 @@ impl Regex {
     }
 }
 
-/// Convert a yara regex AST into a rust regex expression.
-pub(crate) fn regex_ast_to_string(ast: &Node) -> String {
-    visit(ast, AstPrinter::default())
+/// Convert a yara regex HIR into a rust regex expression.
+pub(crate) fn regex_hir_to_string(hir: &Hir) -> String {
+    visit(hir, AstPrinter::default())
 }
 
 #[derive(Default)]
@@ -114,37 +117,37 @@ struct AstPrinter {
 impl Visitor for AstPrinter {
     type Output = String;
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+    fn visit_pre(&mut self, node: &Hir) -> VisitAction {
         match node {
-            Node::Assertion(AssertionKind::StartLine) => self.res.push('^'),
-            Node::Assertion(AssertionKind::EndLine) => self.res.push('$'),
-            Node::Assertion(AssertionKind::WordBoundary) => self.res.push_str(r"\b"),
-            Node::Assertion(AssertionKind::NonWordBoundary) => self.res.push_str(r"\B"),
-            Node::Class(ClassKind::Perl(p)) => self.push_perl_class(p),
-            Node::Class(ClassKind::Bracketed(c)) => self.push_bracketed_class(c),
-            Node::Dot => self.res.push('.'),
-            Node::Literal(b) => self.push_literal(*b),
-            Node::Group(_) => self.res.push('('),
-            Node::Alternation(_) | Node::Concat(_) | Node::Empty | Node::Repetition { .. } => (),
+            Hir::Assertion(AssertionKind::StartLine) => self.res.push('^'),
+            Hir::Assertion(AssertionKind::EndLine) => self.res.push('$'),
+            Hir::Assertion(AssertionKind::WordBoundary) => self.res.push_str(r"\b"),
+            Hir::Assertion(AssertionKind::NonWordBoundary) => self.res.push_str(r"\B"),
+            Hir::Class(ClassKind::Perl(p)) => self.push_perl_class(p),
+            Hir::Class(ClassKind::Bracketed(c)) => self.push_bracketed_class(c),
+            Hir::Dot => self.res.push('.'),
+            Hir::Literal(b) => self.push_literal(*b),
+            Hir::Group(_) => self.res.push('('),
+            Hir::Alternation(_) | Hir::Concat(_) | Hir::Empty | Hir::Repetition { .. } => (),
         }
 
         VisitAction::Continue
     }
 
-    fn visit_post(&mut self, node: &Node) {
+    fn visit_post(&mut self, node: &Hir) {
         match node {
-            Node::Alternation(_)
-            | Node::Assertion(_)
-            | Node::Class(_)
-            | Node::Concat(_)
-            | Node::Dot
-            | Node::Empty
-            | Node::Literal(_) => (),
-            Node::Group(_) => self.res.push(')'),
-            Node::Repetition {
+            Hir::Alternation(_)
+            | Hir::Assertion(_)
+            | Hir::Class(_)
+            | Hir::Concat(_)
+            | Hir::Dot
+            | Hir::Empty
+            | Hir::Literal(_) => (),
+            Hir::Group(_) => self.res.push(')'),
+            Hir::Repetition {
                 kind,
                 greedy,
-                node: _,
+                hir: _,
             } => {
                 match kind {
                     RepetitionKind::ZeroOrOne => self.res.push('?'),
@@ -272,7 +275,7 @@ mod tests {
         fn test(expr: &str, expected_res: Option<&str>) {
             let regex = parse_regex_string(expr);
             assert_eq!(
-                regex_ast_to_string(&regex.ast),
+                regex_hir_to_string(&regex.ast.into()),
                 expected_res.unwrap_or(expr)
             );
         }

@@ -1,7 +1,7 @@
-use boreal_parser::regex::{AssertionKind, Node};
+use boreal_parser::regex::AssertionKind;
 use boreal_parser::VariableModifiers;
 
-use crate::regex::{regex_ast_to_string, visit, Regex, VisitAction, Visitor};
+use crate::regex::{regex_hir_to_string, visit, Hir, Regex, VisitAction, Visitor};
 
 use super::literals::LiteralsDetails;
 use super::matcher::MatcherKind;
@@ -14,15 +14,15 @@ use super::{CompiledVariable, VariableCompilationError};
 /// - An optional expr used to validate matches, only set in the specific case of a widen regex
 ///   containing word boundaries.
 pub(super) fn compile_regex(
-    ast: &Node,
+    hir: &Hir,
     dot_all: bool,
     modifiers: &VariableModifiers,
 ) -> Result<CompiledVariable, VariableCompilationError> {
     let LiteralsDetails {
         mut literals,
-        pre_ast,
-        post_ast,
-    } = super::literals::get_literals_details(ast);
+        pre_hir,
+        post_hir,
+    } = super::literals::get_literals_details(hir);
 
     // If some literals are too small, don't use them, they would match too
     // many times.
@@ -33,15 +33,15 @@ pub(super) fn compile_regex(
 
     let mut use_ac = !literals.is_empty();
 
-    let stats = visit(ast, AstStats::default());
+    let stats = visit(hir, HirStats::default());
     if stats.has_start_or_end_line {
         // Do not use an AC if anchors are present, it will be much efficient to just run
         // the regex directly.
         use_ac = false;
     }
 
-    if let Some(pre) = &pre_ast {
-        let left_stats = visit(pre, AstStats::default());
+    if let Some(pre) = &pre_hir {
+        let left_stats = visit(pre, HirStats::default());
         if left_stats.has_greedy_repetitions {
             // Greedy repetitions on the left side of the literals is not for the moment handled.
             // This is because the repetition can "eat" the literals against which we matched,
@@ -55,21 +55,21 @@ pub(super) fn compile_regex(
     }
 
     let matcher_kind = if use_ac {
-        let pre = pre_ast.map(|ast| convert_ast_to_string_with_flags(&ast, modifiers));
-        let post = post_ast.map(|ast| convert_ast_to_string_with_flags(&ast, modifiers));
+        let pre = pre_hir.map(|hir| convert_hir_to_string_with_flags(&hir, modifiers));
+        let post = post_hir.map(|hir| convert_hir_to_string_with_flags(&hir, modifiers));
 
         MatcherKind::Atomized {
             left_validator: compile_validator(pre, modifiers.nocase, dot_all)?,
             right_validator: compile_validator(post, modifiers.nocase, dot_all)?,
         }
     } else {
-        let expr = convert_ast_to_string_with_flags(ast, modifiers);
+        let expr = convert_hir_to_string_with_flags(hir, modifiers);
 
         MatcherKind::Raw(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
     };
 
     let non_wide_regex = if stats.has_word_boundaries && modifiers.wide {
-        let expr = regex_ast_to_string(ast);
+        let expr = regex_hir_to_string(hir);
         Some(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
     } else {
         None
@@ -83,25 +83,25 @@ pub(super) fn compile_regex(
 }
 
 #[derive(Default)]
-struct AstStats {
+struct HirStats {
     has_start_or_end_line: bool,
     has_greedy_repetitions: bool,
     has_word_boundaries: bool,
 }
 
-impl Visitor for AstStats {
+impl Visitor for HirStats {
     type Output = Self;
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
-        match node {
-            Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
+    fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
+        match hir {
+            Hir::Assertion(AssertionKind::StartLine) | Hir::Assertion(AssertionKind::EndLine) => {
                 self.has_start_or_end_line = true;
             }
-            Node::Assertion(AssertionKind::WordBoundary)
-            | Node::Assertion(AssertionKind::NonWordBoundary) => {
+            Hir::Assertion(AssertionKind::WordBoundary)
+            | Hir::Assertion(AssertionKind::NonWordBoundary) => {
                 self.has_word_boundaries = true;
             }
-            Node::Repetition { greedy: true, .. } => {
+            Hir::Repetition { greedy: true, .. } => {
                 self.has_greedy_repetitions = true;
             }
             _ => (),
@@ -151,21 +151,21 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 }
 
 /// Convert the AST of a regex variable to a string, taking into account variable modifiers.
-fn convert_ast_to_string_with_flags(ast: &Node, modifiers: &VariableModifiers) -> String {
+fn convert_hir_to_string_with_flags(hir: &Hir, modifiers: &VariableModifiers) -> String {
     if modifiers.wide {
-        let wide_ast = visit(ast, AstWidener::new());
+        let wide_hir = visit(hir, HirWidener::new());
 
         if modifiers.ascii {
             format!(
                 "{}|{}",
-                regex_ast_to_string(ast),
-                regex_ast_to_string(&wide_ast),
+                regex_hir_to_string(hir),
+                regex_hir_to_string(&wide_hir),
             )
         } else {
-            regex_ast_to_string(&wide_ast)
+            regex_hir_to_string(&wide_hir)
         }
     } else {
-        regex_ast_to_string(ast)
+        regex_hir_to_string(hir)
     }
 }
 
@@ -177,7 +177,7 @@ fn compile_regex_expr(
     Regex::from_string(expr, case_insensitive, dot_all).map_err(VariableCompilationError::Regex)
 }
 
-/// Visitor used to transform a regex AST to make the regex match "wide" characters.
+/// Visitor used to transform a regex HIR to make the regex match "wide" characters.
 ///
 /// This is intented to transform a regex with the "wide" modifier, that is make it so
 /// the regex will not match raw ASCII but UCS-2.
@@ -185,113 +185,113 @@ fn compile_regex_expr(
 /// This means translating every match on a literal or class into this literal/class followed by a
 /// nul byte. See the implementation of the [`Visitor`] trait on [`NodeWidener`] for more details.
 #[derive(Debug)]
-struct AstWidener {
-    /// Top level AST object
-    node: Option<Node>,
+struct HirWidener {
+    /// Top level HIR object
+    hir: Option<Hir>,
 
-    /// Stack of AST objects built.
+    /// Stack of HIR objects built.
     ///
-    /// Each visit to a compound AST value (group, alternation, etc) will push a new level
+    /// Each visit to a compound HIR value (group, alternation, etc) will push a new level
     /// to the stack. Then when we finish visiting the compound value, the level will be pop-ed,
-    /// and the new compound AST value built.
+    /// and the new compound HIR value built.
     stack: Vec<StackLevel>,
 }
 
 #[derive(Debug)]
 struct StackLevel {
-    /// AST values built in this level.
-    nodes: Vec<Node>,
+    /// HIR values built in this level.
+    hirs: Vec<Hir>,
 
-    /// Is this level for a concat AST value.
+    /// Is this level for a concat HIR value.
     in_concat: bool,
 }
 
 impl StackLevel {
     fn new(in_concat: bool) -> Self {
         Self {
-            nodes: Vec::new(),
+            hirs: Vec::new(),
             in_concat,
         }
     }
 
-    fn push(&mut self, node: Node) {
-        self.nodes.push(node);
+    fn push(&mut self, hir: Hir) {
+        self.hirs.push(hir);
     }
 }
 
-impl AstWidener {
+impl HirWidener {
     fn new() -> Self {
         Self {
-            node: None,
+            hir: None,
             stack: Vec::new(),
         }
     }
 
-    fn add(&mut self, node: Node) {
+    fn add(&mut self, hir: Hir) {
         if self.stack.is_empty() {
-            // Empty stack: we should only have a single AST to set at top-level.
-            let res = self.node.replace(node);
-            assert!(res.is_none(), "top level HIR node already set");
+            // Empty stack: we should only have a single HIR to set at top-level.
+            let res = self.hir.replace(hir);
+            assert!(res.is_none(), "top level HIR hir already set");
         } else {
             let pos = self.stack.len() - 1;
-            self.stack[pos].push(node);
+            self.stack[pos].push(hir);
         }
     }
 
-    fn add_wide(&mut self, node: Node) {
-        let nul_byte = Node::Literal(b'\0');
+    fn add_wide(&mut self, hir: Hir) {
+        let nul_byte = Hir::Literal(b'\0');
 
         if self.stack.is_empty() {
-            let res = self.node.replace(Node::Concat(vec![node, nul_byte]));
-            assert!(res.is_none(), "top level HIR node already set");
+            let res = self.hir.replace(Hir::Concat(vec![hir, nul_byte]));
+            assert!(res.is_none(), "top level HIR hir already set");
         } else {
             let pos = self.stack.len() - 1;
             let level = &mut self.stack[pos];
             if level.in_concat {
-                level.nodes.push(node);
-                level.nodes.push(nul_byte);
+                level.hirs.push(hir);
+                level.hirs.push(nul_byte);
             } else {
                 level
-                    .nodes
-                    .push(Node::Group(Box::new(Node::Concat(vec![node, nul_byte]))));
+                    .hirs
+                    .push(Hir::Group(Box::new(Hir::Concat(vec![hir, nul_byte]))));
             }
         }
     }
 }
 
-impl Visitor for AstWidener {
-    type Output = Node;
+impl Visitor for HirWidener {
+    type Output = Hir;
 
-    fn finish(self) -> Node {
+    fn finish(self) -> Hir {
         // Safety: there is a top-level node, the one we visit first.
-        self.node.unwrap()
+        self.hir.unwrap()
     }
 
-    fn visit_pre(&mut self, node: &Node) -> VisitAction {
+    fn visit_pre(&mut self, node: &Hir) -> VisitAction {
         match node {
-            Node::Dot | Node::Empty | Node::Literal(_) | Node::Class(_) | Node::Assertion(_) => (),
+            Hir::Dot | Hir::Empty | Hir::Literal(_) | Hir::Class(_) | Hir::Assertion(_) => (),
 
-            Node::Repetition { .. } | Node::Group(_) | Node::Alternation(_) => {
+            Hir::Repetition { .. } | Hir::Group(_) | Hir::Alternation(_) => {
                 self.stack.push(StackLevel::new(false));
             }
-            Node::Concat(_) => {
+            Hir::Concat(_) => {
                 self.stack.push(StackLevel::new(true));
             }
         }
         VisitAction::Continue
     }
 
-    fn visit_post(&mut self, node: &Node) {
+    fn visit_post(&mut self, node: &Hir) {
         match node {
-            Node::Empty => self.add(Node::Empty),
+            Hir::Empty => self.add(Hir::Empty),
 
             // Literal, dot or class: add a nul_byte after it
-            Node::Dot => self.add_wide(Node::Dot),
-            Node::Literal(lit) => self.add_wide(Node::Literal(*lit)),
-            Node::Class(cls) => self.add_wide(Node::Class(cls.clone())),
+            Hir::Dot => self.add_wide(Hir::Dot),
+            Hir::Literal(lit) => self.add_wide(Hir::Literal(*lit)),
+            Hir::Class(cls) => self.add_wide(Hir::Class(cls.clone())),
 
             // Anchor: no need to add anything
-            Node::Assertion(AssertionKind::StartLine) | Node::Assertion(AssertionKind::EndLine) => {
+            Hir::Assertion(AssertionKind::StartLine) | Hir::Assertion(AssertionKind::EndLine) => {
                 self.add(node.clone());
             }
 
@@ -312,13 +312,13 @@ impl Visitor for AstWidener {
             // depending on which solution is picked. Those are mostly edge cases on carefully
             // crafted regexes, so it should not matter, but the test
             // `test_variable_regex_word_boundaries_edge_cases` tests some of those.
-            Node::Assertion(AssertionKind::WordBoundary)
-            | Node::Assertion(AssertionKind::NonWordBoundary) => {
-                self.add(Node::Empty);
+            Hir::Assertion(AssertionKind::WordBoundary)
+            | Hir::Assertion(AssertionKind::NonWordBoundary) => {
+                self.add(Hir::Empty);
             }
 
-            Node::Repetition {
-                node: _,
+            Hir::Repetition {
+                hir: _,
                 kind,
                 greedy,
             } => {
@@ -327,35 +327,35 @@ impl Visitor for AstWidener {
                 //   and the pre visit push an element on the stack.
                 // - second pop is guaranteed to contain an element, since we walked into the
                 //   repetition node, which pushed an element into the stack.
-                let node = self.stack.pop().unwrap().nodes.pop().unwrap();
-                self.add(Node::Repetition {
+                let hir = self.stack.pop().unwrap().hirs.pop().unwrap();
+                self.add(Hir::Repetition {
                     kind: kind.clone(),
                     greedy: *greedy,
-                    node: Box::new(node),
+                    hir: Box::new(hir),
                 });
             }
-            Node::Group(_) => {
+            Hir::Group(_) => {
                 // Safety:
                 // - first pop is guaranteed to contain an element, since this is a "post" visit,
                 //   and the pre visit push an element on the stack.
                 // - second pop is guaranteed to contain an element, since we walked into the
                 //   group node, which pushed an element into the stack.
-                let node = self.stack.pop().unwrap().nodes.pop().unwrap();
-                self.add(Node::Group(Box::new(node)));
+                let node = self.stack.pop().unwrap().hirs.pop().unwrap();
+                self.add(Hir::Group(Box::new(node)));
             }
-            Node::Concat(_) => {
+            Hir::Concat(_) => {
                 // Safety:
                 // - pop is guaranteed to contain an element, since this is a "post" visit,
                 //   and the pre visit push an element on the stack.
-                let vec = self.stack.pop().unwrap().nodes;
-                self.add(Node::Concat(vec));
+                let vec = self.stack.pop().unwrap().hirs;
+                self.add(Hir::Concat(vec));
             }
-            Node::Alternation(_) => {
+            Hir::Alternation(_) => {
                 // Safety:
                 // - pop is guaranteed to contain an element, since this is a "post" visit,
                 //   and the pre visit push an element on the stack.
-                let vec = self.stack.pop().unwrap().nodes;
-                self.add(Node::Alternation(vec));
+                let vec = self.stack.pop().unwrap().hirs;
+                self.add(Hir::Alternation(vec));
             }
         }
     }
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(AstWidener::new());
+        test_type_traits_non_clonable(HirWidener::new());
         test_type_traits_non_clonable(StackLevel::new(false));
     }
 }
