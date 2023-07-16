@@ -525,22 +525,22 @@ rule a {
     literals: ["abc"]
     atoms: ["abc"]
     atoms quality: 60
-    kind: Literals
+    algo: literals
   $b = { 01 ( FE | EF ) }
     literals: [{ 01fe }, { 01ef }]
     atoms: [{ 01fe }, { 01ef }]
     atoms quality: 44
-    kind: Literals
+    algo: literals
   $c = /foo\d??bar/ fullword
     literals: ["bar"]
     atoms: ["bar"]
     atoms quality: 60
-    kind: Atomized
+    algo: atomized
   $d = /.{10}/ fullword
     literals: []
     atoms: []
     atoms quality: 0
-    kind: Regex
+    algo: raw
 "#;
 
     let input = test_file("");

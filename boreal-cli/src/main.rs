@@ -310,7 +310,7 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
         println!("    literals: {:?}", &lits);
         println!("    atoms: {:?}", &atoms);
         println!("    atoms quality: {}", var.atoms_quality);
-        println!("    kind: {:?}", var.matching_kind);
+        println!("    algo: {}", var.matching_algo);
     }
 }
 

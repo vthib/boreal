@@ -5,7 +5,7 @@ use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::regex::Regex;
-use crate::statistics::{self, MatchingKind};
+use crate::statistics;
 
 use super::base64::encode_base64;
 use super::CompilationError;
@@ -154,11 +154,12 @@ pub(crate) fn compile_variable(
             literals: res.matcher.literals.clone(),
             atoms,
             atoms_quality,
-            matching_kind: match res.matcher.kind {
-                matcher::MatcherKind::Literals => MatchingKind::Literals,
-                matcher::MatcherKind::Atomized { .. } => MatchingKind::Atomized,
-                matcher::MatcherKind::Raw(_) => MatchingKind::Regex,
-            },
+            matching_algo: match res.matcher.kind {
+                matcher::MatcherKind::Literals => "literals",
+                matcher::MatcherKind::Atomized { .. } => "atomized",
+                matcher::MatcherKind::Raw(_) => "raw",
+            }
+            .into(),
         })
     } else {
         None
