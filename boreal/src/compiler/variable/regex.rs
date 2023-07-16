@@ -269,7 +269,12 @@ impl Visitor for HirWidener {
 
     fn visit_pre(&mut self, node: &Hir) -> VisitAction {
         match node {
-            Hir::Dot | Hir::Empty | Hir::Literal(_) | Hir::Class(_) | Hir::Assertion(_) => (),
+            Hir::Dot
+            | Hir::Empty
+            | Hir::Literal(_)
+            | Hir::Mask { .. }
+            | Hir::Class(_)
+            | Hir::Assertion(_) => (),
 
             Hir::Repetition { .. } | Hir::Group(_) | Hir::Alternation(_) => {
                 self.stack.push(StackLevel::new(false));
@@ -281,18 +286,19 @@ impl Visitor for HirWidener {
         VisitAction::Continue
     }
 
-    fn visit_post(&mut self, node: &Hir) {
-        match node {
+    fn visit_post(&mut self, hir: &Hir) {
+        match hir {
             Hir::Empty => self.add(Hir::Empty),
 
             // Literal, dot or class: add a nul_byte after it
             Hir::Dot => self.add_wide(Hir::Dot),
             Hir::Literal(lit) => self.add_wide(Hir::Literal(*lit)),
+            Hir::Mask { .. } => self.add_wide(hir.clone()),
             Hir::Class(cls) => self.add_wide(Hir::Class(cls.clone())),
 
             // Anchor: no need to add anything
             Hir::Assertion(AssertionKind::StartLine) | Hir::Assertion(AssertionKind::EndLine) => {
-                self.add(node.clone());
+                self.add(hir.clone());
             }
 
             // Boundary is tricky as it looks for a match between two characters:
