@@ -10,7 +10,7 @@ use boreal_parser::{
 ///
 /// Both regexes and hex strings are translated into this representation, which
 /// is then compiled into optimized matchers.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum Hir {
     /// Alternation, ie `a|b|...`.
     Alternation(Vec<Hir>),
@@ -134,5 +134,17 @@ fn masked_byte_to_hir(byte: u8, mask: &Mask, negated: bool) -> Hir {
             negated,
         },
         Mask::All => Hir::Dot,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_helpers::test_type_traits;
+
+    use super::*;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits(Hir::Empty);
     }
 }
