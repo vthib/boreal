@@ -28,8 +28,6 @@ pub struct Matcher {
 }
 
 #[derive(Copy, Clone, Debug)]
-// Completely useless lint
-#[allow(clippy::struct_excessive_bools)]
 pub struct Flags {
     pub fullword: bool,
     pub ascii: bool,
