@@ -1,133 +1,11 @@
 use crate::regex::{visit, Hir, VisitAction, Visitor};
 
 /// Can the hex string be expressed using only literals.
-pub(super) fn hir_to_only_literals(hir: &Hir, dot_all: bool) -> Option<Vec<Vec<u8>>> {
-    // TODO: move this count into the HirStatistics visitor
-    match visit(hir, CountLiterals::new(dot_all)) {
-        Some(count) if count < 100 => visit(hir, Literals::new()),
-        Some(_) | None => None,
-    }
+pub(super) fn hir_to_only_literals(hir: &Hir) -> Option<Vec<Vec<u8>>> {
+    visit(hir, Extractor::new())
 }
 
-struct CountLiterals {
-    /// Is the dot_all flag set.
-    ///
-    /// This is an input of the visitor, and not an output as other fields are.
-    dot_all: bool,
-
-    /// Current count of the number of literals needed to cover the HIR.
-    ///
-    /// Unset if the HIR cannot be covered with simple literals.
-    count: Option<usize>,
-
-    /// Stack used to store counts of alternation branches.
-    alt_stack: Vec<AltCount>,
-}
-
-/// Counts related to an alternation
-struct AltCount {
-    /// The count before entering the alternation.
-    prev_count: Option<usize>,
-
-    /// The current count of visited branches.
-    branch_count: Option<usize>,
-}
-
-impl CountLiterals {
-    fn new(dot_all: bool) -> Self {
-        Self {
-            dot_all,
-            count: Some(1),
-            alt_stack: Vec::new(),
-        }
-    }
-}
-
-impl Visitor for CountLiterals {
-    type Output = Option<usize>;
-
-    fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
-        match hir {
-            Hir::Mask { negated, .. } => {
-                if let Some(count) = &mut self.count {
-                    self.count = count.checked_mul(if *negated { 256 - 16 } else { 16 });
-                }
-                VisitAction::Continue
-            }
-            Hir::Dot => {
-                if let Some(count) = &mut self.count {
-                    self.count = count.checked_mul(if self.dot_all { 256 } else { 255 });
-                }
-                VisitAction::Continue
-            }
-            Hir::Concat(_) | Hir::Empty | Hir::Literal(_) | Hir::Group(_) => VisitAction::Continue,
-            Hir::Alternation(_) => {
-                // Alternations are handled by:
-                // - pushing the current count into a stack
-                // - after each alternate branch, storing that branch count into the stack
-                // - once the all alternation is visited, computing the combinatorics of all
-                //   branches, and restoring the count.
-                self.alt_stack.push(AltCount {
-                    prev_count: self.count,
-                    branch_count: Some(0),
-                });
-                match &self.count {
-                    Some(_) => {
-                        self.count = Some(1);
-                        VisitAction::Continue
-                    }
-                    None => {
-                        self.count = None;
-                        VisitAction::Skip
-                    }
-                }
-            }
-            Hir::Class(_) => {
-                // TODO: handle classes
-                self.count = None;
-                VisitAction::Skip
-            }
-            Hir::Assertion(_) | Hir::Repetition { .. } => {
-                // TODO: repetitions could be handled
-                self.count = None;
-                VisitAction::Skip
-            }
-        }
-    }
-
-    fn visit_alternation_in(&mut self) {
-        let last_pos = self.alt_stack.len() - 1;
-        let v = &mut self.alt_stack[last_pos];
-
-        match (v.branch_count, self.count) {
-            (Some(bc), Some(c)) => v.branch_count = bc.checked_add(c),
-            (Some(_), None) => v.branch_count = None,
-            (None, _) => (),
-        }
-        self.count = Some(1);
-    }
-
-    fn visit_post(&mut self, hir: &Hir) {
-        if let Hir::Alternation(_) = hir {
-            // Close the final branch.
-            self.visit_alternation_in();
-            // Safety: the visit_pre has pushed an element in the stack.
-            let stack = self.alt_stack.pop().unwrap();
-            match (stack.prev_count, stack.branch_count) {
-                (None, _) | (Some(_), None) => self.count = None,
-                (Some(c), Some(bc)) => {
-                    self.count = c.checked_mul(bc);
-                }
-            }
-        }
-    }
-
-    fn finish(self) -> Self::Output {
-        self.count
-    }
-}
-
-struct Literals {
+struct Extractor {
     // Combination of all possible literals.
     all: Option<Vec<Vec<u8>>>,
     // Buffer of a string of bytes to be added to all the literals.
@@ -143,7 +21,7 @@ struct AltLiterals {
     branch_lits: Vec<Vec<u8>>,
 }
 
-impl Literals {
+impl Extractor {
     fn new() -> Self {
         Self {
             all: Some(Vec::new()),
@@ -199,7 +77,7 @@ impl Literals {
     }
 }
 
-impl Visitor for Literals {
+impl Visitor for Extractor {
     type Output = Option<Vec<Vec<u8>>>;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
@@ -297,7 +175,7 @@ mod tests {
             let regex = parse_regex_string(regex);
             let hir = regex.ast.into();
 
-            let res = hir_to_only_literals(&hir, true);
+            let res = hir_to_only_literals(&hir);
             match &res {
                 Some(v) => assert_eq!(v, expected.unwrap()),
                 None => assert!(expected.is_none()),
@@ -342,7 +220,7 @@ mod tests {
             let hex_string = parse_hex_string(hex_string);
             let hir = hex_string.into();
 
-            let res = hir_to_only_literals(&hir, true);
+            let res = hir_to_only_literals(&hir);
             match &res {
                 Some(v) => assert_eq!(v, expected.unwrap()),
                 None => assert!(expected.is_none()),
@@ -473,36 +351,9 @@ mod tests {
         test("{ AB [-2] 01 }", None);
         test("{ AB [1-2] 01 }", None);
 
-        // Too many literals means no extraction
         test("{ AB ?? 01 }", None);
-        test("{ AB (?A | ?B | ?C | ?D | ?E | ?F | ?0) 01 }", None);
-    }
+        test("{ AA ~?D BB }", None);
 
-    #[test]
-    fn test_regex_extract_literals_failure_cases() {
-        // A few tests to ensure the literals extractor properly handle errors.
-        #[track_caller]
-        fn test_hex_string(hex_string: &str) {
-            let hex_string = parse_hex_string(hex_string);
-            let hir = hex_string.into();
-
-            assert!(visit(&hir, Literals::new()).is_none());
-        }
-
-        #[track_caller]
-        fn test_regex(regex: &str) {
-            let regex = parse_regex_string(regex);
-            let hir = regex.ast.into();
-
-            assert!(visit(&hir, Literals::new()).is_none());
-        }
-
-        test_hex_string("{ AA ?? BB }");
-        test_hex_string("{ AA ( CC | ?? | BB ) }");
-        test_hex_string("{ AA ~?D BB }");
-
-        test_regex("^a");
-        test_regex("[^ab]");
-        test_regex("a+");
+        test("{ (AA | ~?D ) BB }", None);
     }
 }

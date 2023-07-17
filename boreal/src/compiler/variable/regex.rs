@@ -3,7 +3,7 @@ use boreal_parser::VariableModifiers;
 
 use crate::regex::{regex_hir_to_string, visit, Hir, Regex, VisitAction, Visitor};
 
-use super::analysis::HirAnalysis;
+use super::analysis::analyze_hir;
 use super::literals::LiteralsDetails;
 use super::matcher::MatcherKind;
 use super::{only_literals, CompiledVariable, VariableCompilationError};
@@ -19,15 +19,37 @@ pub(super) fn compile_regex(
     dot_all: bool,
     modifiers: &VariableModifiers,
 ) -> Result<CompiledVariable, VariableCompilationError> {
-    // Try to convert into only literals if possible
-    // TODO: handle more modifiers
-    if !modifiers.nocase && !modifiers.wide {
-        if let Some(literals) = only_literals::hir_to_only_literals(hir, dot_all) {
-            return Ok(CompiledVariable {
-                literals,
-                matcher_kind: MatcherKind::Literals,
-                non_wide_regex: None,
-            });
+    let analysis = analyze_hir(hir, dot_all);
+
+    let non_wide_regex = if analysis.has_word_boundaries && modifiers.wide {
+        let expr = regex_hir_to_string(hir);
+        Some(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
+    } else {
+        None
+    };
+
+    // Do not use an AC if anchors are present, it will be much efficient to just run
+    // the regex directly.
+    if analysis.has_start_or_end_line {
+        let expr = convert_hir_to_string_with_flags(hir, modifiers);
+        return Ok(CompiledVariable {
+            literals: Vec::new(),
+            matcher_kind: MatcherKind::Raw(compile_regex_expr(expr, modifiers.nocase, dot_all)?),
+            non_wide_regex,
+        });
+    }
+
+    if let Some(count) = analysis.nb_alt_literals {
+        // The regex can be covered entirely by literals. This is optimal, so use this if possible.
+        // TODO: handle more modifiers
+        if count < 100 && !modifiers.nocase && !modifiers.wide {
+            if let Some(literals) = only_literals::hir_to_only_literals(hir) {
+                return Ok(CompiledVariable {
+                    literals,
+                    matcher_kind: MatcherKind::Literals,
+                    non_wide_regex,
+                });
+            }
         }
     }
 
@@ -46,16 +68,8 @@ pub(super) fn compile_regex(
 
     let mut use_ac = !literals.is_empty();
 
-    let analysis = visit(hir, HirAnalysis::default());
-
-    if analysis.has_start_or_end_line {
-        // Do not use an AC if anchors are present, it will be much efficient to just run
-        // the regex directly.
-        use_ac = false;
-    }
-
     if let Some(pre) = &pre_hir {
-        let left_analysis = visit(pre, HirAnalysis::default());
+        let left_analysis = analyze_hir(pre, dot_all);
         if left_analysis.has_greedy_repetitions {
             // Greedy repetitions on the left side of the literals is not for the moment handled.
             // This is because the repetition can "eat" the literals against which we matched,
@@ -80,13 +94,6 @@ pub(super) fn compile_regex(
         let expr = convert_hir_to_string_with_flags(hir, modifiers);
 
         MatcherKind::Raw(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
-    };
-
-    let non_wide_regex = if analysis.has_word_boundaries && modifiers.wide {
-        let expr = regex_hir_to_string(hir);
-        Some(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
-    } else {
-        None
     };
 
     Ok(CompiledVariable {

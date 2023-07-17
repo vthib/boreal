@@ -1,36 +1,239 @@
 use boreal_parser::regex::AssertionKind;
 
-use crate::regex::{Hir, VisitAction, Visitor};
+use crate::regex::{visit, Hir, VisitAction, Visitor};
 
-#[derive(Default)]
 pub struct HirAnalysis {
+    // Contains start or end line assertions.
     pub has_start_or_end_line: bool,
+
+    // Contains greedy repetitions.
     pub has_greedy_repetitions: bool,
+
+    // Contains word boundaries.
     pub has_word_boundaries: bool,
+
+    // Number of alternative literals covering the regex.
+    //
+    // Only set if the regex can be entirely expressed as this literals alternation.
+    pub nb_alt_literals: Option<usize>,
 }
 
-impl Visitor for HirAnalysis {
-    type Output = Self;
+pub fn analyze_hir(hir: &Hir, dot_all: bool) -> HirAnalysis {
+    visit(
+        hir,
+        HirAnalyser {
+            dot_all,
+
+            has_start_or_end_line: false,
+            has_greedy_repetitions: false,
+            has_word_boundaries: false,
+
+            nb_alt_literals: Some(1),
+            alt_stack: Vec::new(),
+        },
+    )
+}
+
+struct HirAnalyser {
+    /// Is the dot_all flag set.
+    ///
+    /// This is an input of the visitor, and not an output as other fields are.
+    dot_all: bool,
+
+    has_start_or_end_line: bool,
+    has_greedy_repetitions: bool,
+    has_word_boundaries: bool,
+
+    /// Current count of the number of literals needed to cover the HIR.
+    ///
+    /// Unset if the HIR cannot be covered with simple literals.
+    nb_alt_literals: Option<usize>,
+
+    /// Stack used to store counts of alternation branches.
+    alt_stack: Vec<AltStack>,
+}
+
+/// Data related to an alternation
+struct AltStack {
+    /// The count of alt literals before entering the alternation.
+    prev_nb_alt_literals: Option<usize>,
+
+    /// The current count of alt literals in visited branches.
+    branches_nb_alt_literals: Option<usize>,
+}
+
+impl Visitor for HirAnalyser {
+    type Output = HirAnalysis;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
         match hir {
-            Hir::Assertion(AssertionKind::StartLine) | Hir::Assertion(AssertionKind::EndLine) => {
-                self.has_start_or_end_line = true;
+            Hir::Mask { negated, .. } => {
+                if let Some(count) = &mut self.nb_alt_literals {
+                    self.nb_alt_literals = count.checked_mul(if *negated { 256 - 16 } else { 16 });
+                }
             }
-            Hir::Assertion(AssertionKind::WordBoundary)
-            | Hir::Assertion(AssertionKind::NonWordBoundary) => {
-                self.has_word_boundaries = true;
+            Hir::Assertion(kind) => {
+                match kind {
+                    AssertionKind::StartLine | AssertionKind::EndLine => {
+                        self.has_start_or_end_line = true;
+                    }
+                    AssertionKind::WordBoundary | AssertionKind::NonWordBoundary => {
+                        self.has_word_boundaries = true;
+                    }
+                }
+                // Assertions means the regex cannot be just an alternation of literals.
+                self.nb_alt_literals = None;
             }
-            Hir::Repetition { greedy: true, .. } => {
-                self.has_greedy_repetitions = true;
+            Hir::Repetition { greedy, .. } => {
+                if *greedy {
+                    self.has_greedy_repetitions = true;
+                }
+                // Repetitions means the regex cannot be just an alternation of literals.
+                // TODO: some could be handled.
+                self.nb_alt_literals = None;
             }
-            _ => (),
+            Hir::Dot => {
+                if let Some(count) = &mut self.nb_alt_literals {
+                    self.nb_alt_literals = count.checked_mul(if self.dot_all { 256 } else { 255 });
+                }
+            }
+            Hir::Class(_) => {
+                // TODO: handle classes
+                self.nb_alt_literals = None;
+            }
+            Hir::Literal(_) | Hir::Empty | Hir::Group(_) | Hir::Concat(_) => (),
+            Hir::Alternation(_) => {
+                // Alternations are handled by:
+                // - pushing the current count into a stack
+                // - after each alternate branch, storing that branch count into the stack
+                // - once the all alternation is visited, computing the combinatorics of all
+                //   branches, and restoring the count.
+                self.alt_stack.push(AltStack {
+                    prev_nb_alt_literals: self.nb_alt_literals,
+                    branches_nb_alt_literals: Some(0),
+                });
+                self.nb_alt_literals = Some(1);
+            }
         }
 
         VisitAction::Continue
     }
 
+    fn visit_alternation_in(&mut self) {
+        let last_pos = self.alt_stack.len() - 1;
+        let v = &mut self.alt_stack[last_pos];
+
+        match (v.branches_nb_alt_literals, self.nb_alt_literals) {
+            (Some(bc), Some(c)) => v.branches_nb_alt_literals = bc.checked_add(c),
+            (Some(_), None) => v.branches_nb_alt_literals = None,
+            (None, _) => (),
+        }
+        self.nb_alt_literals = Some(1);
+    }
+
+    fn visit_post(&mut self, hir: &Hir) {
+        if let Hir::Alternation(_) = hir {
+            // Close the final branch.
+            self.visit_alternation_in();
+            // Safety: the visit_pre has pushed an element in the stack.
+            let stack = self.alt_stack.pop().unwrap();
+            match (stack.prev_nb_alt_literals, stack.branches_nb_alt_literals) {
+                (None, _) | (Some(_), None) => self.nb_alt_literals = None,
+                (Some(c), Some(bc)) => {
+                    self.nb_alt_literals = c.checked_mul(bc);
+                }
+            }
+        }
+    }
+
     fn finish(self) -> Self::Output {
-        self
+        HirAnalysis {
+            has_start_or_end_line: self.has_start_or_end_line,
+            has_greedy_repetitions: self.has_greedy_repetitions,
+            has_word_boundaries: self.has_word_boundaries,
+            nb_alt_literals: self.nb_alt_literals,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::{parse_hex_string, parse_regex_string};
+
+    #[test]
+    fn test_count_alt_literals() {
+        #[track_caller]
+        fn test(expr: &str, dot_all: bool, expected: Option<usize>) {
+            let hir = if expr.starts_with('{') {
+                parse_hex_string(expr).into()
+            } else {
+                parse_regex_string(expr).ast.into()
+            };
+
+            let res = analyze_hir(&hir, dot_all);
+            assert_eq!(res.nb_alt_literals, expected);
+        }
+
+        // Assertions and repetitions means no literals
+        test(r"^a", false, None);
+        test(r"a$", false, None);
+        test(r"a\b", false, None);
+        test(r"a\B", false, None);
+
+        test(r"a?", false, None);
+        test(r"a+?", false, None);
+        test(r"a*", false, None);
+        test(r"a{2}", false, None);
+        test(r"a{1,}", false, None);
+        test(r"a{2,3}", false, None);
+
+        // Jumps are not allowed
+        test("{ AB [1-] 01 }", false, None);
+        test("{ AB [-2] 01 }", false, None);
+        test("{ AB [1-2] 01 }", false, None);
+
+        // Classes are not handled
+        test(r"[a]", false, None);
+        test(r"[^ab]", false, None);
+        test(r"\w", false, None);
+
+        // Dot value depends on dot_all
+        test(r".", false, Some(255));
+        test(r".", true, Some(256));
+
+        // Concat, empty, literal, group, all ok
+        test(r"a(b)()e", false, Some(1));
+
+        // Alternations
+        test(r"a|f(b|c)|((ab)|)c|d", false, Some(6));
+
+        test("{ AB CD 01 }", false, Some(1));
+        test("{ AB ?D 01 }", false, Some(16));
+        test("{ D? FE }", false, Some(16));
+        test("{ AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD }", false, Some(6));
+
+        test(
+            "{ ( 01 | ( 23 | FF ) ( ( 45 | 67 ) | 58 ( AA | BB | CC ) | DD ) ) }",
+            false,
+            Some(13),
+        );
+
+        test("{ ( AA | BB ) F? }", false, Some(32));
+
+        test("{ AB ?? 01 }", true, Some(256));
+        test("{ AB [1] 01 }", false, Some(255));
+        test(
+            "{ AB (?A | ?B | ?C | ?D | ?E | ?F | ?0) 01 }",
+            false,
+            Some(112),
+        );
+
+        test("{ AA ( CC | ?? | BB ) }", true, Some(258));
+        test("{ AA ~?D BB }", false, Some(240));
+
+        test(r"a\b(1|2)c", false, None);
+        test(r"a(\b|2)c", false, None);
+        test(r"a.b(|)c", false, Some(510));
     }
 }
