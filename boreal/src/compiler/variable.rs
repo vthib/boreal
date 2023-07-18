@@ -172,8 +172,9 @@ fn compile_bytes(
     let mut literals = Vec::with_capacity(2);
     if modifiers.wide {
         if modifiers.ascii {
-            literals.push(string_to_wide(&value));
+            let wide = string_to_wide(&value);
             literals.push(value);
+            literals.push(wide);
         } else {
             literals.push(string_to_wide(&value));
         }
@@ -186,6 +187,9 @@ fn compile_bytes(
         let xor_range = xor_range.0..=xor_range.1;
         let xor_range_len = xor_range.len(); // modifiers.xor_range.1.saturating_sub(modifiers.xor_range.0) + 1;
         let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
+
+        // Ascii literals must be first, then wide literals. Since the "literals" var
+        // is the ascii literals then the wide ones, the order is preserved.
         for lit in literals {
             for xor_byte in xor_range.clone() {
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
@@ -206,6 +210,8 @@ fn compile_bytes(
             for lit in &old_literals {
                 for offset in 0..=2 {
                     if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
+                        // Fullword is not compatible with base64 modifiers, hence ordering of
+                        // literals is not required.
                         if base64.wide {
                             literals.push(string_to_wide(&lit));
                         }

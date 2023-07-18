@@ -11,6 +11,14 @@ pub struct Matcher {
     /// Set of literals extracted from the variable.
     ///
     /// Will be used by the AC pass to scan for the variable.
+    ///
+    /// If both ascii and wide are set in the flags, it is expected that the literals are
+    /// composed of:
+    /// - the ascii literals first
+    /// - the wide literals second
+    ///
+    /// This is required in order to know which kind is a literal match, as checking its value
+    /// would be buggy.
     pub literals: Vec<Vec<u8>>,
 
     /// Flags related to variable modifiers.
@@ -49,24 +57,44 @@ pub enum MatcherKind {
     Raw(Regex),
 }
 
+/// Type of a match.
+#[derive(Copy, Clone, Debug)]
+pub enum MatchType {
+    /// The match is on ascii versions of the literals
+    Ascii,
+    /// The match is on wide versions of the literals
+    Wide,
+}
+
 impl Matcher {
     /// Confirm that an AC match is a match on the given literal.
     ///
     /// This is needed because the AC might optimize literals and get false positive matches.
     /// This function is used to confirm the tentative match does match the literal with the given
     /// index.
-    pub fn confirm_ac_literal(&self, mem: &[u8], mat: &Range<usize>, literal_index: usize) -> bool {
+    pub fn confirm_ac_literal(
+        &self,
+        mem: &[u8],
+        mat: &Range<usize>,
+        literal_index: usize,
+    ) -> Option<MatchType> {
         let literal = &self.literals[literal_index];
 
         if self.flags.nocase {
             if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
-                return false;
+                return None;
             }
         } else if literal != &mem[mat.start..mat.end] {
-            return false;
+            return None;
         }
 
-        true
+        match (self.flags.ascii, self.flags.wide) {
+            (false, true) => Some(MatchType::Wide),
+            // If the variable has both ascii and wide, then the ascii literals are in the first
+            // half, and the wide ones in the second half.
+            (true, true) if literal_index >= self.literals.len() / 2 => Some(MatchType::Wide),
+            _ => Some(MatchType::Ascii),
+        }
     }
 
     pub fn process_ac_match(
@@ -74,9 +102,10 @@ impl Matcher {
         mem: &[u8],
         mat: Range<usize>,
         start_position: usize,
+        match_type: MatchType,
     ) -> AcMatchStatus {
         match &self.kind {
-            MatcherKind::Literals => match self.validate_and_update_match(mem, mat) {
+            MatcherKind::Literals => match self.validate_and_update_match(mem, mat, match_type) {
                 Some(m) => AcMatchStatus::Single(m),
                 None => AcMatchStatus::None,
             },
@@ -101,7 +130,7 @@ impl Matcher {
                 match left_validator {
                     None => {
                         let mat = mat.start..end;
-                        match self.validate_and_update_match(mem, mat) {
+                        match self.validate_and_update_match(mem, mat, match_type) {
                             Some(m) => AcMatchStatus::Single(m),
                             None => AcMatchStatus::None,
                         }
@@ -120,7 +149,7 @@ impl Matcher {
                         while let Some(m) = validator.find(&mem[start..mat.end]) {
                             let m = (m.start + start)..end;
                             start = m.start + 1;
-                            if let Some(m) = self.validate_and_update_match(mem, m) {
+                            if let Some(m) = self.validate_and_update_match(mem, m, match_type) {
                                 matches.push(m);
                             }
                         }
@@ -146,7 +175,12 @@ impl Matcher {
         while offset < mem.len() {
             let mat = regex.find_at(mem, offset)?;
 
-            match self.validate_and_update_match(mem, mat.clone()) {
+            let match_type = if is_match_wide(&mat, mem) {
+                MatchType::Wide
+            } else {
+                MatchType::Ascii
+            };
+            match self.validate_and_update_match(mem, mat.clone(), match_type) {
                 Some(m) => return Some(m),
                 None => {
                     offset = mat.start + 1;
@@ -156,28 +190,27 @@ impl Matcher {
         None
     }
 
-    fn validate_and_update_match(&self, mem: &[u8], mat: Range<usize>) -> Option<Range<usize>> {
-        if self.flags.fullword && !check_fullword(mem, &mat, self.flags) {
+    fn validate_and_update_match(
+        &self,
+        mem: &[u8],
+        mat: Range<usize>,
+        match_type: MatchType,
+    ) -> Option<Range<usize>> {
+        if self.flags.fullword && !check_fullword(mem, &mat, match_type) {
             return None;
         }
 
         match self.non_wide_regex.as_ref() {
-            Some(regex) => apply_wide_word_boundaries(mat, mem, regex),
+            Some(regex) => apply_wide_word_boundaries(mat, mem, regex, match_type),
             None => Some(mat),
         }
     }
 }
 
 /// Check the match respects a possible fullword modifier for the variable.
-fn check_fullword(mem: &[u8], mat: &Range<usize>, flags: Flags) -> bool {
-    // TODO: We need to know if the match is done on an ascii or wide string to properly check for
-    // fullword constraints. This is done in a very ugly way, by going through the match.
-    // A better way would be to know which alternation in the match was found.
-    let mut match_is_wide = false;
-
-    if flags.wide {
-        match_is_wide = is_match_wide(mat, mem);
-        if match_is_wide {
+fn check_fullword(mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
+    match match_type {
+        MatchType::Wide => {
             if mat.start > 1
                 && mem[mat.start - 1] == b'\0'
                 && mem[mat.start - 2].is_ascii_alphanumeric()
@@ -191,13 +224,13 @@ fn check_fullword(mem: &[u8], mat: &Range<usize>, flags: Flags) -> bool {
                 return false;
             }
         }
-    }
-    if flags.ascii && !match_is_wide {
-        if mat.start > 0 && mem[mat.start - 1].is_ascii_alphanumeric() {
-            return false;
-        }
-        if mat.end < mem.len() && mem[mat.end].is_ascii_alphanumeric() {
-            return false;
+        MatchType::Ascii => {
+            if mat.start > 0 && mem[mat.start - 1].is_ascii_alphanumeric() {
+                return false;
+            }
+            if mat.end < mem.len() && mem[mat.end].is_ascii_alphanumeric() {
+                return false;
+            }
         }
     }
 
@@ -209,10 +242,9 @@ fn apply_wide_word_boundaries(
     mut mat: Range<usize>,
     mem: &[u8],
     regex: &Regex,
+    match_type: MatchType,
 ) -> Option<Range<usize>> {
-    // The match can be on a non wide regex, if the variable was both ascii and wide. Make sure
-    // the match is wide.
-    if !is_match_wide(&mat, mem) {
+    if !matches!(match_type, MatchType::Wide) {
         return Some(mat);
     }
 
@@ -299,5 +331,6 @@ mod tests {
             wide: false,
             nocase: false,
         });
+        test_type_traits(MatchType::Ascii);
     }
 }

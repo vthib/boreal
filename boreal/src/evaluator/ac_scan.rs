@@ -145,9 +145,10 @@ impl AcScan {
         let m = start..end;
 
         // Verify the literal is valid.
-        if !var.confirm_ac_literal(scan_data.mem, &m, literal_index) {
-            return;
-        }
+        let match_type = match var.confirm_ac_literal(scan_data.mem, &m, literal_index) {
+            Some(ty) => ty,
+            None => return,
+        };
 
         // Shorten the mem to prevent new matches on the same starting byte.
         // For example, for `a.*?bb`, and input `abbb`, this can happen:
@@ -167,7 +168,7 @@ impl AcScan {
             _ => 0,
         };
 
-        let res = var.process_ac_match(scan_data.mem, m, start_position);
+        let res = var.process_ac_match(scan_data.mem, m, start_position, match_type);
 
         #[cfg(feature = "profiling")]
         {
