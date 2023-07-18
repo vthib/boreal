@@ -6,11 +6,20 @@ pub struct HirAnalysis {
     // Contains start or end line assertions.
     pub has_start_or_end_line: bool,
 
+    // Contains repetitions.
+    pub has_repetitions: bool,
+
     // Contains greedy repetitions.
     pub has_greedy_repetitions: bool,
 
     // Contains word boundaries.
     pub has_word_boundaries: bool,
+
+    // Contains word boundaries.
+    pub has_classes: bool,
+
+    // Contains alternations.
+    pub has_alternations: bool,
 
     // Number of alternative literals covering the regex.
     //
@@ -25,8 +34,11 @@ pub fn analyze_hir(hir: &Hir, dot_all: bool) -> HirAnalysis {
             dot_all,
 
             has_start_or_end_line: false,
+            has_repetitions: false,
             has_greedy_repetitions: false,
             has_word_boundaries: false,
+            has_classes: false,
+            has_alternations: false,
 
             nb_alt_literals: Some(1),
             alt_stack: Vec::new(),
@@ -41,8 +53,11 @@ struct HirAnalyser {
     dot_all: bool,
 
     has_start_or_end_line: bool,
+    has_repetitions: bool,
     has_greedy_repetitions: bool,
     has_word_boundaries: bool,
+    has_classes: bool,
+    has_alternations: bool,
 
     /// Current count of the number of literals needed to cover the HIR.
     ///
@@ -85,6 +100,7 @@ impl Visitor for HirAnalyser {
                 self.nb_alt_literals = None;
             }
             Hir::Repetition { greedy, .. } => {
+                self.has_repetitions = true;
                 if *greedy {
                     self.has_greedy_repetitions = true;
                 }
@@ -100,6 +116,7 @@ impl Visitor for HirAnalyser {
             Hir::Class(_) => {
                 // TODO: handle classes
                 self.nb_alt_literals = None;
+                self.has_classes = true;
             }
             Hir::Literal(_) | Hir::Empty | Hir::Group(_) | Hir::Concat(_) => (),
             Hir::Alternation(_) => {
@@ -113,6 +130,7 @@ impl Visitor for HirAnalyser {
                     branches_nb_alt_literals: Some(0),
                 });
                 self.nb_alt_literals = Some(1);
+                self.has_alternations = true;
             }
         }
 
@@ -149,8 +167,11 @@ impl Visitor for HirAnalyser {
     fn finish(self) -> Self::Output {
         HirAnalysis {
             has_start_or_end_line: self.has_start_or_end_line,
+            has_repetitions: self.has_repetitions,
             has_greedy_repetitions: self.has_greedy_repetitions,
             has_word_boundaries: self.has_word_boundaries,
+            has_classes: self.has_classes,
+            has_alternations: self.has_alternations,
             nb_alt_literals: self.nb_alt_literals,
         }
     }
@@ -161,17 +182,20 @@ mod tests {
     use super::*;
     use crate::test_helpers::{parse_hex_string, parse_regex_string};
 
+    fn analyze_expr(expr: &str, dot_all: bool) -> HirAnalysis {
+        let hir = if expr.starts_with('{') {
+            parse_hex_string(expr).into()
+        } else {
+            parse_regex_string(expr).ast.into()
+        };
+        analyze_hir(&hir, dot_all)
+    }
+
     #[test]
     fn test_count_alt_literals() {
         #[track_caller]
         fn test(expr: &str, dot_all: bool, expected: Option<usize>) {
-            let hir = if expr.starts_with('{') {
-                parse_hex_string(expr).into()
-            } else {
-                parse_regex_string(expr).ast.into()
-            };
-
-            let res = analyze_hir(&hir, dot_all);
+            let res = analyze_expr(expr, dot_all);
             assert_eq!(res.nb_alt_literals, expected);
         }
 
@@ -235,5 +259,40 @@ mod tests {
         test(r"a\b(1|2)c", false, None);
         test(r"a(\b|2)c", false, None);
         test(r"a.b(|)c", false, Some(510));
+    }
+
+    #[test]
+    fn test_flags() {
+        let res = analyze_expr("^a32+", false);
+        assert!(res.has_start_or_end_line);
+        assert!(res.has_repetitions);
+        assert!(res.has_greedy_repetitions);
+        assert!(!res.has_word_boundaries);
+        assert!(!res.has_classes);
+        assert!(!res.has_alternations);
+
+        let res = analyze_expr(r"\b[Ww]o(r|R)d\b", false);
+        assert!(!res.has_start_or_end_line);
+        assert!(!res.has_repetitions);
+        assert!(!res.has_greedy_repetitions);
+        assert!(res.has_word_boundaries);
+        assert!(res.has_classes);
+        assert!(res.has_alternations);
+
+        let res = analyze_expr(r"{ 51 [-3] ( ?A ?? AF | FA ) }", false);
+        assert!(!res.has_start_or_end_line);
+        assert!(res.has_repetitions);
+        assert!(!res.has_greedy_repetitions);
+        assert!(!res.has_word_boundaries);
+        assert!(!res.has_classes);
+        assert!(res.has_alternations);
+
+        let res = analyze_expr(r"\Ba{1,3}?$", false);
+        assert!(res.has_start_or_end_line);
+        assert!(res.has_repetitions);
+        assert!(!res.has_greedy_repetitions);
+        assert!(res.has_word_boundaries);
+        assert!(!res.has_classes);
+        assert!(!res.has_alternations);
     }
 }
