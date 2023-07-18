@@ -443,7 +443,7 @@ rule a {
 }
 
 #[test]
-fn test_variable_string_modifiers() {
+fn test_variable_string_wide_ascii() {
     // \x76 is 'v'
     let checker = Checker::new(
         r#"
@@ -546,7 +546,10 @@ rule a {
     // For those, we need to know if the match is wide or ascii to do the proper fullword check.
     checker.check(b"am\0a\0l\0e\0n\0i\0a\0b", true);
     checker.check(b"a\0malenia<\0", true);
+}
 
+#[test]
+fn test_variable_string_xor() {
     let rule = r#"
 rule a {
     strings:
@@ -599,6 +602,85 @@ rule a {
     for x in 0..=255 {
         check_xor(radahn, x, true);
         check_xor(wide_radahn, x, true);
+    }
+}
+
+#[test]
+fn test_variable_string_xor_fullword() {
+    // Test fullword with xor
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = "rykard" xor fullword
+        $c = "radagon" wide xor(0-10) fullword
+        $d = "radahn" wide ascii xor fullword
+    condition:
+        any of them
+}"#,
+    );
+
+    let check_xor = |mem: &[u8], prefix: &[u8], suffix: &[u8], xor_byte: u8, expected_res: bool| {
+        let mut out = Vec::new();
+        out.extend(prefix);
+        out.extend(mem.iter().map(|c| c ^ xor_byte));
+        out.extend(suffix);
+        checker.check(&out, expected_res);
+    };
+
+    // ascii xor fullword
+    let mem = b"rykard";
+    for x in [0, 15, 100] {
+        check_xor(mem, b"", b"", x, true);
+        check_xor(mem, b"a", b"", x, false);
+        check_xor(mem, b"", b"a", x, false);
+        check_xor(mem, b"a", b"a", x, false);
+        check_xor(mem, b"<", b">", x, true);
+    }
+
+    // wide xor fullword
+    let mem = b"r\0a\0d\0a\0g\0o\0n\0";
+    for x in [0, 3, 8] {
+        check_xor(mem, b"", b"", x, true);
+        check_xor(mem, b"a", b"", x, true);
+        check_xor(mem, b"", b"a", x, true);
+        check_xor(mem, b"a", b"a", x, true);
+        check_xor(mem, b"<", b">", x, true);
+
+        check_xor(mem, b"<\0", b">\0", x, true);
+        check_xor(mem, b"<\0", b"b\0", x, false);
+        check_xor(mem, b"a\0", b">\0", x, false);
+        check_xor(mem, b"<\0a\0", b"b\0>\0", x, false);
+        check_xor(mem, b"a\0<\0", b">\0a\0", x, true);
+    }
+
+    // wide ascii xor fullword
+    let mem_ascii = b"radahn";
+    let mem_wide = b"r\0a\0d\0a\0h\0n\0";
+    for x in [0, 84, 123, 230] {
+        check_xor(mem_ascii, b"", b"", x, true);
+        check_xor(mem_ascii, b"a", b"", x, false);
+        check_xor(mem_ascii, b"", b"a", x, false);
+        check_xor(mem_ascii, b"a", b"a", x, false);
+        check_xor(mem_ascii, b"<", b">", x, true);
+
+        check_xor(mem_ascii, b"<\0", b">\0", x, true);
+        check_xor(mem_ascii, b"<\0", b"b\0", x, false);
+        check_xor(mem_ascii, b"a\0", b">\0", x, true);
+        check_xor(mem_ascii, b"<\0a\0", b"b\0>\0", x, false);
+        check_xor(mem_ascii, b"a\0<\0", b">\0a\0", x, true);
+
+        check_xor(mem_wide, b"", b"", x, true);
+        check_xor(mem_wide, b"a", b"", x, true);
+        check_xor(mem_wide, b"", b"a", x, true);
+        check_xor(mem_wide, b"a", b"a", x, true);
+        check_xor(mem_wide, b"<", b">", x, true);
+
+        check_xor(mem_wide, b"<\0", b">\0", x, true);
+        check_xor(mem_wide, b"<\0", b"b\0", x, false);
+        check_xor(mem_wide, b"a\0", b">\0", x, false);
+        check_xor(mem_wide, b"<\0a\0", b"b\0>\0", x, false);
+        check_xor(mem_wide, b"a\0<\0", b">\0a\0", x, true);
     }
 }
 
