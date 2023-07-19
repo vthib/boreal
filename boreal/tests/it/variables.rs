@@ -303,13 +303,62 @@ fn test_regex_wide_fullword(regex: &str, mem_ascii: &[u8]) {
 fn test_variable_regex_wide_fullword() {
     // Dot is here to avoid the literals extraction handling
     test_regex_wide_fullword("b.{1,5}?123", b"bb123");
+    test_regex_wide_fullword("b.{1,5}123", b"bb123");
 
     // Test the raw regex matcher, no literals of at least length 2 extracted.
     test_regex_wide_fullword(r"a.{5}1", b"abcdef1");
 
     // Same thing, but with a tricky regex: the literal looks "wide", but is considered ascii
-    // FIXME: the raw matcher version is buggy
     test_regex_wide_fullword(r"b\x00.{1,5}?i\x00j\x00k\x00", &to_wide(b"bbijk"));
+    test_regex_wide_fullword(r"b\x00.{1,5}i\x00j\x00k\x00", &to_wide(b"bbijk"));
+}
+
+#[test]
+fn test_variable_regex_wide_fullword_raw() {
+    // Test the wide fullword behavior with the "raw" matcher.
+    // To ensure we get the raw matcher, we use a anchor.
+    let checker = build_checker("^ab", "ascii wide fullword");
+    let mem_ascii = b"ab";
+    let mem_wide = b"a\0b\0";
+    checker.check(&join(mem_ascii, b"", b""), true);
+    checker.check(&join(mem_ascii, b"", b"a"), false);
+    checker.check(&join(mem_ascii, b"", b">"), true);
+    checker.check(&join(mem_ascii, b"", b">\0"), true);
+    checker.check(&join(mem_ascii, b"", b"a\0"), false);
+
+    checker.check(&join(mem_wide, b"", b""), true);
+    checker.check(&join(mem_wide, b"", b"a"), true);
+    checker.check(&join(mem_wide, b"", b">"), true);
+    checker.check(&join(mem_wide, b"", b">\0"), true);
+    checker.check(&join(mem_wide, b"", b"a\0"), false);
+
+    let checker = build_checker("ab$", "ascii wide fullword");
+    checker.check(&join(mem_ascii, b"", b""), true);
+    checker.check(&join(mem_ascii, b"a", b""), false);
+    checker.check(&join(mem_ascii, b"<", b""), true);
+    checker.check(&join(mem_ascii, b"<\0", b""), true);
+    checker.check(&join(mem_ascii, b"a\0", b""), true);
+
+    checker.check(&join(mem_wide, b"", b""), true);
+    checker.check(&join(mem_wide, b"a", b""), true);
+    checker.check(&join(mem_wide, b"<", b""), true);
+    checker.check(&join(mem_wide, b"<\0", b""), true);
+    checker.check(&join(mem_wide, b"a\0", b""), false);
+
+    let checker = build_checker(r"^a\x00b\x00", "ascii wide fullword");
+    let mem_ascii = b"a\0b\0";
+    let mem_wide = &to_wide(mem_ascii);
+    checker.check(&join(mem_ascii, b"", b""), true);
+    checker.check(&join(mem_ascii, b"", b"a"), false);
+    checker.check(&join(mem_ascii, b"", b">"), true);
+    checker.check(&join(mem_ascii, b"", b">\0"), true);
+    checker.check(&join(mem_ascii, b"", b"a\0"), false);
+
+    checker.check(&join(mem_wide, b"", b""), true);
+    checker.check(&join(mem_wide, b"", b"a"), true);
+    checker.check(&join(mem_wide, b"", b">"), true);
+    checker.check(&join(mem_ascii, b"", b">\0"), true);
+    checker.check(&join(mem_ascii, b"", b"a\0"), false);
 }
 
 // Test wide regex with word boundaries

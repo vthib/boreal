@@ -46,7 +46,16 @@ impl Regex {
         case_insensitive: bool,
         dot_all: bool,
     ) -> Result<Self, Error> {
-        let meta = meta::Builder::new()
+        let meta = Self::builder(case_insensitive, dot_all)
+            .build(&expr)
+            .map_err(Error::from)?;
+
+        Ok(Regex { meta, expr })
+    }
+
+    pub(crate) fn builder(case_insensitive: bool, dot_all: bool) -> meta::Builder {
+        let mut builder = meta::Builder::new();
+        let _b = builder
             .configure(meta::Config::new().utf8_empty(false))
             .syntax(
                 syntax::Config::new()
@@ -56,11 +65,9 @@ impl Regex {
                     .multi_line(false)
                     .case_insensitive(case_insensitive)
                     .dot_matches_new_line(dot_all),
-            )
-            .build(&expr)
-            .map_err(Error::from)?;
+            );
 
-        Ok(Regex { meta, expr })
+        builder
     }
 
     /// Find a match in the given haystack.

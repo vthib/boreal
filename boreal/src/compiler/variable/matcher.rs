@@ -4,6 +4,9 @@ use crate::regex::Regex;
 
 use super::AcMatchStatus;
 
+pub mod raw;
+mod widener;
+
 const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
 #[derive(Debug)]
@@ -54,7 +57,7 @@ pub enum MatcherKind {
     },
 
     /// The regex cannot confirm matches from AC literal matches.
-    Raw(Regex),
+    Raw(raw::RawMatcher),
 }
 
 /// Type of a match.
@@ -173,13 +176,8 @@ impl Matcher {
         };
 
         while offset < mem.len() {
-            let mat = regex.find_at(mem, offset)?;
+            let (mat, match_type) = regex.find_next_match_at(mem, offset, self.flags)?;
 
-            let match_type = if is_match_wide(&mat, mem) {
-                MatchType::Wide
-            } else {
-                MatchType::Ascii
-            };
             match self.validate_and_update_match(mem, mat.clone(), match_type) {
                 Some(m) => return Some(m),
                 None => {
@@ -289,21 +287,6 @@ fn unwide(mem: &[u8]) -> Vec<u8> {
     }
 
     res
-}
-
-// Is a match a wide string or an ascii one
-fn is_match_wide(mat: &Range<usize>, mem: &[u8]) -> bool {
-    if (mat.end - mat.start) % 2 != 0 {
-        return false;
-    }
-    if mat.is_empty() {
-        return true;
-    }
-
-    !mem[(mat.start + 1)..mat.end]
-        .iter()
-        .step_by(2)
-        .any(|c| *c != b'\0')
 }
 
 #[cfg(test)]
