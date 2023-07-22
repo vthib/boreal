@@ -5,7 +5,7 @@ use crate::regex::{regex_hir_to_string, Hir, Regex};
 use super::analysis::analyze_hir;
 use super::literals::LiteralsDetails;
 use super::matcher;
-use super::matcher::widener::widen_hir;
+use super::matcher::validator::Validator;
 use super::{only_literals, CompiledVariable, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -82,12 +82,15 @@ pub(super) fn compile_regex(
     }
 
     let matcher_kind = if use_ac {
-        let pre = pre_hir.map(|hir| convert_hir_to_string_with_flags(&hir, modifiers));
-        let post = post_hir.map(|hir| convert_hir_to_string_with_flags(&hir, modifiers));
-
         matcher::MatcherKind::Atomized {
-            left_validator: compile_validator(pre, modifiers.nocase, dot_all)?,
-            right_validator: compile_validator(post, modifiers.nocase, dot_all)?,
+            left_validator: match pre_hir {
+                Some(hir) => Some(validator(&hir, modifiers, dot_all)?),
+                None => None,
+            },
+            right_validator: match post_hir {
+                Some(hir) => Some(validator(&hir, modifiers, dot_all)?),
+                None => None,
+            },
         }
     } else {
         raw_matcher(hir, modifiers, dot_all)?
@@ -111,15 +114,12 @@ fn raw_matcher(
     ))
 }
 
-fn compile_validator(
-    expr: Option<String>,
-    case_insensitive: bool,
+fn validator(
+    hir: &Hir,
+    modifiers: &VariableModifiers,
     dot_all: bool,
-) -> Result<Option<Regex>, VariableCompilationError> {
-    match expr {
-        Some(expr) => Ok(Some(compile_regex_expr(expr, case_insensitive, dot_all)?)),
-        None => Ok(None),
-    }
+) -> Result<Validator, VariableCompilationError> {
+    Validator::new(hir, modifiers, dot_all).map_err(VariableCompilationError::Regex)
 }
 
 fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, modifiers: &VariableModifiers) {
@@ -144,25 +144,6 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
         new_lit.push(0);
     }
     new_lit
-}
-
-/// Convert the AST of a regex variable to a string, taking into account variable modifiers.
-fn convert_hir_to_string_with_flags(hir: &Hir, modifiers: &VariableModifiers) -> String {
-    if modifiers.wide {
-        let wide_hir = widen_hir(hir);
-
-        if modifiers.ascii {
-            format!(
-                "{}|{}",
-                regex_hir_to_string(hir),
-                regex_hir_to_string(&wide_hir),
-            )
-        } else {
-            regex_hir_to_string(&wide_hir)
-        }
-    } else {
-        regex_hir_to_string(hir)
-    }
 }
 
 fn compile_regex_expr(
