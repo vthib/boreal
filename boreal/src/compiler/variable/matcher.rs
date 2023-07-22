@@ -5,7 +5,7 @@ use crate::regex::Regex;
 use super::AcMatchStatus;
 
 pub mod raw;
-mod widener;
+pub mod widener;
 
 const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
