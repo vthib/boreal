@@ -1,49 +1,132 @@
-use std::ops::Range;
+use std::sync::Arc;
 
 use boreal_parser::VariableModifiers;
-use regex_automata::{meta, Anchored, Input};
+use regex_automata::hybrid::dfa::{Builder, Cache, DFA};
+use regex_automata::nfa::thompson;
+use regex_automata::util::pool::Pool;
+use regex_automata::util::syntax;
+use regex_automata::{Anchored, Input, MatchKind};
 
-use crate::regex::{regex_hir_to_string, Hir, Regex};
+use crate::regex::{regex_hir_to_string, Hir};
 
 use super::widener::widen_hir;
 
+type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync>;
+
 #[derive(Debug)]
-pub struct Validator {
-    regex: meta::Regex,
+pub struct ForwardValidator {
+    dfa: Arc<DFA>,
+    // TODO: Taking the cache out of the pool when starting scanning (and putting them in the scan
+    // data) would avoid the get/drop on every validation, and only do it once per scan.
+    // Not sure how much improvements this would be, to test.
+    pool: Pool<Cache, PoolCreateFn>,
 }
 
-impl Validator {
+impl ForwardValidator {
     pub fn new(
         hir: &Hir,
         modifiers: &VariableModifiers,
         dot_all: bool,
     ) -> Result<Self, crate::regex::Error> {
         let expr = convert_hir_to_string_with_flags(hir, modifiers);
-        let builder = Regex::builder(modifiers.nocase, dot_all);
 
-        Ok(Self {
-            regex: builder.build(&expr).map_err(crate::regex::Error::from)?,
-        })
+        let dfa = Arc::new(
+            build_dfa(&expr, modifiers.nocase, dot_all, false)
+                .map_err(crate::regex::Error::from)?,
+        );
+        let pool = {
+            let dfa = Arc::clone(&dfa);
+            let create: PoolCreateFn = Box::new(move || dfa.create_cache());
+            Pool::new(create)
+        };
+
+        Ok(Self { dfa, pool })
     }
 
-    pub fn find_anchored_fwd(
-        &self,
-        haystack: &[u8],
-        start: usize,
-        end: usize,
-    ) -> Option<Range<usize>> {
-        self.regex
-            .find(
-                Input::new(haystack)
+    pub fn find_anchored_fwd(&self, haystack: &[u8], start: usize, end: usize) -> Option<usize> {
+        let mut cache = self.pool.get();
+        self.dfa
+            .try_search_fwd(
+                &mut cache,
+                &Input::new(haystack)
                     .span(start..end)
                     .anchored(Anchored::Yes),
             )
-            .map(|m| m.range())
+            .ok()
+            .flatten()
+            .map(|m| m.offset())
+    }
+}
+
+#[derive(Debug)]
+pub struct ReverseValidator {
+    dfa: Arc<DFA>,
+    pool: Pool<Cache, PoolCreateFn>,
+}
+
+impl ReverseValidator {
+    pub fn new(
+        hir: &Hir,
+        modifiers: &VariableModifiers,
+        dot_all: bool,
+    ) -> Result<Self, crate::regex::Error> {
+        let expr = convert_hir_to_string_with_flags(hir, modifiers);
+
+        let dfa = Arc::new(
+            build_dfa(&expr, modifiers.nocase, dot_all, true).map_err(crate::regex::Error::from)?,
+        );
+        let pool = {
+            let dfa = Arc::clone(&dfa);
+            let create: PoolCreateFn = Box::new(move || dfa.create_cache());
+            Pool::new(create)
+        };
+
+        Ok(Self { dfa, pool })
     }
 
-    pub fn find(&self, mem: &[u8]) -> Option<Range<usize>> {
-        self.regex.find(mem).map(|m| m.range())
+    pub fn find_anchored_rev(&self, haystack: &[u8], start: usize, end: usize) -> Option<usize> {
+        let mut cache = self.pool.get();
+        self.dfa
+            .try_search_rev(
+                &mut cache,
+                &Input::new(haystack)
+                    .span(start..end)
+                    .anchored(Anchored::Yes),
+            )
+            .ok()
+            .flatten()
+            .map(|m| m.offset())
     }
+}
+
+fn build_dfa(
+    expr: &str,
+    case_insensitive: bool,
+    dot_all: bool,
+    reverse: bool,
+) -> Result<DFA, crate::regex::Error> {
+    Ok(Builder::new()
+        .configure(DFA::config().prefilter(None).match_kind(if reverse {
+            MatchKind::All
+        } else {
+            MatchKind::LeftmostFirst
+        }))
+        .thompson(
+            thompson::Config::new()
+                .utf8(false)
+                .reverse(reverse)
+                .nfa_size_limit(Some(10 * (1 << 20))),
+        )
+        .syntax(
+            syntax::Config::new()
+                .octal(false)
+                .unicode(false)
+                .utf8(false)
+                .multi_line(false)
+                .case_insensitive(case_insensitive)
+                .dot_matches_new_line(dot_all),
+        )
+        .build(expr)?)
 }
 
 /// Convert the AST of a regex variable to a string, taking into account variable modifiers.
@@ -72,8 +155,11 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(Validator {
-            regex: meta::Regex::new("a").unwrap(),
-        });
+        test_type_traits_non_clonable(
+            ForwardValidator::new(&Hir::Empty, &VariableModifiers::default(), true).unwrap(),
+        );
+        test_type_traits_non_clonable(
+            ReverseValidator::new(&Hir::Empty, &VariableModifiers::default(), true).unwrap(),
+        );
     }
 }

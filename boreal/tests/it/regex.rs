@@ -206,3 +206,25 @@ fn test_regex_at_most_repetitions() {
     checker.check(br"<{{>", true);
     checker.check(br"<{{{>", false);
 }
+
+// Check the regex size is checked regardless of the matcher picked.
+#[test]
+fn test_regex_size() {
+    let check =
+        |regex| {
+            check_err(&format!("rule test {{ strings: $a = {regex} condition: $a }}"),
+        "mem:1:22: error: variable $a cannot be compiled: Compiled regex exceeds size limit");
+        };
+
+    // Raw matcher
+    check("/^a{2977952116}/");
+
+    // Right validator
+    check("/abcd a{2977952116}/");
+
+    // Left validator
+    check("/a{2977952116} abcd/");
+
+    // Wide regex with boundaries
+    check(r"/a{2977952116}\B abcd/ wide");
+}
