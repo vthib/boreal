@@ -53,8 +53,8 @@ pub enum MatcherKind {
     Literals,
     /// The regex can confirm matches from AC literal matches.
     Atomized {
-        left_validator: Option<validator::Validator>,
-        right_validator: Option<validator::Validator>,
+        left_validator: Option<validator::ReverseValidator>,
+        right_validator: Option<validator::ForwardValidator>,
     },
 
     /// The regex cannot confirm matches from AC literal matches.
@@ -124,7 +124,7 @@ impl Matcher {
                             mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH),
                         );
                         match validator.find_anchored_fwd(mem, mat.start, end) {
-                            Some(m) => m.end,
+                            Some(end) => end,
                             None => return AcMatchStatus::None,
                         }
                     }
@@ -150,8 +150,8 @@ impl Matcher {
                             start_position,
                             mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
                         );
-                        while let Some(m) = validator.find(&mem[start..mat.end]) {
-                            let m = (m.start + start)..end;
+                        while let Some(s) = validator.find_anchored_rev(mem, start, mat.end) {
+                            let m = s..end;
                             start = m.start + 1;
                             if let Some(m) = self.validate_and_update_match(mem, m, match_type) {
                                 matches.push(m);

@@ -1,7 +1,9 @@
 //! YARA regex handling
 //!
 //! This module contains a set of types and helpers to handle the YARA regex syntax.
-use std::{fmt::Write, ops::Range};
+use std::error::Error as StdError;
+use std::fmt::Write;
+use std::ops::Range;
 
 use regex_automata::{meta, util::syntax, Input};
 
@@ -277,6 +279,25 @@ impl From<meta::BuildError> for Error {
         } else {
             Self(err.to_string())
         }
+    }
+}
+
+impl From<regex_automata::hybrid::BuildError> for Error {
+    fn from(err: regex_automata::hybrid::BuildError) -> Self {
+        // TODO: would be nice to have a simpler way of finding out this information
+        if let Some(source) = err.source() {
+            if let Some(nfa_err) =
+                source.downcast_ref::<regex_automata::nfa::thompson::BuildError>()
+            {
+                if let Some(size_limit) = nfa_err.size_limit() {
+                    return Self(format!(
+                        "Compiled regex exceeds size limit of {size_limit} bytes.",
+                    ));
+                }
+            }
+        }
+
+        Self(err.to_string())
     }
 }
 

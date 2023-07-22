@@ -1,6 +1,4 @@
 //! Literal extraction and computation from variable expressions.
-use boreal_parser::regex::AssertionKind;
-
 use crate::atoms::atoms_rank;
 use crate::regex::{visit, Hir, VisitAction, Visitor};
 
@@ -229,11 +227,7 @@ impl LiteralSet {
         }
 
         let visitor = PrePostExtractor::new(self.start_position, self.end_position, last_position);
-        let (pre, post) = visit(original_hir, visitor);
-        (
-            pre.map(|pre| Hir::Concat(vec![pre, Hir::Assertion(AssertionKind::EndLine)])),
-            post,
-        )
+        visit(original_hir, visitor)
     }
 }
 
@@ -433,7 +427,7 @@ mod tests {
             r"\xab[\x0d\x1d\x2d=M\x5dm\x7d\x8d\x9d\xad\xbd\xcd\xdd\xed\xfd]\x01",
         );
 
-        test("{ D? FE }", &[b"\xfe"], r"[\xd0-\xdf]\xfe$", "");
+        test("{ D? FE }", &[b"\xfe"], r"[\xd0-\xdf]\xfe", "");
 
         test(
             "{ ( AA | BB ) F? }",
@@ -476,12 +470,7 @@ mod tests {
             "",
             r"\xab(\x11.|\xff)\xcc",
         );
-        test(
-            "{ ( 11 ?? | FF ) CC }",
-            &[b"\xCC"],
-            r"(\x11.|\xff)\xcc$",
-            "",
-        );
+        test("{ ( 11 ?? | FF ) CC }", &[b"\xCC"], r"(\x11.|\xff)\xcc", "");
         test(
             "{ AB ( 11 | 12 ) 13 ( 1? | 14 ) }",
             &[b"\xAB\x11\x13", b"\xAB\x12\x13"],
@@ -565,7 +554,7 @@ mod tests {
         test(
             "{ 11 ?A 22 33 [1] 44 55 66 A? 77 88 }",
             &[b"\x44\x55\x66"],
-            r#"\x11[\x0a\x1a\x2a:JZjz\x8a\x9a\xaa\xba\xca\xda\xea\xfa]"3.DUf$"#,
+            r#"\x11[\x0a\x1a\x2a:JZjz\x8a\x9a\xaa\xba\xca\xda\xea\xfa]"3.DUf"#,
             r#"DUf[\xa0-\xaf]w\x88"#,
         );
 
@@ -574,20 +563,20 @@ mod tests {
             "{ 00 01 00 01 00 02 ?? ?? 00 02 00 01 00 02 ?? ?? 00 03 00 02 00 04 ?? ?? ?? ?? \
                00 04 00 02 00 04 ?? ?? }",
             &[b"\x00\x03\x00\x02\x00\x04"],
-            r"\x00\x01\x00\x01\x00\x02..\x00\x02\x00\x01\x00\x02..\x00\x03\x00\x02\x00\x04$",
+            r"\x00\x01\x00\x01\x00\x02..\x00\x02\x00\x01\x00\x02..\x00\x03\x00\x02\x00\x04",
             r"\x00\x03\x00\x02\x00\x04....\x00\x04\x00\x02\x00\x04..",
         );
 
         test(
             "{ c7 0? 00 00 01 00 [4-14] c7 0? 01 00 00 00 }",
             &[b"\x00\x00\x01\x00"],
-            r"\xc7[\x00-\x0f]\x00\x00\x01\x00$",
+            r"\xc7[\x00-\x0f]\x00\x00\x01\x00",
             r"\x00\x00\x01\x00.{4,14}?\xc7[\x00-\x0f]\x01\x00\x00\x00",
         );
         test(
             "{ 00 CC 00 ?? ?? ?? ?? ?? 00 64 65 66 61 75 6C 74 2E 70 72 6F 70 65 72 74 69 65 73 }",
             &[b"\x00\x64\x65\x66\x61\x75\x6C\x74\x2E\x70\x72\x6F\x70\x65\x72\x74\x69\x65\x73"],
-            r"\x00\xcc\x00.....\x00default\x2eproperties$",
+            r"\x00\xcc\x00.....\x00default\x2eproperties",
             "",
         );
         test(
@@ -595,7 +584,7 @@ mod tests {
               89??00 31?? 83C504 83??04 31?? 39?? 7402 EBE8 ?? FF?? E8D0FFFFFF }",
             &[b"\x83\xC5\x04\x55\x8B"],
             "\\xfc\\xe8.\\x00\\x00\\x00.{0,32}?\\xeb\\x2b.\\x8b.\\x00\\x83\\xc5\\x04\
-             \\x8b.\\x001.\\x83\\xc5\\x04U\\x8b$",
+             \\x8b.\\x001.\\x83\\xc5\\x04U\\x8b",
             "\\x83\\xc5\\x04U\\x8b.\\x001.\\x89.\\x001.\\x83\\xc5\\x04\\x83.\\x041.9.t\
              \\x02\\xeb\\xe8.\\xff.\\xe8\\xd0\\xff\\xff\\xff",
         );
@@ -607,7 +596,7 @@ mod tests {
             &[b"\x02\xAA\x02\xC1"],
             "(\\x0f\\x82..\\x00\\x00|r.)(\\x80|A\\x80)([p-\\x7f]|\\x7c\\x24)\\x04\\x02\
              (\\x0f\\x85..\\x00\\x00|u.)(\\x81|A\\x81)([0-\\x3f]|<\\x24|\\x7d\\x00)\
-             \\x02\\xaa\\x02\\xc1$",
+             \\x02\\xaa\\x02\\xc1",
             "\\x02\\xaa\\x02\\xc1(\\x0f\\x85..\\x00\\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)\
              ([@-O]|[P-_]|[`-o]|[p-\\x7f]|[\\x04\\x14\\x244DTdt\\x84\\x94\\xa4\\xb4\\xc4\\xd4\
              \\xe4\\xf4]\\x24|[\\x0c\\x1c,<L\\x5cl\\x7c\\x8c\\x9c\\xac\\xbc\\xcc\\xdc\\xec\\xfc]\
@@ -631,7 +620,7 @@ mod tests {
         test(
             "{ 61 ?? ( 62 63 | 64) 65 }",
             &[b"\x62\x63\x65", b"\x64\x65"],
-            r"a.(bc|d)e$",
+            r"a.(bc|d)e",
             "",
         );
     }
@@ -671,32 +660,32 @@ mod tests {
         test("a(b)ca+b", &[b"abc"], "", "a(b)ca+b");
 
         // Literal on the right side of a group
-        test("b(a+)abc", &[b"abc"], "b(a+)abc$", "");
+        test("b(a+)abc", &[b"abc"], "b(a+)abc", "");
         // Literal spanning inside a group
-        test("b(a+a)bc", &[b"abc"], "b(a+a)bc$", "");
+        test("b(a+a)bc", &[b"abc"], "b(a+a)bc", "");
         // Literal starting in a group
-        test("ba+(ab)c", &[b"abc"], "ba+(ab)c$", "");
+        test("ba+(ab)c", &[b"abc"], "ba+(ab)c", "");
         // Literal spanning in and out of a group
-        test("ba+a(bc)", &[b"abc"], "ba+a(bc)$", "");
+        test("ba+a(bc)", &[b"abc"], "ba+a(bc)", "");
 
         // A few tests on closing nodes
-        test("a.+bcd{2}e", &[b"bc"], "a.+bc$", "bcd{2}e");
-        test("a.+bc.e", &[b"bc"], "a.+bc$", "bc.e");
-        test("a.+bc\\B.e", &[b"bc"], "a.+bc$", "bc\\B.e");
-        test("a.+bc[aA]e", &[b"bc"], "a.+bc$", "bc[aA]e");
-        test("a.+bc()de", &[b"bcde"], "a.+bc()de$", "");
+        test("a.+bcd{2}e", &[b"bc"], "a.+bc", "bcd{2}e");
+        test("a.+bc.e", &[b"bc"], "a.+bc", "bc.e");
+        test("a.+bc\\B.e", &[b"bc"], "a.+bc", "bc\\B.e");
+        test("a.+bc[aA]e", &[b"bc"], "a.+bc", "bc[aA]e");
+        test("a.+bc()de", &[b"bcde"], "a.+bc()de", "");
 
         test(
             "a+(b.c)(d)(ef)g+",
             &[b"cdef"],
-            "a+(b.c)(d)(ef)$",
+            "a+(b.c)(d)(ef)",
             "(c)(d)(ef)g+",
         );
 
         test(
             "a((b(c)((d)()(e(g+h)ij)))kl)m",
             &[b"hijklm"],
-            "a((b(c)((d)()(e(g+h)ij)))kl)m$",
+            "a((b(c)((d)()(e(g+h)ij)))kl)m",
             "",
         );
 
