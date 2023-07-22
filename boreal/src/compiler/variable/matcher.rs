@@ -5,7 +5,8 @@ use crate::regex::Regex;
 use super::AcMatchStatus;
 
 pub mod raw;
-pub mod widener;
+pub mod validator;
+mod widener;
 
 const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
@@ -52,8 +53,8 @@ pub enum MatcherKind {
     Literals,
     /// The regex can confirm matches from AC literal matches.
     Atomized {
-        left_validator: Option<Regex>,
-        right_validator: Option<Regex>,
+        left_validator: Option<validator::Validator>,
+        right_validator: Option<validator::Validator>,
     },
 
     /// The regex cannot confirm matches from AC literal matches.
@@ -122,7 +123,7 @@ impl Matcher {
                             mem.len(),
                             mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH),
                         );
-                        match validator.find_anchored_at(&mem[0..end], mat.start) {
+                        match validator.find_anchored_fwd(mem, mat.start, end) {
                             Some(m) => m.end,
                             None => return AcMatchStatus::None,
                         }
