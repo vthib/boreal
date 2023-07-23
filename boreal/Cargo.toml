@@ -62,7 +62,7 @@ authenticode-parser = { version = "0.3", optional = true }
 [dev-dependencies]
 base64 = "0.21"
 glob = "0.3.1"
-tempfile = "3.6"
+tempfile = "3.7"
 yara = { version = "0.19", features = ["vendored"] }
 
 # Only needed in tests because Mutex::new is not const
