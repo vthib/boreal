@@ -64,34 +64,19 @@ pub(super) fn compile_regex(
     }
     apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
 
-    let mut use_ac = !literals.is_empty();
-
-    if let Some(pre) = &pre_hir {
-        let left_analysis = analyze_hir(pre, dot_all);
-        if left_analysis.has_greedy_repetitions {
-            // Greedy repetitions on the left side of the literals is not for the moment handled.
-            // This is because the repetition can "eat" the literals against which we matched,
-            // meaning that the pre/post split is not valid.
-            //
-            // For example, a regex that looks like: `a.+foo.+b` will extract the literal foo,
-            // but against the string `aafoobbaafoobb`, it will match on the entire string,
-            // while we will match against both "foo" occurrences.
-            use_ac = false;
-        }
-    }
-
-    let matcher_kind = if use_ac {
+    let matcher_kind = if literals.is_empty() {
+        raw_matcher(hir, modifiers, dot_all)?
+    } else {
         matcher::MatcherKind::Atomized {
             validator: matcher::validator::Validator::new(
                 pre_hir.as_ref(),
                 post_hir.as_ref(),
+                hir,
                 modifiers,
                 dot_all,
             )
             .map_err(VariableCompilationError::Regex)?,
         }
-    } else {
-        raw_matcher(hir, modifiers, dot_all)?
     };
 
     Ok(CompiledVariable {
