@@ -1,14 +1,11 @@
-use std::ops::Range;
-
 use crate::regex::Regex;
+use std::ops::Range;
 
 use super::AcMatchStatus;
 
 pub mod raw;
 pub mod validator;
 mod widener;
-
-const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
 #[derive(Debug)]
 pub struct Matcher {
@@ -52,10 +49,7 @@ pub enum MatcherKind {
     /// The literals cover entirely the variable.
     Literals,
     /// The regex can confirm matches from AC literal matches.
-    Atomized {
-        left_validator: Option<validator::ReverseValidator>,
-        right_validator: Option<validator::ForwardValidator>,
-    },
+    Atomized { validator: validator::Validator },
 
     /// The regex cannot confirm matches from AC literal matches.
     Raw(raw::RawMatcher),
@@ -72,6 +66,21 @@ pub enum MatchType {
 
     /// The match is on wide versions of the literals for an ascii and wide variable.
     WideAlternate,
+}
+
+#[derive(Debug)]
+pub enum Matches {
+    /// The literal yields multiple matches (can be empty).
+    Multiple(Vec<Range<usize>>),
+
+    /// The literal yields a single match (None if invalid).
+    ///
+    /// This is an optim to avoid allocating a Vec for the very common case of returning a
+    /// single match.
+    Single(Range<usize>),
+
+    /// The literal does not give any match.
+    None,
 }
 
 impl Matcher {
@@ -119,54 +128,20 @@ impl Matcher {
                 Some(m) => AcMatchStatus::Single(m),
                 None => AcMatchStatus::None,
             },
-            MatcherKind::Atomized {
-                left_validator,
-                right_validator,
-            } => {
-                let end = match right_validator {
-                    Some(validator) => {
-                        let end = std::cmp::min(
-                            mem.len(),
-                            mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH),
-                        );
-                        match validator.find_anchored_fwd(mem, mat.start, end, match_type) {
-                            Some(end) => end,
-                            None => return AcMatchStatus::None,
-                        }
-                    }
-                    None => mat.end,
-                };
-
-                match left_validator {
-                    None => {
-                        let mat = mat.start..end;
-                        match self.validate_and_update_match(mem, mat, match_type) {
+            MatcherKind::Atomized { validator } => {
+                match validator.validate_match(mem, mat, start_position, match_type) {
+                    Matches::None => AcMatchStatus::None,
+                    Matches::Single(m) => {
+                        match self.validate_and_update_match(mem, m, match_type) {
                             Some(m) => AcMatchStatus::Single(m),
                             None => AcMatchStatus::None,
                         }
                     }
-                    Some(validator) => {
-                        // The left validator can yield multiple matches.
-                        // For example, `a.?bb`, with the `bb` atom, can match as many times as there are
-                        // 'a' characters before the `bb` atom.
-                        //
-                        // XXX: This only works if the left validator does not contain any greedy repetitions!
-                        let mut matches = Vec::new();
-                        let mut start = std::cmp::max(
-                            start_position,
-                            mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
-                        );
-                        while let Some(s) =
-                            validator.find_anchored_rev(mem, start, mat.end, match_type)
-                        {
-                            let m = s..end;
-                            start = m.start + 1;
-                            if let Some(m) = self.validate_and_update_match(mem, m, match_type) {
-                                matches.push(m);
-                            }
-                        }
-                        AcMatchStatus::Multiple(matches)
-                    }
+                    Matches::Multiple(ms) => AcMatchStatus::Multiple(
+                        ms.into_iter()
+                            .filter_map(|m| self.validate_and_update_match(mem, m, match_type))
+                            .collect(),
+                    ),
                 }
             }
             MatcherKind::Raw(_) => AcMatchStatus::Unknown,
@@ -325,5 +300,6 @@ mod tests {
             nocase: false,
         });
         test_type_traits(MatchType::Ascii);
+        test_type_traits_non_clonable(Matches::None);
     }
 }

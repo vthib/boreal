@@ -5,7 +5,6 @@ use crate::regex::{regex_hir_to_string, Hir, Regex};
 use super::analysis::analyze_hir;
 use super::literals::LiteralsDetails;
 use super::matcher;
-use super::matcher::validator::{ForwardValidator, ReverseValidator};
 use super::{only_literals, CompiledVariable, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -83,20 +82,13 @@ pub(super) fn compile_regex(
 
     let matcher_kind = if use_ac {
         matcher::MatcherKind::Atomized {
-            left_validator: match pre_hir {
-                Some(hir) => Some(
-                    ReverseValidator::new(&hir, modifiers, dot_all)
-                        .map_err(VariableCompilationError::Regex)?,
-                ),
-                None => None,
-            },
-            right_validator: match post_hir {
-                Some(hir) => Some(
-                    ForwardValidator::new(&hir, modifiers, dot_all)
-                        .map_err(VariableCompilationError::Regex)?,
-                ),
-                None => None,
-            },
+            validator: matcher::validator::Validator::new(
+                pre_hir.as_ref(),
+                post_hir.as_ref(),
+                modifiers,
+                dot_all,
+            )
+            .map_err(VariableCompilationError::Regex)?,
         }
     } else {
         raw_matcher(hir, modifiers, dot_all)?

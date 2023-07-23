@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::sync::Arc;
 
 use boreal_parser::VariableModifiers;
@@ -10,12 +11,84 @@ use regex_automata::{Anchored, Input, MatchKind, PatternID};
 use crate::regex::{regex_hir_to_string, Hir};
 
 use super::widener::widen_hir;
-use super::MatchType;
+use super::{MatchType, Matches};
 
 type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync>;
 
+const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
+
 #[derive(Debug)]
-pub struct ForwardValidator {
+pub struct Validator {
+    forward: Option<ForwardValidator>,
+    reverse: Option<ReverseValidator>,
+}
+
+impl Validator {
+    pub fn new(
+        pre: Option<&Hir>,
+        post: Option<&Hir>,
+        modifiers: &VariableModifiers,
+        dot_all: bool,
+    ) -> Result<Self, crate::regex::Error> {
+        Ok(Self {
+            forward: match post {
+                Some(hir) => Some(ForwardValidator::new(hir, modifiers, dot_all)?),
+                None => None,
+            },
+            reverse: match pre {
+                Some(hir) => Some(ReverseValidator::new(hir, modifiers, dot_all)?),
+                None => None,
+            },
+        })
+    }
+
+    pub fn validate_match(
+        &self,
+        mem: &[u8],
+        mat: Range<usize>,
+        start_position: usize,
+        match_type: MatchType,
+    ) -> Matches {
+        let pattern_index = match_type_to_pattern_index(match_type);
+
+        let end = match &self.forward {
+            Some(validator) => {
+                let end =
+                    std::cmp::min(mem.len(), mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH));
+                match validator.find_anchored_fwd(mem, mat.start, end, pattern_index) {
+                    Some(end) => end,
+                    None => return Matches::None,
+                }
+            }
+            None => mat.end,
+        };
+
+        match &self.reverse {
+            None => Matches::Single(mat.start..end),
+            Some(validator) => {
+                // The left validator can yield multiple matches.
+                // For example, `a.?bb`, with the `bb` atom, can match as many times as there are
+                // 'a' characters before the `bb` atom.
+                //
+                // XXX: This only works if the left validator does not contain any greedy repetitions!
+                let mut matches = Vec::new();
+                let mut start = std::cmp::max(
+                    start_position,
+                    mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
+                );
+                while let Some(s) = validator.find_anchored_rev(mem, start, mat.end, pattern_index)
+                {
+                    matches.push(s..end);
+                    start = s + 1;
+                }
+                Matches::Multiple(matches)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ForwardValidator {
     dfa: Arc<DFA>,
     // TODO: Taking the cache out of the pool when starting scanning (and putting them in the scan
     // data) would avoid the get/drop on every validation, and only do it once per scan.
@@ -45,10 +118,8 @@ impl ForwardValidator {
         haystack: &[u8],
         start: usize,
         end: usize,
-        match_type: MatchType,
+        pattern_index: PatternID,
     ) -> Option<usize> {
-        let pattern_index = match_type_to_pattern_index(match_type);
-
         let mut cache = self.pool.get();
         self.dfa
             .try_search_fwd(
@@ -71,7 +142,7 @@ fn match_type_to_pattern_index(match_type: MatchType) -> PatternID {
 }
 
 #[derive(Debug)]
-pub struct ReverseValidator {
+struct ReverseValidator {
     dfa: Arc<DFA>,
     pool: Pool<Cache, PoolCreateFn>,
 }
@@ -98,10 +169,8 @@ impl ReverseValidator {
         haystack: &[u8],
         start: usize,
         end: usize,
-        match_type: MatchType,
+        pattern_index: PatternID,
     ) -> Option<usize> {
-        let pattern_index = match_type_to_pattern_index(match_type);
-
         let mut cache = self.pool.get();
         self.dfa
             .try_search_rev(
