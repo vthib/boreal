@@ -62,3 +62,16 @@ impl RawMatcher {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::test_type_traits_non_clonable;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(
+            RawMatcher::new(&Hir::Empty, &VariableModifiers::default(), true).unwrap(),
+        );
+    }
+}
