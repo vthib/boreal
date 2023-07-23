@@ -1,4 +1,3 @@
-use crate::regex::Regex;
 use std::ops::Range;
 
 use super::AcMatchStatus;
@@ -26,14 +25,6 @@ pub(crate) struct Matcher {
     pub flags: Flags,
 
     pub kind: MatcherKind,
-
-    /// Regex of the non wide version of the regex.
-    ///
-    /// This is only set for the specific case of a regex variable, with a wide modifier, that
-    /// contains word boundaries.
-    /// In this case, the regex expression cannot be "widened", and this regex is used to post
-    /// check matches.
-    pub non_wide_regex: Option<Regex>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -133,22 +124,26 @@ impl Matcher {
         match_type: MatchType,
     ) -> AcMatchStatus {
         match &self.kind {
-            MatcherKind::Literals => match self.validate_and_update_match(mem, mat, match_type) {
-                Some(m) => AcMatchStatus::Single(m),
-                None => AcMatchStatus::None,
-            },
+            MatcherKind::Literals => {
+                if self.validate_fullword(mem, &mat, match_type) {
+                    AcMatchStatus::Single(mat)
+                } else {
+                    AcMatchStatus::None
+                }
+            }
             MatcherKind::Atomized { validator } => {
                 match validator.validate_match(mem, mat, start_position, match_type) {
                     Matches::None => AcMatchStatus::None,
                     Matches::Single(m) => {
-                        match self.validate_and_update_match(mem, m, match_type) {
-                            Some(m) => AcMatchStatus::Single(m),
-                            None => AcMatchStatus::None,
+                        if self.validate_fullword(mem, &m, match_type) {
+                            AcMatchStatus::Single(m)
+                        } else {
+                            AcMatchStatus::None
                         }
                     }
                     Matches::Multiple(ms) => AcMatchStatus::Multiple(
                         ms.into_iter()
-                            .filter_map(|m| self.validate_and_update_match(mem, m, match_type))
+                            .filter(|m| self.validate_fullword(mem, m, match_type))
                             .collect(),
                     ),
                 }
@@ -171,30 +166,17 @@ impl Matcher {
         while offset < mem.len() {
             let (mat, match_type) = regex.find_next_match_at(mem, offset, self.flags)?;
 
-            match self.validate_and_update_match(mem, mat.clone(), match_type) {
-                Some(m) => return Some(m),
-                None => {
-                    offset = mat.start + 1;
-                }
+            if self.validate_fullword(mem, &mat, match_type) {
+                return Some(mat);
             }
+
+            offset = mat.start + 1;
         }
         None
     }
 
-    fn validate_and_update_match(
-        &self,
-        mem: &[u8],
-        mat: Range<usize>,
-        match_type: MatchType,
-    ) -> Option<Range<usize>> {
-        if self.flags.fullword && !check_fullword(mem, &mat, match_type) {
-            return None;
-        }
-
-        match self.non_wide_regex.as_ref() {
-            Some(regex) => apply_wide_word_boundaries(mat, mem, regex, match_type),
-            None => Some(mat),
-        }
+    fn validate_fullword(&self, mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
+        !self.flags.fullword || check_fullword(mem, mat, match_type)
     }
 }
 
@@ -225,61 +207,6 @@ fn check_fullword(mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool
     true
 }
 
-/// Check the match respects the word boundaries inside the variable.
-fn apply_wide_word_boundaries(
-    mut mat: Range<usize>,
-    mem: &[u8],
-    regex: &Regex,
-    match_type: MatchType,
-) -> Option<Range<usize>> {
-    match match_type {
-        MatchType::WideStandard | MatchType::WideAlternate => (),
-        MatchType::Ascii => return Some(mat),
-    }
-
-    // Take the previous and next byte, so that word boundaries placed at the beginning or end of
-    // the regex can be checked.
-    // Note that we must check that the previous/next byte is "wide" as well, otherwise it is not
-    // valid.
-    let start = if mat.start >= 2 && mem[mat.start - 1] == b'\0' {
-        mat.start - 2
-    } else {
-        mat.start
-    };
-
-    // Remove the wide bytes, and then use the non wide regex to check for word boundaries.
-    // Since when checking word boundaries, we might match more than the initial match (because of
-    // non greedy repetitions bounded by word boundaries), we need to add more data at the end.
-    // How much? We cannot know, but including too much would be too much of a performance tank.
-    // This is arbitrarily capped at 500 for the moment (or until the string is no longer wide)...
-    let unwiden_mem = unwide(&mem[start..std::cmp::min(mem.len(), mat.end + 500)]);
-
-    #[allow(clippy::bool_to_int_with_if)]
-    let expected_start = if start < mat.start { 1 } else { 0 };
-    match regex.find(&unwiden_mem) {
-        Some(m) if m.start == expected_start => {
-            // Modify the match end. This is needed because the application of word boundary
-            // may modify the match. Since we matched on non wide mem though, double the size.
-            mat.end = mat.start + 2 * (m.end - m.start);
-            Some(mat)
-        }
-        _ => None,
-    }
-}
-
-fn unwide(mem: &[u8]) -> Vec<u8> {
-    let mut res = Vec::new();
-
-    for b in mem.chunks_exact(2) {
-        if b[1] != b'\0' {
-            break;
-        }
-        res.push(b[0]);
-    }
-
-    res
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,7 +223,6 @@ mod tests {
                 nocase: false,
             },
             kind: MatcherKind::Literals,
-            non_wide_regex: None,
         });
         test_type_traits_non_clonable(MatcherKind::Literals);
         test_type_traits(Flags {
