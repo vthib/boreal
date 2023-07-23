@@ -68,6 +68,15 @@ pub enum MatchType {
     WideAlternate,
 }
 
+impl MatchType {
+    pub fn is_wide(self) -> bool {
+        match self {
+            MatchType::Ascii => false,
+            MatchType::WideStandard | MatchType::WideAlternate => true,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Matches {
     /// The literal yields multiple matches (can be empty).
@@ -191,28 +200,25 @@ impl Matcher {
 
 /// Check the match respects a possible fullword modifier for the variable.
 fn check_fullword(mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
-    match match_type {
-        MatchType::WideStandard | MatchType::WideAlternate => {
-            if mat.start > 1
-                && mem[mat.start - 1] == b'\0'
-                && mem[mat.start - 2].is_ascii_alphanumeric()
-            {
-                return false;
-            }
-            if mat.end + 1 < mem.len()
-                && mem[mat.end].is_ascii_alphanumeric()
-                && mem[mat.end + 1] == b'\0'
-            {
-                return false;
-            }
+    if match_type.is_wide() {
+        if mat.start > 1
+            && mem[mat.start - 1] == b'\0'
+            && mem[mat.start - 2].is_ascii_alphanumeric()
+        {
+            return false;
         }
-        MatchType::Ascii => {
-            if mat.start > 0 && mem[mat.start - 1].is_ascii_alphanumeric() {
-                return false;
-            }
-            if mat.end < mem.len() && mem[mat.end].is_ascii_alphanumeric() {
-                return false;
-            }
+        if mat.end + 1 < mem.len()
+            && mem[mat.end].is_ascii_alphanumeric()
+            && mem[mat.end + 1] == b'\0'
+        {
+            return false;
+        }
+    } else {
+        if mat.start > 0 && mem[mat.start - 1].is_ascii_alphanumeric() {
+            return false;
+        }
+        if mat.end < mem.len() && mem[mat.end].is_ascii_alphanumeric() {
+            return false;
         }
     }
 
