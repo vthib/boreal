@@ -38,7 +38,7 @@ pub struct Variable {
     pub is_private: bool,
 
     /// Matcher for the variable.
-    pub matcher: matcher::Matcher,
+    pub(crate) matcher: matcher::Matcher,
 }
 
 /// State of an aho-corasick match on a [`Matcher`] literals.
@@ -58,6 +58,14 @@ pub enum AcMatchStatus {
 
     /// Unknown status for the match, will need to be confirmed on its own.
     Unknown,
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub(crate) struct RegexModifiers {
+    pub wide: bool,
+    pub ascii: bool,
+    pub nocase: bool,
+    pub dot_all: bool,
 }
 
 pub(crate) fn compile_variable(
@@ -87,11 +95,25 @@ pub(crate) fn compile_variable(
             if case_insensitive {
                 modifiers.nocase = true;
             }
-            regex::compile_regex(&ast.into(), dot_all, &modifiers)
+            regex::compile_regex(
+                &ast.into(),
+                RegexModifiers {
+                    wide: modifiers.wide,
+                    ascii: modifiers.ascii,
+                    nocase: modifiers.nocase,
+                    dot_all,
+                },
+            )
         }
-        VariableDeclarationValue::HexString(hex_string) => {
-            regex::compile_regex(&hex_string.into(), true, &modifiers)
-        }
+        VariableDeclarationValue::HexString(hex_string) => regex::compile_regex(
+            &hex_string.into(),
+            RegexModifiers {
+                wide: modifiers.wide,
+                ascii: modifiers.ascii,
+                nocase: modifiers.nocase,
+                dot_all: true,
+            },
+        ),
     };
 
     let res = match res {
@@ -288,6 +310,7 @@ mod tests {
             .0,
         );
         test_type_traits(AcMatchStatus::Unknown);
+        test_type_traits(RegexModifiers::default());
 
         test_type_traits_non_clonable(VariableCompilationError::Regex(
             Regex::from_string("{".to_owned(), true, true).unwrap_err(),

@@ -1,7 +1,6 @@
 use std::ops::Range;
 use std::sync::Arc;
 
-use boreal_parser::VariableModifiers;
 use regex_automata::hybrid::dfa::{Builder, Cache, DFA};
 use regex_automata::nfa::thompson;
 use regex_automata::util::pool::Pool;
@@ -9,6 +8,7 @@ use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input, MatchKind, PatternID};
 
 use crate::compiler::variable::analysis::analyze_hir;
+use crate::compiler::variable::RegexModifiers;
 use crate::regex::{regex_hir_to_string, Hir};
 
 use super::widener::widen_hir;
@@ -19,7 +19,7 @@ type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync>;
 const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
 #[derive(Debug)]
-pub enum Validator {
+pub(crate) enum Validator {
     NonGreedy {
         forward: Option<ForwardValidator>,
         reverse: Option<ReverseValidator>,
@@ -31,15 +31,14 @@ pub enum Validator {
 }
 
 impl Validator {
-    pub fn new(
+    pub(crate) fn new(
         pre: Option<&Hir>,
         post: Option<&Hir>,
         full: &Hir,
-        modifiers: &VariableModifiers,
-        dot_all: bool,
+        modifiers: RegexModifiers,
     ) -> Result<Self, crate::regex::Error> {
         if let Some(pre) = pre {
-            let left_analysis = analyze_hir(pre, dot_all);
+            let left_analysis = analyze_hir(pre, modifiers.dot_all);
 
             // XXX: If the left HIR has greedy repetitions, then the HIR cannot be split into a
             // (left, literals, right) triplet. This is because the greedy repetitions can
@@ -49,27 +48,27 @@ impl Validator {
             // but against the string `aafoobbaafoobb`, it will match on the entire string,
             // while a (pre, post) matching would match twice.
             if left_analysis.has_greedy_repetitions {
-                let reverse = ReverseValidator::new(pre, modifiers, dot_all)?;
-                let full = ForwardValidator::new(full, modifiers, dot_all)?;
+                let reverse = ReverseValidator::new(pre, modifiers)?;
+                let full = ForwardValidator::new(full, modifiers)?;
 
                 return Ok(Self::Greedy { reverse, full });
             }
         }
 
         let reverse = match pre {
-            Some(hir) => Some(ReverseValidator::new(hir, modifiers, dot_all)?),
+            Some(hir) => Some(ReverseValidator::new(hir, modifiers)?),
             None => None,
         };
 
         let forward = match post {
-            Some(hir) => Some(ForwardValidator::new(hir, modifiers, dot_all)?),
+            Some(hir) => Some(ForwardValidator::new(hir, modifiers)?),
             None => None,
         };
 
         Ok(Self::NonGreedy { forward, reverse })
     }
 
-    pub fn validate_match(
+    pub(crate) fn validate_match(
         &self,
         mem: &[u8],
         mat: Range<usize>,
@@ -139,7 +138,7 @@ impl Validator {
 }
 
 #[derive(Debug)]
-pub struct ForwardValidator {
+pub(crate) struct ForwardValidator {
     dfa: Arc<DFA>,
     // TODO: Taking the cache out of the pool when starting scanning (and putting them in the scan
     // data) would avoid the get/drop on every validation, and only do it once per scan.
@@ -148,13 +147,8 @@ pub struct ForwardValidator {
 }
 
 impl ForwardValidator {
-    pub fn new(
-        hir: &Hir,
-        modifiers: &VariableModifiers,
-        dot_all: bool,
-    ) -> Result<Self, crate::regex::Error> {
-        let dfa =
-            Arc::new(build_dfa(hir, modifiers, dot_all, false).map_err(crate::regex::Error::from)?);
+    pub(crate) fn new(hir: &Hir, modifiers: RegexModifiers) -> Result<Self, crate::regex::Error> {
+        let dfa = Arc::new(build_dfa(hir, modifiers, false).map_err(crate::regex::Error::from)?);
         let pool = {
             let dfa = Arc::clone(&dfa);
             let create: PoolCreateFn = Box::new(move || dfa.create_cache());
@@ -164,7 +158,7 @@ impl ForwardValidator {
         Ok(Self { dfa, pool })
     }
 
-    pub fn find_anchored_fwd(
+    pub(crate) fn find_anchored_fwd(
         &self,
         haystack: &[u8],
         start: usize,
@@ -193,19 +187,14 @@ fn match_type_to_pattern_index(match_type: MatchType) -> PatternID {
 }
 
 #[derive(Debug)]
-pub struct ReverseValidator {
+pub(crate) struct ReverseValidator {
     dfa: Arc<DFA>,
     pool: Pool<Cache, PoolCreateFn>,
 }
 
 impl ReverseValidator {
-    pub fn new(
-        hir: &Hir,
-        modifiers: &VariableModifiers,
-        dot_all: bool,
-    ) -> Result<Self, crate::regex::Error> {
-        let dfa =
-            Arc::new(build_dfa(hir, modifiers, dot_all, true).map_err(crate::regex::Error::from)?);
+    pub(crate) fn new(hir: &Hir, modifiers: RegexModifiers) -> Result<Self, crate::regex::Error> {
+        let dfa = Arc::new(build_dfa(hir, modifiers, true).map_err(crate::regex::Error::from)?);
         let pool = {
             let dfa = Arc::clone(&dfa);
             let create: PoolCreateFn = Box::new(move || dfa.create_cache());
@@ -215,7 +204,7 @@ impl ReverseValidator {
         Ok(Self { dfa, pool })
     }
 
-    pub fn find_anchored_rev(
+    pub(crate) fn find_anchored_rev(
         &self,
         haystack: &[u8],
         start: usize,
@@ -238,8 +227,7 @@ impl ReverseValidator {
 
 fn build_dfa(
     hir: &Hir,
-    modifiers: &VariableModifiers,
-    dot_all: bool,
+    modifiers: RegexModifiers,
     reverse: bool,
 ) -> Result<DFA, crate::regex::Error> {
     let mut builder = Builder::new();
@@ -267,7 +255,7 @@ fn build_dfa(
                 .utf8(false)
                 .multi_line(false)
                 .case_insensitive(modifiers.nocase)
-                .dot_matches_new_line(dot_all),
+                .dot_matches_new_line(modifiers.dot_all),
         );
 
     if modifiers.wide {
@@ -292,13 +280,13 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(
-            ForwardValidator::new(&Hir::Empty, &VariableModifiers::default(), true).unwrap(),
+            ForwardValidator::new(&Hir::Empty, RegexModifiers::default()).unwrap(),
         );
         test_type_traits_non_clonable(
-            ReverseValidator::new(&Hir::Empty, &VariableModifiers::default(), true).unwrap(),
+            ReverseValidator::new(&Hir::Empty, RegexModifiers::default()).unwrap(),
         );
         test_type_traits_non_clonable(
-            Validator::new(None, None, &Hir::Empty, &VariableModifiers::default(), true).unwrap(),
+            Validator::new(None, None, &Hir::Empty, RegexModifiers::default()).unwrap(),
         );
     }
 }

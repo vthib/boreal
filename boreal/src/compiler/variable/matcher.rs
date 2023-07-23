@@ -8,7 +8,7 @@ pub mod validator;
 mod widener;
 
 #[derive(Debug)]
-pub struct Matcher {
+pub(crate) struct Matcher {
     /// Set of literals extracted from the variable.
     ///
     /// Will be used by the AC pass to scan for the variable.
@@ -45,7 +45,7 @@ pub struct Flags {
 }
 
 #[derive(Debug)]
-pub enum MatcherKind {
+pub(crate) enum MatcherKind {
     /// The literals cover entirely the variable.
     Literals,
     /// The regex can confirm matches from AC literal matches.

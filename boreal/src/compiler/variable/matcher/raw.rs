@@ -1,24 +1,22 @@
 use std::ops::Range;
 
-use boreal_parser::VariableModifiers;
 use regex_automata::Input;
 
-use crate::regex::{regex_hir_to_string, Hir, Regex};
+use crate::{
+    compiler::variable::RegexModifiers,
+    regex::{regex_hir_to_string, Hir, Regex},
+};
 
 use super::{widener::widen_hir, Flags, MatchType};
 
 #[derive(Debug)]
-pub struct RawMatcher {
+pub(crate) struct RawMatcher {
     regex: regex_automata::meta::Regex,
 }
 
 impl RawMatcher {
-    pub fn new(
-        hir: &Hir,
-        modifiers: &VariableModifiers,
-        dot_all: bool,
-    ) -> Result<Self, crate::regex::Error> {
-        let builder = Regex::builder(modifiers.nocase, dot_all);
+    pub(crate) fn new(hir: &Hir, modifiers: RegexModifiers) -> Result<Self, crate::regex::Error> {
+        let builder = Regex::builder(modifiers.nocase, modifiers.dot_all);
 
         let res = match (modifiers.ascii, modifiers.wide) {
             (true, true) => {
@@ -41,7 +39,7 @@ impl RawMatcher {
         })
     }
 
-    pub(super) fn find_next_match_at(
+    pub(crate) fn find_next_match_at(
         &self,
         mem: &[u8],
         offset: usize,
@@ -71,7 +69,7 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(
-            RawMatcher::new(&Hir::Empty, &VariableModifiers::default(), true).unwrap(),
+            RawMatcher::new(&Hir::Empty, RegexModifiers::default()).unwrap(),
         );
     }
 }

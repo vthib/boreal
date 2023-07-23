@@ -1,10 +1,8 @@
-use boreal_parser::VariableModifiers;
-
 use crate::regex::{regex_hir_to_string, Hir, Regex};
 
 use super::analysis::analyze_hir;
 use super::literals::LiteralsDetails;
-use super::matcher;
+use super::{matcher, RegexModifiers};
 use super::{only_literals, CompiledVariable, VariableCompilationError};
 
 /// Build a matcher for the given regex and string modifiers.
@@ -15,14 +13,13 @@ use super::{only_literals, CompiledVariable, VariableCompilationError};
 ///   containing word boundaries.
 pub(super) fn compile_regex(
     hir: &Hir,
-    dot_all: bool,
-    modifiers: &VariableModifiers,
+    modifiers: RegexModifiers,
 ) -> Result<CompiledVariable, VariableCompilationError> {
-    let analysis = analyze_hir(hir, dot_all);
+    let analysis = analyze_hir(hir, modifiers.dot_all);
 
     let non_wide_regex = if analysis.has_word_boundaries && modifiers.wide {
         let expr = regex_hir_to_string(hir);
-        Some(compile_regex_expr(expr, modifiers.nocase, dot_all)?)
+        Some(compile_regex_expr(expr, modifiers)?)
     } else {
         None
     };
@@ -32,7 +29,7 @@ pub(super) fn compile_regex(
     if analysis.has_start_or_end_line {
         return Ok(CompiledVariable {
             literals: Vec::new(),
-            matcher_kind: raw_matcher(hir, modifiers, dot_all)?,
+            matcher_kind: raw_matcher(hir, modifiers)?,
             non_wide_regex,
         });
     }
@@ -65,7 +62,7 @@ pub(super) fn compile_regex(
     apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
 
     let matcher_kind = if literals.is_empty() {
-        raw_matcher(hir, modifiers, dot_all)?
+        raw_matcher(hir, modifiers)?
     } else {
         matcher::MatcherKind::Atomized {
             validator: matcher::validator::Validator::new(
@@ -73,7 +70,6 @@ pub(super) fn compile_regex(
                 post_hir.as_ref(),
                 hir,
                 modifiers,
-                dot_all,
             )
             .map_err(VariableCompilationError::Regex)?,
         }
@@ -88,16 +84,14 @@ pub(super) fn compile_regex(
 
 fn raw_matcher(
     hir: &Hir,
-    modifiers: &VariableModifiers,
-    dot_all: bool,
+    modifiers: RegexModifiers,
 ) -> Result<matcher::MatcherKind, VariableCompilationError> {
     Ok(matcher::MatcherKind::Raw(
-        matcher::raw::RawMatcher::new(hir, modifiers, dot_all)
-            .map_err(VariableCompilationError::Regex)?,
+        matcher::raw::RawMatcher::new(hir, modifiers).map_err(VariableCompilationError::Regex)?,
     ))
 }
 
-fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, modifiers: &VariableModifiers) {
+fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, modifiers: RegexModifiers) {
     if !modifiers.wide {
         return;
     }
@@ -123,8 +117,8 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 
 fn compile_regex_expr(
     expr: String,
-    case_insensitive: bool,
-    dot_all: bool,
+    modifiers: RegexModifiers,
 ) -> Result<Regex, VariableCompilationError> {
-    Regex::from_string(expr, case_insensitive, dot_all).map_err(VariableCompilationError::Regex)
+    Regex::from_string(expr, modifiers.nocase, modifiers.dot_all)
+        .map_err(VariableCompilationError::Regex)
 }
