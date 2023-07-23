@@ -64,10 +64,14 @@ pub enum MatcherKind {
 /// Type of a match.
 #[derive(Copy, Clone, Debug)]
 pub enum MatchType {
-    /// The match is on ascii versions of the literals
+    /// The match is on ascii literals.
     Ascii,
-    /// The match is on wide versions of the literals
-    Wide,
+
+    /// The match is on the wide literals for an wide only variable.
+    WideStandard,
+
+    /// The match is on wide versions of the literals for an ascii and wide variable.
+    WideAlternate,
 }
 
 impl Matcher {
@@ -93,10 +97,12 @@ impl Matcher {
         }
 
         match (self.flags.ascii, self.flags.wide) {
-            (false, true) => Some(MatchType::Wide),
+            (false, true) => Some(MatchType::WideStandard),
             // If the variable has both ascii and wide, then the ascii literals are in the first
             // half, and the wide ones in the second half.
-            (true, true) if literal_index >= self.literals.len() / 2 => Some(MatchType::Wide),
+            (true, true) if literal_index >= self.literals.len() / 2 => {
+                Some(MatchType::WideAlternate)
+            }
             _ => Some(MatchType::Ascii),
         }
     }
@@ -123,7 +129,7 @@ impl Matcher {
                             mem.len(),
                             mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH),
                         );
-                        match validator.find_anchored_fwd(mem, mat.start, end) {
+                        match validator.find_anchored_fwd(mem, mat.start, end, match_type) {
                             Some(end) => end,
                             None => return AcMatchStatus::None,
                         }
@@ -150,7 +156,9 @@ impl Matcher {
                             start_position,
                             mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
                         );
-                        while let Some(s) = validator.find_anchored_rev(mem, start, mat.end) {
+                        while let Some(s) =
+                            validator.find_anchored_rev(mem, start, mat.end, match_type)
+                        {
                             let m = s..end;
                             start = m.start + 1;
                             if let Some(m) = self.validate_and_update_match(mem, m, match_type) {
@@ -209,7 +217,7 @@ impl Matcher {
 /// Check the match respects a possible fullword modifier for the variable.
 fn check_fullword(mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
     match match_type {
-        MatchType::Wide => {
+        MatchType::WideStandard | MatchType::WideAlternate => {
             if mat.start > 1
                 && mem[mat.start - 1] == b'\0'
                 && mem[mat.start - 2].is_ascii_alphanumeric()
@@ -243,8 +251,9 @@ fn apply_wide_word_boundaries(
     regex: &Regex,
     match_type: MatchType,
 ) -> Option<Range<usize>> {
-    if !matches!(match_type, MatchType::Wide) {
-        return Some(mat);
+    match match_type {
+        MatchType::WideStandard | MatchType::WideAlternate => (),
+        MatchType::Ascii => return Some(mat),
     }
 
     // Take the previous and next byte, so that word boundaries placed at the beginning or end of

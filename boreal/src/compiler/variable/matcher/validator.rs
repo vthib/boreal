@@ -5,11 +5,12 @@ use regex_automata::hybrid::dfa::{Builder, Cache, DFA};
 use regex_automata::nfa::thompson;
 use regex_automata::util::pool::Pool;
 use regex_automata::util::syntax;
-use regex_automata::{Anchored, Input, MatchKind};
+use regex_automata::{Anchored, Input, MatchKind, PatternID};
 
 use crate::regex::{regex_hir_to_string, Hir};
 
 use super::widener::widen_hir;
+use super::MatchType;
 
 type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync>;
 
@@ -28,12 +29,8 @@ impl ForwardValidator {
         modifiers: &VariableModifiers,
         dot_all: bool,
     ) -> Result<Self, crate::regex::Error> {
-        let expr = convert_hir_to_string_with_flags(hir, modifiers);
-
-        let dfa = Arc::new(
-            build_dfa(&expr, modifiers.nocase, dot_all, false)
-                .map_err(crate::regex::Error::from)?,
-        );
+        let dfa =
+            Arc::new(build_dfa(hir, modifiers, dot_all, false).map_err(crate::regex::Error::from)?);
         let pool = {
             let dfa = Arc::clone(&dfa);
             let create: PoolCreateFn = Box::new(move || dfa.create_cache());
@@ -43,19 +40,34 @@ impl ForwardValidator {
         Ok(Self { dfa, pool })
     }
 
-    pub fn find_anchored_fwd(&self, haystack: &[u8], start: usize, end: usize) -> Option<usize> {
+    pub fn find_anchored_fwd(
+        &self,
+        haystack: &[u8],
+        start: usize,
+        end: usize,
+        match_type: MatchType,
+    ) -> Option<usize> {
+        let pattern_index = match_type_to_pattern_index(match_type);
+
         let mut cache = self.pool.get();
         self.dfa
             .try_search_fwd(
                 &mut cache,
                 &Input::new(haystack)
                     .span(start..end)
-                    .anchored(Anchored::Yes),
+                    .anchored(Anchored::Pattern(pattern_index)),
             )
             .ok()
             .flatten()
             .map(|m| m.offset())
     }
+}
+
+fn match_type_to_pattern_index(match_type: MatchType) -> PatternID {
+    PatternID::new_unchecked(match match_type {
+        MatchType::Ascii | MatchType::WideStandard => 0,
+        MatchType::WideAlternate => 1,
+    })
 }
 
 #[derive(Debug)]
@@ -70,11 +82,8 @@ impl ReverseValidator {
         modifiers: &VariableModifiers,
         dot_all: bool,
     ) -> Result<Self, crate::regex::Error> {
-        let expr = convert_hir_to_string_with_flags(hir, modifiers);
-
-        let dfa = Arc::new(
-            build_dfa(&expr, modifiers.nocase, dot_all, true).map_err(crate::regex::Error::from)?,
-        );
+        let dfa =
+            Arc::new(build_dfa(hir, modifiers, dot_all, true).map_err(crate::regex::Error::from)?);
         let pool = {
             let dfa = Arc::clone(&dfa);
             let create: PoolCreateFn = Box::new(move || dfa.create_cache());
@@ -84,14 +93,22 @@ impl ReverseValidator {
         Ok(Self { dfa, pool })
     }
 
-    pub fn find_anchored_rev(&self, haystack: &[u8], start: usize, end: usize) -> Option<usize> {
+    pub fn find_anchored_rev(
+        &self,
+        haystack: &[u8],
+        start: usize,
+        end: usize,
+        match_type: MatchType,
+    ) -> Option<usize> {
+        let pattern_index = match_type_to_pattern_index(match_type);
+
         let mut cache = self.pool.get();
         self.dfa
             .try_search_rev(
                 &mut cache,
                 &Input::new(haystack)
                     .span(start..end)
-                    .anchored(Anchored::Yes),
+                    .anchored(Anchored::Pattern(pattern_index)),
             )
             .ok()
             .flatten()
@@ -100,17 +117,23 @@ impl ReverseValidator {
 }
 
 fn build_dfa(
-    expr: &str,
-    case_insensitive: bool,
+    hir: &Hir,
+    modifiers: &VariableModifiers,
     dot_all: bool,
     reverse: bool,
 ) -> Result<DFA, crate::regex::Error> {
-    Ok(Builder::new()
-        .configure(DFA::config().prefilter(None).match_kind(if reverse {
-            MatchKind::All
-        } else {
-            MatchKind::LeftmostFirst
-        }))
+    let mut builder = Builder::new();
+    let _b = builder
+        .configure(
+            DFA::config()
+                .prefilter(None)
+                .starts_for_each_pattern(true)
+                .match_kind(if reverse {
+                    MatchKind::All
+                } else {
+                    MatchKind::LeftmostFirst
+                }),
+        )
         .thompson(
             thompson::Config::new()
                 .utf8(false)
@@ -123,29 +146,22 @@ fn build_dfa(
                 .unicode(false)
                 .utf8(false)
                 .multi_line(false)
-                .case_insensitive(case_insensitive)
+                .case_insensitive(modifiers.nocase)
                 .dot_matches_new_line(dot_all),
-        )
-        .build(expr)?)
-}
+        );
 
-/// Convert the AST of a regex variable to a string, taking into account variable modifiers.
-fn convert_hir_to_string_with_flags(hir: &Hir, modifiers: &VariableModifiers) -> String {
     if modifiers.wide {
         let wide_hir = widen_hir(hir);
 
         if modifiers.ascii {
-            format!(
-                "{}|{}",
-                regex_hir_to_string(hir),
-                regex_hir_to_string(&wide_hir),
-            )
+            builder.build_many(&[regex_hir_to_string(hir), regex_hir_to_string(&wide_hir)])
         } else {
-            regex_hir_to_string(&wide_hir)
+            builder.build(&regex_hir_to_string(&wide_hir))
         }
     } else {
-        regex_hir_to_string(hir)
+        builder.build(&regex_hir_to_string(hir))
     }
+    .map_err(crate::regex::Error::from)
 }
 
 #[cfg(test)]
