@@ -1,6 +1,6 @@
-use crate::regex::{regex_hir_to_string, Hir, Regex};
+use crate::regex::Hir;
 
-use super::analysis::analyze_hir;
+use super::analysis::{analyze_hir, HirAnalysis};
 use super::literals::LiteralsDetails;
 use super::{matcher, RegexModifiers};
 use super::{only_literals, CompiledVariable, VariableCompilationError};
@@ -17,20 +17,12 @@ pub(super) fn compile_regex(
 ) -> Result<CompiledVariable, VariableCompilationError> {
     let analysis = analyze_hir(hir, modifiers.dot_all);
 
-    let non_wide_regex = if analysis.has_word_boundaries && modifiers.wide {
-        let expr = regex_hir_to_string(hir);
-        Some(compile_regex_expr(expr, modifiers)?)
-    } else {
-        None
-    };
-
     // Do not use an AC if anchors are present, it will be much efficient to just run
     // the regex directly.
     if analysis.has_start_or_end_line {
         return Ok(CompiledVariable {
             literals: Vec::new(),
-            matcher_kind: raw_matcher(hir, modifiers)?,
-            non_wide_regex,
+            matcher_kind: raw_matcher(hir, &analysis, modifiers)?,
         });
     }
 
@@ -42,7 +34,6 @@ pub(super) fn compile_regex(
                 return Ok(CompiledVariable {
                     literals,
                     matcher_kind: matcher::MatcherKind::Literals,
-                    non_wide_regex,
                 });
             }
         }
@@ -62,7 +53,7 @@ pub(super) fn compile_regex(
     apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
 
     let matcher_kind = if literals.is_empty() {
-        raw_matcher(hir, modifiers)?
+        raw_matcher(hir, &analysis, modifiers)?
     } else {
         matcher::MatcherKind::Atomized {
             validator: matcher::validator::Validator::new(
@@ -78,16 +69,17 @@ pub(super) fn compile_regex(
     Ok(CompiledVariable {
         literals,
         matcher_kind,
-        non_wide_regex,
     })
 }
 
 fn raw_matcher(
     hir: &Hir,
+    analysis: &HirAnalysis,
     modifiers: RegexModifiers,
 ) -> Result<matcher::MatcherKind, VariableCompilationError> {
     Ok(matcher::MatcherKind::Raw(
-        matcher::raw::RawMatcher::new(hir, modifiers).map_err(VariableCompilationError::Regex)?,
+        matcher::raw::RawMatcher::new(hir, analysis, modifiers)
+            .map_err(VariableCompilationError::Regex)?,
     ))
 }
 
@@ -113,12 +105,4 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
         new_lit.push(0);
     }
     new_lit
-}
-
-fn compile_regex_expr(
-    expr: String,
-    modifiers: RegexModifiers,
-) -> Result<Regex, VariableCompilationError> {
-    Regex::from_string(expr, modifiers.nocase, modifiers.dot_all)
-        .map_err(VariableCompilationError::Regex)
 }

@@ -4,7 +4,6 @@ use boreal_parser::VariableModifiers;
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
-use crate::regex::Regex;
 use crate::statistics;
 
 use super::base64::encode_base64;
@@ -120,7 +119,6 @@ pub(crate) fn compile_variable(
         Ok(CompiledVariable {
             literals,
             matcher_kind,
-            non_wide_regex,
         }) => Variable {
             name,
             is_private: modifiers.private,
@@ -133,7 +131,6 @@ pub(crate) fn compile_variable(
                     nocase: modifiers.nocase,
                 },
                 kind: matcher_kind,
-                non_wide_regex,
             },
         },
         Err(error) => {
@@ -180,7 +177,6 @@ pub(crate) fn compile_variable(
 struct CompiledVariable {
     literals: Vec<Vec<u8>>,
     matcher_kind: matcher::MatcherKind,
-    non_wide_regex: Option<Regex>,
 }
 
 fn compile_bytes(
@@ -220,7 +216,6 @@ fn compile_bytes(
         return Ok(CompiledVariable {
             literals: new_literals,
             matcher_kind: matcher::MatcherKind::Literals,
-            non_wide_regex: None,
         });
     }
 
@@ -255,7 +250,6 @@ fn compile_bytes(
     Ok(CompiledVariable {
         literals,
         matcher_kind: matcher::MatcherKind::Literals,
-        non_wide_regex: None,
     })
 }
 
@@ -291,7 +285,10 @@ impl std::fmt::Display for VariableCompilationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+    use crate::{
+        regex::Regex,
+        test_helpers::{test_type_traits, test_type_traits_non_clonable},
+    };
 
     #[test]
     fn test_types_traits() {
