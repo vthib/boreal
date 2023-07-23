@@ -51,10 +51,10 @@ impl RawMatcher {
             .find(Input::new(mem).span(offset..mem.len()))
             .map(|m| {
                 let match_type = match (flags.ascii, flags.wide, m.pattern().as_u32()) {
-                    (false, true, _) => MatchType::Wide,
+                    (false, true, _) => MatchType::WideStandard,
                     // First pattern is ascii, Second one is wide
                     (true, true, 0) => MatchType::Ascii,
-                    (true, true, _) => MatchType::Wide,
+                    (true, true, _) => MatchType::WideAlternate,
                     _ => MatchType::Ascii,
                 };
 
