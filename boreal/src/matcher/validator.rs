@@ -2,11 +2,13 @@ use std::ops::Range;
 
 use crate::regex::Hir;
 
-use super::analysis::analyze_hir;
+use super::analysis::{analyze_hir, HirAnalysis};
 use super::{MatchType, Matches, Modifiers};
 
 mod dfa;
-pub(super) use dfa::DfaValidator;
+use dfa::DfaValidator;
+mod simple;
+use simple::SimpleValidator;
 
 // Maximum length against which a regex validator of a AC literal match will be run.
 //
@@ -23,8 +25,8 @@ const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 #[derive(Debug)]
 pub(super) enum Validator {
     NonGreedy {
-        forward: Option<DfaValidator>,
-        reverse: Option<DfaValidator>,
+        forward: Option<HalfValidator>,
+        reverse: Option<HalfValidator>,
     },
     Greedy {
         reverse: DfaValidator,
@@ -59,7 +61,7 @@ impl Validator {
                     return Ok(Self::Greedy { reverse, full });
                 }
 
-                Some(DfaValidator::new(pre, &left_analysis, modifiers, true)?)
+                Some(HalfValidator::new(pre, &left_analysis, modifiers, true)?)
             }
             None => None,
         };
@@ -67,7 +69,7 @@ impl Validator {
         let forward = match post {
             Some(hir) => {
                 let analysis = analyze_hir(hir, modifiers.dot_all);
-                Some(DfaValidator::new(hir, &analysis, modifiers, false)?)
+                Some(HalfValidator::new(hir, &analysis, modifiers, false)?)
             }
             None => None,
         };
@@ -144,6 +146,56 @@ impl Validator {
 
                 Matches::Multiple(matches)
             }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum HalfValidator {
+    // Simplified validator for very simple regex expressions.
+    Simple(SimpleValidator),
+    // Dfa validator, handling all the complex cases
+    Dfa(DfaValidator),
+}
+
+impl HalfValidator {
+    fn new(
+        hir: &Hir,
+        analysis: &HirAnalysis,
+        modifiers: Modifiers,
+        reverse: bool,
+    ) -> Result<Self, crate::regex::Error> {
+        match SimpleValidator::new(hir, analysis, modifiers, reverse) {
+            Some(v) => Ok(Self::Simple(v)),
+            None => Ok(Self::Dfa(DfaValidator::new(
+                hir, analysis, modifiers, reverse,
+            )?)),
+        }
+    }
+
+    fn find_anchored_fwd(
+        &self,
+        haystack: &[u8],
+        start: usize,
+        end: usize,
+        match_type: MatchType,
+    ) -> Option<usize> {
+        match self {
+            Self::Simple(validator) => validator.find_anchored_fwd(haystack, start, end),
+            Self::Dfa(validator) => validator.find_anchored_fwd(haystack, start, end, match_type),
+        }
+    }
+
+    pub(crate) fn find_anchored_rev(
+        &self,
+        haystack: &[u8],
+        start: usize,
+        end: usize,
+        match_type: MatchType,
+    ) -> Option<usize> {
+        match self {
+            Self::Simple(validator) => validator.find_anchored_rev(haystack, start, end),
+            Self::Dfa(validator) => validator.find_anchored_rev(haystack, start, end, match_type),
         }
     }
 }
