@@ -1,6 +1,10 @@
 use std::ops::Range;
 
-use super::AcMatchStatus;
+use crate::regex::Hir;
+
+use super::analysis::analyze_hir;
+use super::literals::LiteralsDetails;
+use super::{only_literals, AcMatchStatus};
 
 pub mod raw;
 pub mod validator;
@@ -21,18 +25,19 @@ pub(crate) struct Matcher {
     /// would be buggy.
     pub literals: Vec<Vec<u8>>,
 
-    /// Flags related to variable modifiers.
-    pub flags: Flags,
-
     pub kind: MatcherKind,
+
+    /// Modifiers related to matching.
+    pub modifiers: Modifiers,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Flags {
+#[derive(Copy, Clone, Default, Debug)]
+pub(crate) struct Modifiers {
     pub fullword: bool,
-    pub ascii: bool,
     pub wide: bool,
+    pub ascii: bool,
     pub nocase: bool,
+    pub dot_all: bool,
 }
 
 #[derive(Debug)]
@@ -84,6 +89,67 @@ pub enum Matches {
 }
 
 impl Matcher {
+    pub fn new(hir: &Hir, modifiers: Modifiers) -> Result<Matcher, crate::regex::Error> {
+        let analysis = analyze_hir(hir, modifiers.dot_all);
+
+        // Do not use an AC if anchors are present, it will be much efficient to just run
+        // the regex directly.
+        if analysis.has_start_or_end_line {
+            let kind = MatcherKind::Raw(raw::RawMatcher::new(hir, &analysis, modifiers)?);
+            return Ok(Self {
+                literals: Vec::new(),
+                kind,
+                modifiers,
+            });
+        }
+
+        if let Some(count) = analysis.nb_alt_literals {
+            // The regex can be covered entirely by literals. This is optimal, so use this if possible.
+            // TODO: handle more modifiers
+            if count < 100 && !modifiers.nocase && !modifiers.wide {
+                if let Some(literals) = only_literals::hir_to_only_literals(hir) {
+                    return Ok(Self {
+                        literals,
+                        kind: MatcherKind::Literals,
+                        modifiers,
+                    });
+                }
+            }
+        }
+
+        let LiteralsDetails {
+            mut literals,
+            pre_hir,
+            post_hir,
+        } = super::literals::get_literals_details(hir);
+
+        // If some literals are too small, don't use them, they would match too
+        // many times.
+        if literals.iter().any(|lit| lit.len() < 2) {
+            literals.clear();
+        }
+        apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
+
+        let kind = if literals.is_empty() {
+            MatcherKind::Raw(raw::RawMatcher::new(hir, &analysis, modifiers)?)
+        } else {
+            MatcherKind::Atomized {
+                validator: validator::Validator::new(
+                    pre_hir.as_ref(),
+                    post_hir.as_ref(),
+                    hir,
+                    modifiers,
+                )?,
+            }
+        };
+
+        Ok(Self {
+            literals,
+            kind,
+            modifiers,
+        })
+    }
+
     /// Confirm that an AC match is a match on the given literal.
     ///
     /// This is needed because the AC might optimize literals and get false positive matches.
@@ -97,7 +163,7 @@ impl Matcher {
     ) -> Option<MatchType> {
         let literal = &self.literals[literal_index];
 
-        if self.flags.nocase {
+        if self.modifiers.nocase {
             if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
                 return None;
             }
@@ -105,7 +171,7 @@ impl Matcher {
             return None;
         }
 
-        match (self.flags.ascii, self.flags.wide) {
+        match (self.modifiers.ascii, self.modifiers.wide) {
             (false, true) => Some(MatchType::WideStandard),
             // If the variable has both ascii and wide, then the ascii literals are in the first
             // half, and the wide ones in the second half.
@@ -164,7 +230,7 @@ impl Matcher {
         };
 
         while offset < mem.len() {
-            let (mat, match_type) = regex.find_next_match_at(mem, offset, self.flags)?;
+            let (mat, match_type) = regex.find_next_match_at(mem, offset, self.modifiers)?;
 
             if self.validate_fullword(mem, &mat, match_type) {
                 return Some(mat);
@@ -176,7 +242,7 @@ impl Matcher {
     }
 
     fn validate_fullword(&self, mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
-        !self.flags.fullword || check_fullword(mem, mat, match_type)
+        !self.modifiers.fullword || check_fullword(mem, mat, match_type)
     }
 }
 
@@ -207,6 +273,30 @@ fn check_fullword(mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool
     true
 }
 
+fn apply_ascii_wide_flags_on_literals(literals: &mut Vec<Vec<u8>>, modifiers: Modifiers) {
+    if !modifiers.wide {
+        return;
+    }
+
+    if modifiers.ascii {
+        let wide_literals: Vec<_> = literals.iter().map(|v| widen_literal(v)).collect();
+        literals.extend(wide_literals);
+    } else {
+        for lit in literals {
+            *lit = widen_literal(lit);
+        }
+    }
+}
+
+fn widen_literal(literal: &[u8]) -> Vec<u8> {
+    let mut new_lit = Vec::with_capacity(literal.len() * 2);
+    for b in literal {
+        new_lit.push(*b);
+        new_lit.push(0);
+    }
+    new_lit
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,7 +306,8 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(Matcher {
             literals: vec![],
-            flags: Flags {
+            modifiers: Modifiers {
+                dot_all: false,
                 fullword: false,
                 ascii: false,
                 wide: false,
@@ -225,11 +316,12 @@ mod tests {
             kind: MatcherKind::Literals,
         });
         test_type_traits_non_clonable(MatcherKind::Literals);
-        test_type_traits(Flags {
+        test_type_traits(Modifiers {
             fullword: false,
             ascii: false,
             wide: false,
             nocase: false,
+            dot_all: false,
         });
         test_type_traits(MatchType::Ascii);
         test_type_traits_non_clonable(Matches::None);

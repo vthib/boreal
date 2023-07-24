@@ -3,10 +3,10 @@ use std::ops::Range;
 use regex_automata::Input;
 
 use crate::compiler::variable::analysis::HirAnalysis;
-use crate::compiler::variable::RegexModifiers;
 use crate::regex::{regex_hir_to_string, Hir, Regex};
 
-use super::{widener::widen_hir, Flags, MatchType};
+use super::widener::widen_hir;
+use super::{MatchType, Modifiers};
 
 #[derive(Debug)]
 pub(crate) struct RawMatcher {
@@ -25,7 +25,7 @@ impl RawMatcher {
     pub(crate) fn new(
         hir: &Hir,
         analysis: &HirAnalysis,
-        modifiers: RegexModifiers,
+        modifiers: Modifiers,
     ) -> Result<Self, crate::regex::Error> {
         let non_wide_regex = if analysis.has_word_boundaries && modifiers.wide {
             let expr = regex_hir_to_string(hir);
@@ -66,13 +66,13 @@ impl RawMatcher {
         &self,
         mem: &[u8],
         mut offset: usize,
-        flags: Flags,
+        modifiers: Modifiers,
     ) -> Option<(Range<usize>, MatchType)> {
         loop {
             let m = self.regex.find(Input::new(mem).span(offset..mem.len()))?;
             let mat = m.range();
 
-            let match_type = match (flags.ascii, flags.wide, m.pattern().as_u32()) {
+            let match_type = match (modifiers.ascii, modifiers.wide, m.pattern().as_u32()) {
                 (false, true, _) => MatchType::WideStandard,
                 // First pattern is ascii, Second one is wide
                 (true, true, 0) => MatchType::Ascii,
@@ -160,7 +160,7 @@ mod tests {
             RawMatcher::new(
                 &Hir::Empty,
                 &analyze_hir(&Hir::Empty, true),
-                RegexModifiers::default(),
+                Modifiers::default(),
             )
             .unwrap(),
         );

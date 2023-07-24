@@ -13,7 +13,6 @@ mod analysis;
 mod literals;
 mod matcher;
 mod only_literals;
-mod regex;
 
 // Maximum length against which a regex validator of a AC literal match will be run.
 //
@@ -59,14 +58,6 @@ pub enum AcMatchStatus {
     Unknown,
 }
 
-#[derive(Copy, Clone, Default, Debug)]
-pub(crate) struct RegexModifiers {
-    pub wide: bool,
-    pub ascii: bool,
-    pub nocase: bool,
-    pub dot_all: bool,
-}
-
 pub(crate) fn compile_variable(
     decl: VariableDeclaration,
     parsed_contents: &str,
@@ -94,44 +85,36 @@ pub(crate) fn compile_variable(
             if case_insensitive {
                 modifiers.nocase = true;
             }
-            regex::compile_regex(
+            matcher::Matcher::new(
                 &ast.into(),
-                RegexModifiers {
+                matcher::Modifiers {
+                    fullword: modifiers.fullword,
                     wide: modifiers.wide,
                     ascii: modifiers.ascii,
                     nocase: modifiers.nocase,
                     dot_all,
                 },
             )
+            .map_err(VariableCompilationError::Regex)
         }
-        VariableDeclarationValue::HexString(hex_string) => regex::compile_regex(
+        VariableDeclarationValue::HexString(hex_string) => matcher::Matcher::new(
             &hex_string.into(),
-            RegexModifiers {
+            matcher::Modifiers {
+                fullword: modifiers.fullword,
                 wide: modifiers.wide,
                 ascii: modifiers.ascii,
                 nocase: modifiers.nocase,
                 dot_all: true,
             },
-        ),
+        )
+        .map_err(VariableCompilationError::Regex),
     };
 
     let res = match res {
-        Ok(CompiledVariable {
-            literals,
-            matcher_kind,
-        }) => Variable {
+        Ok(matcher) => Variable {
             name,
             is_private: modifiers.private,
-            matcher: matcher::Matcher {
-                literals,
-                flags: matcher::Flags {
-                    fullword: modifiers.fullword,
-                    ascii: modifiers.ascii,
-                    wide: modifiers.wide,
-                    nocase: modifiers.nocase,
-                },
-                kind: matcher_kind,
-            },
+            matcher,
         },
         Err(error) => {
             return Err(CompilationError::VariableCompilation {
@@ -174,15 +157,10 @@ pub(crate) fn compile_variable(
     Ok((res, stats))
 }
 
-struct CompiledVariable {
-    literals: Vec<Vec<u8>>,
-    matcher_kind: matcher::MatcherKind,
-}
-
 fn compile_bytes(
     value: Vec<u8>,
     modifiers: &VariableModifiers,
-) -> Result<CompiledVariable, VariableCompilationError> {
+) -> Result<matcher::Matcher, VariableCompilationError> {
     if value.is_empty() {
         return Err(VariableCompilationError::Empty);
     }
@@ -213,9 +191,16 @@ fn compile_bytes(
                 new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
             }
         }
-        return Ok(CompiledVariable {
+        return Ok(matcher::Matcher {
             literals: new_literals,
-            matcher_kind: matcher::MatcherKind::Literals,
+            kind: matcher::MatcherKind::Literals,
+            modifiers: matcher::Modifiers {
+                fullword: modifiers.fullword,
+                wide: modifiers.wide,
+                ascii: modifiers.ascii,
+                nocase: modifiers.nocase,
+                dot_all: false,
+            },
         });
     }
 
@@ -247,9 +232,16 @@ fn compile_bytes(
         }
     }
 
-    Ok(CompiledVariable {
+    Ok(matcher::Matcher {
         literals,
-        matcher_kind: matcher::MatcherKind::Literals,
+        kind: matcher::MatcherKind::Literals,
+        modifiers: matcher::Modifiers {
+            fullword: modifiers.fullword,
+            wide: modifiers.wide,
+            ascii: modifiers.ascii,
+            nocase: modifiers.nocase,
+            dot_all: false,
+        },
     })
 }
 
@@ -307,7 +299,6 @@ mod tests {
             .0,
         );
         test_type_traits(AcMatchStatus::Unknown);
-        test_type_traits(RegexModifiers::default());
 
         test_type_traits_non_clonable(VariableCompilationError::Regex(
             Regex::from_string("{".to_owned(), true, true).unwrap_err(),
