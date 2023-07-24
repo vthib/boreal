@@ -8,11 +8,10 @@ use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input, MatchKind, PatternID};
 
 use crate::compiler::variable::analysis::{analyze_hir, HirAnalysis};
-use crate::compiler::variable::RegexModifiers;
 use crate::regex::{regex_hir_to_string, Hir};
 
 use super::widener::widen_hir;
-use super::{MatchType, Matches};
+use super::{MatchType, Matches, Modifiers};
 
 type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync>;
 
@@ -35,7 +34,7 @@ impl Validator {
         pre: Option<&Hir>,
         post: Option<&Hir>,
         full: &Hir,
-        modifiers: RegexModifiers,
+        modifiers: Modifiers,
     ) -> Result<Self, crate::regex::Error> {
         let reverse = match pre {
             Some(pre) => {
@@ -169,7 +168,7 @@ impl DfaValidator {
     pub(crate) fn new(
         hir: &Hir,
         analysis: &HirAnalysis,
-        mut modifiers: RegexModifiers,
+        mut modifiers: Modifiers,
         reverse: bool,
     ) -> Result<Self, crate::regex::Error> {
         let mut use_custom_wide_runner = false;
@@ -381,11 +380,7 @@ fn match_type_to_pattern_index(match_type: MatchType) -> PatternID {
     })
 }
 
-fn build_dfa(
-    hir: &Hir,
-    modifiers: RegexModifiers,
-    reverse: bool,
-) -> Result<DFA, crate::regex::Error> {
+fn build_dfa(hir: &Hir, modifiers: Modifiers, reverse: bool) -> Result<DFA, crate::regex::Error> {
     let mut builder = Builder::new();
     let _b = builder
         .configure(
@@ -437,10 +432,10 @@ mod tests {
     fn test_types_traits() {
         let analysis = analyze_hir(&Hir::Empty, false);
         test_type_traits_non_clonable(
-            DfaValidator::new(&Hir::Empty, &analysis, RegexModifiers::default(), false).unwrap(),
+            DfaValidator::new(&Hir::Empty, &analysis, Modifiers::default(), false).unwrap(),
         );
         test_type_traits_non_clonable(
-            Validator::new(None, None, &Hir::Empty, RegexModifiers::default()).unwrap(),
+            Validator::new(None, None, &Hir::Empty, Modifiers::default()).unwrap(),
         );
     }
 
@@ -453,7 +448,7 @@ mod tests {
             DfaValidator::new(
                 &hir,
                 &analysis,
-                RegexModifiers {
+                Modifiers {
                     ascii,
                     wide: true,
                     ..Default::default()
@@ -550,7 +545,7 @@ mod tests {
             DfaValidator::new(
                 &hir,
                 &analysis,
-                RegexModifiers {
+                Modifiers {
                     ascii,
                     wide: true,
                     ..Default::default()
