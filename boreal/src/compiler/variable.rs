@@ -1,27 +1,11 @@
-use std::ops::Range;
-
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
+use crate::matcher::{Matcher, Modifiers};
 use crate::statistics;
 
 use super::CompilationError;
 
-mod analysis;
-mod literals;
-mod matcher;
-mod only_literals;
-
-// Maximum length against which a regex validator of a AC literal match will be run.
-//
-// For example, lets say you have the `{ AA [1-] BB CC DD [1-] FF }` hex string. The
-// `\xbb\xcc\xdd` literal is extracted, with:
-// - the pre validator `\xaa.{1,}?\xbb\xcc\xdd$`
-// - the post validator `^\xbb\xcc\xdd.{1,}?\xff`
-//
-// Both the pre and post validator will be run against a slice which maximum length is
-// limited by the constant. Which means that `\xaa0\xbb\xcc\xdd` + ('0' * MAX+1) + '\xff'
-// will not match.
 /// A compiled variable used in a rule.
 #[derive(Debug)]
 pub struct Variable {
@@ -34,26 +18,7 @@ pub struct Variable {
     pub is_private: bool,
 
     /// Matcher for the variable.
-    pub(crate) matcher: matcher::Matcher,
-}
-
-/// State of an aho-corasick match on a [`Matcher`] literals.
-#[derive(Clone, Debug)]
-pub enum AcMatchStatus {
-    /// The literal yields multiple matches (can be empty).
-    Multiple(Vec<Range<usize>>),
-
-    /// The literal yields a single match (None if invalid).
-    ///
-    /// This is an optim to avoid allocating a Vec for the very common case of returning a
-    /// single match.
-    Single(Range<usize>),
-
-    /// The literal does not give any match.
-    None,
-
-    /// Unknown status for the match, will need to be confirmed on its own.
-    Unknown,
+    pub(crate) matcher: Matcher,
 }
 
 pub(crate) fn compile_variable(
@@ -77,7 +42,7 @@ pub(crate) fn compile_variable(
             if s.is_empty() {
                 Err(VariableCompilationError::Empty)
             } else {
-                Ok(matcher::Matcher::new_bytes(s, &modifiers))
+                Ok(Matcher::new_bytes(s, &modifiers))
             }
         }
         VariableDeclarationValue::Regex(boreal_parser::Regex {
@@ -89,9 +54,9 @@ pub(crate) fn compile_variable(
             if case_insensitive {
                 modifiers.nocase = true;
             }
-            matcher::Matcher::new_regex(
+            Matcher::new_regex(
                 &ast.into(),
-                matcher::Modifiers {
+                Modifiers {
                     fullword: modifiers.fullword,
                     wide: modifiers.wide,
                     ascii: modifiers.ascii,
@@ -101,9 +66,9 @@ pub(crate) fn compile_variable(
             )
             .map_err(VariableCompilationError::Regex)
         }
-        VariableDeclarationValue::HexString(hex_string) => matcher::Matcher::new_regex(
+        VariableDeclarationValue::HexString(hex_string) => Matcher::new_regex(
             &hex_string.into(),
-            matcher::Modifiers {
+            Modifiers {
                 fullword: modifiers.fullword,
                 wide: modifiers.wide,
                 ascii: modifiers.ascii,
@@ -147,12 +112,7 @@ pub(crate) fn compile_variable(
             literals: res.matcher.literals.clone(),
             atoms,
             atoms_quality,
-            matching_algo: match res.matcher.kind {
-                matcher::MatcherKind::Literals => "literals",
-                matcher::MatcherKind::Atomized { .. } => "atomized",
-                matcher::MatcherKind::Raw(_) => "raw",
-            }
-            .into(),
+            matching_algo: res.matcher.kind_to_string(),
         })
     } else {
         None
@@ -185,10 +145,8 @@ mod tests {
     use boreal_parser::VariableModifiers;
 
     use super::*;
-    use crate::{
-        regex::Regex,
-        test_helpers::{test_type_traits, test_type_traits_non_clonable},
-    };
+    use crate::regex::Regex;
+    use crate::test_helpers::test_type_traits_non_clonable;
 
     #[test]
     fn test_types_traits() {
@@ -206,7 +164,6 @@ mod tests {
             .unwrap()
             .0,
         );
-        test_type_traits(AcMatchStatus::Unknown);
 
         test_type_traits_non_clonable(VariableCompilationError::Regex(
             Regex::from_string("{".to_owned(), true, true).unwrap_err(),

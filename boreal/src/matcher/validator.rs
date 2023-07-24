@@ -7,18 +7,28 @@ use regex_automata::util::pool::Pool;
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input, MatchKind, PatternID};
 
-use crate::compiler::variable::analysis::{analyze_hir, HirAnalysis};
 use crate::regex::{regex_hir_to_string, Hir};
 
+use super::analysis::{analyze_hir, HirAnalysis};
 use super::widener::widen_hir;
 use super::{MatchType, Matches, Modifiers};
 
 type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync>;
 
+// Maximum length against which a regex validator of a AC literal match will be run.
+//
+// For example, lets say you have the `{ AA [1-] BB CC DD [1-] FF }` hex string. The
+// `\xbb\xcc\xdd` literal is extracted, with:
+// - the pre validator `\xaa.{1,}?\xbb\xcc\xdd$`
+// - the post validator `^\xbb\xcc\xdd.{1,}?\xff`
+//
+// Both the pre and post validator will be run against a slice which maximum length is
+// limited by the constant. Which means that `\xaa0\xbb\xcc\xdd` + ('0' * MAX+1) + '\xff'
+// will not match.
 const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
 #[derive(Debug)]
-pub(crate) enum Validator {
+pub(super) enum Validator {
     NonGreedy {
         forward: Option<DfaValidator>,
         reverse: Option<DfaValidator>,
@@ -30,7 +40,7 @@ pub(crate) enum Validator {
 }
 
 impl Validator {
-    pub(crate) fn new(
+    pub(super) fn new(
         pre: Option<&Hir>,
         post: Option<&Hir>,
         full: &Hir,
@@ -72,7 +82,7 @@ impl Validator {
         Ok(Self::NonGreedy { forward, reverse })
     }
 
-    pub(crate) fn validate_match(
+    pub(super) fn validate_match(
         &self,
         mem: &[u8],
         mat: Range<usize>,
@@ -146,7 +156,7 @@ impl Validator {
 }
 
 #[derive(Debug)]
-pub(crate) struct DfaValidator {
+pub(super) struct DfaValidator {
     /// Anchored lazy DFA, used to validate an AC match.
     dfa: Arc<DFA>,
     // TODO: Taking the cache out of the pool when starting scanning (and putting them in the scan
@@ -165,7 +175,7 @@ pub(crate) struct DfaValidator {
 }
 
 impl DfaValidator {
-    pub(crate) fn new(
+    pub(super) fn new(
         hir: &Hir,
         analysis: &HirAnalysis,
         mut modifiers: Modifiers,
@@ -195,7 +205,7 @@ impl DfaValidator {
         })
     }
 
-    pub(crate) fn find_anchored_fwd(
+    pub(super) fn find_anchored_fwd(
         &self,
         haystack: &[u8],
         start: usize,
@@ -221,7 +231,7 @@ impl DfaValidator {
         }
     }
 
-    pub(crate) fn find_anchored_rev(
+    pub(super) fn find_anchored_rev(
         &self,
         haystack: &[u8],
         start: usize,

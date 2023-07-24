@@ -11,7 +11,6 @@ use codespan_reporting::term;
 
 use boreal_parser as parser;
 
-mod base64;
 mod error;
 pub use error::CompilationError;
 pub(crate) mod expression;

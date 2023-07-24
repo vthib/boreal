@@ -2,14 +2,14 @@ use std::ops::Range;
 
 use regex_automata::Input;
 
-use crate::compiler::variable::analysis::HirAnalysis;
 use crate::regex::{regex_hir_to_string, Hir, Regex};
 
+use super::analysis::HirAnalysis;
 use super::widener::widen_hir;
 use super::{MatchType, Modifiers};
 
 #[derive(Debug)]
-pub(crate) struct RawMatcher {
+pub(super) struct RawMatcher {
     regex: regex_automata::meta::Regex,
 
     /// Regex of the non wide version of the regex.
@@ -22,7 +22,7 @@ pub(crate) struct RawMatcher {
 }
 
 impl RawMatcher {
-    pub(crate) fn new(
+    pub(super) fn new(
         hir: &Hir,
         analysis: &HirAnalysis,
         modifiers: Modifiers,
@@ -62,7 +62,7 @@ impl RawMatcher {
         })
     }
 
-    pub(crate) fn find_next_match_at(
+    pub(super) fn find_next_match_at(
         &self,
         mem: &[u8],
         mut offset: usize,
@@ -151,7 +151,7 @@ fn unwide(mem: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::variable::analysis::analyze_hir;
+    use crate::matcher::analysis::analyze_hir;
     use crate::test_helpers::test_type_traits_non_clonable;
 
     #[test]
