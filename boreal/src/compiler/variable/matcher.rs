@@ -1,5 +1,8 @@
 use std::ops::Range;
 
+use boreal_parser::VariableModifiers;
+
+use crate::compiler::base64::encode_base64;
 use crate::regex::Hir;
 
 use super::analysis::analyze_hir;
@@ -89,7 +92,7 @@ pub enum Matches {
 }
 
 impl Matcher {
-    pub fn new(hir: &Hir, modifiers: Modifiers) -> Result<Matcher, crate::regex::Error> {
+    pub fn new_regex(hir: &Hir, modifiers: Modifiers) -> Result<Matcher, crate::regex::Error> {
         let analysis = analyze_hir(hir, modifiers.dot_all);
 
         // Do not use an AC if anchors are present, it will be much efficient to just run
@@ -148,6 +151,87 @@ impl Matcher {
             kind,
             modifiers,
         })
+    }
+
+    pub fn new_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> Self {
+        let mut literals = Vec::with_capacity(2);
+        if modifiers.wide {
+            if modifiers.ascii {
+                let wide = string_to_wide(&value);
+                literals.push(value);
+                literals.push(wide);
+            } else {
+                literals.push(string_to_wide(&value));
+            }
+        } else {
+            literals.push(value);
+        }
+
+        if let Some(xor_range) = modifiers.xor {
+            // For each literal, for each byte in the xor range, build a new literal
+            let xor_range = xor_range.0..=xor_range.1;
+            let xor_range_len = xor_range.len(); // modifiers.xor_range.1.saturating_sub(modifiers.xor_range.0) + 1;
+            let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
+
+            // Ascii literals must be first, then wide literals. Since the "literals" var
+            // is the ascii literals then the wide ones, the order is preserved.
+            for lit in literals {
+                for xor_byte in xor_range.clone() {
+                    new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
+                }
+            }
+            return Self {
+                literals: new_literals,
+                kind: MatcherKind::Literals,
+                modifiers: Modifiers {
+                    fullword: modifiers.fullword,
+                    wide: modifiers.wide,
+                    ascii: modifiers.ascii,
+                    nocase: modifiers.nocase,
+                    dot_all: false,
+                },
+            };
+        }
+
+        if let Some(base64) = &modifiers.base64 {
+            let mut old_literals = Vec::with_capacity(literals.len() * 3);
+            std::mem::swap(&mut old_literals, &mut literals);
+
+            if base64.ascii {
+                for lit in &old_literals {
+                    for offset in 0..=2 {
+                        if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
+                            // Fullword is not compatible with base64 modifiers, hence ordering of
+                            // literals is not required.
+                            if base64.wide {
+                                literals.push(string_to_wide(&lit));
+                            }
+                            literals.push(lit);
+                        }
+                    }
+                }
+            } else {
+                for lit in &old_literals {
+                    for offset in 0..=2 {
+                        if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
+                            literals.push(string_to_wide(&lit));
+                        }
+                    }
+                }
+            }
+        }
+
+        Matcher {
+            literals,
+            kind: MatcherKind::Literals,
+            modifiers: Modifiers {
+                fullword: modifiers.fullword,
+                wide: modifiers.wide,
+                ascii: modifiers.ascii,
+                nocase: modifiers.nocase,
+                dot_all: false,
+            },
+        }
     }
 
     /// Confirm that an AC match is a match on the given literal.
@@ -295,6 +379,16 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
         new_lit.push(0);
     }
     new_lit
+}
+
+/// Convert an ascii string to a wide string
+fn string_to_wide(s: &[u8]) -> Vec<u8> {
+    let mut res = Vec::with_capacity(s.len() * 2);
+    for b in s {
+        res.push(*b);
+        res.push(b'\0');
+    }
+    res
 }
 
 #[cfg(test)]

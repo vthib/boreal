@@ -1,12 +1,10 @@
 use std::ops::Range;
 
-use boreal_parser::VariableModifiers;
 use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::statistics;
 
-use super::base64::encode_base64;
 use super::CompilationError;
 
 mod analysis;
@@ -75,7 +73,13 @@ pub(crate) fn compile_variable(
     }
 
     let res = match value {
-        VariableDeclarationValue::Bytes(s) => compile_bytes(s, &modifiers),
+        VariableDeclarationValue::Bytes(s) => {
+            if s.is_empty() {
+                Err(VariableCompilationError::Empty)
+            } else {
+                Ok(matcher::Matcher::new_bytes(s, &modifiers))
+            }
+        }
         VariableDeclarationValue::Regex(boreal_parser::Regex {
             ast,
             case_insensitive,
@@ -85,7 +89,7 @@ pub(crate) fn compile_variable(
             if case_insensitive {
                 modifiers.nocase = true;
             }
-            matcher::Matcher::new(
+            matcher::Matcher::new_regex(
                 &ast.into(),
                 matcher::Modifiers {
                     fullword: modifiers.fullword,
@@ -97,7 +101,7 @@ pub(crate) fn compile_variable(
             )
             .map_err(VariableCompilationError::Regex)
         }
-        VariableDeclarationValue::HexString(hex_string) => matcher::Matcher::new(
+        VariableDeclarationValue::HexString(hex_string) => matcher::Matcher::new_regex(
             &hex_string.into(),
             matcher::Modifiers {
                 fullword: modifiers.fullword,
@@ -157,104 +161,6 @@ pub(crate) fn compile_variable(
     Ok((res, stats))
 }
 
-fn compile_bytes(
-    value: Vec<u8>,
-    modifiers: &VariableModifiers,
-) -> Result<matcher::Matcher, VariableCompilationError> {
-    if value.is_empty() {
-        return Err(VariableCompilationError::Empty);
-    }
-
-    let mut literals = Vec::with_capacity(2);
-    if modifiers.wide {
-        if modifiers.ascii {
-            let wide = string_to_wide(&value);
-            literals.push(value);
-            literals.push(wide);
-        } else {
-            literals.push(string_to_wide(&value));
-        }
-    } else {
-        literals.push(value);
-    }
-
-    if let Some(xor_range) = modifiers.xor {
-        // For each literal, for each byte in the xor range, build a new literal
-        let xor_range = xor_range.0..=xor_range.1;
-        let xor_range_len = xor_range.len(); // modifiers.xor_range.1.saturating_sub(modifiers.xor_range.0) + 1;
-        let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
-
-        // Ascii literals must be first, then wide literals. Since the "literals" var
-        // is the ascii literals then the wide ones, the order is preserved.
-        for lit in literals {
-            for xor_byte in xor_range.clone() {
-                new_literals.push(lit.iter().map(|c| c ^ xor_byte).collect());
-            }
-        }
-        return Ok(matcher::Matcher {
-            literals: new_literals,
-            kind: matcher::MatcherKind::Literals,
-            modifiers: matcher::Modifiers {
-                fullword: modifiers.fullword,
-                wide: modifiers.wide,
-                ascii: modifiers.ascii,
-                nocase: modifiers.nocase,
-                dot_all: false,
-            },
-        });
-    }
-
-    if let Some(base64) = &modifiers.base64 {
-        let mut old_literals = Vec::with_capacity(literals.len() * 3);
-        std::mem::swap(&mut old_literals, &mut literals);
-
-        if base64.ascii {
-            for lit in &old_literals {
-                for offset in 0..=2 {
-                    if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
-                        // Fullword is not compatible with base64 modifiers, hence ordering of
-                        // literals is not required.
-                        if base64.wide {
-                            literals.push(string_to_wide(&lit));
-                        }
-                        literals.push(lit);
-                    }
-                }
-            }
-        } else {
-            for lit in &old_literals {
-                for offset in 0..=2 {
-                    if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
-                        literals.push(string_to_wide(&lit));
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(matcher::Matcher {
-        literals,
-        kind: matcher::MatcherKind::Literals,
-        modifiers: matcher::Modifiers {
-            fullword: modifiers.fullword,
-            wide: modifiers.wide,
-            ascii: modifiers.ascii,
-            nocase: modifiers.nocase,
-            dot_all: false,
-        },
-    })
-}
-
-/// Convert an ascii string to a wide string
-fn string_to_wide(s: &[u8]) -> Vec<u8> {
-    let mut res = Vec::with_capacity(s.len() * 2);
-    for b in s {
-        res.push(*b);
-        res.push(b'\0');
-    }
-    res
-}
-
 /// Error during the compilation of a variable.
 #[derive(Debug)]
 pub enum VariableCompilationError {
@@ -276,6 +182,8 @@ impl std::fmt::Display for VariableCompilationError {
 
 #[cfg(test)]
 mod tests {
+    use boreal_parser::VariableModifiers;
+
     use super::*;
     use crate::{
         regex::Regex,
