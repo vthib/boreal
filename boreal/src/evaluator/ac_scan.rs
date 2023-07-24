@@ -5,7 +5,8 @@ use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
 use super::{EvalError, Params, ScanData};
 use crate::atoms::pick_atom_in_literal;
-use crate::compiler::variable::{AcMatchStatus, Variable};
+use crate::compiler::variable::Variable;
+use crate::matcher::AcMatchStatus;
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///

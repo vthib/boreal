@@ -2,15 +2,14 @@ use std::ops::Range;
 
 use boreal_parser::VariableModifiers;
 
-use crate::compiler::base64::encode_base64;
 use crate::regex::Hir;
 
-use super::analysis::analyze_hir;
-use super::literals::LiteralsDetails;
-use super::{only_literals, AcMatchStatus};
-
-pub mod raw;
-pub mod validator;
+mod analysis;
+mod base64;
+mod literals;
+mod only_literals;
+mod raw;
+mod validator;
 mod widener;
 
 #[derive(Debug)]
@@ -26,12 +25,12 @@ pub(crate) struct Matcher {
     ///
     /// This is required in order to know which kind is a literal match, as checking its value
     /// would be buggy.
-    pub literals: Vec<Vec<u8>>,
+    pub(crate) literals: Vec<Vec<u8>>,
 
-    pub kind: MatcherKind,
+    kind: MatcherKind,
 
     /// Modifiers related to matching.
-    pub modifiers: Modifiers,
+    modifiers: Modifiers,
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -43,15 +42,23 @@ pub(crate) struct Modifiers {
     pub dot_all: bool,
 }
 
-#[derive(Debug)]
-pub(crate) enum MatcherKind {
-    /// The literals cover entirely the variable.
-    Literals,
-    /// The regex can confirm matches from AC literal matches.
-    Atomized { validator: validator::Validator },
+/// State of an aho-corasick match on a [`Matcher`] literals.
+#[derive(Clone, Debug)]
+pub enum AcMatchStatus {
+    /// The literal yields multiple matches (can be empty).
+    Multiple(Vec<Range<usize>>),
 
-    /// The regex cannot confirm matches from AC literal matches.
-    Raw(raw::RawMatcher),
+    /// The literal yields a single match (None if invalid).
+    ///
+    /// This is an optim to avoid allocating a Vec for the very common case of returning a
+    /// single match.
+    Single(Range<usize>),
+
+    /// The literal does not give any match.
+    None,
+
+    /// Unknown status for the match, will need to be confirmed on its own.
+    Unknown,
 }
 
 /// Type of a match.
@@ -68,7 +75,7 @@ pub enum MatchType {
 }
 
 impl MatchType {
-    pub fn is_wide(self) -> bool {
+    fn is_wide(self) -> bool {
         match self {
             MatchType::Ascii => false,
             MatchType::WideStandard | MatchType::WideAlternate => true,
@@ -77,7 +84,7 @@ impl MatchType {
 }
 
 #[derive(Debug)]
-pub enum Matches {
+enum Matches {
     /// The literal yields multiple matches (can be empty).
     Multiple(Vec<Range<usize>>),
 
@@ -91,9 +98,20 @@ pub enum Matches {
     None,
 }
 
+#[derive(Debug)]
+enum MatcherKind {
+    /// The literals cover entirely the variable.
+    Literals,
+    /// The regex can confirm matches from AC literal matches.
+    Atomized { validator: validator::Validator },
+
+    /// The regex cannot confirm matches from AC literal matches.
+    Raw(raw::RawMatcher),
+}
+
 impl Matcher {
     pub fn new_regex(hir: &Hir, modifiers: Modifiers) -> Result<Matcher, crate::regex::Error> {
-        let analysis = analyze_hir(hir, modifiers.dot_all);
+        let analysis = analysis::analyze_hir(hir, modifiers.dot_all);
 
         // Do not use an AC if anchors are present, it will be much efficient to just run
         // the regex directly.
@@ -120,11 +138,11 @@ impl Matcher {
             }
         }
 
-        let LiteralsDetails {
+        let literals::LiteralsDetails {
             mut literals,
             pre_hir,
             post_hir,
-        } = super::literals::get_literals_details(hir);
+        } = literals::get_literals_details(hir);
 
         // If some literals are too small, don't use them, they would match too
         // many times.
@@ -200,7 +218,7 @@ impl Matcher {
             if base64.ascii {
                 for lit in &old_literals {
                     for offset in 0..=2 {
-                        if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
+                        if let Some(lit) = base64::encode_base64(lit, &base64.alphabet, offset) {
                             // Fullword is not compatible with base64 modifiers, hence ordering of
                             // literals is not required.
                             if base64.wide {
@@ -213,7 +231,7 @@ impl Matcher {
             } else {
                 for lit in &old_literals {
                     for offset in 0..=2 {
-                        if let Some(lit) = encode_base64(lit, &base64.alphabet, offset) {
+                        if let Some(lit) = base64::encode_base64(lit, &base64.alphabet, offset) {
                             literals.push(string_to_wide(&lit));
                         }
                     }
@@ -325,6 +343,15 @@ impl Matcher {
         None
     }
 
+    pub fn kind_to_string(&self) -> String {
+        match &self.kind {
+            MatcherKind::Literals => "literals",
+            MatcherKind::Atomized { .. } => "atomized",
+            MatcherKind::Raw(_) => "raw",
+        }
+        .to_owned()
+    }
+
     fn validate_fullword(&self, mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
         !self.modifiers.fullword || check_fullword(mem, mat, match_type)
     }
@@ -419,5 +446,6 @@ mod tests {
         });
         test_type_traits(MatchType::Ascii);
         test_type_traits_non_clonable(Matches::None);
+        test_type_traits(AcMatchStatus::Unknown);
     }
 }
