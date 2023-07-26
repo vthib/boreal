@@ -59,6 +59,7 @@
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::single_match_else)]
+#![allow(clippy::inline_always)]
 // Completely useless lint
 #![allow(clippy::struct_excessive_bools)]
 // Would be nice to not need this, thanks macho module

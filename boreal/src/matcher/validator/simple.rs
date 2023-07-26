@@ -18,7 +18,9 @@ enum SimpleNode {
     // Byte to match
     Byte(u8),
     // Masked byte
-    Mask { value: u8, mask: u8, negated: bool },
+    Mask { value: u8, mask: u8 },
+    // Negated Masked byte
+    NegatedMask { value: u8, mask: u8 },
     // Dot, any byte
     Dot,
 }
@@ -60,36 +62,17 @@ impl SimpleValidator {
         end: usize,
     ) -> Option<usize> {
         let mem = &haystack[start..end];
-        let mut index = 0;
+        if mem.len() < self.nodes.len() {
+            return None;
+        }
 
+        let mut index = 0;
         for node in &self.nodes {
-            match node {
-                SimpleNode::Dot => {
-                    if index >= mem.len() {
-                        return None;
-                    }
-                    index += 1;
-                }
-                SimpleNode::Byte(a) => {
-                    if index >= mem.len() || mem[index] != *a {
-                        return None;
-                    }
-                    index += 1;
-                }
-                SimpleNode::Mask {
-                    value,
-                    mask,
-                    negated,
-                } => {
-                    if index >= mem.len() {
-                        return None;
-                    }
-                    if ((mem[index] & *mask) == *value) == *negated {
-                        return None;
-                    }
-                    index += 1;
-                }
+            if !check_node(node, mem, index) {
+                return None;
             }
+
+            index += 1;
         }
 
         Some(start + index)
@@ -102,39 +85,30 @@ impl SimpleValidator {
         end: usize,
     ) -> Option<usize> {
         let mem = &haystack[start..end];
-        let mut index = mem.len();
+        if mem.len() < self.nodes.len() {
+            return None;
+        }
 
+        let mut index = mem.len();
         for node in &self.nodes {
-            match node {
-                SimpleNode::Dot => {
-                    if index == 0 {
-                        return None;
-                    }
-                    index -= 1;
-                }
-                SimpleNode::Byte(a) => {
-                    if index == 0 || mem[index - 1] != *a {
-                        return None;
-                    }
-                    index -= 1;
-                }
-                SimpleNode::Mask {
-                    value,
-                    mask,
-                    negated,
-                } => {
-                    if index == 0 {
-                        return None;
-                    }
-                    if ((mem[index - 1] & *mask) == *value) == *negated {
-                        return None;
-                    }
-                    index -= 1;
-                }
+            if !check_node(node, mem, index - 1) {
+                return None;
             }
+
+            index -= 1;
         }
 
         Some(index + start)
+    }
+}
+
+#[inline(always)]
+fn check_node(node: &SimpleNode, mem: &[u8], index: usize) -> bool {
+    match node {
+        SimpleNode::Dot => true,
+        SimpleNode::Byte(a) => mem[index] == *a,
+        SimpleNode::Mask { value, mask } => (mem[index] & *mask) == *value,
+        SimpleNode::NegatedMask { value, mask } => (mem[index] & *mask) != *value,
     }
 }
 
@@ -146,10 +120,16 @@ fn add_hir_to_simple_nodes(hir: &Hir, reverse: bool, nodes: &mut Vec<SimpleNode>
             mask,
             negated,
         } => {
-            nodes.push(SimpleNode::Mask {
-                value: *value,
-                mask: *mask,
-                negated: *negated,
+            nodes.push(if *negated {
+                SimpleNode::NegatedMask {
+                    value: *value,
+                    mask: *mask,
+                }
+            } else {
+                SimpleNode::Mask {
+                    value: *value,
+                    mask: *mask,
+                }
             });
             true
         }
