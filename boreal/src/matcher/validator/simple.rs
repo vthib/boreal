@@ -185,4 +185,68 @@ mod tests {
             .unwrap(),
         );
     }
+
+    #[test]
+    fn test_simple_validator() {
+        let validator = SimpleValidator {
+            nodes: vec![
+                SimpleNode::Byte(b'a'),
+                SimpleNode::Dot,
+                SimpleNode::Byte(b'c'),
+            ],
+        };
+
+        // Test the start/end handling
+        assert_eq!(validator.find_anchored_fwd(b"abc", 0, 3), Some(3));
+        assert_eq!(validator.find_anchored_fwd(b"abcdef", 0, 3), Some(3));
+        assert_eq!(validator.find_anchored_fwd(b"abcdef", 0, 2), None);
+        assert_eq!(validator.find_anchored_fwd(b"abcdef", 0, 6), Some(3));
+        assert_eq!(validator.find_anchored_fwd(b"abcdef", 1, 6), None);
+        assert_eq!(validator.find_anchored_fwd(b"cbabcd", 2, 6), Some(5));
+
+        // Test with reverse search as well
+        assert_eq!(validator.find_anchored_rev(b"cba", 0, 3), Some(0));
+        assert_eq!(validator.find_anchored_rev(b"cbadef", 0, 3), Some(0));
+        assert_eq!(validator.find_anchored_rev(b"cbadef", 0, 2), None);
+        assert_eq!(validator.find_anchored_rev(b"defcba", 0, 6), Some(3));
+        assert_eq!(validator.find_anchored_rev(b"defcba", 0, 5), None);
+        assert_eq!(validator.find_anchored_rev(b"abcbad", 0, 5), Some(2));
+
+        // Test matching of bytes and dot
+        assert_eq!(validator.find_anchored_fwd(b"bbc", 0, 3), None);
+        assert_eq!(validator.find_anchored_fwd(b"a\nc", 0, 3), Some(3));
+        assert_eq!(validator.find_anchored_fwd(b"a\na", 0, 3), None);
+        assert_eq!(validator.find_anchored_fwd(b"c\na", 0, 3), None);
+
+        assert_eq!(validator.find_anchored_rev(b"bbc", 0, 3), None);
+        assert_eq!(validator.find_anchored_rev(b"a\nc", 0, 3), None);
+        assert_eq!(validator.find_anchored_rev(b"a\na", 0, 3), None);
+        assert_eq!(validator.find_anchored_rev(b"c\na", 0, 3), Some(0));
+
+        let validator = SimpleValidator {
+            nodes: vec![
+                SimpleNode::Mask {
+                    value: 0x50,
+                    mask: 0xF0,
+                },
+                SimpleNode::NegatedMask {
+                    value: 0x0A,
+                    mask: 0x0F,
+                },
+            ],
+        };
+
+        // Test matching of masks
+        assert_eq!(validator.find_anchored_fwd(b"\x50\x0B", 0, 2), Some(2));
+        assert_eq!(validator.find_anchored_fwd(b"\x51\x1D", 0, 2), Some(2));
+        assert_eq!(validator.find_anchored_fwd(b"\x5F\xFF", 0, 2), Some(2));
+        assert_eq!(validator.find_anchored_fwd(b"\x7F\xFF", 0, 2), None);
+        assert_eq!(validator.find_anchored_fwd(b"\x5F\xFA", 0, 2), None);
+
+        assert_eq!(validator.find_anchored_rev(b"\x0B\x50", 0, 2), Some(0));
+        assert_eq!(validator.find_anchored_rev(b"\x1D\x51", 0, 2), Some(0));
+        assert_eq!(validator.find_anchored_rev(b"\xFF\x5F", 0, 2), Some(0));
+        assert_eq!(validator.find_anchored_rev(b"\xFF\x7F", 0, 2), None);
+        assert_eq!(validator.find_anchored_rev(b"\xFA\x5F", 0, 2), None);
+    }
 }
