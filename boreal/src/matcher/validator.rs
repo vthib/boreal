@@ -210,5 +210,14 @@ mod tests {
         test_type_traits_non_clonable(
             Validator::new(None, None, &Hir::Empty, Modifiers::default()).unwrap(),
         );
+        test_type_traits_non_clonable(
+            HalfValidator::new(
+                &Hir::Empty,
+                &analyze_hir(&Hir::Empty, false),
+                Modifiers::default(),
+                false,
+            )
+            .unwrap(),
+        );
     }
 }
