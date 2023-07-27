@@ -13,7 +13,7 @@ pub(crate) struct SimpleValidator {
     nodes: Vec<SimpleNode>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum SimpleNode {
     // Byte to match
     Byte(u8),
@@ -177,6 +177,8 @@ fn add_hir_to_simple_nodes(
 
 #[cfg(test)]
 mod tests {
+    use boreal_parser::regex::AssertionKind;
+
     use super::*;
     use crate::matcher::analysis::analyze_hir;
     use crate::test_helpers::{
@@ -198,16 +200,100 @@ mod tests {
             )
             .unwrap(),
         );
+        test_type_traits_non_clonable(SimpleNode::Dot);
     }
 
-    fn build_validator(expr: &str, modifiers: Modifiers, reverse: bool) -> SimpleValidator {
+    fn build_validator(expr: &str, modifiers: Modifiers, reverse: bool) -> Option<SimpleValidator> {
         let hir = if expr.starts_with('{') {
             parse_hex_string(expr).into()
         } else {
             parse_regex_string(expr).ast.into()
         };
         let analysis = analyze_hir(&hir, modifiers.dot_all);
-        SimpleValidator::new(&hir, &analysis, modifiers, reverse).unwrap()
+        SimpleValidator::new(&hir, &analysis, modifiers, reverse)
+    }
+
+    #[test]
+    fn test_simple_validator_build() {
+        fn test(
+            expr: &str,
+            modifiers: Modifiers,
+            reverse: bool,
+            expected_nodes: Option<&[SimpleNode]>,
+        ) {
+            let v = build_validator(expr, modifiers, reverse);
+            assert_eq!(v.as_ref().map(|v| &*v.nodes), expected_nodes);
+        }
+
+        // Regex contains nodes that are not handled
+        test("a?", Modifiers::default(), false, None);
+        test("a|b", Modifiers::default(), false, None);
+        test("^a", Modifiers::default(), false, None);
+        test("a$", Modifiers::default(), false, None);
+        test(r"a\b", Modifiers::default(), false, None);
+        test(r"a\B", Modifiers::default(), false, None);
+        test(r"[aA]", Modifiers::default(), false, None);
+
+        // Modifiers not handled
+        test(
+            r"a",
+            Modifiers {
+                nocase: true,
+                ..Default::default()
+            },
+            false,
+            None,
+        );
+        test(
+            r"a",
+            Modifiers {
+                wide: true,
+                ..Default::default()
+            },
+            false,
+            None,
+        );
+
+        test(
+            "a.()d",
+            Modifiers::default(),
+            false,
+            Some(&[
+                SimpleNode::Byte(b'a'),
+                SimpleNode::Dot,
+                SimpleNode::Byte(b'd'),
+            ]),
+        );
+
+        test(
+            "a.()d",
+            Modifiers::default(),
+            true,
+            Some(&[
+                SimpleNode::Byte(b'd'),
+                SimpleNode::Dot,
+                SimpleNode::Byte(b'a'),
+            ]),
+        );
+
+        assert!(!add_hir_to_simple_nodes(
+            &Hir::Alternation(vec![Hir::Empty]),
+            Modifiers::default(),
+            false,
+            &mut Vec::new()
+        ));
+        assert!(!add_hir_to_simple_nodes(
+            &Hir::Concat(vec![Hir::Dot, Hir::Assertion(AssertionKind::StartLine)]),
+            Modifiers::default(),
+            false,
+            &mut Vec::new()
+        ));
+        assert!(!add_hir_to_simple_nodes(
+            &Hir::Concat(vec![Hir::Dot, Hir::Assertion(AssertionKind::StartLine)]),
+            Modifiers::default(),
+            true,
+            &mut Vec::new()
+        ));
     }
 
     #[test]
@@ -219,7 +305,8 @@ mod tests {
                 ..Default::default()
             },
             false,
-        );
+        )
+        .unwrap();
         let revidator = build_validator(
             "a.c",
             Modifiers {
@@ -227,7 +314,8 @@ mod tests {
                 ..Default::default()
             },
             true,
-        );
+        )
+        .unwrap();
 
         // Test the start/end handling
         assert_eq!(validator.find_anchored_fwd(b"abc", 0, 3), Some(3));
@@ -259,8 +347,8 @@ mod tests {
 
     #[test]
     fn test_simple_validator_masks() {
-        let validator = build_validator("{ 5? ~?A }", Modifiers::default(), false);
-        let revidator = build_validator("{ 5? ~?A }", Modifiers::default(), true);
+        let validator = build_validator("{ 5? ~?A }", Modifiers::default(), false).unwrap();
+        let revidator = build_validator("{ 5? ~?A }", Modifiers::default(), true).unwrap();
 
         // Test matching of masks
         assert_eq!(validator.find_anchored_fwd(b"\x50\x0B", 0, 2), Some(2));
@@ -278,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_simple_validator_dot() {
-        let v1 = build_validator(".", Modifiers::default(), false);
+        let v1 = build_validator(".", Modifiers::default(), false).unwrap();
         let v2 = build_validator(
             ".",
             Modifiers {
@@ -286,7 +374,8 @@ mod tests {
                 ..Default::default()
             },
             false,
-        );
+        )
+        .unwrap();
 
         assert_eq!(v1.find_anchored_fwd(b"a", 0, 1), Some(1));
         assert_eq!(v2.find_anchored_fwd(b"a", 0, 1), Some(1));
