@@ -1,8 +1,9 @@
+use bitmaps::Bitmap;
 use boreal_parser::{
     hex_string::{Mask, Token},
     regex::{
-        AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Node, RepetitionKind,
-        RepetitionRange,
+        AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Node, PerlClass,
+        PerlClassKind, RepetitionKind, RepetitionRange,
     },
 };
 
@@ -19,7 +20,7 @@ pub enum Hir {
     Assertion(AssertionKind),
 
     /// Set of allowed values for a single byte.
-    Class(ClassKind),
+    Class(Class),
 
     /// Mask over a byte, e.g. `?A`, `~5?`, ...
     Mask {
@@ -67,12 +68,33 @@ pub enum Hir {
     },
 }
 
+/// Class of bytes.
+#[derive(Clone, Debug)]
+pub struct Class {
+    /// Class definition.
+    //
+    // TODO: This is kept around so that the HIR can be retranslated back into a proper regex
+    // string when converting to the regex_automata expressions.
+    // This could be removed by either:
+    // - converting our HIR into the regex_automata HIR
+    // - converting this class into an explicit class with one byte for each bit in the
+    //   bitmap. But it would require ensuring this does not cause regressions (it should
+    //   not).
+    pub definition: ClassKind,
+
+    /// Bitfield of which bytes are in the class.
+    pub bitmap: Bitmap<256>,
+}
+
 impl From<Node> for Hir {
     fn from(value: Node) -> Self {
         match value {
             Node::Alternation(v) => Hir::Alternation(v.into_iter().map(Into::into).collect()),
             Node::Assertion(v) => Hir::Assertion(v),
-            Node::Class(v) => Hir::Class(v),
+            Node::Class(definition) => Hir::Class(Class {
+                bitmap: class_to_bitmap(&definition),
+                definition,
+            }),
             Node::Concat(v) => Hir::Concat(v.into_iter().map(Into::into).collect()),
             Node::Dot => Hir::Dot,
             Node::Empty => Hir::Empty,
@@ -87,6 +109,70 @@ impl From<Node> for Hir {
     }
 }
 
+fn class_to_bitmap(class_kind: &ClassKind) -> Bitmap<256> {
+    match class_kind {
+        ClassKind::Perl(p) => perl_class_to_bitmap(p),
+        ClassKind::Bracketed(BracketedClass { items, negated }) => {
+            let mut bitmap = Bitmap::new();
+
+            for item in items {
+                match item {
+                    BracketedClassItem::Perl(p) => {
+                        bitmap |= perl_class_to_bitmap(p);
+                    }
+                    BracketedClassItem::Literal(b) => {
+                        let _ = bitmap.set(usize::from(*b), true);
+                    }
+                    BracketedClassItem::Range(a, b) => {
+                        for c in *a..=*b {
+                            let _ = bitmap.set(usize::from(c), true);
+                        }
+                    }
+                }
+            }
+
+            if *negated {
+                bitmap.invert();
+            }
+            bitmap
+        }
+    }
+}
+
+fn perl_class_to_bitmap(cls: &PerlClass) -> Bitmap<256> {
+    let PerlClass { kind, negated } = cls;
+
+    let mut bitmap = Bitmap::new();
+    match kind {
+        PerlClassKind::Word => {
+            for c in b'0'..=b'9' {
+                let _ = bitmap.set(usize::from(c), true);
+            }
+            for c in b'A'..=b'Z' {
+                let _ = bitmap.set(usize::from(c), true);
+            }
+            let _ = bitmap.set(usize::from(b'_'), true);
+            for c in b'a'..=b'z' {
+                let _ = bitmap.set(usize::from(c), true);
+            }
+        }
+        PerlClassKind::Space => {
+            for c in [b'\t', b'\n', b'\x0B', b'\x0C', b'\r', b' '] {
+                let _ = bitmap.set(usize::from(c), true);
+            }
+        }
+        PerlClassKind::Digit => {
+            for c in b'0'..=b'9' {
+                let _ = bitmap.set(usize::from(c), true);
+            }
+        }
+    }
+    if *negated {
+        bitmap.invert();
+    }
+    bitmap
+}
+
 impl From<Vec<Token>> for Hir {
     fn from(tokens: Vec<Token>) -> Self {
         Hir::Concat(tokens.into_iter().map(Into::into).collect())
@@ -97,10 +183,19 @@ impl From<Token> for Hir {
     fn from(token: Token) -> Self {
         match token {
             Token::Byte(b) => Hir::Literal(b),
-            Token::NotByte(b) => Hir::Class(ClassKind::Bracketed(BracketedClass {
-                items: vec![BracketedClassItem::Literal(b)],
-                negated: true,
-            })),
+            Token::NotByte(b) => {
+                let mut bitmap = Bitmap::new();
+                let _ = bitmap.set(usize::from(b), true);
+                bitmap.invert();
+
+                Hir::Class(Class {
+                    definition: ClassKind::Bracketed(BracketedClass {
+                        items: vec![BracketedClassItem::Literal(b)],
+                        negated: true,
+                    }),
+                    bitmap,
+                })
+            }
             Token::MaskedByte(b, mask) => masked_byte_to_hir(b, &mask, false),
             Token::NotMaskedByte(b, mask) => masked_byte_to_hir(b, &mask, true),
             Token::Jump(jump) => {
@@ -146,5 +241,12 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits(Hir::Empty);
+        test_type_traits(Class {
+            definition: ClassKind::Perl(PerlClass {
+                kind: PerlClassKind::Word,
+                negated: false,
+            }),
+            bitmap: Bitmap::new(),
+        });
     }
 }

@@ -18,6 +18,8 @@ pub use hir::Hir;
 mod visitor;
 pub(crate) use visitor::{visit, VisitAction, Visitor};
 
+use self::hir::Class;
+
 /// Regex following the YARA format.
 #[derive(Clone, Debug)]
 pub struct Regex {
@@ -147,8 +149,14 @@ impl Visitor for AstPrinter {
                     self.res.push(']');
                 }
             }
-            Hir::Class(ClassKind::Perl(p)) => self.push_perl_class(p),
-            Hir::Class(ClassKind::Bracketed(c)) => self.push_bracketed_class(c),
+            Hir::Class(Class {
+                definition: ClassKind::Perl(p),
+                bitmap: _bitmap,
+            }) => self.push_perl_class(p),
+            Hir::Class(Class {
+                definition: ClassKind::Bracketed(c),
+                bitmap: _bitmap,
+            }) => self.push_bracketed_class(c),
             Hir::Dot => self.res.push('.'),
             Hir::Literal(b) => self.push_literal(*b),
             Hir::Group(_) => self.res.push('('),

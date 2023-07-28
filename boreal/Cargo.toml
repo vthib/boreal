@@ -45,6 +45,9 @@ regex-automata = { version = "0.3", default-features = false, features = ["std",
 # No default features to disable unicode, we do not need it
 regex-syntax = { version = "0.7", default-features = false }
 
+# Bitmap used during compilation of strings
+bitmaps = "3.2"
+
 # "hash" feature
 crc32fast = { version = "1.3", optional = true }
 hex = { version = "0.4", optional = true }
