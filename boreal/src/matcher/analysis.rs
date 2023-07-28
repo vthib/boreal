@@ -1,6 +1,6 @@
 use boreal_parser::regex::AssertionKind;
 
-use crate::regex::{visit, Hir, VisitAction, Visitor};
+use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 pub struct HirAnalysis {
     // Contains start or end line assertions.
@@ -113,9 +113,10 @@ impl Visitor for HirAnalyser {
                     self.nb_alt_literals = count.checked_mul(if self.dot_all { 256 } else { 255 });
                 }
             }
-            Hir::Class(_) => {
-                // TODO: handle classes
-                self.nb_alt_literals = None;
+            Hir::Class(Class { bitmap, .. }) => {
+                if let Some(count) = &mut self.nb_alt_literals {
+                    self.nb_alt_literals = count.checked_mul(bitmap.len());
+                }
                 self.has_classes = true;
             }
             Hir::Literal(_) | Hir::Empty | Hir::Group(_) | Hir::Concat(_) => (),
@@ -217,10 +218,9 @@ mod tests {
         test("{ AB [-2] 01 }", false, None);
         test("{ AB [1-2] 01 }", false, None);
 
-        // Classes are not handled
-        test(r"[a]", false, None);
-        test(r"[^ab]", false, None);
-        test(r"\w", false, None);
+        test(r"[a-d_%]", false, Some(6));
+        test(r"[^ab]", false, Some(254));
+        test(r"\w", false, Some(63));
 
         // Dot value depends on dot_all
         test(r".", false, Some(255));

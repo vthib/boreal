@@ -1,4 +1,6 @@
-use crate::regex::{visit, Hir, VisitAction, Visitor};
+use bitmaps::Bitmap;
+
+use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 /// Can the hex string be expressed using only literals.
 pub(super) fn hir_to_only_literals(hir: &Hir) -> Option<Vec<Vec<u8>>> {
@@ -44,6 +46,26 @@ impl Extractor {
             _ => (b..=(b + 0xF)).map(|i| vec![i]).collect(),
         };
         self.cartesian_product(&suffixes);
+    }
+
+    fn add_class(&mut self, bitmap: &Bitmap<256>) {
+        // First, commit the local buffer, to have a proper list of all possible literals
+        self.commit_buffer();
+
+        if let Some(all) = self.all.as_mut() {
+            *all = all
+                .iter()
+                .flat_map(|prefix| {
+                    bitmap.into_iter().map(move |byte| {
+                        let mut v = Vec::with_capacity(prefix.len() + 1);
+                        v.extend(prefix);
+                        #[allow(clippy::cast_possible_truncation)]
+                        v.push(byte as u8);
+                        v
+                    })
+                })
+                .collect();
+        }
     }
 
     fn cartesian_product(&mut self, suffixes: &[Vec<u8>]) {
@@ -124,7 +146,11 @@ impl Visitor for Extractor {
                 self.all = Some(Vec::new());
                 VisitAction::Continue
             }
-            Hir::Class(_) | Hir::Assertion(_) | Hir::Repetition { .. } => {
+            Hir::Class(Class { bitmap, .. }) => {
+                self.add_class(bitmap);
+                VisitAction::Continue
+            }
+            Hir::Assertion(_) | Hir::Repetition { .. } => {
                 self.all = None;
                 VisitAction::Skip
             }
@@ -171,12 +197,12 @@ mod tests {
     #[test]
     fn test_regex_extract_literals() {
         #[track_caller]
-        fn test(regex: &str, expected: Option<&[&[u8]]>) {
+        fn test(regex: &str, expected: Option<Vec<Vec<u8>>>) {
             let regex = parse_regex_string(regex);
             let hir = regex.ast.into();
 
             let res = hir_to_only_literals(&hir);
-            match &res {
+            match res {
                 Some(v) => assert_eq!(v, expected.unwrap()),
                 None => assert!(expected.is_none()),
             };
@@ -195,21 +221,73 @@ mod tests {
         test(r"a{1,}", None);
         test(r"a{2,3}", None);
 
-        // Classes are not handled
-        test(r"[a]", None);
-        test(r"[^ab]", None);
-        test(r"\w", None);
+        // Classes are handled
+        test(
+            r"[a-d_%]",
+            Some(vec![
+                b"%".to_vec(),
+                b"_".to_vec(),
+                b"a".to_vec(),
+                b"b".to_vec(),
+                b"c".to_vec(),
+                b"d".to_vec(),
+            ]),
+        );
+        test(
+            r"[^ab]",
+            Some(
+                (0..=255_u8)
+                    .filter(|v| *v != b'a' && *v != b'b')
+                    .map(|v| vec![v])
+                    .collect(),
+            ),
+        );
+        test(
+            r"\w",
+            Some(
+                (b'0'..=b'9')
+                    .chain(b'A'..=b'Z')
+                    .chain(b'_'..=b'_')
+                    .chain(b'a'..=b'z')
+                    .map(|v| vec![v])
+                    .collect(),
+            ),
+        );
+        test(
+            r"a[bc][d-f]g[hk]",
+            Some(vec![
+                b"abdgh".to_vec(),
+                b"abdgk".to_vec(),
+                b"abegh".to_vec(),
+                b"abegk".to_vec(),
+                b"abfgh".to_vec(),
+                b"abfgk".to_vec(),
+                b"acdgh".to_vec(),
+                b"acdgk".to_vec(),
+                b"acegh".to_vec(),
+                b"acegk".to_vec(),
+                b"acfgh".to_vec(),
+                b"acfgk".to_vec(),
+            ]),
+        );
 
         // Dot leads to too many literals
         test(r".", None);
 
         // Concat, empty, literal, group, all works
-        test(r"a(b)()e", Some(&[b"abe"]));
+        test(r"a(b)()e", Some(vec![b"abe".to_vec()]));
 
         // Alternations works
         test(
             r"a|f(b|c)|((ab)|)c|d",
-            Some(&[b"a", b"fb", b"fc", b"abc", b"c", b"d"]),
+            Some(vec![
+                b"a".to_vec(),
+                b"fb".to_vec(),
+                b"fc".to_vec(),
+                b"abc".to_vec(),
+                b"c".to_vec(),
+                b"d".to_vec(),
+            ]),
         );
     }
 
