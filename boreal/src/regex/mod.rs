@@ -13,12 +13,10 @@ use boreal_parser::regex::{
 };
 
 mod hir;
-pub use hir::Hir;
+pub use hir::{Class, Hir};
 
 mod visitor;
 pub(crate) use visitor::{visit, VisitAction, Visitor};
-
-use self::hir::Class;
 
 /// Regex following the YARA format.
 #[derive(Clone, Debug)]
