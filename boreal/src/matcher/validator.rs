@@ -150,6 +150,29 @@ impl Validator {
     }
 }
 
+impl std::fmt::Display for Validator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NonGreedy { forward, reverse } => {
+                write!(f, "NonGreedy {{ ")?;
+                match reverse {
+                    Some(v) => write!(f, "reverse: {v}")?,
+                    None => write!(f, "reverse: none")?,
+                };
+                write!(f, ", ")?;
+                match forward {
+                    Some(v) => write!(f, "forward: {v}")?,
+                    None => write!(f, "forward: none")?,
+                };
+                write!(f, " }}")
+            }
+            Self::Greedy { .. } => {
+                write!(f, "Greedy {{ reverse: Dfa, full: Dfa }}")
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(super) enum HalfValidator {
     // Simplified validator for very simple regex expressions.
@@ -196,6 +219,15 @@ impl HalfValidator {
         match self {
             Self::Simple(validator) => validator.find_anchored_rev(haystack, start, end),
             Self::Dfa(validator) => validator.find_anchored_rev(haystack, start, end, match_type),
+        }
+    }
+}
+
+impl std::fmt::Display for HalfValidator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Simple(_) => write!(f, "Simple"),
+            Self::Dfa(_) => write!(f, "Dfa"),
         }
     }
 }
