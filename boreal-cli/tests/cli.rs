@@ -525,22 +525,22 @@ rule a {
     literals: ["abc"]
     atoms: ["abc"]
     atoms quality: 60
-    algo: literals
+    algo: Literals
   $b = { 01 ( FE | EF ) }
     literals: [{ 01fe }, { 01ef }]
     atoms: [{ 01fe }, { 01ef }]
     atoms quality: 44
-    algo: literals
+    algo: Literals
   $c = /foo\d??bar/ fullword
     literals: ["bar"]
     atoms: ["bar"]
     atoms quality: 60
-    algo: atomized
+    algo: Atomized { NonGreedy { reverse: Dfa, forward: none } }
   $d = /.{10}/ fullword
     literals: []
     atoms: []
     atoms quality: 0
-    algo: raw
+    algo: Raw
 "#;
 
     let input = test_file("");

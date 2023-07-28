@@ -112,7 +112,7 @@ pub(crate) fn compile_variable(
             literals: res.matcher.literals.clone(),
             atoms,
             atoms_quality,
-            matching_algo: res.matcher.kind_to_string(),
+            matching_algo: res.matcher.to_desc(),
         })
     } else {
         None

@@ -343,13 +343,12 @@ impl Matcher {
         None
     }
 
-    pub fn kind_to_string(&self) -> String {
+    pub fn to_desc(&self) -> String {
         match &self.kind {
-            MatcherKind::Literals => "literals",
-            MatcherKind::Atomized { .. } => "atomized",
-            MatcherKind::Raw(_) => "raw",
+            MatcherKind::Literals => "Literals".to_owned(),
+            MatcherKind::Atomized { validator } => format!("Atomized {{ {validator} }}"),
+            MatcherKind::Raw(_) => "Raw".to_owned(),
         }
-        .to_owned()
     }
 
     fn validate_fullword(&self, mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
