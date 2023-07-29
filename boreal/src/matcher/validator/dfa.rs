@@ -140,7 +140,7 @@ impl DfaValidator {
         while i < end {
             // Ensure the current byte is a wide byte, otherwise is input is no longer wide,
             // and we must end the search.
-            if i + 1 < end && mem[i + 1] != b'\0' {
+            if i + 1 >= end || mem[i + 1] != b'\0' {
                 break;
             }
             let b = mem[i];
@@ -159,7 +159,7 @@ impl DfaValidator {
         // the special "EOI" transition at the end of the search.
         state = self.dfa.next_eoi_state(cache, state).ok()?;
         if state.is_match() {
-            last_match = Some(end);
+            last_match = Some(i);
         }
 
         last_match
@@ -340,6 +340,14 @@ mod tests {
             Some(2)
         );
         assert_eq!(
+            validator.find_anchored_fwd(b"a\0bb", 0, 4, MatchType::WideStandard),
+            Some(2)
+        );
+        assert_eq!(
+            validator.find_anchored_fwd(b"a\0b", 0, 3, MatchType::WideStandard),
+            Some(2)
+        );
+        assert_eq!(
             validator.find_anchored_fwd(b"aa\0", 0, 3, MatchType::WideStandard),
             None,
         );
@@ -359,6 +367,10 @@ mod tests {
         );
         assert_eq!(
             validator.find_anchored_fwd(b"b\0b\0", 0, 4, MatchType::WideStandard),
+            Some(2),
+        );
+        assert_eq!(
+            validator.find_anchored_fwd(b"b\0b", 0, 3, MatchType::WideStandard),
             Some(2),
         );
         assert_eq!(
@@ -442,6 +454,10 @@ mod tests {
         );
         assert_eq!(
             validator.find_anchored_rev(b"aa\0", 0, 3, MatchType::WideStandard),
+            Some(1),
+        );
+        assert_eq!(
+            validator.find_anchored_rev(b"\0a\0", 0, 3, MatchType::WideStandard),
             Some(1),
         );
         assert_eq!(
