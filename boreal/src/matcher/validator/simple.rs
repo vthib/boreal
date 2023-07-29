@@ -37,10 +37,16 @@ impl SimpleValidator {
         if analysis.has_start_or_end_line
             || analysis.has_repetitions
             || analysis.has_word_boundaries
+            // Classes are not handled because the naive solution would be to use the class bitmap
+            // as a new SimpleNode, which would make its size grow to more than 32 bytes, compared
+            // to the min 16 bytes currently. This makes performances much worse for use-cases
+            // very reliant on simple validators.
+            // Some classes could be handled if there is a way to encode how to check them in as
+            // few bytes as possible. But for the moment, this isn't really needed.
             || analysis.has_classes
             || analysis.has_alternations
         {
-            // TODO: handle fixed size repetitions and handle classes.
+            // TODO: handle fixed size repetitions.
             return None;
         }
 
