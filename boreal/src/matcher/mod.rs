@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::HashSet, ops::Range};
 
 use boreal_parser::VariableModifiers;
 
@@ -149,6 +149,17 @@ impl Matcher {
         if literals.iter().any(|lit| lit.len() < 2) {
             literals.clear();
         }
+
+        // Dedup literals
+        let mut new_lits = Vec::with_capacity(literals.len());
+        let mut known_lits = HashSet::with_capacity(literals.len());
+        for lit in literals {
+            if known_lits.insert(lit.clone()) {
+                new_lits.push(lit);
+            }
+        }
+        literals = new_lits;
+
         apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
 
         let kind = if literals.is_empty() {
