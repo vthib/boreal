@@ -56,6 +56,15 @@ pub enum Node {
     /// Literal byte.
     Literal(u8),
 
+    /// Literal char, not ascii.
+    Char {
+        /// Value of the char
+        c: char,
+
+        /// Position in the input for this char.
+        span: Range<usize>,
+    },
+
     /// A group, i.e. (...).
     Group(Box<Node>),
 
@@ -321,7 +330,7 @@ fn single(input: Input) -> ParseResult<Node> {
         map(perl_class, |p| Node::Class(ClassKind::Perl(p))),
         map(bracketed_class, |p| Node::Class(ClassKind::Bracketed(p))),
         map(escaped_char, Node::Literal),
-        map(literal, Node::Literal),
+        literal,
     ))(input)
 }
 
@@ -417,17 +426,23 @@ fn bracketed_class_char(input: Input) -> ParseResult<u8> {
     Ok((input, b))
 }
 
-fn literal(input: Input) -> ParseResult<u8> {
+fn literal(input: Input) -> ParseResult<Node> {
     let start = input.pos();
 
     // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
     // and newlines are not allowed
     // rest is disallowed because they have specific meaning.
-    let (input, b) = none_of("/\n()[\\|.$^+*?")(input)?;
-    let b = char_to_u8(b)
-        .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from_no_rtrim(start), kind)))?;
+    let (input, c) = none_of("/\n()[\\|.$^+*?")(input)?;
+    let node = if c.is_ascii() {
+        Node::Literal(c as u8)
+    } else {
+        Node::Char {
+            c,
+            span: input.get_span_from_no_rtrim(start),
+        }
+    };
 
-    Ok((input, b))
+    Ok((input, node))
 }
 
 fn escaped_char(input: Input) -> ParseResult<u8> {
@@ -665,7 +680,7 @@ mod tests {
             ]),
         );
 
-        parse_err(alternative, "é");
+        parse_err(alternative, "\\é");
     }
 
     #[test]
@@ -718,7 +733,7 @@ mod tests {
             ]),
         );
 
-        parse_err(concatenation, "é");
+        parse_err(concatenation, "\\é");
     }
 
     #[test]
@@ -1070,10 +1085,17 @@ mod tests {
 
     #[test]
     fn test_literal() {
-        parse(literal, "ab", "b", b'a');
-        parse(literal, "]", "", b']');
+        parse(literal, "ab", "b", Node::Literal(b'a'));
+        parse(literal, "]", "", Node::Literal(b']'));
 
-        parse_err(literal, "é");
+        parse(
+            literal,
+            "éb",
+            "b",
+            Node::Char {
+                c: 'é', span: 0..2
+            },
+        );
     }
 
     #[test]
