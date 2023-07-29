@@ -99,6 +99,11 @@ impl From<Node> for Hir {
             Node::Dot => Hir::Dot,
             Node::Empty => Hir::Empty,
             Node::Literal(v) => Hir::Literal(v),
+            Node::Char { c, .. } => {
+                let mut enc = vec![0; 4];
+                let res = c.encode_utf8(&mut enc);
+                Hir::Concat(res.as_bytes().iter().map(|v| Hir::Literal(*v)).collect())
+            }
             Node::Group(v) => Hir::Group(Box::new((*v).into())),
             Node::Repetition { node, kind, greedy } => Hir::Repetition {
                 hir: Box::new((*node).into()),
