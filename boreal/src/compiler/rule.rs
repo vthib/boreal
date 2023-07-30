@@ -203,12 +203,12 @@ impl<'a> RuleCompiler<'a> {
 
 pub(super) fn compile_rule(
     rule: parser::Rule,
-    namespace: &mut Namespace,
+    namespace: &Namespace,
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
     parsed_contents: &str,
 ) -> Result<CompiledRule, CompilationError> {
-    let (condition, wildcards, vars, warnings) = {
+    let (condition, rule_wildcard_uses, vars, warnings) = {
         let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols, params)?;
         let condition = compile_bool_expression(&mut compiler, rule.condition)?;
 
@@ -219,9 +219,6 @@ pub(super) fn compile_rule(
             compiler.warnings,
         )
     };
-    if !wildcards.is_empty() {
-        namespace.forbidden_rule_prefixes.extend(wildcards);
-    }
 
     // Check duplication of tags
     let mut tags_spans = HashMap::with_capacity(rule.tags.len());
@@ -270,6 +267,7 @@ pub(super) fn compile_rule(
         variables,
         variables_statistics,
         warnings,
+        rule_wildcard_uses,
     })
 }
 
@@ -279,6 +277,7 @@ pub(super) struct CompiledRule {
     pub variables: Vec<variable::Variable>,
     pub variables_statistics: Vec<statistics::CompiledString>,
     pub warnings: Vec<CompilationError>,
+    pub rule_wildcard_uses: Vec<String>,
 }
 
 #[cfg(test)]
@@ -314,6 +313,7 @@ mod tests {
             variables: Vec::new(),
             variables_statistics: Vec::new(),
             warnings: Vec::new(),
+            rule_wildcard_uses: Vec::new(),
         });
         test_type_traits_non_clonable(RuleCompilerVariable {
             name: "a".to_owned(),

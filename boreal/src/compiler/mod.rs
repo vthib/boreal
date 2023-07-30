@@ -392,6 +392,7 @@ impl Compiler {
                     variables,
                     variables_statistics,
                     warnings,
+                    rule_wildcard_uses,
                 } = rule::compile_rule(
                     *rule,
                     namespace,
@@ -404,6 +405,19 @@ impl Compiler {
                     kind: AddRuleErrorKind::Compilation(error),
                 })?;
 
+                // Check the rule has no name conflict.
+                if namespace.rules_indexes.contains_key(&rule_name) {
+                    return Err(AddRuleError {
+                        path: current_filepath.map(Path::to_path_buf),
+                        kind: AddRuleErrorKind::Compilation(CompilationError::DuplicatedRuleName {
+                            name: rule_name,
+                            span: name_span,
+                        }),
+                    });
+                }
+
+                // From this point onward, the rule is valid. We can add all data related
+                // to the rule.
                 if self.params.compute_statistics {
                     status.statistics.push(statistics::CompiledRule {
                         filepath: current_filepath.map(ToOwned::to_owned),
@@ -422,17 +436,7 @@ impl Compiler {
                         kind: AddRuleErrorKind::Compilation(error),
                     }));
 
-                // Check then insert, to avoid a double clone on the rule name. Maybe
-                // someday we'll get the raw entry API.
-                if namespace.rules_indexes.contains_key(&rule_name) {
-                    return Err(AddRuleError {
-                        path: current_filepath.map(Path::to_path_buf),
-                        kind: AddRuleErrorKind::Compilation(CompilationError::DuplicatedRuleName {
-                            name: rule_name,
-                            span: name_span,
-                        }),
-                    });
-                }
+                namespace.forbidden_rule_prefixes.extend(rule_wildcard_uses);
 
                 if is_global {
                     let _r = namespace.rules_indexes.insert(rule_name, None);

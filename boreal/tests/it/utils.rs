@@ -113,12 +113,7 @@ impl Compiler {
 
     #[track_caller]
     pub fn check_add_rules_err(mut self, rules: &str, expected_prefix: &str) {
-        let err = self.compiler.add_rules_str(rules).unwrap_err();
-        let desc = add_rule_error_get_desc(&err, rules);
-        assert!(
-            desc.starts_with(expected_prefix),
-            "error: {desc}\nexpected prefix: {expected_prefix}"
-        );
+        self.check_add_rules_err_boreal(rules, expected_prefix);
 
         // Check libyara also rejects it
         if let Some(compiler) = self.yara_compiler.take() {
@@ -127,6 +122,16 @@ impl Compiler {
                 "conformity test failed for libyara"
             );
         }
+    }
+
+    #[track_caller]
+    pub fn check_add_rules_err_boreal(&mut self, rules: &str, expected_prefix: &str) {
+        let err = self.compiler.add_rules_str(rules).unwrap_err();
+        let desc = add_rule_error_get_desc(&err, rules);
+        assert!(
+            desc.starts_with(expected_prefix),
+            "error: {desc}\nexpected prefix: {expected_prefix}"
+        );
     }
 
     pub fn check_add_rules_warnings(mut self, rules: &str, expected_warnings_prefix: &[&str]) {
