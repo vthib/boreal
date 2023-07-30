@@ -119,6 +119,32 @@ fn test_for_expression_rules_err() {
          rule b3 { condition: true }",
         r#"mem:5:15: error: rule "b3" matches a previous rule set "b*""#,
     );
+
+    // It should be OK if the rule that added the wildcard failed to compile.
+    // This cannot be tested with yara since yara invalidates the compiler as soon as one
+    // error is reached.
+    let mut compiler = Compiler::new();
+    compiler.add_rules("rule a0 { condition: true }");
+    // Fails to compile because a string is not used
+    compiler.check_add_rules_err_boreal(
+        r#"rule b {
+        strings:
+            $t = "abc"
+        condition:
+            all of (a*)
+    }"#,
+        "mem:3:13: error: variable $t is unused",
+    );
+    // Adding a rule prefixed by "a" should thus be allowed.
+    compiler.add_rules("rule a1 { condition: true }");
+
+    // Do the same, but trigger an error very late: if the rule's name is already in the namespace.
+    compiler.check_add_rules_err_boreal(
+        "rule a1 { condition: all of (a*) }",
+        "mem:1:6: error: rule `a1` is already declared in this namespace",
+    );
+    // This should again work
+    compiler.add_rules("rule a2 { condition: true }");
 }
 
 #[test]
