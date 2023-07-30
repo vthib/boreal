@@ -296,7 +296,7 @@ mod tests {
     use super::*;
     use crate::{
         matcher::analysis::analyze_hir,
-        test_helpers::{parse_regex_string, test_type_traits_non_clonable},
+        test_helpers::{expr_to_hir, test_type_traits_non_clonable},
     };
 
     #[test]
@@ -310,8 +310,7 @@ mod tests {
     #[test]
     fn test_find_wide_anchored_fwd() {
         fn build(expr: &str, ascii: bool) -> DfaValidator {
-            let regex = parse_regex_string(expr);
-            let hir = regex.ast.into();
+            let hir = expr_to_hir(expr);
             let analysis = analyze_hir(&hir, false);
             DfaValidator::new(
                 &hir,
@@ -419,8 +418,7 @@ mod tests {
     #[test]
     fn test_find_wide_anchored_rev() {
         fn build(expr: &str, ascii: bool) -> DfaValidator {
-            let regex = parse_regex_string(expr);
-            let hir = regex.ast.into();
+            let hir = expr_to_hir(expr);
             let analysis = analyze_hir(&hir, false);
             DfaValidator::new(
                 &hir,

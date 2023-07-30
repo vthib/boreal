@@ -318,16 +318,14 @@ impl std::error::Error for Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{parse_hex_string, parse_regex_string, test_type_traits};
+    use crate::test_helpers::{expr_to_hir, test_type_traits};
 
     #[test]
     fn test_regex_conversion() {
+        #[track_caller]
         fn test(expr: &str, expected_res: Option<&str>) {
-            let regex = parse_regex_string(expr);
-            assert_eq!(
-                regex_hir_to_string(&regex.ast.into()),
-                expected_res.unwrap_or(expr)
-            );
+            let hir = expr_to_hir(expr);
+            assert_eq!(regex_hir_to_string(&hir), expected_res.unwrap_or(expr));
         }
 
         // Syntaxes that matches between yara and rust regexes.
@@ -363,9 +361,9 @@ mod tests {
         );
         // Regex from the signature-base repository
         test(
-            r#"{"Hosts":\[".{10,512}"\],"Proxy":".{0,512}","Version":".{1,32}","Guid":""#,
+            r#" {"Hosts":\[".{10,512}"\],"Proxy":".{0,512}","Version":".{1,32}","Guid":""#,
             Some(
-                r#"\x7b"Hosts":\x5b".{10,512}"\x5d,"Proxy":".{0,512}","Version":".{1,32}","Guid":""#,
+                r#" \x7b"Hosts":\x5b".{10,512}"\x5d,"Proxy":".{0,512}","Version":".{1,32}","Guid":""#,
             ),
         );
     }
@@ -373,9 +371,9 @@ mod tests {
     #[test]
     fn test_hex_string_to_regex() {
         #[track_caller]
-        fn test(hex_string: &str, expected_regex: &str) {
-            let hex_string = parse_hex_string(hex_string);
-            assert_eq!(&regex_hir_to_string(&hex_string.into()), expected_regex);
+        fn test(expr: &str, expected_regex: &str) {
+            let hir = expr_to_hir(expr);
+            assert_eq!(&regex_hir_to_string(&hir), expected_regex);
         }
 
         test(

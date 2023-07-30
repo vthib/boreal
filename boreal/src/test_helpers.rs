@@ -1,8 +1,19 @@
 use boreal_parser::hex_string::Token;
 use boreal_parser::{parse, Regex, VariableDeclarationValue};
 
+use crate::regex::Hir;
+
 #[track_caller]
-pub fn parse_hex_string(hex_string: &str) -> Vec<Token> {
+pub fn expr_to_hir(expr: &str) -> Hir {
+    if expr.starts_with('{') {
+        parse_hex_string(expr).into()
+    } else {
+        parse_regex_string(expr).ast.into()
+    }
+}
+
+#[track_caller]
+fn parse_hex_string(hex_string: &str) -> Vec<Token> {
     let rule_str = format!("rule a {{ strings: $a = {hex_string} condition: $a }}");
     let mut file = parse(&rule_str).unwrap();
     let mut rule = file
@@ -21,7 +32,7 @@ pub fn parse_hex_string(hex_string: &str) -> Vec<Token> {
 }
 
 #[track_caller]
-pub fn parse_regex_string(hex_string: &str) -> Regex {
+fn parse_regex_string(hex_string: &str) -> Regex {
     let rule_str = format!("rule a {{ strings: $a = /{hex_string}/ condition: $a }}");
     let mut file = parse(&rule_str).unwrap();
     let mut rule = file

@@ -181,15 +181,10 @@ impl Visitor for HirAnalyser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{parse_hex_string, parse_regex_string};
+    use crate::test_helpers::expr_to_hir;
 
     fn analyze_expr(expr: &str, dot_all: bool) -> HirAnalysis {
-        let hir = if expr.starts_with('{') {
-            parse_hex_string(expr).into()
-        } else {
-            parse_regex_string(expr).ast.into()
-        };
-        analyze_hir(&hir, dot_all)
+        analyze_hir(&expr_to_hir(expr), dot_all)
     }
 
     #[test]

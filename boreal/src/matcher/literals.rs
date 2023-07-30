@@ -383,7 +383,7 @@ impl Visitor for PrePostExtractor {
 mod tests {
     use crate::{
         regex::regex_hir_to_string,
-        test_helpers::{parse_hex_string, parse_regex_string, test_type_traits_non_clonable},
+        test_helpers::{expr_to_hir, test_type_traits_non_clonable},
     };
 
     use super::*;
@@ -391,14 +391,9 @@ mod tests {
     #[test]
     fn test_hex_string_literals() {
         #[track_caller]
-        fn test(
-            hex_string_expr: &str,
-            expected_lits: &[&[u8]],
-            expected_pre: &str,
-            expected_post: &str,
-        ) {
-            let hex_string = parse_hex_string(hex_string_expr);
-            let exprs = get_literals_details(&hex_string.into());
+        fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
+            let hir = expr_to_hir(expr);
+            let exprs = get_literals_details(&hir);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -629,8 +624,8 @@ mod tests {
     fn test_regex_literals() {
         #[track_caller]
         fn test(expr: &str, expected_lits: &[&[u8]], expected_pre: &str, expected_post: &str) {
-            let regex = parse_regex_string(expr);
-            let exprs = get_literals_details(&regex.ast.into());
+            let hir = expr_to_hir(expr);
+            let exprs = get_literals_details(&hir);
             assert_eq!(exprs.literals, expected_lits);
             assert_eq!(
                 exprs
@@ -689,7 +684,7 @@ mod tests {
             "",
         );
 
-        test("{ AB CD 01 }", &[b"{ AB CD 01 }"], "", "");
+        test(" { AB CD 01 }", &[b" { AB CD 01 }"], "", "");
     }
 
     #[test]
