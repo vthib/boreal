@@ -272,6 +272,7 @@ mod tests {
 
         // Dot leads to too many literals
         test(r".", None);
+        test(r".[aA]", None);
 
         // Concat, empty, literal, group, all works
         test(r"a(b)()e", Some(vec![b"abe".to_vec()]));

@@ -234,6 +234,32 @@ fn test_variable_regex_wide() {
     checker.check(b"acccf\0", true);
     checker.check(b"a\0c\0c\0c\0f\0\0\0", true);
     checker.check(b"a\0c\0c\0c\0f\0\0", false);
+
+    let checker = build_checker(r"d\b", "wide ascii");
+    checker.check(b"d", true);
+    checker.check(b"d\0", true);
+    checker.check(b"d.", true);
+    checker.check(b"d\0b", true);
+    checker.check(b"d\0b\0", true);
+    checker.check(b"d\0.\0", true);
+    checker.check(b"da", false);
+    checker.check(b"da\0", false);
+
+    let checker = build_checker(r"ad\b", "wide ascii");
+    checker.check(b"ad", true);
+    checker.check(b"ad\0", true);
+    checker.check(b"ad.", true);
+    checker.check(b"ad\0b", true);
+    checker.check(b"ad\0b\0", true);
+    checker.check(b"ad\0.\0", true);
+    checker.check(b"ada", false);
+    checker.check(b"ada\0", false);
+    checker.check(b"a\0d\0", true);
+    checker.check(b"a\0d\0b", true);
+    checker.check(b"a\0d\0b\0", false);
+    checker.check(b"a\0d\0.\0", true);
+    checker.check(b"a\0da", false);
+    checker.check(b"a\0da\0", false);
 }
 
 fn join(expr: &[u8], prefix: &[u8], suffix: &[u8]) -> Vec<u8> {
@@ -1185,6 +1211,7 @@ fn test_variable_find() {
 
 #[test]
 fn test_variable_find_at() {
+    #[track_caller]
     fn check_at(mem: &[u8], at: u64, res: bool) {
         let rule = format!(
             r#"
@@ -1192,6 +1219,7 @@ fn test_variable_find_at() {
         strings:
             $a = "34"
             $b = /[a-z]{{2}}/
+            $c = /=%=$/
         condition:
             for any of them: ($ at {at})
     }}"#
@@ -1209,6 +1237,15 @@ fn test_variable_find_at() {
     check_at(b"abc", 0, true);
     check_at(b"abc", 1, true);
     check_at(b"abc", 2, false);
+    check_at(b" abc", 0, false);
+    check_at(b" abc", 1, true);
+    check_at(b" abc", 2, true);
+
+    check_at(b"=%=", 0, true);
+    check_at(b"=%=", 1, false);
+    check_at(b"=%=", 2, false);
+    check_at(b" =%=", 0, false);
+    check_at(b" =%=", 1, true);
 }
 
 #[test]
@@ -1219,8 +1256,10 @@ fn test_variable_find_in() {
     rule a {{
         strings:
             $a = "345"
+            // Force a raw matcher
+            $b = /abc$/
         condition:
-            $a in ({from}..{to})
+            $a in ({from}..{to}) or $b in ({from}..{to})
     }}"#
         );
         check(&rule, mem, res);
@@ -1234,6 +1273,11 @@ fn test_variable_find_in() {
     check_in(b"01234567", 2, 3, true);
     check_in(b"01234567", 1, 2, false);
     check_in(b"34353435", 1, 6, false);
+
+    check_in(b"abc", 0, 4, true);
+    check_in(b"0123abc", 0, 4, true);
+    check_in(b"0123abc", 0, 2, false);
+    check_in(b"0123abc", 5, 8, false);
 }
 
 #[test]

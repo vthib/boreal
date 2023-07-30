@@ -97,5 +97,6 @@ mod tests {
             atoms_quality: 0,
             matching_algo: String::new(),
         });
+        test_type_traits(Evaluation::default());
     }
 }
