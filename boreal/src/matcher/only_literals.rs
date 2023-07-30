@@ -192,14 +192,13 @@ impl Visitor for Extractor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{parse_hex_string, parse_regex_string};
+    use crate::test_helpers::expr_to_hir;
 
     #[test]
     fn test_regex_extract_literals() {
         #[track_caller]
-        fn test(regex: &str, expected: Option<Vec<Vec<u8>>>) {
-            let regex = parse_regex_string(regex);
-            let hir = regex.ast.into();
+        fn test(expr: &str, expected: Option<Vec<Vec<u8>>>) {
+            let hir = expr_to_hir(expr);
 
             let res = hir_to_only_literals(&hir);
             match res {
@@ -294,10 +293,8 @@ mod tests {
     #[test]
     fn test_extract_literals() {
         #[track_caller]
-        fn test(hex_string: &str, expected: Option<&[&[u8]]>) {
-            let hex_string = parse_hex_string(hex_string);
-            let hir = hex_string.into();
-
+        fn test(expr: &str, expected: Option<&[&[u8]]>) {
+            let hir = expr_to_hir(expr);
             let res = hir_to_only_literals(&hir);
             match &res {
                 Some(v) => assert_eq!(v, expected.unwrap()),

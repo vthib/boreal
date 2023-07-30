@@ -187,9 +187,7 @@ mod tests {
 
     use super::*;
     use crate::matcher::analysis::analyze_hir;
-    use crate::test_helpers::{
-        parse_hex_string, parse_regex_string, test_type_traits_non_clonable,
-    };
+    use crate::test_helpers::{expr_to_hir, test_type_traits_non_clonable};
 
     #[test]
     fn test_types_traits() {
@@ -210,11 +208,7 @@ mod tests {
     }
 
     fn build_validator(expr: &str, modifiers: Modifiers, reverse: bool) -> Option<SimpleValidator> {
-        let hir = if expr.starts_with('{') {
-            parse_hex_string(expr).into()
-        } else {
-            parse_regex_string(expr).ast.into()
-        };
+        let hir = expr_to_hir(expr);
         let analysis = analyze_hir(&hir, modifiers.dot_all);
         SimpleValidator::new(&hir, &analysis, modifiers, reverse)
     }
