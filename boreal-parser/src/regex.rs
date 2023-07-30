@@ -158,6 +158,22 @@ pub enum AssertionKind {
     NonWordBoundary,
 }
 
+/// Parse a regex.
+///
+/// The input is expected to look like `/<regex>/<modifiers>`.
+///
+/// # Errors
+///
+/// Returns an error if the parsing fails.
+pub fn parse_regex(input: &str) -> Result<Regex, Error> {
+    use nom::Finish;
+
+    let input = Input::new(input);
+    let (_, res) = regex(input).finish()?;
+
+    Ok(res)
+}
+
 /// Parse a regular expression.
 ///
 /// Similar to the _REGEX_ lexical pattern in libyara. but the parsing of the AST is done
@@ -535,7 +551,7 @@ mod tests {
     use crate::test_helpers::{parse, parse_err, parse_err_type, test_public_type};
 
     #[test]
-    fn test_parse_regex() {
+    fn test_parse() {
         parse(
             regex,
             "/a/i",
@@ -1196,6 +1212,12 @@ mod tests {
         let input = Input::new(&v);
         let _res = regex(input).unwrap();
         assert_eq!(input.inner_recursion_counter, 0);
+    }
+
+    #[test]
+    fn test_parse_regex() {
+        assert!(parse_regex(r"/a{2}/").is_ok());
+        assert!(parse_regex(r"a{2}/").is_err());
     }
 
     #[test]
