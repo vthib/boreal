@@ -218,13 +218,16 @@ fn test_regex_size() {
 
     // Raw matcher
     check("/^a{2977952116}/");
+    check(r"/^a{2977952116}\b/ wide");
 
     // Right validator
-    check("/abcd a{2977952116}/");
+    check("/abcd a{0,2977952116}?/");
 
     // Left validator
-    check("/a{2977952116} abcd/");
+    check("/a{0,2977952116}? abcd/");
 
-    // Wide regex with boundaries
-    check(r"/a{2977952116}\B abcd/ wide");
+    // Left greedy validator
+    check("/a{0,2977952116} abcd/");
+    // Full greedy validator
+    check("/a+ abcd a{0,2977952116}/");
 }

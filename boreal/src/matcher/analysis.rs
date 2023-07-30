@@ -250,10 +250,13 @@ mod tests {
 
         test("{ AA ( CC | ?? | BB ) }", true, Some(258));
         test("{ AA ~?D BB }", false, Some(240));
+        test(r"{ AA [1-3] ?A ?B }", false, None);
 
         test(r"a\b(1|2)c", false, None);
         test(r"a(\b|2)c", false, None);
         test(r"a.b(|)c", false, Some(510));
+
+        test("{ AA ~?D BB }", false, Some(240));
     }
 
     #[test]
