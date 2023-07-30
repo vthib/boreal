@@ -1,52 +1,14 @@
-use boreal_parser::hex_string::Token;
-use boreal_parser::{parse, Regex, VariableDeclarationValue};
+use boreal_parser::hex_string::parse_hex_string;
+use boreal_parser::regex::parse_regex;
 
 use crate::regex::Hir;
 
 #[track_caller]
 pub fn expr_to_hir(expr: &str) -> Hir {
     if expr.starts_with('{') {
-        parse_hex_string(expr).into()
+        parse_hex_string(expr).unwrap().into()
     } else {
-        parse_regex_string(expr).ast.into()
-    }
-}
-
-#[track_caller]
-fn parse_hex_string(hex_string: &str) -> Vec<Token> {
-    let rule_str = format!("rule a {{ strings: $a = {hex_string} condition: $a }}");
-    let mut file = parse(&rule_str).unwrap();
-    let mut rule = file
-        .components
-        .pop()
-        .map(|v| match v {
-            boreal_parser::YaraFileComponent::Rule(v) => v,
-            _ => panic!(),
-        })
-        .unwrap();
-    let var = rule.variables.pop().unwrap();
-    match var.value {
-        VariableDeclarationValue::HexString(s) => s,
-        _ => panic!(),
-    }
-}
-
-#[track_caller]
-fn parse_regex_string(hex_string: &str) -> Regex {
-    let rule_str = format!("rule a {{ strings: $a = /{hex_string}/ condition: $a }}");
-    let mut file = parse(&rule_str).unwrap();
-    let mut rule = file
-        .components
-        .pop()
-        .map(|v| match v {
-            boreal_parser::YaraFileComponent::Rule(v) => v,
-            _ => panic!(),
-        })
-        .unwrap();
-    let var = rule.variables.pop().unwrap();
-    match var.value {
-        VariableDeclarationValue::Regex(s) => s,
-        _ => panic!(),
+        parse_regex(&format!("/{expr}/")).unwrap().ast.into()
     }
 }
 

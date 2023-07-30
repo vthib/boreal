@@ -13,6 +13,9 @@ use super::error::{Error, ErrorKind};
 use super::nom_recipes::{map_res, rtrim};
 use super::types::{Input, ParseResult};
 
+const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
+const MAX_HEX_TOKEN_RECURSION: usize = 10;
+
 /// A token in an hex string.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
@@ -56,8 +59,32 @@ pub struct Jump {
     pub to: Option<u32>,
 }
 
-const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
-const MAX_HEX_TOKEN_RECURSION: usize = 10;
+/// Parse a hex string.
+///
+/// The input is expected to look like `{ AB .. }`.
+///
+/// # Errors
+///
+/// Returns an error if the parsing fails.
+pub fn parse_hex_string(input: &str) -> Result<Vec<Token>, Error> {
+    use nom::Finish;
+
+    let input = Input::new(input);
+    let (_, tokens) = hex_string(input).finish()?;
+
+    Ok(tokens)
+}
+
+/// Parse an hex string.
+///
+/// This looks like `{ AB .. }`.
+///
+/// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
+pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<Token>> {
+    let (input, _) = rtrim(char('{'))(input)?;
+
+    cut(terminated(|input| tokens(input, false), rtrim(char('}'))))(input)
+}
 
 /// Parse an hex-digit, and return its value in [0-15].
 fn hex_digit(mut input: Input) -> ParseResult<u8> {
@@ -296,17 +323,6 @@ fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     } else {
         Ok((input, tokens))
     }
-}
-
-/// Parse an hex string.
-///
-/// This looks like `{ AB .. }`.
-///
-/// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
-pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<Token>> {
-    let (input, _) = rtrim(char('{'))(input)?;
-
-    cut(terminated(|input| tokens(input, false), rtrim(char('}'))))(input)
 }
 
 #[cfg(test)]
@@ -615,6 +631,12 @@ mod tests {
         let input = Input::new(&hex);
         let _res = hex_string(input).unwrap();
         assert_eq!(input.inner_recursion_counter, 0);
+    }
+
+    #[test]
+    fn test_parse_hex_string() {
+        assert!(parse_hex_string(r"{ AB }").is_ok());
+        assert!(parse_hex_string(r"AB").is_err());
     }
 
     #[test]
