@@ -2,8 +2,6 @@ use std::collections::HashSet;
 use std::ops::Range;
 use std::{collections::HashMap, sync::Arc};
 
-use boreal_parser as parser;
-
 use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
 use super::{variable, CompilationError, CompilerParams, Namespace};
@@ -25,7 +23,7 @@ pub struct Rule {
     pub tags: Vec<String>,
 
     /// Metadata associated with the rule.
-    pub metadatas: Vec<parser::Metadata>,
+    pub metadatas: Vec<boreal_parser::Metadata>,
 
     /// Number of variables used by the rule.
     pub(crate) nb_variables: usize,
@@ -82,9 +80,6 @@ pub(super) struct RuleCompilerVariable {
     /// Name of the variable.
     pub name: String,
 
-    /// Span of the variable declaration.
-    pub span: Range<usize>,
-
     /// Has the variable been used.
     ///
     /// If by the end of the compilation of the rule, the variable is unused, a compilation
@@ -94,14 +89,14 @@ pub(super) struct RuleCompilerVariable {
 
 impl<'a> RuleCompiler<'a> {
     pub(super) fn new(
-        rule: &parser::Rule,
+        rule_variables: &[boreal_parser::VariableDeclaration],
         namespace: &'a Namespace,
         external_symbols: &'a Vec<ExternalSymbol>,
         params: &'a CompilerParams,
     ) -> Result<Self, CompilationError> {
         let mut names_set = HashSet::new();
-        let mut variables = Vec::with_capacity(rule.variables.len());
-        for var in &rule.variables {
+        let mut variables = Vec::with_capacity(rule_variables.len());
+        for var in rule_variables {
             // Check duplicated names, but only for non anonymous strings
             if !var.name.is_empty() && !names_set.insert(var.name.clone()) {
                 return Err(CompilationError::DuplicatedVariable {
@@ -113,7 +108,6 @@ impl<'a> RuleCompiler<'a> {
             variables.push(RuleCompilerVariable {
                 name: var.name.clone(),
                 used: false,
-                span: var.span.clone(),
             });
         }
 
@@ -202,24 +196,12 @@ impl<'a> RuleCompiler<'a> {
 }
 
 pub(super) fn compile_rule(
-    rule: parser::Rule,
+    rule: boreal_parser::Rule,
     namespace: &Namespace,
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
     parsed_contents: &str,
 ) -> Result<CompiledRule, CompilationError> {
-    let (condition, rule_wildcard_uses, vars, warnings) = {
-        let mut compiler = RuleCompiler::new(&rule, namespace, external_symbols, params)?;
-        let condition = compile_bool_expression(&mut compiler, rule.condition)?;
-
-        (
-            condition,
-            compiler.rule_wildcard_uses,
-            compiler.variables,
-            compiler.warnings,
-        )
-    };
-
     // Check duplication of tags
     let mut tags_spans = HashMap::with_capacity(rule.tags.len());
     for v in &rule.tags {
@@ -232,20 +214,20 @@ pub(super) fn compile_rule(
         }
     }
 
-    // Check whether some variables were not used.
-    for var in vars {
-        if !var.used {
+    let mut compiler = RuleCompiler::new(&rule.variables, namespace, external_symbols, params)?;
+    let condition = compile_bool_expression(&mut compiler, rule.condition)?;
+
+    let mut variables = Vec::with_capacity(rule.variables.len());
+    let mut variables_statistics = Vec::new();
+
+    for (var, var_usage) in rule.variables.into_iter().zip(&compiler.variables) {
+        if !var_usage.used {
             return Err(CompilationError::UnusedVariable {
                 name: var.name,
                 span: var.span,
             });
         }
-    }
 
-    let mut variables = Vec::with_capacity(rule.variables.len());
-    let mut variables_statistics = Vec::new();
-
-    for var in rule.variables {
         let (var, stats) =
             variable::compile_variable(var, parsed_contents, params.compute_statistics)?;
         if let Some(stats) = stats {
@@ -266,8 +248,8 @@ pub(super) fn compile_rule(
         },
         variables,
         variables_statistics,
-        warnings,
-        rule_wildcard_uses,
+        warnings: compiler.warnings,
+        rule_wildcard_uses: compiler.rule_wildcard_uses,
     })
 }
 
@@ -317,7 +299,6 @@ mod tests {
         });
         test_type_traits_non_clonable(RuleCompilerVariable {
             name: "a".to_owned(),
-            span: 0..1,
             used: false,
         });
     }
