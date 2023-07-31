@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use bitmaps::Bitmap;
 use boreal_parser::{
     hex_string::{Mask, Token},
@@ -86,31 +88,39 @@ pub struct Class {
     pub bitmap: Bitmap<256>,
 }
 
-impl From<Node> for Hir {
-    fn from(value: Node) -> Self {
-        match value {
-            Node::Alternation(v) => Hir::Alternation(v.into_iter().map(Into::into).collect()),
-            Node::Assertion(v) => Hir::Assertion(v),
-            Node::Class(definition) => Hir::Class(Class {
-                bitmap: class_to_bitmap(&definition),
-                definition,
-            }),
-            Node::Concat(v) => Hir::Concat(v.into_iter().map(Into::into).collect()),
-            Node::Dot => Hir::Dot,
-            Node::Empty => Hir::Empty,
-            Node::Literal(v) => Hir::Literal(v),
-            Node::Char { c, .. } => {
-                let mut enc = vec![0; 4];
-                let res = c.encode_utf8(&mut enc);
-                Hir::Concat(res.as_bytes().iter().map(|v| Hir::Literal(*v)).collect())
-            }
-            Node::Group(v) => Hir::Group(Box::new((*v).into())),
-            Node::Repetition { node, kind, greedy } => Hir::Repetition {
-                hir: Box::new((*node).into()),
-                kind,
-                greedy,
-            },
+// TODO: implement a visitor for the regex ast
+pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) -> Hir {
+    match node {
+        Node::Alternation(v) => Hir::Alternation(
+            v.into_iter()
+                .map(|n| regex_ast_to_hir(n, warnings))
+                .collect(),
+        ),
+        Node::Assertion(v) => Hir::Assertion(v),
+        Node::Class(definition) => Hir::Class(Class {
+            bitmap: class_to_bitmap(&definition),
+            definition,
+        }),
+        Node::Concat(v) => Hir::Concat(
+            v.into_iter()
+                .map(|n| regex_ast_to_hir(n, warnings))
+                .collect(),
+        ),
+        Node::Dot => Hir::Dot,
+        Node::Empty => Hir::Empty,
+        Node::Literal(v) => Hir::Literal(v),
+        Node::Char { c, span } => {
+            warnings.push(RegexAstError::NonAsciiChar { span });
+            let mut enc = vec![0; 4];
+            let res = c.encode_utf8(&mut enc);
+            Hir::Concat(res.as_bytes().iter().map(|v| Hir::Literal(*v)).collect())
         }
+        Node::Group(v) => Hir::Group(Box::new(regex_ast_to_hir(*v, warnings))),
+        Node::Repetition { node, kind, greedy } => Hir::Repetition {
+            hir: Box::new(regex_ast_to_hir(*node, warnings)),
+            kind,
+            greedy,
+        },
     }
 }
 
@@ -237,6 +247,16 @@ fn masked_byte_to_hir(byte: u8, mask: &Mask, negated: bool) -> Hir {
     }
 }
 
+/// Errors related to a regex AST.
+#[derive(Clone, Debug)]
+pub enum RegexAstError {
+    /// A non ascii character is present in the regex.
+    NonAsciiChar {
+        /// Span of the character.
+        span: Range<usize>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use crate::test_helpers::test_type_traits;
@@ -253,5 +273,6 @@ mod tests {
             }),
             bitmap: Bitmap::new(),
         });
+        test_type_traits(RegexAstError::NonAsciiChar { span: 0..1 });
     }
 }

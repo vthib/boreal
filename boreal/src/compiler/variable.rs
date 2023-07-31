@@ -2,8 +2,10 @@ use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
 
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::matcher::{Matcher, Modifiers};
+use crate::regex::{regex_ast_to_hir, RegexAstError};
 use crate::statistics;
 
+use super::rule::RuleCompiler;
 use super::CompilationError;
 
 /// A compiled variable used in a rule.
@@ -21,10 +23,10 @@ pub struct Variable {
     pub(crate) matcher: Matcher,
 }
 
-pub(crate) fn compile_variable(
+pub(super) fn compile_variable(
+    compiler: &mut RuleCompiler,
     decl: VariableDeclaration,
     parsed_contents: &str,
-    compute_statistics: bool,
 ) -> Result<(Variable, Option<statistics::CompiledString>), CompilationError> {
     let VariableDeclaration {
         name,
@@ -54,8 +56,17 @@ pub(crate) fn compile_variable(
             if case_insensitive {
                 modifiers.nocase = true;
             }
+            let mut warnings = Vec::new();
+            let hir = regex_ast_to_hir(ast, &mut warnings);
+            for warn in warnings {
+                compiler.add_warning(match warn {
+                    RegexAstError::NonAsciiChar { span } => {
+                        CompilationError::RegexContainsNonAsciiChar { span }
+                    }
+                })?;
+            }
             Matcher::new_regex(
-                &ast.into(),
+                &hir,
                 Modifiers {
                     fullword: modifiers.fullword,
                     wide: modifiers.wide,
@@ -94,7 +105,7 @@ pub(crate) fn compile_variable(
         }
     };
 
-    let stats = if compute_statistics {
+    let stats = if compiler.params.compute_statistics {
         let atoms: Vec<_> = res
             .matcher
             .literals
@@ -142,16 +153,30 @@ impl std::fmt::Display for VariableCompilationError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use boreal_parser::VariableModifiers;
 
     use super::*;
+    use crate::compiler::{CompilerParams, Namespace};
     use crate::regex::Regex;
     use crate::test_helpers::test_type_traits_non_clonable;
 
     #[test]
     fn test_types_traits() {
+        let mut compiler = RuleCompiler {
+            namespace: &Namespace::default(),
+            variables: Vec::new(),
+            bounded_identifiers: HashMap::new(),
+            rule_wildcard_uses: Vec::new(),
+            external_symbols: &vec![],
+            params: &CompilerParams::default(),
+            condition_depth: 0,
+            warnings: Vec::new(),
+        };
         test_type_traits_non_clonable(
             compile_variable(
+                &mut compiler,
                 VariableDeclaration {
                     name: "a".to_owned(),
                     value: VariableDeclarationValue::Bytes(b"foo".to_vec()),
@@ -159,7 +184,6 @@ mod tests {
                     span: 0..1,
                 },
                 "",
-                false,
             )
             .unwrap()
             .0,

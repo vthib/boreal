@@ -1,14 +1,15 @@
 use boreal_parser::hex_string::parse_hex_string;
 use boreal_parser::regex::parse_regex;
 
-use crate::regex::Hir;
+use crate::regex::{regex_ast_to_hir, Hir};
 
 #[track_caller]
 pub fn expr_to_hir(expr: &str) -> Hir {
     if expr.starts_with('{') {
         parse_hex_string(expr).unwrap().into()
     } else {
-        parse_regex(&format!("/{expr}/")).unwrap().ast.into()
+        let regex = parse_regex(&format!("/{expr}/")).unwrap();
+        regex_ast_to_hir(regex.ast, &mut Vec::new())
     }
 }
 

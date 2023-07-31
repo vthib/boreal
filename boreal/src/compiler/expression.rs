@@ -9,7 +9,7 @@ use super::module::ModuleExpression;
 use super::rule::RuleCompiler;
 use super::{module, CompilationError};
 use crate::module::Type as ModuleType;
-use crate::regex::Regex;
+use crate::regex::{regex_ast_to_hir, regex_hir_to_string, Regex, RegexAstError};
 
 /// Type of a parsed expression
 ///
@@ -690,7 +690,10 @@ pub(super) fn compile_expression(
             let expr = compile_expression(compiler, *expr)?;
 
             Ok(Expr {
-                expr: Expression::Matches(expr.unwrap_expr(Type::Bytes)?, compile_regex(regex)?),
+                expr: Expression::Matches(
+                    expr.unwrap_expr(Type::Bytes)?,
+                    compile_regex(compiler, regex)?,
+                ),
                 ty: Type::Boolean,
                 span,
             })
@@ -878,7 +881,7 @@ pub(super) fn compile_expression(
             span,
         }),
         parser::ExpressionKind::Regex(regex) => Ok(Expr {
-            expr: Expression::Regex(compile_regex(regex)?),
+            expr: Expression::Regex(compile_regex(compiler, regex)?),
             ty: Type::Regex,
             span,
         }),
@@ -1214,7 +1217,10 @@ fn compile_for_iterator(
     }
 }
 
-fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
+fn compile_regex(
+    compiler: &mut RuleCompiler<'_>,
+    regex: parser::Regex,
+) -> Result<Regex, CompilationError> {
     let parser::Regex {
         ast,
         case_insensitive,
@@ -1222,7 +1228,17 @@ fn compile_regex(regex: parser::Regex) -> Result<Regex, CompilationError> {
         span,
     } = regex;
 
-    Regex::from_ast(ast, case_insensitive, dot_all)
+    let mut warnings = Vec::new();
+    let hir = regex_ast_to_hir(ast, &mut warnings);
+    for warn in warnings {
+        compiler.add_warning(match warn {
+            RegexAstError::NonAsciiChar { span } => {
+                CompilationError::RegexContainsNonAsciiChar { span }
+            }
+        })?;
+    }
+
+    Regex::from_string(regex_hir_to_string(&hir), case_insensitive, dot_all)
         .map_err(|error| CompilationError::RegexError { error, span })
 }
 

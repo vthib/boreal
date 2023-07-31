@@ -220,16 +220,15 @@ pub(super) fn compile_rule(
     let mut variables = Vec::with_capacity(rule.variables.len());
     let mut variables_statistics = Vec::new();
 
-    for (var, var_usage) in rule.variables.into_iter().zip(&compiler.variables) {
-        if !var_usage.used {
+    for (i, var) in rule.variables.into_iter().enumerate() {
+        if !compiler.variables[i].used {
             return Err(CompilationError::UnusedVariable {
                 name: var.name,
                 span: var.span,
             });
         }
 
-        let (var, stats) =
-            variable::compile_variable(var, parsed_contents, params.compute_statistics)?;
+        let (var, stats) = variable::compile_variable(&mut compiler, var, parsed_contents)?;
         if let Some(stats) = stats {
             variables_statistics.push(stats);
         }
