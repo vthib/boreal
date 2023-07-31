@@ -88,6 +88,14 @@ pub struct Class {
     pub bitmap: Bitmap<256>,
 }
 
+/// Convert a parsed regex AST into our HIR.
+///
+/// This is quite straightforward, but for one particular transformation: the parsing
+/// is unicode aware, while the HIR is bytes only.
+///
+/// See <https://github.com/VirusTotal/yara/pull/1770#issuecomment-1357622486> for some
+/// discussions on this. To be compatible with YARA, we need to accept unicode bytes, but
+/// match as if the explicit bytes were provided. This function takes care of that.
 // TODO: implement a visitor for the regex ast
 pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) -> Hir {
     match node {
@@ -109,18 +117,74 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
         Node::Dot => Hir::Dot,
         Node::Empty => Hir::Empty,
         Node::Literal(v) => Hir::Literal(v),
+        Node::Group(v) => Hir::Group(Box::new(regex_ast_to_hir(*v, warnings))),
+        Node::Repetition { node, kind, greedy } => {
+            match *node {
+                // This special code is here to normalize the HIR. The issue is that
+                // the parsing is unicode aware, but the yara engine is not. So non ascii
+                // characters are transformed into the utf-8 representation, which
+                // causes an issue with repetitions: when `<char><repetition>` is
+                // parsed, what we want to evaluate is
+                // `<byte0><byte1>...<byteN><repetition>`, so the repetition only
+                // applies on the last byte of the utf-7 representation of the character.
+                //
+                // We *could* only transform Node::Char into an Hir::Concat
+                // of its utf-8 bytes. This however leads to an HIR that is no
+                // longer stable through a string representation. For example,
+                // take this example:
+                //
+                // - the regex `ù+` is parsed, giving the AST
+                //   `Repetition(Char('ù'), OneOrMore)`.
+                // - this is normalized into the HIR
+                //   `Repetition(Concat([b'\xC3', b'\xB9']), OneOrMore)`
+                // - converting to a string gives `\xC3\xB9+`.
+                // - this is parsed and converted into the HIR
+                //   `Concat([b'\xC3', Repetition(b'\xB9', OneOrMore))`
+                //
+                // This attempts to fall into working currently, since we print
+                // the HIR to give it to `regex_automata`. But it is extremely
+                // flimsy, and could lead to a many bugs, since it means we
+                // still work with an HIR that is invalid, since its
+                // representation of the regex does not match the matching
+                // behavior.
+                //
+                // This is all to say: we want to normalize the HIR into
+                // a stable and faithful representation. Hence this code
+                // a bit hacky, where we handle the special
+                // "repetition over a char" case, to put the repetition
+                // only over the last byte.
+                Node::Char { c, span } => {
+                    warnings.push(RegexAstError::NonAsciiChar { span });
+
+                    let mut enc = vec![0; 4];
+                    let _r = c.encode_utf8(&mut enc);
+                    let len = c.len_utf8();
+
+                    // Move the repetition to the last char only.
+                    let mut concat = Vec::with_capacity(len);
+                    for b in &enc[0..(len - 1)] {
+                        concat.push(Hir::Literal(*b));
+                    }
+                    concat.push(Hir::Repetition {
+                        hir: Box::new(Hir::Literal(enc[len - 1])),
+                        kind,
+                        greedy,
+                    });
+                    Hir::Concat(concat)
+                }
+                v => Hir::Repetition {
+                    hir: Box::new(regex_ast_to_hir(v, warnings)),
+                    kind,
+                    greedy,
+                },
+            }
+        }
         Node::Char { c, span } => {
             warnings.push(RegexAstError::NonAsciiChar { span });
             let mut enc = vec![0; 4];
             let res = c.encode_utf8(&mut enc);
             Hir::Concat(res.as_bytes().iter().map(|v| Hir::Literal(*v)).collect())
         }
-        Node::Group(v) => Hir::Group(Box::new(regex_ast_to_hir(*v, warnings))),
-        Node::Repetition { node, kind, greedy } => Hir::Repetition {
-            hir: Box::new(regex_ast_to_hir(*node, warnings)),
-            kind,
-            greedy,
-        },
     }
 }
 
