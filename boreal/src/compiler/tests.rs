@@ -31,7 +31,7 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
     assert!(compiler.define_symbol("sym_bytes", "keyboard"));
 
     let mut rule_compiler = RuleCompiler::new(
-        &rule,
+        &rule.variables,
         &compiler.default_namespace,
         &compiler.external_symbols,
         &compiler.params,
