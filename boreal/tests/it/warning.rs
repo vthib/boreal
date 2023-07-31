@@ -59,6 +59,27 @@ rule root {{
 }
 
 #[test]
+fn test_warning_regex_contains_non_ascii_char() {
+    check_warnings(
+        r#"
+rule a {
+    strings:
+        $a = /µ+/
+    condition:
+        $a and "foo" matches /aéuà/
+           and /£-¤_/
+}"#,
+        &[
+            "mem:6:32: warning: a non ascii character is present in a regex",
+            "mem:6:34: warning: a non ascii character is present in a regex",
+            "mem:7:17: warning: a non ascii character is present in a regex",
+            "mem:7:19: warning: a non ascii character is present in a regex",
+            "mem:4:15: warning: a non ascii character is present in a regex",
+        ],
+    );
+}
+
+#[test]
 fn test_fail_on_warning_param() {
     let mut compiler = Compiler::new();
 
