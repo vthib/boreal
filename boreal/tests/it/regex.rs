@@ -29,6 +29,7 @@ rule a {
     checker.check("é".as_bytes(), false);
     checker.check("<é>".as_bytes(), true);
     checker.check(b"<\xC3\xA9>", true);
+    checker.check(b"<\xC3\xA9\xC3\xA9>", false);
     checker.check("<éé>".as_bytes(), false);
     checker.check(b"<\xC3\xA9\xA9>", true);
     checker.check(b"<\xC3\xA9\xA9\xA9\xA9>", true);

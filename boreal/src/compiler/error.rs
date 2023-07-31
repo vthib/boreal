@@ -263,6 +263,12 @@ pub enum CompilationError {
         /// Span of the expression being casted.
         span: Range<usize>,
     },
+
+    /// A non ascii character is present in a regex.
+    RegexContainsNonAsciiChar {
+        /// Span of the non the ascii byte in the input
+        span: Range<usize>,
+    },
 }
 
 impl CompilationError {
@@ -432,6 +438,21 @@ impl CompilationError {
             Self::ImplicitBytesToBooleanCast { span } => Diagnostic::warning()
                 .with_message("implicit cast from a bytes value to a boolean")
                 .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::RegexContainsNonAsciiChar { span } => Diagnostic::warning()
+                .with_message("a non ascii character is present in a regex")
+                .with_labels(vec![Label::primary((), span.clone())])
+                .with_notes(vec![
+                    "This may cause unexpected matching behavior, either due \
+                     to different encodings, or because matching is only done \
+                     on bytes."
+                        .into(),
+                    "For example, the regex `/<µ+>/` does not match `<µµ>`.".into(),
+                    "You should replace the character with explicit bytes \
+                      that do not depend on any specific encoding, for \
+                      example `/\\xCE\\xBC/` instead of `/µ/`."
+                        .into(),
+                ]),
         }
     }
 }

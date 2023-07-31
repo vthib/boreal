@@ -227,9 +227,9 @@ impl<'a> VariableEvaluation<'a> {
 
 #[cfg(test)]
 mod tests {
-    use boreal_parser::{VariableDeclaration, VariableDeclarationValue, VariableModifiers};
+    use boreal_parser::VariableModifiers;
 
-    use crate::compiler::variable::compile_variable;
+    use crate::matcher::Matcher;
     use crate::test_helpers::test_type_traits_non_clonable;
 
     use super::*;
@@ -237,18 +237,11 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(VariableEvaluation {
-            var: &compile_variable(
-                VariableDeclaration {
-                    name: "a".to_owned(),
-                    value: VariableDeclarationValue::Bytes(b"a".to_vec()),
-                    modifiers: VariableModifiers::default(),
-                    span: 0..1,
-                },
-                "",
-                false,
-            )
-            .unwrap()
-            .0,
+            var: &Variable {
+                name: "a".to_owned(),
+                is_private: false,
+                matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),
+            },
             params: Params {
                 string_max_nb_matches: 100,
             },
