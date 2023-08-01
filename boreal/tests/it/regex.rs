@@ -36,10 +36,15 @@ rule a {
     checker.check(b"<\xC3\xA9\xA9\xA9\xA9", false);
     checker.check(b"\xC3\xA9\xA9\xA9\xA9>", false);
 
+    // unicode chars in a class is not accepted.
     check_err(
         "rule a { strings: $a = /[é]/ condition: $a }",
         "mem:1:26: error: regex should only contain ascii bytes",
     );
+
+    // escaped unicode char is accepted.
+    let checker = Checker::new(r#"rule a { strings: $a = /\µ/ condition: $a }"#);
+    checker.check("µ".as_bytes(), true);
 }
 
 #[test]
