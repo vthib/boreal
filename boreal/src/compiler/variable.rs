@@ -1,4 +1,4 @@
-use boreal_parser::{VariableDeclaration, VariableDeclarationValue};
+use boreal_parser::rule::{VariableDeclaration, VariableDeclarationValue};
 
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::matcher::{Matcher, Modifiers};
@@ -47,7 +47,7 @@ pub(super) fn compile_variable(
                 Ok(Matcher::new_bytes(s, &modifiers))
             }
         }
-        VariableDeclarationValue::Regex(boreal_parser::Regex {
+        VariableDeclarationValue::Regex(boreal_parser::regex::Regex {
             ast,
             case_insensitive,
             dot_all,
@@ -155,7 +155,7 @@ impl std::fmt::Display for VariableCompilationError {
 mod tests {
     use std::collections::HashMap;
 
-    use boreal_parser::VariableModifiers;
+    use boreal_parser::rule::VariableModifiers;
 
     use super::*;
     use crate::compiler::{CompilerParams, Namespace};

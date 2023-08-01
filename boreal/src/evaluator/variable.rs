@@ -227,7 +227,7 @@ impl<'a> VariableEvaluation<'a> {
 
 #[cfg(test)]
 mod tests {
-    use boreal_parser::VariableModifiers;
+    use boreal_parser::rule::VariableModifiers;
 
     use crate::matcher::Matcher;
     use crate::test_helpers::test_type_traits_non_clonable;

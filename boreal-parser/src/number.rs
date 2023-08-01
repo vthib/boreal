@@ -94,7 +94,7 @@ fn octal_number(input: Input) -> ParseResult<i64> {
 /// - hexadecimal with 0x prefix,
 /// - octal with 0o prefix,
 /// - decimal with optional KB/MB suffix.
-pub fn number(input: Input) -> ParseResult<i64> {
+pub(crate) fn number(input: Input) -> ParseResult<i64> {
     // XXX: decimal number must be last, otherwise, it would parse the '0'
     // in the '0x'/'0o' prefix.
     alt((hexadecimal_number, octal_number, decimal_number))(input)
@@ -104,7 +104,7 @@ pub fn number(input: Input) -> ParseResult<i64> {
 ///
 /// Equivalent to the _DOUBLE_ lexical pattern in libyara.
 /// This functions matches the pattern `/\d+\.\d+/`.
-pub fn double(input: Input) -> ParseResult<f64> {
+pub(crate) fn double(input: Input) -> ParseResult<f64> {
     let (input, payload) = rtrim(recognize(tuple((digit1, char('.'), digit1))))(input)?;
 
     // Safety: this cannot fail, we are parsing `[0-9]+ '.' [0-9]+` which is guaranteed to

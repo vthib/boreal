@@ -15,7 +15,7 @@ use super::error::{Error, ErrorKind};
 use super::types::{Input, ParseResult};
 
 /// Right trim after the given parser.
-pub fn rtrim<'a, F, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
+pub(crate) fn rtrim<'a, F, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
     F: Parser<Input<'a>, O, Error> + 'a,
 {
@@ -33,7 +33,7 @@ where
 }
 
 /// Left trim the input.
-pub fn ltrim(mut input: Input) -> ParseResult<()> {
+pub(crate) fn ltrim(mut input: Input) -> ParseResult<()> {
     loop {
         match alt((
             multiline_comment,
@@ -49,7 +49,7 @@ pub fn ltrim(mut input: Input) -> ParseResult<()> {
 }
 
 /// Accepts a first parser, only if the second one does not match afterwards
-pub fn not_followed<'a, F, G, OF, OG>(
+pub(crate) fn not_followed<'a, F, G, OF, OG>(
     mut f: F,
     mut g: G,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, OF>
@@ -70,7 +70,7 @@ where
 }
 
 /// Accepts a single character if the passed function returns true on it.
-pub fn take_one<F>(f: F) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, char>
+pub(crate) fn take_one<F>(f: F) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, char>
 where
     F: Fn(char) -> bool,
 {
@@ -89,7 +89,7 @@ where
 /// following character is not alphanumeric.
 /// This avoids recognizing a tag inside a word, for example, recognizing
 /// `foo` in `foobar`.
-pub fn textual_tag(
+pub(crate) fn textual_tag(
     tag: &'static str,
 ) -> impl for<'a> Fn(Input<'a>) -> ParseResult<'a, &'static str> {
     move |input: Input| {
@@ -133,7 +133,7 @@ fn singleline_comment(input: Input) -> ParseResult<()> {
 ///
 /// This allows using the starting input to generate a proper span
 /// for the error.
-pub fn map_res<'a, O1, O2, F, G>(
+pub(crate) fn map_res<'a, O1, O2, F, G>(
     mut parser: F,
     mut f: G,
 ) -> impl FnMut(Input<'a>) -> ParseResult<O2>

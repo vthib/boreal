@@ -1,3 +1,4 @@
+//! Types related to the condition part of YARA rules.
 use std::ops::Range;
 
 mod boolean_expression;
@@ -10,7 +11,7 @@ mod string_expression;
 
 use crate::regex::Regex;
 
-pub(super) use boolean_expression::boolean_expression as expression;
+pub(crate) use boolean_expression::boolean_expression as expression;
 
 const MAX_EXPR_RECURSION: usize = 20;
 
@@ -423,6 +424,7 @@ pub struct VariableSet {
     pub elements: Vec<SetElement>,
 }
 
+/// Element of a set.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SetElement {
     /// Name of the element.

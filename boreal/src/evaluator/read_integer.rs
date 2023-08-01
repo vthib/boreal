@@ -1,6 +1,6 @@
 //! Provides methods to evaluate the read integer expressions
 use crate::compiler::expression::Expression;
-use boreal_parser::ReadIntegerType;
+use boreal_parser::expression::ReadIntegerType;
 
 use super::{Evaluator, PoisonKind, Value};
 

@@ -7,7 +7,7 @@ use nom::{
 };
 
 #[derive(Clone, Copy, Debug)]
-pub struct Input<'a> {
+pub(crate) struct Input<'a> {
     /// Whole input being parsed.
     ///
     /// This reference is never modified.
@@ -36,14 +36,14 @@ pub struct Input<'a> {
 
 /// Position inside the input.
 #[derive(Clone, Copy, Debug)]
-pub struct Position<'a> {
+pub(crate) struct Position<'a> {
     cursor: &'a str,
 }
 
-pub type ParseResult<'a, O> = IResult<Input<'a>, O, Error>;
+pub(crate) type ParseResult<'a, O> = IResult<Input<'a>, O, Error>;
 
 impl<'a> Input<'a> {
-    pub fn new(input: &'a str) -> Self {
+    pub(crate) fn new(input: &'a str) -> Self {
         Self {
             input,
             cursor: input,
@@ -53,17 +53,17 @@ impl<'a> Input<'a> {
         }
     }
 
-    pub fn pos(&self) -> Position<'a> {
+    pub(crate) fn pos(&self) -> Position<'a> {
         Position {
             cursor: self.cursor,
         }
     }
 
-    pub fn cursor(&self) -> &'a str {
+    pub(crate) fn cursor(&self) -> &'a str {
         self.cursor
     }
 
-    pub fn advance(&mut self, count: usize) {
+    pub(crate) fn advance(&mut self, count: usize) {
         if self.cursor.len() >= count {
             self.cursor = &self.cursor[count..];
         } else {
@@ -71,17 +71,17 @@ impl<'a> Input<'a> {
         }
     }
 
-    pub fn strip_prefix(&self, prefix: &str) -> Option<Self> {
+    pub(crate) fn strip_prefix(&self, prefix: &str) -> Option<Self> {
         self.cursor
             .strip_prefix(prefix)
             .map(|cursor| Self { cursor, ..*self })
     }
 
-    pub fn save_cursor_before_rtrim(&mut self) {
+    pub(crate) fn save_cursor_before_rtrim(&mut self) {
         self.cursor_before_last_rtrim = self.cursor;
     }
 
-    pub fn get_position_offset(&self) -> usize {
+    pub(crate) fn get_position_offset(&self) -> usize {
         (self.cursor.as_ptr() as usize) - (self.input.as_ptr() as usize)
     }
 
@@ -89,7 +89,7 @@ impl<'a> Input<'a> {
     ///
     /// The given input is the start of the span.
     /// The end of the span is the cursor saved before the last rtrim.
-    pub fn get_span_from(&self, start: Position) -> Range<usize> {
+    pub(crate) fn get_span_from(&self, start: Position) -> Range<usize> {
         let input = self.input.as_ptr() as usize;
 
         let start = start.cursor.as_ptr() as usize - input;
@@ -107,7 +107,7 @@ impl<'a> Input<'a> {
     ///
     /// The given input is the start of the span.
     /// The end of the span is the current position of the cursor.
-    pub fn get_span_from_no_rtrim(&self, start: Position) -> Range<usize> {
+    pub(crate) fn get_span_from_no_rtrim(&self, start: Position) -> Range<usize> {
         let input = self.input.as_ptr() as usize;
 
         Range {

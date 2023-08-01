@@ -1,11 +1,15 @@
-use crate::Error;
+use crate::error::Error;
 
 use crate::types::{Input, ParseResult};
 use nom::Finish;
 
 #[track_caller]
-pub fn parse<'a, F, O, O2>(f: F, input: &'a str, expected_rest_input: &str, expected_result: O2)
-where
+pub(crate) fn parse<'a, F, O, O2>(
+    f: F,
+    input: &'a str,
+    expected_rest_input: &str,
+    expected_result: O2,
+) where
     F: FnOnce(Input<'a>) -> ParseResult<'a, O> + 'a,
     O: PartialEq + std::fmt::Debug + From<O2>,
 {
@@ -16,7 +20,7 @@ where
 }
 
 #[track_caller]
-pub fn parse_err<'a, F, O>(f: F, input: &'a str)
+pub(crate) fn parse_err<'a, F, O>(f: F, input: &'a str)
 where
     F: FnOnce(Input<'a>) -> ParseResult<'a, O>,
     O: PartialEq + std::fmt::Debug,
@@ -27,7 +31,7 @@ where
 }
 
 #[track_caller]
-pub fn parse_err_type<'a, F, O>(f: F, input: &'a str, err: &Error)
+pub(crate) fn parse_err_type<'a, F, O>(f: F, input: &'a str, err: &Error)
 where
     F: FnOnce(Input<'a>) -> ParseResult<'a, O>,
     O: PartialEq + std::fmt::Debug,
@@ -38,7 +42,7 @@ where
 }
 
 #[track_caller]
-pub fn parse_check<'a, F, O, C>(f: F, input: &'a str, check: C)
+pub(crate) fn parse_check<'a, F, O, C>(f: F, input: &'a str, check: C)
 where
     F: FnOnce(Input<'a>) -> ParseResult<'a, O>,
     O: PartialEq + std::fmt::Debug,
@@ -54,7 +58,7 @@ where
 // - Instrument those impls to avoid having those derive be marked as missed in coverage...
 //
 // Each module that exposes public types is expected to use it on those types.
-pub fn test_public_type<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
+pub(crate) fn test_public_type<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
     #[allow(clippy::redundant_clone)]
     let _r = t.clone();
     let _r = format!("{:?}", &t);

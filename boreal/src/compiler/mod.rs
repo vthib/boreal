@@ -5,11 +5,10 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use boreal_parser::file::YaraFileComponent;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
-
-use boreal_parser as parser;
 
 mod error;
 pub use error::CompilationError;
@@ -277,7 +276,7 @@ impl Compiler {
         current_filepath: Option<&Path>,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
-        let file = parser::parse(s).map_err(|error| AddRuleError {
+        let file = boreal_parser::parse(s).map_err(|error| AddRuleError {
             path: current_filepath.map(Path::to_path_buf),
             kind: AddRuleErrorKind::Parse(error),
         })?;
@@ -289,7 +288,7 @@ impl Compiler {
 
     fn add_component(
         &mut self,
-        component: parser::YaraFileComponent,
+        component: YaraFileComponent,
         namespace_name: Option<&str>,
         current_filepath: Option<&Path>,
         parsed_contents: &str,
@@ -307,7 +306,7 @@ impl Compiler {
         };
 
         match component {
-            parser::YaraFileComponent::Include(include) => {
+            YaraFileComponent::Include(include) => {
                 // Resolve the given path relative to the current one
                 let path = match current_filepath {
                     None => PathBuf::from(include.path),
@@ -326,7 +325,7 @@ impl Compiler {
                 })?;
                 self.add_rules_file_inner(&path, namespace_name, status)?;
             }
-            parser::YaraFileComponent::Import(import) => {
+            YaraFileComponent::Import(import) => {
                 match self.available_modules.get_mut(&import.name) {
                     Some(module) => {
                         // XXX: this is a bit ugly, but i haven't found a better way to get
@@ -367,7 +366,7 @@ impl Compiler {
                     }
                 };
             }
-            parser::YaraFileComponent::Rule(rule) => {
+            YaraFileComponent::Rule(rule) => {
                 for prefix in &namespace.forbidden_rule_prefixes {
                     if rule.name.starts_with(prefix) {
                         return Err(AddRuleError {
@@ -602,7 +601,7 @@ enum AddRuleErrorKind {
     },
 
     /// Error while parsing a rule.
-    Parse(boreal_parser::Error),
+    Parse(boreal_parser::error::Error),
 
     /// Error while compiling a rule.
     Compilation(CompilationError),

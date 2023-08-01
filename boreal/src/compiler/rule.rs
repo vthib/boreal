@@ -1,6 +1,10 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Range;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
+
+use boreal_parser::rule::Metadata;
+use boreal_parser::rule::VariableDeclaration;
 
 use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
@@ -23,7 +27,7 @@ pub struct Rule {
     pub tags: Vec<String>,
 
     /// Metadata associated with the rule.
-    pub metadatas: Vec<boreal_parser::Metadata>,
+    pub metadatas: Vec<Metadata>,
 
     /// Number of variables used by the rule.
     pub(crate) nb_variables: usize,
@@ -89,7 +93,7 @@ pub(super) struct RuleCompilerVariable {
 
 impl<'a> RuleCompiler<'a> {
     pub(super) fn new(
-        rule_variables: &[boreal_parser::VariableDeclaration],
+        rule_variables: &[VariableDeclaration],
         namespace: &'a Namespace,
         external_symbols: &'a Vec<ExternalSymbol>,
         params: &'a CompilerParams,
@@ -196,7 +200,7 @@ impl<'a> RuleCompiler<'a> {
 }
 
 pub(super) fn compile_rule(
-    rule: boreal_parser::Rule,
+    rule: boreal_parser::rule::Rule,
     namespace: &Namespace,
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
