@@ -329,7 +329,7 @@ fn single(input: Input) -> ParseResult<Node> {
         map(char('.'), |_| Node::Dot),
         map(perl_class, |p| Node::Class(ClassKind::Perl(p))),
         map(bracketed_class, |p| Node::Class(ClassKind::Bracketed(p))),
-        map(escaped_char, Node::Literal),
+        escaped_char,
         literal,
     ))(input)
 }
@@ -410,7 +410,7 @@ fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassI
 }
 
 fn bracketed_class_literal(input: Input) -> ParseResult<u8> {
-    alt((escaped_char, bracketed_class_char))(input)
+    alt((escaped_char_only_ascii, bracketed_class_char))(input)
 }
 
 fn bracketed_class_char(input: Input) -> ParseResult<u8> {
@@ -420,10 +420,14 @@ fn bracketed_class_char(input: Input) -> ParseResult<u8> {
     // and newlines are not allowed
     // ] is disallowed because it indicates the end of the class
     let (input, b) = none_of("/\n]")(input)?;
-    let b = char_to_u8(b)
-        .map_err(|kind| nom::Err::Failure(Error::new(input.get_span_from_no_rtrim(start), kind)))?;
-
-    Ok((input, b))
+    if b.is_ascii() {
+        Ok((input, b as u8))
+    } else {
+        Err(nom::Err::Failure(Error::new(
+            input.get_span_from_no_rtrim(start),
+            ErrorKind::RegexNonAsciiByte,
+        )))
+    }
 }
 
 fn literal(input: Input) -> ParseResult<Node> {
@@ -445,17 +449,40 @@ fn literal(input: Input) -> ParseResult<Node> {
     Ok((input, node))
 }
 
-fn escaped_char(input: Input) -> ParseResult<u8> {
+fn escaped_char(input: Input) -> ParseResult<Node> {
+    let (input, res) = escaped_char_inner(input)?;
+
+    let node = match res {
+        EscapedChar::Byte(b) => Node::Literal(b),
+        EscapedChar::Char { c, span } => Node::Char { c, span },
+    };
+
+    Ok((input, node))
+}
+
+fn escaped_char_only_ascii(input: Input) -> ParseResult<u8> {
+    let (input, res) = escaped_char_inner(input)?;
+
+    match res {
+        EscapedChar::Byte(b) => Ok((input, b)),
+        EscapedChar::Char { span, .. } => Err(nom::Err::Failure(Error::new(
+            span,
+            ErrorKind::RegexNonAsciiByte,
+        ))),
+    }
+}
+
+fn escaped_char_inner(input: Input) -> ParseResult<EscapedChar> {
     let start = input.pos();
     let (input2, _) = char('\\')(input)?;
     let (input, b) = anychar(input2)?;
 
-    let c = match b {
-        'n' => b'\n',
-        't' => b'\t',
-        'r' => b'\r',
-        'f' => b'\x0C',
-        'a' => b'\x07',
+    let res = match b {
+        'n' => EscapedChar::Byte(b'\n'),
+        't' => EscapedChar::Byte(b'\t'),
+        'r' => EscapedChar::Byte(b'\r'),
+        'f' => EscapedChar::Byte(b'\x0C'),
+        'a' => EscapedChar::Byte(b'\x07'),
         'x' => {
             let (input, n) = cut(take(2_u32))(input)?;
 
@@ -468,22 +495,21 @@ fn escaped_char(input: Input) -> ParseResult<u8> {
                     )));
                 }
             };
-            return Ok((input, n));
+            return Ok((input, EscapedChar::Byte(n)));
         }
-        _ => char_to_u8(b).map_err(|kind| {
-            nom::Err::Failure(Error::new(input.get_span_from_no_rtrim(input2.pos()), kind))
-        })?,
+        c if c.is_ascii() => EscapedChar::Byte(c as u8),
+        c => EscapedChar::Char {
+            c,
+            span: input.get_span_from_no_rtrim(input2.pos()),
+        },
     };
 
-    Ok((input, c))
+    Ok((input, res))
 }
 
-fn char_to_u8(c: char) -> Result<u8, ErrorKind> {
-    if c.is_ascii() {
-        Ok(c as u8)
-    } else {
-        Err(ErrorKind::RegexNonAsciiByte)
-    }
+enum EscapedChar {
+    Byte(u8),
+    Char { c: char, span: Range<usize> },
 }
 
 fn range_repetition(input: Input) -> ParseResult<(RepetitionRange, bool)> {
@@ -680,7 +706,7 @@ mod tests {
             ]),
         );
 
-        parse_err(alternative, "\\é");
+        parse_err(alternative, "\\xEG");
     }
 
     #[test]
@@ -733,7 +759,7 @@ mod tests {
             ]),
         );
 
-        parse_err(concatenation, "\\é");
+        parse_err(concatenation, "\\xEG");
     }
 
     #[test]
@@ -976,6 +1002,7 @@ mod tests {
         parse_err(bracketed_class, "[\\]");
         parse_err(bracketed_class, "[\\x]");
         parse_err(bracketed_class, "[\\x0]");
+        parse_err(bracketed_class, "[\\é]");
     }
 
     #[test]
@@ -1073,6 +1100,7 @@ mod tests {
         parse_err(bracketed_class_literal, "]b");
         parse_err(bracketed_class_literal, "é");
         parse_err(bracketed_class_literal, "\\x1");
+        parse_err(bracketed_class_literal, "\\é");
     }
 
     #[test]
@@ -1100,26 +1128,45 @@ mod tests {
 
     #[test]
     fn test_escaped_char() {
-        parse(escaped_char, "\\na", "a", b'\n');
-        parse(escaped_char, "\\ta", "a", b'\t');
-        parse(escaped_char, "\\ra", "a", b'\r');
-        parse(escaped_char, "\\fa", "a", b'\x0C');
-        parse(escaped_char, "\\aa", "a", b'\x07');
-        parse(escaped_char, "\\x00a", "a", b'\0');
-        parse(escaped_char, "\\xAF a", " a", b'\xAF');
-        parse(escaped_char, "\\k", "", b'k');
+        parse(escaped_char, "\\na", "a", Node::Literal(b'\n'));
+        parse(escaped_char, "\\ta", "a", Node::Literal(b'\t'));
+        parse(escaped_char, "\\ra", "a", Node::Literal(b'\r'));
+        parse(escaped_char, "\\fa", "a", Node::Literal(b'\x0C'));
+        parse(escaped_char, "\\aa", "a", Node::Literal(b'\x07'));
+        parse(escaped_char, "\\x00a", "a", Node::Literal(b'\0'));
+        parse(escaped_char, "\\xAF a", " a", Node::Literal(b'\xAF'));
+        parse(escaped_char, "\\k", "", Node::Literal(b'k'));
+        parse(
+            escaped_char,
+            "\\é_",
+            "_",
+            Node::Char {
+                c: 'é', span: 1..3
+            },
+        );
 
         parse_err(escaped_char, "\\");
-        parse_err(escaped_char, "\\é");
         parse_err(escaped_char, "\\x");
         parse_err(escaped_char, "\\x2");
         parse_err(escaped_char, "\\x2G");
     }
 
     #[test]
-    fn test_char_to_u8() {
-        assert_eq!(char_to_u8('(').unwrap(), b'(');
-        assert!(char_to_u8('é').is_err());
+    fn test_escaped_char_only_ascii() {
+        parse(escaped_char_only_ascii, "\\na", "a", b'\n');
+        parse(escaped_char_only_ascii, "\\ta", "a", b'\t');
+        parse(escaped_char_only_ascii, "\\ra", "a", b'\r');
+        parse(escaped_char_only_ascii, "\\fa", "a", b'\x0C');
+        parse(escaped_char_only_ascii, "\\aa", "a", b'\x07');
+        parse(escaped_char_only_ascii, "\\x00a", "a", b'\0');
+        parse(escaped_char_only_ascii, "\\xAF a", " a", b'\xAF');
+        parse(escaped_char_only_ascii, "\\k", "", b'k');
+
+        parse_err(escaped_char_only_ascii, "\\");
+        parse_err(escaped_char_only_ascii, "\\é");
+        parse_err(escaped_char_only_ascii, "\\x");
+        parse_err(escaped_char_only_ascii, "\\x2");
+        parse_err(escaped_char_only_ascii, "\\x2G");
     }
 
     #[test]
