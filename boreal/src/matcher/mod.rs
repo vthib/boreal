@@ -1,6 +1,6 @@
 use std::{collections::HashSet, ops::Range};
 
-use boreal_parser::VariableModifiers;
+use boreal_parser::rule::VariableModifiers;
 
 use crate::regex::Hir;
 

@@ -14,9 +14,10 @@ use super::{
     expression::{self, Expression},
     hex_string,
     nom_recipes::{map_res, rtrim, textual_tag as ttag},
-    number, regex, string,
+    number, regex,
+    regex::Regex,
+    string,
     types::{Input, ParseResult, Position},
-    Regex,
 };
 
 /// A Yara rule.
@@ -66,8 +67,11 @@ pub struct RuleTag {
 /// Value associated with a metadata key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MetadataValue {
+    /// Bytestring variant.
     Bytes(Vec<u8>),
+    /// Integer variant.
     Integer(i64),
+    /// Boolean variant.
     Boolean(bool),
 }
 
@@ -114,10 +118,7 @@ pub struct VariableModifiers {
     /// Xor modifier, providing the range.
     pub xor: Option<(u8, u8)>,
 
-    /// Base64 modifier.alphabet.
-    ///
-    /// This is only applicable if `flags` contains [`VariableFlags::BASE64`]
-    /// or [`VariableFlags::BASE64WIDE`].
+    /// Base64 modifier.
     pub base64: Option<VariableModifierBase64>,
 }
 
@@ -150,7 +151,7 @@ pub struct VariableDeclaration {
 /// Parse a rule
 ///
 /// Related to the `rule` pattern in `grammar.y` in libyara.
-pub fn rule(mut input: Input) -> ParseResult<Rule> {
+pub(crate) fn rule(mut input: Input) -> ParseResult<Rule> {
     let mut is_private = false;
     let mut is_global = false;
 
@@ -565,7 +566,6 @@ mod tests {
     use crate::expression::{Expression, ExpressionKind, ForSelection, VariableSet};
     use crate::hex_string::{Mask, Token};
     use crate::test_helpers::test_public_type;
-    use crate::Regex;
 
     use super::super::test_helpers::{parse, parse_err};
     use super::*;

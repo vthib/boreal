@@ -41,7 +41,7 @@ fn string_identifier_no_rtrim(input: Input) -> ParseResult<String> {
 /// This is equivalent to the `_STRING_IDENTIFIER_` lexical patterns in
 /// libyara.
 /// Roughly equivalent to `$[a-ZA-Z0-9_]*`.
-pub fn string_identifier(input: Input) -> ParseResult<String> {
+pub(crate) fn string_identifier(input: Input) -> ParseResult<String> {
     rtrim(string_identifier_no_rtrim)(input)
 }
 
@@ -49,7 +49,7 @@ pub fn string_identifier(input: Input) -> ParseResult<String> {
 ///
 /// This is equivalent to
 /// `_STRING_IDENTIFIER_ | _STRING_IDENTIFIER_WITH_WILDCARD_` in libyara.
-pub fn string_identifier_with_wildcard(input: Input) -> ParseResult<(String, bool)> {
+pub(crate) fn string_identifier_with_wildcard(input: Input) -> ParseResult<(String, bool)> {
     rtrim(pair(
         string_identifier_no_rtrim,
         map(opt(char('*')), |v| v.is_some()),
@@ -57,24 +57,24 @@ pub fn string_identifier_with_wildcard(input: Input) -> ParseResult<(String, boo
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
-pub fn count(input: Input) -> ParseResult<String> {
+pub(crate) fn count(input: Input) -> ParseResult<String> {
     rtrim(preceded(char('#'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string offset, roughly equivalent to `@[a-zA-Z0-9_]*`.
-pub fn offset(input: Input) -> ParseResult<String> {
+pub(crate) fn offset(input: Input) -> ParseResult<String> {
     rtrim(preceded(char('@'), cut(identifier_contents)))(input)
 }
 
 /// Parse a string length, roughly equivalent to `![a-zA-Z0-9_]*`.
-pub fn length(input: Input) -> ParseResult<String> {
+pub(crate) fn length(input: Input) -> ParseResult<String> {
     rtrim(preceded(char('!'), cut(identifier_contents)))(input)
 }
 
 /// Parse an identifier.
 ///
 /// This is roughly equivalent to `[a-ZA-Z_][a-zA-Z0-9_]*`.
-pub fn identifier(input: Input) -> ParseResult<String> {
+pub(crate) fn identifier(input: Input) -> ParseResult<String> {
     rtrim(map(
         recognize(tuple((
             take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
@@ -91,7 +91,7 @@ pub fn identifier(input: Input) -> ParseResult<String> {
 /// patterns `\t`, `\r`, `\n`, `\"`, `\\`, and `\x[0-9a-fA-F]{2}`.
 ///
 /// This parser allows non ascii bytes, hence returning a byte string.
-pub fn quoted(input: Input) -> ParseResult<Vec<u8>> {
+pub(crate) fn quoted(input: Input) -> ParseResult<Vec<u8>> {
     rtrim(quoted_no_rtrim)(input)
 }
 

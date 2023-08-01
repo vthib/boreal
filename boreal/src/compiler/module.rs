@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range};
 
-use boreal_parser as parser;
+use boreal_parser::expression::{Identifier, IdentifierOperation, IdentifierOperationType};
 
 use super::expression::{compile_expression, Expression, Type};
 use super::rule::RuleCompiler;
@@ -121,7 +121,7 @@ pub(crate) fn compile_module<M: module::Module>(module: &M) -> Module {
 pub(super) fn compile_bounded_identifier_use<'a, 'b>(
     compiler: &'b mut RuleCompiler<'a>,
     starting_type: &'b ValueType,
-    identifier: parser::Identifier,
+    identifier: Identifier,
     identifier_stack_index: usize,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
     let mut module_use = ModuleUse {
@@ -148,7 +148,7 @@ pub(super) fn compile_bounded_identifier_use<'a, 'b>(
 pub(super) fn compile_identifier<'a, 'b>(
     compiler: &'b mut RuleCompiler<'a>,
     module: &'b ImportedModule,
-    identifier: parser::Identifier,
+    identifier: Identifier,
     identifier_span: &Range<usize>,
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
     let nb_ops = identifier.operations.len();
@@ -164,15 +164,15 @@ pub(super) fn compile_identifier<'a, 'b>(
         }
     };
     let subfield = match &first_op.op {
-        parser::IdentifierOperationType::Subfield(subfield) => subfield,
-        parser::IdentifierOperationType::Subscript(_) => {
+        IdentifierOperationType::Subfield(subfield) => subfield,
+        IdentifierOperationType::Subscript(_) => {
             return Err(CompilationError::InvalidIdentifierType {
                 actual_type: "object".to_string(),
                 expected_type: "array or dictionary".to_string(),
                 span: identifier.name_span,
             });
         }
-        parser::IdentifierOperationType::FunctionCall(_) => {
+        IdentifierOperationType::FunctionCall(_) => {
             return Err(CompilationError::InvalidIdentifierType {
                 actual_type: "object".to_string(),
                 expected_type: "function".to_string(),
@@ -234,9 +234,9 @@ pub(super) struct ModuleUse<'a, 'b> {
 }
 
 impl ModuleUse<'_, '_> {
-    fn add_operation(&mut self, op: parser::IdentifierOperation) -> Result<(), CompilationError> {
+    fn add_operation(&mut self, op: IdentifierOperation) -> Result<(), CompilationError> {
         let res = match op.op {
-            parser::IdentifierOperationType::Subfield(subfield) => {
+            IdentifierOperationType::Subfield(subfield) => {
                 let res = self.current_value.subfield(&subfield);
                 match self.current_value {
                     ValueOrType::Value(v) => self.last_immediate_value = Some(v),
@@ -247,14 +247,14 @@ impl ModuleUse<'_, '_> {
                 }
                 res
             }
-            parser::IdentifierOperationType::Subscript(subscript) => {
+            IdentifierOperationType::Subscript(subscript) => {
                 let subscript = compile_expression(self.compiler, *subscript)?;
 
                 self.operations
                     .push(ValueOperation::Subscript(Box::new(subscript.expr)));
                 self.current_value.subscript(subscript.ty, subscript.span)
             }
-            parser::IdentifierOperationType::FunctionCall(arguments) => {
+            IdentifierOperationType::FunctionCall(arguments) => {
                 let mut arguments_exprs = Vec::with_capacity(arguments.len());
                 let mut arguments_types = Vec::with_capacity(arguments.len());
                 for arg in arguments {

@@ -1,3 +1,4 @@
+//! Parsing error types.
 use std::num::ParseIntError;
 use std::ops::Range;
 
@@ -163,7 +164,7 @@ impl ParseError<Input<'_>> for Error {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ErrorKind {
+pub(crate) enum ErrorKind {
     /// A base64 modifier alphabet has an invalid length.
     ///
     /// The length must be 64.

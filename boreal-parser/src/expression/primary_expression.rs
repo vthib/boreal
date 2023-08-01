@@ -12,15 +12,14 @@ use nom::{
 
 use super::{expression, identifier, read_integer, string_expression, Expression, ExpressionKind};
 use crate::{
-    error::ErrorKind,
+    error::{Error, ErrorKind},
     nom_recipes::{rtrim, textual_tag as ttag},
     number, regex, string,
     types::{Input, ParseResult},
-    Error,
 };
 
 /// parse | operator
-pub fn primary_expression(mut input: Input) -> ParseResult<Expression> {
+pub(crate) fn primary_expression(mut input: Input) -> ParseResult<Expression> {
     let start = input.pos();
 
     if input.expr_recursion_counter >= super::MAX_EXPR_RECURSION {
@@ -257,17 +256,13 @@ where
 mod tests {
     use super::super::Identifier;
     use super::{primary_expression as pe, Expression, ExpressionKind as Expr};
-    use crate::error::ErrorKind;
+    use crate::error::{Error, ErrorKind};
+    use crate::expression::ReadIntegerType;
     use crate::expression::MAX_EXPR_RECURSION;
-    use crate::regex::{AssertionKind, Node, RepetitionKind};
+    use crate::regex::{AssertionKind, Node, Regex, RepetitionKind};
     use crate::test_helpers::parse_err_type;
+    use crate::test_helpers::{parse, parse_check, parse_err};
     use crate::types::Input;
-    use crate::Error;
-    use crate::{
-        expression::ReadIntegerType,
-        regex::Regex,
-        test_helpers::{parse, parse_check, parse_err},
-    };
     use std::ops::Range;
 
     #[test]

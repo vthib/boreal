@@ -20,7 +20,7 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
         .into_iter()
         .next()
         .map(|v| match v {
-            boreal_parser::YaraFileComponent::Rule(v) => v,
+            boreal_parser::file::YaraFileComponent::Rule(v) => v,
             _ => panic!(),
         })
         .unwrap();

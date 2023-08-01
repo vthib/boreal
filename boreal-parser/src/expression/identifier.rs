@@ -9,10 +9,10 @@ use nom::{
 };
 
 use super::{Expression, Identifier, IdentifierOperation};
+use crate::expression::IdentifierOperationType;
 use crate::nom_recipes::{not_followed, rtrim};
 use crate::string::identifier as raw_identifier;
 use crate::types::{Input, ParseResult};
-use crate::IdentifierOperationType;
 
 use super::boolean_expression::boolean_expression;
 use super::primary_expression::primary_expression;

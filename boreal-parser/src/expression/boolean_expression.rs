@@ -8,7 +8,8 @@ use nom::{
     sequence::preceded,
 };
 
-use crate::{error::ErrorKind, Error, Regex};
+use crate::error::{Error, ErrorKind};
+use crate::regex::Regex;
 
 use super::{
     super::{
@@ -24,7 +25,7 @@ use super::{
 };
 
 /// parse or operator
-pub fn boolean_expression(mut input: Input) -> ParseResult<Expression> {
+pub(crate) fn boolean_expression(mut input: Input) -> ParseResult<Expression> {
     // Expression parsing involves multiple recursives paths, making it quite complex.
     // There are however a few observations we can make:
     // - only two combinators receive recursive calls: this one and `primary_expression`.

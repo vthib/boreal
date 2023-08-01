@@ -42,25 +42,14 @@
 // - The returned input is right-trimmed
 // The [`nom_recipes::rtrim`] function is provided to make this easier.
 
-mod error;
-pub use error::Error;
-mod expression;
-pub use expression::{
-    Expression, ExpressionKind, ForIterator, ForSelection, Identifier, IdentifierOperation,
-    IdentifierOperationType, ReadIntegerType, RuleSet, VariableSet,
-};
-mod file;
-pub use file::{YaraFile, YaraFileComponent};
+pub mod error;
+pub mod expression;
+pub mod file;
 pub mod hex_string;
 mod nom_recipes;
 mod number;
 pub mod regex;
-pub use regex::Regex;
-mod rule;
-pub use rule::{
-    Metadata, Rule, VariableDeclaration, VariableDeclarationValue, VariableModifierBase64,
-    VariableModifiers,
-};
+pub mod rule;
 mod string;
 mod types;
 
@@ -70,7 +59,7 @@ mod types;
 ///
 /// Returns an error if the parsing fails, or if there are
 /// trailing data in the file that has not been parsed.
-pub fn parse(input: &str) -> Result<YaraFile, Error> {
+pub fn parse(input: &str) -> Result<file::YaraFile, error::Error> {
     use nom::Finish;
 
     let input = types::Input::new(input);

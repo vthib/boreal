@@ -3,7 +3,7 @@
 //! This module contains all types describing a rule condition, built from the parsed AST.
 use std::ops::Range;
 
-use boreal_parser as parser;
+use boreal_parser::expression as parser;
 
 use super::module::ModuleExpression;
 use super::rule::RuleCompiler;
@@ -1219,9 +1219,9 @@ fn compile_for_iterator(
 
 fn compile_regex(
     compiler: &mut RuleCompiler<'_>,
-    regex: parser::Regex,
+    regex: boreal_parser::regex::Regex,
 ) -> Result<Regex, CompilationError> {
-    let parser::Regex {
+    let boreal_parser::regex::Regex {
         ast,
         case_insensitive,
         dot_all,

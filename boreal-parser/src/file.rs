@@ -1,4 +1,4 @@
-//! Parse yara rules.
+//! Types related to YARA files.
 use std::ops::Range;
 
 use nom::branch::alt;
@@ -8,7 +8,7 @@ use nom::combinator::map;
 use nom::sequence::delimited;
 use nom::{combinator::cut, sequence::preceded};
 
-use crate::Rule;
+use crate::rule::Rule;
 
 use super::rule::rule;
 use super::{
@@ -63,7 +63,7 @@ pub struct Include {
 ///
 /// If the input cannot be parsed properly and entirely as a list
 /// of yara rules, an error is returned.
-pub fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
+pub(crate) fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
     let (mut input, _) = ltrim(input)?;
 
     let mut file = YaraFile {
@@ -129,10 +129,8 @@ fn import(input: Input) -> ParseResult<Import> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        test_helpers::{parse, parse_err, test_public_type},
-        Expression, ExpressionKind,
-    };
+    use crate::expression::{Expression, ExpressionKind};
+    use crate::test_helpers::{parse, parse_err, test_public_type};
 
     #[test]
     fn test_parse_yara_file() {
