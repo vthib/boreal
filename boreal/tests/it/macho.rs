@@ -71,11 +71,10 @@ fn test_entry_point_for_arch() {
         file2,
         "macho.entry_point_for_arch(macho.CPU_TYPE_X86, macho.CPU_SUBTYPE_PENTIUM_M) == 2008",
     );
-    // TODO: Bug in LIBYARA
-    // test_cond(
-    //     file2,
-    //     "not defined macho.entry_point_for_arch(macho.CPU_TYPE_X86, macho.CPU_SUBTYPE_XEON)",
-    // );
+    test_cond(
+        file2,
+        "not defined macho.entry_point_for_arch(macho.CPU_TYPE_X86, macho.CPU_SUBTYPE_XEON)",
+    );
     {
         use std::io::Read;
 

@@ -279,13 +279,10 @@ rule second {{
 
 #[test]
 fn test_max_split_match_length_hex_string() {
-    // Turns out yara works fine for the commented string.
-    // TODO: investigate why
     let checker = Checker::new(
         r#"
 rule a {
     strings:
-        // $a = { AA [1-] BB CC DD EE [1-] FF }
         $a = { AA ?? [1-] BB CC DD EE [1-] ?? FF }
     condition:
         any of them
@@ -301,7 +298,7 @@ rule a {
     mem.extend(b"\xAA \xBB\xCC\xDD\xEE");
     mem.resize(5_000, 0);
     mem.push(b'\xFF');
-    // checker.check(&mem, false);
+    checker.check(&mem, false);
 
     // If the \xFF is too far, it won't match.
     let mut mem = Vec::new();

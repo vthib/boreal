@@ -115,7 +115,7 @@ fn test_import_md5() {
 #[test]
 #[cfg(feature = "hash")]
 fn test_telfhash() {
-    use crate::utils::check_boreal;
+    use crate::utils::check;
 
     test(ELF32_FILE, "not defined elf.telfhash()");
     test(ELF32_SHAREDOBJ, "not defined elf.telfhash()");
@@ -125,8 +125,7 @@ fn test_telfhash() {
     test(ELF_X64_FILE, "not defined elf.telfhash()");
 
     let contents = std::fs::read("tests/assets/elf/elf_with_imports").unwrap();
-    // TODO: fixed on yara >4.3.0-rc1
-    check_boreal(
+    check(
         r#"
 import "elf"
 rule test {
