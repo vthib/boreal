@@ -238,6 +238,7 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(VariableEvaluation {
             var: &Variable {
+                rule_name: "a".to_owned(),
                 name: "a".to_owned(),
                 is_private: false,
                 matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),

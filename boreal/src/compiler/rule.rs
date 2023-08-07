@@ -232,7 +232,8 @@ pub(super) fn compile_rule(
             });
         }
 
-        let (var, stats) = variable::compile_variable(&mut compiler, var, parsed_contents)?;
+        let (var, stats) =
+            variable::compile_variable(&rule.name, &mut compiler, var, parsed_contents)?;
         if let Some(stats) = stats {
             variables_statistics.push(stats);
         }

@@ -15,6 +15,7 @@ pub struct Variable {
     ///
     /// Anonymous variables are just named "".
     pub name: String,
+    pub rule_name: String,
 
     /// Is the variable marked as private.
     pub is_private: bool,
@@ -24,6 +25,7 @@ pub struct Variable {
 }
 
 pub(super) fn compile_variable(
+    rule_name: &str,
     compiler: &mut RuleCompiler,
     decl: VariableDeclaration,
     parsed_contents: &str,
@@ -93,6 +95,7 @@ pub(super) fn compile_variable(
     let res = match res {
         Ok(matcher) => Variable {
             name,
+            rule_name: rule_name.to_owned(),
             is_private: modifiers.private,
             matcher,
         },
@@ -176,6 +179,7 @@ mod tests {
         };
         test_type_traits_non_clonable(
             compile_variable(
+                "",
                 &mut compiler,
                 VariableDeclaration {
                     name: "a".to_owned(),
