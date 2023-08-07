@@ -10,7 +10,10 @@ use crate::regex::Hir;
 
 #[derive(Debug)]
 pub(crate) struct SimpleValidator {
+    /// List of nodes to match
     nodes: Vec<SimpleNode>,
+    /// Total length of the expression
+    length: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -21,8 +24,8 @@ enum SimpleNode {
     Mask { value: u8, mask: u8 },
     // Negated Masked byte
     NegatedMask { value: u8, mask: u8 },
-    // Dot all, any byte
-    DotAll,
+    // Jump over a number of bytes
+    Jump(u8),
     // Dot, any byte but '\n'
     Dot,
 }
@@ -60,7 +63,11 @@ impl SimpleValidator {
             return None;
         }
 
-        Some(Self { nodes })
+        let length = nodes.iter().fold(0, |acc, node| match node {
+            SimpleNode::Jump(len) => acc + usize::from(*len),
+            _ => acc + 1,
+        });
+        Some(Self { nodes, length })
     }
 
     pub(crate) fn find_anchored_fwd(
@@ -70,17 +77,13 @@ impl SimpleValidator {
         end: usize,
     ) -> Option<usize> {
         let mem = &haystack[start..end];
-        if mem.len() < self.nodes.len() {
+        if mem.len() < self.length {
             return None;
         }
 
         let mut index = 0;
         for node in &self.nodes {
-            if !check_node(node, mem, index) {
-                return None;
-            }
-
-            index += 1;
+            index += check_node(node, mem, index)?;
         }
 
         Some(start + index)
@@ -93,17 +96,13 @@ impl SimpleValidator {
         end: usize,
     ) -> Option<usize> {
         let mem = &haystack[start..end];
-        if mem.len() < self.nodes.len() {
+        if mem.len() < self.length {
             return None;
         }
 
         let mut index = mem.len();
         for node in &self.nodes {
-            if !check_node(node, mem, index - 1) {
-                return None;
-            }
-
-            index -= 1;
+            index -= check_node(node, mem, index - 1)?;
         }
 
         Some(index + start)
@@ -111,13 +110,19 @@ impl SimpleValidator {
 }
 
 #[inline(always)]
-fn check_node(node: &SimpleNode, mem: &[u8], index: usize) -> bool {
-    match node {
-        SimpleNode::DotAll => true,
+fn check_node(node: &SimpleNode, mem: &[u8], index: usize) -> Option<usize> {
+    let matched = match node {
+        SimpleNode::Jump(v) => return Some(usize::from(*v)),
         SimpleNode::Dot => mem[index] != b'\n',
         SimpleNode::Byte(a) => mem[index] == *a,
         SimpleNode::Mask { value, mask } => (mem[index] & *mask) == *value,
         SimpleNode::NegatedMask { value, mask } => (mem[index] & *mask) != *value,
+    };
+
+    if matched {
+        Some(1)
+    } else {
+        None
     }
 }
 
@@ -165,11 +170,19 @@ fn add_hir_to_simple_nodes(
             true
         }
         Hir::Dot => {
-            nodes.push(if modifiers.dot_all {
-                SimpleNode::DotAll
+            if modifiers.dot_all {
+                if nodes.is_empty() {
+                    nodes.push(SimpleNode::Jump(1));
+                } else {
+                    let last_index = nodes.len() - 1;
+                    match &mut nodes[last_index] {
+                        SimpleNode::Jump(v) if *v < 255 => *v += 1,
+                        _ => nodes.push(SimpleNode::Jump(1)),
+                    }
+                }
             } else {
-                SimpleNode::Dot
-            });
+                nodes.push(SimpleNode::Dot);
+            }
             true
         }
         Hir::Empty => true,
@@ -274,6 +287,30 @@ mod tests {
                 SimpleNode::Dot,
                 SimpleNode::Byte(b'a'),
             ]),
+        );
+
+        test(
+            "..a.",
+            Modifiers {
+                dot_all: true,
+                ..Default::default()
+            },
+            false,
+            Some(&[
+                SimpleNode::Jump(2),
+                SimpleNode::Byte(b'a'),
+                SimpleNode::Jump(1),
+            ]),
+        );
+
+        test(
+            &".".repeat(300),
+            Modifiers {
+                dot_all: true,
+                ..Default::default()
+            },
+            false,
+            Some(&[SimpleNode::Jump(255), SimpleNode::Jump(45)]),
         );
 
         assert!(!add_hir_to_simple_nodes(
