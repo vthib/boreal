@@ -30,7 +30,7 @@ pub(crate) struct Matcher {
     kind: MatcherKind,
 
     /// Modifiers related to matching.
-    modifiers: Modifiers,
+    pub(crate) modifiers: Modifiers,
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -182,8 +182,9 @@ impl Matcher {
         })
     }
 
-    pub fn new_bytes(value: Vec<u8>, modifiers: &VariableModifiers) -> Self {
+    pub fn new_bytes(value: Vec<u8>, mut modifiers: VariableModifiers) -> Self {
         let mut literals = Vec::with_capacity(2);
+
         if modifiers.wide {
             if modifiers.ascii {
                 let wide = string_to_wide(&value);
@@ -216,7 +217,7 @@ impl Matcher {
                     fullword: modifiers.fullword,
                     wide: modifiers.wide,
                     ascii: modifiers.ascii,
-                    nocase: modifiers.nocase,
+                    nocase: false,
                     dot_all: false,
                 },
             };
@@ -248,6 +249,8 @@ impl Matcher {
                     }
                 }
             }
+
+            modifiers.nocase = false;
         }
 
         Matcher {

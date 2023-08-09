@@ -36,7 +36,7 @@ pub(crate) struct AcScan {
 }
 
 /// Details on a literal of a variable.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LiteralInfo {
     /// Index of the variable in the variable array.
     variable_index: usize,
@@ -61,45 +61,48 @@ impl AcScan {
             } else {
                 for (literal_index, lit) in var.matcher.literals.iter().enumerate() {
                     let (start, end) = pick_atom_in_literal(lit);
-                    let mut atom = lit[start..(lit.len() - end)].to_vec();
+                    let atom = lit[start..(lit.len() - end)].to_vec();
+
                     let literal_info = LiteralInfo {
                         variable_index,
                         literal_index,
                         slice_offset: (start, end),
                     };
 
-                    // Ensure the literals provided to the aho corasick are not
-                    // duplicated. If multiple variables uses the same atoms,
-                    // we will iterate on every variable in this module, instead
-                    // of going back into the aho-corasick just for it to
-                    // iterate over the matching ids and return immediately
-                    // to this code. This improves performances significantly.
-                    //
-                    // In addition, since the aho-corasick is case insensitive,
-                    // normalize before de-duplicating.
-                    atom.make_ascii_lowercase();
-
-                    match known_lits.entry(atom.clone()) {
-                        Entry::Vacant(v) => {
-                            let _r = v.insert(lits.len());
-                            aho_index_to_literal_info.push(vec![literal_info]);
-                            lits.push(atom);
+                    if var.matcher.modifiers.nocase {
+                        for atom in generate_nocase(&atom) {
+                            match known_lits.entry(atom.clone()) {
+                                Entry::Vacant(v) => {
+                                    let _r = v.insert(lits.len());
+                                    aho_index_to_literal_info.push(vec![literal_info.clone()]);
+                                    lits.push(atom);
+                                }
+                                Entry::Occupied(o) => {
+                                    let index = o.get();
+                                    aho_index_to_literal_info[*index].push(literal_info.clone());
+                                }
+                            }
                         }
-                        Entry::Occupied(o) => {
-                            let index = o.get();
-                            aho_index_to_literal_info[*index].push(literal_info);
+                    } else {
+                        match known_lits.entry(atom.clone()) {
+                            Entry::Vacant(v) => {
+                                let _r = v.insert(lits.len());
+                                aho_index_to_literal_info.push(vec![literal_info]);
+                                lits.push(atom);
+                            }
+                            Entry::Occupied(o) => {
+                                let index = o.get();
+                                aho_index_to_literal_info[*index].push(literal_info);
+                            }
                         }
                     }
                 }
             }
         }
 
-        // TODO: Should this AC be case insensitive or not? Redo some benches once other
-        // optimizations are done.
-
         let mut builder = AhoCorasickBuilder::new();
         let builder = builder
-            .ascii_case_insensitive(true)
+            .ascii_case_insensitive(false)
             .kind(Some(AhoCorasickKind::DFA));
 
         // First try with a smaller size to reduce memory use and improve performances, otherwise
@@ -223,6 +226,35 @@ impl AcScan {
             }
         }
     }
+}
+
+fn generate_nocase(value: &[u8]) -> Vec<Vec<u8>> {
+    let mut literals = Vec::new();
+
+    literals.push(Vec::new());
+
+    for b in value {
+        if b.is_ascii_alphabetic() {
+            let mut lits2 = literals.clone();
+
+            let b = b.to_ascii_lowercase();
+            for lit in &mut literals {
+                lit.push(b);
+            }
+
+            let b = b.to_ascii_uppercase();
+            for lit in &mut lits2 {
+                lit.push(b);
+            }
+            literals.extend(lits2);
+        } else {
+            for lit in &mut literals {
+                lit.push(*b);
+            }
+        }
+    }
+
+    literals
 }
 
 #[derive(Clone, Debug)]

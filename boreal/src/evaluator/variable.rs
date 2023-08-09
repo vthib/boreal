@@ -240,7 +240,7 @@ mod tests {
             var: &Variable {
                 name: "a".to_owned(),
                 is_private: false,
-                matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),
+                matcher: Matcher::new_bytes(Vec::new(), VariableModifiers::default()),
             },
             params: Params {
                 string_max_nb_matches: 100,

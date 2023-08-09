@@ -39,12 +39,13 @@ pub(super) fn compile_variable(
         modifiers.ascii = true;
     }
 
+    let is_private = modifiers.private;
     let res = match value {
         VariableDeclarationValue::Bytes(s) => {
             if s.is_empty() {
                 Err(VariableCompilationError::Empty)
             } else {
-                Ok(Matcher::new_bytes(s, &modifiers))
+                Ok(Matcher::new_bytes(s, modifiers))
             }
         }
         VariableDeclarationValue::Regex(boreal_parser::regex::Regex {
@@ -93,7 +94,7 @@ pub(super) fn compile_variable(
     let res = match res {
         Ok(matcher) => Variable {
             name,
-            is_private: modifiers.private,
+            is_private,
             matcher,
         },
         Err(error) => {
