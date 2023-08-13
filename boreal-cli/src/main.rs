@@ -117,6 +117,11 @@ fn main() -> ExitCode {
         let mut compiler = unsafe { Compiler::new_with_pe_signatures() };
         #[cfg(not(feature = "authenticode"))]
         let mut compiler = Compiler::new();
+        let _ = compiler.define_symbol("owner", "owner");
+        let _ = compiler.define_symbol("filename", "filename");
+        let _ = compiler.define_symbol("filepath", "filepath");
+        let _ = compiler.define_symbol("extension", "bin");
+        let _ = compiler.define_symbol("filetype", "bin");
 
         compiler.set_params(
             boreal::compiler::CompilerParams::default()
