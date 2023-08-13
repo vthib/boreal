@@ -2,7 +2,7 @@
 use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
-use crate::atoms::{atoms_rank, byte_rank};
+use crate::atoms::atoms_rank;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 use bitmaps::Bitmap;
 
@@ -59,9 +59,6 @@ pub struct LiteralsDetails {
 struct Splitter {
     parts: Vec<HirPart>,
 
-    /// Literals currently being built.
-    literal_set_builder: Option<LiteralSetBuilder>,
-
     /// Current position of the visitor.
     ///
     /// This position is a simple counter of visited nodes.
@@ -72,54 +69,47 @@ struct Splitter {
 }
 
 #[derive(Debug)]
-enum HirPart {
-    Literals(LiteralSet),
-    Dot {
-        start_position: usize,
-        dot_all: bool,
-    },
-    Class {
-        start_position: usize,
-        bitmap: Bitmap<256>,
-    },
+struct HirPart {
+    position: usize,
+    kind: HirPartKind,
+}
+
+#[derive(Debug)]
+enum HirPartKind {
+    Literal(u8),
+    Literals(Vec<Vec<u8>>),
+    Dot { dot_all: bool },
+    Class { bitmap: Bitmap<256> },
     Other,
 }
 
 impl HirPart {
-    fn combinations(&self) -> Option<i32> {
-        match self {
-            HirPart::Literals(set) => i32::try_from(set.literals.len()).ok(),
-            HirPart::Dot { .. } => Some(256),
-            HirPart::Class { bitmap, .. } => i32::try_from(bitmap.len()).ok(),
-            HirPart::Other => None,
-        }
-    }
-
-    fn start_position(&self) -> Option<usize> {
-        match self {
-            HirPart::Literals(set) => Some(set.start_position),
-            HirPart::Dot { start_position, .. } => Some(*start_position),
-            HirPart::Class { start_position, .. } => Some(*start_position),
-            HirPart::Other => None,
-        }
-    }
-
-    fn end_position(&self) -> Option<usize> {
-        match self {
-            HirPart::Literals(set) => Some(set.end_position),
-            HirPart::Dot { start_position, .. } => Some(start_position + 1),
-            HirPart::Class { start_position, .. } => Some(start_position + 1),
-            HirPart::Other => None,
+    fn combinations(&self) -> Option<u32> {
+        match &self.kind {
+            HirPartKind::Literal(_) => Some(1),
+            HirPartKind::Literals(lits) => u32::try_from(lits.len()).ok(),
+            HirPartKind::Dot { .. } => Some(256),
+            HirPartKind::Class { bitmap, .. } => u32::try_from(bitmap.len()).ok(),
+            HirPartKind::Other => None,
         }
     }
 
     fn len(&self) -> Option<usize> {
-        match self {
-            HirPart::Literals(set) => Some(set.end_position - set.start_position),
-            HirPart::Dot { .. } => Some(1),
-            HirPart::Class { .. } => Some(1),
-            HirPart::Other => None,
+        match &self.kind {
+            HirPartKind::Literal(_) => Some(1),
+            HirPartKind::Literals(lits) => lits.iter().map(Vec::len).min(),
+            HirPartKind::Dot { .. } => Some(1),
+            HirPartKind::Class { .. } => Some(1),
+            HirPartKind::Other => None,
         }
+    }
+
+    fn start_position(&self) -> usize {
+        self.position
+    }
+
+    fn end_position(&self) -> usize {
+        self.position + 1
     }
 }
 
@@ -127,25 +117,17 @@ impl Splitter {
     fn new(dot_all: bool) -> Self {
         Self {
             parts: Vec::new(),
-            literal_set_builder: None,
 
             current_position: 0,
             dot_all,
         }
     }
 
-    /// Add a byte to the literals being built.
-    fn add_byte(&mut self, byte: u8) {
-        let builder = self
-            .literal_set_builder
-            .get_or_insert_with(|| LiteralSetBuilder::new(self.current_position));
-
-        builder.add_byte(byte);
-    }
-
-    fn add_part(&mut self, part: HirPart) {
-        self.close_literal_set();
-        self.parts.push(part);
+    fn add_part(&mut self, kind: HirPartKind) {
+        self.parts.push(HirPart {
+            position: self.current_position,
+            kind,
+        });
     }
 
     /// Visit an alternation to add it to the currently being build literals.
@@ -172,55 +154,15 @@ impl Splitter {
             }
         }
 
-        let current_len = self
-            .literal_set_builder
-            .as_ref()
-            .map_or(1, |builder| builder.literals.len());
-        if current_len.checked_mul(lits.len()).map_or(true, |v| v > 32) {
-            return false;
-        }
-
-        let builder = self
-            .literal_set_builder
-            .get_or_insert_with(|| LiteralSetBuilder::new(self.current_position));
-        builder.add_alternation(Cow::Owned(lits));
+        self.add_part(HirPartKind::Literals(lits));
         true
     }
 
-    /// Close currently being built literals.
-    fn close_literal_set(&mut self) {
-        if let Some(builder) = self.literal_set_builder.take() {
-            self.add_part(HirPart::Literals(builder.build(self.current_position)));
-        }
-    }
-
     fn close_run(&mut self) {
-        self.close_literal_set();
-        self.parts.push(HirPart::Other);
+        self.add_part(HirPartKind::Other);
     }
 
     fn find_best_literals_set(self) -> Option<LiteralSet> {
-        // Firstly, try to find explicit literals present in the regex.
-        let set = self
-            .parts
-            .iter()
-            .filter_map(|part| match part {
-                HirPart::Literals(set) => Some(set),
-                _ => None,
-            })
-            // We use min of -rank to ensure that the first element is returned
-            // if multiple elements have the same rank. This is preferable to ease
-            // validation of the matching against a literal match.
-            .min_by_key(|set| -i64::from(set.rank));
-
-        if let Some(set) = set {
-            // If the length of the literals is 2 or more, this is enough for a
-            // good quality atom.
-            if !set.literals.is_empty() && set.literals[0].len() >= 3 {
-                return Some(set.clone());
-            }
-        }
-
         // Secondly, try to generate good enough literals by expanding classes
         // or dot expressions.
         //
@@ -243,8 +185,6 @@ impl Splitter {
 struct LiteralSetBuilder {
     /// List of literals extracted.
     literals: Vec<Vec<u8>>,
-
-    /// Starting position of the literals (including the first bytes of the literals).
     start_position: usize,
 }
 
@@ -301,24 +241,25 @@ impl LiteralSetBuilder {
     }
 
     fn add_ast_part(&mut self, part: &HirPart) {
-        match part {
-            HirPart::Literals(set) => {
-                if set.literals.len() == 1 {
-                    for b in &set.literals[0] {
+        match &part.kind {
+            HirPartKind::Literal(byte) => self.add_byte(*byte),
+            HirPartKind::Literals(lits) => {
+                if lits.len() == 1 {
+                    for b in &lits[0] {
                         self.add_byte(*b);
                     }
                 } else {
-                    self.add_alternation(Cow::Borrowed(&set.literals));
+                    self.add_alternation(Cow::Borrowed(lits));
                 }
             }
-            HirPart::Dot { dot_all, .. } => {
+            HirPartKind::Dot { dot_all, .. } => {
                 // TODO: replace with a static vec
                 let cls: Vec<_> = (0..=255)
                     .filter(|b| if *dot_all { true } else { *b != b'\n' })
                     .collect();
                 self.add_class(&cls);
             }
-            HirPart::Class { bitmap, .. } => {
+            HirPartKind::Class { bitmap, .. } => {
                 // TODO: improve data objects used
                 let cls: Vec<_> = bitmap
                     .into_iter()
@@ -328,13 +269,13 @@ impl LiteralSetBuilder {
                     .collect();
                 self.add_class(&cls);
             }
-            HirPart::Other => unreachable!(),
+            HirPartKind::Other => unreachable!(),
         }
     }
 }
 
 // Max out combinators on expansion of one ?? and one X? or ?X
-const MAX_COMBINATORICS: i32 = 256;
+const MAX_COMBINATORICS: u32 = 256;
 
 fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
     // Compute the combinations of every part.
@@ -373,17 +314,21 @@ fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
                 Some(v) => v,
                 None => break,
             };
+
+            current_combinations *= j_details.combinations;
+            current_len += j_details.len;
+
             if j_details.combinations == 1 {
-                // We can append the element to the current valid slices, no need to split it.
                 let last_index = valid_slices.len() - 1;
+
+                // We can append the element to the current valid slices, no need to split it.
                 valid_slices[last_index].span = i..=j;
-                // FIXME: this isn't really what the atoms_rank algorithm does. A better way of
-                // computing this would be nice.
                 valid_slices[last_index].invalid = false;
                 valid_slices[last_index].len += j_details.len;
+                if valid_slices[last_index].len >= 4 {
+                    break;
+                }
             } else {
-                current_combinations *= j_details.combinations;
-                current_len += j_details.len;
                 if current_combinations > MAX_COMBINATORICS {
                     break;
                 }
@@ -393,20 +338,15 @@ fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
                     len: current_len,
                     invalid: j_details.combinations >= 255,
                 });
-            }
-
-            if current_len >= 4 {
-                break;
+                if current_len >= 4 {
+                    break;
+                }
             }
         }
     }
 
-    let mut valid_slices: Vec<_> = valid_slices.into_iter().filter(|v| !v.invalid).collect();
-    let mut ranks = valid_slices
-        .iter()
-        .enumerate()
-        .map(|(i, v)| (i, v.rank()))
-        .collect();
+    let valid_slices: Vec<_> = valid_slices.into_iter().filter(|v| !v.invalid).collect();
+    let mut ranks: Vec<(&Slice, u32)> = valid_slices.iter().map(|s| (s, s.rank(parts))).collect();
 
     // Now, select the best slices while trying to limit combinations.
     // This is done by sorting the valid slices. We sort in reverse because, for equal
@@ -414,15 +354,15 @@ fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
     // (to reduce the reverse validator).
     ranks.sort_by(|(_, a), (_, b)| b.cmp(a));
 
-    match ranks.get(0).and_then(|(index, _)| valid_slices.get(*index)) {
-        Some(Slice { span, .. }) => {
+    match ranks.first() {
+        Some((Slice { span, .. }, _)) => {
             let parts = &parts[span.clone()];
-            let mut builder = LiteralSetBuilder::new(parts[0].start_position().unwrap());
+            let mut builder = LiteralSetBuilder::new(parts[0].start_position());
 
             for part in parts {
                 builder.add_ast_part(part);
             }
-            Some(builder.build(parts[parts.len() - 1].end_position().unwrap()))
+            Some(builder.build(parts[parts.len() - 1].end_position()))
         }
         None => None,
     }
@@ -431,59 +371,32 @@ fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Slice {
     span: RangeInclusive<usize>,
-    combinations: i32,
+    combinations: u32,
     len: usize,
     invalid: bool,
 }
 
-impl PartialOrd for Slice {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Slice {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (high_order(self), self.rank).cmp(&(high_order(other), other.rank))
-    }
-}
-
-fn high_order(a: &Slice) -> u8 {
-    // len >= 3, comb 1  => 3
-    // len >= 4, comb 16 => 3
-    // len >= 3, comb 16 => 2
-    // len >= 2, comb 1  => 2
-    // len >= 4, comb 256 => 2
-    // len >= 2, comb 16 => 1
-    // len >= 3, comb 256 => 1
-    if a.combinations <= 1 {
-        if a.len >= 3 {
-            8
-        } else if a.len >= 2 {
-            5
-        } else {
-            1
+impl Slice {
+    fn rank(&self, parts: &[HirPart]) -> u32 {
+        let mut builder = LiteralSetBuilder::new(0);
+        for part in &parts[self.span.clone()] {
+            builder.add_ast_part(part);
         }
-    } else if a.combinations <= 20 {
-        if a.len >= 4 {
-            7
-        } else if a.len >= 3 {
-            6
-        } else if a.len >= 2 {
-            3
+
+        let quality = atoms_rank(&builder.literals);
+        if self.combinations >= 100 {
+            quality.saturating_sub((10 * self.len) as u32)
+        } else if self.combinations > 1 {
+            quality.saturating_sub((4 * self.len) as u32)
         } else {
-            0
+            quality
         }
-    } else if a.len >= 4 {
-        4
-    } else {
-        2
     }
 }
 
 #[derive(Debug, Copy, Clone)]
 struct PartDetails {
-    combinations: i32,
+    combinations: u32,
     len: usize,
 }
 
@@ -493,22 +406,18 @@ impl Visitor for Splitter {
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
         match hir {
             Hir::Literal(b) => {
-                self.add_byte(*b);
+                self.add_part(HirPartKind::Literal(*b));
                 VisitAction::Skip
             }
             Hir::Empty => VisitAction::Skip,
             Hir::Dot => {
-                self.add_part(HirPart::Dot {
-                    start_position: self.current_position,
+                self.add_part(HirPartKind::Dot {
                     dot_all: self.dot_all,
                 });
                 VisitAction::Skip
             }
             Hir::Class(Class { bitmap, .. }) => {
-                self.add_part(HirPart::Class {
-                    start_position: self.current_position,
-                    bitmap: *bitmap,
-                });
+                self.add_part(HirPartKind::Class { bitmap: *bitmap });
                 VisitAction::Skip
             }
             Hir::Mask {
@@ -529,10 +438,7 @@ impl Visitor for Splitter {
                 if *negated {
                     bitmap.invert();
                 }
-                self.add_part(HirPart::Class {
-                    start_position: self.current_position,
-                    bitmap,
-                });
+                self.add_part(HirPartKind::Class { bitmap });
                 VisitAction::Skip
             }
             Hir::Assertion(_) | Hir::Repetition { .. } => {
@@ -572,20 +478,14 @@ struct LiteralSet {
 
     /// Ending position of the literals (excluding the last bytes of the literals).
     end_position: usize,
-
-    /// Rank of the saved literals.
-    rank: u32,
 }
 
 impl LiteralSet {
     fn new(literals: Vec<Vec<u8>>, start_position: usize, end_position: usize) -> Self {
-        let rank = atoms_rank(&literals);
-
         Self {
             literals,
             start_position,
             end_position,
-            rank,
         }
     }
 
@@ -927,38 +827,22 @@ mod tests {
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) ( 31 | 32 ) ( 41 | 42 ) ( 51 | 52 ) ( 61 | 62 ) ( 71 | 72 ) 88 }",
             &[
-                b"\x11\x21\x31\x41\x51",
-                b"\x11\x21\x31\x41\x52",
-                b"\x11\x21\x31\x42\x51",
-                b"\x11\x21\x31\x42\x52",
-                b"\x11\x21\x32\x41\x51",
-                b"\x11\x21\x32\x41\x52",
-                b"\x11\x21\x32\x42\x51",
-                b"\x11\x21\x32\x42\x52",
-                b"\x11\x22\x31\x41\x51",
-                b"\x11\x22\x31\x41\x52",
-                b"\x11\x22\x31\x42\x51",
-                b"\x11\x22\x31\x42\x52",
-                b"\x11\x22\x32\x41\x51",
-                b"\x11\x22\x32\x41\x52",
-                b"\x11\x22\x32\x42\x51",
-                b"\x11\x22\x32\x42\x52",
-                b"\x12\x21\x31\x41\x51",
-                b"\x12\x21\x31\x41\x52",
-                b"\x12\x21\x31\x42\x51",
-                b"\x12\x21\x31\x42\x52",
-                b"\x12\x21\x32\x41\x51",
-                b"\x12\x21\x32\x41\x52",
-                b"\x12\x21\x32\x42\x51",
-                b"\x12\x21\x32\x42\x52",
-                b"\x12\x22\x31\x41\x51",
-                b"\x12\x22\x31\x41\x52",
-                b"\x12\x22\x31\x42\x51",
-                b"\x12\x22\x31\x42\x52",
-                b"\x12\x22\x32\x41\x51",
-                b"\x12\x22\x32\x41\x52",
-                b"\x12\x22\x32\x42\x51",
-                b"\x12\x22\x32\x42\x52",
+                b"\x11\x21\x31\x41",
+                b"\x11\x21\x31\x42",
+                b"\x11\x21\x32\x41",
+                b"\x11\x21\x32\x42",
+                b"\x11\x22\x31\x41",
+                b"\x11\x22\x31\x42",
+                b"\x11\x22\x32\x41",
+                b"\x11\x22\x32\x42",
+                b"\x12\x21\x31\x41",
+                b"\x12\x21\x31\x42",
+                b"\x12\x21\x32\x41",
+                b"\x12\x21\x32\x42",
+                b"\x12\x22\x31\x41",
+                b"\x12\x22\x31\x42",
+                b"\x12\x22\x32\x41",
+                b"\x12\x22\x32\x42",
             ],
             "",
             "(\\x11|\\x12)(!|\")(1|2)(A|B)(Q|R)(a|b)(q|r)\\x88",
@@ -966,42 +850,89 @@ mod tests {
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) 33 ( 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10  ) }",
             &[
-                b"\x11\x21\x33",
-                b"\x11\x22\x33",
-                b"\x12\x21\x33",
-                b"\x12\x22\x33",
+                b"\x11\x21\x33\x01",
+                b"\x11\x21\x33\x02",
+                b"\x11\x21\x33\x03",
+                b"\x11\x21\x33\x04",
+                b"\x11\x21\x33\x05",
+                b"\x11\x21\x33\x06",
+                b"\x11\x21\x33\x07",
+                b"\x11\x21\x33\x08",
+                b"\x11\x21\x33\x09",
+                b"\x11\x21\x33\x10",
+                b"\x11\x22\x33\x01",
+                b"\x11\x22\x33\x02",
+                b"\x11\x22\x33\x03",
+                b"\x11\x22\x33\x04",
+                b"\x11\x22\x33\x05",
+                b"\x11\x22\x33\x06",
+                b"\x11\x22\x33\x07",
+                b"\x11\x22\x33\x08",
+                b"\x11\x22\x33\x09",
+                b"\x11\x22\x33\x10",
+                b"\x12\x21\x33\x01",
+                b"\x12\x21\x33\x02",
+                b"\x12\x21\x33\x03",
+                b"\x12\x21\x33\x04",
+                b"\x12\x21\x33\x05",
+                b"\x12\x21\x33\x06",
+                b"\x12\x21\x33\x07",
+                b"\x12\x21\x33\x08",
+                b"\x12\x21\x33\x09",
+                b"\x12\x21\x33\x10",
+                b"\x12\x22\x33\x01",
+                b"\x12\x22\x33\x02",
+                b"\x12\x22\x33\x03",
+                b"\x12\x22\x33\x04",
+                b"\x12\x22\x33\x05",
+                b"\x12\x22\x33\x06",
+                b"\x12\x22\x33\x07",
+                b"\x12\x22\x33\x08",
+                b"\x12\x22\x33\x09",
+                b"\x12\x22\x33\x10",
             ],
             "",
-            r#"(\x11|\x12)(!|")3(\x01|\x02|\x03|\x04|\x05|\x06|\x07|\x08|\x09|\x10)"#,
+            "",
         );
 
-        // TODO: to improve, there are diminishing returns in computing the longest literals.
         test(
             "{ 11 22 33 44 55 66 77 ( 88 | 99 | AA | BB ) }",
-            &[
-                b"\x11\x22\x33\x44\x55\x66\x77\x88",
-                b"\x11\x22\x33\x44\x55\x66\x77\x99",
-                b"\x11\x22\x33\x44\x55\x66\x77\xAA",
-                b"\x11\x22\x33\x44\x55\x66\x77\xBB",
-            ],
+            &[b"\x11\x22\x33\x44"],
             "",
-            "",
+            r#"\x11"3DUfw(\x88|\x99|\xaa|\xbb)"#,
         );
 
         test(
             "{ 11 ?A 22 33 [1] 44 55 66 A? 77 88 }",
-            &[b"\x44\x55\x66"],
-            r#"\x11[\x0a\x1a\x2a:JZjz\x8a\x9a\xaa\xba\xca\xda\xea\xfa]"3.DUf"#,
-            r#"DUf[\xa0-\xaf]w\x88"#,
+            &[
+                b"\x11\x0A\x22\x33",
+                b"\x11\x1A\x22\x33",
+                b"\x11\x2A\x22\x33",
+                b"\x11\x3A\x22\x33",
+                b"\x11\x4A\x22\x33",
+                b"\x11\x5A\x22\x33",
+                b"\x11\x6A\x22\x33",
+                b"\x11\x7A\x22\x33",
+                b"\x11\x8A\x22\x33",
+                b"\x11\x9A\x22\x33",
+                b"\x11\xAA\x22\x33",
+                b"\x11\xBA\x22\x33",
+                b"\x11\xCA\x22\x33",
+                b"\x11\xDA\x22\x33",
+                b"\x11\xEA\x22\x33",
+                b"\x11\xFA\x22\x33",
+            ],
+            "",
+            r#"\x11[\x0a\x1a\x2a:JZjz\x8a\x9a\xaa\xba\xca\xda\xea\xfa]"3.DUf[\xa0-\xaf]w\x88"#,
         );
 
         // hex strings found in some real rules
         test(
             "{ 00 01 00 01 00 02 ?? ?? 00 02 00 01 00 02 ?? ?? 00 03 00 02 00 04 ?? ?? ?? ?? \
                00 04 00 02 00 04 ?? ?? }",
-            &[b"\x00\x03\x00\x02\x00\x04"],
-            r"\x00\x01\x00\x01\x00\x02..\x00\x02\x00\x01\x00\x02..\x00\x03\x00\x02\x00\x04",
-            r"\x00\x03\x00\x02\x00\x04....\x00\x04\x00\x02\x00\x04..",
+            &[b"\x00\x01\x00\x02"],
+            r"\x00\x01\x00\x01\x00\x02",
+            r"\x00\x01\x00\x02..\x00\x02\x00\x01\x00\x02..\x00\x03\x00\x02\x00\x04....\x00\x04\x00\x02\x00\x04..",
         );
 
         test(
@@ -1012,9 +943,9 @@ mod tests {
         );
         test(
             "{ 00 CC 00 ?? ?? ?? ?? ?? 00 64 65 66 61 75 6C 74 2E 70 72 6F 70 65 72 74 69 65 73 }",
-            &[b"\x00\x64\x65\x66\x61\x75\x6C\x74\x2E\x70\x72\x6F\x70\x65\x72\x74\x69\x65\x73"],
-            r"\x00\xcc\x00.....\x00default\x2eproperties",
-            "",
+            &[b"\x75\x6C\x74\x2E"],
+            r"\x00\xcc\x00.....\x00default\x2e",
+            r"ult\x2eproperties",
         );
         test(
             "{ FC E8??000000 [0-32] EB2B ?? 8B??00 83C504 8B??00 31?? 83C504 55 8B??00 31?? \
@@ -1152,7 +1083,7 @@ mod tests {
 
         // A few tests on closing nodes
         test("a.+bcd{2}e", &[b"bc"], "a.+bc", "bcd{2}e");
-        test("a.+bc.e", &[b"bc"], "a.+bc", "bc.e");
+        test("a.+bc.e", &["bc"], "a.+bc", "bc.e");
         test("a.+bc\\B.e", &[b"bc"], "a.+bc", "bc\\B.e");
         test("a.+bc[aA]e", &[b"bcAe", b"bcae"], "a.+bc[aA]e", "");
         test("a.+bc()de", &[b"bcde"], "a.+bc()de", "");
@@ -1166,21 +1097,71 @@ mod tests {
 
         test(
             "a((b(c)((d)()(e(g+h)ij)))kl)m",
-            &[b"hijklm"],
-            "a((b(c)((d)()(e(g+h)ij)))kl)m",
+            &[b"abcd"],
             "",
+            "a((b(c)((d)()(e(g+h)ij)))kl)m",
         );
 
-        test(" { AB CD 01 }", &[b" { AB CD 01 }"], "", "");
+        test(
+            " { AB CD 01 }",
+            &[b"{ AB"],
+            r" \x7b AB",
+            r"\x7b AB CD 01 \x7d",
+        );
 
         test(
             r"\([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\)",
             &[
-                b"0 AM)", b"0 PM)", b"1 AM)", b"1 PM)", b"2 AM)", b"2 PM)", b"3 AM)", b"3 PM)",
-                b"4 AM)", b"4 PM)", b"5 AM)", b"5 PM)", b"6 AM)", b"6 PM)", b"7 AM)", b"7 PM)",
-                b"8 AM)", b"8 PM)", b"9 AM)", b"9 PM)",
+                b"0 AM", b"0 PM", b"1 AM", b"1 PM", b"2 AM", b"2 PM", b"3 AM", b"3 PM", b"4 AM",
+                b"4 PM", b"5 AM", b"5 PM", b"6 AM", b"6 PM", b"7 AM", b"7 PM", b"8 AM", b"8 PM",
+                b"9 AM", b"9 PM",
             ],
-            r"\x28[0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\x29",
+            r"\x28[0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M",
+            r"[0-9] [AP]M\x29",
+        );
+
+        test(
+            r"b.*a(1234567|7892345).*d",
+            &[b"1234567", b"7892345"],
+            r"b.*a(1234567|7892345)",
+            r"(1234567|7892345).*d",
+        );
+    }
+
+    #[test]
+    fn test_foo() {
+        #[track_caller]
+        fn test<T>(expr: &str, expected_lits: &[T], expected_pre: &str, expected_post: &str)
+        where
+            T: AsRef<[u8]>,
+        {
+            let hir = expr_to_hir(expr);
+            let exprs = get_literals_details(&hir, false);
+            let literals: Vec<_> = exprs.literals.iter().collect();
+            let expected: Vec<_> = expected_lits.iter().map(AsRef::as_ref).collect();
+            assert_eq!(literals, expected);
+            assert_eq!(
+                exprs
+                    .pre_hir
+                    .as_ref()
+                    .map(regex_hir_to_string)
+                    .unwrap_or_default(),
+                expected_pre
+            );
+            assert_eq!(
+                exprs
+                    .post_hir
+                    .as_ref()
+                    .map(regex_hir_to_string)
+                    .unwrap_or_default(),
+                expected_post
+            );
+        }
+
+        test(
+            r"POST \/(ecp\/y\.js|ecp\/main\.css|ecp\/default\.flt|ecp\/auth\/w\.js|owa\/auth\/w\.js)[^\n]{100,600} (200|301|302) ",
+            &[b"POST"],
+            "",
             "",
         );
     }

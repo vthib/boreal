@@ -38,7 +38,17 @@ pub fn pick_atom_in_literal(lit: &[u8]) -> (usize, usize) {
 pub fn atoms_rank(literals: &[Vec<u8>]) -> u32 {
     // Get the min rank. This is probably the best solution, it isn't clear if a better one
     // is easy to find.
-    literals.iter().map(|lit| atom_rank(lit)).min().unwrap_or(0)
+    literals
+        .iter()
+        .map(|lit| {
+            if lit.len() > 4 {
+                lit.windows(ATOM_SIZE).map(atom_rank).max().unwrap()
+            } else {
+                atom_rank(lit)
+            }
+        })
+        .min()
+        .unwrap_or(0)
 }
 
 /// Compute the rank of an atom.
