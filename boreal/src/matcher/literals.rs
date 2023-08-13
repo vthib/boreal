@@ -226,7 +226,7 @@ impl Splitter {
         if let Some(set) = set {
             // If the length of the literals is 2 or more, this is enough for a
             // good quality atom.
-            if !set.literals.is_empty() && set.literals[0].len() >= 2 {
+            if !set.literals.is_empty() && set.literals[0].len() >= 3 {
                 return Some(set.clone());
             }
         }
@@ -452,16 +452,40 @@ impl PartialOrd for Slice {
 
 impl Ord for Slice {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // We want:
-        // - bigger length
-        // - smaller combinations
-        // - bigger rank
-        // Sort by length first, then combinations, then rank
-        (self.len, -self.combinatorics, self.rank).cmp(&(
-            other.len,
-            -other.combinatorics,
-            other.rank,
-        ))
+        (high_order(self), self.rank).cmp(&(high_order(other), other.rank))
+    }
+}
+
+fn high_order(a: &Slice) -> u8 {
+    // len >= 3, comb 1  => 3
+    // len >= 4, comb 16 => 3
+    // len >= 3, comb 16 => 2
+    // len >= 2, comb 1  => 2
+    // len >= 4, comb 256 => 2
+    // len >= 2, comb 16 => 1
+    // len >= 3, comb 256 => 1
+    if a.combinatorics <= 1 {
+        if a.len >= 3 {
+            8
+        } else if a.len >= 2 {
+            5
+        } else {
+            1
+        }
+    } else if a.combinatorics <= 20 {
+        if a.len >= 4 {
+            7
+        } else if a.len >= 3 {
+            6
+        } else if a.len >= 2 {
+            3
+        } else {
+            0
+        }
+    } else if a.len >= 4 {
+        4
+    } else {
+        2
     }
 }
 
@@ -1078,6 +1102,13 @@ mod tests {
             r"a.(bc|d)e",
             "",
         );
+
+        test(
+            "{ 81 EB ?? [0-8] E8 ?? 00 00 00 [0-8] 2B C3 }",
+            &[b"\x00\x00\x00"],
+            r"\x81\xeb..{0,8}?\xe8.\x00\x00\x00",
+            r"\x00\x00\x00.{0,8}?\x2b\xc3",
+        );
     }
 
     #[test]
@@ -1132,7 +1163,7 @@ mod tests {
         test("a.+bcd{2}e", &[b"bc"], "a.+bc", "bcd{2}e");
         test("a.+bc.e", &[b"bc"], "a.+bc", "bc.e");
         test("a.+bc\\B.e", &[b"bc"], "a.+bc", "bc\\B.e");
-        test("a.+bc[aA]e", &[b"bc"], "a.+bc", "bc[aA]e");
+        test("a.+bc[aA]e", &[b"bcAe", b"bcae"], "a.+bc[aA]e", "");
         test("a.+bc()de", &[b"bcde"], "a.+bc()de", "");
 
         test(
@@ -1150,6 +1181,17 @@ mod tests {
         );
 
         test(" { AB CD 01 }", &[b" { AB CD 01 }"], "", "");
+
+        test(
+            "([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M)",
+            &[
+                b"0 AM", b"0 PM", b"1 AM", b"1 PM", b"2 AM", b"2 PM", b"3 AM", b"3 PM", b"4 AM",
+                b"4 PM", b"5 AM", b"5 PM", b"6 AM", b"6 PM", b"7 AM", b"7 PM", b"8 AM", b"8 PM",
+                b"9 AM", b"9 PM",
+            ],
+            "([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M)",
+            "",
+        );
     }
 
     #[test]
