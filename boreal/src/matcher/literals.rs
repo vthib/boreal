@@ -86,21 +86,11 @@ enum HirPart {
 }
 
 impl HirPart {
-    fn combinatorics(&self) -> Option<i32> {
+    fn combinations(&self) -> Option<i32> {
         match self {
             HirPart::Literals(set) => i32::try_from(set.literals.len()).ok(),
             HirPart::Dot { .. } => Some(256),
             HirPart::Class { bitmap, .. } => i32::try_from(bitmap.len()).ok(),
-            HirPart::Other => None,
-        }
-    }
-
-    fn rank(&self) -> Option<u32> {
-        match self {
-            HirPart::Literals(set) => Some(set.rank),
-            HirPart::Dot { .. } => Some(byte_rank(0)),
-            // FIXME: improve this:
-            HirPart::Class { .. } => Some(byte_rank(0)),
             HirPart::Other => None,
         }
     }
@@ -347,81 +337,84 @@ impl LiteralSetBuilder {
 const MAX_COMBINATORICS: i32 = 256;
 
 fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
-    // Compute the combinatorics of every part.
+    // Compute the combinations of every part.
     let details: Vec<_> = parts
         .iter()
         .map(|part| {
             Some(PartDetails {
-                combinatorics: part.combinatorics()?,
-                rank: part.rank()?,
+                combinations: part.combinations()?,
                 len: part.len()?,
             })
         })
         .collect();
 
-    // For every slice in the run, compute the combinatorics of it, with two rules to simplify it:
+    // For every slice in the run, compute the combinations of it, with two rules to simplify it:
     // - ignore slices that reach MAX_COMBINATORICS
-    // - grow a valid slice when it can be done without increasing its combinatorics
+    // - grow a valid slice when it can be done without increasing its combinations
     let mut valid_slices = Vec::new();
-    'outer: for (i, i_details) in details.iter().enumerate() {
+    for (i, i_details) in details.iter().enumerate() {
         let i_details = match i_details {
             Some(v) => v,
             None => continue,
         };
-        if i_details.combinatorics >= 255 {
+        if i_details.combinations >= 255 {
             continue;
         }
         valid_slices.push(Slice {
             span: i..=i,
-            combinatorics: i_details.combinatorics,
-            rank: i_details.rank,
+            combinations: i_details.combinations,
             len: i_details.len,
             invalid: false,
         });
-        let mut current_combinatorics = i_details.combinatorics;
-        let mut current_rank = i_details.rank;
+        let mut current_combinations = i_details.combinations;
         let mut current_len = i_details.len;
         for (j, j_details) in details.iter().enumerate().skip(i + 1) {
             let j_details = match j_details {
                 Some(v) => v,
                 None => break,
             };
-            if j_details.combinatorics == 1 {
+            if j_details.combinations == 1 {
                 // We can append the element to the current valid slices, no need to split it.
                 let last_index = valid_slices.len() - 1;
                 valid_slices[last_index].span = i..=j;
                 // FIXME: this isn't really what the atoms_rank algorithm does. A better way of
                 // computing this would be nice.
-                valid_slices[last_index].rank += j_details.rank;
                 valid_slices[last_index].invalid = false;
                 valid_slices[last_index].len += j_details.len;
-                continue;
+            } else {
+                current_combinations *= j_details.combinations;
+                current_len += j_details.len;
+                if current_combinations > MAX_COMBINATORICS {
+                    break;
+                }
+                valid_slices.push(Slice {
+                    span: i..=j,
+                    combinations: current_combinations,
+                    len: current_len,
+                    invalid: j_details.combinations >= 255,
+                });
             }
-            current_combinatorics *= j_details.combinatorics;
-            current_rank += j_details.rank;
-            current_len += j_details.len;
-            if current_combinatorics > MAX_COMBINATORICS {
-                continue 'outer;
+
+            if current_len >= 4 {
+                break;
             }
-            valid_slices.push(Slice {
-                span: i..=j,
-                combinatorics: current_combinatorics,
-                rank: current_rank,
-                len: current_len,
-                invalid: j_details.combinatorics >= 255,
-            });
         }
     }
 
     let mut valid_slices: Vec<_> = valid_slices.into_iter().filter(|v| !v.invalid).collect();
+    let mut ranks = valid_slices
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (i, v.rank()))
+        .collect();
 
-    // Now, select the best slices while trying to limit combinatorics.
+    // Now, select the best slices while trying to limit combinations.
     // This is done by sorting the valid slices. We sort in reverse because, for equal
     // slices, we prefer picking the one that is as much on the left side as possible
     // (to reduce the reverse validator).
-    valid_slices.sort_by(|a, b| b.cmp(a));
+    ranks.sort_by(|(_, a), (_, b)| b.cmp(a));
 
-    match valid_slices.get(0) {
+    match ranks.get(0).and_then(|(index, _)| valid_slices.get(*index)) {
         Some(Slice { span, .. }) => {
             let parts = &parts[span.clone()];
             let mut builder = LiteralSetBuilder::new(parts[0].start_position().unwrap());
@@ -438,8 +431,7 @@ fn find_best_literal_set_in_parts(parts: &[HirPart]) -> Option<LiteralSet> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Slice {
     span: RangeInclusive<usize>,
-    combinatorics: i32,
-    rank: u32,
+    combinations: i32,
     len: usize,
     invalid: bool,
 }
@@ -464,7 +456,7 @@ fn high_order(a: &Slice) -> u8 {
     // len >= 4, comb 256 => 2
     // len >= 2, comb 16 => 1
     // len >= 3, comb 256 => 1
-    if a.combinatorics <= 1 {
+    if a.combinations <= 1 {
         if a.len >= 3 {
             8
         } else if a.len >= 2 {
@@ -472,7 +464,7 @@ fn high_order(a: &Slice) -> u8 {
         } else {
             1
         }
-    } else if a.combinatorics <= 20 {
+    } else if a.combinations <= 20 {
         if a.len >= 4 {
             7
         } else if a.len >= 3 {
@@ -491,8 +483,7 @@ fn high_order(a: &Slice) -> u8 {
 
 #[derive(Debug, Copy, Clone)]
 struct PartDetails {
-    combinatorics: i32,
-    rank: u32,
+    combinations: i32,
     len: usize,
 }
 
@@ -1183,13 +1174,13 @@ mod tests {
         test(" { AB CD 01 }", &[b" { AB CD 01 }"], "", "");
 
         test(
-            "([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M)",
+            r"\([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\)",
             &[
-                b"0 AM", b"0 PM", b"1 AM", b"1 PM", b"2 AM", b"2 PM", b"3 AM", b"3 PM", b"4 AM",
-                b"4 PM", b"5 AM", b"5 PM", b"6 AM", b"6 PM", b"7 AM", b"7 PM", b"8 AM", b"8 PM",
-                b"9 AM", b"9 PM",
+                b"0 AM)", b"0 PM)", b"1 AM)", b"1 PM)", b"2 AM)", b"2 PM)", b"3 AM)", b"3 PM)",
+                b"4 AM)", b"4 PM)", b"5 AM)", b"5 PM)", b"6 AM)", b"6 PM)", b"7 AM)", b"7 PM)",
+                b"8 AM)", b"8 PM)", b"9 AM)", b"9 PM)",
             ],
-            "([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M)",
+            r"\x28[0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\x29",
             "",
         );
     }
