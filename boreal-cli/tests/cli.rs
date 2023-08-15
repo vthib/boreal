@@ -510,9 +510,9 @@ fn test_print_string_stats() {
         r#"
 rule a {
     strings:
-        $a = "abc"
+        $a = "ab<de>g"
         $b = { 01 ( FE | EF ) }
-        $c = /foo\d??bar/ fullword
+        $c = /foo\d??barbaz/ fullword
         $d = /.{10}/ fullword
     condition:
         any of them
@@ -521,20 +521,20 @@ rule a {
     );
 
     let stats = r#"
-  $a = "abc"
-    literals: ["abc"]
-    atoms: ["abc"]
-    atoms quality: 60
+  $a = "ab<de>g"
+    literals: ["ab<de>g"]
+    atoms: ["<de>"]
+    atoms quality: 84
     algo: Literals
   $b = { 01 ( FE | EF ) }
     literals: [{ 01fe }, { 01ef }]
     atoms: [{ 01fe }, { 01ef }]
     atoms quality: 44
     algo: Literals
-  $c = /foo\d??bar/ fullword
-    literals: ["bar"]
-    atoms: ["bar"]
-    atoms quality: 60
+  $c = /foo\d??barbaz/ fullword
+    literals: ["barbaz"]
+    atoms: ["rbaz"]
+    atoms quality: 80
     algo: Atomized { NonGreedy { reverse: Dfa, forward: none } }
   $d = /.{10}/ fullword
     literals: []
