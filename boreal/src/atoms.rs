@@ -62,11 +62,7 @@ fn atom_rank(atom: &[u8]) -> u32 {
     let mut nb_uniq = 0;
 
     for b in atom {
-        match *b {
-            0x00 | 0x20 | 0xCC | 0xFF => quality += 12,
-            v if v.is_ascii_lowercase() => quality += 18,
-            _ => quality += 20,
-        }
+        quality += byte_rank(*b);
 
         if !bitmask[*b as usize] {
             bitmask[*b as usize] = true;
@@ -86,4 +82,12 @@ fn atom_rank(atom: &[u8]) -> u32 {
     }
 
     quality
+}
+
+pub fn byte_rank(b: u8) -> u32 {
+    match b {
+        0x00 | 0x20 | 0xCC | 0xFF => 12,
+        v if v.is_ascii_lowercase() => 18,
+        _ => 20,
+    }
 }

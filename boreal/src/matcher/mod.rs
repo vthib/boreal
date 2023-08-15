@@ -142,13 +142,7 @@ impl Matcher {
             mut literals,
             pre_hir,
             post_hir,
-        } = literals::get_literals_details(hir);
-
-        // If some literals are too small, don't use them, they would match too
-        // many times.
-        if literals.iter().any(|lit| lit.len() < 2) {
-            literals.clear();
-        }
+        } = literals::get_literals_details(hir, modifiers.dot_all);
 
         // Dedup literals
         let mut new_lits = Vec::with_capacity(literals.len());
