@@ -166,9 +166,8 @@ impl AcScan {
                 None => continue,
             };
             let end = match mat.end().checked_add(end_offset) {
-                Some(v) if v > scan_data.mem.len() => continue,
-                Some(v) => v,
-                None => continue,
+                Some(v) if v <= scan_data.mem.len() => v,
+                _ => continue,
             };
             let m = start..end;
 
@@ -189,10 +188,7 @@ impl AcScan {
             // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
             // saved match.
             let start_position = match &matches[variable_index] {
-                AcResult::Matches(v) => match v.last() {
-                    Some(m) => m.start + 1,
-                    None => 0,
-                },
+                AcResult::Matches(v) if !v.is_empty() => v[v.len() - 1].start + 1,
                 _ => 0,
             };
 

@@ -331,8 +331,8 @@ fn test_variable_regex_wide_fullword() {
     test_regex_wide_fullword("b.{1,5}?123", b"bb123");
     test_regex_wide_fullword("b.{1,5}123", b"bb123");
 
-    // Test the raw regex matcher, no literals of at least length 2 extracted.
-    test_regex_wide_fullword(r"a.{5}1", b"abcdef1");
+    // Test the raw regex matcher, no literals possible to extract)
+    test_regex_wide_fullword(r"(a.{5}1|z+)", b"abcdef1");
 
     // Same thing, but with a tricky regex: the literal looks "wide", but is considered ascii
     test_regex_wide_fullword(r"b\x00.{1,5}?i\x00j\x00k\x00", &to_wide(b"bbijk"));
@@ -359,6 +359,20 @@ fn test_variable_regex_wide_fullword_raw() {
     checker.check(&join(mem_wide, b"", b"a\0"), false);
 
     let checker = build_checker("ab$", "ascii wide fullword");
+    checker.check(&join(mem_ascii, b"", b""), true);
+    checker.check(&join(mem_ascii, b"a", b""), false);
+    checker.check(&join(mem_ascii, b"<", b""), true);
+    checker.check(&join(mem_ascii, b"<\0", b""), true);
+    checker.check(&join(mem_ascii, b"a\0", b""), true);
+
+    checker.check(&join(mem_wide, b"", b""), true);
+    checker.check(&join(mem_wide, b"a", b""), true);
+    checker.check(&join(mem_wide, b"<", b""), true);
+    checker.check(&join(mem_wide, b"<\0", b""), true);
+    checker.check(&join(mem_wide, b"a\0", b""), false);
+
+    // Do the same with word boundaries instead of fullword modifier
+    let checker = build_checker(r"\bab$", "ascii wide");
     checker.check(&join(mem_ascii, b"", b""), true);
     checker.check(&join(mem_ascii, b"a", b""), false);
     checker.check(&join(mem_ascii, b"<", b""), true);
@@ -413,7 +427,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check_libyara(b"\0a", false);
 
     // Check word boundary at start
-    let checker = build_checker(r"\ba", "wide");
+    let checker = build_checker(r"\ba+", "wide");
     checker.check(b"", false);
     checker.check(b"a", false);
     checker.check(b"a\0", true);
@@ -439,7 +453,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(b"b\ra\0", false);
 
     // Check word boundary at end
-    let checker = build_checker(r"a\b", "wide");
+    let checker = build_checker(r"a+\b", "wide");
     checker.check(b"", false);
     checker.check(b"a", false);
     checker.check(b"a\0", true);
@@ -1892,4 +1906,27 @@ rule a {
             )],
         )],
     );
+}
+
+#[test]
+fn test_variable_no_literals() {
+    // Test a var with no literals extracted
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a+(b|)c+/
+    condition:
+        any of them
+}"#,
+    );
+    checker.check(b"a", false);
+    checker.check(b"b", false);
+    checker.check(b"ab", false);
+    checker.check(b"bc", false);
+    checker.check(b"abc", true);
+    checker.check(b"ac", true);
+    checker.check(b"aac", true);
+    checker.check(b"abccc", true);
+    checker.check(b"aabbc", false);
 }

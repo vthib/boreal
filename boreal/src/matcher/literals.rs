@@ -874,6 +874,15 @@ mod tests {
         test("[ab]d[ef]", &[b"ade", b"adf", b"bde", b"bdf"], "", "");
 
         test::<&str>("( () | () )", &[], "", "");
+
+        // Between a list of nul bytes and a single char, the single char is preferred
+        test("\x00\x00\x00\x00.*a", &[b"a"], r"\x00\x00\x00\x00.*a", "");
+        test(
+            "(\x00\x00\x00\x00|abcd)a",
+            &[b"a"],
+            r"(\x00\x00\x00\x00|abcd)a",
+            "",
+        );
     }
 
     #[test]
