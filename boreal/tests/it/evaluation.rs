@@ -330,7 +330,7 @@ fn test_eval_var_length_regex() {
         r#"
 rule a {
     strings:
-        $a = /a.*b/
+        $a = /^a.*b/
     condition:
         !a == 3
 }"#,
@@ -378,6 +378,24 @@ fn test_eval_var_offset_regex() {
 rule a {
     strings:
         $a = /a+b/
+    condition:
+        @a == 2
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"ab", false);
+    checker.check(b" ab", false);
+    checker.check(b"  ab", true);
+    checker.check(b"  aab", true);
+    checker.check(b"   ab", false);
+    checker.check(b"abab", false);
+
+    // Force the use of a raw matcher
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a+b+/
     condition:
         @a == 2
 }"#,
@@ -692,6 +710,26 @@ rule a {
 rule a {
     strings:
         $a = /a.*b/
+    condition:
+        #a in (2..5) == 3
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"  abaabb", true);
+    checker.check(b"  ababab", false);
+    checker.check(b"  abab", false);
+    checker.check(b"  aaaab", false);
+    checker.check(b" aaabb", false);
+    checker.check(b"  aaabb", true);
+    checker.check(b"   aaabb", true);
+    checker.check(b"    aaabb", false);
+
+    // Same but with a variable that uses a raw matcher.
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a{1,2}.*b{1,1}/
     condition:
         #a in (2..5) == 3
 }"#,
