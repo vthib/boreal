@@ -206,6 +206,7 @@ impl AcScan {
             }
 
             match res {
+                AcMatchStatus::Multiple(v) if v.is_empty() => (),
                 AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
                     AcResult::Matches(v) => v.extend(found_matches),
                     _ => matches[variable_index] = AcResult::Matches(found_matches),
