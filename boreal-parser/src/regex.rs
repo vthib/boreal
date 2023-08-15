@@ -104,7 +104,7 @@ pub struct PerlClass {
 pub enum PerlClassKind {
     /// Word class, i.e. `[a-zA-Z0-9_]`.
     Word,
-    /// Space class, i.e. `[\t\n\r\f]`.
+    /// Space class, i.e. `[\t\n\v\f\r ]`.
     Space,
     /// Digit class, i.e. `[0-9]`.
     Digit,
