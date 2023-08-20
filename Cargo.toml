@@ -20,12 +20,3 @@ members = [
 # - Handle VirtualSize=0 when searching through sections
 #   - f7e5d82c5f6fa4ca9d6ef5a39e83b6109fe2c18c
 object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.32" }
-
-# yara-rust:
-# - Add CallbackMsg::ConsoleLog: https://github.com/Hugal31/yara-rust/pull/139
-# yara:
-# - Add base address to elf entrypoint: https://github.com/VirusTotal/yara/pull/1989
-# - Fixes for macho module and process memory: https://github.com/VirusTotal/yara/pull/1995
-# - Fix for elf module and process memory: https://github.com/VirusTotal/yara/pull/1996
-# - Fix for macos process scanning: https://github.com/VirusTotal/yara/pull/2033
-yara = { git = 'https://github.com/vthib/yara-rust', branch = 'version-0.24.0' }
