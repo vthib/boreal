@@ -601,46 +601,16 @@ fn test_coverage_pe_libyara_tiny_51ff() {
     compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
-// FIXME
-// #[test]
-// #[ignore]
-// fn test_coverage_pe_libyara_tiny_5200() {
-//     let diffs = [
-//         "pe.import_details[1].functions",
-//         "pe.import_details[1].number_of_functions",
-//         "pe.import_details[2].functions",
-//         "pe.import_details[2].number_of_functions",
-//         "pe.import_details[3].functions",
-//         "pe.import_details[3].number_of_functions",
-//         "pe.import_details[4].functions",
-//         "pe.import_details[4].number_of_functions",
-//         "pe.import_details[5].functions",
-//         "pe.import_details[5].number_of_functions",
-//         "pe.import_details[6].functions",
-//         "pe.import_details[6].number_of_functions",
-//         "pe.import_details[7].functions",
-//         "pe.import_details[7].number_of_functions",
-//         "pe.import_details[8].functions",
-//         "pe.import_details[8].number_of_functions",
-//         "pe.import_details[9].functions",
-//         "pe.import_details[9].number_of_functions",
-//         "pe.import_details[10].functions",
-//         "pe.import_details[10].number_of_functions",
-//         // libyara allows getting the hint name from outside the .idata section, which
-//         // returns garbage. boreal do not do it, hence the differences
-//         "pe.import_details[0].functions[1].name",
-//         "pe.import_details[0].functions[2].name",
-//         "pe.import_details[0].functions[3].name",
-//         // TODO: invalid imports are still counted by libyara. Is that desirable? I don't think
-//         // so
-//         "pe.number_of_imports",
-//         #[cfg(not(feature = "authenticode"))]
-//         "pe.number_of_signatures",
-//     ];
-//     let path = "tests/assets/libyara/data/tiny-idata-5200";
-//     compare_module_values_on_file(Pe::default(), path, false, &diffs);
-//     compare_module_values_on_file(Pe::default(), path, true, &diffs);
-// }
+#[test]
+fn test_coverage_pe_libyara_tiny_5200() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/tiny-idata-5200";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
 
 #[test]
 fn test_coverage_pe_libyara_tiny_overlay() {
