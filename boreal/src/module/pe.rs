@@ -2384,7 +2384,11 @@ impl Data {
         self.get_imports(delayed)
             .iter()
             .find(|imp| imp.dll_name.eq_ignore_ascii_case(dll_name))
-            .and_then(|imp| imp.functions.iter().find(|f| fun_name == f.name))
+            .and_then(|imp| {
+                imp.functions
+                    .iter()
+                    .find(|f| f.name.eq_ignore_ascii_case(fun_name))
+            })
     }
 
     fn find_function_ordinal(

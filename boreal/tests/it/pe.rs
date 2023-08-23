@@ -124,8 +124,7 @@ fn test_imports() {
     test(file1, r#"pe.imports("KERNEL32.dll", "ExitProcess") == 1"#);
     test(file1, r#"pe.imports("USER32.dll", "ExitProcess") == 0"#);
     test(file1, r#"pe.imports("USER32.dll", "KillTimer") == 1"#);
-    // FIXME
-    // test(file1, r#"pe.imports("user32.dll", "killtimer") == 1"#);
+    test(file1, r#"pe.imports("user32.dll", "killtimer") == 1"#);
     test(file1, r#"pe.imports("user32.dll", 3) == 0"#);
     // delayed imports are not found
     test(file2, r#"pe.imports("OLEAUT32.dll", "VariantInit") == 0"#);
@@ -161,11 +160,10 @@ fn test_imports() {
         file1,
         r#"pe.imports(pe.IMPORT_STANDARD, "KERNEL32.dll", "ExitProcess") == 1"#,
     );
-    // FIXME
-    // test(
-    //     file1,
-    //     r#"pe.imports(pe.IMPORT_STANDARD, "kerNEL32.Dll", "exitPRocesS") == 1"#,
-    // );
+    test(
+        file1,
+        r#"pe.imports(pe.IMPORT_STANDARD, "kerNEL32.Dll", "exitPRocesS") == 1"#,
+    );
     test(
         file1,
         r#"pe.imports(pe.IMPORT_DELAYED, "KERNEL32.dll", "ExitProcess") == 0"#,
@@ -179,11 +177,10 @@ fn test_imports() {
         file2,
         r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll", "VariantInit") == 1"#,
     );
-    // FIXME
-    // test(
-    //     file2,
-    //     r#"pe.imports(pe.IMPORT_DELAYED, "oleaut32.DLL", "VariantINIT") == 1"#,
-    // );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, "oleaut32.DLL", "VariantINIT") == 1"#,
+    );
     test(
         file2,
         r#"pe.imports(pe.IMPORT_STANDARD, "OLEAUT32.dll", "VariantInit") == 0"#,
@@ -279,7 +276,7 @@ fn test_import_rva() {
         file1,
         r#"pe.import_rva("USER32.dll", "KillTimer") == 255012"#,
     );
-    // FIXME
+    // FIXME: comformity test on libyara, fixed for >4.3.2
     // test(
     //     file1,
     //     r#"pe.import_rva("user32.dll", "killtimer") == 255012"#,
@@ -310,7 +307,7 @@ fn test_import_rva() {
         file2,
         r#"pe.delayed_import_rva("OLEAUT32.dll", "VariantInit") == 80000"#,
     );
-    // FIXME
+    // FIXME: comformity test on libyara, fixed for >4.3.2
     // test(
     //     file2,
     //     r#"pe.delayed_import_rva("oleaut32.DLL", "VariantINIT") == 80000"#,
