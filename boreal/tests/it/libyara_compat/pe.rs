@@ -26,10 +26,10 @@ fn test_pe() {
         "import \"pe\"
       rule test {
         condition:
-          pe.imports(\"KERNEL32.dll\", \"DeleteCriticalSection\")
+          pe.number_of_imports == 0 and pe.number_of_imported_functions == 0
       }",
         "tests/assets/libyara/data/tiny-idata-5200",
-        false,
+        true,
     );
 
     check_file(
@@ -50,26 +50,6 @@ fn test_pe() {
       }",
         "tests/assets/libyara/data/tiny",
         true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(/.*/, /.*/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(/.*/, /.*CriticalSection/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
     );
 
     ///////////////////////////////
@@ -98,16 +78,6 @@ fn test_pe() {
         "import \"pe\"
       rule test {
         condition:
-          pe.imports(pe.IMPORT_STANDARD, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
           pe.imports(pe.IMPORT_STANDARD, /.*/, /.*CriticalSection/) == 4
       }",
         "tests/assets/libyara/data/tiny",
@@ -122,26 +92,6 @@ fn test_pe() {
       }",
         "tests/assets/libyara/data/tiny",
         true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_STANDARD, /.*/, /.*/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_STANDARD, /.*/, /.*CriticalSection/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
     );
 
     check_file(
@@ -241,16 +191,6 @@ fn test_pe() {
         "import \"pe\"
       rule test {
         condition:
-          pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
           pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/) == 4
       }",
         "tests/assets/libyara/data/tiny",
@@ -265,26 +205,6 @@ fn test_pe() {
       }",
         "tests/assets/libyara/data/tiny",
         true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_ANY, /.*/, /.*/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
     );
 
     check(
@@ -363,6 +283,18 @@ fn test_pe() {
             pe.imphash() == \"1720bf764274b7a4052bbef0a71adc0d\"
         }",
         "tests/assets/libyara/data/tiny",
+        true,
+    );
+
+    // Make sure imports with no ordinal and an empty name are skipped. This is
+    // consistent with the behavior of pefile.
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imphash() == \"b441b7fd09648ae6a06cea0e090128d6\"
+      }",
+        "tests/assets/libyara/data/tiny_empty_import_name",
         true,
     );
 
