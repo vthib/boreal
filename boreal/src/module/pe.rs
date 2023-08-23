@@ -954,6 +954,7 @@ impl Module for Pe {
                     ("name", Type::Bytes),
                     ("forward_name", Type::Bytes),
                     ("ordinal", Type::Integer),
+                    ("rva", Type::Integer),
                 ])),
             ),
             (
@@ -1667,6 +1668,7 @@ fn add_exports(
                         },
                     ),
                     ("forward_name", forward_name.into()),
+                    ("rva", address.into()),
                 ])
             })
             .collect();
