@@ -124,8 +124,8 @@ fn test_imports() {
     test(file1, r#"pe.imports("KERNEL32.dll", "ExitProcess") == 1"#);
     test(file1, r#"pe.imports("USER32.dll", "ExitProcess") == 0"#);
     test(file1, r#"pe.imports("USER32.dll", "KillTimer") == 1"#);
-    // TODO
-    // test(file1, r#"pe.imports("user32.dll", "killtimer") == 0"#);
+    // FIXME
+    // test(file1, r#"pe.imports("user32.dll", "killtimer") == 1"#);
     test(file1, r#"pe.imports("user32.dll", 3) == 0"#);
     // delayed imports are not found
     test(file2, r#"pe.imports("OLEAUT32.dll", "VariantInit") == 0"#);
@@ -135,11 +135,13 @@ fn test_imports() {
     test(file1, r#"pe.imports("PtDMDecode.dll", 2) == 0"#);
     test(file1, r#"pe.imports("KERNEL32.dll", 2) == 0"#);
     test(file1, r#"pe.imports("PtImageRW.dll", 7) == 1"#);
+    test(file1, r#"pe.imports("ptimagerW.dLL", 7) == 1"#);
     // delayed imports are not found
     test(file2, r#"pe.imports("OLEAUT32.dll", 8) == 0"#);
 
     // dll_name
     test(file1, r#"pe.imports("KERNEL32.dll") == 127"#);
+    test(file1, r#"pe.imports("kernel32.DLL") == 127"#);
     test(file1, r#"pe.imports("PtDMDecode.dll") == 4"#);
     test(file1, r#"pe.imports("a.dll") == 0"#);
     // delayed imports are not found
@@ -159,6 +161,11 @@ fn test_imports() {
         file1,
         r#"pe.imports(pe.IMPORT_STANDARD, "KERNEL32.dll", "ExitProcess") == 1"#,
     );
+    // FIXME
+    // test(
+    //     file1,
+    //     r#"pe.imports(pe.IMPORT_STANDARD, "kerNEL32.Dll", "exitPRocesS") == 1"#,
+    // );
     test(
         file1,
         r#"pe.imports(pe.IMPORT_DELAYED, "KERNEL32.dll", "ExitProcess") == 0"#,
@@ -172,6 +179,11 @@ fn test_imports() {
         file2,
         r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll", "VariantInit") == 1"#,
     );
+    // FIXME
+    // test(
+    //     file2,
+    //     r#"pe.imports(pe.IMPORT_DELAYED, "oleaut32.DLL", "VariantINIT") == 1"#,
+    // );
     test(
         file2,
         r#"pe.imports(pe.IMPORT_STANDARD, "OLEAUT32.dll", "VariantInit") == 0"#,
@@ -190,6 +202,10 @@ fn test_imports() {
         file2,
         r#"pe.imports(pe.IMPORT_STANDARD, "KERNEL32.dll") == 69"#,
     );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_STANDARD, "kernel32.DLL") == 69"#,
+    );
 
     // import_flag, dll_name, ordinal
     test(
@@ -203,6 +219,10 @@ fn test_imports() {
     test(
         file2,
         r#"pe.imports(pe.IMPORT_DELAYED, "OLEAUT32.dll", 8) == 1"#,
+    );
+    test(
+        file2,
+        r#"pe.imports(pe.IMPORT_DELAYED, "OLEaut32.DLL", 8) == 1"#,
     );
     test(
         file2,
@@ -229,6 +249,99 @@ fn test_imports() {
         file2,
         r#"pe.imports(pe.IMPORT_STANDARD | pe.IMPORT_DELAYED, /(OLE|WS).*32/, /./) == 4"#,
     );
+}
+
+#[test]
+fn test_import_rva() {
+    let file1 = "tests/assets/libyara/data/\
+                 ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386";
+    let file2 = "tests/assets/pe/ord_and_delay.exe";
+
+    #[track_caller]
+    fn test(file: &str, cond: &str) {
+        check_file(
+            &format!("import \"pe\" rule test {{ condition: {cond} }}"),
+            file,
+            true,
+        );
+    }
+
+    // dll_name, function_name
+    test(
+        file1,
+        r#"pe.import_rva("KERNEL32.dll", "ExitProcess") == 254348"#,
+    );
+    test(
+        file1,
+        r#"not defined pe.import_rva("USER32.dll", "ExitProcess")"#,
+    );
+    test(
+        file1,
+        r#"pe.import_rva("USER32.dll", "KillTimer") == 255012"#,
+    );
+    // FIXME
+    // test(
+    //     file1,
+    //     r#"pe.import_rva("user32.dll", "killtimer") == 255012"#,
+    // );
+    test(file1, r#"not defined pe.import_rva("user32.dll", 3)"#);
+    // delayed imports are not found
+    test(
+        file2,
+        r#"not defined pe.import_rva("OLEAUT32.dll", "VariantInit")"#,
+    );
+
+    // dll_name, ordinal
+    test(file1, r#"pe.import_rva("PtDMDecode.dll", 3) == 254904"#);
+    test(file1, r#"not defined pe.import_rva("PtDMDecode.dll", 2)"#);
+    test(file1, r#"not defined pe.import_rva("KERNEL32.dll", 2)"#);
+    test(file1, r#"pe.import_rva("PtImageRW.dll", 7) == 254928"#);
+    // FIXME: comformity test on libyara, fixed for >4.3.2
+    // test(file1, r#"pe.import_rva("ptimagerW.dLL", 7) == 254928"#);
+    // delayed imports are not found
+    test(file2, r#"not defined pe.import_rva("OLEAUT32.dll", 8)"#);
+
+    // delayed dll_name, function_name
+    test(
+        file1,
+        r#"not defined pe.delayed_import_rva("KERNEL32.dll", "ExitProcess")"#,
+    );
+    test(
+        file2,
+        r#"pe.delayed_import_rva("OLEAUT32.dll", "VariantInit") == 80000"#,
+    );
+    // FIXME
+    // test(
+    //     file2,
+    //     r#"pe.delayed_import_rva("oleaut32.DLL", "VariantINIT") == 80000"#,
+    // );
+    test(
+        file2,
+        r#"not defined pe.delayed_import_rva("oleaut32.DLL", "VariantINI")"#,
+    );
+    test(
+        file2,
+        r#"not defined pe.delayed_import_rva("oleaut32", "VariantInit")"#,
+    );
+
+    // import_flag, dll_name, ordinal
+    test(
+        file2,
+        r#"pe.delayed_import_rva("OLEAUT32.dll", 411) == 80004"#,
+    );
+    test(
+        file2,
+        r#"not defined pe.delayed_import_rva("OLEAUT32.dll", 7)"#,
+    );
+    test(
+        file2,
+        r#"pe.delayed_import_rva("OLEAUT32.dll", 8) == 80000"#,
+    );
+    // FIXME: comformity test on libyara, fixed for >4.3.2
+    // test(
+    //     file2,
+    //     r#"pe.delayed_import_rva("OLEaut32.DLL", 8) == 80000"#,
+    // );
 }
 
 #[test]
