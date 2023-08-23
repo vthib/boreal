@@ -1429,6 +1429,9 @@ fn add_imports<Pe: ImageNtHeaders>(
                     &mut nb_functions_total,
                 )
             });
+            if functions.as_ref().map_or(true, Vec::is_empty) {
+                continue;
+            }
 
             data.imports.push(DataImport {
                 dll_name: library.clone(),
@@ -1477,16 +1480,17 @@ where
         if *nb_functions_total >= MAX_PE_IMPORTS {
             break;
         }
-        *nb_functions_total += 1;
 
-        add_thunk::<Pe, _>(
+        if add_thunk::<Pe, _>(
             thunk,
             dll_name,
             rva,
             &hint_name,
             &mut functions,
             data_functions,
-        );
+        ) {
+            *nb_functions_total += 1;
+        }
         rva += if is_32 { 4 } else { 8 };
     }
     functions
@@ -1499,7 +1503,8 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
     hint_name: F,
     functions: &mut Vec<Value>,
     data_functions: &mut Vec<DataFunction>,
-) where
+) -> bool
+where
     F: Fn(u32) -> object::Result<Vec<u8>>,
 {
     if thunk.is_ordinal() {
@@ -1517,10 +1522,15 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
             ("ordinal", ordinal.into()),
             ("rva", rva.into()),
         ]));
+        true
     } else {
         let Ok(name) = hint_name(thunk.address()) else {
-            return;
+            return false;
         };
+
+        if !is_import_name_valid(&name) {
+            return false;
+        }
 
         data_functions.push(DataFunction {
             name: name.clone(),
@@ -1528,6 +1538,20 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
             rva,
         });
         functions.push(Value::object([("name", name.into()), ("rva", rva.into())]));
+        true
+    }
+}
+
+// This mirrors what pefile does.
+// See https://github.com/erocarrera/pefile/blob/593d094e35198dad92aaf040bef17eb800c8a373/pefile.py#L2326-L2348
+fn is_import_name_valid(name: &[u8]) -> bool {
+    if name.is_empty() {
+        false
+    } else {
+        name.iter().all(|b| {
+            b.is_ascii_alphanumeric()
+                || [b'.', b'_', b'?', b'@', b'$', b'(', b')', b'<', b'>'].contains(b)
+        })
     }
 }
 
