@@ -226,7 +226,7 @@ pub(super) fn compile_rule(
     let mut variables_statistics = Vec::new();
 
     for (i, var) in rule.variables.into_iter().enumerate() {
-        if !compiler.variables[i].used {
+        if !compiler.variables[i].used && !var.name.starts_with('_') {
             return Err(CompilationError::UnusedVariable {
                 name: var.name,
                 span: var.span,
