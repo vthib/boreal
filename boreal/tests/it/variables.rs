@@ -328,12 +328,11 @@ fn test_regex_wide_fullword(regex: &str, mem_ascii: &[u8]) {
     checker.check(&join(mem_ascii, b"<\0a\0", b"b\0>\0"), false);
     checker.check(&join(mem_ascii, b"a\0<\0", b">\0a\0"), true);
 
-    // TODO: This is caused by <https://github.com/VirusTotal/yara/issues/1933>
-    checker.check_boreal(&join(mem_wide, b"", b""), true);
-    checker.check_boreal(&join(mem_wide, b"a", b""), true);
-    checker.check_boreal(&join(mem_wide, b"", b"a"), true);
-    checker.check_boreal(&join(mem_wide, b"a", b"a"), true);
-    checker.check_boreal(&join(mem_wide, b"<", b">"), true);
+    checker.check(&join(mem_wide, b"", b""), true);
+    checker.check(&join(mem_wide, b"a", b""), true);
+    checker.check(&join(mem_wide, b"", b"a"), true);
+    checker.check(&join(mem_wide, b"a", b"a"), true);
+    checker.check(&join(mem_wide, b"<", b">"), true);
 
     checker.check_boreal(&join(mem_wide, b"<\0", b">\0"), true);
     checker.check_boreal(&join(mem_wide, b"<\0", b"b\0"), false);
