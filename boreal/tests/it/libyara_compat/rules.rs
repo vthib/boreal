@@ -533,6 +533,28 @@ fn test_syntax() {
         "rule test { strings: $a = \"a\" condition: for 3.14159 of them: ($) }",
         "mem:1:46: error: expression has an invalid type",
     );
+
+    check_err(
+        "rule test { strings: $a = \"a\" condition: true }",
+        "mem:1:22: error: variable $a is unused",
+    );
+
+    let mut checker = Checker::new(
+        "rule test {
+        strings:
+            $a = \"AXS\"
+            $_b = \"ERS\"
+        condition:
+            $a
+    }",
+    );
+    checker.check_full_matches(
+        b"AXSERS",
+        vec![(
+            "default:test".to_owned(),
+            vec![("a", vec![(b"AXS", 0, 3)]), ("_b", vec![(b"ERS", 3, 3)])],
+        )],
+    );
 }
 
 #[test]
@@ -541,6 +563,11 @@ fn test_anonymous_strings() {
         "rule test { strings: $ = \"a\" $ = \"b\" condition: all of them }",
         b"ab",
         true,
+    );
+
+    check_err(
+        "rule test { strings: $ = \"a\" condition: true }",
+        "mem:1:22: error: variable $ is unused",
     );
 }
 
