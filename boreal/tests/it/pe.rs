@@ -276,11 +276,10 @@ fn test_import_rva() {
         file1,
         r#"pe.import_rva("USER32.dll", "KillTimer") == 255012"#,
     );
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(
-    //     file1,
-    //     r#"pe.import_rva("user32.dll", "killtimer") == 255012"#,
-    // );
+    test(
+        file1,
+        r#"pe.import_rva("user32.dll", "killtimer") == 255012"#,
+    );
     test(file1, r#"not defined pe.import_rva("user32.dll", 3)"#);
     // delayed imports are not found
     test(
@@ -293,8 +292,7 @@ fn test_import_rva() {
     test(file1, r#"not defined pe.import_rva("PtDMDecode.dll", 2)"#);
     test(file1, r#"not defined pe.import_rva("KERNEL32.dll", 2)"#);
     test(file1, r#"pe.import_rva("PtImageRW.dll", 7) == 254928"#);
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(file1, r#"pe.import_rva("ptimagerW.dLL", 7) == 254928"#);
+    test(file1, r#"pe.import_rva("ptimagerW.dLL", 7) == 254928"#);
     // delayed imports are not found
     test(file2, r#"not defined pe.import_rva("OLEAUT32.dll", 8)"#);
 
@@ -307,11 +305,10 @@ fn test_import_rva() {
         file2,
         r#"pe.delayed_import_rva("OLEAUT32.dll", "VariantInit") == 80000"#,
     );
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(
-    //     file2,
-    //     r#"pe.delayed_import_rva("oleaut32.DLL", "VariantINIT") == 80000"#,
-    // );
+    test(
+        file2,
+        r#"pe.delayed_import_rva("oleaut32.DLL", "VariantINIT") == 80000"#,
+    );
     test(
         file2,
         r#"not defined pe.delayed_import_rva("oleaut32.DLL", "VariantINI")"#,
@@ -334,11 +331,10 @@ fn test_import_rva() {
         file2,
         r#"pe.delayed_import_rva("OLEAUT32.dll", 8) == 80000"#,
     );
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(
-    //     file2,
-    //     r#"pe.delayed_import_rva("OLEaut32.DLL", 8) == 80000"#,
-    // );
+    test(
+        file2,
+        r#"pe.delayed_import_rva("OLEaut32.DLL", 8) == 80000"#,
+    );
 }
 
 #[test]

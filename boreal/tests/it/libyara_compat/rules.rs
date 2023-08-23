@@ -1888,6 +1888,22 @@ fn test_hex_strings() {
         true,
     );
 
+    check(
+        "rule test {
+        strings: $a = { 31[-][8-][-]30 }
+        condition: $a }",
+        b"1234567890",
+        true,
+    );
+
+    check(
+        "rule test {
+        strings: $a = { 31[-][9-][-]30 }
+        condition: $a }",
+        b"1234567890",
+        false,
+    );
+
     // ERROR_INVALID_HEX_STRING
     check_err(
         "rule test {
@@ -3372,6 +3388,20 @@ fn test_re() {
     check(
         "rule test { strings: $a =/abc([^\"\\\\])*\"/ nocase condition: $a }",
         &data,
+        true,
+    );
+
+    // Test case for issue #1933
+    check(
+        "rule test { strings: $a = /a.{1}1/ ascii wide condition: $a }",
+        b"a\0b\0\x31\0",
+        true,
+    );
+
+    // Test case for issue #1933
+    check(
+        "rule test { strings: $a = /a.{1}1/ ascii wide condition: $a }",
+        b"ab1\0",
         true,
     );
 }

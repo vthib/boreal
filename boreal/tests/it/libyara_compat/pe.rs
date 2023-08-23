@@ -298,6 +298,16 @@ fn test_pe() {
         true,
     );
 
+    check_file(
+        "import \"pe\"
+        rule test {
+          condition:
+            pe.imphash() == \"d49b7870cb53f29ec3f42b11cc8bea8b\"
+        }",
+        "tests/assets/libyara/data/e3d45a2865818756068757d7e319258fef40dad54532ee4355b86bc129f27345",
+        true
+    ) ;
+
     #[cfg(feature = "authenticode")]
     check_file(
         "import \"pe\"
@@ -492,12 +502,24 @@ fn test_pe() {
     );
 
     check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.pdb_path == \"/Users/runner/work/OpenCorePkg/OpenCorePkg/UDK/Build/OpenCorePkg/\
+          DEBUG_XCODE5/X64/OpenCorePkg/Application/ChipTune/ChipTune/DEBUG/ChipTune.dll\"
+      }",
+        "tests/assets/libyara/data/ChipTune.efi",
+        true,
+    );
+
+    check_file(
       "import \"pe\"
       rule test {
         condition:
-          pe.pdb_path == \"/Users/runner/work/OpenCorePkg/OpenCorePkg/UDK/Build/OpenCorePkg/DEBUG_XCODE5/X64/OpenCorePkg/Application/ChipTune/ChipTune/DEBUG/ChipTune.dll\"
+          pe.pdb_path == \"2AC71AF3-A338-495C-834E-977A6DD5C6FD\"
       }",
-      "tests/assets/libyara/data/ChipTune.efi", true);
+      "tests/assets/libyara/data/6c2abf4b80a87e63eee2996e5cea8f004d49ec0c1806080fa72e960529cba14c",
+      true);
 
     check_file(
         "import \"pe\"
@@ -906,32 +928,59 @@ fn test_pe() {
         true,
     );
 
+    // These are intentionally using DLL and function names with incorrect case
+    // to be sure the string compare is case insensitive.
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule test {
         condition:
-          pe.import_rva(\"PtImageRW.dll\", \"ord4\") == 254924 and
-          pe.import_rva(\"PtPDF417Decode.dll\", 4) == 254948
+          pe.import_rva(\"ptimagerw.dll\", \"ORD4\") == 254924 and
+          pe.import_rva(\"ptPDF417decode.dll\", 4) == 254948
       }",
-      "tests/assets/libyara/data/ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386", true);
+        "tests/assets/libyara/data/\
+      ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386",
+        true,
+    );
 
+    // These are intentionally using DLL and function names with incorrect case
+    // to be sure the string compare is case insensitive.
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule test {
         condition:
-          pe.delayed_import_rva(\"QDB.dll\", \"ord116\") ==
-          pe.delayed_import_rva(\"QDB.dll\", 116)
+          pe.delayed_import_rva(\"qdb.dll\", \"ORD116\") ==
+          pe.delayed_import_rva(\"qdb.dll\", 116)
       }",
-      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+        "tests/assets/libyara/data/\
+      079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
 
     // The first 0x410 bytes of
     // c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba are enough
     // to trigger the bug in https://github.com/VirusTotal/yara/pull/1561
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule rva_to_offset_weird_sections {
         condition:
           pe.rva_to_offset(4096) == 1024
       }",
-      "tests/assets/libyara/data/c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h", true);
+        "tests/assets/libyara/data/\
+      c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h",
+        true,
+    );
+
+    check_file(
+        "import \"pe\"
+      rule invalid_offset {
+        condition:
+          not defined pe.export_details[0].offset and
+          not defined pe.export_details[7].offset and
+          not defined pe.export_details[15].offset and
+          not defined pe.export_details[21].offset
+      }",
+        "tests/assets/libyara/data/\
+        05cd06e6a202e12be22a02700ed6f1604e803ca8867277d852e8971efded0650",
+        true,
+    );
 }
