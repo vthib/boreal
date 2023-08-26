@@ -57,13 +57,7 @@ pub enum Node {
     Literal(Literal),
 
     /// Literal char, not ascii.
-    Char {
-        /// Value of the char
-        c: char,
-
-        /// Position in the input for this char.
-        span: Range<usize>,
-    },
+    Char(LiteralChar),
 
     /// A group, i.e. (...).
     Group(Box<Node>),
@@ -165,6 +159,16 @@ pub enum AssertionKind {
     WordBoundary,
     /// Non word boundary, i.e. `\B`.
     NonWordBoundary,
+}
+
+/// Literal unicode character.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LiteralChar {
+    /// The unicode character.
+    pub c: char,
+
+    /// Position in the input for this char.
+    pub span: Range<usize>,
 }
 
 /// Literal byte
@@ -453,10 +457,10 @@ fn literal(input: Input) -> ParseResult<Node> {
     let node = if c.is_ascii() {
         Node::Literal(Literal { byte: c as u8 })
     } else {
-        Node::Char {
+        Node::Char(LiteralChar {
             c,
             span: input.get_span_from_no_rtrim(start),
-        }
+        })
     };
 
     Ok((input, node))
@@ -467,7 +471,7 @@ fn escaped_char(input: Input) -> ParseResult<Node> {
 
     let node = match res {
         EscapedChar::Byte(byte) => Node::Literal(Literal { byte }),
-        EscapedChar::Char { c, span } => Node::Char { c, span },
+        EscapedChar::Char { c, span } => Node::Char(LiteralChar { c, span }),
     };
 
     Ok((input, node))
@@ -1168,9 +1172,9 @@ mod tests {
             literal,
             "éb",
             "b",
-            Node::Char {
+            Node::Char(LiteralChar {
                 c: 'é', span: 0..2
-            },
+            }),
         );
     }
 
@@ -1228,9 +1232,9 @@ mod tests {
             escaped_char,
             "\\é_",
             "_",
-            Node::Char {
+            Node::Char(LiteralChar {
                 c: 'é', span: 1..3
-            },
+            }),
         );
 
         parse_err(escaped_char, "\\");
