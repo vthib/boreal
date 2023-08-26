@@ -259,7 +259,7 @@ mod tests {
     use crate::error::{Error, ErrorKind};
     use crate::expression::ReadIntegerType;
     use crate::expression::MAX_EXPR_RECURSION;
-    use crate::regex::{AssertionKind, Node, Regex, RepetitionKind};
+    use crate::regex::{AssertionKind, Literal, Node, Regex, RepetitionKind};
     use crate::test_helpers::parse_err_type;
     use crate::test_helpers::{parse, parse_check, parse_err};
     use crate::types::Input;
@@ -460,11 +460,11 @@ mod tests {
                 expr: Expr::Regex(Regex {
                     ast: Node::Concat(vec![
                         Node::Repetition {
-                            node: Box::new(Node::Literal(b'a')),
+                            node: Box::new(Node::Literal(Literal { byte: b'a' })),
                             kind: RepetitionKind::ZeroOrMore,
                             greedy: true,
                         },
-                        Node::Literal(b'b'),
+                        Node::Literal(Literal { byte: b'b' }),
                         Node::Assertion(AssertionKind::EndLine),
                     ]),
                     case_insensitive: true,

@@ -565,6 +565,7 @@ fn condition(input: Input) -> ParseResult<Expression> {
 mod tests {
     use crate::expression::{Expression, ExpressionKind, ForSelection, VariableSet};
     use crate::hex_string::{Mask, Token};
+    use crate::regex::Literal;
     use crate::test_helpers::test_public_type;
 
     use super::super::test_helpers::{parse, parse_err};
@@ -926,11 +927,11 @@ mod tests {
                     value: VariableDeclarationValue::Regex(Regex {
                         ast: regex::Node::Concat(vec![
                             regex::Node::Repetition {
-                                node: Box::new(regex::Node::Literal(b'a')),
+                                node: Box::new(regex::Node::Literal(Literal { byte: b'a' })),
                                 kind: regex::RepetitionKind::ZeroOrOne,
                                 greedy: true,
                             },
-                            regex::Node::Literal(b'b'),
+                            regex::Node::Literal(Literal { byte: b'b' }),
                         ]),
                         case_insensitive: false,
                         dot_all: false,

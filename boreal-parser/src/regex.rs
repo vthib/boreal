@@ -54,7 +54,7 @@ pub enum Node {
     Empty,
 
     /// Literal byte.
-    Literal(u8),
+    Literal(Literal),
 
     /// Literal char, not ascii.
     Char {
@@ -125,9 +125,9 @@ pub enum BracketedClassItem {
     /// Perl style class.
     Perl(PerlClass),
     /// Literal byte.
-    Literal(u8),
+    Literal(Literal),
     /// Range of bytes.
-    Range(u8, u8),
+    Range(Literal, Literal),
 }
 
 /// Kind of repetition.
@@ -165,6 +165,19 @@ pub enum AssertionKind {
     WordBoundary,
     /// Non word boundary, i.e. `\B`.
     NonWordBoundary,
+}
+
+/// Literal byte
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Literal {
+    /// byte value.
+    pub byte: u8,
+}
+
+impl PartialOrd for Literal {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.byte.partial_cmp(&other.byte)
+    }
 }
 
 /// Parse a regex.
@@ -377,7 +390,7 @@ fn bracketed_class_inner(input: Input) -> ParseResult<BracketedClass> {
     let (input, _) = char(']')(input)?;
 
     if contains_closing_bracket {
-        items.push(BracketedClassItem::Literal(b']'));
+        items.push(BracketedClassItem::Literal(Literal { byte: b']' }));
     }
     Ok((input, BracketedClass { items, negated }))
 }
@@ -409,11 +422,11 @@ fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassI
     }
 }
 
-fn bracketed_class_literal(input: Input) -> ParseResult<u8> {
+fn bracketed_class_literal(input: Input) -> ParseResult<Literal> {
     alt((escaped_char_only_ascii, bracketed_class_char))(input)
 }
 
-fn bracketed_class_char(input: Input) -> ParseResult<u8> {
+fn bracketed_class_char(input: Input) -> ParseResult<Literal> {
     let start = input.pos();
 
     // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
@@ -421,7 +434,7 @@ fn bracketed_class_char(input: Input) -> ParseResult<u8> {
     // ] is disallowed because it indicates the end of the class
     let (input, b) = none_of("/\n]")(input)?;
     if b.is_ascii() {
-        Ok((input, b as u8))
+        Ok((input, Literal { byte: b as u8 }))
     } else {
         Err(nom::Err::Failure(Error::new(
             input.get_span_from_no_rtrim(start),
@@ -438,7 +451,7 @@ fn literal(input: Input) -> ParseResult<Node> {
     // rest is disallowed because they have specific meaning.
     let (input, c) = none_of("/\n()[\\|.$^+*?")(input)?;
     let node = if c.is_ascii() {
-        Node::Literal(c as u8)
+        Node::Literal(Literal { byte: c as u8 })
     } else {
         Node::Char {
             c,
@@ -453,18 +466,18 @@ fn escaped_char(input: Input) -> ParseResult<Node> {
     let (input, res) = escaped_char_inner(input)?;
 
     let node = match res {
-        EscapedChar::Byte(b) => Node::Literal(b),
+        EscapedChar::Byte(byte) => Node::Literal(Literal { byte }),
         EscapedChar::Char { c, span } => Node::Char { c, span },
     };
 
     Ok((input, node))
 }
 
-fn escaped_char_only_ascii(input: Input) -> ParseResult<u8> {
+fn escaped_char_only_ascii(input: Input) -> ParseResult<Literal> {
     let (input, res) = escaped_char_inner(input)?;
 
     match res {
-        EscapedChar::Byte(b) => Ok((input, b)),
+        EscapedChar::Byte(byte) => Ok((input, Literal { byte })),
         EscapedChar::Char { span, .. } => Err(nom::Err::Failure(Error::new(
             span,
             ErrorKind::RegexNonAsciiByte,
@@ -598,7 +611,7 @@ mod tests {
             "/a/i",
             "",
             Regex {
-                ast: Node::Literal(b'a'),
+                ast: Node::Literal(Literal { byte: b'a' }),
                 case_insensitive: true,
                 dot_all: false,
                 span: 0..4,
@@ -611,7 +624,10 @@ mod tests {
             Regex {
                 ast: Node::Repetition {
                     node: Box::new(Node::Class(ClassKind::Bracketed(BracketedClass {
-                        items: vec![BracketedClassItem::Range(b'0', b'9')],
+                        items: vec![BracketedClassItem::Range(
+                            Literal { byte: b'0' },
+                            Literal { byte: b'9' },
+                        )],
                         negated: true,
                     }))),
                     kind: RepetitionKind::OneOrMore,
@@ -628,11 +644,11 @@ mod tests {
             "b",
             Regex {
                 ast: Node::Concat(vec![
-                    Node::Literal(b'a'),
-                    Node::Literal(b'/'),
-                    Node::Literal(b'b'),
-                    Node::Literal(b'c'),
-                    Node::Literal(b'd'),
+                    Node::Literal(Literal { byte: b'a' }),
+                    Node::Literal(Literal { byte: b'/' }),
+                    Node::Literal(Literal { byte: b'b' }),
+                    Node::Literal(Literal { byte: b'c' }),
+                    Node::Literal(Literal { byte: b'd' }),
                 ]),
                 case_insensitive: true,
                 dot_all: true,
@@ -659,7 +675,10 @@ mod tests {
             "/\0\\\0/ c",
             "c",
             Regex {
-                ast: Node::Concat(vec![Node::Literal(b'\0'), Node::Literal(b'\0')]),
+                ast: Node::Concat(vec![
+                    Node::Literal(Literal { byte: b'\0' }),
+                    Node::Literal(Literal { byte: b'\0' }),
+                ]),
                 case_insensitive: false,
                 dot_all: false,
                 span: 0..5,
@@ -677,18 +696,26 @@ mod tests {
     #[test]
     fn test_alternative() {
         parse(alternative, "(", "(", Node::Empty);
-        parse(alternative, "a)", ")", Node::Literal(b'a'));
+        parse(
+            alternative,
+            "a)",
+            ")",
+            Node::Literal(Literal { byte: b'a' }),
+        );
         parse(
             alternative,
             "a|b",
             "",
-            Node::Alternation(vec![Node::Literal(b'a'), Node::Literal(b'b')]),
+            Node::Alternation(vec![
+                Node::Literal(Literal { byte: b'a' }),
+                Node::Literal(Literal { byte: b'b' }),
+            ]),
         );
         parse(
             alternative,
             "a|)",
             ")",
-            Node::Alternation(vec![Node::Literal(b'a'), Node::Empty]),
+            Node::Alternation(vec![Node::Literal(Literal { byte: b'a' }), Node::Empty]),
         );
 
         parse(
@@ -696,8 +723,11 @@ mod tests {
             r"ab|.\||\b$|",
             "",
             Node::Alternation(vec![
-                Node::Concat(vec![Node::Literal(b'a'), Node::Literal(b'b')]),
-                Node::Concat(vec![Node::Dot, Node::Literal(b'|')]),
+                Node::Concat(vec![
+                    Node::Literal(Literal { byte: b'a' }),
+                    Node::Literal(Literal { byte: b'b' }),
+                ]),
+                Node::Concat(vec![Node::Dot, Node::Literal(Literal { byte: b'|' })]),
                 Node::Concat(vec![
                     Node::Assertion(AssertionKind::WordBoundary),
                     Node::Assertion(AssertionKind::EndLine),
@@ -712,19 +742,27 @@ mod tests {
     #[test]
     fn test_concatenation() {
         parse(concatenation, "", "", Node::Empty);
-        parse(concatenation, "a", "", Node::Literal(b'a'));
+        parse(
+            concatenation,
+            "a",
+            "",
+            Node::Literal(Literal { byte: b'a' }),
+        );
         parse(
             concatenation,
             "ab",
             "",
-            Node::Concat(vec![Node::Literal(b'a'), Node::Literal(b'b')]),
+            Node::Concat(vec![
+                Node::Literal(Literal { byte: b'a' }),
+                Node::Literal(Literal { byte: b'b' }),
+            ]),
         );
         parse(
             concatenation,
             "a$*",
             "*",
             Node::Concat(vec![
-                Node::Literal(b'a'),
+                Node::Literal(Literal { byte: b'a' }),
                 Node::Assertion(AssertionKind::EndLine),
             ]),
         );
@@ -735,7 +773,7 @@ mod tests {
             Node::Concat(vec![
                 Node::Assertion(AssertionKind::StartLine),
                 Node::Repetition {
-                    node: Box::new(Node::Literal(b'a')),
+                    node: Box::new(Node::Literal(Literal { byte: b'a' })),
                     kind: RepetitionKind::OneOrMore,
                     greedy: true,
                 },
@@ -750,7 +788,7 @@ mod tests {
                 },
                 Node::Repetition {
                     node: Box::new(Node::Class(ClassKind::Bracketed(BracketedClass {
-                        items: vec![BracketedClassItem::Literal(b'z')],
+                        items: vec![BracketedClassItem::Literal(Literal { byte: b'z' })],
                         negated: true,
                     }))),
                     kind: RepetitionKind::ZeroOrMore,
@@ -819,8 +857,8 @@ mod tests {
             "(ab)a",
             "a",
             Node::Group(Box::new(Node::Concat(vec![
-                Node::Literal(b'a'),
-                Node::Literal(b'b'),
+                Node::Literal(Literal { byte: b'a' }),
+                Node::Literal(Literal { byte: b'b' }),
             ]))),
         );
         parse(
@@ -838,14 +876,19 @@ mod tests {
             " ",
             Node::Class(ClassKind::Bracketed(BracketedClass {
                 items: vec![
-                    BracketedClassItem::Range(b'a', b'f'),
-                    BracketedClassItem::Range(b'A', b'F'),
+                    BracketedClassItem::Range(Literal { byte: b'a' }, Literal { byte: b'f' }),
+                    BracketedClassItem::Range(Literal { byte: b'A' }, Literal { byte: b'F' }),
                 ],
                 negated: false,
             })),
         );
-        parse(single, r"\xFFa", "a", Node::Literal(b'\xFF'));
-        parse(single, r"]a", "a", Node::Literal(b']'));
+        parse(
+            single,
+            r"\xFFa",
+            "a",
+            Node::Literal(Literal { byte: b'\xFF' }),
+        );
+        parse(single, r"]a", "a", Node::Literal(Literal { byte: b']' }));
 
         parse_err(single, "");
         parse_err(single, "(");
@@ -929,7 +972,7 @@ mod tests {
             "[a]b",
             "b",
             BracketedClass {
-                items: vec![BracketedClassItem::Literal(b'a')],
+                items: vec![BracketedClassItem::Literal(Literal { byte: b'a' })],
                 negated: false,
             },
         );
@@ -939,13 +982,13 @@ mod tests {
             "",
             BracketedClass {
                 items: vec![
-                    BracketedClassItem::Range(b'a', b'z'),
-                    BracketedClassItem::Literal(b'_'),
+                    BracketedClassItem::Range(Literal { byte: b'a' }, Literal { byte: b'z' }),
+                    BracketedClassItem::Literal(Literal { byte: b'_' }),
                     BracketedClassItem::Perl(PerlClass {
                         kind: PerlClassKind::Space,
                         negated: true,
                     }),
-                    BracketedClassItem::Range(b'0', b'9'),
+                    BracketedClassItem::Range(Literal { byte: b'0' }, Literal { byte: b'9' }),
                 ],
                 negated: true,
             },
@@ -956,8 +999,8 @@ mod tests {
             "",
             BracketedClass {
                 items: vec![
-                    BracketedClassItem::Literal(b'j'),
-                    BracketedClassItem::Literal(b']'),
+                    BracketedClassItem::Literal(Literal { byte: b'j' }),
+                    BracketedClassItem::Literal(Literal { byte: b']' }),
                 ],
                 negated: false,
             },
@@ -967,7 +1010,7 @@ mod tests {
             "[]]",
             "",
             BracketedClass {
-                items: vec![BracketedClassItem::Literal(b']')],
+                items: vec![BracketedClassItem::Literal(Literal { byte: b']' })],
                 negated: false,
             },
         );
@@ -976,7 +1019,7 @@ mod tests {
             "[^]]",
             "",
             BracketedClass {
-                items: vec![BracketedClassItem::Literal(b']')],
+                items: vec![BracketedClassItem::Literal(Literal { byte: b']' })],
                 negated: true,
             },
         );
@@ -986,10 +1029,10 @@ mod tests {
             "",
             BracketedClass {
                 items: vec![
-                    BracketedClassItem::Literal(b'a'),
-                    BracketedClassItem::Literal(b']'),
-                    BracketedClassItem::Literal(b'b'),
-                    BracketedClassItem::Literal(b'-'),
+                    BracketedClassItem::Literal(Literal { byte: b'a' }),
+                    BracketedClassItem::Literal(Literal { byte: b']' }),
+                    BracketedClassItem::Literal(Literal { byte: b'b' }),
+                    BracketedClassItem::Literal(Literal { byte: b'-' }),
                 ],
                 negated: true,
             },
@@ -1020,7 +1063,7 @@ mod tests {
             bracketed_class_item,
             "a-z]",
             "]",
-            BracketedClassItem::Range(b'a', b'z'),
+            BracketedClassItem::Range(Literal { byte: b'a' }, Literal { byte: b'z' }),
         );
 
         parse_err(bracketed_class_item, "é");
@@ -1032,56 +1075,56 @@ mod tests {
             bracketed_class_range_or_literal,
             "ab",
             "b",
-            BracketedClassItem::Literal(b'a'),
+            BracketedClassItem::Literal(Literal { byte: b'a' }),
         );
         parse(
             bracketed_class_range_or_literal,
             "\x01-",
             "-",
-            BracketedClassItem::Literal(b'\x01'),
+            BracketedClassItem::Literal(Literal { byte: b'\x01' }),
         );
         parse(
             bracketed_class_range_or_literal,
             "-\\]",
             "\\]",
-            BracketedClassItem::Literal(b'-'),
+            BracketedClassItem::Literal(Literal { byte: b'-' }),
         );
         parse(
             bracketed_class_range_or_literal,
             "A-]",
             "-]",
-            BracketedClassItem::Literal(b'A'),
+            BracketedClassItem::Literal(Literal { byte: b'A' }),
         );
 
         parse(
             bracketed_class_range_or_literal,
             "a-\\sb",
             "b",
-            BracketedClassItem::Range(b'a', b's'),
+            BracketedClassItem::Range(Literal { byte: b'a' }, Literal { byte: b's' }),
         );
         parse(
             bracketed_class_range_or_literal,
             "!--",
             "",
-            BracketedClassItem::Range(b'!', b'-'),
+            BracketedClassItem::Range(Literal { byte: b'!' }, Literal { byte: b'-' }),
         );
         parse(
             bracketed_class_range_or_literal,
             "---",
             "",
-            BracketedClassItem::Range(b'-', b'-'),
+            BracketedClassItem::Range(Literal { byte: b'-' }, Literal { byte: b'-' }),
         );
         parse(
             bracketed_class_range_or_literal,
             r"\n-\n",
             "",
-            BracketedClassItem::Range(b'\n', b'\n'),
+            BracketedClassItem::Range(Literal { byte: b'\n' }, Literal { byte: b'\n' }),
         );
         parse(
             bracketed_class_range_or_literal,
             r"\x01-\xFE",
             "",
-            BracketedClassItem::Range(b'\x01', b'\xFE'),
+            BracketedClassItem::Range(Literal { byte: b'\x01' }, Literal { byte: b'\xFE' }),
         );
 
         parse_err(bracketed_class_range_or_literal, "é");
@@ -1093,9 +1136,14 @@ mod tests {
 
     #[test]
     fn test_bracketed_class_literal() {
-        parse(bracketed_class_literal, "ab", "b", b'a');
-        parse(bracketed_class_literal, "\\nb", "b", b'\n');
-        parse(bracketed_class_literal, "\\]", "", b']');
+        parse(bracketed_class_literal, "ab", "b", Literal { byte: b'a' });
+        parse(
+            bracketed_class_literal,
+            "\\nb",
+            "b",
+            Literal { byte: b'\n' },
+        );
+        parse(bracketed_class_literal, "\\]", "", Literal { byte: b']' });
 
         parse_err(bracketed_class_literal, "]b");
         parse_err(bracketed_class_literal, "é");
@@ -1105,7 +1153,7 @@ mod tests {
 
     #[test]
     fn test_bracketed_class_char() {
-        parse(bracketed_class_char, "ab", "b", b'a');
+        parse(bracketed_class_char, "ab", "b", Literal { byte: b'a' });
 
         parse_err(bracketed_class_char, "]b");
         parse_err(bracketed_class_char, "é");
@@ -1113,8 +1161,8 @@ mod tests {
 
     #[test]
     fn test_literal() {
-        parse(literal, "ab", "b", Node::Literal(b'a'));
-        parse(literal, "]", "", Node::Literal(b']'));
+        parse(literal, "ab", "b", Node::Literal(Literal { byte: b'a' }));
+        parse(literal, "]", "", Node::Literal(Literal { byte: b']' }));
 
         parse(
             literal,
@@ -1128,14 +1176,54 @@ mod tests {
 
     #[test]
     fn test_escaped_char() {
-        parse(escaped_char, "\\na", "a", Node::Literal(b'\n'));
-        parse(escaped_char, "\\ta", "a", Node::Literal(b'\t'));
-        parse(escaped_char, "\\ra", "a", Node::Literal(b'\r'));
-        parse(escaped_char, "\\fa", "a", Node::Literal(b'\x0C'));
-        parse(escaped_char, "\\aa", "a", Node::Literal(b'\x07'));
-        parse(escaped_char, "\\x00a", "a", Node::Literal(b'\0'));
-        parse(escaped_char, "\\xAF a", " a", Node::Literal(b'\xAF'));
-        parse(escaped_char, "\\k", "", Node::Literal(b'k'));
+        parse(
+            escaped_char,
+            "\\na",
+            "a",
+            Node::Literal(Literal { byte: b'\n' }),
+        );
+        parse(
+            escaped_char,
+            "\\ta",
+            "a",
+            Node::Literal(Literal { byte: b'\t' }),
+        );
+        parse(
+            escaped_char,
+            "\\ra",
+            "a",
+            Node::Literal(Literal { byte: b'\r' }),
+        );
+        parse(
+            escaped_char,
+            "\\fa",
+            "a",
+            Node::Literal(Literal { byte: b'\x0C' }),
+        );
+        parse(
+            escaped_char,
+            "\\aa",
+            "a",
+            Node::Literal(Literal { byte: b'\x07' }),
+        );
+        parse(
+            escaped_char,
+            "\\x00a",
+            "a",
+            Node::Literal(Literal { byte: b'\0' }),
+        );
+        parse(
+            escaped_char,
+            "\\xAF a",
+            " a",
+            Node::Literal(Literal { byte: b'\xAF' }),
+        );
+        parse(
+            escaped_char,
+            "\\k",
+            "",
+            Node::Literal(Literal { byte: b'k' }),
+        );
         parse(
             escaped_char,
             "\\é_",
@@ -1153,14 +1241,49 @@ mod tests {
 
     #[test]
     fn test_escaped_char_only_ascii() {
-        parse(escaped_char_only_ascii, "\\na", "a", b'\n');
-        parse(escaped_char_only_ascii, "\\ta", "a", b'\t');
-        parse(escaped_char_only_ascii, "\\ra", "a", b'\r');
-        parse(escaped_char_only_ascii, "\\fa", "a", b'\x0C');
-        parse(escaped_char_only_ascii, "\\aa", "a", b'\x07');
-        parse(escaped_char_only_ascii, "\\x00a", "a", b'\0');
-        parse(escaped_char_only_ascii, "\\xAF a", " a", b'\xAF');
-        parse(escaped_char_only_ascii, "\\k", "", b'k');
+        parse(
+            escaped_char_only_ascii,
+            "\\na",
+            "a",
+            Literal { byte: b'\n' },
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\ta",
+            "a",
+            Literal { byte: b'\t' },
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\ra",
+            "a",
+            Literal { byte: b'\r' },
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\fa",
+            "a",
+            Literal { byte: b'\x0C' },
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\aa",
+            "a",
+            Literal { byte: b'\x07' },
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\x00a",
+            "a",
+            Literal { byte: b'\0' },
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\xAF a",
+            " a",
+            Literal { byte: b'\xAF' },
+        );
+        parse(escaped_char_only_ascii, "\\k", "", Literal { byte: b'k' });
 
         parse_err(escaped_char_only_ascii, "\\");
         parse_err(escaped_char_only_ascii, "\\é");

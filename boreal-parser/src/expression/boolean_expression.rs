@@ -322,7 +322,7 @@ mod tests {
     use super::*;
     use crate::{
         expression::{Identifier, MAX_EXPR_RECURSION},
-        regex::{self, Regex},
+        regex::{self, Literal, Regex},
         test_helpers::{parse, parse_check, parse_err, parse_err_type, test_public_type},
     };
     use std::ops::Range;
@@ -676,7 +676,7 @@ mod tests {
                         span: 0..3,
                     }),
                     Regex {
-                        ast: regex::Node::Literal(b'b'),
+                        ast: regex::Node::Literal(Literal { byte: b'b' }),
                         case_insensitive: true,
                         dot_all: false,
                         span: 12..16,

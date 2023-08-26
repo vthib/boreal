@@ -8,8 +8,8 @@ use std::ops::Range;
 use regex_automata::{meta, util::syntax, Input};
 
 use boreal_parser::regex::{
-    AssertionKind, BracketedClass, BracketedClassItem, ClassKind, PerlClass, PerlClassKind,
-    RepetitionKind, RepetitionRange,
+    AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Literal, PerlClass,
+    PerlClassKind, RepetitionKind, RepetitionRange,
 };
 
 mod hir;
@@ -250,8 +250,8 @@ impl AstPrinter {
         for item in &cls.items {
             match item {
                 BracketedClassItem::Perl(p) => self.push_perl_class(p),
-                BracketedClassItem::Literal(b) => self.push_literal(*b),
-                BracketedClassItem::Range(a, b) => {
+                BracketedClassItem::Literal(Literal { byte }) => self.push_literal(*byte),
+                BracketedClassItem::Range(Literal { byte: a }, Literal { byte: b }) => {
                     self.push_literal(*a);
                     self.res.push('-');
                     self.push_literal(*b);
