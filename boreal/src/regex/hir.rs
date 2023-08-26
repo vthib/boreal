@@ -3,8 +3,8 @@ use std::ops::Range;
 use bitmaps::Bitmap;
 use boreal_parser::hex_string::{Mask, Token};
 use boreal_parser::regex::{
-    AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Literal, Node, PerlClass,
-    PerlClassKind, RepetitionKind, RepetitionRange,
+    AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Literal, LiteralChar, Node,
+    PerlClass, PerlClassKind, RepetitionKind, RepetitionRange,
 };
 
 /// HIR of a regular expression.
@@ -151,7 +151,7 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
                 // a bit hacky, where we handle the special
                 // "repetition over a char" case, to put the repetition
                 // only over the last byte.
-                Node::Char { c, span } => {
+                Node::Char(LiteralChar { c, span }) => {
                     warnings.push(RegexAstError::NonAsciiChar { span });
 
                     let mut enc = vec![0; 4];
@@ -177,7 +177,7 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
                 },
             }
         }
-        Node::Char { c, span } => {
+        Node::Char(LiteralChar { c, span }) => {
             warnings.push(RegexAstError::NonAsciiChar { span });
             let mut enc = vec![0; 4];
             let res = c.encode_utf8(&mut enc);
