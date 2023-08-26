@@ -678,6 +678,7 @@ mod tests {
                     Regex {
                         ast: regex::Node::Literal(Literal {
                             byte: b'b',
+                            span: 13..14,
                             escaped: false,
                         }),
                         case_insensitive: true,

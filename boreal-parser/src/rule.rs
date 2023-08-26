@@ -929,6 +929,7 @@ mod tests {
                             regex::Node::Repetition {
                                 node: Box::new(regex::Node::Literal(Literal {
                                     byte: b'a',
+                                    span: 39..40,
                                     escaped: false,
                                 })),
                                 kind: regex::RepetitionKind::ZeroOrOne,
@@ -936,6 +937,7 @@ mod tests {
                             },
                             regex::Node::Literal(Literal {
                                 byte: b'b',
+                                span: 41..42,
                                 escaped: false,
                             }),
                         ]),

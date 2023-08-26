@@ -182,6 +182,9 @@ pub struct Literal {
     /// Byte value.
     pub byte: u8,
 
+    /// Span of the literal
+    pub span: Range<usize>,
+
     /// Was the byte escaped.
     ///
     /// This is for example true for '\[' or '\.', but not for '\n' or '\xAB'.
@@ -398,14 +401,16 @@ fn bracketed_class(input: Input) -> ParseResult<BracketedClass> {
 
 fn bracketed_class_inner(input: Input) -> ParseResult<BracketedClass> {
     let (input, negated) = eat_opt_char('^', input);
-    let (input, contains_closing_bracket) = eat_opt_char(']', input);
+    let start = input.pos();
+    let (input2, contains_closing_bracket) = eat_opt_char(']', input);
 
-    let (input, mut items) = many0(bracketed_class_item)(input)?;
+    let (input, mut items) = many0(bracketed_class_item)(input2)?;
     let (input, _) = char(']')(input)?;
 
     if contains_closing_bracket {
         items.push(BracketedClassItem::Literal(Literal {
             byte: b']',
+            span: input2.get_span_from_no_rtrim(start),
             escaped: false,
         }));
     }
@@ -455,6 +460,7 @@ fn bracketed_class_char(input: Input) -> ParseResult<Literal> {
             input,
             Literal {
                 byte: b as u8,
+                span: input.get_span_from_no_rtrim(start),
                 escaped: false,
             },
         ))
@@ -476,6 +482,7 @@ fn literal(input: Input) -> ParseResult<Node> {
     let node = if c.is_ascii() {
         Node::Literal(Literal {
             byte: c as u8,
+            span: input.get_span_from_no_rtrim(start),
             escaped: false,
         })
     } else {
@@ -490,39 +497,67 @@ fn literal(input: Input) -> ParseResult<Node> {
 }
 
 fn escaped_char(input: Input) -> ParseResult<Node> {
-    let (input, (res, escaped)) = escaped_char_inner(input)?;
+    let (input, res) = escaped_char_inner(input)?;
 
     let node = match res {
-        EscapedChar::Byte(byte) => Node::Literal(Literal { byte, escaped }),
-        EscapedChar::Char { c, span } => Node::Char(LiteralChar { c, span, escaped }),
+        Escaped {
+            kind: EscapedKind::Byte(byte),
+            span,
+            escaped,
+        } => Node::Literal(Literal {
+            byte,
+            span,
+            escaped,
+        }),
+        Escaped {
+            kind: EscapedKind::Char(c),
+            span,
+            escaped,
+        } => Node::Char(LiteralChar { c, span, escaped }),
     };
 
     Ok((input, node))
 }
 
 fn escaped_char_only_ascii(input: Input) -> ParseResult<Literal> {
-    let (input, (res, escaped)) = escaped_char_inner(input)?;
+    let (input, res) = escaped_char_inner(input)?;
 
     match res {
-        EscapedChar::Byte(byte) => Ok((input, Literal { byte, escaped })),
-        EscapedChar::Char { span, .. } => Err(nom::Err::Failure(Error::new(
+        Escaped {
+            kind: EscapedKind::Byte(byte),
+            span,
+            escaped,
+        } => Ok((
+            input,
+            Literal {
+                byte,
+                span,
+                escaped,
+            },
+        )),
+        Escaped {
+            kind: EscapedKind::Char(_),
+            span,
+            ..
+        } => Err(nom::Err::Failure(Error::new(
             span,
             ErrorKind::RegexNonAsciiByte,
         ))),
     }
 }
 
-fn escaped_char_inner(input: Input) -> ParseResult<(EscapedChar, bool)> {
+fn escaped_char_inner(input: Input) -> ParseResult<Escaped> {
     let start = input.pos();
     let (input2, _) = char('\\')(input)?;
     let (input, b) = anychar(input2)?;
 
-    let res = match b {
-        'n' => (EscapedChar::Byte(b'\n'), false),
-        't' => (EscapedChar::Byte(b'\t'), false),
-        'r' => (EscapedChar::Byte(b'\r'), false),
-        'f' => (EscapedChar::Byte(b'\x0C'), false),
-        'a' => (EscapedChar::Byte(b'\x07'), false),
+    let span = input.get_span_from_no_rtrim(start);
+    let (kind, escaped) = match b {
+        'n' => (EscapedKind::Byte(b'\n'), false),
+        't' => (EscapedKind::Byte(b'\t'), false),
+        'r' => (EscapedKind::Byte(b'\r'), false),
+        'f' => (EscapedKind::Byte(b'\x0C'), false),
+        'a' => (EscapedKind::Byte(b'\x07'), false),
         'x' => {
             let (input, n) = cut(take(2_u32))(input)?;
 
@@ -535,24 +570,38 @@ fn escaped_char_inner(input: Input) -> ParseResult<(EscapedChar, bool)> {
                     )));
                 }
             };
-            return Ok((input, (EscapedChar::Byte(n), false)));
+            return Ok((
+                input,
+                Escaped {
+                    kind: EscapedKind::Byte(n),
+                    span: input.get_span_from_no_rtrim(start),
+                    escaped: false,
+                },
+            ));
         }
-        c if c.is_ascii() => (EscapedChar::Byte(c as u8), true),
-        c => (
-            EscapedChar::Char {
-                c,
-                span: input.get_span_from_no_rtrim(input2.pos()),
-            },
-            true,
-        ),
+        c if c.is_ascii() => (EscapedKind::Byte(c as u8), true),
+        c => (EscapedKind::Char(c), true),
     };
 
-    Ok((input, res))
+    Ok((
+        input,
+        Escaped {
+            kind,
+            span,
+            escaped,
+        },
+    ))
 }
 
-enum EscapedChar {
+struct Escaped {
+    kind: EscapedKind,
+    span: Range<usize>,
+    escaped: bool,
+}
+
+enum EscapedKind {
     Byte(u8),
-    Char { c: char, span: Range<usize> },
+    Char(char),
 }
 
 fn range_repetition(input: Input) -> ParseResult<(RepetitionRange, bool)> {
@@ -634,8 +683,12 @@ mod tests {
     use super::*;
     use crate::test_helpers::{parse, parse_err, parse_err_type, test_public_type};
 
-    fn lit(byte: u8, escaped: bool) -> Literal {
-        Literal { byte, escaped }
+    fn lit(byte: u8, span: Range<usize>, escaped: bool) -> Literal {
+        Literal {
+            byte,
+            span,
+            escaped,
+        }
     }
 
     #[test]
@@ -645,7 +698,7 @@ mod tests {
             "/a/i",
             "",
             Regex {
-                ast: Node::Literal(lit(b'a', false)),
+                ast: Node::Literal(lit(b'a', 1..2, false)),
                 case_insensitive: true,
                 dot_all: false,
                 span: 0..4,
@@ -659,8 +712,8 @@ mod tests {
                 ast: Node::Repetition {
                     node: Box::new(Node::Class(ClassKind::Bracketed(BracketedClass {
                         items: vec![BracketedClassItem::Range(
-                            lit(b'0', false),
-                            lit(b'9', false),
+                            lit(b'0', 3..4, false),
+                            lit(b'9', 5..6, false),
                         )],
                         negated: true,
                     }))),
@@ -678,11 +731,11 @@ mod tests {
             "b",
             Regex {
                 ast: Node::Concat(vec![
-                    Node::Literal(lit(b'a', false)),
-                    Node::Literal(lit(b'/', true)),
-                    Node::Literal(lit(b'b', false)),
-                    Node::Literal(lit(b'c', true)),
-                    Node::Literal(lit(b'd', false)),
+                    Node::Literal(lit(b'a', 1..2, false)),
+                    Node::Literal(lit(b'/', 2..4, true)),
+                    Node::Literal(lit(b'b', 4..5, false)),
+                    Node::Literal(lit(b'c', 5..7, true)),
+                    Node::Literal(lit(b'd', 7..8, false)),
                 ]),
                 case_insensitive: true,
                 dot_all: true,
@@ -710,8 +763,8 @@ mod tests {
             "c",
             Regex {
                 ast: Node::Concat(vec![
-                    Node::Literal(lit(b'\0', false)),
-                    Node::Literal(lit(b'\0', true)),
+                    Node::Literal(lit(b'\0', 1..2, false)),
+                    Node::Literal(lit(b'\0', 2..4, true)),
                 ]),
                 case_insensitive: false,
                 dot_all: false,
@@ -730,21 +783,26 @@ mod tests {
     #[test]
     fn test_alternative() {
         parse(alternative, "(", "(", Node::Empty);
-        parse(alternative, "a)", ")", Node::Literal(lit(b'a', false)));
+        parse(
+            alternative,
+            "a)",
+            ")",
+            Node::Literal(lit(b'a', 0..1, false)),
+        );
         parse(
             alternative,
             "a|b",
             "",
             Node::Alternation(vec![
-                Node::Literal(lit(b'a', false)),
-                Node::Literal(lit(b'b', false)),
+                Node::Literal(lit(b'a', 0..1, false)),
+                Node::Literal(lit(b'b', 2..3, false)),
             ]),
         );
         parse(
             alternative,
             "a|)",
             ")",
-            Node::Alternation(vec![Node::Literal(lit(b'a', false)), Node::Empty]),
+            Node::Alternation(vec![Node::Literal(lit(b'a', 0..1, false)), Node::Empty]),
         );
 
         parse(
@@ -753,10 +811,10 @@ mod tests {
             "",
             Node::Alternation(vec![
                 Node::Concat(vec![
-                    Node::Literal(lit(b'a', false)),
-                    Node::Literal(lit(b'b', false)),
+                    Node::Literal(lit(b'a', 0..1, false)),
+                    Node::Literal(lit(b'b', 1..2, false)),
                 ]),
-                Node::Concat(vec![Node::Dot, Node::Literal(lit(b'|', true))]),
+                Node::Concat(vec![Node::Dot, Node::Literal(lit(b'|', 4..6, true))]),
                 Node::Concat(vec![
                     Node::Assertion(AssertionKind::WordBoundary),
                     Node::Assertion(AssertionKind::EndLine),
@@ -771,14 +829,19 @@ mod tests {
     #[test]
     fn test_concatenation() {
         parse(concatenation, "", "", Node::Empty);
-        parse(concatenation, "a", "", Node::Literal(lit(b'a', false)));
+        parse(
+            concatenation,
+            "a",
+            "",
+            Node::Literal(lit(b'a', 0..1, false)),
+        );
         parse(
             concatenation,
             "ab",
             "",
             Node::Concat(vec![
-                Node::Literal(lit(b'a', false)),
-                Node::Literal(lit(b'b', false)),
+                Node::Literal(lit(b'a', 0..1, false)),
+                Node::Literal(lit(b'b', 1..2, false)),
             ]),
         );
         parse(
@@ -786,7 +849,7 @@ mod tests {
             "a$*",
             "*",
             Node::Concat(vec![
-                Node::Literal(lit(b'a', false)),
+                Node::Literal(lit(b'a', 0..1, false)),
                 Node::Assertion(AssertionKind::EndLine),
             ]),
         );
@@ -797,7 +860,7 @@ mod tests {
             Node::Concat(vec![
                 Node::Assertion(AssertionKind::StartLine),
                 Node::Repetition {
-                    node: Box::new(Node::Literal(lit(b'a', false))),
+                    node: Box::new(Node::Literal(lit(b'a', 1..2, false))),
                     kind: RepetitionKind::OneOrMore,
                     greedy: true,
                 },
@@ -812,7 +875,7 @@ mod tests {
                 },
                 Node::Repetition {
                     node: Box::new(Node::Class(ClassKind::Bracketed(BracketedClass {
-                        items: vec![BracketedClassItem::Literal(lit(b'z', false))],
+                        items: vec![BracketedClassItem::Literal(lit(b'z', 14..15, false))],
                         negated: true,
                     }))),
                     kind: RepetitionKind::ZeroOrMore,
@@ -881,8 +944,8 @@ mod tests {
             "(ab)a",
             "a",
             Node::Group(Box::new(Node::Concat(vec![
-                Node::Literal(lit(b'a', false)),
-                Node::Literal(lit(b'b', false)),
+                Node::Literal(lit(b'a', 1..2, false)),
+                Node::Literal(lit(b'b', 2..3, false)),
             ]))),
         );
         parse(
@@ -900,14 +963,19 @@ mod tests {
             " ",
             Node::Class(ClassKind::Bracketed(BracketedClass {
                 items: vec![
-                    BracketedClassItem::Range(lit(b'a', false), lit(b'f', false)),
-                    BracketedClassItem::Range(lit(b'A', false), lit(b'F', false)),
+                    BracketedClassItem::Range(lit(b'a', 1..2, false), lit(b'f', 3..4, false)),
+                    BracketedClassItem::Range(lit(b'A', 4..5, false), lit(b'F', 6..7, false)),
                 ],
                 negated: false,
             })),
         );
-        parse(single, r"\xFFa", "a", Node::Literal(lit(b'\xFF', false)));
-        parse(single, r"]a", "a", Node::Literal(lit(b']', false)));
+        parse(
+            single,
+            r"\xFFa",
+            "a",
+            Node::Literal(lit(b'\xFF', 0..4, false)),
+        );
+        parse(single, r"]a", "a", Node::Literal(lit(b']', 0..1, false)));
 
         parse_err(single, "");
         parse_err(single, "(");
@@ -991,7 +1059,7 @@ mod tests {
             "[a]b",
             "b",
             BracketedClass {
-                items: vec![BracketedClassItem::Literal(lit(b'a', false))],
+                items: vec![BracketedClassItem::Literal(lit(b'a', 1..2, false))],
                 negated: false,
             },
         );
@@ -1001,13 +1069,13 @@ mod tests {
             "",
             BracketedClass {
                 items: vec![
-                    BracketedClassItem::Range(lit(b'a', false), lit(b'z', false)),
-                    BracketedClassItem::Literal(lit(b'_', false)),
+                    BracketedClassItem::Range(lit(b'a', 2..3, false), lit(b'z', 4..5, false)),
+                    BracketedClassItem::Literal(lit(b'_', 5..6, false)),
                     BracketedClassItem::Perl(PerlClass {
                         kind: PerlClassKind::Space,
                         negated: true,
                     }),
-                    BracketedClassItem::Range(lit(b'0', false), lit(b'9', false)),
+                    BracketedClassItem::Range(lit(b'0', 8..9, false), lit(b'9', 10..11, false)),
                 ],
                 negated: true,
             },
@@ -1018,8 +1086,8 @@ mod tests {
             "",
             BracketedClass {
                 items: vec![
-                    BracketedClassItem::Literal(lit(b'j', true)),
-                    BracketedClassItem::Literal(lit(b']', false)),
+                    BracketedClassItem::Literal(lit(b'j', 2..4, true)),
+                    BracketedClassItem::Literal(lit(b']', 1..2, false)),
                 ],
                 negated: false,
             },
@@ -1029,7 +1097,7 @@ mod tests {
             "[]]",
             "",
             BracketedClass {
-                items: vec![BracketedClassItem::Literal(lit(b']', false))],
+                items: vec![BracketedClassItem::Literal(lit(b']', 1..2, false))],
                 negated: false,
             },
         );
@@ -1038,7 +1106,7 @@ mod tests {
             "[^]]",
             "",
             BracketedClass {
-                items: vec![BracketedClassItem::Literal(lit(b']', false))],
+                items: vec![BracketedClassItem::Literal(lit(b']', 2..3, false))],
                 negated: true,
             },
         );
@@ -1048,10 +1116,10 @@ mod tests {
             "",
             BracketedClass {
                 items: vec![
-                    BracketedClassItem::Literal(lit(b'a', false)),
-                    BracketedClassItem::Literal(lit(b']', true)),
-                    BracketedClassItem::Literal(lit(b'b', false)),
-                    BracketedClassItem::Literal(lit(b'-', false)),
+                    BracketedClassItem::Literal(lit(b'a', 2..3, false)),
+                    BracketedClassItem::Literal(lit(b']', 3..5, true)),
+                    BracketedClassItem::Literal(lit(b'b', 5..6, false)),
+                    BracketedClassItem::Literal(lit(b'-', 6..7, false)),
                 ],
                 negated: true,
             },
@@ -1082,7 +1150,7 @@ mod tests {
             bracketed_class_item,
             "\\c-z]",
             "]",
-            BracketedClassItem::Range(lit(b'c', true), lit(b'z', false)),
+            BracketedClassItem::Range(lit(b'c', 0..2, true), lit(b'z', 3..4, false)),
         );
 
         parse_err(bracketed_class_item, "é");
@@ -1094,56 +1162,56 @@ mod tests {
             bracketed_class_range_or_literal,
             "ab",
             "b",
-            BracketedClassItem::Literal(lit(b'a', false)),
+            BracketedClassItem::Literal(lit(b'a', 0..1, false)),
         );
         parse(
             bracketed_class_range_or_literal,
-            "\x01-",
+            r"\x01-",
             "-",
-            BracketedClassItem::Literal(lit(b'\x01', false)),
+            BracketedClassItem::Literal(lit(b'\x01', 0..4, false)),
         );
         parse(
             bracketed_class_range_or_literal,
             "-\\]",
             "\\]",
-            BracketedClassItem::Literal(lit(b'-', false)),
+            BracketedClassItem::Literal(lit(b'-', 0..1, false)),
         );
         parse(
             bracketed_class_range_or_literal,
             "A-]",
             "-]",
-            BracketedClassItem::Literal(lit(b'A', false)),
+            BracketedClassItem::Literal(lit(b'A', 0..1, false)),
         );
 
         parse(
             bracketed_class_range_or_literal,
             "a-\\sb",
             "b",
-            BracketedClassItem::Range(lit(b'a', false), lit(b's', true)),
+            BracketedClassItem::Range(lit(b'a', 0..1, false), lit(b's', 2..4, true)),
         );
         parse(
             bracketed_class_range_or_literal,
             "!--",
             "",
-            BracketedClassItem::Range(lit(b'!', false), lit(b'-', false)),
+            BracketedClassItem::Range(lit(b'!', 0..1, false), lit(b'-', 2..3, false)),
         );
         parse(
             bracketed_class_range_or_literal,
             "---",
             "",
-            BracketedClassItem::Range(lit(b'-', false), lit(b'-', false)),
+            BracketedClassItem::Range(lit(b'-', 0..1, false), lit(b'-', 2..3, false)),
         );
         parse(
             bracketed_class_range_or_literal,
             r"\n-\n",
             "",
-            BracketedClassItem::Range(lit(b'\n', false), lit(b'\n', false)),
+            BracketedClassItem::Range(lit(b'\n', 0..2, false), lit(b'\n', 3..5, false)),
         );
         parse(
             bracketed_class_range_or_literal,
             r"\x01-\xFE",
             "",
-            BracketedClassItem::Range(lit(b'\x01', false), lit(b'\xFE', false)),
+            BracketedClassItem::Range(lit(b'\x01', 0..4, false), lit(b'\xFE', 5..9, false)),
         );
 
         parse_err(bracketed_class_range_or_literal, "é");
@@ -1155,9 +1223,14 @@ mod tests {
 
     #[test]
     fn test_bracketed_class_literal() {
-        parse(bracketed_class_literal, "ab", "b", lit(b'a', false));
-        parse(bracketed_class_literal, "\\nb", "b", lit(b'\n', false));
-        parse(bracketed_class_literal, "\\]", "", lit(b']', true));
+        parse(bracketed_class_literal, "ab", "b", lit(b'a', 0..1, false));
+        parse(
+            bracketed_class_literal,
+            "\\nb",
+            "b",
+            lit(b'\n', 0..2, false),
+        );
+        parse(bracketed_class_literal, "\\]", "", lit(b']', 0..2, true));
 
         parse_err(bracketed_class_literal, "]b");
         parse_err(bracketed_class_literal, "é");
@@ -1167,7 +1240,7 @@ mod tests {
 
     #[test]
     fn test_bracketed_class_char() {
-        parse(bracketed_class_char, "ab", "b", lit(b'a', false));
+        parse(bracketed_class_char, "ab", "b", lit(b'a', 0..1, false));
 
         parse_err(bracketed_class_char, "]b");
         parse_err(bracketed_class_char, "é");
@@ -1175,8 +1248,8 @@ mod tests {
 
     #[test]
     fn test_literal() {
-        parse(literal, "ab", "b", Node::Literal(lit(b'a', false)));
-        parse(literal, "]", "", Node::Literal(lit(b']', false)));
+        parse(literal, "ab", "b", Node::Literal(lit(b'a', 0..1, false)));
+        parse(literal, "]", "", Node::Literal(lit(b']', 0..1, false)));
 
         parse(
             literal,
@@ -1192,41 +1265,61 @@ mod tests {
 
     #[test]
     fn test_escaped_char() {
-        parse(escaped_char, "\\na", "a", Node::Literal(lit(b'\n', false)));
-        parse(escaped_char, "\\ta", "a", Node::Literal(lit(b'\t', false)));
-        parse(escaped_char, "\\ra", "a", Node::Literal(lit(b'\r', false)));
+        parse(
+            escaped_char,
+            "\\na",
+            "a",
+            Node::Literal(lit(b'\n', 0..2, false)),
+        );
+        parse(
+            escaped_char,
+            "\\ta",
+            "a",
+            Node::Literal(lit(b'\t', 0..2, false)),
+        );
+        parse(
+            escaped_char,
+            "\\ra",
+            "a",
+            Node::Literal(lit(b'\r', 0..2, false)),
+        );
         parse(
             escaped_char,
             "\\fa",
             "a",
-            Node::Literal(lit(b'\x0C', false)),
+            Node::Literal(lit(b'\x0C', 0..2, false)),
         );
         parse(
             escaped_char,
             "\\aa",
             "a",
-            Node::Literal(lit(b'\x07', false)),
+            Node::Literal(lit(b'\x07', 0..2, false)),
         );
         parse(
             escaped_char,
             "\\x00a",
             "a",
-            Node::Literal(lit(b'\0', false)),
+            Node::Literal(lit(b'\0', 0..4, false)),
         );
         parse(
             escaped_char,
             "\\xAF a",
             " a",
-            Node::Literal(lit(b'\xAF', false)),
+            Node::Literal(lit(b'\xAF', 0..4, false)),
         );
-        parse(escaped_char, "\\k", "", Node::Literal(lit(b'k', true)));
+        parse(
+            escaped_char,
+            "\\k",
+            "",
+            Node::Literal(lit(b'k', 0..2, true)),
+        );
         parse(
             escaped_char,
             "\\é_",
             "_",
             Node::Char(LiteralChar {
                 c: 'é',
-                span: 1..3,
+                span: 0..3,
                 escaped: true,
             }),
         );
@@ -1239,19 +1332,49 @@ mod tests {
 
     #[test]
     fn test_escaped_char_only_ascii() {
-        parse(escaped_char_only_ascii, "\\na", "a", lit(b'\n', false));
-        parse(escaped_char_only_ascii, "\\ta", "a", lit(b'\t', false));
-        parse(escaped_char_only_ascii, "\\ra", "a", lit(b'\r', false));
-        parse(escaped_char_only_ascii, "\\fa", "a", lit(b'\x0C', false));
-        parse(escaped_char_only_ascii, "\\aa", "a", lit(b'\x07', false));
-        parse(escaped_char_only_ascii, "\\x00a", "a", lit(b'\0', false));
+        parse(
+            escaped_char_only_ascii,
+            "\\na",
+            "a",
+            lit(b'\n', 0..2, false),
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\ta",
+            "a",
+            lit(b'\t', 0..2, false),
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\ra",
+            "a",
+            lit(b'\r', 0..2, false),
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\fa",
+            "a",
+            lit(b'\x0C', 0..2, false),
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\aa",
+            "a",
+            lit(b'\x07', 0..2, false),
+        );
+        parse(
+            escaped_char_only_ascii,
+            "\\x00a",
+            "a",
+            lit(b'\0', 0..4, false),
+        );
         parse(
             escaped_char_only_ascii,
             "\\xAF a",
             " a",
-            lit(b'\xAF', false),
+            lit(b'\xAF', 0..4, false),
         );
-        parse(escaped_char_only_ascii, "\\k", "", lit(b'k', true));
+        parse(escaped_char_only_ascii, "\\k", "", lit(b'k', 0..2, true));
 
         parse_err(escaped_char_only_ascii, "\\");
         parse_err(escaped_char_only_ascii, "\\é");
