@@ -114,7 +114,7 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
         ),
         Node::Dot => Hir::Dot,
         Node::Empty => Hir::Empty,
-        Node::Literal(Literal { byte }) => Hir::Literal(byte),
+        Node::Literal(Literal { byte, .. }) => Hir::Literal(byte),
         Node::Group(v) => Hir::Group(Box::new(regex_ast_to_hir(*v, warnings))),
         Node::Repetition { node, kind, greedy } => {
             match *node {
@@ -151,7 +151,7 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
                 // a bit hacky, where we handle the special
                 // "repetition over a char" case, to put the repetition
                 // only over the last byte.
-                Node::Char(LiteralChar { c, span }) => {
+                Node::Char(LiteralChar { c, span, .. }) => {
                     warnings.push(RegexAstError::NonAsciiChar { span });
 
                     let mut enc = vec![0; 4];
@@ -177,7 +177,7 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
                 },
             }
         }
-        Node::Char(LiteralChar { c, span }) => {
+        Node::Char(LiteralChar { c, span, .. }) => {
             warnings.push(RegexAstError::NonAsciiChar { span });
             let mut enc = vec![0; 4];
             let res = c.encode_utf8(&mut enc);
@@ -197,10 +197,10 @@ fn class_to_bitmap(class_kind: &ClassKind) -> Bitmap<256> {
                     BracketedClassItem::Perl(p) => {
                         bitmap |= perl_class_to_bitmap(p);
                     }
-                    BracketedClassItem::Literal(Literal { byte }) => {
+                    BracketedClassItem::Literal(Literal { byte, .. }) => {
                         let _ = bitmap.set(usize::from(*byte), true);
                     }
-                    BracketedClassItem::Range(Literal { byte: a }, Literal { byte: b }) => {
+                    BracketedClassItem::Range(Literal { byte: a, .. }, Literal { byte: b, .. }) => {
                         for c in *a..=*b {
                             let _ = bitmap.set(usize::from(c), true);
                         }
@@ -267,7 +267,10 @@ impl From<Token> for Hir {
 
                 Hir::Class(Class {
                     definition: ClassKind::Bracketed(BracketedClass {
-                        items: vec![BracketedClassItem::Literal(Literal { byte: b })],
+                        items: vec![BracketedClassItem::Literal(Literal {
+                            byte: b,
+                            escaped: false,
+                        })],
                         negated: true,
                     }),
                     bitmap,

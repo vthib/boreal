@@ -250,8 +250,8 @@ impl AstPrinter {
         for item in &cls.items {
             match item {
                 BracketedClassItem::Perl(p) => self.push_perl_class(p),
-                BracketedClassItem::Literal(Literal { byte }) => self.push_literal(*byte),
-                BracketedClassItem::Range(Literal { byte: a }, Literal { byte: b }) => {
+                BracketedClassItem::Literal(Literal { byte, .. }) => self.push_literal(*byte),
+                BracketedClassItem::Range(Literal { byte: a, .. }, Literal { byte: b, .. }) => {
                     self.push_literal(*a);
                     self.res.push('-');
                     self.push_literal(*b);

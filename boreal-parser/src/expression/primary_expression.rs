@@ -460,11 +460,17 @@ mod tests {
                 expr: Expr::Regex(Regex {
                     ast: Node::Concat(vec![
                         Node::Repetition {
-                            node: Box::new(Node::Literal(Literal { byte: b'a' })),
+                            node: Box::new(Node::Literal(Literal {
+                                byte: b'a',
+                                escaped: false,
+                            })),
                             kind: RepetitionKind::ZeroOrMore,
                             greedy: true,
                         },
-                        Node::Literal(Literal { byte: b'b' }),
+                        Node::Literal(Literal {
+                            byte: b'b',
+                            escaped: false,
+                        }),
                         Node::Assertion(AssertionKind::EndLine),
                     ]),
                     case_insensitive: true,
