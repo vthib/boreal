@@ -1,12 +1,10 @@
 use std::ops::Range;
 
 use bitmaps::Bitmap;
-use boreal_parser::{
-    hex_string::{Mask, Token},
-    regex::{
-        AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Node, PerlClass,
-        PerlClassKind, RepetitionKind, RepetitionRange,
-    },
+use boreal_parser::hex_string::{Mask, Token};
+use boreal_parser::regex::{
+    AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Literal, Node, PerlClass,
+    PerlClassKind, RepetitionKind, RepetitionRange,
 };
 
 /// HIR of a regular expression.
@@ -116,7 +114,7 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
         ),
         Node::Dot => Hir::Dot,
         Node::Empty => Hir::Empty,
-        Node::Literal(v) => Hir::Literal(v),
+        Node::Literal(Literal { byte }) => Hir::Literal(byte),
         Node::Group(v) => Hir::Group(Box::new(regex_ast_to_hir(*v, warnings))),
         Node::Repetition { node, kind, greedy } => {
             match *node {
@@ -199,10 +197,10 @@ fn class_to_bitmap(class_kind: &ClassKind) -> Bitmap<256> {
                     BracketedClassItem::Perl(p) => {
                         bitmap |= perl_class_to_bitmap(p);
                     }
-                    BracketedClassItem::Literal(b) => {
-                        let _ = bitmap.set(usize::from(*b), true);
+                    BracketedClassItem::Literal(Literal { byte }) => {
+                        let _ = bitmap.set(usize::from(*byte), true);
                     }
-                    BracketedClassItem::Range(a, b) => {
+                    BracketedClassItem::Range(Literal { byte: a }, Literal { byte: b }) => {
                         for c in *a..=*b {
                             let _ = bitmap.set(usize::from(c), true);
                         }
@@ -269,7 +267,7 @@ impl From<Token> for Hir {
 
                 Hir::Class(Class {
                     definition: ClassKind::Bracketed(BracketedClass {
-                        items: vec![BracketedClassItem::Literal(b)],
+                        items: vec![BracketedClassItem::Literal(Literal { byte: b })],
                         negated: true,
                     }),
                     bitmap,
