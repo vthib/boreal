@@ -269,6 +269,7 @@ impl From<Token> for Hir {
                     definition: ClassKind::Bracketed(BracketedClass {
                         items: vec![BracketedClassItem::Literal(Literal {
                             byte: b,
+                            span: 0..1,
                             escaped: false,
                         })],
                         negated: true,

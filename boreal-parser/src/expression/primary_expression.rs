@@ -462,6 +462,7 @@ mod tests {
                         Node::Repetition {
                             node: Box::new(Node::Literal(Literal {
                                 byte: b'a',
+                                span: 1..2,
                                 escaped: false,
                             })),
                             kind: RepetitionKind::ZeroOrMore,
@@ -469,6 +470,7 @@ mod tests {
                         },
                         Node::Literal(Literal {
                             byte: b'b',
+                            span: 3..4,
                             escaped: false,
                         }),
                         Node::Assertion(AssertionKind::EndLine),
