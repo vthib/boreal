@@ -927,11 +927,17 @@ mod tests {
                     value: VariableDeclarationValue::Regex(Regex {
                         ast: regex::Node::Concat(vec![
                             regex::Node::Repetition {
-                                node: Box::new(regex::Node::Literal(Literal { byte: b'a' })),
+                                node: Box::new(regex::Node::Literal(Literal {
+                                    byte: b'a',
+                                    escaped: false,
+                                })),
                                 kind: regex::RepetitionKind::ZeroOrOne,
                                 greedy: true,
                             },
-                            regex::Node::Literal(Literal { byte: b'b' }),
+                            regex::Node::Literal(Literal {
+                                byte: b'b',
+                                escaped: false,
+                            }),
                         ]),
                         case_insensitive: false,
                         dot_all: false,

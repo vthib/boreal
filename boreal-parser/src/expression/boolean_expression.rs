@@ -676,7 +676,10 @@ mod tests {
                         span: 0..3,
                     }),
                     Regex {
-                        ast: regex::Node::Literal(Literal { byte: b'b' }),
+                        ast: regex::Node::Literal(Literal {
+                            byte: b'b',
+                            escaped: false,
+                        }),
                         case_insensitive: true,
                         dot_all: false,
                         span: 12..16,
