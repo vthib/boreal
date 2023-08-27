@@ -3,6 +3,8 @@ use std::ops::Range;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
+use crate::regex::RegexAstError;
+
 use super::variable::VariableCompilationError;
 
 /// Type of error while compiling a rule.
@@ -269,6 +271,15 @@ pub enum CompilationError {
         /// Span of the non the ascii byte in the input
         span: Range<usize>,
     },
+
+    /// An unknown escape sequence is present in the regex.
+    RegexUnknownEscape {
+        /// Span of the escape sequence.
+        span: Range<usize>,
+
+        /// Character equivalent to the sequence, without the escape.
+        c: char,
+    },
 }
 
 impl CompilationError {
@@ -453,6 +464,24 @@ impl CompilationError {
                       example `/\\xCE\\xBC/` instead of `/µ/`."
                         .into(),
                 ]),
+
+            Self::RegexUnknownEscape { c, span } => Diagnostic::warning()
+                .with_message("unknown escape sequence")
+                .with_labels(vec![Label::primary((), span.clone())
+                    .with_message(format!("this is equivalent to '{c}'"))]),
+        }
+    }
+}
+
+impl From<RegexAstError> for CompilationError {
+    fn from(err: RegexAstError) -> Self {
+        match err {
+            RegexAstError::NonAsciiChar { span } => {
+                CompilationError::RegexContainsNonAsciiChar { span }
+            }
+            RegexAstError::UnknownEscape { c, span } => {
+                CompilationError::RegexUnknownEscape { c, span }
+            }
         }
     }
 }

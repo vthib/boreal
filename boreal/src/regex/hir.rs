@@ -104,7 +104,7 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
         ),
         Node::Assertion(v) => Hir::Assertion(v),
         Node::Class(definition) => Hir::Class(Class {
-            bitmap: class_to_bitmap(&definition),
+            bitmap: class_to_bitmap(&definition, warnings),
             definition,
         }),
         Node::Concat(v) => Hir::Concat(
@@ -114,7 +114,10 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
         ),
         Node::Dot => Hir::Dot,
         Node::Empty => Hir::Empty,
-        Node::Literal(Literal { byte, .. }) => Hir::Literal(byte),
+        Node::Literal(lit) => {
+            let byte = unwrap_literal(&lit, warnings);
+            Hir::Literal(byte)
+        }
         Node::Group(v) => Hir::Group(Box::new(regex_ast_to_hir(*v, warnings))),
         Node::Repetition { node, kind, greedy } => {
             match *node {
@@ -151,7 +154,13 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
                 // a bit hacky, where we handle the special
                 // "repetition over a char" case, to put the repetition
                 // only over the last byte.
-                Node::Char(LiteralChar { c, span, .. }) => {
+                Node::Char(LiteralChar { c, span, escaped }) => {
+                    if escaped {
+                        warnings.push(RegexAstError::UnknownEscape {
+                            span: span.clone(),
+                            c,
+                        });
+                    }
                     warnings.push(RegexAstError::NonAsciiChar { span });
 
                     let mut enc = vec![0; 4];
@@ -177,8 +186,15 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
                 },
             }
         }
-        Node::Char(LiteralChar { c, span, .. }) => {
+        Node::Char(LiteralChar { c, span, escaped }) => {
+            if escaped {
+                warnings.push(RegexAstError::UnknownEscape {
+                    span: span.clone(),
+                    c,
+                });
+            }
             warnings.push(RegexAstError::NonAsciiChar { span });
+
             let mut enc = vec![0; 4];
             let res = c.encode_utf8(&mut enc);
             Hir::Concat(res.as_bytes().iter().map(|v| Hir::Literal(*v)).collect())
@@ -186,7 +202,46 @@ pub(crate) fn regex_ast_to_hir(node: Node, warnings: &mut Vec<RegexAstError>) ->
     }
 }
 
-fn class_to_bitmap(class_kind: &ClassKind) -> Bitmap<256> {
+fn unwrap_literal(lit: &Literal, warnings: &mut Vec<RegexAstError>) -> u8 {
+    let Literal {
+        byte,
+        span,
+        escaped,
+    } = lit;
+
+    if *escaped && !is_meta_character(*byte) {
+        warnings.push(RegexAstError::UnknownEscape {
+            span: span.clone(),
+            c: char::from(*byte),
+        });
+    }
+
+    *byte
+}
+
+fn is_meta_character(byte: u8) -> bool {
+    matches!(
+        byte,
+        b'\\'
+            | b'/'
+            | b'.'
+            | b'+'
+            | b'*'
+            | b'?'
+            | b'('
+            | b')'
+            | b'|'
+            | b'['
+            | b']'
+            | b'{'
+            | b'}'
+            | b'^'
+            | b'$'
+            | b'-'
+    )
+}
+
+fn class_to_bitmap(class_kind: &ClassKind, warnings: &mut Vec<RegexAstError>) -> Bitmap<256> {
     match class_kind {
         ClassKind::Perl(p) => perl_class_to_bitmap(p),
         ClassKind::Bracketed(BracketedClass { items, negated }) => {
@@ -197,11 +252,14 @@ fn class_to_bitmap(class_kind: &ClassKind) -> Bitmap<256> {
                     BracketedClassItem::Perl(p) => {
                         bitmap |= perl_class_to_bitmap(p);
                     }
-                    BracketedClassItem::Literal(Literal { byte, .. }) => {
-                        let _ = bitmap.set(usize::from(*byte), true);
+                    BracketedClassItem::Literal(lit) => {
+                        let byte = unwrap_literal(lit, warnings);
+                        let _ = bitmap.set(usize::from(byte), true);
                     }
-                    BracketedClassItem::Range(Literal { byte: a, .. }, Literal { byte: b, .. }) => {
-                        for c in *a..=*b {
+                    BracketedClassItem::Range(lita, litb) => {
+                        let a = unwrap_literal(lita, warnings);
+                        let b = unwrap_literal(litb, warnings);
+                        for c in a..=b {
                             let _ = bitmap.set(usize::from(c), true);
                         }
                     }
@@ -320,6 +378,14 @@ pub enum RegexAstError {
     NonAsciiChar {
         /// Span of the character.
         span: Range<usize>,
+    },
+    /// An unknown escape sequence is present in the regex.
+    UnknownEscape {
+        /// Span of the escape sequence.
+        span: Range<usize>,
+
+        /// Character equivalent to the sequence, without the escape.
+        c: char,
     },
 }
 
