@@ -4,7 +4,7 @@
 //! as well. Do not modify those tests in any way. Custom tests should go in the other integration
 //! tests, outside of the `libyara` directory.
 use super::util::{ISSUE_1006, PE32_FILE, TEXT_1024_BYTES};
-use crate::utils::{check, check_count, check_err, check_file, join_str, Checker};
+use crate::utils::{check, check_count, check_err, check_file, check_warnings, join_str, Checker};
 
 #[test]
 fn test_boolean_operators() {
@@ -2963,6 +2963,24 @@ fn test_re() {
         false,
     );
 
+    check(
+        "rule test { condition: \"avb\" matches /a\\vb/ }",
+        &join_str(
+            TEXT_1024_BYTES,
+            "rule test { condition: \"avb\" matches /a\\vb/ }",
+        ),
+        true,
+    );
+
+    check(
+        "rule test { condition: \"ab\" matches /a\\vb/ }",
+        &join_str(
+            TEXT_1024_BYTES,
+            "rule test { condition: \"ab\" matches /a\\vb/ }",
+        ),
+        false,
+    );
+
     check_err(&build_regex_rule(")"), "mem:1:28: error: syntax error");
     check_regex_match("abc", b"abc", b"abc");
     check(&build_regex_rule("abc"), b"xbc", false);
@@ -3156,7 +3174,8 @@ fn test_re() {
     check(&build_regex_rule("[\\x00-\\x02]+"), b"\x03\x04\x05", false);
     check_regex_match("[\\x5D]", b"]", b"]");
 
-    check_regex_match("[\\0x5A-\\x5D]", b"\x5B", b"\x5B");
+    check_regex_match("[\\x5A-\\x5D]", b"\x5B", b"\x5B");
+    check(&build_regex_rule("[\\x5A-\\x5D]"), b"\x4F", false);
 
     check_regex_match("[\\x5D-\\x5F]", b"\x5E", b"\x5E");
     check_regex_match("[\\x5C-\\x5F]", b"\x5E", b"\x5E");
@@ -4073,6 +4092,74 @@ fn test_tags() {
 }
 
 // TODO: implement process scanning and add test_process_scan
+
+#[test]
+fn test_invalid_escape_sequences_warnings() {
+    check_warnings(
+        "rule test { strings: $a = /ab\\cdef/ condition: $a }",
+        &["mem:1:30: warning: unknown escape sequence"],
+    );
+    check_warnings(
+        "rule test { strings: $a = /ab\\ def/ condition: $a }",
+        &["mem:1:30: warning: unknown escape sequence"],
+    );
+    check_warnings(
+        "rule test { strings: $a = /ab\\;def/ condition: $a }",
+        &["mem:1:30: warning: unknown escape sequence"],
+    );
+    check_warnings("rule test { strings: $a = /ab\\*def/ condition: $a }", &[]);
+    check_warnings("rule test { strings: $a = /abcdef/ condition: $a }", &[]);
+    check_warnings(
+        "rule test { strings: $a = /ab\\cdef/ condition: $a }",
+        &["mem:1:30: warning: unknown escape sequence"],
+    );
+    check_warnings("rule test { strings: $a = /abcdef/ condition: $a }", &[]);
+    check_warnings(
+        "rule test { strings: $a = \
+        /\\\\WINDOWS\\\\system32\\\\\\victim\\.exe\\.exe/ condition: $a }",
+        &["mem:1:49: warning: unknown escape sequence"],
+    );
+    check_warnings(
+        "rule test { strings: $a = \
+        /\\\\WINDOWS\\\\system32\\\\victim\\.exe\\.exe/ condition: $a }",
+        &[],
+    );
+    check_warnings(
+        "rule test { strings: $a = \
+        /AppData\\\\Roaming\\\\[0-9]{9,12}\\VMwareCplLauncher\\.exe/ condition: $a }",
+        &["mem:1:57: warning: unknown escape sequence"],
+    );
+    check_warnings(
+        "rule test { strings: $a = \
+        /AppData\\\\Roaming\\\\[0-9]{9,12}\\\\VMwareCplLauncher\\.exe/ condition: $a }",
+        &[],
+    );
+    check_warnings(
+        "rule test { strings: $a = /ab[\\000-\\343]/ condition: $a }",
+        &[
+            "mem:1:31: warning: unknown escape sequence",
+            "mem:1:36: warning: unknown escape sequence",
+        ],
+    );
+    check_warnings(
+        "rule test { strings: $a = /ab[\\x00-\\x43]/ condition: $a }",
+        &[],
+    );
+    check_warnings(
+        "rule test { strings: $a = \
+        /C:\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\AzireVPN\\\\token\\.txt/ condition: $a }",
+        &["mem:1:30: warning: unknown escape sequence"],
+    );
+    check_warnings(
+        "rule test { strings: $a = \
+        /C:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\AzireVPN\\\\token\\.txt/ condition: $a }",
+        &[],
+    );
+    check_warnings(
+        "rule test { condition: \"avb\" matches /a\\vb/ }",
+        &["mem:1:40: warning: unknown escape sequence"],
+    );
+}
 
 // TODO add test_performance_warnings ?
 
