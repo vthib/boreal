@@ -9,7 +9,7 @@ use super::module::ModuleExpression;
 use super::rule::RuleCompiler;
 use super::{module, CompilationError};
 use crate::module::Type as ModuleType;
-use crate::regex::{regex_ast_to_hir, regex_hir_to_string, Regex, RegexAstError};
+use crate::regex::{regex_ast_to_hir, regex_hir_to_string, Regex};
 
 /// Type of a parsed expression
 ///
@@ -1231,11 +1231,7 @@ fn compile_regex(
     let mut warnings = Vec::new();
     let hir = regex_ast_to_hir(ast, &mut warnings);
     for warn in warnings {
-        compiler.add_warning(match warn {
-            RegexAstError::NonAsciiChar { span } => {
-                CompilationError::RegexContainsNonAsciiChar { span }
-            }
-        })?;
+        compiler.add_warning(warn.into())?;
     }
 
     Regex::from_string(regex_hir_to_string(&hir), case_insensitive, dot_all)

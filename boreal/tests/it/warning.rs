@@ -80,6 +80,30 @@ rule a {
 }
 
 #[test]
+fn test_warning_regex_unknown_escape() {
+    check_warnings(
+        r"
+rule a {
+    strings:
+        $a = /a\/a\i+\é_[1\2]-[a\0-\9z]2\+\🙄+/
+    condition:
+        $a and /\V/
+}",
+        &[
+            "mem:6:17: warning: unknown escape sequence",
+            "mem:4:19: warning: unknown escape sequence",
+            "mem:4:22: warning: unknown escape sequence",
+            "mem:4:22: warning: a non ascii character is present in a regex",
+            "mem:4:27: warning: unknown escape sequence",
+            "mem:4:33: warning: unknown escape sequence",
+            "mem:4:36: warning: unknown escape sequence",
+            "mem:4:43: warning: unknown escape sequence",
+            "mem:4:43: warning: a non ascii character is present in a regex",
+        ],
+    );
+}
+
+#[test]
 fn test_fail_on_warning_param() {
     let mut compiler = Compiler::new();
 

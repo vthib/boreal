@@ -148,7 +148,7 @@ impl Compiler {
             );
         }
 
-        // Check libyara also rejects it
+        // Check libyara accepts it.
         // TODO: add a way to get the warnings in yara-rust
         // For the moment, check the rule is not rejected at least.
         if let Some(compiler) = self.yara_compiler.take() {

@@ -2,7 +2,7 @@ use boreal_parser::rule::{VariableDeclaration, VariableDeclarationValue};
 
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::matcher::{Matcher, Modifiers};
-use crate::regex::{regex_ast_to_hir, RegexAstError};
+use crate::regex::regex_ast_to_hir;
 use crate::statistics;
 
 use super::rule::RuleCompiler;
@@ -59,11 +59,7 @@ pub(super) fn compile_variable(
             let mut warnings = Vec::new();
             let hir = regex_ast_to_hir(ast, &mut warnings);
             for warn in warnings {
-                compiler.add_warning(match warn {
-                    RegexAstError::NonAsciiChar { span } => {
-                        CompilationError::RegexContainsNonAsciiChar { span }
-                    }
-                })?;
+                compiler.add_warning(warn.into())?;
             }
             Matcher::new_regex(
                 &hir,
