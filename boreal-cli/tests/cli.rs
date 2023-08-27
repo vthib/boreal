@@ -579,7 +579,7 @@ rule a {
         .assert()
         .stdout(
             predicate::str::is_match(
-                r#"Evaluation \{
+                r"Evaluation \{
     no_scan_eval_duration: .*,
     ac_duration: .*,
     ac_confirm_duration: .*,
@@ -587,7 +587,7 @@ rule a {
     rules_eval_duration: .*,
     raw_regexes_eval_duration: .*,
 \}
-"#,
+",
             )
             .unwrap(),
         )
