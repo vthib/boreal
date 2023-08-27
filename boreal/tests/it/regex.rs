@@ -43,7 +43,7 @@ rule a {
     );
 
     // escaped unicode char is accepted.
-    let checker = Checker::new(r#"rule a { strings: $a = /\µ/ condition: $a }"#);
+    let checker = Checker::new(r"rule a { strings: $a = /\µ/ condition: $a }");
     checker.check("µ".as_bytes(), true);
 }
 

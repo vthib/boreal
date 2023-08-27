@@ -46,6 +46,7 @@ impl Module for Pe {
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+        #[allow(clippy::cast_possible_wrap)]
         [
             (
                 "MACHINE_UNKNOWN",
@@ -1303,10 +1304,7 @@ impl Pe {
             if let Some((signatures, is_signed)) =
                 signatures::get_signatures(&data_dirs, mem, token)
             {
-                let _r = map.insert(
-                    "number_of_signatures",
-                    Value::Integer(signatures.len() as _),
-                );
+                let _r = map.insert("number_of_signatures", signatures.len().into());
                 let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
                 let _r = map.insert("signatures", Value::Array(signatures));
             } else {
@@ -1864,7 +1862,7 @@ pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str
     };
 
     out.extend([
-        ("number_of_version_infos", (infos.len() as i64).into()),
+        ("number_of_version_infos", infos.len().into()),
         (
             "version_info",
             Value::Dictionary(

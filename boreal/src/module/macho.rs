@@ -722,7 +722,7 @@ impl MachO {
                     continue;
                 }
             }
-            return Some(Value::Integer(i as i64));
+            return Some(i.into());
         }
         None
     }

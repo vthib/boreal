@@ -53,7 +53,7 @@ fn test_variable_err() {
 fn test_variable_regex_modifiers() {
     // \x76 is 'v'
     let checker = Checker::new(
-        r#"
+        r"
 rule a {
     strings:
         $a = /f[aF]T[d-g]\x76/ nocase
@@ -62,7 +62,7 @@ rule a {
         $d = /.{,2}quu/ nocase fullword
     condition:
         any of them
-}"#,
+}",
     );
 
     // Nocase: work on literals, ranges, and explicit hexa char
@@ -215,7 +215,7 @@ fn test_variable_regex_wide() {
     checker.check(b"<\x00a\x009\x00d\x00>\x00", false);
     checker.check(b"a\x009\x00", false);
 
-    let checker = build_checker(r#"\d[^abc]d$"#, "wide");
+    let checker = build_checker(r"\d[^abc]d$", "wide");
     checker.check(b"13d", false);
     checker.check(b"1\x003\x00d\x00", true);
     checker.check(b"1\x003\x00d", false);
@@ -592,13 +592,13 @@ rule a {{
 fn test_variable_boundary_ac_confirm() {
     // Make sure the boundary is taken into account when confirming an ac match.
     let checker = Checker::new(
-        r#"
+        r"
 rule a {
     strings:
         $a = /\Wabcd\W/
     condition:
         $a
-}"#,
+}",
     );
 
     checker.check(b"aabcde", false);

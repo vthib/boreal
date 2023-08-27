@@ -312,7 +312,7 @@ impl Inner {
         let mut var_evals_iterator = self
             .variables
             .iter()
-            .zip(ac_matches.into_iter())
+            .zip(ac_matches)
             .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result));
 
         for (rule, is_global) in self

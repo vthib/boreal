@@ -624,7 +624,7 @@ mod tests {
         );
         parse(
             regex,
-            r#"/a\/b\cd/isb"#,
+            r"/a\/b\cd/isb",
             "b",
             Regex {
                 ast: Node::Concat(vec![

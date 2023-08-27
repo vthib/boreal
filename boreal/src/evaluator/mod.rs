@@ -329,7 +329,9 @@ impl Evaluator<'_, '_, '_, '_, '_> {
         }
 
         match expr {
-            Expression::Filesize => Ok(Value::Integer(self.mem.len() as i64)),
+            Expression::Filesize => Ok(Value::Integer(
+                self.mem.len().try_into().unwrap_or(i64::MAX),
+            )),
 
             #[cfg(feature = "object")]
             Expression::Entrypoint => {
@@ -372,7 +374,8 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                     Ok(v) if v != 0 => {
                         let var = get_var!(self, *variable_index);
                         var.find_match_occurence(self.scan_data, v - 1)
-                            .map(|mat| Value::Integer(mat.start as i64))
+                            .and_then(|mat| i64::try_from(mat.start).ok())
+                            .map(Value::Integer)
                             .ok_or(PoisonKind::Undefined)
                     }
                     Ok(_) | Err(_) => Err(PoisonKind::Undefined),
@@ -388,7 +391,8 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                     Ok(v) if v != 0 => {
                         let var = get_var!(self, *variable_index);
                         var.find_match_occurence(self.scan_data, v - 1)
-                            .map(|mat| Value::Integer(mat.len() as i64))
+                            .and_then(|mat| i64::try_from(mat.len()).ok())
+                            .map(Value::Integer)
                             .ok_or(PoisonKind::Undefined)
                     }
                     Ok(_) | Err(_) => Err(PoisonKind::Undefined),

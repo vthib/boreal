@@ -37,7 +37,7 @@ rule b {
     );
 
     compiler.add_rules_in_namespace(
-        r#"
+        r"
 rule c {
     strings:
         $rgx = /\s_\w+\d{,2}/
@@ -47,7 +47,7 @@ rule c {
     condition:
         any of them
 }
-        "#,
+        ",
         "2nd namespace",
     );
 
