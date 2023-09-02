@@ -19,7 +19,7 @@ The main goals of the project are:
 
 ## Features
 
-* Full compatibility with YARA 4.3 and [most modules](#modules). Any existing rule can be used as is.
+* Full compatibility with YARA 4.5 and [most modules](#modules). Any existing rule can be used as is.
 * Avoid scanning for strings when not required, greatly reducing execution time on carefully crafted
   rules. See [no scan optimization](#no-scan-optimization).
 * Protection against any untrusted inputs, be it rules or scanned bytes. Ill-crafted rules or inputs should never
@@ -82,9 +82,6 @@ on boreal and YARA to guarantee the exact same behavior.
 There are however, some exceptions to this compatibility:
 
 * Evaluation bugs. Boreal may not suffer from some of them, or may has already fixed some of them.
-  For example, there are many bugs that are already fixed in boreal and YARA, but have not yet
-  been released by YARA, so even though boreal supports YARA 4.3, some bugs are fixed in boreal
-  and not in YARA.
 
 * Overflows or underflows. Those are not specified by YARA and in fact, signed overflows is UB in
   itself. Behavior of evaluations on overflows/underflows is no longer UB in boreal, but is
