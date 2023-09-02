@@ -24,7 +24,7 @@ mod version_info;
 
 const MAX_PE_SECTIONS: usize = 96;
 const MAX_PE_IMPORTS: usize = 16384;
-const MAX_PE_EXPORTS: usize = 8192;
+const MAX_PE_EXPORTS: usize = 16384;
 const MAX_EXPORT_NAME_LENGTH: usize = 512;
 const MAX_RESOURCES: usize = 65536;
 const MAX_NB_DATA_DIRECTORIES: usize = 32768;
