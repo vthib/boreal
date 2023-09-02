@@ -7,13 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Main changes:
+This is a huge release containing several months of work, including:
 
-- Updated to be compatible with Yara 4.3
-- Lots of improved testing on modules and on the `boreal` binary, as well as running
-  all tests in a big-endian architecture.
+- Full compatibility with Yara 4.3. All the new features from Yara 4.3
+  are available.
 
-Yara 4.3 compatibility:
+- A complete rewrite of the strings compilation algorithm. Performance
+  has been improved dramatically when using a lot of rules or when using
+  strings of lesser quality. See the [updated benchmarks](/benches/README.md).
+
+- New tools to debug and improve performances of rules scanning, which new
+  flags to display several kind of statistics.
+  - Strings statistics can now be computed: how are strings compiled,
+    the quality of the extracted atoms, ...j
+  - Evaluation duration statistics can now be computed, detailing how long each
+    evaluation step takes. This is only available if the new `profiling` feature
+    is enabled, to not impact evaluation performance if not set.
+
+- Improved testing on modules and on the `boreal-cli` binary, as well
+  as running all tests in a big-endian architecture. This caught several bugs
+  in YARA that were fixed in the 4.3 and 4.4 releases.
+
+Here are some more details on the new YARA features:
+
+Yara 4.3:
 
 - Negation in hex strings, eg `{ ~C3 ~?F }`.
 - New `to_string` function in `math` module.
@@ -27,18 +44,76 @@ Yara 4.3 compatibility:
 - Use of the `authenticode-parser` lib to parse signatures in `pe` module.
   This adds a lot of fields in `pe.signatures`.
 
-### Changed
+Here are the changes grouped by crate:
 
+### Boreal
+
+#### Added
+
+- Yara 4.3 compatibility. Too many features to list, see above
+  for a short recap of the main new features.
+- New `profiling` feature, needed to compute evaluation statistics.
+
+#### Changed
+
+- Rewrite of the strings compilation algorithm to significantly improve
+  statistics.
 - `openssl` feature removed, replaced with the `authenticode` feature.
 - Using the `pe` module with the `signatures` parsing now requires
   calling the unsafe function `Compiler::new_with_pe_signatures`.
+- All dependencies updated. `regex` has been removed in favor
+  of `regex-automata`.
 
-### Fixed
+#### Fixed
 
 - Improved handling on invalid ranges in '$a in (from..to)' expression.
 - Fixed minor differences in edge cases in `elf.dynamic_section_entries` and
-  ``elf.number_of_sections` (e639df643b05).
-- Fixed `==` operator on boolean values (cec439eee19f).
+  ``elf.number_of_sections` ([e639df643b05](https://github.com/vthib/boreal/commit/e639df643b05)).
+- Fixed `==` operator on boolean values ([cec439eee19f](https://github.com/vthib/boreal/commit/cec439eee19f)).
+- Fixed some bugs occuring when using the `fullword` keyword with
+  both the `wide` and `ascii` modifiers, see [PR #51](https://github.com/vthib/boreal/pull/51).
+- Fix compilation of rules following the failed compilation of a rule using
+  a rule dependency. I doubt this actually impacted anyone, see [PR #60](https://github.com/vthib/boreal/pull/60).
+- Change regex behavior to allow non ascii bytes in regexes. See [PR #62](https://github.com/vthib/boreal/pull/62).
+  A warning has however been added to warn against this situation.
+- Fixed string comparison in the `pe.imports` and `pe.(delayed_)import_rva`
+  functions to be case-insensitive, See [PR #69](https://github.com/vthib/boreal/pull/69).
+
+### boreal-cli
+
+#### Added
+
+- New `-M` flag to a list of available modules.
+- New `--string-stats` flag to display strings' compilation statistics.
+- New `--scan-stats` flag to display evaluation duration statistics.
+
+#### Changed
+
+- Number of dependencies reduced by removing any use of proc macros.
+- `boreal` updated to 0.3, see `boreal` changes.
+
+### boreal-parser
+
+#### Added
+
+- Parsing of negation in hex strings, eg `{ ~C3 ~?F }` ([9c21fd446](https://github.com/vthib/boreal/commit/9c21fd446)).
+- Parsing of `at` for expression, eg `any of them at 0` ([b26fbc3b6](https://github.com/vthib/boreal/commit/b26fbc3b6)).
+- `parse_regex` and `parse_hex_string` added to public API ([d6a7afc98](https://github.com/vthib/boreal/commit/d6a7afc98)).
+
+#### Changed
+
+- Exports of the crate have been entirely reworked. Objects are
+  now nested in relevant modules ([3e8682bec](https://github.com/vthib/boreal/commit/3e8682bec)).
+- Removal of `bitflags` dependency, rework of `VariableModifiers`
+  object ([05877aae4](https://github.com/vthib/boreal/commit/05877aae4)).
+- Regex now accepts non ascii bytes when not in a class. See [PR #62](https://github.com/vthib/boreal/pull/62).
+- AST for bytes and characters in a regex has been updated to
+  provide escaping information and span location. See [PR #68](https://github.com/vthib/boreal/pull/68).
+
+#### Fixed
+
+- Some public objects were not properly exposed publicly, this
+  should now be fixed ([3e8682bec](https://github.com/vthib/boreal/commit/3e8682bec)).
 
 ## [0.2.0] - 2023-02-12
 
