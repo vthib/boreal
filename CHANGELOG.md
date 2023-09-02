@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Yara 4.5:
+
+- New Warning on unknown escape sequences in regexes. See [PR #68](https://github.com/vthib/boreal/pull/68).
+  This warning is however more broad than the YARA one.
+- Do not report strings whose name starts with `_` as unused.
+- Add `pe.export_details[*].rva` field.
+- `math.count` and `math.percentage` now returns an undefined value when given a
+  value outside the `[0; 255]` range.
+- Imported dlls are ignored if the dll name is longer than 255 bytes.
+- Fix endianness issue in `macho.magic` field, see the [Yara fix](https://github.com/VirusTotal/yara/pull/2041).
+- Always expose `pe.is_signed` as long as the `authenticode` feature is enabled.
+
 ## [0.4.0] - 2024-02-11
 
 This release introduces process memory scanning, implemented on Windows, Linux and macOS. In addition,
