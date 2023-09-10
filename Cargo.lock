@@ -563,8 +563,8 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.31.0"
-source = "git+https://github.com/vthib/boreal-object?branch=version-0.31#f7e5d82c5f6fa4ca9d6ef5a39e83b6109fe2c18c"
+version = "0.32.1"
+source = "git+https://github.com/vthib/boreal-object?branch=version-0.32#6576d42b795a5a61374a9f45f325394a20f91133"
 dependencies = [
  "memchr",
 ]
