@@ -18,4 +18,4 @@ members = [
 #   - c980aa38c595cd6b91c29e41cbb0b7b11ad1511d
 # - Handle VirtualSize=0 when searching through sections
 #   - f7e5d82c5f6fa4ca9d6ef5a39e83b6109fe2c18c
-object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.31" }
+object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.32" }
