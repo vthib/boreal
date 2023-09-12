@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2023-09-12
 
 This is a huge release containing several months of work, including:
 
@@ -24,9 +24,7 @@ This is a huge release containing several months of work, including:
     evaluation step takes. This is only available if the new `profiling` feature
     is enabled, to not impact evaluation performance if not set.
 
-- Improved testing on modules and on the `boreal-cli` binary, as well
-  as running all tests in a big-endian architecture. This caught several bugs
-  in YARA that were fixed in the 4.3 and 4.4 releases.
+- Improved testing on modules and on the `boreal-cli` binary.
 
 Here are some more details on the new YARA features:
 
