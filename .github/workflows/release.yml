@@ -84,10 +84,12 @@ jobs:
         vcpkgGitCommitId: '163fe7bd3d67c41200617caaa245b5ba2ba854e6'
         runVcpkgInstall: true
 
-    - name: Export VCPKGRS_TRIPLET env var
+    - name: Export VCPKGRS_TRIPLET and OPENSSL_DIR env var
       if: ${{ matrix.os == 'windows-2022' }}
       shell: bash
-      run: echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+      run: |
+        echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+        echo "OPENSSL_DIR=${{ runner.workspace }}\\vcpkg\\installed\\${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
