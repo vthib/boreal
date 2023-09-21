@@ -15,7 +15,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use walkdir::WalkDir;
 
 fn build_command() -> Command {
-    command!()
+    let mut command = command!()
         .arg(
             Arg::new("no_follow_symlinks")
                 .short('N')
@@ -89,7 +89,24 @@ fn build_command() -> Command {
                 .long("scan-stats")
                 .action(ArgAction::SetTrue)
                 .help("Display statistics on rules' evaluation"),
-        )
+        );
+
+    if cfg!(feature = "memmap") {
+        command = command.arg(
+            Arg::new("no_mmap")
+                .long("no-mmap")
+                .action(ArgAction::SetTrue)
+                .help("Disable the use of memory maps.")
+                .long_help(
+                    "Disable the use of memory maps.\n\
+                    By default, memory maps are used to load files to scan.\n\
+                    This can cause the program to abort unexpectedly \
+                    if files are simultaneous truncated.",
+                ),
+        );
+    }
+
+    command
 }
 
 fn main() -> ExitCode {
@@ -190,7 +207,7 @@ fn main() -> ExitCode {
 
         ExitCode::SUCCESS
     } else {
-        match scan_file(&scanner, input, args.get_flag("print_module_data")) {
+        match scan_file(&scanner, input, ScanOptions::new(&args)) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", input.display(), err);
@@ -200,10 +217,35 @@ fn main() -> ExitCode {
     }
 }
 
-fn scan_file(scanner: &Scanner, path: &Path, print_module_data: bool) -> std::io::Result<()> {
-    let res = scanner.scan_file(path)?;
+#[derive(Copy, Clone)]
+struct ScanOptions {
+    print_module_data: bool,
+    no_mmap: bool,
+}
 
-    if print_module_data {
+impl ScanOptions {
+    fn new(args: &ArgMatches) -> Self {
+        Self {
+            print_module_data: args.get_flag("print_module_data"),
+            no_mmap: if cfg!(feature = "memmap") {
+                args.get_flag("no_mmap")
+            } else {
+                false
+            },
+        }
+    }
+}
+
+fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> std::io::Result<()> {
+    let res = if cfg!(feature = "memmap") && !options.no_mmap {
+        // Safety: By default, we accept that this CLI tool can abort if the underlying
+        // file is truncated while the scan is ongoing.
+        unsafe { scanner.scan_file_memmap(path)? }
+    } else {
+        scanner.scan_file(path)?
+    };
+
+    if options.print_module_data {
         for (module_name, module_value) in res.module_values {
             // A module value must be an object. Filter out empty ones, it means the module has not
             // generated any values.
@@ -240,12 +282,11 @@ impl ThreadPool {
         };
 
         let (sender, receiver) = bounded(nb_cpus * 5);
+        let options = ScanOptions::new(args);
         (
             Self {
                 threads: (0..nb_cpus)
-                    .map(|_| {
-                        Self::worker_thread(scanner, &receiver, args.get_flag("print_module_data"))
-                    })
+                    .map(|_| Self::worker_thread(scanner, &receiver, options))
                     .collect(),
             },
             sender,
@@ -261,14 +302,14 @@ impl ThreadPool {
     fn worker_thread(
         scanner: &Scanner,
         receiver: &Receiver<PathBuf>,
-        print_module_data: bool,
+        scan_options: ScanOptions,
     ) -> JoinHandle<()> {
         let scanner = scanner.clone();
         let receiver = receiver.clone();
 
         std::thread::spawn(move || {
             while let Ok(path) = receiver.recv() {
-                if let Err(err) = scan_file(&scanner, &path, print_module_data) {
+                if let Err(err) = scan_file(&scanner, &path, scan_options) {
                     eprintln!("Cannot scan file {}: {}", path.display(), err);
                 }
             }

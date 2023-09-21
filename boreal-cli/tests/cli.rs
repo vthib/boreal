@@ -644,3 +644,34 @@ fn test_module_names() {
         // Still successful, since some other files in the directory may have been scanned
         .success();
 }
+
+#[test]
+#[cfg(feature = "memmap")]
+fn test_no_mmap() {
+    let rule_file = test_file(
+        r#"
+rule first {
+    strings:
+        $a = "abc"
+    condition:
+        any of them
+}
+rule second {
+    strings:
+        $a = "xyz"
+    condition:
+        any of them
+}"#,
+    );
+
+    let input = test_file("xyabcz");
+    // Not matching
+    cmd()
+        .arg("--no-mmap")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!("first {}\n", input.path().display())))
+        .stderr("")
+        .success();
+}

@@ -142,6 +142,34 @@ impl Scanner {
         Ok(self.scan_mem(&contents))
     }
 
+    /// Scan a file using memmap to read from it.
+    ///
+    /// Returns a list of rules that matched the given file.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file at the given path cannot be opened or memory mapped.
+    ///
+    /// # Safety
+    ///
+    /// See the safety documentation of [`memmap2::Mmap`]. It is unsafe to use this
+    /// method as the behavior is undefined if the underlying file is modified while the map
+    /// is still alive. For example, shrinking the underlying file can and will cause issues
+    /// in this process: on Linux, a SIGBUS can be emitted, while on Windows, a structured
+    /// exception can be raised.
+    #[cfg(feature = "memmap")]
+    pub unsafe fn scan_file_memmap<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> std::io::Result<ScanResult> {
+        let file = std::fs::File::open(path.as_ref())?;
+
+        // Safety: guaranteed by the safety contract of this function
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+
+        Ok(self.scan_mem(&mmap))
+    }
+
     /// Define a value for a symbol defined and used in compiled rules.
     ///
     /// This symbol must have been defined when compiling rules using
