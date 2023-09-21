@@ -14,10 +14,12 @@ name = "boreal"
 path = "src/main.rs"
 
 [features]
-default = ["authenticode", "profiling"]
+default = ["authenticode", "memmap", "profiling"]
 
 # Enable authenticode parsing in boreal, requires OpenSSL
 authenticode = ["boreal/authenticode"]
+# Enable use of memory maps to load files to scan.
+memmap = ["boreal/memmap"]
 # Enables scan statistics. Should not impact performances
 # significantly, and very useful in a CLI tool to debug rules.
 profiling = ["boreal/profiling"]

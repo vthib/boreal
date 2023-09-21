@@ -163,6 +163,7 @@ dependencies = [
  "hex",
  "md-5",
  "memchr",
+ "memmap2",
  "object",
  "once_cell",
  "regex-automata",
@@ -544,6 +545,15 @@ name = "memchr"
 version = "2.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f232d6ef707e1956a43342693d2a31e72989554d58299d7a88738cc95b0d35c"
+
+[[package]]
+name = "memmap2"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f49388d20533534cd19360ad3d6a7dadc885944aa802ba3995040c5ec11288c6"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "minimal-lexical"
