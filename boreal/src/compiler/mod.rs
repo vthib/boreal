@@ -143,7 +143,10 @@ impl Compiler {
     pub unsafe fn new_with_pe_signatures() -> Self {
         let mut this = Self::new_without_pe_module();
 
-        let _r = this.add_module(crate::module::Pe::new_with_signatures());
+        let _r = this.add_module(
+            // Safety: guaranteed by the safety contract of this function
+            unsafe { crate::module::Pe::new_with_signatures() },
+        );
 
         this
     }
