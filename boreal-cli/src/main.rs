@@ -217,7 +217,7 @@ fn main() -> ExitCode {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct ScanOptions {
     print_module_data: bool,
     no_mmap: bool,
@@ -437,8 +437,24 @@ impl std::fmt::Debug for ByteString<'_> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn verify_cli() {
-        super::build_command().debug_assert();
+        build_command().debug_assert();
+    }
+
+    #[test]
+    fn test_types() {
+        fn test<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
+            #[allow(clippy::redundant_clone)]
+            let _r = t.clone();
+            let _r = format!("{:?}", &t);
+        }
+
+        test(ScanOptions {
+            print_module_data: false,
+            no_mmap: false,
+        });
     }
 }
