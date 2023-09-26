@@ -1139,7 +1139,10 @@ impl Pe {
     #[cfg(feature = "authenticode")]
     pub unsafe fn new_with_signatures() -> Self {
         Self {
-            token: Some(authenticode_parser::InitializationToken::new()),
+            token: Some(
+                // Safety: guaranteed by the safety contract of this function
+                unsafe { authenticode_parser::InitializationToken::new() },
+            ),
         }
     }
 

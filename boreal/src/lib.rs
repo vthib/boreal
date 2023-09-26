@@ -51,6 +51,7 @@
 #![deny(unused_lifetimes)]
 #![deny(unused_qualifications)]
 #![deny(unused_results)]
+#![deny(unsafe_op_in_unsafe_fn)]
 // Do the same for clippy
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
