@@ -659,7 +659,7 @@ mod tests {
     use super::*;
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
-    #[cfg_attr(coverage_nightly, no_coverage)]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn test_fun(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
         drop(args);
         None

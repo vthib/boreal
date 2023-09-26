@@ -69,7 +69,7 @@
 #![deny(clippy::cargo)]
 // Handled by cargo-deny
 #![allow(clippy::multiple_crate_versions)]
-#![cfg_attr(coverage_nightly, feature(no_coverage))]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 // Used in integration tests, not in the library.
 // This is to remove the "unused_crate_dependencies" warning, maybe a better solution

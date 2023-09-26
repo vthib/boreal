@@ -19,7 +19,7 @@ pub(super) fn ord_lookup(dll_name: &[u8], ord: u16) -> Vec<u8> {
     format!("ord{ord}").into_bytes()
 }
 
-#[cfg_attr(coverage_nightly, no_coverage)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn wsock32_ord_lookup(ord: u16) -> Option<&'static [u8]> {
     match ord {
         1 => Some(b"accept"),
@@ -143,7 +143,7 @@ fn wsock32_ord_lookup(ord: u16) -> Option<&'static [u8]> {
     }
 }
 
-#[cfg_attr(coverage_nightly, no_coverage)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 fn oleaut32_ord_lookup(ord: u16) -> Option<&'static [u8]> {
     match ord {
         2 => Some(b"SysAllocString"),
