@@ -137,13 +137,6 @@ Modules not yet supported:
 A few key features are still missing. If you are looking into using boreal in place of YARA,
 some of those might be blockers for you:
 
-#### Optimizations
-
-A few optimizations were done, mostly to have acceptable performances. However, there is still a
-lot that is planned and yet to be done. As can be seen in the [benchmarks](/boreal/benches/README.md),
-huge number of rules, big files and bad hex or regex strings deteriorates performances quite a lot.
-This is mainly because of missing optimizations that is planned in the next releases.
-
 #### Process scanning
 
 Only scanning files or bytes is available for the moment.
@@ -159,12 +152,6 @@ need is not implemented, please create an issue.
 I am not quite sure what are the use-cases for this YARA feature, as the compilation of YARA rules
 is not that time consuming. Please create an issue with a use-case if this is a feature you would
 need.
-
-#### Using mmap/MapViewOfFile to avoid duplicating the scanned file in memory.
-
-This is unfortunately not done because of the trickiness of doing this properly in Rust, as reading
-of a file mapping can trigger signals (SIGBUS) or exceptions. I hope to have a solution for
-this in the future.
 
 ## Pay for what you use
 
