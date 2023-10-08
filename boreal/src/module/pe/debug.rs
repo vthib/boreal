@@ -41,7 +41,7 @@ pub fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable
         let mut info = Bytes(info);
         let sig = match info.read_bytes(4) {
             Ok(v) => v.0,
-            Err(_) => continue,
+            Err(()) => continue,
         };
 
         let pdb_path_offset = match sig {

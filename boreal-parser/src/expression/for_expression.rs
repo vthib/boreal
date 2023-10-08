@@ -150,7 +150,7 @@ fn for_expression_kind(input: Input) -> ParseResult<ForExprKind> {
             preceded(rtrim(ttag("at")), cut(primary_expression)),
             |expr| ForExprKind::At(Box::new(expr)),
         ),
-        map(success(()), |_| ForExprKind::None),
+        map(success(()), |()| ForExprKind::None),
     ))(input)
 }
 

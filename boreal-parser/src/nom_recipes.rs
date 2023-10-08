@@ -41,7 +41,7 @@ pub(crate) fn ltrim(mut input: Input) -> ParseResult<()> {
             value((), multispace1),
         ))(input)
         {
-            Ok((i, _)) => input = i,
+            Ok((i, ())) => input = i,
             Err(nom::Err::Error(_)) => return Ok((input, ())),
             err @ Err(_) => return err,
         }
