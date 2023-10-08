@@ -39,10 +39,11 @@ pub(super) fn evaluate_read_integer(
     let addr = evaluator.evaluate_expr(addr)?.unwrap_number()?;
 
     let addr = usize::try_from(addr).map_err(|_| PoisonKind::Undefined)?;
-    if addr >= evaluator.mem.len() {
-        return Err(PoisonKind::Undefined);
-    }
-    let mem = &evaluator.mem[addr..];
+    let mem = &evaluator
+        .scan_data
+        .mem
+        .get(addr..)
+        .ok_or(PoisonKind::Undefined)?;
 
     let v = match ty {
         ReadIntegerType::Int8 => read_le!(i8, mem),

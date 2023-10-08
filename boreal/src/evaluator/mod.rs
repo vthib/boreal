@@ -192,7 +192,6 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
         var_matches,
-        mem: scan_data.mem,
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
@@ -208,8 +207,6 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
 
 struct Evaluator<'a, 'b, 'c> {
     var_matches: Option<VarMatches<'b>>,
-
-    mem: &'a [u8],
 
     // Array of previous rules results.
     //
@@ -323,13 +320,12 @@ impl Evaluator<'_, '_, '_> {
 
         match expr {
             Expression::Filesize => Ok(Value::Integer(
-                self.mem.len().try_into().unwrap_or(i64::MAX),
+                self.scan_data.mem.len().try_into().unwrap_or(i64::MAX),
             )),
 
             #[cfg(feature = "object")]
-            Expression::Entrypoint => {
-                entrypoint::get_pe_or_elf_entry_point(self.mem).ok_or(PoisonKind::Undefined)
-            }
+            Expression::Entrypoint => entrypoint::get_pe_or_elf_entry_point(self.scan_data.mem)
+                .ok_or(PoisonKind::Undefined),
             #[cfg(not(feature = "object"))]
             Expression::Entrypoint => Err(PoisonKind::Undefined),
 
