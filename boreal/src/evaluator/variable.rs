@@ -1,73 +1,48 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use super::{Params, ScanData};
-use crate::compiler::variable::Variable;
-
 /// Variable evaluation context.
 ///
 /// This is used to cache scan results for a single variable,
 /// on a single input.
 #[derive(Debug)]
-pub(crate) struct VariableEvaluation<'a> {
-    /// Variable being evaluated.
-    pub(crate) var: &'a Variable,
-
-    /// Parameters for the evaluation.
-    params: Params,
-
-    /// Matches already done.
+pub(crate) struct VarMatches<'a> {
+    /// Matches per variable.
     ///
-    /// This array is capped and matches are ignored once the limit is reached.
-    pub(crate) matches: Vec<Match>,
+    /// This uses the same order as the variables vec in the scanner object.
+    pub(crate) matches: &'a [Vec<Match>],
 }
 
 type Match = std::ops::Range<usize>;
 
-impl<'a> VariableEvaluation<'a> {
-    /// Build a new variable evaluation context, from a variable.
-    pub fn new(var: &'a Variable, params: Params, matches: Vec<Match>) -> Self {
-        Self {
-            var,
-            params,
-            matches,
-        }
-    }
-
+impl VarMatches<'_> {
     /// Return true if the variable can be found in the scanned memory.
-    pub fn find(&mut self, scan_data: &mut ScanData) -> bool {
-        !self.matches.is_empty()
+    pub fn find(&self, var_index: usize) -> bool {
+        !self.matches[var_index].is_empty()
     }
 
     /// Get a specific match occurrence for the variable.
     ///
     /// This starts at 0, and not at 1 as in the yara file.
-    pub fn find_match_occurence(
-        &mut self,
-        scan_data: &mut ScanData,
-        occurence_number: usize,
-    ) -> Option<Match> {
-        self.matches.get(occurence_number).cloned()
+    pub fn find_match_occurence(&self, var_index: usize, occurence_number: usize) -> Option<Match> {
+        self.matches[var_index].get(occurence_number).cloned()
     }
 
     /// Count number of matches.
-    pub fn count_matches(&mut self, scan_data: &mut ScanData) -> u32 {
+    pub fn count_matches(&self, var_index: usize) -> u32 {
         // This is safe to allow because the number of matches is guaranteed to be capped by the
         // string_max_nb_matches parameter, which is a u32.
         #[allow(clippy::cast_possible_truncation)]
         {
-            self.matches.len() as u32
+            self.matches[var_index].len() as u32
         }
     }
 
     /// Count number of matches in between two bounds.
-    pub fn count_matches_in(&mut self, scan_data: &mut ScanData, from: usize, to: usize) -> u32 {
-        if from >= scan_data.mem.len() {
-            return 0;
-        }
-
+    pub fn count_matches_in(&self, var_index: usize, from: usize, to: usize) -> u32 {
+        // TODO: improve algorithm for searching in matches
         let mut count = 0;
-        for mat in &self.matches {
+        for mat in &self.matches[var_index] {
             if mat.start > to {
                 return count;
             } else if mat.start >= from {
@@ -79,12 +54,9 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable at a given offset
-    pub fn find_at(&mut self, scan_data: &mut ScanData, offset: usize) -> bool {
-        if offset >= scan_data.mem.len() {
-            return false;
-        }
-
-        for mat in &self.matches {
+    pub fn find_at(&self, var_index: usize, offset: usize) -> bool {
+        // TODO: improve algorithm for searching in matches
+        for mat in &self.matches[var_index] {
             match mat.start.cmp(&offset) {
                 Ordering::Less => (),
                 Ordering::Equal => return true,
@@ -96,12 +68,9 @@ impl<'a> VariableEvaluation<'a> {
     }
 
     /// Search occurrence of a variable in between given offset
-    pub fn find_in(&mut self, scan_data: &mut ScanData, from: usize, to: usize) -> bool {
-        if from >= scan_data.mem.len() {
-            return false;
-        }
-
-        for mat in &self.matches {
+    pub fn find_in(&self, var_index: usize, from: usize, to: usize) -> bool {
+        // TODO: improve algorithm for searching in matches
+        for mat in &self.matches[var_index] {
             if mat.start > to {
                 return false;
             } else if mat.start >= from {
@@ -115,25 +84,12 @@ impl<'a> VariableEvaluation<'a> {
 
 #[cfg(test)]
 mod tests {
-    use boreal_parser::rule::VariableModifiers;
-
-    use crate::matcher::Matcher;
     use crate::test_helpers::test_type_traits_non_clonable;
 
     use super::*;
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(VariableEvaluation {
-            var: &Variable {
-                name: "a".to_owned(),
-                is_private: false,
-                matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),
-            },
-            params: Params {
-                string_max_nb_matches: 100,
-            },
-            matches: Vec::new(),
-        });
+        test_type_traits_non_clonable(VarMatches { matches: &[] });
     }
 }
