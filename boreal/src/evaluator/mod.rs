@@ -37,6 +37,7 @@
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
+use crate::memory::Memory;
 use crate::regex::Regex;
 use crate::scanner::ScanData;
 use memchr::memmem;
@@ -258,15 +259,19 @@ impl Evaluator<'_, '_, '_> {
         }
 
         match expr {
-            Expression::Filesize => Ok(Value::Integer(
-                self.scan_data.mem.len().try_into().unwrap_or(i64::MAX),
-            )),
+            Expression::Filesize => match self.scan_data.mem.filesize() {
+                Some(filesize) => Ok(Value::Integer(filesize.try_into().unwrap_or(i64::MAX))),
+                None => Err(PoisonKind::Undefined),
+            },
 
             #[cfg(feature = "object")]
-            Expression::Entrypoint => entrypoint::get_pe_or_elf_entry_point(self.scan_data.mem)
-                .and_then(|v| i64::try_from(v).ok())
-                .map(Value::Integer)
-                .ok_or(PoisonKind::Undefined),
+            Expression::Entrypoint => match self.scan_data.mem {
+                Memory::Direct(mem) => entrypoint::get_pe_or_elf_entry_point(mem)
+                    .and_then(|v| i64::try_from(v).ok())
+                    .map(Value::Integer)
+                    .ok_or(PoisonKind::Undefined),
+                Memory::Fragmented { .. } => todo!(),
+            },
             #[cfg(not(feature = "object"))]
             Expression::Entrypoint => Err(PoisonKind::Undefined),
 

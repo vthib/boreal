@@ -90,6 +90,7 @@ pub mod compiler;
 pub use compiler::Compiler;
 mod evaluator;
 mod matcher;
+pub mod memory;
 pub mod module;
 pub mod regex;
 pub mod scanner;

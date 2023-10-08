@@ -6,6 +6,7 @@ use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::{self, evaluate_rule, EvalError};
+use crate::memory::Memory;
 use crate::module::Module;
 use crate::statistics;
 use crate::timeout::TimeoutChecker;
@@ -127,8 +128,11 @@ impl Scanner {
     /// Returns a list of rules that matched on the given byte slice.
     #[must_use]
     pub fn scan_mem<'scanner>(&'scanner self, mem: &[u8]) -> ScanResult<'scanner> {
-        self.inner
-            .scan(mem, &self.scan_params, &self.external_symbols_values)
+        self.inner.scan(
+            Memory::Direct(mem),
+            &self.scan_params,
+            &self.external_symbols_values,
+        )
     }
 
     /// Scan a file.
@@ -260,7 +264,7 @@ struct Inner {
 impl Inner {
     fn scan<'scanner>(
         &'scanner self,
-        mem: &[u8],
+        mem: Memory,
         params: &'scanner ScanParams,
         external_symbols_values: &'scanner [ExternalValue],
     ) -> ScanResult<'scanner> {
@@ -296,9 +300,12 @@ impl Inner {
         &'scanner self,
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
-        scan_data
-            .module_values
-            .scan_mem(scan_data.mem, &self.modules);
+        match scan_data.mem {
+            Memory::Direct(mem) => scan_data.module_values.scan_mem(mem, &self.modules),
+            Memory::Fragmented { .. } => {
+                // FIXME
+            }
+        }
 
         if !scan_data.params.compute_full_matches {
             #[cfg(feature = "profiling")]
@@ -432,8 +439,13 @@ impl Inner {
         let start = std::time::Instant::now();
 
         // Scan the memory for all variables occurences.
-        self.ac_scan
-            .scan_mem(scan_data.mem, &self.variables, scan_data, &mut matches)?;
+        match scan_data.mem {
+            Memory::Direct(mem) => {
+                self.ac_scan
+                    .scan_mem(mem, &self.variables, scan_data, &mut matches)?;
+            }
+            Memory::Fragmented { .. } => todo!(),
+        }
 
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
@@ -447,7 +459,7 @@ impl Inner {
 #[derive(Debug)]
 pub(crate) struct ScanData<'scanner, 'mem> {
     /// Memory to scan,
-    pub(crate) mem: &'mem [u8],
+    pub(crate) mem: Memory<'mem>,
 
     /// Values of external symbols.
     pub(crate) external_symbols_values: &'scanner [ExternalValue],
@@ -679,7 +691,7 @@ mod tests {
         module_values.scan_mem(mem, &scanner.inner.modules);
 
         let mut scan_data = ScanData {
-            mem,
+            mem: Memory::Direct(mem),
             external_symbols_values: &[],
             matched_rules: Vec::new(),
             module_values,
@@ -1219,7 +1231,7 @@ mod tests {
         });
         test_type_traits_non_clonable(DefineSymbolError::UnknownName);
         test_type_traits_non_clonable(ScanData {
-            mem: b"",
+            mem: Memory::Direct(b""),
             external_symbols_values: &[],
             matched_rules: Vec::new(),
             module_values: evaluator::module::EvalData {
