@@ -308,13 +308,20 @@ impl Inner {
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_res = {
+        let ac_matches = {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
-            let res = self
+            let res = match self
                 .ac_scan
-                .matches(&mut scan_data, &self.variables, eval_params);
+                .matches(&mut scan_data, &self.variables, eval_params)
+            {
+                Ok(v) => v,
+                Err(EvalError::Undecidable) => unreachable!(),
+                Err(EvalError::Timeout) => {
+                    return ScanResult::timeout(Vec::new(), scan_data);
+                }
+            };
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -322,13 +329,6 @@ impl Inner {
             }
 
             res
-        };
-        let ac_matches = match ac_res {
-            Ok(v) => v,
-            Err(EvalError::Undecidable) => unreachable!(),
-            Err(EvalError::Timeout) => {
-                return ScanResult::timeout(Vec::new(), scan_data);
-            }
         };
 
         let mut matched_rules = Vec::new();

@@ -1,7 +1,6 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use super::ac_scan::AcResult;
 use super::{Params, ScanData};
 use crate::compiler::variable::Variable;
 
@@ -23,22 +22,15 @@ pub(crate) struct VariableEvaluation<'a> {
     pub(crate) matches: Vec<Match>,
 }
 
-pub type Match = std::ops::Range<usize>;
+type Match = std::ops::Range<usize>;
 
 impl<'a> VariableEvaluation<'a> {
     /// Build a new variable evaluation context, from a variable.
-    pub fn new(var: &'a Variable, params: Params, ac_result: AcResult) -> Self {
-        let mut this = Self {
+    pub fn new(var: &'a Variable, params: Params, matches: Vec<Match>) -> Self {
+        Self {
             var,
             params,
-            matches: Vec::new(),
-        };
-        match ac_result {
-            AcResult::NotFound => this,
-            AcResult::Matches(matches) => {
-                this.matches = matches;
-                this
-            }
+            matches,
         }
     }
 
