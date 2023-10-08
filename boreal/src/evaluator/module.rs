@@ -6,6 +6,7 @@ use std::slice::Iter;
 use crate::compiler::module::{
     BoundedValueIndex, ModuleExpression, ModuleExpressionKind, ModuleOperations, ValueOperation,
 };
+use crate::memory::Memory;
 use crate::module::{EvalContext, Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 use super::{Evaluator, PoisonKind, Value};
@@ -96,7 +97,13 @@ pub(super) fn evaluate_expr(
                 .map(expr_value_to_module_value)
                 .collect();
             let eval_ctx = EvalContext {
-                mem: evaluator.scan_data.mem,
+                mem: match evaluator.scan_data.mem {
+                    Memory::Direct(mem) => mem,
+                    Memory::Fragmented { .. } => {
+                        // FIXME
+                        b""
+                    }
+                },
                 module_data: &evaluator.scan_data.module_values.data_map,
             };
             let value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
@@ -146,7 +153,13 @@ fn evaluate_ops(
                         .map(expr_value_to_module_value)
                         .collect();
                     let eval_ctx = EvalContext {
-                        mem: evaluator.scan_data.mem,
+                        mem: match evaluator.scan_data.mem {
+                            Memory::Direct(mem) => mem,
+                            Memory::Fragmented { .. } => {
+                                // FIXME
+                                b""
+                            }
+                        },
                         module_data: &evaluator.scan_data.module_values.data_map,
                     };
                     let new_value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;

@@ -1,5 +1,5 @@
 //! Provides methods to evaluate the read integer expressions
-use crate::compiler::expression::Expression;
+use crate::{compiler::expression::Expression, memory::Memory};
 use boreal_parser::expression::ReadIntegerType;
 
 use super::{Evaluator, PoisonKind, Value};
@@ -24,9 +24,11 @@ pub(super) fn evaluate_read_integer(
         | ReadIntegerType::Uint32BE => 4,
     };
 
-    let mem = evaluator
-        .scan_data
-        .mem
+    let mem = match evaluator.scan_data.mem {
+        Memory::Direct(v) => v,
+        Memory::Fragmented { .. } => todo!(),
+    };
+    let mem = mem
         .get(addr..(addr + length))
         .ok_or(PoisonKind::Undefined)?;
 
