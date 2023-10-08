@@ -1,14 +1,13 @@
 //! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
 use std::collections::HashMap;
+use std::ops::Range;
 use std::sync::Arc;
 
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::ac_scan::AcScan;
-use crate::evaluator::{
-    evaluate_rule, EvalError, Params as EvalParams, ScanData, VariableEvaluation,
-};
+use crate::evaluator::{evaluate_rule, EvalError, Params as EvalParams, ScanData, VarMatches};
 use crate::module::Module;
 use crate::statistics;
 
@@ -330,6 +329,7 @@ impl Inner {
 
             res
         };
+        let mut ac_matches_iter = ac_matches.into_iter();
 
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
@@ -337,22 +337,19 @@ impl Inner {
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
 
-        let mut var_evals_iterator = self
-            .variables
-            .iter()
-            .zip(ac_matches)
-            .map(|(var, ac_result)| VariableEvaluation::new(var, eval_params, ac_result));
-
+        let mut var_index = 0;
         for (rule, is_global) in self
             .global_rules
             .iter()
             .map(|v| (v, true))
             .chain(self.rules.iter().map(|v| (v, false)))
         {
-            let mut var_evals = collect_nb_elems(&mut var_evals_iterator, rule.nb_variables);
+            let var_matches = collect_nb_elems(&mut ac_matches_iter, rule.nb_variables);
             let res = match evaluate_rule(
                 rule,
-                Some(&mut var_evals),
+                Some(VarMatches {
+                    matches: &var_matches,
+                }),
                 &mut scan_data,
                 &previous_results,
             ) {
@@ -381,7 +378,8 @@ impl Inner {
             if res && !rule.is_private {
                 matched_rules.push(build_matched_rule(
                     rule,
-                    var_evals,
+                    &self.variables[var_index..(var_index + rule.nb_variables)],
+                    var_matches,
                     &mut scan_data,
                     params.match_max_length,
                 ));
@@ -390,6 +388,7 @@ impl Inner {
             if !is_global {
                 previous_results.push(res);
             }
+            var_index += rule.nb_variables;
         }
 
         #[cfg(feature = "profiling")]
@@ -424,6 +423,7 @@ impl Inner {
                     if !rule.is_private {
                         matched_rules.push(build_matched_rule(
                             rule,
+                            &[],
                             Vec::new(),
                             scan_data,
                             params.match_max_length,
@@ -448,6 +448,7 @@ impl Inner {
             if matched && !rule.is_private {
                 matched_rules.push(build_matched_rule(
                     rule,
+                    &[],
                     Vec::new(),
                     scan_data,
                     params.match_max_length,
@@ -473,21 +474,22 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 
 fn build_matched_rule<'a>(
     rule: &'a Rule,
-    var_evals: Vec<VariableEvaluation<'a>>,
+    variables: &'a [Variable],
+    var_matches: Vec<Vec<Range<usize>>>,
     scan_data: &mut ScanData,
     match_max_length: usize,
 ) -> MatchedRule<'a> {
     MatchedRule {
         namespace: rule.namespace.as_deref(),
         name: &rule.name,
-        matches: var_evals
+        matches: var_matches
             .into_iter()
-            .filter(|eval| !eval.var.is_private)
-            .filter(|eval| !eval.matches.is_empty())
-            .map(|eval| StringMatches {
-                name: &eval.var.name,
-                matches: eval
-                    .matches
+            .zip(variables.iter())
+            .filter(|(_, var)| !var.is_private)
+            .filter(|(matches, _)| !matches.is_empty())
+            .map(|(matches, var)| StringMatches {
+                name: &var.name,
+                matches: matches
                     .iter()
                     .map(|mat| {
                         let length = mat.end - mat.start;

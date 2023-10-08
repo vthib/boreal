@@ -61,7 +61,7 @@ mod read_integer;
 use read_integer::evaluate_read_integer;
 mod timeout;
 mod variable;
-pub(crate) use variable::VariableEvaluation;
+pub(crate) use variable::VarMatches;
 
 #[derive(Clone, Debug)]
 enum Value {
@@ -186,12 +186,12 @@ pub struct Params {
 /// byte slice, false otherwise.
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
-    variables: Option<&'rule mut [VariableEvaluation]>,
+    var_matches: Option<VarMatches<'rule>>,
     scan_data: &'scan mut ScanData,
     previous_rules_results: &'scan [bool],
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
-        variables,
+        var_matches,
         mem: scan_data.mem,
         previous_rules_results,
         currently_selected_variable_index: None,
@@ -206,15 +206,15 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     }
 }
 
-struct Evaluator<'a, 'b, 'c, 'd, 'e> {
-    variables: Option<&'a mut [VariableEvaluation<'d>]>,
+struct Evaluator<'a, 'b, 'c> {
+    var_matches: Option<VarMatches<'b>>,
 
-    mem: &'b [u8],
+    mem: &'a [u8],
 
     // Array of previous rules results.
     //
     // This only stores results of rules that are depended upon, not all rules.
-    previous_rules_results: &'c [bool],
+    previous_rules_results: &'b [bool],
 
     // Index of the currently selected variable.
     //
@@ -225,7 +225,7 @@ struct Evaluator<'a, 'b, 'c, 'd, 'e> {
     bounded_identifiers_stack: Vec<Arc<ModuleValue>>,
 
     // Data related only to the scan, independent of the rule.
-    scan_data: &'e mut ScanData<'b>,
+    scan_data: &'c mut ScanData<'a>,
 }
 
 #[derive(Debug)]
@@ -304,23 +304,16 @@ macro_rules! apply_cmp_op {
     }
 }
 
-macro_rules! get_var {
-    ($self:expr, $var_index:expr) => {{
-        let index = $self.get_variable_index($var_index)?;
-        $self
-            .variables
-            .as_mut()
-            .map(|v| &mut v[index])
-            .ok_or(PoisonKind::VarNeeded)?
-    }};
-}
-
-impl Evaluator<'_, '_, '_, '_, '_> {
+impl Evaluator<'_, '_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, PoisonKind> {
         var_index
             .0
             .or(self.currently_selected_variable_index)
             .ok_or(PoisonKind::Undefined)
+    }
+
+    fn get_var_matches(&self) -> Result<&VarMatches, PoisonKind> {
+        self.var_matches.as_ref().ok_or(PoisonKind::VarNeeded)
     }
 
     fn evaluate_expr(&mut self, expr: &Expression) -> Result<Value, PoisonKind> {
@@ -353,14 +346,18 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 let from = usize::try_from(from).unwrap_or(0);
                 let to = usize::try_from(to).unwrap_or(0);
 
-                let var = get_var!(self, *variable_index);
-                let count = var.count_matches_in(self.scan_data, from, to);
+                let var_index = self.get_variable_index(*variable_index)?;
+                let count = self
+                    .get_var_matches()
+                    .map(|var_matches| var_matches.count_matches_in(var_index, from, to))?;
 
                 Ok(Value::Integer(count.into()))
             }
             Expression::Count(variable_index) => {
-                let var = get_var!(self, *variable_index);
-                let count = var.count_matches(self.scan_data);
+                let var_index = self.get_variable_index(*variable_index)?;
+                let count = self
+                    .get_var_matches()
+                    .map(|var_matches| var_matches.count_matches(var_index))?;
 
                 Ok(Value::Integer(count.into()))
             }
@@ -372,9 +369,12 @@ impl Evaluator<'_, '_, '_, '_, '_> {
 
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
-                        let var = get_var!(self, *variable_index);
-                        var.find_match_occurence(self.scan_data, v - 1)
-                            .and_then(|mat| i64::try_from(mat.start).ok())
+                        let var_index = self.get_variable_index(*variable_index)?;
+                        let mat = self.get_var_matches().map(|var_matches| {
+                            var_matches.find_match_occurence(var_index, v - 1)
+                        })?;
+
+                        mat.and_then(|mat| i64::try_from(mat.start).ok())
                             .map(Value::Integer)
                             .ok_or(PoisonKind::Undefined)
                     }
@@ -389,9 +389,12 @@ impl Evaluator<'_, '_, '_, '_, '_> {
 
                 match usize::try_from(occurence_number) {
                     Ok(v) if v != 0 => {
-                        let var = get_var!(self, *variable_index);
-                        var.find_match_occurence(self.scan_data, v - 1)
-                            .and_then(|mat| i64::try_from(mat.len()).ok())
+                        let var_index = self.get_variable_index(*variable_index)?;
+                        let mat = self.get_var_matches().map(|var_matches| {
+                            var_matches.find_match_occurence(var_index, v - 1)
+                        })?;
+
+                        mat.and_then(|mat| i64::try_from(mat.len()).ok())
                             .map(Value::Integer)
                             .ok_or(PoisonKind::Undefined)
                     }
@@ -620,8 +623,10 @@ impl Evaluator<'_, '_, '_, '_, '_> {
             Expression::Variable(variable_index) => {
                 // For this expression, we can use the variables set to retrieve the truth value,
                 // no need to rescan.
-                let var = get_var!(self, *variable_index);
-                Ok(Value::Boolean(var.find(self.scan_data)))
+                let var_index = self.get_variable_index(*variable_index)?;
+                self.get_var_matches()
+                    .map(|var_matches| var_matches.find(var_index))
+                    .map(Value::Boolean)
             }
 
             Expression::VariableAt {
@@ -632,8 +637,10 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 let offset = self.evaluate_expr(offset)?.unwrap_number()?;
                 match usize::try_from(offset) {
                     Ok(offset) => {
-                        let var = get_var!(self, *variable_index);
-                        Ok(Value::Boolean(var.find_at(self.scan_data, offset)))
+                        let var_index = self.get_variable_index(*variable_index)?;
+                        self.get_var_matches()
+                            .map(|var_matches| var_matches.find_at(var_index, offset))
+                            .map(Value::Boolean)
                     }
                     Err(_) => Ok(Value::Boolean(false)),
                 }
@@ -649,9 +656,10 @@ impl Evaluator<'_, '_, '_, '_, '_> {
                 let to = self.evaluate_expr(to)?.unwrap_number()?;
                 match (usize::try_from(from), usize::try_from(to)) {
                     (Ok(from), Ok(to)) if from <= to => {
-                        let var = get_var!(self, *variable_index);
-
-                        Ok(Value::Boolean(var.find_in(self.scan_data, from, to)))
+                        let var_index = self.get_variable_index(*variable_index)?;
+                        self.get_var_matches()
+                            .map(|var_matches| var_matches.find_in(var_index, from, to))
+                            .map(Value::Boolean)
                     }
                     _ => Ok(Value::Boolean(false)),
                 }
