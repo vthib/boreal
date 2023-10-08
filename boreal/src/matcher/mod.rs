@@ -56,9 +56,6 @@ pub enum AcMatchStatus {
 
     /// The literal does not give any match.
     None,
-
-    /// Unknown status for the match, will need to be confirmed on its own.
-    Unknown,
 }
 
 /// Type of a match.
@@ -321,7 +318,11 @@ impl Matcher {
                     ),
                 }
             }
-            MatcherKind::Raw(_) => AcMatchStatus::Unknown,
+            MatcherKind::Raw(_) => {
+                // A raw matcher has no literals, so this is unreachable.
+                debug_assert!(false);
+                AcMatchStatus::None
+            }
         }
     }
 
@@ -450,6 +451,6 @@ mod tests {
         });
         test_type_traits(MatchType::Ascii);
         test_type_traits_non_clonable(Matches::None);
-        test_type_traits(AcMatchStatus::Unknown);
+        test_type_traits(AcMatchStatus::None);
     }
 }

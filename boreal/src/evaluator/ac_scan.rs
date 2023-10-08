@@ -211,7 +211,6 @@ impl AcScan {
                     AcResult::Matches(v) => v.push(m),
                     _ => matches[variable_index] = AcResult::Matches(vec![m]),
                 },
-                AcMatchStatus::Unknown => matches[variable_index] = AcResult::Unknown,
                 AcMatchStatus::None => (),
             };
 
