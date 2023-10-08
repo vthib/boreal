@@ -347,9 +347,7 @@ impl Inner {
             let var_matches = collect_nb_elems(&mut ac_matches_iter, rule.nb_variables);
             let res = match evaluate_rule(
                 rule,
-                Some(VarMatches {
-                    matches: &var_matches,
-                }),
+                Some(VarMatches::new(&var_matches)),
                 &mut scan_data,
                 &previous_results,
             ) {
