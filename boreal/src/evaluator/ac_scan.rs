@@ -8,7 +8,7 @@ use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 use super::{EvalError, Params, ScanData};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
-use crate::matcher::AcMatchStatus;
+use crate::matcher::{AcMatchStatus, Matcher};
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -120,17 +120,20 @@ impl AcScan {
         params: Params,
     ) -> Result<Vec<AcResult>, EvalError> {
         let mut matches = vec![AcResult::NotFound; variables.len()];
-        let mem = scan_data.mem;
 
-        for mat in self.aho.find_overlapping_iter(mem) {
+        // Iterate over aho-corasick matches, validating those matches
+        for mat in self.aho.find_overlapping_iter(scan_data.mem) {
             if scan_data.check_timeout() {
                 return Err(EvalError::Timeout);
             }
             self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
         }
 
-        for i in &self.non_handled_var_indexes {
-            matches[*i] = AcResult::Unknown;
+        // For every "raw" variable, scan the memory for this variable.
+        for variable_index in &self.non_handled_var_indexes {
+            let var = &variables[*variable_index].matcher;
+
+            matches[*variable_index] = scan_single_variable(var, scan_data, params);
         }
 
         Ok(matches)
@@ -221,12 +224,48 @@ impl AcScan {
     }
 }
 
+fn scan_single_variable(matcher: &Matcher, scan_data: &mut ScanData, params: Params) -> AcResult {
+    let mut res = Vec::new();
+
+    let mut offset = 0;
+    while offset < scan_data.mem.len() {
+        #[cfg(feature = "profiling")]
+        let start = std::time::Instant::now();
+
+        let mat = matcher.find_next_match_at(scan_data.mem, offset);
+
+        #[cfg(feature = "profiling")]
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.raw_regexes_eval_duration += start.elapsed();
+        }
+
+        match mat {
+            None => break,
+            Some(mat) => {
+                offset = mat.start + 1;
+                res.push(mat);
+
+                // This is safe to allow because this is called on every iterator of self.matches, so once
+                // it cannot overflow u32 before this condition is true.
+                #[allow(clippy::cast_possible_truncation)]
+                if (res.len() as u32) >= params.string_max_nb_matches {
+                    break;
+                }
+            }
+        }
+    }
+
+    if res.is_empty() {
+        AcResult::NotFound
+    } else {
+        AcResult::Matches(res)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum AcResult {
     /// Variable was not found by the AC pass.
     NotFound,
-    /// Unknown, must scan for the variable on its own.
-    Unknown,
     /// List of matches for the variable.
     Matches(Vec<Range<usize>>),
 }
@@ -244,6 +283,6 @@ mod tests {
             literal_index: 0,
             slice_offset: (0, 0),
         });
-        test_type_traits(AcResult::Unknown);
+        test_type_traits(AcResult::NotFound);
     }
 }
