@@ -102,6 +102,23 @@ rule a {
     checker.check(b"aaqUu", true);
     checker.check(b"aAaQUu", false);
 
+    // Test fullword with raw matcher
+    let checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a$/ fullword
+    condition:
+        $a
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"a", true);
+    checker.check(b"ba", false);
+    checker.check(b"<a", true);
+    checker.check(b"ab", false);
+    checker.check(b"b", false);
+
     let checker = Checker::new(
         r#"
 rule a {
