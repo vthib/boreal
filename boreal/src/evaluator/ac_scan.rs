@@ -48,6 +48,8 @@ struct LiteralInfo {
     slice_offset: (usize, usize),
 }
 
+type VarMatches = Vec<Range<usize>>;
+
 impl AcScan {
     pub(crate) fn new(variables: &[Variable]) -> Self {
         let mut lits = Vec::new();
@@ -118,8 +120,8 @@ impl AcScan {
         scan_data: &mut ScanData,
         variables: &[Variable],
         params: Params,
-    ) -> Result<Vec<AcResult>, EvalError> {
-        let mut matches = vec![AcResult::NotFound; variables.len()];
+    ) -> Result<Vec<VarMatches>, EvalError> {
+        let mut matches = vec![Vec::new(); variables.len()];
 
         // Iterate over aho-corasick matches, validating those matches
         for mat in self.aho.find_overlapping_iter(scan_data.mem) {
@@ -145,7 +147,7 @@ impl AcScan {
         variables: &[Variable],
         mat: &aho_corasick::Match,
         params: Params,
-        matches: &mut [AcResult],
+        matches: &mut [VarMatches],
     ) {
         for literal_info in &self.aho_index_to_literal_info[mat.pattern()] {
             let LiteralInfo {
@@ -180,6 +182,8 @@ impl AcScan {
                 None => continue,
             };
 
+            let var_matches = &mut matches[variable_index];
+
             // Shorten the mem to prevent new matches on the same starting byte.
             // For example, for `a.*?bb`, and input `abbb`, this can happen:
             // - extract atom `bb`
@@ -190,10 +194,7 @@ impl AcScan {
             // This is invalid, only one match per starting byte can happen.
             // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
             // saved match.
-            let start_position = match &matches[variable_index] {
-                AcResult::Matches(v) if !v.is_empty() => v[v.len() - 1].start + 1,
-                _ => 0,
-            };
+            let start_position = var_matches.last().map_or(0, |mat| mat.start + 1);
 
             let res = var.process_ac_match(scan_data.mem, m, start_position, match_type);
 
@@ -206,25 +207,19 @@ impl AcScan {
 
             match res {
                 AcMatchStatus::Multiple(v) if v.is_empty() => (),
-                AcMatchStatus::Multiple(found_matches) => match &mut matches[variable_index] {
-                    AcResult::Matches(v) => v.extend(found_matches),
-                    _ => matches[variable_index] = AcResult::Matches(found_matches),
-                },
-                AcMatchStatus::Single(m) => match &mut matches[variable_index] {
-                    AcResult::Matches(v) => v.push(m),
-                    _ => matches[variable_index] = AcResult::Matches(vec![m]),
-                },
+                AcMatchStatus::Multiple(found_matches) => var_matches.extend(found_matches),
+                AcMatchStatus::Single(m) => var_matches.push(m),
                 AcMatchStatus::None => (),
             };
 
-            if let AcResult::Matches(matches) = &mut matches[variable_index] {
-                matches.truncate(params.string_max_nb_matches as usize);
+            if !var_matches.is_empty() {
+                var_matches.truncate(params.string_max_nb_matches as usize);
             }
         }
     }
 }
 
-fn scan_single_variable(matcher: &Matcher, scan_data: &mut ScanData, params: Params) -> AcResult {
+fn scan_single_variable(matcher: &Matcher, scan_data: &mut ScanData, params: Params) -> VarMatches {
     let mut res = Vec::new();
 
     let mut offset = 0;
@@ -255,25 +250,13 @@ fn scan_single_variable(matcher: &Matcher, scan_data: &mut ScanData, params: Par
         }
     }
 
-    if res.is_empty() {
-        AcResult::NotFound
-    } else {
-        AcResult::Matches(res)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum AcResult {
-    /// Variable was not found by the AC pass.
-    NotFound,
-    /// List of matches for the variable.
-    Matches(Vec<Range<usize>>),
+    res
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+    use crate::test_helpers::test_type_traits_non_clonable;
 
     #[test]
     fn test_types_traits() {
@@ -283,6 +266,5 @@ mod tests {
             literal_index: 0,
             slice_offset: (0, 0),
         });
-        test_type_traits(AcResult::NotFound);
     }
 }
