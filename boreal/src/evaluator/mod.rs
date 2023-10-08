@@ -205,13 +205,13 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     }
 }
 
-struct Evaluator<'a, 'b, 'c> {
-    var_matches: Option<VarMatches<'b>>,
+struct Evaluator<'scan, 'rule> {
+    var_matches: Option<VarMatches<'rule>>,
 
     // Array of previous rules results.
     //
     // This only stores results of rules that are depended upon, not all rules.
-    previous_rules_results: &'b [bool],
+    previous_rules_results: &'rule [bool],
 
     // Index of the currently selected variable.
     //
@@ -222,7 +222,7 @@ struct Evaluator<'a, 'b, 'c> {
     bounded_identifiers_stack: Vec<Arc<ModuleValue>>,
 
     // Data related only to the scan, independent of the rule.
-    scan_data: &'c mut ScanData<'a>,
+    scan_data: &'rule mut ScanData<'scan>,
 }
 
 #[derive(Debug)]
@@ -301,7 +301,7 @@ macro_rules! apply_cmp_op {
     }
 }
 
-impl Evaluator<'_, '_, '_> {
+impl Evaluator<'_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, PoisonKind> {
         var_index
             .0
