@@ -10,12 +10,17 @@ pub(crate) struct VarMatches<'a> {
     /// Matches per variable.
     ///
     /// This uses the same order as the variables vec in the scanner object.
-    pub(crate) matches: &'a [Vec<Match>],
+    matches: &'a [Vec<Match>],
 }
 
 type Match = std::ops::Range<usize>;
 
-impl VarMatches<'_> {
+impl<'a> VarMatches<'a> {
+    /// Create a new `VarMatches` object from a list of variable matches.
+    pub fn new(matches: &'a [Vec<Match>]) -> Self {
+        Self { matches }
+    }
+
     /// Return true if the variable can be found in the scanned memory.
     pub fn find(&self, var_index: usize) -> bool {
         !self.matches[var_index].is_empty()
