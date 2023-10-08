@@ -383,7 +383,6 @@ impl Inner {
                     rule,
                     var_evals,
                     &mut scan_data,
-                    params.compute_full_matches,
                     params.match_max_length,
                 ));
             }
@@ -427,7 +426,6 @@ impl Inner {
                             rule,
                             Vec::new(),
                             scan_data,
-                            false,
                             params.match_max_length,
                         ));
                     }
@@ -452,7 +450,6 @@ impl Inner {
                     rule,
                     Vec::new(),
                     scan_data,
-                    false,
                     params.match_max_length,
                 ));
             }
@@ -476,17 +473,10 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 
 fn build_matched_rule<'a>(
     rule: &'a Rule,
-    mut var_evals: Vec<VariableEvaluation<'a>>,
+    var_evals: Vec<VariableEvaluation<'a>>,
     scan_data: &mut ScanData,
-    compute_full_matches: bool,
     match_max_length: usize,
 ) -> MatchedRule<'a> {
-    if compute_full_matches {
-        for var_eval in &mut var_evals {
-            var_eval.compute_all_matches(scan_data);
-        }
-    }
-
     MatchedRule {
         namespace: rule.namespace.as_deref(),
         name: &rule.name,
