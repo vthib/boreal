@@ -341,7 +341,7 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_fragmented(&self, regions: &[(usize, &'static [u8])], expected_res: bool) {
+    pub fn check_fragmented(&self, regions: &[(usize, &[u8])], expected_res: bool) {
         let regions = convert_regions(regions);
         let res = self.scanner.scan_fragmented(&regions);
         let res = !res.matched_rules.is_empty();
@@ -397,7 +397,7 @@ impl Checker {
     }
 }
 
-fn convert_regions(regions: &[(usize, &'static [u8])]) -> Vec<MemoryRegion<'static>> {
+fn convert_regions<'a>(regions: &[(usize, &'a [u8])]) -> Vec<MemoryRegion<'a>> {
     regions
         .iter()
         .map(|(start, mem)| MemoryRegion { start: *start, mem })

@@ -26,6 +26,31 @@ impl Memory<'_> {
             Self::Fragmented { .. } => None,
         }
     }
+
+    /// TODO
+    #[must_use]
+    pub fn get(&self, start: usize, length: usize) -> Option<&[u8]> {
+        match self {
+            Self::Direct(mem) => {
+                let end = start.checked_add(length)?;
+                mem.get(start..end)
+            }
+            Self::Fragmented { regions } => {
+                for region in *regions {
+                    let Some(relative_start) = start.checked_sub(region.start) else {
+                        break;
+                    };
+                    if relative_start > region.mem.len() {
+                        continue;
+                    }
+                    let end = relative_start.checked_add(length)?;
+                    return region.mem.get(relative_start..end);
+                }
+
+                None
+            }
+        }
+    }
 }
 
 /// A region of memory to scan.
