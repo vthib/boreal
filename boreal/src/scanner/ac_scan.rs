@@ -8,6 +8,7 @@ use super::{EvalError, StringMatch};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
+use crate::memory::MemoryRegion;
 
 use super::ScanData;
 
@@ -114,19 +115,19 @@ impl AcScan {
         }
     }
 
-    pub(super) fn scan_mem(
+    pub(super) fn scan_region(
         &self,
-        mem: &[u8],
+        region: &MemoryRegion,
         variables: &[Variable],
         scan_data: &mut ScanData,
         matches: &mut [Vec<StringMatch>],
     ) -> Result<(), EvalError> {
         // Iterate over aho-corasick matches, validating those matches
-        for mat in self.aho.find_overlapping_iter(mem) {
+        for mat in self.aho.find_overlapping_iter(region.mem) {
             if scan_data.check_timeout() {
                 return Err(EvalError::Timeout);
             }
-            self.handle_possible_match(mem, &mat, variables, scan_data, matches);
+            self.handle_possible_match(region, &mat, variables, scan_data, matches);
         }
 
         if !self.non_handled_var_indexes.is_empty() {
@@ -137,7 +138,7 @@ impl AcScan {
             for variable_index in &self.non_handled_var_indexes {
                 let var = &variables[*variable_index].matcher;
 
-                scan_single_variable(mem, var, scan_data, &mut matches[*variable_index]);
+                scan_single_variable(region, var, scan_data, &mut matches[*variable_index]);
             }
 
             #[cfg(feature = "profiling")]
@@ -151,7 +152,7 @@ impl AcScan {
 
     fn handle_possible_match(
         &self,
-        mem: &[u8],
+        region: &MemoryRegion,
         mat: &aho_corasick::Match,
         variables: &[Variable],
         scan_data: &mut ScanData,
@@ -178,13 +179,13 @@ impl AcScan {
                 continue;
             };
             let end = match mat.end().checked_add(end_offset) {
-                Some(v) if v <= mem.len() => v,
+                Some(v) if v <= region.mem.len() => v,
                 _ => continue,
             };
             let m = start..end;
 
             // Verify the literal is valid.
-            let Some(match_type) = var.confirm_ac_literal(mem, &m, literal_index) else {
+            let Some(match_type) = var.confirm_ac_literal(region.mem, &m, literal_index) else {
                 continue;
             };
 
@@ -202,7 +203,7 @@ impl AcScan {
             // saved match.
             let start_position = var_matches.last().map_or(0, |mat| mat.offset + 1);
 
-            let res = var.process_ac_match(mem, m, start_position, match_type);
+            let res = var.process_ac_match(region.mem, m, start_position, match_type);
 
             #[cfg(feature = "profiling")]
             {
@@ -216,10 +217,14 @@ impl AcScan {
                 AcMatchStatus::Multiple(found_matches) => var_matches.extend(
                     found_matches
                         .into_iter()
-                        .map(|m| StringMatch::new(mem, m, scan_data.params.match_max_length)),
+                        .map(|m| StringMatch::new(region, m, scan_data.params.match_max_length)),
                 ),
                 AcMatchStatus::Single(m) => {
-                    var_matches.push(StringMatch::new(mem, m, scan_data.params.match_max_length));
+                    var_matches.push(StringMatch::new(
+                        region,
+                        m,
+                        scan_data.params.match_max_length,
+                    ));
                 }
                 AcMatchStatus::None => (),
             };
@@ -232,21 +237,21 @@ impl AcScan {
 }
 
 fn scan_single_variable(
-    mem: &[u8],
+    region: &MemoryRegion,
     matcher: &Matcher,
     scan_data: &mut ScanData,
     string_matches: &mut Vec<StringMatch>,
 ) {
     let mut offset = 0;
-    while offset < mem.len() {
-        let mat = matcher.find_next_match_at(mem, offset);
+    while offset < region.mem.len() {
+        let mat = matcher.find_next_match_at(region.mem, offset);
 
         match mat {
             None => break,
             Some(mat) => {
                 offset = mat.start + 1;
                 string_matches.push(StringMatch::new(
-                    mem,
+                    region,
                     mat,
                     scan_data.params.match_max_length,
                 ));
