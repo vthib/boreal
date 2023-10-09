@@ -1,6 +1,8 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
+use crate::memory::MemoryRegion;
+
 /// Variable evaluation context.
 ///
 /// This is used to cache scan results for a single variable,
@@ -107,17 +109,21 @@ pub struct StringMatch {
 }
 
 impl StringMatch {
-    pub(crate) fn new(mem: &[u8], mat: std::ops::Range<usize>, match_max_length: usize) -> Self {
+    pub(crate) fn new(
+        region: &MemoryRegion,
+        mat: std::ops::Range<usize>,
+        match_max_length: usize,
+    ) -> Self {
         let length = mat.end - mat.start;
         let capped_length = std::cmp::min(length, match_max_length);
 
         Self {
-            data: mem[mat.start..]
+            data: region.mem[mat.start..]
                 .iter()
                 .take(capped_length)
                 .copied()
                 .collect(),
-            offset: mat.start,
+            offset: mat.start.saturating_add(region.start),
             length,
         }
     }

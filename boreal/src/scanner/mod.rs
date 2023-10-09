@@ -6,7 +6,7 @@ use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::{self, evaluate_rule, EvalError};
-use crate::memory::Memory;
+use crate::memory::{Memory, MemoryRegion};
 use crate::module::Module;
 use crate::statistics;
 use crate::timeout::TimeoutChecker;
@@ -438,13 +438,23 @@ impl Inner {
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
 
-        // Scan the memory for all variables occurences.
         match scan_data.mem {
             Memory::Direct(mem) => {
-                self.ac_scan
-                    .scan_mem(mem, &self.variables, scan_data, &mut matches)?;
+                // Scan the memory for all variables occurences.
+                self.ac_scan.scan_region(
+                    &MemoryRegion { start: 0, mem },
+                    &self.variables,
+                    scan_data,
+                    &mut matches,
+                )?;
             }
-            Memory::Fragmented { .. } => todo!(),
+            Memory::Fragmented { regions } => {
+                // Scan each region for all variables occurences.
+                for region in regions {
+                    self.ac_scan
+                        .scan_region(region, &self.variables, scan_data, &mut matches)?;
+                }
+            }
         }
 
         #[cfg(feature = "profiling")]
