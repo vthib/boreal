@@ -128,11 +128,21 @@ impl AcScan {
             self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
         }
 
-        // For every "raw" variable, scan the memory for this variable.
-        for variable_index in &self.non_handled_var_indexes {
-            let var = &variables[*variable_index].matcher;
+        if !self.non_handled_var_indexes.is_empty() {
+            #[cfg(feature = "profiling")]
+            let start = std::time::Instant::now();
 
-            matches[*variable_index] = scan_single_variable(var, scan_data, params);
+            // For every "raw" variable, scan the memory for this variable.
+            for variable_index in &self.non_handled_var_indexes {
+                let var = &variables[*variable_index].matcher;
+
+                scan_single_variable(scan_data.mem, var, params, &mut matches[*variable_index]);
+            }
+
+            #[cfg(feature = "profiling")]
+            if let Some(stats) = scan_data.statistics.as_mut() {
+                stats.raw_regexes_eval_duration += start.elapsed();
+            }
         }
 
         Ok(matches)
@@ -223,41 +233,30 @@ impl AcScan {
 }
 
 fn scan_single_variable(
+    mem: &[u8],
     matcher: &Matcher,
-    scan_data: &mut ScanData,
     params: Params,
-) -> Vec<StringMatch> {
-    let mut res = Vec::new();
-
+    string_matches: &mut Vec<StringMatch>,
+) {
     let mut offset = 0;
-    while offset < scan_data.mem.len() {
-        #[cfg(feature = "profiling")]
-        let start = std::time::Instant::now();
-
-        let mat = matcher.find_next_match_at(scan_data.mem, offset);
-
-        #[cfg(feature = "profiling")]
-        if let Some(stats) = scan_data.statistics.as_mut() {
-            stats.raw_regexes_eval_duration += start.elapsed();
-        }
+    while offset < mem.len() {
+        let mat = matcher.find_next_match_at(mem, offset);
 
         match mat {
             None => break,
             Some(mat) => {
                 offset = mat.start + 1;
-                res.push(StringMatch::new(scan_data.mem, mat, params));
+                string_matches.push(StringMatch::new(mem, mat, params));
 
                 // This is safe to allow because this is called on every iterator of self.matches, so once
                 // it cannot overflow u32 before this condition is true.
                 #[allow(clippy::cast_possible_truncation)]
-                if (res.len() as u32) >= params.string_max_nb_matches {
+                if (string_matches.len() as u32) >= params.string_max_nb_matches {
                     break;
                 }
             }
         }
     }
-
-    res
 }
 
 /// Details on a match on a string during a scan.
