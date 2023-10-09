@@ -4,59 +4,45 @@ use boreal_parser::expression::ReadIntegerType;
 
 use super::{Evaluator, PoisonKind, Value};
 
-macro_rules! read {
-    ($ty:ty, $slice:expr, $fun:expr) => {{
-        let size = std::mem::size_of::<$ty>();
-        if size > $slice.len() {
-            Err(PoisonKind::Undefined)
-        } else {
-            let (int_bytes, _) = $slice.split_at(size);
-            int_bytes
-                .try_into()
-                .map(|v| $fun(v) as i64)
-                .map_err(|_| PoisonKind::Undefined)
-        }
-    }};
-}
-
-macro_rules! read_le {
-    ($ty:ty, $slice:expr) => {
-        read!($ty, $slice, <$ty>::from_le_bytes)
-    };
-}
-
-macro_rules! read_be {
-    ($ty:ty, $slice:expr) => {
-        read!($ty, $slice, <$ty>::from_be_bytes)
-    };
-}
-
 pub(super) fn evaluate_read_integer(
     evaluator: &mut Evaluator,
     addr: &Expression,
     ty: ReadIntegerType,
 ) -> Result<Value, PoisonKind> {
     let addr = evaluator.evaluate_expr(addr)?.unwrap_number()?;
-
     let addr = usize::try_from(addr).map_err(|_| PoisonKind::Undefined)?;
-    let mem = &evaluator
+
+    let length = match ty {
+        ReadIntegerType::Int8 | ReadIntegerType::Uint8 => 1,
+        ReadIntegerType::Int16
+        | ReadIntegerType::Uint16
+        | ReadIntegerType::Int16BE
+        | ReadIntegerType::Uint16BE => 2,
+        ReadIntegerType::Int32
+        | ReadIntegerType::Uint32
+        | ReadIntegerType::Int32BE
+        | ReadIntegerType::Uint32BE => 4,
+    };
+
+    let mem = evaluator
         .scan_data
         .mem
-        .get(addr..)
+        .get(addr..(addr + length))
         .ok_or(PoisonKind::Undefined)?;
 
-    let v = match ty {
-        ReadIntegerType::Int8 => read_le!(i8, mem),
-        ReadIntegerType::Uint8 => read_le!(u8, mem),
-        ReadIntegerType::Int16 => read_le!(i16, mem),
-        ReadIntegerType::Uint16 => read_le!(u16, mem),
-        ReadIntegerType::Int32 => read_le!(i32, mem),
-        ReadIntegerType::Uint32 => read_le!(u32, mem),
+    match ty {
+        ReadIntegerType::Int8 => mem.try_into().map(i8::from_le_bytes).map(i64::from),
+        ReadIntegerType::Uint8 => mem.try_into().map(u8::from_le_bytes).map(i64::from),
+        ReadIntegerType::Int16 => mem.try_into().map(i16::from_le_bytes).map(i64::from),
+        ReadIntegerType::Uint16 => mem.try_into().map(u16::from_le_bytes).map(i64::from),
+        ReadIntegerType::Int32 => mem.try_into().map(i32::from_le_bytes).map(i64::from),
+        ReadIntegerType::Uint32 => mem.try_into().map(u32::from_le_bytes).map(i64::from),
 
-        ReadIntegerType::Int16BE => read_be!(i16, mem),
-        ReadIntegerType::Uint16BE => read_be!(u16, mem),
-        ReadIntegerType::Int32BE => read_be!(i32, mem),
-        ReadIntegerType::Uint32BE => read_be!(u32, mem),
-    }?;
-    Ok(Value::Integer(v))
+        ReadIntegerType::Int16BE => mem.try_into().map(i16::from_be_bytes).map(i64::from),
+        ReadIntegerType::Uint16BE => mem.try_into().map(u16::from_be_bytes).map(i64::from),
+        ReadIntegerType::Int32BE => mem.try_into().map(i32::from_be_bytes).map(i64::from),
+        ReadIntegerType::Uint32BE => mem.try_into().map(u32::from_be_bytes).map(i64::from),
+    }
+    .map(Value::Integer)
+    .map_err(|_| PoisonKind::Undefined)
 }
