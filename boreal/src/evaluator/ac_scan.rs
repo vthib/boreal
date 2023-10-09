@@ -1,7 +1,6 @@
 //! Provides the [`AcScan`] object, used to scan for all variables in a single AC pass.
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
@@ -47,8 +46,6 @@ struct LiteralInfo {
     /// Left and right offset for the slice picked in the Aho-Corasick.
     slice_offset: (usize, usize),
 }
-
-type VarMatches = Vec<Range<usize>>;
 
 impl AcScan {
     pub(crate) fn new(variables: &[Variable]) -> Self {
@@ -120,7 +117,7 @@ impl AcScan {
         scan_data: &mut ScanData,
         variables: &[Variable],
         params: Params,
-    ) -> Result<Vec<VarMatches>, EvalError> {
+    ) -> Result<Vec<Vec<StringMatch>>, EvalError> {
         let mut matches = vec![Vec::new(); variables.len()];
 
         // Iterate over aho-corasick matches, validating those matches
@@ -147,7 +144,7 @@ impl AcScan {
         variables: &[Variable],
         mat: &aho_corasick::Match,
         params: Params,
-        matches: &mut [VarMatches],
+        matches: &mut [Vec<StringMatch>],
     ) {
         for literal_info in &self.aho_index_to_literal_info[mat.pattern()] {
             let LiteralInfo {
@@ -194,7 +191,7 @@ impl AcScan {
             // This is invalid, only one match per starting byte can happen.
             // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
             // saved match.
-            let start_position = var_matches.last().map_or(0, |mat| mat.start + 1);
+            let start_position = var_matches.last().map_or(0, |mat| mat.offset + 1);
 
             let res = var.process_ac_match(scan_data.mem, m, start_position, match_type);
 
@@ -207,8 +204,14 @@ impl AcScan {
 
             match res {
                 AcMatchStatus::Multiple(v) if v.is_empty() => (),
-                AcMatchStatus::Multiple(found_matches) => var_matches.extend(found_matches),
-                AcMatchStatus::Single(m) => var_matches.push(m),
+                AcMatchStatus::Multiple(found_matches) => var_matches.extend(
+                    found_matches
+                        .into_iter()
+                        .map(|m| StringMatch::new(scan_data.mem, m, params)),
+                ),
+                AcMatchStatus::Single(m) => {
+                    var_matches.push(StringMatch::new(scan_data.mem, m, params));
+                }
                 AcMatchStatus::None => (),
             };
 
@@ -219,7 +222,11 @@ impl AcScan {
     }
 }
 
-fn scan_single_variable(matcher: &Matcher, scan_data: &mut ScanData, params: Params) -> VarMatches {
+fn scan_single_variable(
+    matcher: &Matcher,
+    scan_data: &mut ScanData,
+    params: Params,
+) -> Vec<StringMatch> {
     let mut res = Vec::new();
 
     let mut offset = 0;
@@ -238,7 +245,7 @@ fn scan_single_variable(matcher: &Matcher, scan_data: &mut ScanData, params: Par
             None => break,
             Some(mat) => {
                 offset = mat.start + 1;
-                res.push(mat);
+                res.push(StringMatch::new(scan_data.mem, mat, params));
 
                 // This is safe to allow because this is called on every iterator of self.matches, so once
                 // it cannot overflow u32 before this condition is true.
@@ -253,10 +260,44 @@ fn scan_single_variable(matcher: &Matcher, scan_data: &mut ScanData, params: Par
     res
 }
 
+/// Details on a match on a string during a scan.
+#[derive(Clone, Debug)]
+pub struct StringMatch {
+    /// Offset of the match
+    pub offset: usize,
+
+    /// Actual length of the match.
+    ///
+    /// This is the real length of the match, which might be bigger than the length of `data`.
+    pub length: usize,
+
+    /// The matched data.
+    ///
+    /// The length of this field is capped.
+    pub data: Vec<u8>,
+}
+
+impl StringMatch {
+    fn new(mem: &[u8], mat: std::ops::Range<usize>, params: Params) -> Self {
+        let length = mat.end - mat.start;
+        let capped_length = std::cmp::min(length, params.match_max_length);
+
+        Self {
+            data: mem[mat.start..]
+                .iter()
+                .take(capped_length)
+                .copied()
+                .collect(),
+            offset: mat.start,
+            length,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::test_type_traits_non_clonable;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
     #[test]
     fn test_types_traits() {
@@ -265,6 +306,11 @@ mod tests {
             variable_index: 0,
             literal_index: 0,
             slice_offset: (0, 0),
+        });
+        test_type_traits(StringMatch {
+            offset: 0,
+            length: 0,
+            data: Vec::new(),
         });
     }
 }

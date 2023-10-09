@@ -1,6 +1,8 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
+use super::ac_scan::StringMatch;
+
 /// Variable evaluation context.
 ///
 /// This is used to cache scan results for a single variable,
@@ -10,14 +12,12 @@ pub(crate) struct VarMatches<'a> {
     /// Matches per variable.
     ///
     /// This uses the same order as the variables vec in the scanner object.
-    matches: &'a [Vec<Match>],
+    matches: &'a [Vec<StringMatch>],
 }
-
-type Match = std::ops::Range<usize>;
 
 impl<'a> VarMatches<'a> {
     /// Create a new `VarMatches` object from a list of variable matches.
-    pub fn new(matches: &'a [Vec<Match>]) -> Self {
+    pub fn new(matches: &'a [Vec<StringMatch>]) -> Self {
         Self { matches }
     }
 
@@ -29,8 +29,12 @@ impl<'a> VarMatches<'a> {
     /// Get a specific match occurrence for the variable.
     ///
     /// This starts at 0, and not at 1 as in the yara file.
-    pub fn find_match_occurence(&self, var_index: usize, occurence_number: usize) -> Option<Match> {
-        self.matches[var_index].get(occurence_number).cloned()
+    pub fn find_match_occurence(
+        &self,
+        var_index: usize,
+        occurence_number: usize,
+    ) -> Option<&StringMatch> {
+        self.matches[var_index].get(occurence_number)
     }
 
     /// Count number of matches.
@@ -48,9 +52,9 @@ impl<'a> VarMatches<'a> {
         // TODO: improve algorithm for searching in matches
         let mut count = 0;
         for mat in &self.matches[var_index] {
-            if mat.start > to {
+            if mat.offset > to {
                 return count;
-            } else if mat.start >= from {
+            } else if mat.offset >= from {
                 count += 1;
             }
         }
@@ -62,7 +66,7 @@ impl<'a> VarMatches<'a> {
     pub fn find_at(&self, var_index: usize, offset: usize) -> bool {
         // TODO: improve algorithm for searching in matches
         for mat in &self.matches[var_index] {
-            match mat.start.cmp(&offset) {
+            match mat.offset.cmp(&offset) {
                 Ordering::Less => (),
                 Ordering::Equal => return true,
                 Ordering::Greater => return false,
@@ -76,9 +80,9 @@ impl<'a> VarMatches<'a> {
     pub fn find_in(&self, var_index: usize, from: usize, to: usize) -> bool {
         // TODO: improve algorithm for searching in matches
         for mat in &self.matches[var_index] {
-            if mat.start > to {
+            if mat.offset > to {
                 return false;
-            } else if mat.start >= from {
+            } else if mat.offset >= from {
                 return true;
             }
         }
