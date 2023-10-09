@@ -178,6 +178,9 @@ impl<'a> ScanData<'a> {
 pub struct Params {
     /// Max number of matches for a given string.
     pub string_max_nb_matches: u32,
+
+    /// Max length of the matches returned in matching rules.
+    pub match_max_length: usize,
 }
 
 /// Evaluates an expression on a given byte slice.
@@ -370,7 +373,7 @@ impl Evaluator<'_, '_> {
                             var_matches.find_match_occurence(var_index, v - 1)
                         })?;
 
-                        mat.and_then(|mat| i64::try_from(mat.start).ok())
+                        mat.and_then(|mat| i64::try_from(mat.offset).ok())
                             .map(Value::Integer)
                             .ok_or(PoisonKind::Undefined)
                     }
@@ -390,7 +393,7 @@ impl Evaluator<'_, '_> {
                             var_matches.find_match_occurence(var_index, v - 1)
                         })?;
 
-                        mat.and_then(|mat| i64::try_from(mat.len()).ok())
+                        mat.and_then(|mat| i64::try_from(mat.length).ok())
                             .map(Value::Integer)
                             .ok_or(PoisonKind::Undefined)
                     }
@@ -1054,6 +1057,7 @@ mod tests {
         test_type_traits(Value::Integer(0));
         test_type_traits(Params {
             string_max_nb_matches: 0,
+            match_max_length: 0,
         });
         test_type_traits_non_clonable(ScanData {
             mem: b"",

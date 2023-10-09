@@ -1,12 +1,11 @@
 //! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
 use std::collections::HashMap;
-use std::ops::Range;
 use std::sync::Arc;
 
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-use crate::evaluator::ac_scan::AcScan;
+use crate::evaluator::ac_scan::{AcScan, StringMatch};
 use crate::evaluator::{evaluate_rule, EvalError, Params as EvalParams, ScanData, VarMatches};
 use crate::module::Module;
 use crate::statistics;
@@ -278,7 +277,7 @@ impl Inner {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
-            let res = self.evaluate_without_matches(&mut scan_data, params);
+            let res = self.evaluate_without_matches(&mut scan_data);
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -303,6 +302,7 @@ impl Inner {
 
         let eval_params = EvalParams {
             string_max_nb_matches: params.string_max_nb_matches,
+            match_max_length: params.match_max_length,
         };
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
@@ -378,8 +378,6 @@ impl Inner {
                     rule,
                     &self.variables[var_index..(var_index + rule.nb_variables)],
                     var_matches,
-                    &mut scan_data,
-                    params.match_max_length,
                 ));
             }
 
@@ -408,7 +406,6 @@ impl Inner {
     fn evaluate_without_matches<'scanner>(
         &'scanner self,
         scan_data: &mut ScanData<'_>,
-        params: &ScanParams,
     ) -> Result<Vec<MatchedRule<'scanner>>, EvalError> {
         let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
@@ -419,13 +416,7 @@ impl Inner {
             match evaluate_rule(rule, None, scan_data, &previous_results) {
                 Ok(true) => {
                     if !rule.is_private {
-                        matched_rules.push(build_matched_rule(
-                            rule,
-                            &[],
-                            Vec::new(),
-                            scan_data,
-                            params.match_max_length,
-                        ));
+                        matched_rules.push(build_matched_rule(rule, &[], Vec::new()));
                     }
                 }
                 Ok(false) => return Ok(Vec::new()),
@@ -444,13 +435,7 @@ impl Inner {
             let matched = evaluate_rule(rule, None, scan_data, &previous_results)?;
 
             if matched && !rule.is_private {
-                matched_rules.push(build_matched_rule(
-                    rule,
-                    &[],
-                    Vec::new(),
-                    scan_data,
-                    params.match_max_length,
-                ));
+                matched_rules.push(build_matched_rule(rule, &[], Vec::new()));
             }
             previous_results.push(matched);
         }
@@ -473,9 +458,7 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     variables: &'a [Variable],
-    var_matches: Vec<Vec<Range<usize>>>,
-    scan_data: &mut ScanData,
-    match_max_length: usize,
+    var_matches: Vec<Vec<StringMatch>>,
 ) -> MatchedRule<'a> {
     MatchedRule {
         namespace: rule.namespace.as_deref(),
@@ -487,22 +470,7 @@ fn build_matched_rule<'a>(
             .filter(|(matches, _)| !matches.is_empty())
             .map(|(matches, var)| StringMatches {
                 name: &var.name,
-                matches: matches
-                    .iter()
-                    .map(|mat| {
-                        let length = mat.end - mat.start;
-                        let capped_length = std::cmp::min(length, match_max_length);
-                        StringMatch {
-                            offset: mat.start,
-                            length: mat.end - mat.start,
-                            data: scan_data.mem[mat.start..]
-                                .iter()
-                                .take(capped_length)
-                                .copied()
-                                .collect(),
-                        }
-                    })
-                    .collect(),
+                matches,
             })
             .collect(),
     }
@@ -566,23 +534,6 @@ pub struct StringMatches<'scanner> {
     /// for this variable, some potential matches will not
     /// be reported.
     pub matches: Vec<StringMatch>,
-}
-
-/// Details on a match on a string during a scan.
-#[derive(Debug)]
-pub struct StringMatch {
-    /// Offset of the match
-    pub offset: usize,
-
-    /// Actual length of the match.
-    ///
-    /// This is the real length of the match, which might be bigger than the length of `data`.
-    pub length: usize,
-
-    /// The matched data.
-    ///
-    /// The length of this field is capped.
-    pub data: Vec<u8>,
 }
 
 /// Error when defining a symbol's value in a [`Scanner`].
@@ -1234,11 +1185,6 @@ mod tests {
         test_type_traits_non_clonable(StringMatches {
             name: "a",
             matches: Vec::new(),
-        });
-        test_type_traits_non_clonable(StringMatch {
-            offset: 0,
-            length: 0,
-            data: Vec::new(),
         });
         test_type_traits_non_clonable(DefineSymbolError::UnknownName);
     }
