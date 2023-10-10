@@ -328,6 +328,8 @@ impl Evaluator<'_, '_> {
 
             #[cfg(feature = "object")]
             Expression::Entrypoint => entrypoint::get_pe_or_elf_entry_point(self.scan_data.mem)
+                .and_then(|v| i64::try_from(v).ok())
+                .map(Value::Integer)
                 .ok_or(PoisonKind::Undefined),
             #[cfg(not(feature = "object"))]
             Expression::Entrypoint => Err(PoisonKind::Undefined),
