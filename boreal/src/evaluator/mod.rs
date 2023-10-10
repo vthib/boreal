@@ -254,23 +254,6 @@ enum PoisonKind {
     Timeout,
 }
 
-macro_rules! bytes_op {
-    ($self:expr, $left:expr, $right:expr, $case_insensitive:expr, $method:ident) => {{
-        let left = $self.evaluate_expr($left)?;
-        let mut left = left.unwrap_bytes()?;
-        let right = $self.evaluate_expr($right)?;
-        let mut right = right.unwrap_bytes()?;
-
-        if $case_insensitive {
-            left.make_ascii_lowercase();
-            right.make_ascii_lowercase();
-            Ok(Value::Boolean(left.$method(&right)))
-        } else {
-            Ok(Value::Boolean(left.$method(&right)))
-        }
-    }};
-}
-
 macro_rules! arith_op_num_and_float {
     ($self:expr, $left:expr, $right:expr, $op:tt, $wrapping_op:ident) => {{
         let left = $self.evaluate_expr($left)?;
@@ -314,6 +297,30 @@ impl Evaluator<'_, '_> {
 
     fn get_var_matches(&self) -> Result<&VarMatches, PoisonKind> {
         self.var_matches.as_ref().ok_or(PoisonKind::VarNeeded)
+    }
+
+    fn compare_strings<F>(
+        &mut self,
+        left: &Expression,
+        right: &Expression,
+        case_insensitive: bool,
+        cmp: F,
+    ) -> Result<Value, PoisonKind>
+    where
+        F: Fn(&[u8], &[u8]) -> bool,
+    {
+        let left = self.evaluate_expr(left)?;
+        let mut left = left.unwrap_bytes()?;
+        let right = self.evaluate_expr(right)?;
+        let mut right = right.unwrap_bytes()?;
+
+        Ok(Value::Boolean(if case_insensitive {
+            left.make_ascii_lowercase();
+            right.make_ascii_lowercase();
+            cmp(&left, &right)
+        } else {
+            cmp(&left, &right)
+        }))
     }
 
     fn evaluate_expr(&mut self, expr: &Expression) -> Result<Value, PoisonKind> {
@@ -572,34 +579,20 @@ impl Evaluator<'_, '_> {
                 haystack,
                 needle,
                 case_insensitive,
-            } => {
-                let left = self.evaluate_expr(haystack)?;
-                let mut left = left.unwrap_bytes()?;
-                let right = self.evaluate_expr(needle)?;
-                let mut right = right.unwrap_bytes()?;
-
-                if *case_insensitive {
-                    left.make_ascii_lowercase();
-                    right.make_ascii_lowercase();
-                    Ok(Value::Boolean(memmem::find(&left, &right).is_some()))
-                } else {
-                    Ok(Value::Boolean(memmem::find(&left, &right).is_some()))
-                }
-            }
+            } => self.compare_strings(haystack, needle, *case_insensitive, |a, b| {
+                memmem::find(a, b).is_some()
+            }),
             Expression::StartsWith {
                 expr,
                 prefix,
                 case_insensitive,
-            } => {
-                bytes_op!(self, expr, prefix, *case_insensitive, starts_with)
-            }
+            } => self.compare_strings(expr, prefix, *case_insensitive, <[u8]>::starts_with),
             Expression::EndsWith {
                 expr,
                 suffix,
                 case_insensitive,
-            } => {
-                bytes_op!(self, expr, suffix, *case_insensitive, ends_with)
-            }
+            } => self.compare_strings(expr, suffix, *case_insensitive, <[u8]>::ends_with),
+
             Expression::IEquals(left, right) => {
                 let mut left = self.evaluate_expr(left)?.unwrap_bytes()?;
                 left.make_ascii_lowercase();
