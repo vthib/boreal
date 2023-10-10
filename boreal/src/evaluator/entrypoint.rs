@@ -12,10 +12,9 @@ use object::read::elf::FileHeader;
 use object::read::pe::{ImageNtHeaders, ImageOptionalHeader};
 use object::{Endianness, FileKind, LittleEndian as LE};
 
-use super::Value;
 use crate::module::elf;
 
-pub(super) fn get_pe_or_elf_entry_point(mem: &[u8]) -> Option<Value> {
+pub(super) fn get_pe_or_elf_entry_point(mem: &[u8]) -> Option<u64> {
     match FileKind::parse(mem).ok()? {
         FileKind::Pe32 => parse_pe::<ImageNtHeaders32>(mem),
         FileKind::Pe64 => parse_pe::<ImageNtHeaders64>(mem),
@@ -25,7 +24,7 @@ pub(super) fn get_pe_or_elf_entry_point(mem: &[u8]) -> Option<Value> {
     }
 }
 
-fn parse_pe<Pe: ImageNtHeaders>(mem: &[u8]) -> Option<Value> {
+fn parse_pe<Pe: ImageNtHeaders>(mem: &[u8]) -> Option<u64> {
     let dos_header = ImageDosHeader::parse(mem).ok()?;
     let mut offset = dos_header.nt_headers_offset().into();
     let (nt_headers, _) = Pe::parse(mem, &mut offset).ok()?;
@@ -40,16 +39,14 @@ fn parse_pe<Pe: ImageNtHeaders>(mem: &[u8]) -> Option<Value> {
 
     let ep = opt_hdr.address_of_entry_point();
 
-    Some(Value::Integer(
-        pe_rva_to_file_offset(&sections, ep).unwrap_or(0),
-    ))
+    Some(pe_rva_to_file_offset(&sections, ep).unwrap_or(0))
 }
 
 // This reimplements the `yr_pe_rva_to_offset` function from libyara.
 //
 // This is not the same as the function implemented in the pe module and it has it own set
 // of particularities...
-fn pe_rva_to_file_offset(sections: &SectionTable, va: u32) -> Option<i64> {
+fn pe_rva_to_file_offset(sections: &SectionTable, va: u32) -> Option<u64> {
     let mut nearest_section_va = 0;
     let mut nearest_section_offset = 0;
     for section in sections.iter().take(60) {
@@ -60,13 +57,11 @@ fn pe_rva_to_file_offset(sections: &SectionTable, va: u32) -> Option<i64> {
         }
     }
 
-    i64::from(nearest_section_offset).checked_add(i64::from(va - nearest_section_va))
+    u64::from(nearest_section_offset).checked_add(u64::from(va - nearest_section_va))
 }
 
-fn parse_elf<Elf: FileHeader<Endian = Endianness>>(header: &Elf, mem: &[u8]) -> Option<Value> {
+fn parse_elf<Elf: FileHeader<Endian = Endianness>>(header: &Elf, mem: &[u8]) -> Option<u64> {
     let e = header.endian().ok()?;
 
     elf::entry_point(header, e, mem)
-        .and_then(|ep| i64::try_from(ep).ok())
-        .map(Value::Integer)
 }
