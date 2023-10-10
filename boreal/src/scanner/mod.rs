@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-use crate::evaluator::{self, evaluate_rule, EvalError};
+use crate::evaluator::{self, entrypoint, evaluate_rule, EvalError};
 use crate::memory::{Memory, MemoryRegion};
 use crate::module::Module;
 use crate::statistics;
@@ -291,6 +291,7 @@ impl Inner {
             },
             timeout_checker: params.timeout_duration.map(TimeoutChecker::new),
             params,
+            entrypoint: None,
         };
 
         let timeout = match self.do_scan(&mut scan_data) {
@@ -318,7 +319,7 @@ impl Inner {
             }
         }
 
-        if !scan_data.params.compute_full_matches {
+        if !scan_data.params.compute_full_matches && scan_data.mem.is_direct() {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
@@ -464,6 +465,20 @@ impl Inner {
                 for region in regions {
                     self.ac_scan
                         .scan_region(region, &self.variables, scan_data, &mut matches)?;
+
+                    // Also, compute the value for the entrypoint expression. Since
+                    // we fetch each region here, this is much cheaper that refetching
+                    // them later on when evaluating the expression.
+                    #[cfg(feature = "object")]
+                    if scan_data.entrypoint.is_none() {
+                        scan_data.entrypoint = entrypoint::get_pe_or_elf_entry_point(
+                            region.mem, true,
+                        )
+                        .and_then(|ep| {
+                            let start = u64::try_from(region.start).ok()?;
+                            ep.checked_add(start)
+                        });
+                    }
                 }
             }
         }
@@ -501,6 +516,17 @@ pub(crate) struct ScanData<'scanner, 'mem> {
 
     /// Parameters linked to the scan.
     pub(crate) params: &'scanner ScanParams,
+
+    /// Entrypoint value for the deprecated `entrypoint` expression.
+    ///
+    /// This is only set and computed ahead of time if scanning fragmented
+    /// memory (such as a process memory). This is because this relies on
+    /// parsing each region, and would thus be prohibitively expensive to
+    /// compute on demand.
+    /// However, when scanning direct memory (such as a file), this is
+    /// unset and to be computed on demand, so as to not incur the
+    /// cost of this computation on rules that do not use it.
+    pub(crate) entrypoint: Option<u64>,
 }
 
 impl ScanData<'_, '_> {
@@ -719,6 +745,7 @@ mod tests {
             statistics: None,
             timeout_checker: None,
             params: &ScanParams::default(),
+            entrypoint: None,
         };
         let mut previous_results = Vec::new();
         let rules = &scanner.inner.rules;
@@ -1261,6 +1288,7 @@ mod tests {
             },
             statistics: None,
             timeout_checker: None,
+            entrypoint: None,
             params: &ScanParams::default(),
         });
     }

@@ -115,3 +115,65 @@ rule a {
     checker.check_fragmented(&[(1000, &[0x78, 0x56]), (1002, &[0x34, 0x12])], false);
     checker.check_fragmented(&[(1050, b"")], false);
 }
+
+#[test]
+#[cfg(feature = "object")]
+fn test_fragmented_entrypoint() {
+    use crate::libyara_compat::util::{ELF32_FILE, ELF32_SHAREDOBJ, ELF64_FILE};
+
+    let undefined_checker = Checker::new("rule a { condition: not defined entrypoint }");
+    fn checker(value: u64) -> Checker {
+        Checker::new(&format!("rule a {{ condition: entrypoint == {value} }}"))
+    }
+    fn checker_without_yara(value: u64) -> Checker {
+        Checker::new_without_yara(&format!("rule a {{ condition: entrypoint == {value} }}"))
+    }
+
+    undefined_checker.check_fragmented(&[(0, b"")], true);
+
+    // TODO: elf entrypoint broken in yara, should be fixed in a future release:
+    // <https://github.com/VirusTotal/yara/pull/1989>
+    checker_without_yara(0x8048060).check_fragmented(&[(0, ELF32_FILE)], true);
+    checker_without_yara(0x8048060 + 1000)
+        .check_fragmented(&[(0, b"a"), (500, b"b"), (1000, ELF32_FILE)], true);
+
+    checker_without_yara(0x400080 + 500).check_fragmented(&[(500, ELF64_FILE)], true);
+
+    // First one found wins
+    checker_without_yara(0x8048060 + 500)
+        .check_fragmented(&[(0, b"a"), (500, ELF32_FILE), (1000, ELF64_FILE)], true);
+    checker_without_yara(0x400080 + 500)
+        .check_fragmented(&[(0, b"a"), (500, ELF64_FILE), (1000, ELF32_FILE)], true);
+
+    // an elf that is not ET_EXEC is ignored
+    undefined_checker.check_fragmented(&[(0, b"a"), (500, ELF32_SHAREDOBJ)], true);
+    checker_without_yara(0x8048060 + 1000).check_fragmented(
+        &[(0, b"a"), (500, ELF32_SHAREDOBJ), (1000, ELF32_FILE)],
+        true,
+    );
+
+    // Do the same for PE files
+    let pe32 = std::fs::read("tests/assets/libyara/data/tiny").unwrap();
+    let pe64 = std::fs::read("tests/assets/libyara/data/pe_mingw").unwrap();
+    let dll = std::fs::read("tests/assets/libyara/data/mtxex.dll").unwrap();
+
+    checker(0x14E0).check_fragmented(&[(0, &pe32)], true);
+    checker(0x14E0 + 1000).check_fragmented(&[(0, b"a"), (1000, &pe32)], true);
+
+    checker(0x14F0).check_fragmented(&[(0, &pe64)], true);
+    checker(0x14F0 + 1000).check_fragmented(&[(0, b"a"), (1000, &pe64)], true);
+
+    // DLL is ignored
+    undefined_checker.check_fragmented(&[(0, &dll)], true);
+    checker(0x14F0 + 1000).check_fragmented(&[(0, &dll), (1000, &pe64)], true);
+
+    // first one picked
+    checker_without_yara(0x8048060 + 1000).check_fragmented(
+        &[(0, b"a"), (500, &dll), (1000, ELF32_FILE), (2000, &pe32)],
+        true,
+    );
+    checker(0x14E0 + 1000).check_fragmented(
+        &[(0, b"a"), (500, &dll), (1000, &pe32), (2000, ELF32_FILE)],
+        true,
+    );
+}

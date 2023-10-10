@@ -51,7 +51,7 @@ pub use error::EvalError;
 pub(crate) mod module;
 
 #[cfg(feature = "object")]
-mod entrypoint;
+pub(crate) mod entrypoint;
 
 mod read_integer;
 use read_integer::evaluate_read_integer;
@@ -265,13 +265,15 @@ impl Evaluator<'_, '_, '_> {
             },
 
             #[cfg(feature = "object")]
-            Expression::Entrypoint => match self.scan_data.mem {
-                Memory::Direct(mem) => entrypoint::get_pe_or_elf_entry_point(mem)
-                    .and_then(|v| i64::try_from(v).ok())
+            Expression::Entrypoint => {
+                let res = match self.scan_data.mem {
+                    Memory::Direct(mem) => entrypoint::get_pe_or_elf_entry_point(mem, false),
+                    Memory::Fragmented { .. } => self.scan_data.entrypoint,
+                };
+                res.and_then(|ep| i64::try_from(ep).ok())
                     .map(Value::Integer)
-                    .ok_or(PoisonKind::Undefined),
-                Memory::Fragmented { .. } => todo!(),
-            },
+                    .ok_or(PoisonKind::Undefined)
+            }
             #[cfg(not(feature = "object"))]
             Expression::Entrypoint => Err(PoisonKind::Undefined),
 
