@@ -348,7 +348,9 @@ impl Checker {
         assert_eq!(res, expected_res, "test failed for boreal");
 
         if let Some(rules) = &self.yara_rules {
-            let scanner = rules.scanner().unwrap();
+            let mut scanner = rules.scanner().unwrap();
+            // FIXME: expose flags in boreal API
+            scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
             let res = scanner
                 .scan_mem_blocks(YaraBlocks {
                     current: 0,

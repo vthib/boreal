@@ -27,6 +27,15 @@ impl Memory<'_> {
         }
     }
 
+    /// True if all the memory is readily available.
+    #[must_use]
+    pub fn is_direct(&self) -> bool {
+        match self {
+            Self::Direct(_) => true,
+            Self::Fragmented { .. } => false,
+        }
+    }
+
     /// TODO
     #[must_use]
     pub fn get(&self, start: usize, length: usize) -> Option<&[u8]> {
