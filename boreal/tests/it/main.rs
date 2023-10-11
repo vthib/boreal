@@ -24,6 +24,9 @@ mod namespaces;
 mod undefined;
 mod variables;
 
+// Tests related to scanning of fragmented memory
+mod fragmented;
+
 // Tests related to different limits set.
 mod limits;
 

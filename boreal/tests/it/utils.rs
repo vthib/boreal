@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use boreal::memory::MemoryRegion;
 use boreal::module::{Module, StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanParams, ScanResult};
+use yara::MemoryBlock;
 
 pub struct Checker {
     scanner: boreal::Scanner,
@@ -276,7 +278,7 @@ impl Checker {
 
     // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", [(offset, length), ...]), ...]]
     #[track_caller]
-    pub fn check_full_matches(&self, mem: &[u8], mut expected: FullMatches) {
+    pub fn check_full_matches(&self, mem: &[u8], expected: FullMatches) {
         // We need to compute the full matches for this test
         {
             let mut scanner = self.scanner.clone();
@@ -288,17 +290,7 @@ impl Checker {
 
         if let Some(rules) = &self.yara_rules {
             let res = rules.scan_mem(mem, 1).unwrap();
-            let mut res = get_yara_full_matches(&res);
-            // Yara still reports private strings, however they will always have
-            // zero matches. We do not list private strings, so to really compare both,
-            // we need to clean up all 0 matches in the yara results & expected results
-            for s in &mut res {
-                s.1.retain(|m| !m.1.is_empty());
-            }
-            for s in &mut expected {
-                s.1.retain(|m| !m.1.is_empty());
-            }
-            assert_eq!(res, expected, "conformity test failed for libyara");
+            check_yara_full_matches(&res, expected);
         }
     }
 
@@ -348,12 +340,68 @@ impl Checker {
         }
     }
 
+    #[track_caller]
+    pub fn check_fragmented(&self, regions: &[(usize, &'static [u8])], expected_res: bool) {
+        let regions = convert_regions(regions);
+        let res = self.scanner.scan_fragmented(&regions);
+        let res = !res.matched_rules.is_empty();
+        assert_eq!(res, expected_res, "test failed for boreal");
+
+        if let Some(rules) = &self.yara_rules {
+            let scanner = rules.scanner().unwrap();
+            let res = scanner
+                .scan_mem_blocks(YaraBlocks {
+                    current: 0,
+                    regions: &regions,
+                })
+                .unwrap();
+            let res = !res.is_empty();
+            assert_eq!(res, expected_res, "conformity test failed for libyara");
+        }
+    }
+
+    #[track_caller]
+    pub fn check_fragmented_full_matches(
+        &self,
+        regions: &[(usize, &'static [u8])],
+        expected: FullMatches,
+    ) {
+        let regions = convert_regions(regions);
+
+        // We need to compute the full matches for this test
+        {
+            let mut scanner = self.scanner.clone();
+            scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
+            let res = scanner.scan_fragmented(&regions);
+            let res = get_boreal_full_matches(&res);
+            assert_eq!(res, expected, "test failed for boreal");
+        }
+
+        if let Some(rules) = &self.yara_rules {
+            let scanner = rules.scanner().unwrap();
+            let res = scanner
+                .scan_mem_blocks(YaraBlocks {
+                    current: 0,
+                    regions: &regions,
+                })
+                .unwrap();
+            check_yara_full_matches(&res, expected);
+        }
+    }
+
     pub fn scanner(&self) -> Scanner {
         Scanner {
             scanner: self.scanner.clone(),
             yara_scanner: self.yara_rules.as_ref().map(|v| v.scanner().unwrap()),
         }
     }
+}
+
+fn convert_regions(regions: &[(usize, &'static [u8])]) -> Vec<MemoryRegion<'static>> {
+    regions
+        .iter()
+        .map(|(start, mem)| MemoryRegion { start: *start, mem })
+        .collect()
 }
 
 pub struct Scanner<'a> {
@@ -485,8 +533,9 @@ fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
         .collect()
 }
 
-fn get_yara_full_matches<'a>(res: &'a [yara::Rule]) -> FullMatches<'a> {
-    res.iter()
+fn check_yara_full_matches(res: &[yara::Rule], mut expected: FullMatches) {
+    let mut res: FullMatches = res
+        .iter()
         .map(|v| {
             let rule_name = format!("{}:{}", v.namespace, v.identifier);
             let str_matches: Vec<_> = v
@@ -500,14 +549,24 @@ fn get_yara_full_matches<'a>(res: &'a [yara::Rule]) -> FullMatches<'a> {
                         str_match
                             .matches
                             .iter()
-                            .map(|m| (&*m.data, m.offset, m.length))
+                            .map(|m| (&*m.data, m.base + m.offset, m.length))
                             .collect(),
                     )
                 })
                 .collect();
             (rule_name, str_matches)
         })
-        .collect()
+        .collect();
+    // Yara still reports private strings, however they will always have
+    // zero matches. We do not list private strings, so to really compare both,
+    // we need to clean up all 0 matches in the yara results & expected results
+    for s in &mut res {
+        s.1.retain(|m| !m.1.is_empty());
+    }
+    for s in &mut expected {
+        s.1.retain(|m| !m.1.is_empty());
+    }
+    assert_eq!(res, expected, "conformity test failed for libyara");
 }
 
 pub fn build_rule(condition: &str) -> String {
@@ -805,4 +864,22 @@ impl std::fmt::Debug for Diff {
 
 pub fn join_str(a: &str, b: &str) -> Vec<u8> {
     format!("{}{}", a, b).into_bytes()
+}
+
+struct YaraBlocks<'a> {
+    current: usize,
+    regions: &'a [MemoryRegion<'a>],
+}
+
+impl<'a> yara::MemoryBlockIterator for YaraBlocks<'a> {
+    fn first(&mut self) -> Option<yara::MemoryBlock> {
+        self.current = 0;
+        self.next()
+    }
+
+    fn next(&mut self) -> Option<yara::MemoryBlock> {
+        let region = self.regions.get(self.current)?;
+        self.current += 1;
+        Some(MemoryBlock::new(region.start as _, region.mem))
+    }
 }
