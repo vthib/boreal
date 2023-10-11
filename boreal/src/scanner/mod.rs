@@ -175,6 +175,17 @@ impl Scanner {
         Ok(self.scan_mem(&mmap))
     }
 
+    // FIXME: clean up proto and doc before release
+    #[doc(hidden)]
+    #[must_use]
+    pub fn scan_fragmented(&self, regions: &[MemoryRegion]) -> ScanResult {
+        self.inner.scan(
+            Memory::Fragmented { regions },
+            &self.scan_params,
+            &self.external_symbols_values,
+        )
+    }
+
     /// Define a value for a symbol defined and used in compiled rules.
     ///
     /// This symbol must have been defined when compiling rules using
