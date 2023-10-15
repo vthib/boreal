@@ -66,7 +66,7 @@ object = { version = "0.32", optional = true, default-features = false, features
 authenticode-parser = { version = "0.3", optional = true }
 
 # "memmap" feature
-memmap2 = { version = "0.7", optional = true }
+memmap2 = { version = "0.9", optional = true }
 
 [dev-dependencies]
 base64 = "0.21"
