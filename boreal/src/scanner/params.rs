@@ -21,6 +21,9 @@ pub struct ScanParams {
     ///
     /// This requires the `profiling` feature.
     pub(crate) compute_statistics: bool,
+
+    /// Scanned bytes are part of a process memory.
+    pub(crate) process_memory: bool,
 }
 
 impl Default for ScanParams {
@@ -31,6 +34,7 @@ impl Default for ScanParams {
             string_max_nb_matches: 1_000,
             timeout_duration: None,
             compute_statistics: false,
+            process_memory: false,
         }
     }
 }
@@ -100,6 +104,62 @@ impl ScanParams {
     pub fn compute_statistics(mut self, compute_statistics: bool) -> Self {
         self.compute_statistics = compute_statistics;
         self
+    }
+
+    /// Scanned bytes are part of the memory of a process.
+    ///
+    /// This has an impact of the behavior of some modules. For example, some file analysis
+    /// modules such as `pe` or `elf` will depend on this flag to decide whether to use the
+    /// virtual address values (if this flag is true), or the file offset values (if it is
+    /// false).
+    ///
+    /// This is always true when using the APIs to scan a process, regardless of this
+    /// parameter. It is false in other APIs, unless this parameter is set.
+    ///
+    /// One reason to use this parameter is for example to modify how a process regions
+    /// are fetched or filtered, but still rely on the same scanning behavior. The
+    /// [`crate::Scanner::scan_mem`] or [`crate::Scanner::scan_fragmented`] can then be used,
+    /// and the scan will evaluate as if [`crate::Scanner::scan_process`] was called.
+    #[must_use]
+    pub fn process_memory(mut self, process_memory: bool) -> Self {
+        self.process_memory = process_memory;
+        self
+    }
+
+    /// Returns whether full matches are computed on matching rules.
+    #[must_use]
+    pub fn get_compute_full_matches(&self) -> bool {
+        self.compute_full_matches
+    }
+
+    /// Returns the maxiumum length of the matches returned in matching rules.
+    #[must_use]
+    pub fn get_match_max_length(&self) -> usize {
+        self.match_max_length
+    }
+
+    /// Returns the maximum number of matches for a given string.
+    #[must_use]
+    pub fn get_string_max_nb_matches(&self) -> u32 {
+        self.string_max_nb_matches
+    }
+
+    /// Returns the maximum duration of a scan before it is stopped.
+    #[must_use]
+    pub fn get_timeout_duration(&self) -> Option<&Duration> {
+        self.timeout_duration.as_ref()
+    }
+
+    /// Returns whether statistics are computed during scanning.
+    #[must_use]
+    pub fn get_compute_statistics(&self) -> bool {
+        self.compute_statistics
+    }
+
+    /// Returns whether scanned bytes are considered part of the memory of a process.
+    #[must_use]
+    pub fn get_process_memory(&self) -> bool {
+        self.process_memory
     }
 }
 

@@ -340,6 +340,11 @@ impl Checker {
         }
     }
 
+    pub fn set_process_memory_flag(&mut self) {
+        let params = self.scanner.scan_params().clone();
+        self.scanner.set_scan_params(params.process_memory(true));
+    }
+
     #[track_caller]
     pub fn check_fragmented(&self, regions: &[(usize, &[u8])], expected_res: bool) {
         let regions = convert_regions(regions);
@@ -349,8 +354,9 @@ impl Checker {
 
         if let Some(rules) = &self.yara_rules {
             let mut scanner = rules.scanner().unwrap();
-            // FIXME: expose flags in boreal API
-            scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
+            if self.scanner.scan_params().get_process_memory() {
+                scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
+            }
             let res = scanner
                 .scan_mem_blocks(YaraBlocks {
                     current: 0,

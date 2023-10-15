@@ -121,13 +121,20 @@ rule a {
 fn test_fragmented_entrypoint() {
     use crate::libyara_compat::util::{ELF32_FILE, ELF32_SHAREDOBJ, ELF64_FILE};
 
-    let undefined_checker = Checker::new("rule a { condition: not defined entrypoint }");
     fn checker(value: u64) -> Checker {
-        Checker::new(&format!("rule a {{ condition: entrypoint == {value} }}"))
+        let mut checker = Checker::new(&format!("rule a {{ condition: entrypoint == {value} }}"));
+        checker.set_process_memory_flag();
+        checker
     }
     fn checker_without_yara(value: u64) -> Checker {
-        Checker::new_without_yara(&format!("rule a {{ condition: entrypoint == {value} }}"))
+        let mut checker =
+            Checker::new_without_yara(&format!("rule a {{ condition: entrypoint == {value} }}"));
+        checker.set_process_memory_flag();
+        checker
     }
+
+    let mut undefined_checker = Checker::new("rule a { condition: not defined entrypoint }");
+    undefined_checker.set_process_memory_flag();
 
     undefined_checker.check_fragmented(&[(0, b"")], true);
 
