@@ -40,7 +40,7 @@ crossbeam-channel = "0.5"
 hex = "0.4"
 
 # Walking through directories
-walkdir = "2.3"
+walkdir = "2.4"
 
 [dev-dependencies]
 # Testing for the CLI
