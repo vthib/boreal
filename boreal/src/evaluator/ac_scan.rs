@@ -173,9 +173,8 @@ impl AcScan {
 
             // Upscale to the original literal shape before feeding it to the matcher verification
             // function.
-            let start = match mat.start().checked_sub(start_offset) {
-                Some(v) => v,
-                None => continue,
+            let Some(start) = mat.start().checked_sub(start_offset) else {
+                continue;
             };
             let end = match mat.end().checked_add(end_offset) {
                 Some(v) if v <= scan_data.mem.len() => v,
@@ -184,9 +183,8 @@ impl AcScan {
             let m = start..end;
 
             // Verify the literal is valid.
-            let match_type = match var.confirm_ac_literal(scan_data.mem, &m, literal_index) {
-                Some(ty) => ty,
-                None => continue,
+            let Some(match_type) = var.confirm_ac_literal(scan_data.mem, &m, literal_index) else {
+                continue;
             };
 
             let var_matches = &mut matches[variable_index];

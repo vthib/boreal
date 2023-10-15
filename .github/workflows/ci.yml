@@ -149,11 +149,11 @@ jobs:
           fail_ci_if_error: true
 
   msrv:
-    name: Rust 1.62.0
+    name: Rust 1.65.0
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.62.0
+      - uses: dtolnay/rust-toolchain@1.65.0
       # Only check boreal (and boreal-parser).
       # boreal-cli is a useful tool, but MSRV on it is not really useful.
       - run: |

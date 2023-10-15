@@ -114,19 +114,13 @@ fn quoted_no_rtrim(input: Input) -> ParseResult<Vec<u8>> {
                 Some((_, '\\')) => res.push(b'\\'),
                 Some((_, 'x')) => match (chars.next(), chars.next()) {
                     (Some((i1, a)), Some((i2, b))) => {
-                        let a = match a.to_digit(16) {
-                            Some(a) => a,
-                            None => {
-                                index = i1;
-                                break;
-                            }
+                        let Some(a) = a.to_digit(16) else {
+                            index = i1;
+                            break;
                         };
-                        let b = match b.to_digit(16) {
-                            Some(b) => b,
-                            None => {
-                                index = i2;
-                                break;
-                            }
+                        let Some(b) = b.to_digit(16) else {
+                            index = i2;
+                            break;
                         };
                         #[allow(clippy::cast_possible_truncation)]
                         res.push(((a as u8) << 4) + (b as u8));

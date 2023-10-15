@@ -1485,9 +1485,8 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
             ("rva", rva.into()),
         ]));
     } else {
-        let name = match hint_name(thunk.address()) {
-            Ok(name) => name,
-            Err(_) => return,
+        let Ok(name) = hint_name(thunk.address()) else {
+            return;
         };
 
         data_functions.push(DataFunction {
@@ -1617,9 +1616,8 @@ fn add_exports(
 
         // Now, add names
         for (name_pointer, ordinal_index) in table.name_iter() {
-            let mut name = match table.name_from_pointer(name_pointer) {
-                Ok(v) => v,
-                Err(_) => continue,
+            let Ok(mut name) = table.name_from_pointer(name_pointer) else {
+                continue;
             };
             if name.len() > MAX_EXPORT_NAME_LENGTH {
                 name = &name[..MAX_EXPORT_NAME_LENGTH];
@@ -1766,9 +1764,8 @@ fn add_resources(
                 ResourceNameOrId::Id(_) => None,
             };
 
-            let table = match entry.data(dir) {
-                Ok(ResourceDirectoryEntryData::Table(table)) => table,
-                _ => continue,
+            let Ok(ResourceDirectoryEntryData::Table(table)) = entry.data(dir) else {
+                continue;
             };
             for entry in table.entries {
                 // Second level is id
@@ -1778,9 +1775,8 @@ fn add_resources(
                     ResourceNameOrId::Id(_) => None,
                 };
 
-                let table = match entry.data(dir) {
-                    Ok(ResourceDirectoryEntryData::Table(table)) => table,
-                    _ => continue,
+                let Ok(ResourceDirectoryEntryData::Table(table)) = entry.data(dir) else {
+                    continue;
                 };
                 for entry in table.entries {
                     // Third level is language
@@ -1859,9 +1855,8 @@ fn add_resources(
 }
 
 pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str, Value>) {
-    let infos = match version_info::read_version_info(mem, offset as usize) {
-        Some(infos) => infos,
-        None => return,
+    let Some(infos) = version_info::read_version_info(mem, offset as usize) else {
+        return;
     };
 
     out.extend([
