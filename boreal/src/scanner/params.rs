@@ -112,4 +112,27 @@ mod tests {
     fn test_types_traits() {
         test_type_traits(ScanParams::default());
     }
+
+    #[test]
+    fn test_getters() {
+        let params = ScanParams::default();
+
+        let params = params.compute_full_matches(true);
+        assert!(params.get_compute_full_matches());
+
+        let params = params.match_max_length(3);
+        assert_eq!(params.get_match_max_length(), 3);
+
+        let params = params.string_max_nb_matches(3);
+        assert_eq!(params.get_string_max_nb_matches(), 3);
+
+        let params = params.timeout_duration(Some(Duration::from_secs(4)));
+        assert_eq!(params.get_timeout_duration(), Some(&Duration::from_secs(4)));
+
+        let params = params.compute_statistics(true);
+        assert!(params.get_compute_statistics());
+
+        let params = params.process_memory(true);
+        assert!(params.get_process_memory());
+    }
 }
