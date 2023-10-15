@@ -472,7 +472,8 @@ impl Inner {
                     #[cfg(feature = "object")]
                     if scan_data.entrypoint.is_none() {
                         scan_data.entrypoint = entrypoint::get_pe_or_elf_entry_point(
-                            region.mem, true,
+                            region.mem,
+                            scan_data.params.process_memory,
                         )
                         .and_then(|ep| {
                             let start = u64::try_from(region.start).ok()?;
