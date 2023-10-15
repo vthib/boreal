@@ -327,14 +327,11 @@ impl Matcher {
     }
 
     pub fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Range<usize>> {
-        let regex = match &self.kind {
-            MatcherKind::Raw(r) => r,
-            _ => {
-                // This variable should have been covered by the AC pass, so we should
-                // not be able to reach this code.
-                debug_assert!(false);
-                return None;
-            }
+        let MatcherKind::Raw(regex) = &self.kind else {
+            // This variable should have been covered by the AC pass, so we should
+            // not be able to reach this code.
+            debug_assert!(false);
+            return None;
         };
 
         while offset < mem.len() {

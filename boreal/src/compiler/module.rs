@@ -155,13 +155,10 @@ pub(super) fn compile_identifier<'a, 'b>(
 
     // Extract first operation, it must be a subfielding.
     let mut ops = identifier.operations.into_iter();
-    let first_op = match ops.next() {
-        Some(v) => v,
-        None => {
-            return Err(CompilationError::InvalidIdentifierUse {
-                span: identifier_span.clone(),
-            })
-        }
+    let Some(first_op) = ops.next() else {
+        return Err(CompilationError::InvalidIdentifierUse {
+            span: identifier_span.clone(),
+        });
     };
     let subfield = match &first_op.op {
         IdentifierOperationType::Subfield(subfield) => subfield,
@@ -329,9 +326,7 @@ impl ModuleUse<'_, '_> {
 
                     StaticValue::Function { fun, .. } => {
                         let mut ops = self.operations.into_iter();
-                        let arguments = if let Some(ValueOperation::FunctionCall(v)) = ops.next() {
-                            v
-                        } else {
+                        let Some(ValueOperation::FunctionCall(arguments)) = ops.next() else {
                             return None;
                         };
                         Expression::Module(ModuleExpression::Function {
