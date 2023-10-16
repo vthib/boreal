@@ -19,7 +19,7 @@ pub enum Memory<'a> {
     },
 }
 
-impl Memory<'_> {
+impl<'a> Memory<'a> {
     pub(crate) fn filesize(&self) -> Option<usize> {
         match self {
             Self::Direct(mem) => Some(mem.len()),
@@ -36,23 +36,37 @@ impl Memory<'_> {
         }
     }
 
+    /// Returns the byte slice of the whole scanned memory if available.
+    #[must_use]
+    pub fn get_direct(&self) -> Option<&[u8]> {
+        match self {
+            Self::Direct(v) => Some(*v),
+            Self::Fragmented { .. } => None,
+        }
+    }
+
     /// TODO
     #[must_use]
-    pub fn get(&self, start: usize, length: usize) -> Option<&[u8]> {
+    pub fn get(&self, start: usize, end: usize) -> Option<&'a [u8]> {
         match self {
             Self::Direct(mem) => {
-                let end = start.checked_add(length)?;
-                mem.get(start..end)
+                if start >= mem.len() {
+                    None
+                } else {
+                    let end = std::cmp::min(mem.len(), end);
+                    mem.get(start..end)
+                }
             }
             Self::Fragmented { regions } => {
                 for region in *regions {
                     let Some(relative_start) = start.checked_sub(region.start) else {
                         break;
                     };
-                    if relative_start > region.mem.len() {
+                    if relative_start >= region.mem.len() {
                         continue;
                     }
-                    let end = relative_start.checked_add(length)?;
+                    let end = end.checked_sub(region.start)?;
+                    let end = std::cmp::min(region.mem.len(), end);
                     return region.mem.get(relative_start..end);
                 }
 

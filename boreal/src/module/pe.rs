@@ -1920,9 +1920,11 @@ fn bool_to_int_value(b: bool) -> Value {
 
 impl Pe {
     fn calculate_checksum(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
+        let mem = ctx.mem.get_direct()?;
+
         // Compute offset of checksum in the file: this is replaced by 0 when computing the
         // checksum
-        let dos_header = pe::ImageDosHeader::parse(ctx.mem).ok()?;
+        let dos_header = pe::ImageDosHeader::parse(mem).ok()?;
         // 64 is the offset of the checksum in the optional header, and 24 is the offset of the
         // optional header in the nt headers: See
         // <https://docs.microsoft.com/en-us/windows/win32/debug/pe-format>
@@ -1931,10 +1933,10 @@ impl Pe {
         // Add data as LE u32 with overflow
         let mut csum: u64 = 0;
         let mut idx = 0;
-        let mut mem = ctx.mem;
-        while mem.len() >= 4 {
+        let mut cursor = mem;
+        while cursor.len() >= 4 {
             if idx != csum_offset {
-                let dword = u32::from_le_bytes([mem[0], mem[1], mem[2], mem[3]]);
+                let dword = u32::from_le_bytes([cursor[0], cursor[1], cursor[2], cursor[3]]);
 
                 csum += u64::from(dword);
                 if csum > 0xFFFF_FFFF {
@@ -1942,12 +1944,12 @@ impl Pe {
                 }
             }
 
-            mem = &mem[4..];
+            cursor = &cursor[4..];
             idx += 4;
         }
 
         // pad with 0 for the last chunk
-        let dword = match mem {
+        let dword = match cursor {
             [a] => u32::from_le_bytes([*a, 0, 0, 0]),
             [a, b] => u32::from_le_bytes([*a, *b, 0, 0]),
             [a, b, c] => u32::from_le_bytes([*a, *b, *c, 0]),
@@ -1965,7 +1967,7 @@ impl Pe {
 
         // Finally, add the filesize
         #[allow(clippy::cast_possible_truncation)]
-        (csum as usize).wrapping_add(ctx.mem.len()).try_into().ok()
+        (csum as usize).wrapping_add(mem.len()).try_into().ok()
     }
 
     fn section_index(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -2307,24 +2309,27 @@ impl Pe {
         let rva: i64 = args.into_iter().next()?.try_into().ok()?;
         let rva: u32 = rva.try_into().ok()?;
 
+        // TODO: handle fragmented memory for this
+        let mem = ctx.mem.get_direct()?;
+
         // We cannot save the SectionTable in the data, because it is a no-copy struct borrowing on
         // the scanned mem. Instead, we will reparse the mem and rebuild the SectionTable.
         // This isn't that costly, and this function shouldn't be used that much anyway.
-        let dos_header = ImageDosHeader::parse(ctx.mem).ok()?;
+        let dos_header = ImageDosHeader::parse(mem).ok()?;
         let mut offset = dos_header.nt_headers_offset().into();
-        let section_table = match FileKind::parse(ctx.mem) {
+        let section_table = match FileKind::parse(mem) {
             Ok(FileKind::Pe32) => {
-                let (nt_headers, _) = ImageNtHeaders32::parse(ctx.mem, &mut offset).ok()?;
-                nt_headers.sections(ctx.mem, offset).ok()?
+                let (nt_headers, _) = ImageNtHeaders32::parse(mem, &mut offset).ok()?;
+                nt_headers.sections(mem, offset).ok()?
             }
             Ok(FileKind::Pe64) => {
-                let (nt_headers, _) = ImageNtHeaders64::parse(ctx.mem, &mut offset).ok()?;
-                nt_headers.sections(ctx.mem, offset).ok()?
+                let (nt_headers, _) = ImageNtHeaders64::parse(mem, &mut offset).ok()?;
+                nt_headers.sections(mem, offset).ok()?
             }
             _ => return None,
         };
 
-        va_to_file_offset(ctx.mem, &section_table, rva).map(Into::into)
+        va_to_file_offset(mem, &section_table, rva).map(Into::into)
     }
 }
 

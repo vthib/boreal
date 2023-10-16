@@ -41,6 +41,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::memory::Memory;
 use crate::regex::Regex;
 
 mod time;
@@ -196,7 +197,7 @@ impl std::fmt::Debug for ScanContext<'_> {
 /// Context provided to module functions during evaluation.
 pub struct EvalContext<'a, 'b> {
     /// Input being scanned.
-    pub mem: &'a [u8],
+    pub mem: &'b Memory<'a>,
 
     /// Private data (per-scan) of each module.
     ///
@@ -349,10 +350,14 @@ pub enum Value {
         /// `fun("a", 1 + 2, #foo)` would call the function `fun` with:
         ///
         /// ```
+        /// # use boreal::memory::Memory;
         /// # use boreal::module::{EvalContext, Value};
         /// # let x = 3;
         /// # fn fun(_: &EvalContext, _: Vec<Value>) -> Option<Value> { None }
-        /// # let ctx = EvalContext { mem: b"", module_data: &Default::default() };
+        /// # let ctx = EvalContext {
+        /// #     mem: &Memory::Direct(b""),
+        /// #     module_data: &Default::default()
+        /// # };
         /// let result = fun(&ctx, vec![
         ///     Value::bytes("a"),
         ///     Value::Integer(3),
@@ -724,7 +729,7 @@ mod tests {
             module_data: &mut ModuleDataMap(HashMap::new()),
         });
         test_type_traits_non_clonable(EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap(HashMap::new()),
         });
 
