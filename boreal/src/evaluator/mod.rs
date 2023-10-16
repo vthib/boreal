@@ -35,6 +35,7 @@
 //! - `defined`
 //!
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
+use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
@@ -149,9 +150,11 @@ impl<'a> ScanData<'a> {
             .iter()
             .map(|module| {
                 module.setup_new_scan(&mut module_ctx.module_data);
-                let value =
-                    crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx));
-                (module.get_name(), value)
+
+                let mut values = HashMap::new();
+                module.get_dynamic_values(&mut module_ctx, &mut values);
+
+                (module.get_name(), crate::module::Value::Object(values))
             })
             .collect();
 

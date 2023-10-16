@@ -589,15 +589,18 @@ mod tests {
             .into()
         }
 
-        fn get_dynamic_values(&self, _: &mut ScanContext) -> HashMap<&'static str, ModuleValue> {
-            [
+        fn get_dynamic_values(
+            &self,
+            _: &mut ScanContext,
+            out: &mut HashMap<&'static str, ModuleValue>,
+        ) {
+            out.extend([
                 ("array", ModuleValue::Array(vec![ModuleValue::Integer(3)])),
                 (
                     "dict",
                     ModuleValue::Dictionary([(b"a".to_vec(), ModuleValue::Integer(3))].into()),
                 ),
-            ]
-            .into()
+            ]);
         }
     }
 

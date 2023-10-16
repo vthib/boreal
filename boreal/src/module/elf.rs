@@ -243,11 +243,14 @@ impl Module for Elf {
         data_map.insert::<Self>(Data::default());
     }
 
-    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        ctx.module_data
+    fn get_dynamic_values(&self, ctx: &mut ScanContext, out: &mut HashMap<&'static str, Value>) {
+        if let Some(values) = ctx
+            .module_data
             .get_mut::<Self>()
             .and_then(|data| parse_file(ctx.mem, data))
-            .unwrap_or_default()
+        {
+            *out = values;
+        }
     }
 }
 

@@ -117,11 +117,11 @@ pub trait Module: Send + Sync {
     ///         [("array", Type::array(Type::Bytes))].into()
     ///     }
     ///
-    ///     fn get_dynamic_values(&self, _ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-    ///         [(
+    ///     fn get_dynamic_values(&self, _ctx: &mut ScanContext, out: &mut HashMap<&'static str, Value>) {
+    ///         out.extend([(
     ///             "array",
     ///             Value::Array(vec![Value::bytes("a"), Value::bytes("b")])
-    ///         )].into()
+    ///         )]);
     ///     }
     /// }
     /// ```
@@ -156,9 +156,15 @@ pub trait Module: Send + Sync {
 
     /// Values computed dynamically.
     ///
-    /// This is called on every scan.
-    fn get_dynamic_values(&self, _ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        HashMap::new()
+    /// This is called on every scan, but can be called multiple times.
+    /// When scanning a file or a byte slice, this is only called once per scan.
+    /// However, when scanning the memory of a process, this is called once per
+    /// every region.
+    fn get_dynamic_values(
+        &self,
+        _ctx: &mut ScanContext,
+        _values: &mut HashMap<&'static str, Value>,
+    ) {
     }
 }
 
