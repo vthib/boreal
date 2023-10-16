@@ -139,6 +139,21 @@ pub trait Module: Send + Sync {
         HashMap::new()
     }
 
+    /// Setup data when a new scan is started.
+    ///
+    /// This method is called when a new scan is started, before calling
+    /// [`Module::get_dynamic_values`]. It should be used to save a new instance
+    /// of the module data for the scan. See [`ModuleData`].
+    ///
+    /// It is better to add the module data in this method rather than in
+    /// `Module::get_dynamic_values` for two reasons:
+    /// - The [`Module::get_dynamic_values`] method can be called multiple times
+    ///   during a single scan, for example when scanning the memory of a process.
+    /// - Some module use data without having any dynamic values
+    fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
+        let _ = data_map;
+    }
+
     /// Values computed dynamically.
     ///
     /// This is called on every scan.
@@ -188,7 +203,7 @@ pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
 ///
 /// ```
 /// use std::collections::HashMap;
-/// use boreal::module::{Module, ModuleData, StaticValue, Value, Type, ScanContext};
+/// use boreal::module::{Module, ModuleData, ModuleDataMap, StaticValue, Value, Type, ScanContext};
 ///
 /// struct Foo;
 ///
@@ -216,12 +231,10 @@ pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
 ///         )].into()
 ///     }
 ///
-///     fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-///         ctx.module_data.insert::<Self>(FooData {
+///     fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
+///         data_map.insert::<Self>(FooData {
 ///             value: 5
 ///         });
-///
-///         HashMap::new()
 ///     }
 /// }
 ///
@@ -249,6 +262,14 @@ impl ModuleDataMap {
         self.0
             .get(&TypeId::of::<T>())
             .and_then(|v| v.downcast_ref())
+    }
+
+    /// Retrieve a mutable borrow on the data of a module.
+    #[must_use]
+    pub fn get_mut<T: Module + ModuleData + 'static>(&mut self) -> Option<&mut T::Data> {
+        self.0
+            .get_mut(&TypeId::of::<T>())
+            .and_then(|v| v.downcast_mut())
     }
 }
 
