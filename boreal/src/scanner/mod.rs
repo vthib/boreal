@@ -560,7 +560,7 @@ impl std::fmt::Display for DefineSymbolError {
 mod tests {
     use std::collections::HashMap;
 
-    use crate::module::{ScanContext, StaticValue, Type, Value as ModuleValue};
+    use crate::module::{EvalContext, ScanContext, StaticValue, Type, Value as ModuleValue};
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
     use crate::Compiler;
 
@@ -605,7 +605,7 @@ mod tests {
     }
 
     impl Test {
-        fn to_bytes(_ctx: &ScanContext, args: Vec<ModuleValue>) -> Option<ModuleValue> {
+        fn to_bytes(_ctx: &EvalContext, args: Vec<ModuleValue>) -> Option<ModuleValue> {
             let mut args = args.into_iter();
             let v: i64 = args.next()?.try_into().ok()?;
             Some(ModuleValue::Bytes(format!("{v}").into_bytes()))

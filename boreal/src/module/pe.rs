@@ -11,7 +11,9 @@ use object::{
     FileKind, LittleEndian as LE, StringTable,
 };
 
-use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
+use super::{
+    EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
+};
 
 mod debug;
 mod ord;
@@ -1917,7 +1919,7 @@ fn bool_to_int_value(b: bool) -> Value {
 }
 
 impl Pe {
-    fn calculate_checksum(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn calculate_checksum(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
         // Compute offset of checksum in the file: this is replaced by 0 when computing the
         // checksum
         let dos_header = pe::ImageDosHeader::parse(ctx.mem).ok()?;
@@ -1966,7 +1968,7 @@ impl Pe {
         (csum as usize).wrapping_add(ctx.mem.len()).try_into().ok()
     }
 
-    fn section_index(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn section_index(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let arg = args.next()?;
 
@@ -1989,7 +1991,7 @@ impl Pe {
         }
     }
 
-    fn exports(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn exports(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let arg = args.next()?;
 
@@ -2018,7 +2020,7 @@ impl Pe {
         Some(bool_to_int_value(res))
     }
 
-    fn exports_index(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn exports_index(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let arg = args.next()?;
 
@@ -2057,7 +2059,7 @@ impl Pe {
         res.try_into().ok()
     }
 
-    fn imports(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn imports(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let first = args.next()?;
         let second = args.next();
@@ -2157,7 +2159,7 @@ impl Pe {
         }
     }
 
-    fn import_rva(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn import_rva(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let first = args.next()?;
         let second = args.next()?;
@@ -2175,7 +2177,7 @@ impl Pe {
         }
     }
 
-    fn delayed_import_rva(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn delayed_import_rva(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let first = args.next()?;
         let second = args.next()?;
@@ -2193,7 +2195,7 @@ impl Pe {
         }
     }
 
-    fn locale(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn locale(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let locale: i64 = args.next()?.try_into().ok()?;
 
@@ -2205,7 +2207,7 @@ impl Pe {
         ))
     }
 
-    fn language(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn language(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let lang: i64 = args.next()?.try_into().ok()?;
 
@@ -2217,22 +2219,22 @@ impl Pe {
         ))
     }
 
-    fn is_dll(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn is_dll(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
         let data = ctx.module_data.get::<Self>()?;
         Some(data.is_dll.into())
     }
 
-    fn is_32bit(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn is_32bit(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
         let data = ctx.module_data.get::<Self>()?;
         Some(bool_to_int_value(data.is_32bit))
     }
 
-    fn is_64bit(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn is_64bit(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
         let data = ctx.module_data.get::<Self>()?;
         Some(bool_to_int_value(!data.is_32bit))
     }
 
-    fn rich_signature_version(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn rich_signature_version(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let first = args.next()?;
         let second = args.next();
@@ -2250,7 +2252,7 @@ impl Pe {
         res.try_into().ok()
     }
 
-    fn rich_signature_toolid(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn rich_signature_toolid(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let first = args.next()?;
         let second = args.next();
@@ -2269,7 +2271,7 @@ impl Pe {
     }
 
     #[cfg(feature = "hash")]
-    fn imphash(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn imphash(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
         use md5::{Digest, Md5};
 
         let data = ctx.module_data.get::<Self>()?;
@@ -2301,7 +2303,7 @@ impl Pe {
         Some(Value::Bytes(hex::encode(hasher.finalize()).into_bytes()))
     }
 
-    fn rva_to_offset(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn rva_to_offset(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let rva: i64 = args.into_iter().next()?.try_into().ok()?;
         let rva: u32 = rva.try_into().ok()?;
 

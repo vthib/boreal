@@ -4,7 +4,9 @@ use object::elf::{self, FileHeader32, FileHeader64};
 use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, Sym};
 use object::{Endianness, FileKind};
 
-use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
+use super::{
+    EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
+};
 
 const MAX_NB_SEGMENTS: usize = 32_768;
 const MAX_NB_SECTIONS: usize = 32_768;
@@ -528,7 +530,7 @@ fn get_symbols<Elf: FileHeader>(
 
 impl Elf {
     #[cfg(feature = "hash")]
-    fn import_md5(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn import_md5(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
         use md5::{Digest, Md5};
 
         let data = ctx.module_data.get::<Self>()?;
@@ -541,7 +543,7 @@ impl Elf {
     }
 
     #[cfg(feature = "hash")]
-    fn telfhash(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn telfhash(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
         const EXCLUDED_STRINGS: &[&[u8]; 8] = &[
             b"__libc_start_main",
             b"main",

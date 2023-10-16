@@ -3,7 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::{Module, ScanContext, StaticValue, Type, Value};
+use super::{EvalContext, Module, StaticValue, Type, Value};
 
 /// `time` module. Only exposes a `now` function to get the unix timestamp.
 #[derive(Debug)]
@@ -24,7 +24,7 @@ impl Module for Time {
 }
 
 impl Time {
-    fn now(_: &ScanContext, _: Vec<Value>) -> Option<Value> {
+    fn now(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             // This should not fail unless the clock is set to before the unix epoch.

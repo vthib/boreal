@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
+use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value};
 use md5::{Digest, Md5};
 use sha1::Sha1;
 use sha2::Sha256;
@@ -87,7 +87,7 @@ fn compute_hash<D: Digest>(bytes: &[u8]) -> Value {
 }
 
 impl Hash {
-    fn md5(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn md5(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         match get_args(ctx, args)? {
             Args::Bytes(s) => Some(compute_hash::<Md5>(&s)),
             Args::Range(offset, end) => {
@@ -111,7 +111,7 @@ impl Hash {
         }
     }
 
-    fn sha1(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn sha1(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         match get_args(ctx, args)? {
             Args::Bytes(s) => Some(compute_hash::<Sha1>(&s)),
             Args::Range(offset, end) => {
@@ -135,7 +135,7 @@ impl Hash {
         }
     }
 
-    fn sha2(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn sha2(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         match get_args(ctx, args)? {
             Args::Bytes(s) => Some(compute_hash::<Sha256>(&s)),
             Args::Range(offset, end) => {
@@ -159,7 +159,7 @@ impl Hash {
         }
     }
 
-    fn checksum32(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn checksum32(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         apply(ctx, args, |s| {
             let checksum = s
                 .iter()
@@ -168,7 +168,7 @@ impl Hash {
         })
     }
 
-    fn crc32(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn crc32(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         apply(ctx, args, |s| {
             let crc = crc32fast::hash(s);
             Value::Integer(i64::from(crc))
@@ -181,7 +181,7 @@ enum Args {
     Range(usize, usize),
 }
 
-fn get_args(ctx: &ScanContext, args: Vec<Value>) -> Option<Args> {
+fn get_args(ctx: &EvalContext, args: Vec<Value>) -> Option<Args> {
     let mut args = args.into_iter();
     let v = args.next()?;
 
@@ -202,7 +202,7 @@ fn get_args(ctx: &ScanContext, args: Vec<Value>) -> Option<Args> {
     }
 }
 
-fn apply<F>(ctx: &ScanContext, args: Vec<Value>, fun: F) -> Option<Value>
+fn apply<F>(ctx: &EvalContext, args: Vec<Value>, fun: F) -> Option<Value>
 where
     F: FnOnce(&[u8]) -> Value,
 {

@@ -45,7 +45,7 @@ use crate::statistics;
 use memchr::memmem;
 
 use crate::compiler::ExternalValue;
-use crate::module::{Module, ModuleDataMap, ScanContext, Value as ModuleValue};
+use crate::module::{EvalContext, Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 pub mod ac_scan;
 
@@ -117,7 +117,7 @@ pub struct ScanData<'a> {
     pub module_values: Vec<(&'static str, ModuleValue)>,
 
     // Context used when calling module functions
-    module_ctx: ScanContext<'a>,
+    module_ctx: EvalContext<'a>,
 
     // List of values for external symbols.
     external_symbols: &'a [ExternalValue],
@@ -141,7 +141,7 @@ impl<'a> ScanData<'a> {
         // evaluation.
         let timeout_checker = timeout.map(timeout::TimeoutChecker::new);
 
-        let mut module_ctx = ScanContext {
+        let mut scan_ctx = ScanContext {
             mem,
             module_data: ModuleDataMap::default(),
         };
@@ -149,14 +149,19 @@ impl<'a> ScanData<'a> {
         let module_values = modules
             .iter()
             .map(|module| {
-                module.setup_new_scan(&mut module_ctx.module_data);
+                module.setup_new_scan(&mut scan_ctx.module_data);
 
                 let mut values = HashMap::new();
-                module.get_dynamic_values(&mut module_ctx, &mut values);
+                module.get_dynamic_values(&mut scan_ctx, &mut values);
 
                 (module.get_name(), crate::module::Value::Object(values))
             })
             .collect();
+
+        let module_ctx = EvalContext {
+            mem,
+            module_data: scan_ctx.module_data,
+        };
 
         Self {
             mem,
@@ -1058,7 +1063,7 @@ mod tests {
         test_type_traits_non_clonable(ScanData {
             mem: b"",
             module_values: Vec::new(),
-            module_ctx: ScanContext {
+            module_ctx: EvalContext {
                 mem: b"",
                 module_data: ModuleDataMap::default(),
             },
