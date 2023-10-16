@@ -4,7 +4,7 @@ use object::elf::{self, FileHeader32, FileHeader64};
 use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, Sym};
 use object::{Endianness, FileKind};
 
-use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 
 const MAX_NB_SEGMENTS: usize = 32_768;
 const MAX_NB_SECTIONS: usize = 32_768;
@@ -239,16 +239,15 @@ impl Module for Elf {
         .into()
     }
 
-    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        let mut data = Data::default();
+    fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
+        data_map.insert::<Self>(Data::default());
+    }
 
-        match parse_file(ctx.mem, &mut data) {
-            Some(v) => {
-                ctx.module_data.insert::<Self>(data);
-                v
-            }
-            None => HashMap::new(),
-        }
+    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
+        ctx.module_data
+            .get_mut::<Self>()
+            .and_then(|data| parse_file(ctx.mem, data))
+            .unwrap_or_default()
     }
 }
 

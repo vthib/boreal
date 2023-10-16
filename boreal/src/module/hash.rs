@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 use md5::{Digest, Md5};
 use sha1::Sha1;
 use sha2::Sha256;
@@ -61,9 +61,8 @@ impl Module for Hash {
         .into()
     }
 
-    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        ctx.module_data.insert::<Self>(Data::default());
-        HashMap::new()
+    fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
+        data_map.insert::<Self>(Data::default());
     }
 }
 

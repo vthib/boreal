@@ -11,7 +11,7 @@ use object::{
     FileKind, LittleEndian as LE, StringTable,
 };
 
-use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 
 mod debug;
 mod ord;
@@ -1098,28 +1098,28 @@ impl Module for Pe {
         .into()
     }
 
+    fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
+        data_map.insert::<Self>(Data::default());
+    }
+
     fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        let mut data = Data::default();
+        let Some(data) = ctx.module_data.get_mut::<Self>() else {
+            return HashMap::new();
+        };
 
         let res = match FileKind::parse(ctx.mem) {
             Ok(FileKind::Pe32) => {
                 data.is_32bit = true;
-                self.parse_file::<ImageNtHeaders32>(ctx.mem, &mut data)
+                self.parse_file::<ImageNtHeaders32>(ctx.mem, data)
             }
             Ok(FileKind::Pe64) => {
                 data.is_32bit = false;
-                self.parse_file::<ImageNtHeaders64>(ctx.mem, &mut data)
+                self.parse_file::<ImageNtHeaders64>(ctx.mem, data)
             }
             _ => None,
         };
 
-        match res {
-            Some(dict) => {
-                ctx.module_data.insert::<Self>(data);
-                dict
-            }
-            None => [("is_pe", 0.into())].into(),
-        }
+        res.unwrap_or_else(|| [("is_pe", 0.into())].into())
     }
 }
 

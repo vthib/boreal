@@ -145,17 +145,19 @@ impl<'a> ScanData<'a> {
             module_data: ModuleDataMap::default(),
         };
 
+        let module_values = modules
+            .iter()
+            .map(|module| {
+                module.setup_new_scan(&mut module_ctx.module_data);
+                let value =
+                    crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx));
+                (module.get_name(), value)
+            })
+            .collect();
+
         Self {
             mem,
-            module_values: modules
-                .iter()
-                .map(|module| {
-                    (
-                        module.get_name(),
-                        crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx)),
-                    )
-                })
-                .collect(),
+            module_values,
             module_ctx,
             external_symbols,
             timeout_checker,

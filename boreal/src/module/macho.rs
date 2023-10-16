@@ -9,7 +9,7 @@ use object::{
     BigEndian, Bytes, Endianness, FileKind, U32, U64,
 };
 
-use super::{Module, ModuleData, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 
 const MAX_NB_ARCHS: usize = 100;
 const MAX_NB_SEGMENTS: usize = 32_768;
@@ -680,12 +680,15 @@ impl Module for MachO {
         out
     }
 
-    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        let mut data = Data::default();
+    fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
+        data_map.insert::<Self>(Data::default());
+    }
 
-        let res = parse_file(ctx.mem, &mut data, false, 0).unwrap_or_default();
-        ctx.module_data.insert::<Self>(data);
-        res
+    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
+        ctx.module_data
+            .get_mut::<Self>()
+            .and_then(|data| parse_file(ctx.mem, data, false, 0))
+            .unwrap_or_default()
     }
 }
 
