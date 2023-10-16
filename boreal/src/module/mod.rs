@@ -176,7 +176,7 @@ impl std::fmt::Debug for Box<dyn Module> {
     }
 }
 
-/// Context provided to module functions during scanning.
+/// Context provided to module methods during scanning.
 pub struct ScanContext<'a> {
     /// Input being scanned.
     pub mem: &'a [u8],
@@ -190,6 +190,23 @@ pub struct ScanContext<'a> {
 impl std::fmt::Debug for ScanContext<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScanContext").finish()
+    }
+}
+
+/// Context provided to module functions during evaluation.
+pub struct EvalContext<'a> {
+    /// Input being scanned.
+    pub mem: &'a [u8],
+
+    /// Private data (per-scan) of each module.
+    ///
+    /// See [`ModuleData`] for an example on how this can be used.
+    pub module_data: ModuleDataMap,
+}
+
+impl std::fmt::Debug for EvalContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvalContext").finish()
     }
 }
 
@@ -209,7 +226,9 @@ pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
 ///
 /// ```
 /// use std::collections::HashMap;
-/// use boreal::module::{Module, ModuleData, ModuleDataMap, StaticValue, Value, Type, ScanContext};
+/// use boreal::module::{
+///     EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Value, Type, ScanContext
+/// };
 ///
 /// struct Foo;
 ///
@@ -245,7 +264,7 @@ pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
 /// }
 ///
 /// impl Foo {
-///     fn get_data_value(ctx: &ScanContext, _: Vec<Value>) -> Option<Value> {
+///     fn get_data_value(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
 ///         let data = ctx.module_data.get::<Self>()?;
 ///         Some(data.value.into())
 ///     }
@@ -324,10 +343,10 @@ pub enum Value {
         /// `fun("a", 1 + 2, #foo)` would call the function `fun` with:
         ///
         /// ```
-        /// # use boreal::module::{ScanContext, Value};
+        /// # use boreal::module::{EvalContext, Value};
         /// # let x = 3;
-        /// # fn fun(_: &ScanContext, _: Vec<Value>) -> Option<Value> { None }
-        /// # let ctx = ScanContext { mem: b"", module_data: Default::default() };
+        /// # fn fun(_: &EvalContext, _: Vec<Value>) -> Option<Value> { None }
+        /// # let ctx = EvalContext { mem: b"", module_data: Default::default() };
         /// let result = fun(&ctx, vec![
         ///     Value::bytes("a"),
         ///     Value::Integer(3),
@@ -336,7 +355,7 @@ pub enum Value {
         /// ```
         // TODO: find a way to simplify this
         #[allow(clippy::type_complexity)]
-        Arc<Box<dyn Fn(&ScanContext, Vec<Value>) -> Option<Value> + Send + Sync>>,
+        Arc<Box<dyn Fn(&EvalContext, Vec<Value>) -> Option<Value> + Send + Sync>>,
     ),
 
     /// An undefined value.
@@ -390,7 +409,7 @@ pub enum StaticValue {
     /// A function, see [`Value::Function`].
     Function {
         /// The function to call.
-        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
+        fun: fn(&EvalContext, Vec<Value>) -> Option<Value>,
 
         /// Types of arguments for the function.
         ///
@@ -461,7 +480,7 @@ impl Value {
     /// ```
     pub fn function<F>(f: F) -> Self
     where
-        F: Fn(&ScanContext, Vec<Value>) -> Option<Value> + Send + Sync + 'static,
+        F: Fn(&EvalContext, Vec<Value>) -> Option<Value> + Send + Sync + 'static,
     {
         Self::Function(Arc::new(Box::new(f)))
     }
@@ -497,9 +516,9 @@ impl StaticValue {
     /// Build a [`Self::Function`] static value.
     ///
     /// ```
-    /// use boreal::module::{ScanContext, StaticValue, Type, Value};
+    /// use boreal::module::{EvalContext, StaticValue, Type, Value};
     ///
-    /// fn change_case(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    /// fn change_case(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
     ///     let mut args = args.into_iter();
     ///     let s: Vec<u8> = args.next()?.try_into().ok()?;
     ///     let to_upper: bool = args.next()?.try_into().ok()?;
@@ -518,7 +537,7 @@ impl StaticValue {
     /// );
     /// ```
     pub fn function(
-        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
+        fun: fn(&EvalContext, Vec<Value>) -> Option<Value>,
         arguments_types: Vec<Vec<Type>>,
         return_type: Type,
     ) -> Self {
@@ -687,13 +706,22 @@ mod tests {
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn test_fun(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn test_fun(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         drop(args);
         None
     }
 
     #[test]
     fn test_types_traits() {
+        test_type_traits_non_clonable(ScanContext {
+            mem: b"",
+            module_data: ModuleDataMap(HashMap::new()),
+        });
+        test_type_traits_non_clonable(EvalContext {
+            mem: b"",
+            module_data: ModuleDataMap(HashMap::new()),
+        });
+
         test_type_traits(Value::Integer(0));
         test_type_traits(StaticValue::Integer(0));
         test_type_traits(Type::Integer);

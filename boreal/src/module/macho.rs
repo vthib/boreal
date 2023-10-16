@@ -9,7 +9,9 @@ use object::{
     BigEndian, Bytes, Endianness, FileKind, U32, U64,
 };
 
-use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
+use super::{
+    EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
+};
 
 const MAX_NB_ARCHS: usize = 100;
 const MAX_NB_SEGMENTS: usize = 32_768;
@@ -712,7 +714,7 @@ impl ModuleData for MachO {
 }
 
 impl MachO {
-    fn file_index_for_arch(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn file_index_for_arch(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v1: i64 = args.next()?.try_into().ok()?;
         let v2 = args.next().and_then(|v| i64::try_from(v).ok());
@@ -733,7 +735,7 @@ impl MachO {
         None
     }
 
-    fn entry_point_for_arch(ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn entry_point_for_arch(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v1: i64 = args.next()?.try_into().ok()?;
         let v2 = args.next().and_then(|v| i64::try_from(v).ok());

@@ -5,7 +5,7 @@ use boreal_parser::expression::{Identifier, IdentifierOperation, IdentifierOpera
 use super::expression::{compile_expression, Expr, Expression, Type};
 use super::rule::RuleCompiler;
 use super::{CompilationError, ImportedModule};
-use crate::module::{self, ScanContext, StaticValue, Type as ValueType, Value};
+use crate::module::{self, EvalContext, StaticValue, Type as ValueType, Value};
 
 /// Module used during compilation
 #[derive(Debug)]
@@ -50,7 +50,7 @@ pub enum ModuleExpressionKind {
     /// A value coming from a function exposed by a module.
     StaticFunction {
         /// The function to call.
-        fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
+        fun: fn(&EvalContext, Vec<Value>) -> Option<Value>,
     },
 }
 
@@ -622,7 +622,7 @@ mod tests {
     use crate::test_helpers::test_type_traits_non_clonable;
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn test_fun(_ctx: &ScanContext, args: Vec<Value>) -> Option<Value> {
+    fn test_fun(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
         drop(args);
         None
     }
