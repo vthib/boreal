@@ -1102,9 +1102,9 @@ impl Module for Pe {
         data_map.insert::<Self>(Data::default());
     }
 
-    fn get_dynamic_values(&self, ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
+    fn get_dynamic_values(&self, ctx: &mut ScanContext, out: &mut HashMap<&'static str, Value>) {
         let Some(data) = ctx.module_data.get_mut::<Self>() else {
-            return HashMap::new();
+            return;
         };
 
         let res = match FileKind::parse(ctx.mem) {
@@ -1119,7 +1119,9 @@ impl Module for Pe {
             _ => None,
         };
 
-        res.unwrap_or_else(|| [("is_pe", 0.into())].into())
+        if let Some(values) = res {
+            *out = values;
+        }
     }
 }
 

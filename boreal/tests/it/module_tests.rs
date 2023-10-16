@@ -201,8 +201,12 @@ impl Module for Tests {
         .into()
     }
 
-    fn get_dynamic_values(&self, _ctx: &mut ScanContext) -> HashMap<&'static str, Value> {
-        [
+    fn get_dynamic_values(&self, _ctx: &mut ScanContext, out: &mut HashMap<&'static str, Value>) {
+        if !out.is_empty() {
+            return;
+        }
+
+        out.extend([
             (
                 "integer_array",
                 Value::Array(vec![
@@ -314,8 +318,7 @@ impl Module for Tests {
             ("lazy", Value::function(Self::lazy)),
             ("log", Value::function(Self::log)),
             ("invalid_fun", Value::function(Self::foobar)),
-        ]
-        .into()
+        ]);
     }
 }
 
