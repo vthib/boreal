@@ -88,7 +88,7 @@ fn compute_hash<D: Digest>(bytes: &[u8]) -> Value {
 
 impl Hash {
     fn md5(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
-        match get_args(ctx, args)? {
+        match get_args(args)? {
             Args::Bytes(s) => Some(compute_hash::<Md5>(&s)),
             Args::Range(offset, end) => {
                 let data = ctx.module_data.get::<Hash>()?;
@@ -99,7 +99,7 @@ impl Hash {
                     }
                 }
 
-                let hash = compute_hash::<Md5>(&ctx.mem[offset..end]);
+                let hash = compute_hash::<Md5>(ctx.mem.get(offset, end)?);
                 let _r = data
                     .cache
                     .write()
@@ -112,7 +112,7 @@ impl Hash {
     }
 
     fn sha1(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
-        match get_args(ctx, args)? {
+        match get_args(args)? {
             Args::Bytes(s) => Some(compute_hash::<Sha1>(&s)),
             Args::Range(offset, end) => {
                 let data = ctx.module_data.get::<Hash>()?;
@@ -123,7 +123,7 @@ impl Hash {
                     }
                 }
 
-                let hash = compute_hash::<Sha1>(&ctx.mem[offset..end]);
+                let hash = compute_hash::<Sha1>(ctx.mem.get(offset, end)?);
                 let _r = data
                     .cache
                     .write()
@@ -136,7 +136,7 @@ impl Hash {
     }
 
     fn sha2(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
-        match get_args(ctx, args)? {
+        match get_args(args)? {
             Args::Bytes(s) => Some(compute_hash::<Sha256>(&s)),
             Args::Range(offset, end) => {
                 let data = ctx.module_data.get::<Hash>()?;
@@ -147,7 +147,7 @@ impl Hash {
                     }
                 }
 
-                let hash = compute_hash::<Sha256>(&ctx.mem[offset..end]);
+                let hash = compute_hash::<Sha256>(ctx.mem.get(offset, end)?);
                 let _r = data
                     .cache
                     .write()
@@ -181,7 +181,7 @@ enum Args {
     Range(usize, usize),
 }
 
-fn get_args(ctx: &EvalContext, args: Vec<Value>) -> Option<Args> {
+fn get_args(args: Vec<Value>) -> Option<Args> {
     let mut args = args.into_iter();
     let v = args.next()?;
 
@@ -190,9 +190,8 @@ fn get_args(ctx: &EvalContext, args: Vec<Value>) -> Option<Args> {
         Value::Integer(offset) => {
             let length = i64::try_from(args.next()?).ok()?;
             match (usize::try_from(offset), usize::try_from(length)) {
-                (Ok(offset), _) if offset >= ctx.mem.len() => None,
                 (Ok(offset), Ok(length)) => {
-                    let end = std::cmp::min(offset + length, ctx.mem.len());
+                    let end = offset.checked_add(length)?;
                     Some(Args::Range(offset, end))
                 }
                 _ => None,
@@ -206,8 +205,8 @@ fn apply<F>(ctx: &EvalContext, args: Vec<Value>, fun: F) -> Option<Value>
 where
     F: FnOnce(&[u8]) -> Value,
 {
-    match get_args(ctx, args)? {
+    match get_args(args)? {
         Args::Bytes(s) => Some(fun(&s)),
-        Args::Range(offset, end) => Some(fun(&ctx.mem[offset..end])),
+        Args::Range(offset, end) => Some(fun(ctx.mem.get(offset, end)?)),
     }
 }

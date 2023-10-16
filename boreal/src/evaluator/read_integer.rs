@@ -24,10 +24,9 @@ pub(super) fn evaluate_read_integer(
         | ReadIntegerType::Uint32BE => 4,
     };
 
-    let mem = evaluator
-        .scan_data
-        .mem
-        .get(addr, length)
+    let mem = addr
+        .checked_add(length)
+        .and_then(|end| evaluator.scan_data.mem.get(addr, end))
         .ok_or(PoisonKind::Undefined)?;
 
     match ty {

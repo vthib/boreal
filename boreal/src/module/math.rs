@@ -134,10 +134,10 @@ impl Module for Math {
 
 fn get_mem_slice<'a>(ctx: &EvalContext<'a, '_>, offset: i64, length: i64) -> Option<&'a [u8]> {
     let start: usize = offset.try_into().ok()?;
-    let end = start.checked_add(length.try_into().ok()?)?;
-    let end = std::cmp::min(end, ctx.mem.len());
+    let length: usize = length.try_into().ok()?;
+    let end = start.checked_add(length)?;
 
-    ctx.mem.get(start..end)
+    ctx.mem.get(start, end)
 }
 
 impl Math {
@@ -296,7 +296,10 @@ impl Math {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
                 distribution(get_mem_slice(ctx, offset, length)?)
             }
-            (None, None) => distribution(ctx.mem),
+            (None, None) => match ctx.mem.get_direct() {
+                Some(mem) => distribution(mem),
+                None => return None,
+            },
             _ => return None,
         };
 
@@ -314,7 +317,10 @@ impl Math {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
                 distribution(get_mem_slice(ctx, offset, length)?)
             }
-            (None, None) => distribution(ctx.mem),
+            (None, None) => match ctx.mem.get_direct() {
+                Some(mem) => distribution(mem),
+                None => return None,
+            },
             _ => return None,
         };
 
@@ -331,7 +337,10 @@ impl Math {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
                 distribution(get_mem_slice(ctx, offset, length)?)
             }
-            (None, None) => distribution(ctx.mem),
+            (None, None) => match ctx.mem.get_direct() {
+                Some(mem) => distribution(mem),
+                None => return None,
+            },
             _ => return None,
         };
 
@@ -489,6 +498,7 @@ fn distribution(bytes: &[u8]) -> [u64; 256] {
 
 #[cfg(test)]
 mod tests {
+    use crate::memory::Memory;
     use crate::module::ModuleDataMap;
 
     use super::*;
@@ -496,7 +506,7 @@ mod tests {
     #[test]
     fn test_in_range_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -511,7 +521,7 @@ mod tests {
     #[test]
     fn test_deviation_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -528,7 +538,7 @@ mod tests {
     #[test]
     fn test_mean_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -541,7 +551,7 @@ mod tests {
     #[test]
     fn test_serial_correlation_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -554,7 +564,7 @@ mod tests {
     #[test]
     fn test_monte_carlo_pi_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -567,7 +577,7 @@ mod tests {
     #[test]
     fn test_entropy_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -580,7 +590,7 @@ mod tests {
     #[test]
     fn test_min_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -593,7 +603,7 @@ mod tests {
     #[test]
     fn test_max_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -606,7 +616,7 @@ mod tests {
     #[test]
     fn test_to_number_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -617,7 +627,7 @@ mod tests {
     #[test]
     fn test_abs_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -628,7 +638,7 @@ mod tests {
     #[test]
     fn test_count_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -640,7 +650,7 @@ mod tests {
     #[test]
     fn test_percentage_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
@@ -652,7 +662,7 @@ mod tests {
     #[test]
     fn test_mode_invalid_args() {
         let ctx = EvalContext {
-            mem: b"",
+            mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap::default(),
         };
 
