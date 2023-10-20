@@ -184,7 +184,7 @@ pub struct ScanContext<'a> {
     /// Private data (per-scan) of each module.
     ///
     /// See [`ModuleData`] for an example on how this can be used.
-    pub module_data: ModuleDataMap,
+    pub module_data: &'a mut ModuleDataMap,
 }
 
 impl std::fmt::Debug for ScanContext<'_> {
@@ -194,17 +194,17 @@ impl std::fmt::Debug for ScanContext<'_> {
 }
 
 /// Context provided to module functions during evaluation.
-pub struct EvalContext<'a> {
+pub struct EvalContext<'a, 'b> {
     /// Input being scanned.
     pub mem: &'a [u8],
 
     /// Private data (per-scan) of each module.
     ///
     /// See [`ModuleData`] for an example on how this can be used.
-    pub module_data: ModuleDataMap,
+    pub module_data: &'b ModuleDataMap,
 }
 
-impl std::fmt::Debug for EvalContext<'_> {
+impl std::fmt::Debug for EvalContext<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EvalContext").finish()
     }
@@ -213,6 +213,12 @@ impl std::fmt::Debug for EvalContext<'_> {
 /// Object holding the data of each module. See [`ModuleData`].
 #[derive(Default)]
 pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
+
+impl std::fmt::Debug for ModuleDataMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ModuleDataMap").finish()
+    }
+}
 
 /// Data used by module to share state with module functions.
 ///
@@ -346,7 +352,7 @@ pub enum Value {
         /// # use boreal::module::{EvalContext, Value};
         /// # let x = 3;
         /// # fn fun(_: &EvalContext, _: Vec<Value>) -> Option<Value> { None }
-        /// # let ctx = EvalContext { mem: b"", module_data: Default::default() };
+        /// # let ctx = EvalContext { mem: b"", module_data: &Default::default() };
         /// let result = fun(&ctx, vec![
         ///     Value::bytes("a"),
         ///     Value::Integer(3),
@@ -715,11 +721,11 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(ScanContext {
             mem: b"",
-            module_data: ModuleDataMap(HashMap::new()),
+            module_data: &mut ModuleDataMap(HashMap::new()),
         });
         test_type_traits_non_clonable(EvalContext {
             mem: b"",
-            module_data: ModuleDataMap(HashMap::new()),
+            module_data: &ModuleDataMap(HashMap::new()),
         });
 
         test_type_traits(Value::Integer(0));
