@@ -5,8 +5,7 @@ use std::sync::Arc;
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-use crate::evaluator::ac_scan::{AcScan, StringMatch};
-use crate::evaluator::{evaluate_rule, EvalError, Params as EvalParams, ScanData, VarMatches};
+use crate::evaluator::{ac_scan, evaluate_rule, EvalError, ScanData, VarMatches};
 use crate::module::Module;
 use crate::statistics;
 
@@ -93,7 +92,7 @@ impl Scanner {
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
     ) -> Self {
-        let ac_scan = AcScan::new(&variables);
+        let ac_scan = ac_scan::AcScan::new(&variables);
 
         let mut external_symbols_values = Vec::new();
         let mut external_symbols_map = HashMap::new();
@@ -246,7 +245,7 @@ struct Inner {
     /// This is used to scan the memory in one go, and find which variables are found. This
     /// is usually sufficient for most rules. Other rules that depend on the number or length of
     /// matches will scan the memory during their evaluation.
-    ac_scan: AcScan,
+    ac_scan: ac_scan::AcScan,
 
     /// List of modules used during scanning.
     modules: Vec<Box<dyn Module>>,
@@ -299,34 +298,14 @@ impl Inner {
             }
         }
 
-        let eval_params = EvalParams {
-            string_max_nb_matches: params.string_max_nb_matches,
-            match_max_length: params.match_max_length,
-        };
-
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_matches = {
-            #[cfg(feature = "profiling")]
-            let start = std::time::Instant::now();
-
-            let res = match self
-                .ac_scan
-                .matches(&mut scan_data, &self.variables, eval_params)
-            {
-                Ok(v) => v,
-                Err(EvalError::Undecidable) => unreachable!(),
-                Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(Vec::new(), scan_data);
-                }
-            };
-
-            #[cfg(feature = "profiling")]
-            if let Some(stats) = scan_data.statistics.as_mut() {
-                stats.ac_duration = start.elapsed();
+        let ac_matches = match self.do_memory_scan(params, &mut scan_data) {
+            Ok(v) => v,
+            Err(EvalError::Undecidable) => unreachable!(),
+            Err(EvalError::Timeout) => {
+                return ScanResult::timeout(Vec::new(), scan_data);
             }
-
-            res
         };
         let mut ac_matches_iter = ac_matches.into_iter();
 
@@ -431,6 +410,36 @@ impl Inner {
 
         Ok(matched_rules)
     }
+
+    fn do_memory_scan(
+        &self,
+        scan_params: &ScanParams,
+        scan_data: &mut ScanData<'_>,
+    ) -> Result<Vec<Vec<ac_scan::StringMatch>>, EvalError> {
+        let mut matches = vec![Vec::new(); self.variables.len()];
+
+        let mut scan_context = ac_scan::ScanContext {
+            timeout_checker: scan_data.timeout_checker.as_mut(),
+            statistics: scan_data.statistics.as_mut(),
+            variables: &self.variables,
+            string_max_nb_matches: scan_params.string_max_nb_matches,
+            match_max_length: scan_params.match_max_length,
+        };
+
+        #[cfg(feature = "profiling")]
+        let start = std::time::Instant::now();
+
+        // Scan the memory for all variables occurences.
+        self.ac_scan
+            .scan_mem(scan_data.mem, &mut scan_context, &mut matches)?;
+
+        #[cfg(feature = "profiling")]
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.ac_duration = start.elapsed();
+        }
+
+        Ok(matches)
+    }
 }
 
 fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T> {
@@ -447,7 +456,7 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     variables: &'a [Variable],
-    var_matches: Vec<Vec<StringMatch>>,
+    var_matches: Vec<Vec<ac_scan::StringMatch>>,
 ) -> MatchedRule<'a> {
     MatchedRule {
         namespace: rule.namespace.as_deref(),
@@ -534,7 +543,7 @@ pub struct StringMatches<'scanner> {
     /// could be resolved without scanning entirely the input
     /// for this variable, some potential matches will not
     /// be reported.
-    pub matches: Vec<StringMatch>,
+    pub matches: Vec<ac_scan::StringMatch>,
 }
 
 /// Error when defining a symbol's value in a [`Scanner`].

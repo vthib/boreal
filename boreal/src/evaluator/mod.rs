@@ -119,7 +119,7 @@ pub struct ScanData<'a> {
     external_symbols: &'a [ExternalValue],
 
     // Object used to check if the scan times out.
-    timeout_checker: Option<timeout::TimeoutChecker>,
+    pub timeout_checker: Option<timeout::TimeoutChecker>,
 
     // Statistics related to the scan.
     pub statistics: Option<statistics::Evaluation>,
@@ -161,16 +161,6 @@ pub struct ModulesData {
 
     /// Map of modules' private data.
     pub data_map: ModuleDataMap,
-}
-
-/// Parameters used to tweak an evaluation.
-#[derive(Copy, Clone, Debug)]
-pub struct Params {
-    /// Max number of matches for a given string.
-    pub string_max_nb_matches: u32,
-
-    /// Max length of the matches returned in matching rules.
-    pub match_max_length: usize,
 }
 
 /// Evaluates an expression on a given byte slice.
@@ -1039,10 +1029,6 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits(Value::Integer(0));
-        test_type_traits(Params {
-            string_max_nb_matches: 0,
-            match_max_length: 0,
-        });
         test_type_traits_non_clonable(ScanData {
             mem: b"",
             modules_data: ModulesData {

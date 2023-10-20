@@ -4,10 +4,11 @@ use std::collections::HashMap;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
-use super::{EvalError, Params, ScanData};
+use super::{timeout, EvalError};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
+use crate::statistics;
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -45,6 +46,38 @@ struct LiteralInfo {
 
     /// Left and right offset for the slice picked in the Aho-Corasick.
     slice_offset: (usize, usize),
+}
+
+/// Context related to a scan.
+///
+/// Mostly used simply to factorize variables used during the AC scan.
+#[derive(Debug)]
+pub struct ScanContext<'a> {
+    /// Object used to check if the scan times out.
+    pub timeout_checker: Option<&'a mut timeout::TimeoutChecker>,
+
+    /// Statistics related to the scan.
+    pub statistics: Option<&'a mut statistics::Evaluation>,
+
+    /// List of variables to scan.
+    ///
+    /// This is the same variables, in the same order, as when building the
+    /// [`AcScan`] object.
+    pub variables: &'a [Variable],
+
+    /// Max number of matches for a given string.
+    pub string_max_nb_matches: u32,
+
+    /// Max length of the matches returned in matching rules.
+    pub match_max_length: usize,
+}
+
+impl ScanContext<'_> {
+    fn check_timeout(&mut self) -> bool {
+        self.timeout_checker
+            .as_mut()
+            .map_or(false, |checker| checker.check_timeout())
+    }
 }
 
 impl AcScan {
@@ -112,20 +145,18 @@ impl AcScan {
         }
     }
 
-    pub(crate) fn matches(
+    pub(crate) fn scan_mem(
         &self,
-        scan_data: &mut ScanData,
-        variables: &[Variable],
-        params: Params,
-    ) -> Result<Vec<Vec<StringMatch>>, EvalError> {
-        let mut matches = vec![Vec::new(); variables.len()];
-
+        mem: &[u8],
+        scan_ctx: &mut ScanContext,
+        matches: &mut [Vec<StringMatch>],
+    ) -> Result<(), EvalError> {
         // Iterate over aho-corasick matches, validating those matches
-        for mat in self.aho.find_overlapping_iter(scan_data.mem) {
-            if scan_data.check_timeout() {
+        for mat in self.aho.find_overlapping_iter(mem) {
+            if scan_ctx.check_timeout() {
                 return Err(EvalError::Timeout);
             }
-            self.handle_possible_match(scan_data, variables, &mat, params, &mut matches);
+            self.handle_possible_match(mem, &mat, scan_ctx, matches);
         }
 
         if !self.non_handled_var_indexes.is_empty() {
@@ -134,26 +165,25 @@ impl AcScan {
 
             // For every "raw" variable, scan the memory for this variable.
             for variable_index in &self.non_handled_var_indexes {
-                let var = &variables[*variable_index].matcher;
+                let var = &scan_ctx.variables[*variable_index].matcher;
 
-                scan_single_variable(scan_data.mem, var, params, &mut matches[*variable_index]);
+                scan_single_variable(mem, var, scan_ctx, &mut matches[*variable_index]);
             }
 
             #[cfg(feature = "profiling")]
-            if let Some(stats) = scan_data.statistics.as_mut() {
+            if let Some(stats) = scan_ctx.statistics.as_mut() {
                 stats.raw_regexes_eval_duration += start.elapsed();
             }
         }
 
-        Ok(matches)
+        Ok(())
     }
 
     fn handle_possible_match(
         &self,
-        scan_data: &mut ScanData,
-        variables: &[Variable],
+        mem: &[u8],
         mat: &aho_corasick::Match,
-        params: Params,
+        scan_ctx: &mut ScanContext,
         matches: &mut [Vec<StringMatch>],
     ) {
         for literal_info in &self.aho_index_to_literal_info[mat.pattern()] {
@@ -162,10 +192,10 @@ impl AcScan {
                 literal_index,
                 slice_offset: (start_offset, end_offset),
             } = *literal_info;
-            let var = &variables[variable_index].matcher;
+            let var = &scan_ctx.variables[variable_index].matcher;
 
             #[cfg(feature = "profiling")]
-            if let Some(stats) = scan_data.statistics.as_mut() {
+            if let Some(stats) = scan_ctx.statistics.as_mut() {
                 stats.nb_ac_matches += 1;
             }
             #[cfg(feature = "profiling")]
@@ -177,13 +207,13 @@ impl AcScan {
                 continue;
             };
             let end = match mat.end().checked_add(end_offset) {
-                Some(v) if v <= scan_data.mem.len() => v,
+                Some(v) if v <= mem.len() => v,
                 _ => continue,
             };
             let m = start..end;
 
             // Verify the literal is valid.
-            let Some(match_type) = var.confirm_ac_literal(scan_data.mem, &m, literal_index) else {
+            let Some(match_type) = var.confirm_ac_literal(mem, &m, literal_index) else {
                 continue;
             };
 
@@ -201,11 +231,11 @@ impl AcScan {
             // saved match.
             let start_position = var_matches.last().map_or(0, |mat| mat.offset + 1);
 
-            let res = var.process_ac_match(scan_data.mem, m, start_position, match_type);
+            let res = var.process_ac_match(mem, m, start_position, match_type);
 
             #[cfg(feature = "profiling")]
             {
-                if let Some(stats) = scan_data.statistics.as_mut() {
+                if let Some(stats) = scan_ctx.statistics.as_mut() {
                     stats.ac_confirm_duration += start_instant.elapsed();
                 }
             }
@@ -215,16 +245,16 @@ impl AcScan {
                 AcMatchStatus::Multiple(found_matches) => var_matches.extend(
                     found_matches
                         .into_iter()
-                        .map(|m| StringMatch::new(scan_data.mem, m, params)),
+                        .map(|m| StringMatch::new(mem, m, scan_ctx.match_max_length)),
                 ),
                 AcMatchStatus::Single(m) => {
-                    var_matches.push(StringMatch::new(scan_data.mem, m, params));
+                    var_matches.push(StringMatch::new(mem, m, scan_ctx.match_max_length));
                 }
                 AcMatchStatus::None => (),
             };
 
             if !var_matches.is_empty() {
-                var_matches.truncate(params.string_max_nb_matches as usize);
+                var_matches.truncate(scan_ctx.string_max_nb_matches as usize);
             }
         }
     }
@@ -233,7 +263,7 @@ impl AcScan {
 fn scan_single_variable(
     mem: &[u8],
     matcher: &Matcher,
-    params: Params,
+    scan_ctx: &mut ScanContext,
     string_matches: &mut Vec<StringMatch>,
 ) {
     let mut offset = 0;
@@ -244,12 +274,12 @@ fn scan_single_variable(
             None => break,
             Some(mat) => {
                 offset = mat.start + 1;
-                string_matches.push(StringMatch::new(mem, mat, params));
+                string_matches.push(StringMatch::new(mem, mat, scan_ctx.match_max_length));
 
                 // This is safe to allow because this is called on every iterator of self.matches, so once
                 // it cannot overflow u32 before this condition is true.
                 #[allow(clippy::cast_possible_truncation)]
-                if (string_matches.len() as u32) >= params.string_max_nb_matches {
+                if (string_matches.len() as u32) >= scan_ctx.string_max_nb_matches {
                     break;
                 }
             }
@@ -275,9 +305,9 @@ pub struct StringMatch {
 }
 
 impl StringMatch {
-    fn new(mem: &[u8], mat: std::ops::Range<usize>, params: Params) -> Self {
+    fn new(mem: &[u8], mat: std::ops::Range<usize>, match_max_length: usize) -> Self {
         let length = mat.end - mat.start;
-        let capped_length = std::cmp::min(length, params.match_max_length);
+        let capped_length = std::cmp::min(length, match_max_length);
 
         Self {
             data: mem[mat.start..]
@@ -308,6 +338,13 @@ mod tests {
             offset: 0,
             length: 0,
             data: Vec::new(),
+        });
+        test_type_traits_non_clonable(ScanContext {
+            timeout_checker: None,
+            statistics: None,
+            variables: &[],
+            string_max_nb_matches: 0,
+            match_max_length: 0,
         });
     }
 }
