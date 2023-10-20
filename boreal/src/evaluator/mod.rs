@@ -35,7 +35,6 @@
 //! - `defined`
 //!
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
-use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
@@ -45,7 +44,7 @@ use crate::statistics;
 use memchr::memmem;
 
 use crate::compiler::ExternalValue;
-use crate::module::{EvalContext, Module, ModuleDataMap, ScanContext, Value as ModuleValue};
+use crate::module::{ModuleDataMap, Value as ModuleValue};
 
 pub mod ac_scan;
 
@@ -114,10 +113,7 @@ impl From<ExternalValue> for Value {
 pub struct ScanData<'a> {
     pub mem: &'a [u8],
 
-    pub module_values: Vec<(&'static str, ModuleValue)>,
-
-    // Context used when calling module functions
-    module_ctx: EvalContext<'a>,
+    pub modules_data: ModulesData,
 
     // List of values for external symbols.
     external_symbols: &'a [ExternalValue],
@@ -132,7 +128,7 @@ pub struct ScanData<'a> {
 impl<'a> ScanData<'a> {
     pub(crate) fn new(
         mem: &'a [u8],
-        modules: &[Box<dyn Module>],
+        modules_data: ModulesData,
         external_symbols: &'a [ExternalValue],
         timeout: Option<Duration>,
         statistics: Option<statistics::Evaluation>,
@@ -141,32 +137,9 @@ impl<'a> ScanData<'a> {
         // evaluation.
         let timeout_checker = timeout.map(timeout::TimeoutChecker::new);
 
-        let mut scan_ctx = ScanContext {
-            mem,
-            module_data: ModuleDataMap::default(),
-        };
-
-        let module_values = modules
-            .iter()
-            .map(|module| {
-                module.setup_new_scan(&mut scan_ctx.module_data);
-
-                let mut values = HashMap::new();
-                module.get_dynamic_values(&mut scan_ctx, &mut values);
-
-                (module.get_name(), crate::module::Value::Object(values))
-            })
-            .collect();
-
-        let module_ctx = EvalContext {
-            mem,
-            module_data: scan_ctx.module_data,
-        };
-
         Self {
             mem,
-            module_values,
-            module_ctx,
+            modules_data,
             external_symbols,
             timeout_checker,
             statistics,
@@ -178,6 +151,16 @@ impl<'a> ScanData<'a> {
             .as_mut()
             .map_or(false, timeout::TimeoutChecker::check_timeout)
     }
+}
+
+/// Data related to modules used for evaluation.
+#[derive(Debug)]
+pub struct ModulesData {
+    /// List of dynamic values per module, associated with the module's name.
+    pub dynamic_values: Vec<(&'static str, ModuleValue)>,
+
+    /// Map of modules' private data.
+    pub data_map: ModuleDataMap,
 }
 
 /// Parameters used to tweak an evaluation.
@@ -1062,14 +1045,17 @@ mod tests {
         });
         test_type_traits_non_clonable(ScanData {
             mem: b"",
-            module_values: Vec::new(),
-            module_ctx: EvalContext {
-                mem: b"",
-                module_data: ModuleDataMap::default(),
+            modules_data: ModulesData {
+                dynamic_values: Vec::new(),
+                data_map: ModuleDataMap::default(),
             },
             external_symbols: &[],
             timeout_checker: None,
             statistics: None,
+        });
+        test_type_traits_non_clonable(ModulesData {
+            dynamic_values: Vec::new(),
+            data_map: ModuleDataMap::default(),
         });
         test_type_traits_non_clonable(ForSelectionEvaluation::Value(Value::Integer(0)));
         test_type_traits_non_clonable(ForSelectionEvaluator::None);

@@ -132,7 +132,7 @@ impl Module for Math {
     }
 }
 
-fn get_mem_slice<'a>(ctx: &EvalContext<'a>, offset: i64, length: i64) -> Option<&'a [u8]> {
+fn get_mem_slice<'a>(ctx: &EvalContext<'a, '_>, offset: i64, length: i64) -> Option<&'a [u8]> {
     let start: usize = offset.try_into().ok()?;
     let end = start.checked_add(length.try_into().ok()?)?;
     let end = std::cmp::min(end, ctx.mem.len());
@@ -493,16 +493,12 @@ mod tests {
 
     use super::*;
 
-    fn build_ctx() -> EvalContext<'static> {
-        EvalContext {
-            mem: b"",
-            module_data: ModuleDataMap::default(),
-        }
-    }
-
     #[test]
     fn test_in_range_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::in_range(&ctx, vec![]).is_none());
         assert!(Math::in_range(&ctx, vec![0.5.into()]).is_none());
@@ -514,7 +510,10 @@ mod tests {
 
     #[test]
     fn test_deviation_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::deviation(&ctx, vec![]).is_none());
         assert!(Math::deviation(&ctx, vec![0.5.into()]).is_none());
@@ -528,7 +527,10 @@ mod tests {
 
     #[test]
     fn test_mean_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::mean(&ctx, vec![]).is_none());
         assert!(Math::mean(&ctx, vec![0.5.into()]).is_none());
@@ -538,7 +540,10 @@ mod tests {
 
     #[test]
     fn test_serial_correlation_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::serial_correlation(&ctx, vec![]).is_none());
         assert!(Math::serial_correlation(&ctx, vec![0.5.into()]).is_none());
@@ -548,7 +553,10 @@ mod tests {
 
     #[test]
     fn test_monte_carlo_pi_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::monte_carlo_pi(&ctx, vec![]).is_none());
         assert!(Math::monte_carlo_pi(&ctx, vec![0.5.into()]).is_none());
@@ -558,7 +566,10 @@ mod tests {
 
     #[test]
     fn test_entropy_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::entropy(&ctx, vec![]).is_none());
         assert!(Math::entropy(&ctx, vec![0.5.into()]).is_none());
@@ -568,7 +579,10 @@ mod tests {
 
     #[test]
     fn test_min_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::min(&ctx, vec![]).is_none());
         assert!(Math::min(&ctx, vec![0.5.into()]).is_none());
@@ -578,7 +592,10 @@ mod tests {
 
     #[test]
     fn test_max_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::max(&ctx, vec![]).is_none());
         assert!(Math::max(&ctx, vec![0.5.into()]).is_none());
@@ -588,7 +605,10 @@ mod tests {
 
     #[test]
     fn test_to_number_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::to_number(&ctx, vec![]).is_none());
         assert!(Math::to_number(&ctx, vec![0.into()]).is_none());
@@ -596,7 +616,10 @@ mod tests {
 
     #[test]
     fn test_abs_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::abs(&ctx, vec![]).is_none());
         assert!(Math::abs(&ctx, vec![0.5.into()]).is_none());
@@ -604,7 +627,10 @@ mod tests {
 
     #[test]
     fn test_count_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::count(&ctx, vec![]).is_none());
         assert!(Math::count(&ctx, vec![0.5.into()]).is_none());
@@ -613,7 +639,10 @@ mod tests {
 
     #[test]
     fn test_percentage_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::percentage(&ctx, vec![]).is_none());
         assert!(Math::percentage(&ctx, vec![0.5.into()]).is_none());
@@ -622,7 +651,10 @@ mod tests {
 
     #[test]
     fn test_mode_invalid_args() {
-        let ctx = build_ctx();
+        let ctx = EvalContext {
+            mem: b"",
+            module_data: &ModuleDataMap::default(),
+        };
 
         assert!(Math::mode(&ctx, vec![0.5.into()]).is_none());
     }

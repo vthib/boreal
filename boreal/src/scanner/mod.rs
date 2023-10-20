@@ -10,6 +10,7 @@ use crate::evaluator::{evaluate_rule, EvalError, Params as EvalParams, ScanData,
 use crate::module::Module;
 use crate::statistics;
 
+mod module;
 mod params;
 pub use params::ScanParams;
 
@@ -261,9 +262,12 @@ impl Inner {
         params: &ScanParams,
         external_symbols_values: &[ExternalValue],
     ) -> ScanResult<'scanner> {
+        let mut modules_scan_data = module::ScanData::new(&self.modules);
+        modules_scan_data.scan_mem(mem);
+
         let mut scan_data = ScanData::new(
             mem,
-            &self.modules,
+            modules_scan_data.finalize(),
             external_symbols_values,
             params.timeout_duration,
             if params.compute_statistics {
@@ -286,12 +290,7 @@ impl Inner {
 
             match res {
                 Ok(matched_rules) => {
-                    return ScanResult {
-                        matched_rules,
-                        module_values: scan_data.module_values,
-                        timeout: false,
-                        statistics: scan_data.statistics,
-                    }
+                    return ScanResult::new(matched_rules, scan_data);
                 }
                 Err(EvalError::Undecidable) => (),
                 Err(EvalError::Timeout) => {
@@ -366,12 +365,7 @@ impl Inner {
                     stats.rules_eval_duration = start.elapsed();
                 }
 
-                return ScanResult {
-                    matched_rules,
-                    module_values: scan_data.module_values,
-                    timeout: false,
-                    statistics: scan_data.statistics,
-                };
+                return ScanResult::new(matched_rules, scan_data);
             }
             if res && !rule.is_private {
                 matched_rules.push(build_matched_rule(
@@ -391,12 +385,7 @@ impl Inner {
         if let Some(stats) = scan_data.statistics.as_mut() {
             stats.rules_eval_duration = start.elapsed();
         }
-        ScanResult {
-            matched_rules,
-            module_values: scan_data.module_values,
-            timeout: false,
-            statistics: scan_data.statistics,
-        }
+        ScanResult::new(matched_rules, scan_data)
     }
 
     /// Evaluate all rules without availability of the variables' matches.
@@ -498,11 +487,23 @@ pub struct ScanResult<'scanner> {
 }
 
 impl<'scanner> ScanResult<'scanner> {
+    fn new(matched_rules: Vec<MatchedRule<'scanner>>, scan_data: ScanData) -> Self {
+        Self::inner(matched_rules, scan_data, false)
+    }
+
     fn timeout(matched_rules: Vec<MatchedRule<'scanner>>, scan_data: ScanData) -> Self {
+        Self::inner(matched_rules, scan_data, true)
+    }
+
+    fn inner(
+        matched_rules: Vec<MatchedRule<'scanner>>,
+        scan_data: ScanData,
+        timeout: bool,
+    ) -> Self {
         Self {
             matched_rules,
-            module_values: scan_data.module_values,
-            timeout: true,
+            module_values: scan_data.modules_data.dynamic_values,
+            timeout,
             statistics: scan_data.statistics,
         }
     }
@@ -652,9 +653,12 @@ mod tests {
         let _r = compiler.add_rules_str(rule_str).unwrap();
         let scanner = compiler.into_scanner();
 
+        let mut modules_scan_data = module::ScanData::new(&scanner.inner.modules);
+        modules_scan_data.scan_mem(mem);
+
         let mut scan_data = ScanData::new(
             mem,
-            &scanner.inner.modules,
+            modules_scan_data.finalize(),
             &scanner.external_symbols_values,
             None,
             None,
