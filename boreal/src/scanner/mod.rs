@@ -261,6 +261,12 @@ impl Inner {
         params: &ScanParams,
         external_symbols_values: &[ExternalValue],
     ) -> ScanResult<'scanner> {
+        let mut statistics = if params.compute_statistics {
+            Some(statistics::Evaluation::default())
+        } else {
+            None
+        };
+
         let mut modules_scan_data = module::ScanData::new(&self.modules);
         modules_scan_data.scan_mem(mem);
 
@@ -269,11 +275,6 @@ impl Inner {
             modules_scan_data.finalize(),
             external_symbols_values,
             params.timeout_duration,
-            if params.compute_statistics {
-                Some(statistics::Evaluation::default())
-            } else {
-                None
-            },
         );
 
         if !params.compute_full_matches {
@@ -283,28 +284,28 @@ impl Inner {
             let res = self.evaluate_without_matches(&mut scan_data);
 
             #[cfg(feature = "profiling")]
-            if let Some(stats) = scan_data.statistics.as_mut() {
+            if let Some(stats) = statistics.as_mut() {
                 stats.no_scan_eval_duration = start.elapsed();
             }
 
             match res {
                 Ok(matched_rules) => {
-                    return ScanResult::new(matched_rules, scan_data);
+                    return ScanResult::new(matched_rules, scan_data, statistics);
                 }
                 Err(EvalError::Undecidable) => (),
                 Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(Vec::new(), scan_data);
+                    return ScanResult::timeout(Vec::new(), scan_data, statistics);
                 }
             }
         }
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_matches = match self.do_memory_scan(params, &mut scan_data) {
+        let ac_matches = match self.do_memory_scan(params, &mut scan_data, statistics.as_mut()) {
             Ok(v) => v,
             Err(EvalError::Undecidable) => unreachable!(),
             Err(EvalError::Timeout) => {
-                return ScanResult::timeout(Vec::new(), scan_data);
+                return ScanResult::timeout(Vec::new(), scan_data, statistics);
             }
         };
         let mut ac_matches_iter = ac_matches.into_iter();
@@ -332,7 +333,7 @@ impl Inner {
                 Ok(v) => v,
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(matched_rules, scan_data);
+                    return ScanResult::timeout(matched_rules, scan_data, statistics);
                 }
             };
 
@@ -340,11 +341,11 @@ impl Inner {
                 matched_rules.clear();
 
                 #[cfg(feature = "profiling")]
-                if let Some(stats) = scan_data.statistics.as_mut() {
+                if let Some(stats) = statistics.as_mut() {
                     stats.rules_eval_duration = start.elapsed();
                 }
 
-                return ScanResult::new(matched_rules, scan_data);
+                return ScanResult::new(matched_rules, scan_data, statistics);
             }
             if res && !rule.is_private {
                 matched_rules.push(build_matched_rule(
@@ -361,10 +362,10 @@ impl Inner {
         }
 
         #[cfg(feature = "profiling")]
-        if let Some(stats) = scan_data.statistics.as_mut() {
+        if let Some(stats) = statistics.as_mut() {
             stats.rules_eval_duration = start.elapsed();
         }
-        ScanResult::new(matched_rules, scan_data)
+        ScanResult::new(matched_rules, scan_data, statistics)
     }
 
     /// Evaluate all rules without availability of the variables' matches.
@@ -415,12 +416,13 @@ impl Inner {
         &self,
         scan_params: &ScanParams,
         scan_data: &mut ScanData<'_>,
+        statistics: Option<&mut statistics::Evaluation>,
     ) -> Result<Vec<Vec<ac_scan::StringMatch>>, EvalError> {
         let mut matches = vec![Vec::new(); self.variables.len()];
 
         let mut scan_context = ac_scan::ScanContext {
             timeout_checker: scan_data.timeout_checker.as_mut(),
-            statistics: scan_data.statistics.as_mut(),
+            statistics,
             variables: &self.variables,
             string_max_nb_matches: scan_params.string_max_nb_matches,
             match_max_length: scan_params.match_max_length,
@@ -434,7 +436,7 @@ impl Inner {
             .scan_mem(scan_data.mem, &mut scan_context, &mut matches)?;
 
         #[cfg(feature = "profiling")]
-        if let Some(stats) = scan_data.statistics.as_mut() {
+        if let Some(stats) = scan_context.statistics.as_mut() {
             stats.ac_duration = start.elapsed();
         }
 
@@ -496,24 +498,33 @@ pub struct ScanResult<'scanner> {
 }
 
 impl<'scanner> ScanResult<'scanner> {
-    fn new(matched_rules: Vec<MatchedRule<'scanner>>, scan_data: ScanData) -> Self {
-        Self::inner(matched_rules, scan_data, false)
+    fn new(
+        matched_rules: Vec<MatchedRule<'scanner>>,
+        scan_data: ScanData,
+        statistics: Option<statistics::Evaluation>,
+    ) -> Self {
+        Self::inner(matched_rules, scan_data, statistics, false)
     }
 
-    fn timeout(matched_rules: Vec<MatchedRule<'scanner>>, scan_data: ScanData) -> Self {
-        Self::inner(matched_rules, scan_data, true)
+    fn timeout(
+        matched_rules: Vec<MatchedRule<'scanner>>,
+        scan_data: ScanData,
+        statistics: Option<statistics::Evaluation>,
+    ) -> Self {
+        Self::inner(matched_rules, scan_data, statistics, true)
     }
 
     fn inner(
         matched_rules: Vec<MatchedRule<'scanner>>,
         scan_data: ScanData,
+        statistics: Option<statistics::Evaluation>,
         timeout: bool,
     ) -> Self {
         Self {
             matched_rules,
             module_values: scan_data.modules_data.dynamic_values,
             timeout,
-            statistics: scan_data.statistics,
+            statistics,
         }
     }
 }
@@ -669,7 +680,6 @@ mod tests {
             mem,
             modules_scan_data.finalize(),
             &scanner.external_symbols_values,
-            None,
             None,
         );
         let mut previous_results = Vec::new();
