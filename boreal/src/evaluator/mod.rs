@@ -40,7 +40,6 @@ use std::time::Duration;
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
 use crate::regex::Regex;
-use crate::statistics;
 use memchr::memmem;
 
 use crate::compiler::ExternalValue;
@@ -120,9 +119,6 @@ pub struct ScanData<'a> {
 
     // Object used to check if the scan times out.
     pub timeout_checker: Option<TimeoutChecker>,
-
-    // Statistics related to the scan.
-    pub statistics: Option<statistics::Evaluation>,
 }
 
 impl<'a> ScanData<'a> {
@@ -131,7 +127,6 @@ impl<'a> ScanData<'a> {
         modules_data: ModulesData,
         external_symbols: &'a [ExternalValue],
         timeout: Option<Duration>,
-        statistics: Option<statistics::Evaluation>,
     ) -> Self {
         // Create the timeout checker first. This starts the timer, and thus includes the modules
         // evaluation.
@@ -142,7 +137,6 @@ impl<'a> ScanData<'a> {
             modules_data,
             external_symbols,
             timeout_checker,
-            statistics,
         }
     }
 
@@ -1037,7 +1031,6 @@ mod tests {
             },
             external_symbols: &[],
             timeout_checker: None,
-            statistics: None,
         });
         test_type_traits_non_clonable(ModulesData {
             dynamic_values: Vec::new(),
