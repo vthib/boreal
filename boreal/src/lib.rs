@@ -95,6 +95,7 @@ pub mod regex;
 pub mod scanner;
 pub use scanner::Scanner;
 pub mod statistics;
+mod timeout;
 
 #[cfg(test)]
 mod test_helpers;

@@ -45,6 +45,7 @@ use memchr::memmem;
 
 use crate::compiler::ExternalValue;
 use crate::module::{ModuleDataMap, Value as ModuleValue};
+use crate::timeout::TimeoutChecker;
 
 pub mod ac_scan;
 
@@ -58,7 +59,6 @@ mod entrypoint;
 
 mod read_integer;
 use read_integer::evaluate_read_integer;
-mod timeout;
 mod variable;
 pub(crate) use variable::VarMatches;
 
@@ -119,7 +119,7 @@ pub struct ScanData<'a> {
     external_symbols: &'a [ExternalValue],
 
     // Object used to check if the scan times out.
-    pub timeout_checker: Option<timeout::TimeoutChecker>,
+    pub timeout_checker: Option<TimeoutChecker>,
 
     // Statistics related to the scan.
     pub statistics: Option<statistics::Evaluation>,
@@ -135,7 +135,7 @@ impl<'a> ScanData<'a> {
     ) -> Self {
         // Create the timeout checker first. This starts the timer, and thus includes the modules
         // evaluation.
-        let timeout_checker = timeout.map(timeout::TimeoutChecker::new);
+        let timeout_checker = timeout.map(TimeoutChecker::new);
 
         Self {
             mem,
@@ -149,7 +149,7 @@ impl<'a> ScanData<'a> {
     fn check_timeout(&mut self) -> bool {
         self.timeout_checker
             .as_mut()
-            .map_or(false, timeout::TimeoutChecker::check_timeout)
+            .map_or(false, TimeoutChecker::check_timeout)
     }
 }
 
