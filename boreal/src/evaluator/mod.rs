@@ -35,8 +35,6 @@
 //! - `defined`
 //!
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
-use std::time::Duration;
-
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
 use crate::regex::Regex;
@@ -112,26 +110,22 @@ impl From<ExternalValue> for Value {
 pub struct ScanData<'a> {
     pub mem: &'a [u8],
 
-    pub modules_data: ModulesData,
+    pub modules_data: &'a ModulesData,
 
     // List of values for external symbols.
     external_symbols: &'a [ExternalValue],
 
     // Object used to check if the scan times out.
-    pub timeout_checker: Option<TimeoutChecker>,
+    pub timeout_checker: Option<&'a mut TimeoutChecker>,
 }
 
 impl<'a> ScanData<'a> {
     pub(crate) fn new(
         mem: &'a [u8],
-        modules_data: ModulesData,
+        modules_data: &'a ModulesData,
         external_symbols: &'a [ExternalValue],
-        timeout: Option<Duration>,
+        timeout_checker: Option<&'a mut TimeoutChecker>,
     ) -> Self {
-        // Create the timeout checker first. This starts the timer, and thus includes the modules
-        // evaluation.
-        let timeout_checker = timeout.map(TimeoutChecker::new);
-
         Self {
             mem,
             modules_data,
@@ -143,7 +137,7 @@ impl<'a> ScanData<'a> {
     fn check_timeout(&mut self) -> bool {
         self.timeout_checker
             .as_mut()
-            .map_or(false, TimeoutChecker::check_timeout)
+            .map_or(false, |checker| checker.check_timeout())
     }
 }
 
@@ -1025,7 +1019,7 @@ mod tests {
         test_type_traits(Value::Integer(0));
         test_type_traits_non_clonable(ScanData {
             mem: b"",
-            modules_data: ModulesData {
+            modules_data: &ModulesData {
                 dynamic_values: Vec::new(),
                 data_map: ModuleDataMap::default(),
             },
