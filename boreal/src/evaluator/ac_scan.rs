@@ -4,11 +4,12 @@ use std::collections::HashMap;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
-use super::{timeout, EvalError};
+use super::EvalError;
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
 use crate::statistics;
+use crate::timeout::TimeoutChecker;
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -54,7 +55,7 @@ struct LiteralInfo {
 #[derive(Debug)]
 pub struct ScanContext<'a> {
     /// Object used to check if the scan times out.
-    pub timeout_checker: Option<&'a mut timeout::TimeoutChecker>,
+    pub timeout_checker: Option<&'a mut TimeoutChecker>,
 
     /// Statistics related to the scan.
     pub statistics: Option<&'a mut statistics::Evaluation>,
