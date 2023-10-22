@@ -562,7 +562,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     let scanner = compiler.into_scanner();
 
     let res = scanner.scan_mem(mem);
-    let boreal_value = res
+    let mut boreal_value = res
         .module_values
         .into_iter()
         .find_map(|(name, module_value)| {
@@ -575,7 +575,6 @@ pub fn compare_module_values_on_mem<M: Module>(
         .unwrap();
 
     // Enrich value using the static values, so that it can be compared with yara's
-    let mut boreal_value = Arc::try_unwrap(boreal_value).unwrap();
     enrich_with_static_values(&mut boreal_value, module.get_static_values());
 
     let c = yara::Compiler::new().unwrap();

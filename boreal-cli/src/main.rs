@@ -249,7 +249,7 @@ fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> std::io::R
         for (module_name, module_value) in res.module_values {
             // A module value must be an object. Filter out empty ones, it means the module has not
             // generated any values.
-            if let ModuleValue::Object(map) = &*module_value {
+            if let ModuleValue::Object(map) = &module_value {
                 if !map.is_empty() {
                     print!("{module_name}");
                     print_module_value(&module_value, 4);
