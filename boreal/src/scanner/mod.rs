@@ -265,6 +265,7 @@ impl Inner {
         external_symbols_values: &'scanner [ExternalValue],
     ) -> ScanResult<'scanner> {
         let mut scan_data = ScanData {
+            mem,
             external_symbols_values,
             matched_rules: Vec::new(),
             module_values: evaluator::module::EvalData::new(&self.modules),
@@ -277,7 +278,7 @@ impl Inner {
             params,
         };
 
-        let timeout = match self.do_scan(mem, &mut scan_data) {
+        let timeout = match self.do_scan(&mut scan_data) {
             Ok(()) => false,
             Err(EvalError::Undecidable) => unreachable!(),
             Err(EvalError::Timeout) => true,
@@ -293,16 +294,17 @@ impl Inner {
 
     fn do_scan<'scanner>(
         &'scanner self,
-        mem: &[u8],
-        scan_data: &mut ScanData<'scanner>,
+        scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
-        scan_data.module_values.scan_mem(mem, &self.modules);
+        scan_data
+            .module_values
+            .scan_mem(scan_data.mem, &self.modules);
 
         if !scan_data.params.compute_full_matches {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
-            let res = self.evaluate_without_matches(mem, scan_data);
+            let res = self.evaluate_without_matches(scan_data);
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -321,11 +323,11 @@ impl Inner {
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_matches = self.do_memory_scan(mem, scan_data)?;
+        let ac_matches = self.do_memory_scan(scan_data)?;
         let mut ac_matches_iter = ac_matches.into_iter();
 
         let mut eval_data = evaluator::ScanData::new(
-            mem,
+            scan_data.mem,
             &scan_data.module_values,
             scan_data.external_symbols_values,
             scan_data.timeout_checker.as_mut(),
@@ -389,13 +391,12 @@ impl Inner {
     /// final result of the scan.
     fn evaluate_without_matches<'scanner>(
         &'scanner self,
-        mem: &[u8],
-        scan_data: &mut ScanData<'scanner>,
+        scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
         let mut eval_data = evaluator::ScanData::new(
-            mem,
+            scan_data.mem,
             &scan_data.module_values,
             scan_data.external_symbols_values,
             scan_data.timeout_checker.as_mut(),
@@ -437,11 +438,7 @@ impl Inner {
         Ok(())
     }
 
-    fn do_memory_scan(
-        &self,
-        mem: &[u8],
-        scan_data: &mut ScanData,
-    ) -> Result<Vec<Vec<StringMatch>>, EvalError> {
+    fn do_memory_scan(&self, scan_data: &mut ScanData) -> Result<Vec<Vec<StringMatch>>, EvalError> {
         let mut matches = vec![Vec::new(); self.variables.len()];
 
         #[cfg(feature = "profiling")]
@@ -449,7 +446,7 @@ impl Inner {
 
         // Scan the memory for all variables occurences.
         self.ac_scan
-            .scan_mem(mem, &self.variables, scan_data, &mut matches)?;
+            .scan_mem(scan_data.mem, &self.variables, scan_data, &mut matches)?;
 
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
@@ -460,7 +457,10 @@ impl Inner {
     }
 }
 
-struct ScanData<'scanner> {
+struct ScanData<'scanner, 'mem> {
+    /// Memory to scan,
+    mem: &'mem [u8],
+
     /// Values of external symbols.
     external_symbols_values: &'scanner [ExternalValue],
 
@@ -482,7 +482,7 @@ struct ScanData<'scanner> {
     params: &'scanner ScanParams,
 }
 
-impl ScanData<'_> {
+impl ScanData<'_, '_> {
     fn check_timeout(&mut self) -> bool {
         self.timeout_checker
             .as_mut()
