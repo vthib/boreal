@@ -13,7 +13,6 @@ use crate::timeout::TimeoutChecker;
 pub use crate::evaluator::variable::StringMatch;
 
 mod ac_scan;
-mod module;
 mod params;
 pub use params::ScanParams;
 
@@ -268,7 +267,7 @@ impl Inner {
         let mut scan_data = ScanData {
             external_symbols_values,
             matched_rules: Vec::new(),
-            module_values: module::ScanData::new(&self.modules),
+            module_values: evaluator::module::EvalData::new(&self.modules),
             statistics: if params.compute_statistics {
                 Some(statistics::Evaluation::default())
             } else {
@@ -340,7 +339,7 @@ impl Inner {
 
         let mut eval_data = evaluator::ScanData::new(
             mem,
-            scan_data.module_values.to_eval_data(),
+            &scan_data.module_values,
             scan_data.external_symbols_values,
             timeout_checker.as_mut(),
         );
@@ -411,7 +410,7 @@ impl Inner {
 
         let mut eval_data = evaluator::ScanData::new(
             mem,
-            scan_data.module_values.to_eval_data(),
+            &scan_data.module_values,
             scan_data.external_symbols_values,
             timeout_checker,
         );
@@ -484,7 +483,7 @@ struct ScanData<'scanner> {
     /// On-scan values of all modules used in the scanner.
     ///
     /// First element is the module name, second one is the dynamic values produced by the module.
-    module_values: module::ScanData,
+    module_values: evaluator::module::EvalData,
 
     /// Statistics related to the scanning.
     statistics: Option<statistics::Evaluation>,
@@ -687,12 +686,11 @@ mod tests {
         let _r = compiler.add_rules_str(rule_str).unwrap();
         let scanner = compiler.into_scanner();
 
-        let mut modules_scan_data = module::ScanData::new(&scanner.inner.modules);
-        modules_scan_data.scan_mem(mem, &scanner.inner.modules);
-        let modules_data = modules_scan_data.to_eval_data();
+        let mut modules_data = evaluator::module::EvalData::new(&scanner.inner.modules);
+        modules_data.scan_mem(mem, &scanner.inner.modules);
 
         let mut eval_data =
-            evaluator::ScanData::new(mem, modules_data, &scanner.external_symbols_values, None);
+            evaluator::ScanData::new(mem, &modules_data, &scanner.external_symbols_values, None);
         let mut previous_results = Vec::new();
         let rules = &scanner.inner.rules;
         for rule in &rules[..(rules.len() - 1)] {

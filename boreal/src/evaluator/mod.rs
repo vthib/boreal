@@ -47,7 +47,7 @@ use crate::timeout::TimeoutChecker;
 mod error;
 pub use error::EvalError;
 
-mod module;
+pub(crate) mod module;
 
 #[cfg(feature = "object")]
 mod entrypoint;
@@ -107,19 +107,19 @@ impl From<ExternalValue> for Value {
 pub struct ScanData<'a> {
     pub mem: &'a [u8],
 
-    pub modules_data: ModulesData<'a>,
+    modules_data: &'a module::EvalData,
 
     // List of values for external symbols.
     external_symbols: &'a [ExternalValue],
 
     // Object used to check if the scan times out.
-    pub timeout_checker: Option<&'a mut TimeoutChecker>,
+    timeout_checker: Option<&'a mut TimeoutChecker>,
 }
 
 impl<'a> ScanData<'a> {
     pub(crate) fn new(
         mem: &'a [u8],
-        modules_data: ModulesData<'a>,
+        modules_data: &'a module::EvalData,
         external_symbols: &'a [ExternalValue],
         timeout_checker: Option<&'a mut TimeoutChecker>,
     ) -> Self {
@@ -1016,9 +1016,9 @@ mod tests {
         test_type_traits(Value::Integer(0));
         test_type_traits_non_clonable(ScanData {
             mem: b"",
-            modules_data: ModulesData {
-                dynamic_values: &[],
-                data_map: &ModuleDataMap::default(),
+            modules_data: &module::EvalData {
+                values: Vec::new(),
+                data_map: ModuleDataMap::default(),
             },
             external_symbols: &[],
             timeout_checker: None,
