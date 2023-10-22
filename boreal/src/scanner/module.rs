@@ -6,14 +6,13 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct ScanData<'a> {
-    modules: &'a [Box<dyn Module>],
-    values: Vec<HashMap<&'static str, Value>>,
-    data_map: ModuleDataMap,
+pub struct ScanData {
+    pub values: Vec<(&'static str, Value)>,
+    pub data_map: ModuleDataMap,
 }
 
-impl<'a> ScanData<'a> {
-    pub fn new(modules: &'a [Box<dyn Module>]) -> Self {
+impl ScanData {
+    pub fn new(modules: &[Box<dyn Module>]) -> Self {
         let mut data_map = ModuleDataMap::default();
 
         let values = modules
@@ -21,37 +20,33 @@ impl<'a> ScanData<'a> {
             .map(|module| {
                 module.setup_new_scan(&mut data_map);
 
-                HashMap::new()
+                (module.get_name(), Value::Object(HashMap::new()))
             })
             .collect();
 
-        Self {
-            modules,
-            values,
-            data_map,
-        }
+        Self { values, data_map }
     }
 
-    pub fn scan_mem(&mut self, mem: &[u8]) {
+    pub fn scan_mem(&mut self, mem: &[u8], modules: &[Box<dyn Module>]) {
         let mut scan_ctx = ScanContext {
             mem,
             module_data: &mut self.data_map,
         };
 
-        for (module, values) in self.modules.iter().zip(self.values.iter_mut()) {
+        for (module, values) in modules.iter().zip(self.values.iter_mut()) {
+            let Value::Object(values) = &mut values.1 else {
+                // Safety: this value is built in the new method of this object and guaranteed
+                // to be of this type.
+                unreachable!();
+            };
             module.get_dynamic_values(&mut scan_ctx, values);
         }
     }
 
-    pub fn finalize(self) -> ModulesData {
+    pub fn to_eval_data(&self) -> ModulesData {
         ModulesData {
-            dynamic_values: self
-                .modules
-                .iter()
-                .zip(self.values)
-                .map(|(module, values)| (module.get_name(), Value::Object(values)))
-                .collect(),
-            data_map: self.data_map,
+            dynamic_values: &self.values,
+            data_map: &self.data_map,
         }
     }
 }
@@ -65,7 +60,6 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(ScanData {
-            modules: &[],
             values: Vec::new(),
             data_map: ModuleDataMap::default(),
         });

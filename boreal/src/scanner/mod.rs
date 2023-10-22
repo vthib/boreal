@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-use crate::evaluator::{ac_scan, evaluate_rule, EvalError, ModulesData, ScanData, VarMatches};
+use crate::evaluator::{self, ac_scan, evaluate_rule, EvalError, VarMatches};
 use crate::module::Module;
 use crate::statistics;
 use crate::timeout::TimeoutChecker;
@@ -260,46 +260,62 @@ impl Inner {
         &'scanner self,
         mem: &[u8],
         params: &ScanParams,
-        external_symbols_values: &[ExternalValue],
+        external_symbols_values: &'scanner [ExternalValue],
     ) -> ScanResult<'scanner> {
-        let mut statistics = if params.compute_statistics {
-            Some(statistics::Evaluation::default())
-        } else {
-            None
+        let mut scan_data = ScanData {
+            external_symbols_values,
+            matched_rules: Vec::new(),
+            module_values: module::ScanData::new(&self.modules),
+            statistics: if params.compute_statistics {
+                Some(statistics::Evaluation::default())
+            } else {
+                None
+            },
         };
 
+        let timeout = match self.do_scan(mem, params, &mut scan_data) {
+            Ok(()) => false,
+            Err(EvalError::Undecidable) => unreachable!(),
+            Err(EvalError::Timeout) => true,
+        };
+
+        ScanResult {
+            matched_rules: scan_data.matched_rules,
+            module_values: scan_data.module_values.values,
+            timeout,
+            statistics: scan_data.statistics,
+        }
+    }
+
+    fn do_scan<'scanner>(
+        &'scanner self,
+        mem: &[u8],
+        params: &ScanParams,
+        scan_data: &mut ScanData<'scanner>,
+    ) -> Result<(), EvalError> {
         // Create the timeout checker first. This starts the timer, and thus includes the modules
         // evaluation.
         let mut timeout_checker = params.timeout_duration.map(TimeoutChecker::new);
 
-        let mut modules_scan_data = module::ScanData::new(&self.modules);
-        modules_scan_data.scan_mem(mem);
-        let modules_eval_data = modules_scan_data.finalize();
+        scan_data.module_values.scan_mem(mem, &self.modules);
 
         if !params.compute_full_matches {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
-            let scan_data = ScanData::new(
-                mem,
-                &modules_eval_data,
-                external_symbols_values,
-                timeout_checker.as_mut(),
-            );
-            let res = self.evaluate_without_matches(scan_data);
+            let res = self.evaluate_without_matches(mem, scan_data, timeout_checker.as_mut());
 
             #[cfg(feature = "profiling")]
-            if let Some(stats) = statistics.as_mut() {
+            if let Some(stats) = scan_data.statistics.as_mut() {
                 stats.no_scan_eval_duration = start.elapsed();
             }
 
             match res {
-                Ok(matched_rules) => {
-                    return ScanResult::new(matched_rules, modules_eval_data, statistics);
-                }
-                Err(EvalError::Undecidable) => (),
-                Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(Vec::new(), modules_eval_data, statistics);
+                Ok(()) => return Ok(()),
+                Err(EvalError::Timeout) => return Err(EvalError::Timeout),
+                Err(EvalError::Undecidable) => {
+                    // Reset the rules that might have matched already.
+                    scan_data.matched_rules.clear();
                 }
             }
         }
@@ -309,30 +325,23 @@ impl Inner {
         let ac_matches = {
             let ac_scan_context = ac_scan::ScanContext {
                 timeout_checker: timeout_checker.as_mut(),
-                statistics: statistics.as_mut(),
+                statistics: scan_data.statistics.as_mut(),
                 variables: &self.variables,
                 string_max_nb_matches: params.string_max_nb_matches,
                 match_max_length: params.match_max_length,
             };
 
-            match self.do_memory_scan(mem, ac_scan_context) {
-                Ok(v) => v,
-                Err(EvalError::Undecidable) => unreachable!(),
-                Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(Vec::new(), modules_eval_data, statistics);
-                }
-            }
+            self.do_memory_scan(mem, ac_scan_context)?
         };
         let mut ac_matches_iter = ac_matches.into_iter();
 
-        let mut scan_data = ScanData::new(
+        let mut eval_data = evaluator::ScanData::new(
             mem,
-            &modules_eval_data,
-            external_symbols_values,
+            scan_data.module_values.to_eval_data(),
+            scan_data.external_symbols_values,
             timeout_checker.as_mut(),
         );
 
-        let mut matched_rules = Vec::new();
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
         #[cfg(feature = "profiling")]
@@ -347,31 +356,25 @@ impl Inner {
         {
             let var_matches = collect_nb_elems(&mut ac_matches_iter, rule.nb_variables);
 
-            let res = match evaluate_rule(
+            let res = evaluate_rule(
                 rule,
                 Some(VarMatches::new(&var_matches)),
-                &mut scan_data,
+                &mut eval_data,
                 &previous_results,
-            ) {
-                Ok(v) => v,
-                Err(EvalError::Undecidable) => unreachable!(),
-                Err(EvalError::Timeout) => {
-                    return ScanResult::timeout(matched_rules, modules_eval_data, statistics);
-                }
-            };
+            )?;
 
             if is_global && !res {
-                matched_rules.clear();
+                scan_data.matched_rules.clear();
 
                 #[cfg(feature = "profiling")]
-                if let Some(stats) = statistics.as_mut() {
+                if let Some(stats) = scan_data.statistics.as_mut() {
                     stats.rules_eval_duration = start.elapsed();
                 }
 
-                return ScanResult::new(matched_rules, modules_eval_data, statistics);
+                return Ok(());
             }
             if res && !rule.is_private {
-                matched_rules.push(build_matched_rule(
+                scan_data.matched_rules.push(build_matched_rule(
                     rule,
                     &self.variables[var_index..(var_index + rule.nb_variables)],
                     var_matches,
@@ -385,10 +388,10 @@ impl Inner {
         }
 
         #[cfg(feature = "profiling")]
-        if let Some(stats) = statistics.as_mut() {
+        if let Some(stats) = scan_data.statistics.as_mut() {
             stats.rules_eval_duration = start.elapsed();
         }
-        ScanResult::new(matched_rules, modules_eval_data, statistics)
+        Ok(())
     }
 
     /// Evaluate all rules without availability of the variables' matches.
@@ -397,21 +400,30 @@ impl Inner {
     /// final result of the scan.
     fn evaluate_without_matches<'scanner>(
         &'scanner self,
-        mut scan_data: ScanData<'_>,
-    ) -> Result<Vec<MatchedRule<'scanner>>, EvalError> {
-        let mut matched_rules = Vec::new();
+        mem: &[u8],
+        scan_data: &mut ScanData<'scanner>,
+        timeout_checker: Option<&mut TimeoutChecker>,
+    ) -> Result<(), EvalError> {
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
+        let mut eval_data = evaluator::ScanData::new(
+            mem,
+            scan_data.module_values.to_eval_data(),
+            scan_data.external_symbols_values,
+            timeout_checker,
+        );
         // First, check global rules
         let mut has_unknown_globals = false;
         for rule in &self.global_rules {
-            match evaluate_rule(rule, None, &mut scan_data, &previous_results) {
+            match evaluate_rule(rule, None, &mut eval_data, &previous_results) {
                 Ok(true) => {
                     if !rule.is_private {
-                        matched_rules.push(build_matched_rule(rule, &[], Vec::new()));
+                        scan_data
+                            .matched_rules
+                            .push(build_matched_rule(rule, &[], Vec::new()));
                     }
                 }
-                Ok(false) => return Ok(Vec::new()),
+                Ok(false) => return Ok(()),
                 // Do not rethrow immediately, so that if one of the globals is false, it is
                 // detected.
                 Err(EvalError::Undecidable) => has_unknown_globals = true,
@@ -424,15 +436,17 @@ impl Inner {
 
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
-            let matched = evaluate_rule(rule, None, &mut scan_data, &previous_results)?;
+            let matched = evaluate_rule(rule, None, &mut eval_data, &previous_results)?;
 
             if matched && !rule.is_private {
-                matched_rules.push(build_matched_rule(rule, &[], Vec::new()));
+                scan_data
+                    .matched_rules
+                    .push(build_matched_rule(rule, &[], Vec::new()));
             }
             previous_results.push(matched);
         }
 
-        Ok(matched_rules)
+        Ok(())
     }
 
     fn do_memory_scan(
@@ -456,6 +470,21 @@ impl Inner {
 
         Ok(matches)
     }
+}
+
+struct ScanData<'scanner> {
+    external_symbols_values: &'scanner [ExternalValue],
+
+    /// List of rules that matched.
+    matched_rules: Vec<MatchedRule<'scanner>>,
+
+    /// On-scan values of all modules used in the scanner.
+    ///
+    /// First element is the module name, second one is the dynamic values produced by the module.
+    module_values: module::ScanData,
+
+    /// Statistics related to the scanning.
+    statistics: Option<statistics::Evaluation>,
 }
 
 fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T> {
@@ -509,38 +538,6 @@ pub struct ScanResult<'scanner> {
 
     /// Statistics related to the scanning.
     pub statistics: Option<statistics::Evaluation>,
-}
-
-impl<'scanner> ScanResult<'scanner> {
-    fn new(
-        matched_rules: Vec<MatchedRule<'scanner>>,
-        modules_eval_data: ModulesData,
-        statistics: Option<statistics::Evaluation>,
-    ) -> Self {
-        Self::inner(matched_rules, modules_eval_data, statistics, false)
-    }
-
-    fn timeout(
-        matched_rules: Vec<MatchedRule<'scanner>>,
-        modules_eval_data: ModulesData,
-        statistics: Option<statistics::Evaluation>,
-    ) -> Self {
-        Self::inner(matched_rules, modules_eval_data, statistics, true)
-    }
-
-    fn inner(
-        matched_rules: Vec<MatchedRule<'scanner>>,
-        modules_eval_data: ModulesData,
-        statistics: Option<statistics::Evaluation>,
-        timeout: bool,
-    ) -> Self {
-        Self {
-            matched_rules,
-            module_values: modules_eval_data.dynamic_values,
-            timeout,
-            statistics,
-        }
-    }
 }
 
 /// Description of a rule that matched during a scan.
@@ -688,21 +685,21 @@ mod tests {
         let scanner = compiler.into_scanner();
 
         let mut modules_scan_data = module::ScanData::new(&scanner.inner.modules);
-        modules_scan_data.scan_mem(mem);
-        let modules_data = modules_scan_data.finalize();
+        modules_scan_data.scan_mem(mem, &scanner.inner.modules);
+        let modules_data = modules_scan_data.to_eval_data();
 
-        let mut scan_data =
-            ScanData::new(mem, &modules_data, &scanner.external_symbols_values, None);
+        let mut eval_data =
+            evaluator::ScanData::new(mem, modules_data, &scanner.external_symbols_values, None);
         let mut previous_results = Vec::new();
         let rules = &scanner.inner.rules;
         for rule in &rules[..(rules.len() - 1)] {
             previous_results
-                .push(evaluate_rule(rule, None, &mut scan_data, &previous_results).unwrap());
+                .push(evaluate_rule(rule, None, &mut eval_data, &previous_results).unwrap());
         }
         let last_res = evaluate_rule(
             &rules[rules.len() - 1],
             None,
-            &mut scan_data,
+            &mut eval_data,
             &previous_results,
         );
 
