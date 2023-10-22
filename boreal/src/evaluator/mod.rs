@@ -110,7 +110,7 @@ impl From<ExternalValue> for Value {
 pub struct ScanData<'a> {
     pub mem: &'a [u8],
 
-    pub modules_data: &'a ModulesData,
+    pub modules_data: ModulesData<'a>,
 
     // List of values for external symbols.
     external_symbols: &'a [ExternalValue],
@@ -122,7 +122,7 @@ pub struct ScanData<'a> {
 impl<'a> ScanData<'a> {
     pub(crate) fn new(
         mem: &'a [u8],
-        modules_data: &'a ModulesData,
+        modules_data: ModulesData<'a>,
         external_symbols: &'a [ExternalValue],
         timeout_checker: Option<&'a mut TimeoutChecker>,
     ) -> Self {
@@ -143,12 +143,12 @@ impl<'a> ScanData<'a> {
 
 /// Data related to modules used for evaluation.
 #[derive(Debug)]
-pub struct ModulesData {
-    /// List of dynamic values per module, associated with the module's name.
-    pub dynamic_values: Vec<(&'static str, ModuleValue)>,
+pub struct ModulesData<'a> {
+    /// List of dynamic values per module.
+    pub dynamic_values: &'a [(&'static str, ModuleValue)],
 
     /// Map of modules' private data.
-    pub data_map: ModuleDataMap,
+    pub data_map: &'a ModuleDataMap,
 }
 
 /// Evaluates an expression on a given byte slice.
@@ -1019,16 +1019,16 @@ mod tests {
         test_type_traits(Value::Integer(0));
         test_type_traits_non_clonable(ScanData {
             mem: b"",
-            modules_data: &ModulesData {
-                dynamic_values: Vec::new(),
-                data_map: ModuleDataMap::default(),
+            modules_data: ModulesData {
+                dynamic_values: &[],
+                data_map: &ModuleDataMap::default(),
             },
             external_symbols: &[],
             timeout_checker: None,
         });
         test_type_traits_non_clonable(ModulesData {
-            dynamic_values: Vec::new(),
-            data_map: ModuleDataMap::default(),
+            dynamic_values: &[],
+            data_map: &ModuleDataMap::default(),
         });
         test_type_traits_non_clonable(ForSelectionEvaluation::Value(Value::Integer(0)));
         test_type_traits_non_clonable(ForSelectionEvaluator::None);
