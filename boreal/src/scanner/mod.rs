@@ -5,11 +5,14 @@ use std::sync::Arc;
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-use crate::evaluator::{self, ac_scan, evaluate_rule, EvalError, VarMatches};
+use crate::evaluator::{self, evaluate_rule, EvalError};
 use crate::module::Module;
 use crate::statistics;
 use crate::timeout::TimeoutChecker;
 
+pub use crate::evaluator::variable::StringMatch;
+
+mod ac_scan;
 mod module;
 mod params;
 pub use params::ScanParams;
@@ -358,7 +361,7 @@ impl Inner {
 
             let res = evaluate_rule(
                 rule,
-                Some(VarMatches::new(&var_matches)),
+                Some(evaluator::variable::VarMatches::new(&var_matches)),
                 &mut eval_data,
                 &previous_results,
             )?;
@@ -453,7 +456,7 @@ impl Inner {
         &self,
         mem: &[u8],
         mut scan_context: ac_scan::ScanContext,
-    ) -> Result<Vec<Vec<ac_scan::StringMatch>>, EvalError> {
+    ) -> Result<Vec<Vec<StringMatch>>, EvalError> {
         let mut matches = vec![Vec::new(); self.variables.len()];
 
         #[cfg(feature = "profiling")]
@@ -501,7 +504,7 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     variables: &'a [Variable],
-    var_matches: Vec<Vec<ac_scan::StringMatch>>,
+    var_matches: Vec<Vec<StringMatch>>,
 ) -> MatchedRule<'a> {
     MatchedRule {
         namespace: rule.namespace.as_deref(),
@@ -565,7 +568,7 @@ pub struct StringMatches<'scanner> {
     /// could be resolved without scanning entirely the input
     /// for this variable, some potential matches will not
     /// be reported.
-    pub matches: Vec<ac_scan::StringMatch>,
+    pub matches: Vec<StringMatch>,
 }
 
 /// Error when defining a symbol's value in a [`Scanner`].

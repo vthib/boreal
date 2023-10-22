@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
-use super::EvalError;
+use super::{EvalError, StringMatch};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
@@ -288,44 +288,10 @@ fn scan_single_variable(
     }
 }
 
-/// Details on a match on a string during a scan.
-#[derive(Clone, Debug)]
-pub struct StringMatch {
-    /// Offset of the match
-    pub offset: usize,
-
-    /// Actual length of the match.
-    ///
-    /// This is the real length of the match, which might be bigger than the length of `data`.
-    pub length: usize,
-
-    /// The matched data.
-    ///
-    /// The length of this field is capped.
-    pub data: Vec<u8>,
-}
-
-impl StringMatch {
-    fn new(mem: &[u8], mat: std::ops::Range<usize>, match_max_length: usize) -> Self {
-        let length = mat.end - mat.start;
-        let capped_length = std::cmp::min(length, match_max_length);
-
-        Self {
-            data: mem[mat.start..]
-                .iter()
-                .take(capped_length)
-                .copied()
-                .collect(),
-            offset: mat.start,
-            length,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+    use crate::test_helpers::test_type_traits_non_clonable;
 
     #[test]
     fn test_types_traits() {
@@ -334,11 +300,6 @@ mod tests {
             variable_index: 0,
             literal_index: 0,
             slice_offset: (0, 0),
-        });
-        test_type_traits(StringMatch {
-            offset: 0,
-            length: 0,
-            data: Vec::new(),
         });
         test_type_traits_non_clonable(ScanContext {
             timeout_checker: None,

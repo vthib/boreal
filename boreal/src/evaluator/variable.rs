@@ -1,8 +1,6 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use super::ac_scan::StringMatch;
-
 /// Variable evaluation context.
 ///
 /// This is used to cache scan results for a single variable,
@@ -91,14 +89,53 @@ impl<'a> VarMatches<'a> {
     }
 }
 
+/// Details on a match on a string during a scan.
+#[derive(Clone, Debug)]
+pub struct StringMatch {
+    /// Offset of the match
+    pub offset: usize,
+
+    /// Actual length of the match.
+    ///
+    /// This is the real length of the match, which might be bigger than the length of `data`.
+    pub length: usize,
+
+    /// The matched data.
+    ///
+    /// The length of this field is capped.
+    pub data: Vec<u8>,
+}
+
+impl StringMatch {
+    pub(crate) fn new(mem: &[u8], mat: std::ops::Range<usize>, match_max_length: usize) -> Self {
+        let length = mat.end - mat.start;
+        let capped_length = std::cmp::min(length, match_max_length);
+
+        Self {
+            data: mem[mat.start..]
+                .iter()
+                .take(capped_length)
+                .copied()
+                .collect(),
+            offset: mat.start,
+            length,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::test_type_traits_non_clonable;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
     use super::*;
 
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(VarMatches { matches: &[] });
+        test_type_traits(StringMatch {
+            offset: 0,
+            length: 0,
+            data: Vec::new(),
+        });
     }
 }

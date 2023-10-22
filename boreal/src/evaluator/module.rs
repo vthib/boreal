@@ -122,7 +122,7 @@ fn evaluate_ops(
 fn build_eval_context<'a, 'c>(evaluator: &'c Evaluator<'a, '_>) -> EvalContext<'a, 'c> {
     EvalContext {
         mem: evaluator.scan_data.mem,
-        module_data: &evaluator.scan_data.modules_data.data_map,
+        module_data: evaluator.scan_data.modules_data.data_map,
     }
 }
 
