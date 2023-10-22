@@ -38,11 +38,11 @@
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
 use crate::regex::Regex;
+use crate::scanner::ScanData;
 use memchr::memmem;
 
 use crate::compiler::ExternalValue;
 use crate::module::{ModuleDataMap, Value as ModuleValue};
-use crate::timeout::TimeoutChecker;
 
 mod error;
 pub use error::EvalError;
@@ -102,42 +102,6 @@ impl From<ExternalValue> for Value {
     }
 }
 
-/// Data linked to the scan, shared by all rules.
-#[derive(Debug)]
-pub struct ScanData<'a> {
-    pub mem: &'a [u8],
-
-    modules_data: &'a module::EvalData,
-
-    // List of values for external symbols.
-    external_symbols: &'a [ExternalValue],
-
-    // Object used to check if the scan times out.
-    timeout_checker: Option<&'a mut TimeoutChecker>,
-}
-
-impl<'a> ScanData<'a> {
-    pub(crate) fn new(
-        mem: &'a [u8],
-        modules_data: &'a module::EvalData,
-        external_symbols: &'a [ExternalValue],
-        timeout_checker: Option<&'a mut TimeoutChecker>,
-    ) -> Self {
-        Self {
-            mem,
-            modules_data,
-            external_symbols,
-            timeout_checker,
-        }
-    }
-
-    fn check_timeout(&mut self) -> bool {
-        self.timeout_checker
-            .as_mut()
-            .map_or(false, |checker| checker.check_timeout())
-    }
-}
-
 /// Data related to modules used for evaluation.
 #[derive(Debug)]
 pub struct ModulesData<'a> {
@@ -155,8 +119,8 @@ pub struct ModulesData<'a> {
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
     var_matches: Option<variable::VarMatches<'rule>>,
-    scan_data: &'scan mut ScanData,
     previous_rules_results: &'scan [bool],
+    scan_data: &'scan mut ScanData,
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
         var_matches,
@@ -173,7 +137,7 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
     }
 }
 
-struct Evaluator<'scan, 'rule> {
+struct Evaluator<'scan, 'rule, 'mem> {
     var_matches: Option<variable::VarMatches<'rule>>,
 
     // Array of previous rules results.
@@ -190,7 +154,7 @@ struct Evaluator<'scan, 'rule> {
     bounded_identifiers_stack: Vec<ModuleValue>,
 
     // Data related only to the scan, independent of the rule.
-    scan_data: &'rule mut ScanData<'scan>,
+    scan_data: &'rule mut ScanData<'scan, 'mem>,
 }
 
 #[derive(Debug)]
@@ -252,7 +216,7 @@ macro_rules! apply_cmp_op {
     }
 }
 
-impl Evaluator<'_, '_> {
+impl Evaluator<'_, '_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, PoisonKind> {
         var_index
             .0
@@ -701,7 +665,7 @@ impl Evaluator<'_, '_> {
 
             Expression::ExternalSymbol(index) => self
                 .scan_data
-                .external_symbols
+                .external_symbols_values
                 .get(*index)
                 .cloned()
                 .map(Into::into)
@@ -1014,15 +978,6 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits(Value::Integer(0));
-        test_type_traits_non_clonable(ScanData {
-            mem: b"",
-            modules_data: &module::EvalData {
-                values: Vec::new(),
-                data_map: ModuleDataMap::default(),
-            },
-            external_symbols: &[],
-            timeout_checker: None,
-        });
         test_type_traits_non_clonable(ModulesData {
             dynamic_values: &[],
             data_map: &ModuleDataMap::default(),

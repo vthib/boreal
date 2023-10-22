@@ -72,7 +72,7 @@ pub(super) fn evaluate_expr(
                 BoundedValueIndex::Module(index) => {
                     &evaluator
                         .scan_data
-                        .modules_data
+                        .module_values
                         .values
                         .get(*index)
                         .ok_or(PoisonKind::Undefined)?
@@ -95,7 +95,10 @@ pub(super) fn evaluate_expr(
                 .take(*nb_arguments)
                 .map(expr_value_to_module_value)
                 .collect();
-            let eval_ctx = build_eval_context(evaluator);
+            let eval_ctx = EvalContext {
+                mem: evaluator.scan_data.mem,
+                module_data: &evaluator.scan_data.module_values.data_map,
+            };
             let value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
             evaluate_ops(evaluator, &value, ops, expressions)
         }
@@ -142,7 +145,10 @@ fn evaluate_ops(
                         .take(*nb_arguments)
                         .map(expr_value_to_module_value)
                         .collect();
-                    let eval_ctx = build_eval_context(evaluator);
+                    let eval_ctx = EvalContext {
+                        mem: evaluator.scan_data.mem,
+                        module_data: &evaluator.scan_data.module_values.data_map,
+                    };
                     let new_value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
                     // Avoid cloning the value if possible
                     return if operations.peek().is_none() {
@@ -157,13 +163,6 @@ fn evaluate_ops(
     }
 
     Ok(value.clone())
-}
-
-fn build_eval_context<'a, 'c>(evaluator: &'c Evaluator<'a, '_>) -> EvalContext<'a, 'c> {
-    EvalContext {
-        mem: evaluator.scan_data.mem,
-        module_data: &evaluator.scan_data.modules_data.data_map,
-    }
 }
 
 pub(super) fn module_value_to_expr_value(value: ModuleValue) -> Result<Value, PoisonKind> {
