@@ -261,7 +261,7 @@ impl Inner {
     fn scan<'scanner>(
         &'scanner self,
         mem: &[u8],
-        params: &ScanParams,
+        params: &'scanner ScanParams,
         external_symbols_values: &'scanner [ExternalValue],
     ) -> ScanResult<'scanner> {
         let mut scan_data = ScanData {
@@ -273,9 +273,11 @@ impl Inner {
             } else {
                 None
             },
+            timeout_checker: params.timeout_duration.map(TimeoutChecker::new),
+            params,
         };
 
-        let timeout = match self.do_scan(mem, params, &mut scan_data) {
+        let timeout = match self.do_scan(mem, &mut scan_data) {
             Ok(()) => false,
             Err(EvalError::Undecidable) => unreachable!(),
             Err(EvalError::Timeout) => true,
@@ -292,20 +294,15 @@ impl Inner {
     fn do_scan<'scanner>(
         &'scanner self,
         mem: &[u8],
-        params: &ScanParams,
         scan_data: &mut ScanData<'scanner>,
     ) -> Result<(), EvalError> {
-        // Create the timeout checker first. This starts the timer, and thus includes the modules
-        // evaluation.
-        let mut timeout_checker = params.timeout_duration.map(TimeoutChecker::new);
-
         scan_data.module_values.scan_mem(mem, &self.modules);
 
-        if !params.compute_full_matches {
+        if !scan_data.params.compute_full_matches {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
-            let res = self.evaluate_without_matches(mem, scan_data, timeout_checker.as_mut());
+            let res = self.evaluate_without_matches(mem, scan_data);
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -324,24 +321,14 @@ impl Inner {
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_matches = {
-            let ac_scan_context = ac_scan::ScanContext {
-                timeout_checker: timeout_checker.as_mut(),
-                statistics: scan_data.statistics.as_mut(),
-                variables: &self.variables,
-                string_max_nb_matches: params.string_max_nb_matches,
-                match_max_length: params.match_max_length,
-            };
-
-            self.do_memory_scan(mem, ac_scan_context)?
-        };
+        let ac_matches = self.do_memory_scan(mem, scan_data)?;
         let mut ac_matches_iter = ac_matches.into_iter();
 
         let mut eval_data = evaluator::ScanData::new(
             mem,
             &scan_data.module_values,
             scan_data.external_symbols_values,
-            timeout_checker.as_mut(),
+            scan_data.timeout_checker.as_mut(),
         );
 
         let mut previous_results = Vec::with_capacity(self.rules.len());
@@ -404,7 +391,6 @@ impl Inner {
         &'scanner self,
         mem: &[u8],
         scan_data: &mut ScanData<'scanner>,
-        timeout_checker: Option<&mut TimeoutChecker>,
     ) -> Result<(), EvalError> {
         let mut previous_results = Vec::with_capacity(self.rules.len());
 
@@ -412,7 +398,7 @@ impl Inner {
             mem,
             &scan_data.module_values,
             scan_data.external_symbols_values,
-            timeout_checker,
+            scan_data.timeout_checker.as_mut(),
         );
         // First, check global rules
         let mut has_unknown_globals = false;
@@ -454,7 +440,7 @@ impl Inner {
     fn do_memory_scan(
         &self,
         mem: &[u8],
-        mut scan_context: ac_scan::ScanContext,
+        scan_data: &mut ScanData,
     ) -> Result<Vec<Vec<StringMatch>>, EvalError> {
         let mut matches = vec![Vec::new(); self.variables.len()];
 
@@ -463,10 +449,10 @@ impl Inner {
 
         // Scan the memory for all variables occurences.
         self.ac_scan
-            .scan_mem(mem, &mut scan_context, &mut matches)?;
+            .scan_mem(mem, &self.variables, scan_data, &mut matches)?;
 
         #[cfg(feature = "profiling")]
-        if let Some(stats) = scan_context.statistics.as_mut() {
+        if let Some(stats) = scan_data.statistics.as_mut() {
             stats.ac_duration = start.elapsed();
         }
 
@@ -475,6 +461,7 @@ impl Inner {
 }
 
 struct ScanData<'scanner> {
+    /// Values of external symbols.
     external_symbols_values: &'scanner [ExternalValue],
 
     /// List of rules that matched.
@@ -487,6 +474,20 @@ struct ScanData<'scanner> {
 
     /// Statistics related to the scanning.
     statistics: Option<statistics::Evaluation>,
+
+    /// Object used to check if the scan times out.
+    timeout_checker: Option<TimeoutChecker>,
+
+    /// Parameters linked to the scan.
+    params: &'scanner ScanParams,
+}
+
+impl ScanData<'_> {
+    fn check_timeout(&mut self) -> bool {
+        self.timeout_checker
+            .as_mut()
+            .map_or(false, TimeoutChecker::check_timeout)
+    }
 }
 
 fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T> {
