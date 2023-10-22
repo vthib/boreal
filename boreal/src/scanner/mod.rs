@@ -313,30 +313,37 @@ impl Inner {
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
         match scan_data.mem {
-            Memory::Direct(mem) => scan_data.module_values.scan_mem(mem, &self.modules),
-            Memory::Fragmented { .. } => {
-                // FIXME
-            }
-        }
+            Memory::Direct(mem) => {
+                // We can evaluate module values and then try to evaluate rules without matches.
+                scan_data
+                    .module_values
+                    .scan_region(&MemoryRegion { start: 0, mem }, &self.modules);
 
-        if !scan_data.params.compute_full_matches && scan_data.mem.is_direct() {
-            #[cfg(feature = "profiling")]
-            let start = std::time::Instant::now();
+                if !scan_data.params.compute_full_matches && scan_data.mem.is_direct() {
+                    #[cfg(feature = "profiling")]
+                    let start = std::time::Instant::now();
 
-            let res = self.evaluate_without_matches(scan_data);
+                    let res = self.evaluate_without_matches(scan_data);
 
-            #[cfg(feature = "profiling")]
-            if let Some(stats) = scan_data.statistics.as_mut() {
-                stats.no_scan_eval_duration = start.elapsed();
-            }
+                    #[cfg(feature = "profiling")]
+                    if let Some(stats) = scan_data.statistics.as_mut() {
+                        stats.no_scan_eval_duration = start.elapsed();
+                    }
 
-            match res {
-                Ok(()) => return Ok(()),
-                Err(EvalError::Timeout) => return Err(EvalError::Timeout),
-                Err(EvalError::Undecidable) => {
-                    // Reset the rules that might have matched already.
-                    scan_data.matched_rules.clear();
+                    match res {
+                        Ok(()) => return Ok(()),
+                        Err(EvalError::Timeout) => return Err(EvalError::Timeout),
+                        Err(EvalError::Undecidable) => {
+                            // Reset the rules that might have matched already.
+                            scan_data.matched_rules.clear();
+                        }
+                    }
                 }
+            }
+            Memory::Fragmented { .. } => {
+                // Otherwise, we cannot evaluate module values, and thus disable the evaluation
+                // without matches optimisation. module values will be evaluated when we iterate on
+                // each region to scan them.
             }
         }
 
@@ -480,6 +487,9 @@ impl Inner {
                             ep.checked_add(start)
                         });
                     }
+
+                    // And finally, evaluate the module values on each region.
+                    scan_data.module_values.scan_region(region, &self.modules);
                 }
             }
         }
@@ -736,7 +746,7 @@ mod tests {
         let scanner = compiler.into_scanner();
 
         let mut module_values = evaluator::module::EvalData::new(&scanner.inner.modules);
-        module_values.scan_mem(mem, &scanner.inner.modules);
+        module_values.scan_region(&MemoryRegion { start: 0, mem }, &scanner.inner.modules);
 
         let mut scan_data = ScanData {
             mem: Memory::Direct(mem),

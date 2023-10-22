@@ -41,7 +41,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::memory::Memory;
+use crate::memory::{Memory, MemoryRegion};
 use crate::regex::Regex;
 
 mod time;
@@ -178,9 +178,9 @@ impl std::fmt::Debug for Box<dyn Module> {
 }
 
 /// Context provided to module methods during scanning.
-pub struct ScanContext<'a> {
-    /// Input being scanned.
-    pub mem: &'a [u8],
+pub struct ScanContext<'a, 'b> {
+    /// Memory region being scanned.
+    pub region: &'a MemoryRegion<'b>,
 
     /// Private data (per-scan) of each module.
     ///
@@ -188,7 +188,7 @@ pub struct ScanContext<'a> {
     pub module_data: &'a mut ModuleDataMap,
 }
 
-impl std::fmt::Debug for ScanContext<'_> {
+impl std::fmt::Debug for ScanContext<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScanContext").finish()
     }
@@ -725,7 +725,7 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(ScanContext {
-            mem: b"",
+            region: &MemoryRegion { start: 0, mem: b"" },
             module_data: &mut ModuleDataMap(HashMap::new()),
         });
         test_type_traits_non_clonable(EvalContext {

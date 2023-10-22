@@ -6,6 +6,7 @@ use std::slice::Iter;
 use crate::compiler::module::{
     BoundedValueIndex, ModuleExpression, ModuleExpressionKind, ModuleOperations, ValueOperation,
 };
+use crate::memory::MemoryRegion;
 use crate::module::{EvalContext, Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 use super::{Evaluator, PoisonKind, Value};
@@ -32,9 +33,9 @@ impl EvalData {
         Self { values, data_map }
     }
 
-    pub fn scan_mem(&mut self, mem: &[u8], modules: &[Box<dyn Module>]) {
+    pub fn scan_region(&mut self, region: &MemoryRegion, modules: &[Box<dyn Module>]) {
         let mut scan_ctx = ScanContext {
-            mem,
+            region,
             module_data: &mut self.data_map,
         };
 

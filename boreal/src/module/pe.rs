@@ -1109,14 +1109,14 @@ impl Module for Pe {
             return;
         };
 
-        let res = match FileKind::parse(ctx.mem) {
+        let res = match FileKind::parse(ctx.region.mem) {
             Ok(FileKind::Pe32) => {
                 data.is_32bit = true;
-                self.parse_file::<ImageNtHeaders32>(ctx.mem, data)
+                self.parse_file::<ImageNtHeaders32>(ctx.region.mem, data)
             }
             Ok(FileKind::Pe64) => {
                 data.is_32bit = false;
-                self.parse_file::<ImageNtHeaders64>(ctx.mem, data)
+                self.parse_file::<ImageNtHeaders64>(ctx.region.mem, data)
             }
             _ => None,
         };
