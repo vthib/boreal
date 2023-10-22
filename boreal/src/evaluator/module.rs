@@ -1,13 +1,53 @@
 //! Provides methods to evaluate module values during scanning.
+use std::collections::HashMap;
 use std::iter::Peekable;
 use std::slice::Iter;
 
 use crate::compiler::module::{
     BoundedValueIndex, ModuleExpression, ModuleExpressionKind, ModuleOperations, ValueOperation,
 };
-use crate::module::{EvalContext, Value as ModuleValue};
+use crate::module::{EvalContext, Module, ModuleDataMap, ScanContext, Value as ModuleValue};
 
 use super::{Evaluator, PoisonKind, Value};
+
+#[derive(Debug)]
+pub struct EvalData {
+    pub values: Vec<(&'static str, ModuleValue)>,
+    pub data_map: ModuleDataMap,
+}
+
+impl EvalData {
+    pub fn new(modules: &[Box<dyn Module>]) -> Self {
+        let mut data_map = ModuleDataMap::default();
+
+        let values = modules
+            .iter()
+            .map(|module| {
+                module.setup_new_scan(&mut data_map);
+
+                (module.get_name(), ModuleValue::Object(HashMap::new()))
+            })
+            .collect();
+
+        Self { values, data_map }
+    }
+
+    pub fn scan_mem(&mut self, mem: &[u8], modules: &[Box<dyn Module>]) {
+        let mut scan_ctx = ScanContext {
+            mem,
+            module_data: &mut self.data_map,
+        };
+
+        for (module, values) in modules.iter().zip(self.values.iter_mut()) {
+            let ModuleValue::Object(values) = &mut values.1 else {
+                // Safety: this value is built in the new method of this object and guaranteed
+                // to be of this type.
+                unreachable!();
+            };
+            module.get_dynamic_values(&mut scan_ctx, values);
+        }
+    }
+}
 
 pub(super) fn evaluate_expr(
     evaluator: &mut Evaluator,
@@ -33,7 +73,7 @@ pub(super) fn evaluate_expr(
                     &evaluator
                         .scan_data
                         .modules_data
-                        .dynamic_values
+                        .values
                         .get(*index)
                         .ok_or(PoisonKind::Undefined)?
                         .1
@@ -122,7 +162,7 @@ fn evaluate_ops(
 fn build_eval_context<'a, 'c>(evaluator: &'c Evaluator<'a, '_>) -> EvalContext<'a, 'c> {
     EvalContext {
         mem: evaluator.scan_data.mem,
-        module_data: evaluator.scan_data.modules_data.data_map,
+        module_data: &evaluator.scan_data.modules_data.data_map,
     }
 }
 
@@ -155,5 +195,20 @@ fn expr_value_to_module_value(v: Value) -> ModuleValue {
         Value::Bytes(v) => ModuleValue::Bytes(v),
         Value::Regex(v) => ModuleValue::Regex(v),
         Value::Boolean(v) => ModuleValue::Boolean(v),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_helpers::test_type_traits_non_clonable;
+
+    use super::*;
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(EvalData {
+            values: Vec::new(),
+            data_map: ModuleDataMap::default(),
+        });
     }
 }
