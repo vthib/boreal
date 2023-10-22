@@ -44,8 +44,6 @@ use crate::compiler::ExternalValue;
 use crate::module::{ModuleDataMap, Value as ModuleValue};
 use crate::timeout::TimeoutChecker;
 
-pub mod ac_scan;
-
 mod error;
 pub use error::EvalError;
 
@@ -56,8 +54,7 @@ mod entrypoint;
 
 mod read_integer;
 use read_integer::evaluate_read_integer;
-mod variable;
-pub(crate) use variable::VarMatches;
+pub(crate) mod variable;
 
 #[derive(Clone, Debug)]
 enum Value {
@@ -157,7 +154,7 @@ pub struct ModulesData<'a> {
 /// byte slice, false otherwise.
 pub(crate) fn evaluate_rule<'scan, 'rule>(
     rule: &'rule Rule,
-    var_matches: Option<VarMatches<'rule>>,
+    var_matches: Option<variable::VarMatches<'rule>>,
     scan_data: &'scan mut ScanData,
     previous_rules_results: &'scan [bool],
 ) -> Result<bool, EvalError> {
@@ -177,7 +174,7 @@ pub(crate) fn evaluate_rule<'scan, 'rule>(
 }
 
 struct Evaluator<'scan, 'rule> {
-    var_matches: Option<VarMatches<'rule>>,
+    var_matches: Option<variable::VarMatches<'rule>>,
 
     // Array of previous rules results.
     //
@@ -263,7 +260,7 @@ impl Evaluator<'_, '_> {
             .ok_or(PoisonKind::Undefined)
     }
 
-    fn get_var_matches(&self) -> Result<&VarMatches, PoisonKind> {
+    fn get_var_matches(&self) -> Result<&variable::VarMatches, PoisonKind> {
         self.var_matches.as_ref().ok_or(PoisonKind::VarNeeded)
     }
 
