@@ -249,7 +249,7 @@ impl Module for Elf {
         if let Some(values) = ctx
             .module_data
             .get_mut::<Self>()
-            .and_then(|data| parse_file(ctx.mem, data))
+            .and_then(|data| parse_file(ctx.region.mem, data))
         {
             *out = values;
         }
