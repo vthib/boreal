@@ -1,7 +1,6 @@
 //! Provides methods to evaluate module values during scanning.
 use std::iter::Peekable;
 use std::slice::Iter;
-use std::sync::Arc;
 
 use crate::compiler::module::{
     BoundedValueIndex, ModuleExpression, ModuleExpressionKind, ModuleOperations, ValueOperation,
@@ -43,9 +42,8 @@ pub(super) fn evaluate_expr(
                     .get(*index)
                     .ok_or(PoisonKind::Undefined)?,
             };
-            let value = Arc::clone(value);
 
-            evaluate_ops(evaluator, &value, ops, expressions)
+            evaluate_ops(evaluator, value, ops, expressions)
         }
         ModuleExpressionKind::StaticFunction { fun } => {
             let Some(ValueOperation::FunctionCall(nb_arguments)) = ops.next() else {
@@ -64,7 +62,7 @@ pub(super) fn evaluate_expr(
 }
 
 fn evaluate_ops(
-    evaluator: &mut Evaluator,
+    evaluator: &Evaluator,
     mut value: &ModuleValue,
     mut operations: Peekable<Iter<ValueOperation>>,
     mut expressions: std::vec::IntoIter<Value>,

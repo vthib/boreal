@@ -485,7 +485,7 @@ pub struct ScanResult<'scanner> {
     /// On-scan values of all modules used in the scanner.
     ///
     /// First element is the module name, second one is the dynamic values produced by the module.
-    pub module_values: Vec<(&'static str, Arc<crate::module::Value>)>,
+    pub module_values: Vec<(&'static str, crate::module::Value)>,
 
     /// Indicates if evaluation timed out.
     ///

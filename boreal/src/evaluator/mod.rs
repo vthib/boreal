@@ -35,7 +35,6 @@
 //! - `defined`
 //!
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
@@ -114,7 +113,7 @@ impl From<ExternalValue> for Value {
 pub struct ScanData<'a> {
     pub mem: &'a [u8],
 
-    pub module_values: Vec<(&'static str, Arc<ModuleValue>)>,
+    pub module_values: Vec<(&'static str, ModuleValue)>,
 
     // Context used when calling module functions
     module_ctx: ScanContext<'a>,
@@ -153,9 +152,7 @@ impl<'a> ScanData<'a> {
                 .map(|module| {
                     (
                         module.get_name(),
-                        Arc::new(crate::module::Value::Object(
-                            module.get_dynamic_values(&mut module_ctx),
-                        )),
+                        crate::module::Value::Object(module.get_dynamic_values(&mut module_ctx)),
                     )
                 })
                 .collect(),
@@ -222,7 +219,7 @@ struct Evaluator<'scan, 'rule> {
     currently_selected_variable_index: Option<usize>,
 
     // Stack of bounded identifiers to their integer values.
-    bounded_identifiers_stack: Vec<Arc<ModuleValue>>,
+    bounded_identifiers_stack: Vec<ModuleValue>,
 
     // Data related only to the scan, independent of the rule.
     scan_data: &'rule mut ScanData<'scan>,
@@ -845,7 +842,7 @@ impl Evaluator<'_, '_> {
                 match value {
                     ModuleValue::Array(array) => {
                         for value in array {
-                            self.bounded_identifiers_stack.push(Arc::new(value));
+                            self.bounded_identifiers_stack.push(value);
                             let v = self.evaluate_expr(body);
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
                             let v = match v {
@@ -865,9 +862,8 @@ impl Evaluator<'_, '_> {
                     }
                     ModuleValue::Dictionary(dict) => {
                         for (key, value) in dict {
-                            self.bounded_identifiers_stack
-                                .push(Arc::new(ModuleValue::Bytes(key)));
-                            self.bounded_identifiers_stack.push(Arc::new(value));
+                            self.bounded_identifiers_stack.push(ModuleValue::Bytes(key));
+                            self.bounded_identifiers_stack.push(value);
                             let v = self.evaluate_expr(body);
                             self.bounded_identifiers_stack.truncate(prev_stack_len);
                             let v = match v {
@@ -900,7 +896,7 @@ impl Evaluator<'_, '_> {
 
                 for value in from..=to {
                     self.bounded_identifiers_stack
-                        .push(Arc::new(ModuleValue::Integer(value)));
+                        .push(ModuleValue::Integer(value));
                     let v = self.evaluate_expr(body);
                     self.bounded_identifiers_stack.truncate(prev_stack_len);
                     let v = match v {
@@ -925,11 +921,11 @@ impl Evaluator<'_, '_> {
                     match self.evaluate_expr(expr)? {
                         Value::Integer(value) => {
                             self.bounded_identifiers_stack
-                                .push(Arc::new(ModuleValue::Integer(value)));
+                                .push(ModuleValue::Integer(value));
                         }
                         Value::Bytes(value) => {
                             self.bounded_identifiers_stack
-                                .push(Arc::new(ModuleValue::Bytes(value)));
+                                .push(ModuleValue::Bytes(value));
                         }
                         _ => return Err(PoisonKind::Undefined),
                     }
