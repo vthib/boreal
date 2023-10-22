@@ -31,25 +31,26 @@ pub enum BoundedValueIndex {
 }
 
 /// Different type of expressions related to the use of a module.
-pub enum ModuleExpression {
+#[derive(Debug)]
+pub struct ModuleExpression {
+    /// Kind of the expression.
+    pub kind: ModuleExpressionKind,
+
+    /// List of operations to apply to the value to get the final value.
+    pub operations: ModuleOperations,
+}
+
+pub enum ModuleExpressionKind {
     /// Operations on a bounded module value.
     BoundedModuleValueUse {
         /// Index of the bounded value.
         index: BoundedValueIndex,
-
-        /// List of operations to apply to the value to get the final value.
-        operations: ModuleOperations,
     },
 
     /// A value coming from a function exposed by a module.
     StaticFunction {
         /// The function to call.
         fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
-
-        /// List of operations to apply to the value to get the final value.
-        ///
-        /// These operations must start with a [`ValueOperation::FunctionCall`] operation.
-        operations: ModuleOperations,
     },
 }
 
@@ -86,18 +87,16 @@ pub enum ValueOperation {
 }
 
 // XXX: custom Debug impl needed because derive does not work with the fn fields.
-impl std::fmt::Debug for ModuleExpression {
+impl std::fmt::Debug for ModuleExpressionKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BoundedModuleValueUse { index, operations } => f
+            Self::BoundedModuleValueUse { index } => f
                 .debug_struct("BoundedModuleValueUse")
                 .field("index", index)
-                .field("operations", operations)
                 .finish(),
-            Self::StaticFunction { fun, operations } => f
+            Self::StaticFunction { fun } => f
                 .debug_struct("Function")
                 .field("fun", &(*fun as usize))
-                .field("operations", operations)
                 .finish(),
         }
     }
@@ -328,8 +327,10 @@ impl ModuleUse<'_, '_> {
 
     fn into_module_expression(self) -> Option<(ModuleExpression, ValueType)> {
         let ty = self.current_value.into_type()?;
-        let expr = ModuleExpression::BoundedModuleValueUse {
-            index: self.bounded_value_index?,
+        let expr = ModuleExpression {
+            kind: ModuleExpressionKind::BoundedModuleValueUse {
+                index: self.bounded_value_index?,
+            },
             operations: ModuleOperations {
                 expressions: self.operations_expressions,
                 operations: self.operations,
@@ -351,15 +352,13 @@ impl ModuleUse<'_, '_> {
 
                     StaticValue::Object(_) => return None,
 
-                    StaticValue::Function { fun, .. } => {
-                        Expression::Module(ModuleExpression::StaticFunction {
-                            fun: *fun,
-                            operations: ModuleOperations {
-                                expressions: self.operations_expressions,
-                                operations: self.operations,
-                            },
-                        })
-                    }
+                    StaticValue::Function { fun, .. } => Expression::Module(ModuleExpression {
+                        kind: ModuleExpressionKind::StaticFunction { fun: *fun },
+                        operations: ModuleOperations {
+                            expressions: self.operations_expressions,
+                            operations: self.operations,
+                        },
+                    }),
                 };
                 let ty = self.current_value.into_type()?;
 
@@ -637,20 +636,19 @@ mod tests {
             expressions: Vec::new(),
             operations: Vec::new(),
         });
-        test_type_traits_non_clonable(ModuleExpression::BoundedModuleValueUse {
+        test_type_traits_non_clonable(ModuleExpression {
+            kind: ModuleExpressionKind::BoundedModuleValueUse {
+                index: BoundedValueIndex::Module(0),
+            },
+            operations: ModuleOperations {
+                expressions: Vec::new(),
+                operations: Vec::new(),
+            },
+        });
+        test_type_traits_non_clonable(ModuleExpressionKind::BoundedModuleValueUse {
             index: BoundedValueIndex::Module(0),
-            operations: ModuleOperations {
-                expressions: Vec::new(),
-                operations: Vec::new(),
-            },
         });
-        test_type_traits_non_clonable(ModuleExpression::StaticFunction {
-            fun: test_fun,
-            operations: ModuleOperations {
-                expressions: Vec::new(),
-                operations: Vec::new(),
-            },
-        });
+        test_type_traits_non_clonable(ModuleExpressionKind::StaticFunction { fun: test_fun });
         test_type_traits_non_clonable(IteratorType::Array(ValueType::Integer));
         test_type_traits_non_clonable(TypeError::UnknownSubfield("a".to_owned()));
         test_type_traits_non_clonable(ValueOrType::Type(&ValueType::Integer));

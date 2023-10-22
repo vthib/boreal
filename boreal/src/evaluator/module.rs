@@ -4,7 +4,7 @@ use std::slice::Iter;
 use std::sync::Arc;
 
 use crate::compiler::module::{
-    BoundedValueIndex, ModuleExpression, ModuleOperations, ValueOperation,
+    BoundedValueIndex, ModuleExpression, ModuleExpressionKind, ModuleOperations, ValueOperation,
 };
 use crate::module::Value as ModuleValue;
 
@@ -14,15 +14,21 @@ pub(super) fn evaluate_expr(
     evaluator: &mut Evaluator,
     expr: &ModuleExpression,
 ) -> Result<ModuleValue, PoisonKind> {
-    match expr {
-        ModuleExpression::BoundedModuleValueUse {
-            index,
-            operations:
-                ModuleOperations {
-                    expressions,
-                    operations,
-                },
-        } => {
+    let ModuleOperations {
+        expressions,
+        operations,
+    } = &expr.operations;
+
+    let expressions = expressions
+        .iter()
+        .map(|expr| evaluator.evaluate_expr(expr))
+        .collect::<Result<Vec<Value>, PoisonKind>>()?;
+    let mut expressions = expressions.into_iter();
+
+    let mut ops = operations.iter().peekable();
+
+    match &expr.kind {
+        ModuleExpressionKind::BoundedModuleValueUse { index } => {
             let value = match index {
                 BoundedValueIndex::Module(index) => {
                     &evaluator
@@ -39,35 +45,12 @@ pub(super) fn evaluate_expr(
             };
             let value = Arc::clone(value);
 
-            let expressions = expressions
-                .iter()
-                .map(|expr| evaluator.evaluate_expr(expr))
-                .collect::<Result<Vec<Value>, PoisonKind>>()?;
-            evaluate_ops(
-                evaluator,
-                &value,
-                operations.iter().peekable(),
-                expressions.into_iter(),
-            )
+            evaluate_ops(evaluator, &value, ops, expressions)
         }
-        ModuleExpression::StaticFunction {
-            fun,
-            operations:
-                ModuleOperations {
-                    expressions,
-                    operations,
-                },
-        } => {
-            let mut ops = operations.iter().peekable();
+        ModuleExpressionKind::StaticFunction { fun } => {
             let Some(ValueOperation::FunctionCall(nb_arguments)) = ops.next() else {
                 return Err(PoisonKind::Undefined);
             };
-
-            let expressions: Vec<Value> = expressions
-                .iter()
-                .map(|expr| evaluator.evaluate_expr(expr))
-                .collect::<Result<Vec<Value>, PoisonKind>>()?;
-            let mut expressions = expressions.into_iter();
 
             let arguments: Vec<ModuleValue> = (&mut expressions)
                 .take(*nb_arguments)
