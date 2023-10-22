@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range};
 
 use boreal_parser::expression::{Identifier, IdentifierOperation, IdentifierOperationType};
 
-use super::expression::{compile_expression, Expression, Type};
+use super::expression::{compile_expression, Expr, Expression, Type};
 use super::rule::RuleCompiler;
 use super::{CompilationError, ImportedModule};
 use crate::module::{self, ScanContext, StaticValue, Type as ValueType, Value};
@@ -16,17 +16,6 @@ pub struct Module {
     static_values: HashMap<&'static str, StaticValue>,
     /// Dynamic types for values computed during scanning.
     dynamic_types: ValueType,
-}
-
-/// Operations on identifiers.
-#[derive(Debug)]
-pub enum ValueOperation {
-    /// Object subfield, i.e. `value.subfield`.
-    Subfield(String),
-    /// Array/dict subscript, i.e. `value[subscript]`.
-    Subscript(Box<Expression>),
-    /// Function call, i.e. `value(arguments)`.
-    FunctionCall(Vec<Expression>),
 }
 
 /// Index on a bounded value
@@ -49,18 +38,51 @@ pub enum ModuleExpression {
         index: BoundedValueIndex,
 
         /// List of operations to apply to the value to get the final value.
-        operations: Vec<ValueOperation>,
+        operations: ModuleOperations,
     },
 
     /// A value coming from a function exposed by a module.
-    Function {
-        /// The function to call with the computed index
+    StaticFunction {
+        /// The function to call.
         fun: fn(&ScanContext, Vec<Value>) -> Option<Value>,
-        /// The expressions that provides the arguments of the function.
-        arguments: Vec<Expression>,
-        /// List of operations to apply on the value returned by the function.
-        operations: Vec<ValueOperation>,
+
+        /// List of operations to apply to the value to get the final value.
+        ///
+        /// These operations must start with a [`ValueOperation::FunctionCall`] operation.
+        operations: ModuleOperations,
     },
+}
+
+/// Operations to apply to a module value.
+#[derive(Debug)]
+pub struct ModuleOperations {
+    /// List of expressions that needs to be evaluated to compute all of the operations.
+    ///
+    /// This list is in its own Vec instead of inlined in each operation so that they
+    /// can be evaluated separately, which makes the evaluation of operations simpler
+    /// as it can be done immutably.
+    ///
+    /// The expressions are stored in the same order the operations will be evaluated.
+    pub expressions: Vec<Expression>,
+
+    /// List of operations to apply to the module value.
+    pub operations: Vec<ValueOperation>,
+}
+
+/// Operations on identifiers.
+#[derive(Debug)]
+pub enum ValueOperation {
+    /// Object subfield, i.e. `value.subfield`.
+    Subfield(String),
+    /// Array/dict subscript, i.e. `value[subscript]`.
+    ///
+    /// The value used as the subscript index is stored in [`ModuleOperations::expressions`].
+    Subscript,
+    /// Function call, i.e. `value(arguments)`.
+    ///
+    /// The value is the number of expressions to pick from [`ModuleOperations::expressions`]
+    /// to form the arguments of the function call.
+    FunctionCall(usize),
 }
 
 // XXX: custom Debug impl needed because derive does not work with the fn fields.
@@ -72,14 +94,9 @@ impl std::fmt::Debug for ModuleExpression {
                 .field("index", index)
                 .field("operations", operations)
                 .finish(),
-            Self::Function {
-                fun,
-                arguments,
-                operations,
-            } => f
+            Self::StaticFunction { fun, operations } => f
                 .debug_struct("Function")
                 .field("fun", &(*fun as usize))
-                .field("arguments", arguments)
                 .field("operations", operations)
                 .finish(),
         }
@@ -128,6 +145,7 @@ pub(super) fn compile_bounded_identifier_use<'a, 'b>(
         compiler,
         last_immediate_value: None,
         current_value: ValueOrType::Type(starting_type),
+        operations_expressions: Vec::new(),
         operations: Vec::with_capacity(identifier.operations.len()),
         current_span: identifier.name_span,
         bounded_value_index: Some(BoundedValueIndex::BoundedStack(identifier_stack_index)),
@@ -184,6 +202,7 @@ pub(super) fn compile_identifier<'a, 'b>(
             compiler,
             last_immediate_value: Some(value),
             current_value: ValueOrType::Value(value),
+            operations_expressions: Vec::new(),
             operations: Vec::with_capacity(nb_ops),
             current_span: identifier.name_span,
             bounded_value_index: None,
@@ -195,6 +214,7 @@ pub(super) fn compile_identifier<'a, 'b>(
                 compiler,
                 last_immediate_value: None,
                 current_value: ValueOrType::Type(&module.module.dynamic_types),
+                operations_expressions: Vec::new(),
                 operations: Vec::with_capacity(nb_ops),
                 current_span: identifier.name_span,
                 bounded_value_index: Some(BoundedValueIndex::Module(module.module_index)),
@@ -219,6 +239,9 @@ pub(super) struct ModuleUse<'a, 'b> {
 
     // Current value (or type).
     current_value: ValueOrType<'b>,
+
+    // Expressions that needs to be evaluated to be able to evaluate the operations.
+    operations_expressions: Vec<Expression>,
 
     // Operations that will need to be evaluated at scanning time.
     operations: Vec<ValueOperation>,
@@ -245,22 +268,23 @@ impl ModuleUse<'_, '_> {
                 res
             }
             IdentifierOperationType::Subscript(subscript) => {
-                let subscript = compile_expression(self.compiler, *subscript)?;
+                let Expr { expr, ty, span } = compile_expression(self.compiler, *subscript)?;
 
-                self.operations
-                    .push(ValueOperation::Subscript(Box::new(subscript.expr)));
-                self.current_value.subscript(subscript.ty, subscript.span)
+                self.operations_expressions.push(expr);
+                self.operations.push(ValueOperation::Subscript);
+                self.current_value.subscript(ty, span)
             }
             IdentifierOperationType::FunctionCall(arguments) => {
-                let mut arguments_exprs = Vec::with_capacity(arguments.len());
+                self.operations
+                    .push(ValueOperation::FunctionCall(arguments.len()));
+
                 let mut arguments_types = Vec::with_capacity(arguments.len());
                 for arg in arguments {
                     let res = compile_expression(self.compiler, arg)?;
-                    arguments_exprs.push(res.expr);
+                    self.operations_expressions.push(res.expr);
                     arguments_types.push(res.ty);
                 }
-                self.operations
-                    .push(ValueOperation::FunctionCall(arguments_exprs));
+
                 self.current_value.function_call(&arguments_types)
             }
         };
@@ -306,7 +330,10 @@ impl ModuleUse<'_, '_> {
         let ty = self.current_value.into_type()?;
         let expr = ModuleExpression::BoundedModuleValueUse {
             index: self.bounded_value_index?,
-            operations: self.operations,
+            operations: ModuleOperations {
+                expressions: self.operations_expressions,
+                operations: self.operations,
+            },
         };
         Some((expr, ty))
     }
@@ -325,14 +352,12 @@ impl ModuleUse<'_, '_> {
                     StaticValue::Object(_) => return None,
 
                     StaticValue::Function { fun, .. } => {
-                        let mut ops = self.operations.into_iter();
-                        let Some(ValueOperation::FunctionCall(arguments)) = ops.next() else {
-                            return None;
-                        };
-                        Expression::Module(ModuleExpression::Function {
+                        Expression::Module(ModuleExpression::StaticFunction {
                             fun: *fun,
-                            arguments,
-                            operations: ops.collect(),
+                            operations: ModuleOperations {
+                                expressions: self.operations_expressions,
+                                operations: self.operations,
+                            },
                         })
                     }
                 };
@@ -608,14 +633,23 @@ mod tests {
         test_type_traits_non_clonable(compile_module(&crate::module::Time));
         test_type_traits_non_clonable(ValueOperation::Subfield("a".to_owned()));
         test_type_traits_non_clonable(BoundedValueIndex::Module(0));
-        test_type_traits_non_clonable(ModuleExpression::BoundedModuleValueUse {
-            index: BoundedValueIndex::Module(0),
+        test_type_traits_non_clonable(ModuleOperations {
+            expressions: Vec::new(),
             operations: Vec::new(),
         });
-        test_type_traits_non_clonable(ModuleExpression::Function {
+        test_type_traits_non_clonable(ModuleExpression::BoundedModuleValueUse {
+            index: BoundedValueIndex::Module(0),
+            operations: ModuleOperations {
+                expressions: Vec::new(),
+                operations: Vec::new(),
+            },
+        });
+        test_type_traits_non_clonable(ModuleExpression::StaticFunction {
             fun: test_fun,
-            arguments: Vec::new(),
-            operations: Vec::new(),
+            operations: ModuleOperations {
+                expressions: Vec::new(),
+                operations: Vec::new(),
+            },
         });
         test_type_traits_non_clonable(IteratorType::Array(ValueType::Integer));
         test_type_traits_non_clonable(TypeError::UnknownSubfield("a".to_owned()));
