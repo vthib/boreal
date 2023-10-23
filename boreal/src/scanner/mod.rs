@@ -6,7 +6,7 @@ use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::{self, entrypoint, evaluate_rule, EvalError};
-use crate::memory::{Memory, Region};
+use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::Module;
 use crate::statistics;
 use crate::timeout::TimeoutChecker;
@@ -196,12 +196,12 @@ impl Scanner {
 
     // FIXME: clean up proto and doc before release
     #[doc(hidden)]
-    pub fn scan_fragmented<'scanner>(
-        &'scanner self,
-        regions: &[Region],
-    ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
+    pub fn scan_fragmented<T>(&self, obj: T) -> Result<ScanResult, (ScanError, ScanResult)>
+    where
+        T: FragmentedMemory,
+    {
         self.inner.scan(
-            Memory::Fragmented { regions },
+            Memory::Fragmented(Box::new(obj)),
             &self.scan_params,
             &self.external_symbols_values,
         )
@@ -489,7 +489,7 @@ impl Inner {
             variables: &self.variables,
             params: scan_data.params,
         };
-        match scan_data.mem {
+        match &mut scan_data.mem {
             Memory::Direct(mem) => {
                 // Scan the memory for all variables occurences.
                 self.ac_scan.scan_region(
@@ -498,11 +498,13 @@ impl Inner {
                     &mut matches,
                 )?;
             }
-            Memory::Fragmented { regions } => {
+            Memory::Fragmented(obj) => {
                 // Scan each region for all variables occurences.
-                for region in regions {
+                let regions: Vec<_> = obj.list_regions();
+                for region_desc in regions {
+                    let region = obj.fetch_region(region_desc);
                     self.ac_scan
-                        .scan_region(region, &mut ac_scan_data, &mut matches)?;
+                        .scan_region(&region, &mut ac_scan_data, &mut matches)?;
 
                     // Also, compute the value for the entrypoint expression. Since
                     // we fetch each region here, this is much cheaper that refetching
@@ -521,7 +523,7 @@ impl Inner {
 
                     // And finally, evaluate the module values on each region.
                     scan_data.module_values.scan_region(
-                        region,
+                        &region,
                         &self.modules,
                         scan_data.params.process_memory,
                     );

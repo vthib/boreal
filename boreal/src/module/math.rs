@@ -132,7 +132,7 @@ impl Module for Math {
     }
 }
 
-fn get_mem_slice<'a>(ctx: &mut EvalContext<'a, '_>, offset: i64, length: i64) -> Option<&'a [u8]> {
+fn get_mem_slice<'a>(ctx: &'a mut EvalContext, offset: i64, length: i64) -> Option<&'a [u8]> {
     let start: usize = offset.try_into().ok()?;
     let length: usize = length.try_into().ok()?;
     let end = start.checked_add(length)?;
@@ -506,7 +506,7 @@ mod tests {
     macro_rules! ctx {
         () => {
             EvalContext {
-                mem: &Memory::Direct(b""),
+                mem: &mut Memory::Direct(b""),
                 module_data: &ModuleDataMap::default(),
                 process_memory: false,
             }
