@@ -13,13 +13,10 @@ pub enum Memory<'a> {
     /// This is as if the bytes to scan had holes, which is useful when scanning
     /// the memory of a process, which consists of non contiguous regions of
     /// bytes.
-    Fragmented {
-        /// Non overlapping regions mapping the fragmented memory.
-        regions: &'a [Region<'a>],
-    },
+    Fragmented(Box<dyn FragmentedMemory + 'a>),
 }
 
-impl<'a> Memory<'a> {
+impl Memory<'_> {
     pub(crate) fn filesize(&self) -> Option<usize> {
         match self {
             Self::Direct(mem) => Some(mem.len()),
@@ -55,7 +52,7 @@ impl<'a> Memory<'a> {
     /// If the end is after the end of the region, the slice is truncated.
     // TODO: return an iterator if the range overlaps multiple regions that are contiguous?
     #[must_use]
-    pub fn get(&self, start: usize, end: usize) -> Option<&'a [u8]> {
+    pub fn get(&mut self, start: usize, end: usize) -> Option<&[u8]> {
         match self {
             Self::Direct(mem) => {
                 if start >= mem.len() {
@@ -65,16 +62,18 @@ impl<'a> Memory<'a> {
                     mem.get(start..end)
                 }
             }
-            Self::Fragmented { regions } => {
-                for region in *regions {
+            Self::Fragmented(obj) => {
+                for region in obj.list_regions() {
                     let Some(relative_start) = start.checked_sub(region.start) else {
                         break;
                     };
-                    if relative_start >= region.mem.len() {
+                    if relative_start >= region.length {
                         continue;
                     }
                     let end = end.checked_sub(region.start)?;
-                    let end = std::cmp::min(region.mem.len(), end);
+                    let end = std::cmp::min(region.length, end);
+
+                    let region = obj.fetch_region(region);
                     return region.mem.get(relative_start..end);
                 }
 
@@ -82,6 +81,32 @@ impl<'a> Memory<'a> {
             }
         }
     }
+}
+
+/// Memory to scan, fragmented into different regions.
+///
+/// This trait can be implemented to scan bytes which are not arranged as a
+/// single slice. The main use case is for example scanning the memory of a
+/// process, which is arranged in non contiguous regions of mapped bytes.
+pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
+    /// List non overlapping regions mapping the fragmented memory.
+    ///
+    /// This listing should be cheap. Actually retrieving the memory behind a region
+    /// should only be done in the [`FragmentedMemory::fetch_region`] method.
+    fn list_regions(&self) -> Vec<RegionDescription>;
+
+    /// Fetch the data of a region.
+    fn fetch_region(&mut self, region_desc: RegionDescription) -> Region;
+}
+
+/// A description of a region of memory to scan.
+#[derive(Copy, Clone, Debug)]
+pub struct RegionDescription {
+    /// Index of the start of the region.
+    pub start: usize,
+
+    /// Length of the region.
+    pub length: usize,
 }
 
 /// A region of memory to scan.
@@ -104,5 +129,9 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(Memory::Direct(b""));
         test_type_traits_non_clonable(Region { start: 0, mem: b"" });
+        test_type_traits_non_clonable(RegionDescription {
+            start: 0,
+            length: 0,
+        });
     }
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use boreal::memory::Region;
+use boreal::memory::{FragmentedMemory, Region, RegionDescription};
 use boreal::module::{Module, StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanError, ScanParams, ScanResult};
 use yara::MemoryBlock;
@@ -374,7 +374,10 @@ impl Checker {
     #[track_caller]
     pub fn check_fragmented(&mut self, regions: &[(usize, &[u8])], expected_res: bool) {
         let regions = convert_regions(regions);
-        let res = self.scanner.scan_fragmented(&regions).unwrap();
+        let res = self
+            .scanner
+            .scan_fragmented(FragmentedSlices { regions: &regions })
+            .unwrap();
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
 
@@ -402,7 +405,9 @@ impl Checker {
         {
             let mut scanner = self.scanner.clone();
             scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
-            let res = scanner.scan_fragmented(&regions).unwrap();
+            let res = scanner
+                .scan_fragmented(FragmentedSlices { regions: &regions })
+                .unwrap();
             let res = get_boreal_full_matches(&res);
             assert_eq!(res, expected, "test failed for boreal");
         }
@@ -435,6 +440,35 @@ fn convert_regions<'a>(regions: &[(usize, &'a [u8])]) -> Vec<Region<'a>> {
         .iter()
         .map(|(start, mem)| Region { start: *start, mem })
         .collect()
+}
+
+#[derive(Debug)]
+struct FragmentedSlices<'a, 'b> {
+    regions: &'b [Region<'a>],
+}
+
+impl FragmentedMemory for FragmentedSlices<'_, '_> {
+    fn list_regions(&self) -> Vec<RegionDescription> {
+        self.regions
+            .iter()
+            .map(|r| RegionDescription {
+                start: r.start,
+                length: r.mem.len(),
+            })
+            .collect()
+    }
+
+    fn fetch_region(&mut self, region_desc: RegionDescription) -> Region {
+        for reg in self.regions {
+            if reg.start == region_desc.start {
+                return Region {
+                    start: reg.start,
+                    mem: reg.mem,
+                };
+            }
+        }
+        unreachable!()
+    }
 }
 
 pub struct Scanner<'a> {

@@ -91,7 +91,12 @@ pub(super) fn evaluate_expr(
                     .ok_or(PoisonKind::Undefined)?,
             };
 
-            evaluate_ops(evaluator, value, ops, expressions)
+            let mut eval_ctx = EvalContext {
+                mem: &mut evaluator.scan_data.mem,
+                module_data: &evaluator.scan_data.module_values.data_map,
+                process_memory: evaluator.scan_data.params.process_memory,
+            };
+            evaluate_ops(&mut eval_ctx, value, ops, expressions)
         }
         ModuleExpressionKind::StaticFunction { fun } => {
             let Some(ValueOperation::FunctionCall(nb_arguments)) = ops.next() else {
@@ -103,18 +108,18 @@ pub(super) fn evaluate_expr(
                 .map(expr_value_to_module_value)
                 .collect();
             let mut eval_ctx = EvalContext {
-                mem: &evaluator.scan_data.mem,
+                mem: &mut evaluator.scan_data.mem,
                 module_data: &evaluator.scan_data.module_values.data_map,
                 process_memory: evaluator.scan_data.params.process_memory,
             };
             let value = fun(&mut eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
-            evaluate_ops(evaluator, &value, ops, expressions)
+            evaluate_ops(&mut eval_ctx, &value, ops, expressions)
         }
     }
 }
 
 fn evaluate_ops(
-    evaluator: &Evaluator,
+    eval_ctx: &mut EvalContext,
     mut value: &ModuleValue,
     mut operations: Peekable<Iter<ValueOperation>>,
     mut expressions: std::vec::IntoIter<Value>,
@@ -153,17 +158,12 @@ fn evaluate_ops(
                         .take(*nb_arguments)
                         .map(expr_value_to_module_value)
                         .collect();
-                    let mut eval_ctx = EvalContext {
-                        mem: &evaluator.scan_data.mem,
-                        module_data: &evaluator.scan_data.module_values.data_map,
-                        process_memory: evaluator.scan_data.params.process_memory,
-                    };
-                    let new_value = fun(&mut eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
+                    let new_value = fun(eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
                     // Avoid cloning the value if possible
                     return if operations.peek().is_none() {
                         Ok(new_value)
                     } else {
-                        evaluate_ops(evaluator, &new_value, operations, expressions)
+                        evaluate_ops(eval_ctx, &new_value, operations, expressions)
                     };
                 }
                 _ => return Err(PoisonKind::Undefined),

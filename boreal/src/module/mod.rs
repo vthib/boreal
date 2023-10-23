@@ -202,7 +202,7 @@ impl std::fmt::Debug for ScanContext<'_, '_> {
 /// Context provided to module functions during evaluation.
 pub struct EvalContext<'a, 'b> {
     /// Input being scanned.
-    pub mem: &'b Memory<'a>,
+    pub mem: &'b mut Memory<'a>,
 
     /// Private data (per-scan) of each module.
     ///
@@ -365,7 +365,7 @@ pub enum Value {
         /// # let x = 3;
         /// # fn fun(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> { None }
         /// # let mut ctx = EvalContext {
-        /// #     mem: &Memory::Direct(b""),
+        /// #     mem: &mut Memory::Direct(b""),
         /// #     module_data: &Default::default(),
         /// #     process_memory: false,
         /// # };
@@ -741,7 +741,7 @@ mod tests {
             process_memory: false,
         });
         test_type_traits_non_clonable(EvalContext {
-            mem: &Memory::Direct(b""),
+            mem: &mut Memory::Direct(b""),
             module_data: &ModuleDataMap(HashMap::new()),
             process_memory: false,
         });
