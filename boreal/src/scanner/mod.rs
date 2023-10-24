@@ -6,7 +6,7 @@ use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::{self, entrypoint, evaluate_rule, EvalError};
-use crate::memory::{Memory, MemoryRegion};
+use crate::memory::{Memory, Region};
 use crate::module::Module;
 use crate::statistics;
 use crate::timeout::TimeoutChecker;
@@ -198,7 +198,7 @@ impl Scanner {
     #[doc(hidden)]
     pub fn scan_fragmented<'scanner>(
         &'scanner self,
-        regions: &[MemoryRegion],
+        regions: &[Region],
     ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
         self.inner.scan(
             Memory::Fragmented { regions },
@@ -336,7 +336,7 @@ impl Inner {
             Memory::Direct(mem) => {
                 // We can evaluate module values and then try to evaluate rules without matches.
                 scan_data.module_values.scan_region(
-                    &MemoryRegion { start: 0, mem },
+                    &Region { start: 0, mem },
                     &self.modules,
                     scan_data.params.process_memory,
                 );
@@ -487,7 +487,7 @@ impl Inner {
             Memory::Direct(mem) => {
                 // Scan the memory for all variables occurences.
                 self.ac_scan.scan_region(
-                    &MemoryRegion { start: 0, mem },
+                    &Region { start: 0, mem },
                     &self.variables,
                     scan_data,
                     &mut matches,
@@ -778,11 +778,7 @@ mod tests {
         let scanner = compiler.into_scanner();
 
         let mut module_values = evaluator::module::EvalData::new(&scanner.inner.modules);
-        module_values.scan_region(
-            &MemoryRegion { start: 0, mem },
-            &scanner.inner.modules,
-            false,
-        );
+        module_values.scan_region(&Region { start: 0, mem }, &scanner.inner.modules, false);
 
         let mut scan_data = ScanData {
             mem: Memory::Direct(mem),

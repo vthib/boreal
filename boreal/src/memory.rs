@@ -15,7 +15,7 @@ pub enum Memory<'a> {
     /// bytes.
     Fragmented {
         /// Non overlapping regions mapping the fragmented memory.
-        regions: &'a [MemoryRegion<'a>],
+        regions: &'a [Region<'a>],
     },
 }
 
@@ -86,7 +86,7 @@ impl<'a> Memory<'a> {
 
 /// A region of memory to scan.
 #[derive(Debug)]
-pub struct MemoryRegion<'a> {
+pub struct Region<'a> {
     /// Index of the start of the region.
     pub start: usize,
 
@@ -103,6 +103,6 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(Memory::Direct(b""));
-        test_type_traits_non_clonable(MemoryRegion { start: 0, mem: b"" });
+        test_type_traits_non_clonable(Region { start: 0, mem: b"" });
     }
 }

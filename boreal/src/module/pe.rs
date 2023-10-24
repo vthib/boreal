@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::{memory::MemoryRegion, regex::Regex};
+use crate::memory::Region;
+use crate::regex::Regex;
 use object::{
     coff::{CoffHeader, SectionTable, SymbolTable},
     pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64},
@@ -1165,7 +1166,7 @@ impl Pe {
     #[allow(clippy::trivially_copy_pass_by_ref)]
     fn parse_file<HEADERS: ImageNtHeaders>(
         &self,
-        region: &MemoryRegion,
+        region: &Region,
         process_memory: bool,
         data: &mut Data,
     ) -> Option<HashMap<&'static str, Value>> {

@@ -9,7 +9,7 @@ use object::{
     BigEndian, Bytes, Endianness, FileKind, U32, U64,
 };
 
-use crate::memory::MemoryRegion;
+use crate::memory::Region;
 
 use super::{
     EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
@@ -766,7 +766,7 @@ impl MachO {
 }
 
 fn parse_file(
-    region: &MemoryRegion,
+    region: &Region,
     process_memory: bool,
     data: &mut Data,
     add_file_to_data: bool,
@@ -809,7 +809,7 @@ fn parse_file(
 fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     header: &Mach,
     e: Endianness,
-    region: &MemoryRegion,
+    region: &Region,
     process_memory: bool,
     reserved: Option<u32>,
     data: Option<&mut Data>,
@@ -888,7 +888,7 @@ fn segments<Mach: MachHeader<Endian = Endianness>>(
 fn entry_point_data<Mach: MachHeader<Endian = Endianness>>(
     header: &Mach,
     e: Endianness,
-    region: &MemoryRegion,
+    region: &Region,
     process_memory: bool,
     cputype: u32,
 ) -> (Option<u64>, Option<u64>) {
@@ -1126,7 +1126,7 @@ fn sections64(
 }
 
 fn parse_fat(
-    region: &MemoryRegion,
+    region: &Region,
     process_memory: bool,
     data: &mut Data,
     is64: bool,
@@ -1176,7 +1176,7 @@ fn parse_fat(
 fn fat_arch_to_file_value<A: FatArch>(
     arch: &A,
     data: &mut Data,
-    region: &MemoryRegion,
+    region: &Region,
     process_memory: bool,
 ) -> Value {
     Value::Object(
@@ -1187,7 +1187,7 @@ fn fat_arch_to_file_value<A: FatArch>(
                     // Do not modify the start. This is because the start is only used for rva
                     // adjustement, and only a single element of the fat list is loaded, so the
                     // base address does not change.
-                    &MemoryRegion {
+                    &Region {
                         start: region.start,
                         mem: new_mem,
                     },

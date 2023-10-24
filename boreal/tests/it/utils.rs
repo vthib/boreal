@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use boreal::memory::MemoryRegion;
+use boreal::memory::Region;
 use boreal::module::{Module, StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanError, ScanParams, ScanResult};
 use yara::MemoryBlock;
@@ -426,10 +426,10 @@ impl Checker {
     }
 }
 
-fn convert_regions<'a>(regions: &[(usize, &'a [u8])]) -> Vec<MemoryRegion<'a>> {
+fn convert_regions<'a>(regions: &[(usize, &'a [u8])]) -> Vec<Region<'a>> {
     regions
         .iter()
-        .map(|(start, mem)| MemoryRegion { start: *start, mem })
+        .map(|(start, mem)| Region { start: *start, mem })
         .collect()
 }
 
@@ -930,7 +930,7 @@ pub fn join_str(a: &str, b: &str) -> Vec<u8> {
 
 struct YaraBlocks<'a> {
     current: usize,
-    regions: &'a [MemoryRegion<'a>],
+    regions: &'a [Region<'a>],
 }
 
 impl<'a> yara::MemoryBlockIterator for YaraBlocks<'a> {

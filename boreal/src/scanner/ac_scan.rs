@@ -8,7 +8,7 @@ use super::{ScanData, ScanError, StringMatch};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
-use crate::memory::MemoryRegion;
+use crate::memory::Region;
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -115,7 +115,7 @@ impl AcScan {
 
     pub(super) fn scan_region(
         &self,
-        region: &MemoryRegion,
+        region: &Region,
         variables: &[Variable],
         scan_data: &mut ScanData,
         matches: &mut [Vec<StringMatch>],
@@ -150,7 +150,7 @@ impl AcScan {
 
     fn handle_possible_match(
         &self,
-        region: &MemoryRegion,
+        region: &Region,
         mat: &aho_corasick::Match,
         variables: &[Variable],
         scan_data: &mut ScanData,
@@ -235,7 +235,7 @@ impl AcScan {
 }
 
 fn scan_single_variable(
-    region: &MemoryRegion,
+    region: &Region,
     matcher: &Matcher,
     scan_data: &mut ScanData,
     string_matches: &mut Vec<StringMatch>,

@@ -4,7 +4,7 @@ use object::elf::{self, FileHeader32, FileHeader64};
 use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, Sym};
 use object::{Endianness, FileKind};
 
-use crate::memory::MemoryRegion;
+use crate::memory::Region;
 
 use super::{
     EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
@@ -318,7 +318,7 @@ impl Data {
 }
 
 fn parse_file(
-    region: &MemoryRegion,
+    region: &Region,
     process_memory: bool,
     data: &mut Data,
 ) -> Option<HashMap<&'static str, Value>> {
@@ -341,7 +341,7 @@ fn parse_file(
 
 fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     header: &Elf,
-    region: &MemoryRegion,
+    region: &Region,
     process_memory: bool,
     data: &mut Data,
 ) -> Option<HashMap<&'static str, Value>> {

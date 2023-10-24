@@ -41,7 +41,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::memory::{Memory, MemoryRegion};
+use crate::memory::{Memory, Region};
 use crate::regex::Regex;
 
 mod time;
@@ -180,7 +180,7 @@ impl std::fmt::Debug for Box<dyn Module> {
 /// Context provided to module methods during scanning.
 pub struct ScanContext<'a, 'b> {
     /// Memory region being scanned.
-    pub region: &'a MemoryRegion<'b>,
+    pub region: &'a Region<'b>,
 
     /// Private data (per-scan) of each module.
     ///
@@ -736,7 +736,7 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(ScanContext {
-            region: &MemoryRegion { start: 0, mem: b"" },
+            region: &Region { start: 0, mem: b"" },
             module_data: &mut ModuleDataMap(HashMap::new()),
             process_memory: false,
         });
