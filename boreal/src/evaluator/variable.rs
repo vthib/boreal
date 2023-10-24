@@ -1,7 +1,7 @@
 //! Implement scanning for variables
 use std::cmp::Ordering;
 
-use crate::memory::MemoryRegion;
+use crate::memory::Region;
 
 /// Variable evaluation context.
 ///
@@ -110,7 +110,7 @@ pub struct StringMatch {
 
 impl StringMatch {
     pub(crate) fn new(
-        region: &MemoryRegion,
+        region: &Region,
         mat: std::ops::Range<usize>,
         match_max_length: usize,
     ) -> Self {
