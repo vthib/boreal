@@ -483,13 +483,18 @@ impl Inner {
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
 
+        let mut ac_scan_data = ac_scan::ScanData {
+            timeout_checker: scan_data.timeout_checker.as_mut(),
+            statistics: scan_data.statistics.as_mut(),
+            variables: &self.variables,
+            params: scan_data.params,
+        };
         match scan_data.mem {
             Memory::Direct(mem) => {
                 // Scan the memory for all variables occurences.
                 self.ac_scan.scan_region(
                     &Region { start: 0, mem },
-                    &self.variables,
-                    scan_data,
+                    &mut ac_scan_data,
                     &mut matches,
                 )?;
             }
@@ -497,7 +502,7 @@ impl Inner {
                 // Scan each region for all variables occurences.
                 for region in regions {
                     self.ac_scan
-                        .scan_region(region, &self.variables, scan_data, &mut matches)?;
+                        .scan_region(region, &mut ac_scan_data, &mut matches)?;
 
                     // Also, compute the value for the entrypoint expression. Since
                     // we fetch each region here, this is much cheaper that refetching
