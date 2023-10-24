@@ -315,9 +315,11 @@ impl Inner {
         match scan_data.mem {
             Memory::Direct(mem) => {
                 // We can evaluate module values and then try to evaluate rules without matches.
-                scan_data
-                    .module_values
-                    .scan_region(&MemoryRegion { start: 0, mem }, &self.modules);
+                scan_data.module_values.scan_region(
+                    &MemoryRegion { start: 0, mem },
+                    &self.modules,
+                    scan_data.params.process_memory,
+                );
 
                 if !scan_data.params.compute_full_matches && scan_data.mem.is_direct() {
                     #[cfg(feature = "profiling")]
@@ -489,7 +491,11 @@ impl Inner {
                     }
 
                     // And finally, evaluate the module values on each region.
-                    scan_data.module_values.scan_region(region, &self.modules);
+                    scan_data.module_values.scan_region(
+                        region,
+                        &self.modules,
+                        scan_data.params.process_memory,
+                    );
                 }
             }
         }
@@ -746,7 +752,11 @@ mod tests {
         let scanner = compiler.into_scanner();
 
         let mut module_values = evaluator::module::EvalData::new(&scanner.inner.modules);
-        module_values.scan_region(&MemoryRegion { start: 0, mem }, &scanner.inner.modules);
+        module_values.scan_region(
+            &MemoryRegion { start: 0, mem },
+            &scanner.inner.modules,
+            false,
+        );
 
         let mut scan_data = ScanData {
             mem: Memory::Direct(mem),

@@ -203,8 +203,6 @@ rule dll {
 "#;
     let mut checker = Checker::new(rule);
     checker.set_process_memory_flag();
-    let mut checker_without_yara = Checker::new_without_yara(rule);
-    checker_without_yara.set_process_memory_flag();
 
     let pe32 = std::fs::read("tests/assets/libyara/data/tiny").unwrap();
     let pe64 = std::fs::read("tests/assets/libyara/data/pe_mingw").unwrap();
@@ -215,20 +213,10 @@ rule dll {
         &[(0, b"a"), (1000, &pe64), (2000, &pe32)],
         vec![("default:pe64".to_owned(), vec![])],
     );
-    // TODO: dll should not be handled when doing a process memory scan
-    checker_without_yara.check_fragmented_full_matches(
-        &[(0, &dll), (1000, b"b")],
-        vec![
-            ("default:pe64".to_owned(), vec![]),
-            ("default:dll".to_owned(), vec![]),
-        ],
-    );
-    checker_without_yara.check_fragmented_full_matches(
+    checker.check_fragmented_full_matches(&[(0, &dll), (1000, b"b")], vec![]);
+    checker.check_fragmented_full_matches(
         &[(0, &dll), (1000, b"b"), (2000, &pe32)],
-        vec![
-            ("default:pe64".to_owned(), vec![]),
-            ("default:dll".to_owned(), vec![]),
-        ],
+        vec![("default:pe32".to_owned(), vec![])],
     );
 }
 
@@ -268,22 +256,11 @@ rule so {
     );
 
     // Should ignore a SO file
-    // TODO: so should not be handled when doing a process memory scan
-    checker_without_yara.check_fragmented_full_matches(
-        &[(0, ELF32_SHAREDOBJ), (1000, b"b")],
-        vec![
-            ("default:elf32".to_owned(), vec![]),
-            ("default:so".to_owned(), vec![]),
-        ],
-    );
+    checker.check_fragmented_full_matches(&[(0, ELF32_SHAREDOBJ), (1000, b"b")], vec![]);
 
-    // TODO: so should not be handled when doing a process memory scan
     checker_without_yara.check_fragmented_full_matches(
         &[(0, ELF32_SHAREDOBJ), (1000, b"b"), (2000, ELF32_FILE)],
-        vec![
-            ("default:elf32".to_owned(), vec![]),
-            ("default:so".to_owned(), vec![]),
-        ],
+        vec![("default:elf32".to_owned(), vec![])],
     );
 }
 

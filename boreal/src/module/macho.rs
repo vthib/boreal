@@ -9,6 +9,8 @@ use object::{
     BigEndian, Bytes, Endianness, FileKind, U32, U64,
 };
 
+use crate::memory::MemoryRegion;
+
 use super::{
     EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
 };
@@ -695,7 +697,7 @@ impl Module for MachO {
         if let Some(values) = ctx
             .module_data
             .get_mut::<Self>()
-            .and_then(|data| parse_file(ctx.region.mem, data, false, 0))
+            .and_then(|data| parse_file(ctx.region, ctx.process_memory, data, false, 0))
         {
             *out = values;
         }
@@ -764,39 +766,42 @@ impl MachO {
 }
 
 fn parse_file(
-    mem: &[u8],
+    region: &MemoryRegion,
+    process_memory: bool,
     data: &mut Data,
     add_file_to_data: bool,
     arch_offset: u64,
 ) -> Option<HashMap<&'static str, Value>> {
-    match FileKind::parse(mem).ok()? {
+    match FileKind::parse(region.mem).ok()? {
         FileKind::MachO32 => {
-            let header = MachHeader32::parse(mem, 0).ok()?;
+            let header = MachHeader32::parse(region.mem, 0).ok()?;
             let e = header.endian().ok()?;
             Some(parse_header(
                 header,
                 e,
-                mem,
+                region,
+                process_memory,
                 None,
                 add_file_to_data.then_some(data),
                 arch_offset,
             ))
         }
         FileKind::MachO64 => {
-            let header = MachHeader64::parse(mem, 0).ok()?;
+            let header = MachHeader64::parse(region.mem, 0).ok()?;
             let e = header.endian().ok()?;
             Some(parse_header(
                 header,
                 e,
-                mem,
+                region,
+                process_memory,
                 Some(header.reserved.get(e)),
                 add_file_to_data.then_some(data),
                 arch_offset,
             ))
         }
-        FileKind::MachOFat32 => parse_fat(mem, data, false),
+        FileKind::MachOFat32 => parse_fat(region, process_memory, data, false),
         // TODO: add test on this format
-        FileKind::MachOFat64 => parse_fat(mem, data, true),
+        FileKind::MachOFat64 => parse_fat(region, process_memory, data, true),
         _ => None,
     }
 }
@@ -804,7 +809,8 @@ fn parse_file(
 fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     header: &Mach,
     e: Endianness,
-    mem: &[u8],
+    region: &MemoryRegion,
+    process_memory: bool,
     reserved: Option<u32>,
     data: Option<&mut Data>,
     arch_offset: u64,
@@ -812,10 +818,10 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     let cputype = header.cputype(e);
     let cpusubtype = header.cpusubtype(e);
 
-    let segments = segments(header, e, mem);
+    let segments = segments(header, e, region.mem);
     let nb_segments = segments.as_ref().map(Vec::len);
 
-    let (entry_point, stack_size) = entry_point_data(header, e, mem, cputype);
+    let (entry_point, stack_size) = entry_point_data(header, e, region, process_memory, cputype);
 
     if let Some(data) = data {
         data.files.push(FileData {
@@ -882,18 +888,31 @@ fn segments<Mach: MachHeader<Endian = Endianness>>(
 fn entry_point_data<Mach: MachHeader<Endian = Endianness>>(
     header: &Mach,
     e: Endianness,
-    mem: &[u8],
+    region: &MemoryRegion,
+    process_memory: bool,
     cputype: u32,
 ) -> (Option<u64>, Option<u64>) {
-    if let Ok(mut cmds) = header.load_commands(e, mem, 0) {
+    if let Ok(mut cmds) = header.load_commands(e, region.mem, 0) {
         while let Ok(Some(cmd)) = cmds.next() {
             if let Ok(Some(entry)) = cmd.entry_point() {
-                return (Some(entry.entryoff.get(e)), Some(entry.stacksize.get(e)));
+                let stacksize = Some(entry.stacksize.get(e));
+                let ep = entry.entryoff.get(e);
+
+                return if process_memory {
+                    (file_offset_to_va(header, e, region.mem, ep), stacksize)
+                } else {
+                    (Some(ep), stacksize)
+                };
             } else if cmd.cmd() == macho::LC_UNIXTHREAD {
                 match handle_unix_thread(cmd, e, cputype) {
                     Some(ep) => {
-                        // Entry-point retrieved is a VA, it must be converted into a file offset.
-                        return (va_to_file_offset(header, e, mem, ep), None);
+                        return if process_memory {
+                            let start: Option<u64> = region.start.try_into().ok();
+                            (start.and_then(|v| v.checked_add(ep)), None)
+                        } else {
+                            // Entry-point retrieved is a VA, it must be converted into a file offset.
+                            (va_to_file_offset(header, e, region.mem, ep), None)
+                        };
                     }
                     None => return (None, None),
                 }
@@ -918,6 +937,28 @@ fn va_to_file_offset<Mach: MachHeader<Endian = Endianness>>(
             if ep >= vmaddr && ep < vmaddr.saturating_add(vmsize) {
                 let fileoff: u64 = segment.fileoff(e).into();
                 return Some(fileoff.saturating_add(ep - vmaddr));
+            }
+        }
+    }
+
+    None
+}
+
+fn file_offset_to_va<Mach: MachHeader<Endian = Endianness>>(
+    header: &Mach,
+    e: Endianness,
+    mem: &[u8],
+    ep: u64,
+) -> Option<u64> {
+    let mut cmds = header.load_commands(e, mem, 0).ok()?;
+    while let Ok(Some(cmd)) = cmds.next() {
+        if let Ok(Some((segment, _))) = Mach::Segment::from_command(cmd) {
+            let fileoff: u64 = segment.fileoff(e).into();
+            let filesize: u64 = segment.filesize(e).into();
+
+            if ep >= fileoff && ep < fileoff.saturating_add(filesize) {
+                let vmaddr: u64 = segment.vmaddr(e).into();
+                return Some(vmaddr.saturating_add(ep - fileoff));
             }
         }
     }
@@ -1084,8 +1125,13 @@ fn sections64(
     )
 }
 
-fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static str, Value>> {
-    let (magic, nfat_arch) = match FatHeader::parse(mem) {
+fn parse_fat(
+    region: &MemoryRegion,
+    process_memory: bool,
+    data: &mut Data,
+    is64: bool,
+) -> Option<HashMap<&'static str, Value>> {
+    let (magic, nfat_arch) = match FatHeader::parse(region.mem) {
         Ok(header) => (
             header.magic.get(BigEndian).into(),
             header.nfat_arch.get(BigEndian).into(),
@@ -1097,14 +1143,22 @@ fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static
     let mut files = Vec::new();
 
     if is64 {
-        for arch in FatHeader::parse_arch64(mem).ok()?.iter().take(MAX_NB_ARCHS) {
+        for arch in FatHeader::parse_arch64(region.mem)
+            .ok()?
+            .iter()
+            .take(MAX_NB_ARCHS)
+        {
             archs.push(fat_arch_to_value(arch));
-            files.push(fat_arch_to_file_value(arch, data, mem));
+            files.push(fat_arch_to_file_value(arch, data, region, process_memory));
         }
     } else {
-        for arch in FatHeader::parse_arch32(mem).ok()?.iter().take(MAX_NB_ARCHS) {
+        for arch in FatHeader::parse_arch32(region.mem)
+            .ok()?
+            .iter()
+            .take(MAX_NB_ARCHS)
+        {
             archs.push(fat_arch_to_value(arch));
-            files.push(fat_arch_to_file_value(arch, data, mem));
+            files.push(fat_arch_to_file_value(arch, data, region, process_memory));
         }
     }
 
@@ -1119,11 +1173,30 @@ fn parse_fat(mem: &[u8], data: &mut Data, is64: bool) -> Option<HashMap<&'static
     )
 }
 
-fn fat_arch_to_file_value<A: FatArch>(arch: &A, data: &mut Data, mem: &[u8]) -> Value {
+fn fat_arch_to_file_value<A: FatArch>(
+    arch: &A,
+    data: &mut Data,
+    region: &MemoryRegion,
+    process_memory: bool,
+) -> Value {
     Value::Object(
-        arch.data(mem)
+        arch.data(region.mem)
             .ok()
-            .and_then(|new_mem| parse_file(new_mem, data, true, arch.offset().into()))
+            .and_then(|new_mem| {
+                parse_file(
+                    // Do not modify the start. This is because the start is only used for rva
+                    // adjustement, and only a single element of the fat list is loaded, so the
+                    // base address does not change.
+                    &MemoryRegion {
+                        start: region.start,
+                        mem: new_mem,
+                    },
+                    process_memory,
+                    data,
+                    true,
+                    arch.offset().into(),
+                )
+            })
             .unwrap_or_default(),
     )
 }

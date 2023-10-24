@@ -186,6 +186,11 @@ pub struct ScanContext<'a, 'b> {
     ///
     /// See [`ModuleData`] for an example on how this can be used.
     pub module_data: &'a mut ModuleDataMap,
+
+    /// True if the region should be considered part of a process memory.
+    ///
+    /// See [`crate::scanner::ScanParams::process_memory`] for more details.
+    pub process_memory: bool,
 }
 
 impl std::fmt::Debug for ScanContext<'_, '_> {
@@ -203,6 +208,11 @@ pub struct EvalContext<'a, 'b> {
     ///
     /// See [`ModuleData`] for an example on how this can be used.
     pub module_data: &'b ModuleDataMap,
+
+    /// True if the scan is done on a process memory.
+    ///
+    /// See [`crate::scanner::ScanParams::process_memory`] for more details.
+    pub process_memory: bool,
 }
 
 impl std::fmt::Debug for EvalContext<'_, '_> {
@@ -356,7 +366,8 @@ pub enum Value {
         /// # fn fun(_: &EvalContext, _: Vec<Value>) -> Option<Value> { None }
         /// # let ctx = EvalContext {
         /// #     mem: &Memory::Direct(b""),
-        /// #     module_data: &Default::default()
+        /// #     module_data: &Default::default(),
+        /// #     process_memory: false,
         /// # };
         /// let result = fun(&ctx, vec![
         ///     Value::bytes("a"),
@@ -727,10 +738,12 @@ mod tests {
         test_type_traits_non_clonable(ScanContext {
             region: &MemoryRegion { start: 0, mem: b"" },
             module_data: &mut ModuleDataMap(HashMap::new()),
+            process_memory: false,
         });
         test_type_traits_non_clonable(EvalContext {
             mem: &Memory::Direct(b""),
             module_data: &ModuleDataMap(HashMap::new()),
+            process_memory: false,
         });
 
         test_type_traits(Value::Integer(0));
