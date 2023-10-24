@@ -369,11 +369,7 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_fragmented_full_matches(
-        &self,
-        regions: &[(usize, &'static [u8])],
-        expected: FullMatches,
-    ) {
+    pub fn check_fragmented_full_matches(&self, regions: &[(usize, &[u8])], expected: FullMatches) {
         let regions = convert_regions(regions);
 
         // We need to compute the full matches for this test
@@ -386,7 +382,10 @@ impl Checker {
         }
 
         if let Some(rules) = &self.yara_rules {
-            let scanner = rules.scanner().unwrap();
+            let mut scanner = rules.scanner().unwrap();
+            if self.scanner.scan_params().get_process_memory() {
+                scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
+            }
             let res = scanner
                 .scan_mem_blocks(YaraBlocks {
                     current: 0,
