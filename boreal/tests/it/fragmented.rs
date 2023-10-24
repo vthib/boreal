@@ -184,3 +184,137 @@ fn test_fragmented_entrypoint() {
         true,
     );
 }
+
+#[test]
+#[cfg(feature = "object")]
+fn test_fragmented_pe() {
+    let rule = r#"
+import "pe"
+
+rule pe32 {
+    condition: pe.is_pe and pe.is_32bit()
+}
+rule pe64 {
+    condition: pe.is_pe and not pe.is_32bit()
+}
+rule dll {
+    condition: pe.is_pe and pe.is_dll()
+}
+"#;
+    let mut checker = Checker::new(rule);
+    checker.set_process_memory_flag();
+    let mut checker_without_yara = Checker::new_without_yara(rule);
+    checker_without_yara.set_process_memory_flag();
+
+    let pe32 = std::fs::read("tests/assets/libyara/data/tiny").unwrap();
+    let pe64 = std::fs::read("tests/assets/libyara/data/pe_mingw").unwrap();
+    let dll = std::fs::read("tests/assets/libyara/data/mtxex.dll").unwrap();
+
+    checker.check_fragmented_full_matches(&[(0, &pe32)], vec![("default:pe32".to_owned(), vec![])]);
+    checker.check_fragmented_full_matches(
+        &[(0, b"a"), (1000, &pe64), (2000, &pe32)],
+        vec![("default:pe64".to_owned(), vec![])],
+    );
+    // TODO: dll should not be handled when doing a process memory scan
+    checker_without_yara.check_fragmented_full_matches(
+        &[(0, &dll), (1000, b"b")],
+        vec![
+            ("default:pe64".to_owned(), vec![]),
+            ("default:dll".to_owned(), vec![]),
+        ],
+    );
+    checker_without_yara.check_fragmented_full_matches(
+        &[(0, &dll), (1000, b"b"), (2000, &pe32)],
+        vec![
+            ("default:pe64".to_owned(), vec![]),
+            ("default:dll".to_owned(), vec![]),
+        ],
+    );
+}
+
+#[test]
+#[cfg(feature = "object")]
+fn test_fragmented_elf() {
+    use crate::libyara_compat::util::{ELF32_FILE, ELF32_SHAREDOBJ, ELF64_FILE};
+
+    let rule = r#"
+import "elf"
+
+rule elf32 {
+    condition: elf.machine == elf.EM_386
+}
+rule elf64 {
+    condition: elf.machine == elf.EM_X86_64
+}
+rule so {
+    condition: elf.type == elf.ET_DYN
+}
+"#;
+    let mut checker = Checker::new(rule);
+    checker.set_process_memory_flag();
+    let mut checker_without_yara = Checker::new_without_yara(rule);
+    checker_without_yara.set_process_memory_flag();
+
+    checker.check_fragmented_full_matches(
+        &[(0, ELF32_FILE)],
+        vec![("default:elf32".to_owned(), vec![])],
+    );
+
+    // Should stop when finding the first one, and ignore the second one
+    // FIXME: buggy on libyara, it goes through all the regions and keeps the last one
+    checker_without_yara.check_fragmented_full_matches(
+        &[(0, b"a"), (1000, ELF64_FILE), (2000, ELF32_FILE)],
+        vec![("default:elf64".to_owned(), vec![])],
+    );
+
+    // Should ignore a SO file
+    // TODO: so should not be handled when doing a process memory scan
+    checker_without_yara.check_fragmented_full_matches(
+        &[(0, ELF32_SHAREDOBJ), (1000, b"b")],
+        vec![
+            ("default:elf32".to_owned(), vec![]),
+            ("default:so".to_owned(), vec![]),
+        ],
+    );
+
+    // TODO: so should not be handled when doing a process memory scan
+    checker_without_yara.check_fragmented_full_matches(
+        &[(0, ELF32_SHAREDOBJ), (1000, b"b"), (2000, ELF32_FILE)],
+        vec![
+            ("default:elf32".to_owned(), vec![]),
+            ("default:so".to_owned(), vec![]),
+        ],
+    );
+}
+
+#[test]
+#[cfg(feature = "object")]
+fn test_fragmented_macho() {
+    use crate::libyara_compat::util::{
+        MACHO_X86_64_DYLIB_FILE as macho64, MACHO_X86_FILE as macho32,
+    };
+
+    let rule = r#"
+import "macho"
+
+rule macho32 {
+    condition: macho.cputype == macho.CPU_TYPE_X86
+}
+rule macho64 {
+    condition: macho.cputype == macho.CPU_TYPE_X86_64
+}
+"#;
+    let mut checker = Checker::new(rule);
+    checker.set_process_memory_flag();
+
+    checker.check_fragmented_full_matches(
+        &[(0, macho32)],
+        vec![("default:macho32".to_owned(), vec![])],
+    );
+
+    // Should stop when finding the first one, and ignore the second one
+    checker.check_fragmented_full_matches(
+        &[(0, b"a"), (1000, macho64), (2000, macho32)],
+        vec![("default:macho64".to_owned(), vec![])],
+    );
+}

@@ -246,6 +246,11 @@ impl Module for Elf {
     }
 
     fn get_dynamic_values(&self, ctx: &mut ScanContext, out: &mut HashMap<&'static str, Value>) {
+        if !out.is_empty() {
+            // We already found an elf in a scanned region, so ignore the others.
+            return;
+        }
+
         if let Some(values) = ctx
             .module_data
             .get_mut::<Self>()

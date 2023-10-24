@@ -1109,6 +1109,11 @@ impl Module for Pe {
             return;
         };
 
+        if data.found_pe {
+            // We already found a PE in a region, so ignore the others
+            return;
+        }
+
         let res = match FileKind::parse(ctx.region.mem) {
             Ok(FileKind::Pe32) => {
                 data.is_32bit = true;
@@ -1121,9 +1126,13 @@ impl Module for Pe {
             _ => None,
         };
 
-        if let Some(values) = res {
-            *out = values;
-        }
+        match res {
+            Some(values) => {
+                *out = values;
+                data.found_pe = true;
+            }
+            None => *out = [("is_pe", 0.into())].into(),
+        };
     }
 }
 
@@ -2343,6 +2352,7 @@ pub struct Data {
     resource_languages: Vec<u32>,
     is_32bit: bool,
     is_dll: u16,
+    found_pe: bool,
 }
 
 struct DataImport {
