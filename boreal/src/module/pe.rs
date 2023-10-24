@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::regex::Regex;
+use crate::{memory::MemoryRegion, regex::Regex};
 use object::{
     coff::{CoffHeader, SectionTable, SymbolTable},
     pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64},
@@ -1117,11 +1117,11 @@ impl Module for Pe {
         let res = match FileKind::parse(ctx.region.mem) {
             Ok(FileKind::Pe32) => {
                 data.is_32bit = true;
-                self.parse_file::<ImageNtHeaders32>(ctx.region.mem, data)
+                self.parse_file::<ImageNtHeaders32>(ctx.region, ctx.process_memory, data)
             }
             Ok(FileKind::Pe64) => {
                 data.is_32bit = false;
-                self.parse_file::<ImageNtHeaders64>(ctx.region.mem, data)
+                self.parse_file::<ImageNtHeaders64>(ctx.region, ctx.process_memory, data)
             }
             _ => None,
         };
@@ -1165,25 +1165,40 @@ impl Pe {
     #[allow(clippy::trivially_copy_pass_by_ref)]
     fn parse_file<Pe: ImageNtHeaders>(
         &self,
-        mem: &[u8],
+        region: &MemoryRegion,
+        process_memory: bool,
         data: &mut Data,
     ) -> Option<HashMap<&'static str, Value>> {
-        let dos_header = ImageDosHeader::parse(mem).ok()?;
+        let dos_header = ImageDosHeader::parse(region.mem).ok()?;
         let mut offset = dos_header.nt_headers_offset().into();
-        let (nt_headers, data_dirs) = Pe::parse(mem, &mut offset).ok()?;
+        let (nt_headers, data_dirs) = Pe::parse(region.mem, &mut offset).ok()?;
 
-        let sections = nt_headers.sections(mem, offset).ok();
+        let sections = nt_headers.sections(region.mem, offset).ok();
 
         let hdr = nt_headers.file_header();
+        let characteristics = hdr.characteristics.get(LE);
+
+        if process_memory && (characteristics & pe::IMAGE_FILE_DLL) != 0 {
+            return None;
+        }
+
+        let symbols = hdr.symbols(region.mem).ok();
+
         let opt_hdr = nt_headers.optional_header();
-
-        let symbols = hdr.symbols(mem).ok();
-
         let ep = opt_hdr.address_of_entry_point();
 
-        let characteristics = hdr.characteristics.get(LE);
         // libyara does not return a bool, but the result of the bitwise and...
         data.is_dll = characteristics & pe::IMAGE_FILE_DLL;
+
+        let entrypoint: Value = if process_memory {
+            let ep: Option<usize> = ep.try_into().ok();
+            ep.and_then(|ep| ep.checked_add(region.start)).into()
+        } else {
+            sections
+                .and_then(|sections| va_to_file_offset(region.mem, &sections, ep))
+                .map_or(-1, i64::from)
+                .into()
+        };
 
         let mut map: HashMap<_, _> = [
             ("is_pe", Value::Integer(1)),
@@ -1202,13 +1217,7 @@ impl Pe {
             ),
             ("characteristics", characteristics.into()),
             //
-            (
-                "entry_point",
-                sections
-                    .and_then(|sections| va_to_file_offset(mem, &sections, ep))
-                    .map_or(-1, i64::from)
-                    .into(),
-            ),
+            ("entry_point", entrypoint),
             ("entry_point_raw", ep.into()),
             ("image_base", opt_hdr.image_base().into()),
             (
@@ -1290,35 +1299,37 @@ impl Pe {
                 "overlay",
                 sections
                     .as_ref()
-                    .map_or(Value::Undefined, |sections| overlay(sections, mem)),
+                    .map_or(Value::Undefined, |sections| overlay(sections, region.mem)),
             ),
             (
                 "pdb_path",
                 sections
                     .as_ref()
-                    .and_then(|sections| debug::pdb_path(&data_dirs, mem, sections))
+                    .and_then(|sections| debug::pdb_path(&data_dirs, region.mem, sections))
                     .unwrap_or(Value::Undefined),
             ),
             (
                 "rich_signature",
-                RichHeaderInfo::parse(mem, dos_header.nt_headers_offset().into())
-                    .map_or(Value::Undefined, |info| rich_signature(info, mem, data)),
+                RichHeaderInfo::parse(region.mem, dos_header.nt_headers_offset().into())
+                    .map_or(Value::Undefined, |info| {
+                        rich_signature(info, region.mem, data)
+                    }),
             ),
             ("number_of_version_infos", 0.into()),
         ]
         .into();
 
         if let Some(sections) = sections.as_ref() {
-            add_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
-            add_delay_load_imports::<Pe>(&data_dirs, mem, sections, data, &mut map);
-            add_exports(&data_dirs, mem, sections, data, &mut map);
-            add_resources(&data_dirs, mem, sections, data, &mut map);
+            add_imports::<Pe>(&data_dirs, region.mem, sections, data, &mut map);
+            add_delay_load_imports::<Pe>(&data_dirs, region.mem, sections, data, &mut map);
+            add_exports(&data_dirs, region.mem, sections, data, &mut map);
+            add_resources(&data_dirs, region.mem, sections, data, &mut map);
         }
 
         #[cfg(feature = "authenticode")]
         if let Some(token) = self.token {
             if let Some((signatures, is_signed)) =
-                signatures::get_signatures(&data_dirs, mem, token)
+                signatures::get_signatures(&data_dirs, region.mem, token)
             {
                 let _r = map.insert("number_of_signatures", signatures.len().into());
                 let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
@@ -1707,19 +1718,23 @@ fn sections_to_value(
                 };
                 let raw_data_offset = i64::from(section.pointer_to_raw_data.get(LE));
                 let raw_data_size = i64::from(section.size_of_raw_data.get(LE));
+                let virtual_address = i64::from(section.virtual_address.get(LE));
+                let virtual_size = i64::from(section.virtual_size.get(LE));
 
                 data.sections.push(DataSection {
                     name: name.to_vec(),
                     raw_data_offset,
                     raw_data_size,
+                    virtual_address,
+                    virtual_size,
                 });
 
                 Value::object([
                     ("name", name.to_vec().into()),
                     ("full_name", full_name.map(<[u8]>::to_vec).into()),
                     ("characteristics", section.characteristics.get(LE).into()),
-                    ("virtual_address", section.virtual_address.get(LE).into()),
-                    ("virtual_size", section.virtual_size.get(LE).into()),
+                    ("virtual_address", virtual_address.into()),
+                    ("virtual_size", virtual_size.into()),
                     ("raw_data_size", raw_data_size.into()),
                     ("raw_data_offset", raw_data_offset.into()),
                     (
@@ -1991,13 +2006,20 @@ impl Pe {
                 .iter()
                 .position(|sec| sec.name == section_name)
                 .and_then(|v| v.try_into().ok()),
-            Value::Integer(addr) => data
-                .sections
-                .iter()
-                .position(|sec| {
-                    addr >= sec.raw_data_offset && addr - sec.raw_data_offset < sec.raw_data_size
-                })
-                .and_then(|v| v.try_into().ok()),
+            Value::Integer(addr) => {
+                let index = if ctx.process_memory {
+                    data.sections.iter().position(|sec| {
+                        addr >= sec.virtual_address && addr - sec.virtual_address < sec.virtual_size
+                    })?
+                } else {
+                    data.sections.iter().position(|sec| {
+                        addr >= sec.raw_data_offset
+                            && addr - sec.raw_data_offset < sec.raw_data_size
+                    })?
+                };
+
+                index.try_into().ok()
+            }
             _ => None,
         }
     }
@@ -2375,6 +2397,8 @@ struct DataSection {
     name: Vec<u8>,
     raw_data_offset: i64,
     raw_data_size: i64,
+    virtual_address: i64,
+    virtual_size: i64,
 }
 
 struct DataRichEntry {

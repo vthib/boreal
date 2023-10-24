@@ -33,10 +33,16 @@ impl EvalData {
         Self { values, data_map }
     }
 
-    pub fn scan_region(&mut self, region: &MemoryRegion, modules: &[Box<dyn Module>]) {
+    pub fn scan_region(
+        &mut self,
+        region: &MemoryRegion,
+        modules: &[Box<dyn Module>],
+        process_memory: bool,
+    ) {
         let mut scan_ctx = ScanContext {
             region,
             module_data: &mut self.data_map,
+            process_memory,
         };
 
         for (module, values) in modules.iter().zip(self.values.iter_mut()) {
@@ -99,6 +105,7 @@ pub(super) fn evaluate_expr(
             let eval_ctx = EvalContext {
                 mem: &evaluator.scan_data.mem,
                 module_data: &evaluator.scan_data.module_values.data_map,
+                process_memory: evaluator.scan_data.params.process_memory,
             };
             let value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
             evaluate_ops(evaluator, &value, ops, expressions)
@@ -149,6 +156,7 @@ fn evaluate_ops(
                     let eval_ctx = EvalContext {
                         mem: &evaluator.scan_data.mem,
                         module_data: &evaluator.scan_data.module_values.data_map,
+                        process_memory: evaluator.scan_data.params.process_memory,
                     };
                     let new_value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
                     // Avoid cloning the value if possible

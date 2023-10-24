@@ -4,6 +4,8 @@ use object::elf::{self, FileHeader32, FileHeader64};
 use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, Sym};
 use object::{Endianness, FileKind};
 
+use crate::memory::MemoryRegion;
+
 use super::{
     EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
 };
@@ -254,7 +256,7 @@ impl Module for Elf {
         if let Some(values) = ctx
             .module_data
             .get_mut::<Self>()
-            .and_then(|data| parse_file(ctx.region.mem, data))
+            .and_then(|data| parse_file(ctx.region, ctx.process_memory, data))
         {
             *out = values;
         }
@@ -315,54 +317,84 @@ impl Data {
     }
 }
 
-fn parse_file(mem: &[u8], data: &mut Data) -> Option<HashMap<&'static str, Value>> {
-    match FileKind::parse(mem).ok()? {
-        FileKind::Elf32 => Some(parse_file_inner(FileHeader32::parse(mem).ok()?, mem, data)),
-        FileKind::Elf64 => Some(parse_file_inner(FileHeader64::parse(mem).ok()?, mem, data)),
+fn parse_file(
+    region: &MemoryRegion,
+    process_memory: bool,
+    data: &mut Data,
+) -> Option<HashMap<&'static str, Value>> {
+    match FileKind::parse(region.mem).ok()? {
+        FileKind::Elf32 => parse_file_inner(
+            FileHeader32::parse(region.mem).ok()?,
+            region,
+            process_memory,
+            data,
+        ),
+        FileKind::Elf64 => parse_file_inner(
+            FileHeader64::parse(region.mem).ok()?,
+            region,
+            process_memory,
+            data,
+        ),
         _ => None,
     }
 }
 
 fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     header: &Elf,
-    mem: &[u8],
+    region: &MemoryRegion,
+    process_memory: bool,
     data: &mut Data,
-) -> HashMap<&'static str, Value> {
+) -> Option<HashMap<&'static str, Value>> {
     // Safety: cannot fail, as we use `Endian = Endianness`, so we do not force endianness.
     let e = header.endian().unwrap();
 
-    let symtab = get_symbols(header, e, mem, elf::SHT_SYMTAB, data);
+    if process_memory && header.e_type(e) != elf::ET_EXEC {
+        return None;
+    }
+
+    let symtab = get_symbols(header, e, region.mem, elf::SHT_SYMTAB, data);
     let symtab_len = symtab
         .as_ref()
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
     // Get dynsym *after* symtab. This ensures that data.symbols uses
     // the dynsym in priority, if both exists.
-    let dynsym = get_symbols(header, e, mem, elf::SHT_DYNSYM, data);
+    let dynsym = get_symbols(header, e, region.mem, elf::SHT_DYNSYM, data);
     let dynsym_len = dynsym
         .as_ref()
         .and_then(|v| if v.is_empty() { None } else { Some(v.len()) });
 
-    let dynamic = dynamic(header, e, mem);
+    let dynamic = dynamic(header, e, region.mem);
     let dynamic_len = dynamic.as_ref().map(Vec::len);
 
-    [
+    let entrypoint = if process_memory {
+        let entry: u64 = header.e_entry(e).into();
+        let start: Option<u64> = region.start.try_into().ok();
+        start.and_then(|v| v.checked_add(entry))
+    } else {
+        entry_point(header, e, region.mem)
+    };
+
+    let res = [
         ("type", Value::from(header.e_type(e))),
         ("machine", header.e_machine(e).into()),
-        ("entry_point", entry_point(header, e, mem).into()),
+        ("entry_point", entrypoint.into()),
         ("number_of_sections", header.e_shnum(e).into()),
         ("sh_offset", header.e_shoff(e).into().into()),
         ("sh_entry_size", u64::from(header.e_shentsize(e)).into()),
-        ("number_of_segments", header.phnum(e, mem).ok().into()),
+        (
+            "number_of_segments",
+            header.phnum(e, region.mem).ok().into(),
+        ),
         ("ph_offset", header.e_phoff(e).into().into()),
         ("ph_entry_size", u64::from(header.e_phentsize(e)).into()),
         (
             "sections",
-            sections(header, e, mem).unwrap_or(Value::Undefined),
+            sections(header, e, region.mem).unwrap_or(Value::Undefined),
         ),
         (
             "segments",
-            segments(header, e, mem).map_or(Value::Undefined, Value::Array),
+            segments(header, e, region.mem).map_or(Value::Undefined, Value::Array),
         ),
         ("symtab", symtab.map_or(Value::Undefined, Value::Array)),
         ("symtab_entries", symtab_len.into()),
@@ -371,7 +403,8 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
         ("dynamic", dynamic.map_or(Value::Undefined, Value::Array)),
         ("dynamic_section_entries", dynamic_len.into()),
     ]
-    .into()
+    .into();
+    Some(res)
 }
 
 pub(crate) fn entry_point<Elf: FileHeader>(
