@@ -735,7 +735,7 @@ mod tests {
     }
 
     impl Test {
-        fn to_bytes(_ctx: &EvalContext, args: Vec<ModuleValue>) -> Option<ModuleValue> {
+        fn to_bytes(_ctx: &mut EvalContext, args: Vec<ModuleValue>) -> Option<ModuleValue> {
             let mut args = args.into_iter();
             let v: i64 = args.next()?.try_into().ok()?;
             Some(ModuleValue::Bytes(format!("{v}").into_bytes()))

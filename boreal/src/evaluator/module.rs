@@ -102,12 +102,12 @@ pub(super) fn evaluate_expr(
                 .take(*nb_arguments)
                 .map(expr_value_to_module_value)
                 .collect();
-            let eval_ctx = EvalContext {
+            let mut eval_ctx = EvalContext {
                 mem: &evaluator.scan_data.mem,
                 module_data: &evaluator.scan_data.module_values.data_map,
                 process_memory: evaluator.scan_data.params.process_memory,
             };
-            let value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
+            let value = fun(&mut eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
             evaluate_ops(evaluator, &value, ops, expressions)
         }
     }
@@ -153,12 +153,12 @@ fn evaluate_ops(
                         .take(*nb_arguments)
                         .map(expr_value_to_module_value)
                         .collect();
-                    let eval_ctx = EvalContext {
+                    let mut eval_ctx = EvalContext {
                         mem: &evaluator.scan_data.mem,
                         module_data: &evaluator.scan_data.module_values.data_map,
                         process_memory: evaluator.scan_data.params.process_memory,
                     };
-                    let new_value = fun(&eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
+                    let new_value = fun(&mut eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
                     // Avoid cloning the value if possible
                     return if operations.peek().is_none() {
                         Ok(new_value)

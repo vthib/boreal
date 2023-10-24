@@ -281,7 +281,7 @@ impl std::fmt::Debug for ModuleDataMap {
 /// }
 ///
 /// impl Foo {
-///     fn get_data_value(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
+///     fn get_data_value(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
 ///         let data = ctx.module_data.get::<Self>()?;
 ///         Some(data.value.into())
 ///     }
@@ -363,13 +363,13 @@ pub enum Value {
         /// # use boreal::memory::Memory;
         /// # use boreal::module::{EvalContext, Value};
         /// # let x = 3;
-        /// # fn fun(_: &EvalContext, _: Vec<Value>) -> Option<Value> { None }
-        /// # let ctx = EvalContext {
+        /// # fn fun(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> { None }
+        /// # let mut ctx = EvalContext {
         /// #     mem: &Memory::Direct(b""),
         /// #     module_data: &Default::default(),
         /// #     process_memory: false,
         /// # };
-        /// let result = fun(&ctx, vec![
+        /// let result = fun(&mut ctx, vec![
         ///     Value::bytes("a"),
         ///     Value::Integer(3),
         ///     Value::Integer(x), // Number of matches of string $foo
@@ -377,7 +377,7 @@ pub enum Value {
         /// ```
         // TODO: find a way to simplify this
         #[allow(clippy::type_complexity)]
-        Arc<Box<dyn Fn(&EvalContext, Vec<Value>) -> Option<Value> + Send + Sync>>,
+        Arc<Box<dyn Fn(&mut EvalContext, Vec<Value>) -> Option<Value> + Send + Sync>>,
     ),
 
     /// An undefined value.
@@ -431,7 +431,7 @@ pub enum StaticValue {
     /// A function, see [`Value::Function`].
     Function {
         /// The function to call.
-        fun: fn(&EvalContext, Vec<Value>) -> Option<Value>,
+        fun: fn(&mut EvalContext, Vec<Value>) -> Option<Value>,
 
         /// Types of arguments for the function.
         ///
@@ -502,7 +502,7 @@ impl Value {
     /// ```
     pub fn function<F>(f: F) -> Self
     where
-        F: Fn(&EvalContext, Vec<Value>) -> Option<Value> + Send + Sync + 'static,
+        F: Fn(&mut EvalContext, Vec<Value>) -> Option<Value> + Send + Sync + 'static,
     {
         Self::Function(Arc::new(Box::new(f)))
     }
@@ -540,7 +540,7 @@ impl StaticValue {
     /// ```
     /// use boreal::module::{EvalContext, StaticValue, Type, Value};
     ///
-    /// fn change_case(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    /// fn change_case(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
     ///     let mut args = args.into_iter();
     ///     let s: Vec<u8> = args.next()?.try_into().ok()?;
     ///     let to_upper: bool = args.next()?.try_into().ok()?;
@@ -559,7 +559,7 @@ impl StaticValue {
     /// );
     /// ```
     pub fn function(
-        fun: fn(&EvalContext, Vec<Value>) -> Option<Value>,
+        fun: fn(&mut EvalContext, Vec<Value>) -> Option<Value>,
         arguments_types: Vec<Vec<Type>>,
         return_type: Type,
     ) -> Self {
@@ -728,7 +728,7 @@ mod tests {
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn test_fun(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn test_fun(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         drop(args);
         None
     }

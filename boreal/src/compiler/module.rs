@@ -50,7 +50,7 @@ pub enum ModuleExpressionKind {
     /// A value coming from a function exposed by a module.
     StaticFunction {
         /// The function to call.
-        fun: fn(&EvalContext, Vec<Value>) -> Option<Value>,
+        fun: fn(&mut EvalContext, Vec<Value>) -> Option<Value>,
     },
 }
 
@@ -622,7 +622,7 @@ mod tests {
     use crate::test_helpers::test_type_traits_non_clonable;
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn test_fun(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn test_fun(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         drop(args);
         None
     }

@@ -132,7 +132,7 @@ impl Module for Math {
     }
 }
 
-fn get_mem_slice<'a>(ctx: &EvalContext<'a, '_>, offset: i64, length: i64) -> Option<&'a [u8]> {
+fn get_mem_slice<'a>(ctx: &mut EvalContext<'a, '_>, offset: i64, length: i64) -> Option<&'a [u8]> {
     let start: usize = offset.try_into().ok()?;
     let length: usize = length.try_into().ok()?;
     let end = start.checked_add(length)?;
@@ -141,7 +141,7 @@ fn get_mem_slice<'a>(ctx: &EvalContext<'a, '_>, offset: i64, length: i64) -> Opt
 }
 
 impl Math {
-    fn in_range(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn in_range(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let test: f64 = args.next()?.try_into().ok()?;
         let lower: f64 = args.next()?.try_into().ok()?;
@@ -150,7 +150,7 @@ impl Math {
         Some(Value::Integer(i64::from(test >= lower && test <= upper)))
     }
 
-    fn deviation(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn deviation(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let deviation = match args.next()? {
             Value::Bytes(bytes) => {
@@ -169,7 +169,7 @@ impl Math {
         Some(Value::Float(deviation))
     }
 
-    fn mean(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn mean(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let mean = match args.next()? {
             Value::Bytes(bytes) => compute_mean(&bytes),
@@ -184,7 +184,7 @@ impl Math {
         Some(Value::Float(mean))
     }
 
-    fn serial_correlation(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn serial_correlation(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let scc = match args.next()? {
             Value::Bytes(bytes) => compute_serial_correlation(&bytes),
@@ -199,7 +199,7 @@ impl Math {
         Some(Value::Float(scc))
     }
 
-    fn monte_carlo_pi(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn monte_carlo_pi(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let mc = match args.next()? {
             Value::Bytes(bytes) => compute_monte_carlo_pi(&bytes),
@@ -214,7 +214,7 @@ impl Math {
         mc.map(Value::Float)
     }
 
-    fn entropy(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn entropy(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let entropy = match args.next()? {
             Value::Bytes(bytes) => compute_entropy(&bytes),
@@ -228,7 +228,7 @@ impl Math {
         Some(Value::Float(entropy))
     }
 
-    fn min(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn min(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let a: i64 = args.next()?.try_into().ok()?;
         let b: i64 = args.next()?.try_into().ok()?;
@@ -249,7 +249,7 @@ impl Math {
         }
     }
 
-    fn max(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn max(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let a: i64 = args.next()?.try_into().ok()?;
         let b: i64 = args.next()?.try_into().ok()?;
@@ -270,21 +270,21 @@ impl Math {
         }
     }
 
-    fn to_number(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn to_number(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v: bool = args.next()?.try_into().ok()?;
 
         Some(Value::Integer(v.into()))
     }
 
-    fn abs(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn abs(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v: i64 = args.next()?.try_into().ok()?;
 
         v.checked_abs().map(Value::Integer)
     }
 
-    fn count(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn count(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let byte: i64 = args.next()?.try_into().ok()?;
         // libyara type cast this to a byte directly.
@@ -308,7 +308,7 @@ impl Math {
             .map(Value::Integer)
     }
 
-    fn percentage(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn percentage(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let byte: i64 = args.next()?.try_into().ok()?;
         let byte: usize = byte.try_into().ok()?;
@@ -330,7 +330,7 @@ impl Math {
         Some(Value::Float((*count as f64) / (sum as f64)))
     }
 
-    fn mode(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn mode(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
 
         let dist = match (args.next(), args.next()) {
@@ -350,7 +350,7 @@ impl Math {
         most_common.try_into().ok().map(Value::Integer)
     }
 
-    fn to_string(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn to_string(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let value: i64 = args.next()?.try_into().ok()?;
         let base: Option<i64> = match args.next() {
@@ -515,128 +515,128 @@ mod tests {
 
     #[test]
     fn test_in_range_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::in_range(&ctx, vec![]).is_none());
-        assert!(Math::in_range(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::in_range(&ctx, vec![0.5.into(), 0.5.into()]).is_none());
-        assert!(Math::in_range(&ctx, vec![0.into()]).is_none());
-        assert!(Math::in_range(&ctx, vec![0.5.into(), 0.into()]).is_none());
-        assert!(Math::in_range(&ctx, vec![0.5.into(), 0.5.into(), 0.into()]).is_none());
+        assert!(Math::in_range(&mut ctx, vec![]).is_none());
+        assert!(Math::in_range(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::in_range(&mut ctx, vec![0.5.into(), 0.5.into()]).is_none());
+        assert!(Math::in_range(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::in_range(&mut ctx, vec![0.5.into(), 0.into()]).is_none());
+        assert!(Math::in_range(&mut ctx, vec![0.5.into(), 0.5.into(), 0.into()]).is_none());
     }
 
     #[test]
     fn test_deviation_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::deviation(&ctx, vec![]).is_none());
-        assert!(Math::deviation(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::deviation(&ctx, vec![b"".to_vec().into()]).is_none());
-        assert!(Math::deviation(&ctx, vec![b"".to_vec().into(), 0.into()]).is_none());
-        assert!(Math::deviation(&ctx, vec![0.into()]).is_none());
-        assert!(Math::deviation(&ctx, vec![0.into(), 0.into()]).is_none());
-        assert!(Math::deviation(&ctx, vec![0.into(), 0.5.into()]).is_none());
-        assert!(Math::deviation(&ctx, vec![0.into(), 0.into(), 0.into()]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![b"".to_vec().into()]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![b"".to_vec().into(), 0.into()]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![0.into(), 0.into()]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::deviation(&mut ctx, vec![0.into(), 0.into(), 0.into()]).is_none());
     }
 
     #[test]
     fn test_mean_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::mean(&ctx, vec![]).is_none());
-        assert!(Math::mean(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::mean(&ctx, vec![0.into()]).is_none());
-        assert!(Math::mean(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::mean(&mut ctx, vec![]).is_none());
+        assert!(Math::mean(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::mean(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::mean(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_serial_correlation_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::serial_correlation(&ctx, vec![]).is_none());
-        assert!(Math::serial_correlation(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::serial_correlation(&ctx, vec![0.into()]).is_none());
-        assert!(Math::serial_correlation(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::serial_correlation(&mut ctx, vec![]).is_none());
+        assert!(Math::serial_correlation(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::serial_correlation(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::serial_correlation(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_monte_carlo_pi_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::monte_carlo_pi(&ctx, vec![]).is_none());
-        assert!(Math::monte_carlo_pi(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::monte_carlo_pi(&ctx, vec![0.into()]).is_none());
-        assert!(Math::monte_carlo_pi(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::monte_carlo_pi(&mut ctx, vec![]).is_none());
+        assert!(Math::monte_carlo_pi(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::monte_carlo_pi(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::monte_carlo_pi(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_entropy_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::entropy(&ctx, vec![]).is_none());
-        assert!(Math::entropy(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::entropy(&ctx, vec![0.into()]).is_none());
-        assert!(Math::entropy(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::entropy(&mut ctx, vec![]).is_none());
+        assert!(Math::entropy(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::entropy(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::entropy(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_min_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::min(&ctx, vec![]).is_none());
-        assert!(Math::min(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::min(&ctx, vec![0.into()]).is_none());
-        assert!(Math::min(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::min(&mut ctx, vec![]).is_none());
+        assert!(Math::min(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::min(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::min(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_max_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::max(&ctx, vec![]).is_none());
-        assert!(Math::max(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::max(&ctx, vec![0.into()]).is_none());
-        assert!(Math::max(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::max(&mut ctx, vec![]).is_none());
+        assert!(Math::max(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::max(&mut ctx, vec![0.into()]).is_none());
+        assert!(Math::max(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_to_number_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::to_number(&ctx, vec![]).is_none());
-        assert!(Math::to_number(&ctx, vec![0.into()]).is_none());
+        assert!(Math::to_number(&mut ctx, vec![]).is_none());
+        assert!(Math::to_number(&mut ctx, vec![0.into()]).is_none());
     }
 
     #[test]
     fn test_abs_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::abs(&ctx, vec![]).is_none());
-        assert!(Math::abs(&ctx, vec![0.5.into()]).is_none());
+        assert!(Math::abs(&mut ctx, vec![]).is_none());
+        assert!(Math::abs(&mut ctx, vec![0.5.into()]).is_none());
     }
 
     #[test]
     fn test_count_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::count(&ctx, vec![]).is_none());
-        assert!(Math::count(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::count(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::count(&mut ctx, vec![]).is_none());
+        assert!(Math::count(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::count(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_percentage_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::percentage(&ctx, vec![]).is_none());
-        assert!(Math::percentage(&ctx, vec![0.5.into()]).is_none());
-        assert!(Math::percentage(&ctx, vec![0.into(), 0.5.into()]).is_none());
+        assert!(Math::percentage(&mut ctx, vec![]).is_none());
+        assert!(Math::percentage(&mut ctx, vec![0.5.into()]).is_none());
+        assert!(Math::percentage(&mut ctx, vec![0.into(), 0.5.into()]).is_none());
     }
 
     #[test]
     fn test_mode_invalid_args() {
-        let ctx = ctx!();
+        let mut ctx = ctx!();
 
-        assert!(Math::mode(&ctx, vec![0.5.into()]).is_none());
+        assert!(Math::mode(&mut ctx, vec![0.5.into()]).is_none());
     }
 }
