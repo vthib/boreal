@@ -323,7 +323,7 @@ impl Module for Tests {
 }
 
 impl Tests {
-    fn fsum(_: &EvalContext, arguments: Vec<Value>) -> Option<Value> {
+    fn fsum(_: &mut EvalContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let mut res = f64::try_from(args.next()?).ok()?;
         res += f64::try_from(args.next()?).ok()?;
@@ -333,7 +333,7 @@ impl Tests {
         Some(Value::Float(res))
     }
 
-    fn isum(_: &EvalContext, arguments: Vec<Value>) -> Option<Value> {
+    fn isum(_: &mut EvalContext, arguments: Vec<Value>) -> Option<Value> {
         let mut res = 0;
         for arg in arguments {
             res += i64::try_from(arg).ok()?;
@@ -341,18 +341,18 @@ impl Tests {
         Some(Value::Integer(res))
     }
 
-    fn length(_: &EvalContext, arguments: Vec<Value>) -> Option<Value> {
+    fn length(_: &mut EvalContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let s: Vec<u8> = args.next()?.try_into().ok()?;
 
         i64::try_from(s.len()).ok().map(Value::Integer)
     }
 
-    fn empty(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn empty(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::Bytes("".into()))
     }
 
-    fn foobar(_: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn foobar(_: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v = i64::try_from(args.next()?).ok()?;
 
@@ -363,11 +363,11 @@ impl Tests {
         }))
     }
 
-    fn log(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn log(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::Boolean(true))
     }
 
-    fn r#match(_: &EvalContext, arguments: Vec<Value>) -> Option<Value> {
+    fn r#match(_: &mut EvalContext, arguments: Vec<Value>) -> Option<Value> {
         let mut args = arguments.into_iter();
         let regex: Regex = args.next()?.try_into().ok()?;
         let s: Vec<u8> = args.next()?.try_into().ok()?;
@@ -378,7 +378,7 @@ impl Tests {
         }))
     }
 
-    fn lazy(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn lazy(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::object([
             ("one", Value::Integer(1)),
             ("one_half", Value::Float(0.5)),
@@ -419,18 +419,18 @@ impl Tests {
         ]))
     }
 
-    fn lazy_lazy(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn lazy_lazy(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::object([(
             "lazy_int",
             Value::function(Self::lazy_lazy_int),
         )]))
     }
 
-    fn lazy_lazy_int(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn lazy_lazy_int(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::Integer(3))
     }
 
-    fn lazy_array(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn lazy_array(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         Some(Value::Array(vec![
             Value::object([(
                 "another_array",

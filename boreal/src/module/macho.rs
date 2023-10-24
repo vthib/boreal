@@ -721,7 +721,7 @@ impl ModuleData for MachO {
 }
 
 impl MachO {
-    fn file_index_for_arch(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn file_index_for_arch(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v1: i64 = args.next()?.try_into().ok()?;
         let v2 = args.next().and_then(|v| i64::try_from(v).ok());
@@ -742,7 +742,7 @@ impl MachO {
         None
     }
 
-    fn entry_point_for_arch(ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn entry_point_for_arch(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let v1: i64 = args.next()?.try_into().ok()?;
         let v2 = args.next().and_then(|v| i64::try_from(v).ok());

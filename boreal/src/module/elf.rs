@@ -568,7 +568,7 @@ fn get_symbols<Elf: FileHeader>(
 
 impl Elf {
     #[cfg(feature = "hash")]
-    fn import_md5(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn import_md5(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         use md5::{Digest, Md5};
 
         let data = ctx.module_data.get::<Self>()?;
@@ -581,7 +581,7 @@ impl Elf {
     }
 
     #[cfg(feature = "hash")]
-    fn telfhash(ctx: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn telfhash(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         const EXCLUDED_STRINGS: &[&[u8]; 8] = &[
             b"__libc_start_main",
             b"main",

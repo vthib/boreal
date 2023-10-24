@@ -31,7 +31,7 @@ impl Module for String_ {
 }
 
 impl String_ {
-    fn to_int(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn to_int(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
 
         let s: Vec<u8> = args.next()?.try_into().ok()?;
@@ -103,7 +103,7 @@ impl String_ {
         Some(Value::Integer(res))
     }
 
-    fn length(_ctx: &EvalContext, args: Vec<Value>) -> Option<Value> {
+    fn length(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let s: Vec<u8> = args.next()?.try_into().ok()?;
 

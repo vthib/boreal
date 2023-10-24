@@ -24,7 +24,7 @@ impl Module for Time {
 }
 
 impl Time {
-    fn now(_: &EvalContext, _: Vec<Value>) -> Option<Value> {
+    fn now(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             // This should not fail unless the clock is set to before the unix epoch.
