@@ -434,299 +434,279 @@ rule test {
 
 #[test]
 fn test_coverage_pe_ord_and_delay() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/pe/ord_and_delay.exe",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/pe/ord_and_delay.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_resources_only() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/pe/resources_only.dll",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/pe/resources_only.dll";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &[]);
 }
 
 #[test]
 fn test_coverage_pe_libyara_079a472d() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/\
-        079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-            #[cfg(not(feature = "authenticode"))]
-            "pe.signatures",
-            #[cfg(not(feature = "authenticode"))]
-            "pe.is_signed",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
+    ];
+    let path = "tests/assets/libyara/data/\
+        079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885";
+
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &[]);
 }
 
 #[test]
 fn test_coverage_pe_libyara_079a472d_upx() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/\
-        079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/\
+        079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &[]);
 }
 
 #[test]
 fn test_coverage_pe_libyara_0ca09bde() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/\
-        0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/\
+        0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &[]);
 }
 
 #[test]
 fn test_coverage_pe_libyara_33fc70f9() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/\
-        33fc70f99be6d2833ae48852d611c8048d0c053ed0b2c626db4dbe902832a08b",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/\
+        33fc70f99be6d2833ae48852d611c8048d0c053ed0b2c626db4dbe902832a08b";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_libyara_3b8b9015() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/\
-        3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-            #[cfg(not(feature = "authenticode"))]
-            "pe.signatures",
-            #[cfg(not(feature = "authenticode"))]
-            "pe.is_signed",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
+    ];
+    let path = "tests/assets/libyara/data/\
+        3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &[]);
 }
 
 #[test]
 fn test_coverage_pe_libyara_ca21e1c32() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/\
-        ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/\
+        ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_libyara_mtxex() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/mtxex.dll",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/mtxex.dll";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &[]);
 }
 
 #[test]
 fn test_coverage_pe_libyara_mtxex_modified() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &[]);
 }
 
 #[test]
 fn test_coverage_pe_libyara_pe_imports() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/pe_imports",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/pe_imports";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_libyara_pe_mingw() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/pe_mingw",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/pe_mingw";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_libyara_tiny() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/tiny",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/tiny";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_libyara_tiny_51ff() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/tiny-idata-51ff",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/tiny-idata-51ff";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 // FIXME
 #[ignore]
 fn test_coverage_pe_libyara_tiny_5200() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/tiny-idata-5200",
-        &[
-            "pe.import_details[1].functions",
-            "pe.import_details[1].number_of_functions",
-            "pe.import_details[2].functions",
-            "pe.import_details[2].number_of_functions",
-            "pe.import_details[3].functions",
-            "pe.import_details[3].number_of_functions",
-            "pe.import_details[4].functions",
-            "pe.import_details[4].number_of_functions",
-            "pe.import_details[5].functions",
-            "pe.import_details[5].number_of_functions",
-            "pe.import_details[6].functions",
-            "pe.import_details[6].number_of_functions",
-            "pe.import_details[7].functions",
-            "pe.import_details[7].number_of_functions",
-            "pe.import_details[8].functions",
-            "pe.import_details[8].number_of_functions",
-            "pe.import_details[9].functions",
-            "pe.import_details[9].number_of_functions",
-            "pe.import_details[10].functions",
-            "pe.import_details[10].number_of_functions",
-            // libyara allows getting the hint name from outside the .idata section, which
-            // returns garbage. boreal do not do it, hence the differences
-            "pe.import_details[0].functions[1].name",
-            "pe.import_details[0].functions[2].name",
-            "pe.import_details[0].functions[3].name",
-            // TODO: invalid imports are still counted by libyara. Is that desirable? I don't think
-            // so
-            "pe.number_of_imports",
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        "pe.import_details[1].functions",
+        "pe.import_details[1].number_of_functions",
+        "pe.import_details[2].functions",
+        "pe.import_details[2].number_of_functions",
+        "pe.import_details[3].functions",
+        "pe.import_details[3].number_of_functions",
+        "pe.import_details[4].functions",
+        "pe.import_details[4].number_of_functions",
+        "pe.import_details[5].functions",
+        "pe.import_details[5].number_of_functions",
+        "pe.import_details[6].functions",
+        "pe.import_details[6].number_of_functions",
+        "pe.import_details[7].functions",
+        "pe.import_details[7].number_of_functions",
+        "pe.import_details[8].functions",
+        "pe.import_details[8].number_of_functions",
+        "pe.import_details[9].functions",
+        "pe.import_details[9].number_of_functions",
+        "pe.import_details[10].functions",
+        "pe.import_details[10].number_of_functions",
+        // libyara allows getting the hint name from outside the .idata section, which
+        // returns garbage. boreal do not do it, hence the differences
+        "pe.import_details[0].functions[1].name",
+        "pe.import_details[0].functions[2].name",
+        "pe.import_details[0].functions[3].name",
+        // TODO: invalid imports are still counted by libyara. Is that desirable? I don't think
+        // so
+        "pe.number_of_imports",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/tiny-idata-5200";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_libyara_tiny_overlay() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/tiny-overlay",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/tiny-overlay";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_1561_std() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/yara_1561/x64/FileTest.exe",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/yara_1561/x64/FileTest.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_1561_align_40() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/yara_1561/x64/FileTest_alignment_40.exe",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/yara_1561/x64/FileTest_alignment_40.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_1561_32_align_40() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/yara_1561/Win32/FileTest_Alignment_40.exe",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/yara_1561/Win32/FileTest_Alignment_40.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_1561_32_section1() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/yara_1561/Win32/FileTest_Section1_Starts_at_header.exe",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/yara_1561/Win32/FileTest_Section1_Starts_at_header.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_pe_c6f9709f() {
-    compare_module_values_on_file(
-        Pe::default(),
-        "tests/assets/libyara/data/\
-         c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h",
-        &[
-            #[cfg(not(feature = "authenticode"))]
-            "pe.number_of_signatures",
-        ],
-    );
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/libyara/data/\
+         c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
 #[test]
