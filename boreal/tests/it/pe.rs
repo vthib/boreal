@@ -493,7 +493,6 @@ fn test_coverage_pe_libyara_0ca09bde() {
         "tests/assets/libyara/data/\
         0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],
@@ -507,7 +506,6 @@ fn test_coverage_pe_libyara_33fc70f9() {
         "tests/assets/libyara/data/\
         33fc70f99be6d2833ae48852d611c8048d0c053ed0b2c626db4dbe902832a08b",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],
@@ -521,7 +519,6 @@ fn test_coverage_pe_libyara_3b8b9015() {
         "tests/assets/libyara/data/\
         3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
             #[cfg(not(feature = "authenticode"))]
@@ -587,7 +584,6 @@ fn test_coverage_pe_libyara_pe_mingw() {
         Pe::default(),
         "tests/assets/libyara/data/pe_mingw",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],
@@ -600,7 +596,6 @@ fn test_coverage_pe_libyara_tiny() {
         Pe::default(),
         "tests/assets/libyara/data/tiny",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],
@@ -613,7 +608,6 @@ fn test_coverage_pe_libyara_tiny_51ff() {
         Pe::default(),
         "tests/assets/libyara/data/tiny-idata-51ff",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],
@@ -628,7 +622,6 @@ fn test_coverage_pe_libyara_tiny_5200() {
         Pe::default(),
         "tests/assets/libyara/data/tiny-idata-5200",
         &[
-            "pe.rich_signature",
             "pe.import_details[1].functions",
             "pe.import_details[1].number_of_functions",
             "pe.import_details[2].functions",
@@ -669,7 +662,6 @@ fn test_coverage_pe_libyara_tiny_overlay() {
         Pe::default(),
         "tests/assets/libyara/data/tiny-overlay",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],
@@ -718,7 +710,6 @@ fn test_coverage_pe_1561_32_section1() {
         Pe::default(),
         "tests/assets/yara_1561/Win32/FileTest_Section1_Starts_at_header.exe",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],
@@ -732,7 +723,6 @@ fn test_coverage_pe_c6f9709f() {
         "tests/assets/libyara/data/\
          c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h",
         &[
-            "pe.rich_signature",
             #[cfg(not(feature = "authenticode"))]
             "pe.number_of_signatures",
         ],

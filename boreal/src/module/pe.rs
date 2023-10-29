@@ -1163,7 +1163,7 @@ impl Pe {
     // the feature is disabled.
     #[allow(clippy::unused_self)]
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn parse_file<Pe: ImageNtHeaders>(
+    fn parse_file<HEADERS: ImageNtHeaders>(
         &self,
         region: &MemoryRegion,
         process_memory: bool,
@@ -1171,7 +1171,7 @@ impl Pe {
     ) -> Option<HashMap<&'static str, Value>> {
         let dos_header = ImageDosHeader::parse(region.mem).ok()?;
         let mut offset = dos_header.nt_headers_offset().into();
-        let (nt_headers, data_dirs) = Pe::parse(region.mem, &mut offset).ok()?;
+        let (nt_headers, data_dirs) = HEADERS::parse(region.mem, &mut offset).ok()?;
 
         let sections = nt_headers.sections(region.mem, offset).ok();
 
@@ -1311,17 +1311,25 @@ impl Pe {
             (
                 "rich_signature",
                 RichHeaderInfo::parse(region.mem, dos_header.nt_headers_offset().into())
-                    .map_or(Value::Undefined, |info| {
-                        rich_signature(info, region.mem, data)
-                    }),
+                    .map_or_else(
+                        || {
+                            // Setting this is a bit useless, but it mirrors what yara does
+                            // and helps comparing module values.
+                            Value::object([
+                                ("version", Value::function(Pe::rich_signature_version)),
+                                ("toolid", Value::function(Pe::rich_signature_toolid)),
+                            ])
+                        },
+                        |info| rich_signature(info, region.mem, data),
+                    ),
             ),
             ("number_of_version_infos", 0.into()),
         ]
         .into();
 
         if let Some(sections) = sections.as_ref() {
-            add_imports::<Pe>(&data_dirs, region.mem, sections, data, &mut map);
-            add_delay_load_imports::<Pe>(&data_dirs, region.mem, sections, data, &mut map);
+            add_imports::<HEADERS>(&data_dirs, region.mem, sections, data, &mut map);
+            add_delay_load_imports::<HEADERS>(&data_dirs, region.mem, sections, data, &mut map);
             add_exports(&data_dirs, region.mem, sections, data, &mut map);
             add_resources(&data_dirs, region.mem, sections, data, &mut map);
         }
