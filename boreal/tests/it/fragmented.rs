@@ -126,35 +126,26 @@ fn test_fragmented_entrypoint() {
         checker.set_process_memory_flag();
         checker
     }
-    fn checker_without_yara(value: u64) -> Checker {
-        let mut checker =
-            Checker::new_without_yara(&format!("rule a {{ condition: entrypoint == {value} }}"));
-        checker.set_process_memory_flag();
-        checker
-    }
 
     let mut undefined_checker = Checker::new("rule a { condition: not defined entrypoint }");
     undefined_checker.set_process_memory_flag();
 
     undefined_checker.check_fragmented(&[(0, b"")], true);
 
-    // TODO: elf entrypoint broken in yara, should be fixed in a future release:
-    // <https://github.com/VirusTotal/yara/pull/1989>
-    checker_without_yara(0x8048060).check_fragmented(&[(0, ELF32_FILE)], true);
-    checker_without_yara(0x8048060 + 1000)
-        .check_fragmented(&[(0, b"a"), (500, b"b"), (1000, ELF32_FILE)], true);
+    checker(0x8048060).check_fragmented(&[(0, ELF32_FILE)], true);
+    checker(0x8048060 + 1000).check_fragmented(&[(0, b"a"), (500, b"b"), (1000, ELF32_FILE)], true);
 
-    checker_without_yara(0x400080 + 500).check_fragmented(&[(500, ELF64_FILE)], true);
+    checker(0x400080 + 500).check_fragmented(&[(500, ELF64_FILE)], true);
 
     // First one found wins
-    checker_without_yara(0x8048060 + 500)
+    checker(0x8048060 + 500)
         .check_fragmented(&[(0, b"a"), (500, ELF32_FILE), (1000, ELF64_FILE)], true);
-    checker_without_yara(0x400080 + 500)
+    checker(0x400080 + 500)
         .check_fragmented(&[(0, b"a"), (500, ELF64_FILE), (1000, ELF32_FILE)], true);
 
     // an elf that is not ET_EXEC is ignored
     undefined_checker.check_fragmented(&[(0, b"a"), (500, ELF32_SHAREDOBJ)], true);
-    checker_without_yara(0x8048060 + 1000).check_fragmented(
+    checker(0x8048060 + 1000).check_fragmented(
         &[(0, b"a"), (500, ELF32_SHAREDOBJ), (1000, ELF32_FILE)],
         true,
     );
@@ -175,7 +166,7 @@ fn test_fragmented_entrypoint() {
     checker(0x14F0 + 1000).check_fragmented(&[(0, &dll), (1000, &pe64)], true);
 
     // first one picked
-    checker_without_yara(0x8048060 + 1000).check_fragmented(
+    checker(0x8048060 + 1000).check_fragmented(
         &[(0, b"a"), (500, &dll), (1000, ELF32_FILE), (2000, &pe32)],
         true,
     );
@@ -240,8 +231,6 @@ rule so {
 "#;
     let mut checker = Checker::new(rule);
     checker.set_process_memory_flag();
-    let mut checker_without_yara = Checker::new_without_yara(rule);
-    checker_without_yara.set_process_memory_flag();
 
     checker.check_fragmented_full_matches(
         &[(0, ELF32_FILE)],
@@ -249,8 +238,7 @@ rule so {
     );
 
     // Should stop when finding the first one, and ignore the second one
-    // FIXME: buggy on libyara, it goes through all the regions and keeps the last one
-    checker_without_yara.check_fragmented_full_matches(
+    checker.check_fragmented_full_matches(
         &[(0, b"a"), (1000, ELF64_FILE), (2000, ELF32_FILE)],
         vec![("default:elf64".to_owned(), vec![])],
     );
@@ -258,7 +246,7 @@ rule so {
     // Should ignore a SO file
     checker.check_fragmented_full_matches(&[(0, ELF32_SHAREDOBJ), (1000, b"b")], vec![]);
 
-    checker_without_yara.check_fragmented_full_matches(
+    checker.check_fragmented_full_matches(
         &[(0, ELF32_SHAREDOBJ), (1000, b"b"), (2000, ELF32_FILE)],
         vec![("default:elf32".to_owned(), vec![])],
     );
