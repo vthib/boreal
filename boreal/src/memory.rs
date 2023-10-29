@@ -45,7 +45,15 @@ impl<'a> Memory<'a> {
         }
     }
 
-    /// TODO
+    /// Retrieve the data that matches the given range, potentially truncated.
+    ///
+    /// This will fetch the memory region containing this range and return the data slice
+    /// matching the exact range, possibly truncated.
+    ///
+    /// If the start does not belong to any memory region, None is returned.
+    ///
+    /// If the end is after the end of the region, the slice is truncated.
+    // TODO: return an iterator if the range overlaps multiple regions that are contiguous?
     #[must_use]
     pub fn get(&self, start: usize, end: usize) -> Option<&'a [u8]> {
         match self {
