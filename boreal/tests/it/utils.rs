@@ -606,9 +606,14 @@ fn add_rule_error_get_desc(err: &boreal::compiler::AddRuleError, rules: &str) ->
 }
 
 /// Compare boreal & yara module values on a given file
-pub fn compare_module_values_on_file<M: Module>(module: M, path: &str, ignored_diffs: &[&str]) {
+pub fn compare_module_values_on_file<M: Module>(
+    module: M,
+    path: &str,
+    process_memory: bool,
+    ignored_diffs: &[&str],
+) {
     let mem = std::fs::read(path).unwrap();
-    compare_module_values_on_mem(module, path, &mem, ignored_diffs);
+    compare_module_values_on_mem(module, path, &mem, process_memory, ignored_diffs);
 }
 
 /// Compare boreal & yara module values on a given bytestring
@@ -616,6 +621,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     module: M,
     mem_name: &str,
     mem: &[u8],
+    process_memory: bool,
     ignored_diffs: &[&str],
 ) {
     let mut compiler = build_compiler();
@@ -625,7 +631,11 @@ pub fn compare_module_values_on_mem<M: Module>(
             module.get_name()
         ))
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let mut scanner = compiler.into_scanner();
+    if process_memory {
+        let params = scanner.scan_params().clone();
+        scanner.set_scan_params(params.process_memory(true));
+    }
 
     let res = scanner.scan_mem(mem);
     let mut boreal_value = res
@@ -651,11 +661,33 @@ pub fn compare_module_values_on_mem<M: Module>(
         ))
         .unwrap();
     let rules = c.compile_rules().unwrap();
+    let mut scanner = rules.scanner().unwrap();
 
-    rules
-        .scan_mem_callback(mem, 0, |msg| {
+    if process_memory {
+        // TODO: add a base/start offset for the region, to check it is properly taken
+        // into account.
+        scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
+    }
+
+    scanner
+        .scan_mem_callback(mem, |msg| {
             if let yara::CallbackMsg::ModuleImported(obj) = msg {
-                let yara_value = convert_yara_obj_to_module_value(obj);
+                let mut yara_value = convert_yara_obj_to_module_value(obj);
+
+                // This is a hack to remove the "rich_signature" field from the pe module
+                // when the file is not a PE. The PE module on yara has a lot of idiosyncracies,
+                // but two of them conflates here: it is the only module that has values when it
+                // does not parse anything (the is_pe field is set, either to 1 or 0), and it
+                // always sets the rich_signature field even if it does not contain anything
+                // (because it contains two functions).
+                // This is very annoying to handle when comparing module values, so just remove
+                // this dummy value when the file is not a pe, it serves no purpose.
+                if let ModuleValue::Object(map) = &mut yara_value {
+                    if matches!(map.get("is_pe"), Some(ModuleValue::Integer(0))) {
+                        map.remove("rich_signature");
+                    }
+                }
+
                 let mut diffs = Vec::new();
                 compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
 
@@ -675,9 +707,10 @@ pub fn compare_module_values_on_mem<M: Module>(
 
                 if !diffs.is_empty() {
                     panic!(
-                        "found differences for module {} on {}: {:#?}",
+                        "found differences for module {} on {}{}: {:#?}",
                         module.get_name(),
                         mem_name,
+                        if process_memory { " with process memory flag" } else { "" },
                         diffs
                     );
                 }
