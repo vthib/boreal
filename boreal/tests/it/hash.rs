@@ -40,6 +40,11 @@ fn test_md5() {
         r#"hash.md5(0, filesize) == "c3fcd3d76192e4007dfb496cca67e13b""#,
         b"abcdefghijklmnopqrstuvwxyz",
     );
+    // Instrument the cache
+    test(
+        "hash.md5(0, filesize) == hash.md5(0, filesize)",
+        b"abcdefghijklmnopqrstuvwxyz",
+    );
     test(
         "hash.md5(0, filesize * 2) == hash.md5(0, filesize)",
         b"abcdefghijklmnopqrstuvwxyz",
@@ -72,6 +77,11 @@ fn test_sha1() {
     );
     test(
         r#"hash.sha1(0, filesize) == "32d10c7b8cf96570ca04ce37f2a19d84240d3a89""#,
+        b"abcdefghijklmnopqrstuvwxyz",
+    );
+    // Instrument the cache
+    test(
+        "hash.sha1(0, filesize) == hash.sha1(0, filesize)",
         b"abcdefghijklmnopqrstuvwxyz",
     );
     test(
@@ -111,6 +121,11 @@ fn test_sha256() {
     test(
         "hash.sha256(0, filesize) == \
             \"71c480df93d6ae2f1efad1447c66c9525e316218cf51fc8d9ed832f2daf18b73\"",
+        b"abcdefghijklmnopqrstuvwxyz",
+    );
+    // Instrument the cache
+    test(
+        "hash.sha256(0, filesize) == hash.sha256(0, filesize)",
         b"abcdefghijklmnopqrstuvwxyz",
     );
     test(
