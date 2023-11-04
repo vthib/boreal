@@ -502,7 +502,9 @@ impl Inner {
                 // Scan each region for all variables occurences.
                 let regions: Vec<_> = obj.list_regions();
                 for region_desc in regions {
-                    let region = obj.fetch_region(region_desc);
+                    let Some(region) = obj.fetch_region(region_desc) else {
+                        continue;
+                    };
                     self.ac_scan
                         .scan_region(&region, &mut ac_scan_data, &mut matches)?;
 

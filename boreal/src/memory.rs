@@ -73,7 +73,7 @@ impl Memory<'_> {
                     let end = end.checked_sub(region.start)?;
                     let end = std::cmp::min(region.length, end);
 
-                    let region = obj.fetch_region(region);
+                    let region = obj.fetch_region(region)?;
                     return region.mem.get(relative_start..end);
                 }
 
@@ -93,10 +93,20 @@ pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
     ///
     /// This listing should be cheap. Actually retrieving the memory behind a region
     /// should only be done in the [`FragmentedMemory::fetch_region`] method.
+    /// This is also the reason why this function cannot fail, the regions should have been
+    /// precomputed already.
     fn list_regions(&self) -> Vec<RegionDescription>;
 
     /// Fetch the data of a region.
-    fn fetch_region(&mut self, region_desc: RegionDescription) -> Region;
+    ///
+    /// If unable to fetch, None must be returned. The region will be ignored,
+    /// but scanning will go on:
+    /// - This region will not be scanned for strings occurrences, nor will it be
+    ///   handled in modules (for example, it will not be parsed by the pe module
+    ///   if used).
+    /// - If the fetch was done during evaluation, the expression will evaluate
+    ///   as `undefined`.
+    fn fetch_region(&mut self, region_desc: RegionDescription) -> Option<Region>;
 }
 
 /// A description of a region of memory to scan.
