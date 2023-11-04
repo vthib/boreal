@@ -5,7 +5,6 @@ use std::sync::Arc;
 use boreal::memory::{FragmentedMemory, Region, RegionDescription};
 use boreal::module::{Module, StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanError, ScanParams, ScanResult};
-use yara::MemoryBlock;
 
 pub struct Checker {
     scanner: boreal::Scanner,
@@ -372,11 +371,10 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_fragmented(&mut self, regions: &[(usize, &[u8])], expected_res: bool) {
-        let regions = convert_regions(regions);
+    pub fn check_fragmented(&mut self, regions: &[(usize, Option<&[u8]>)], expected_res: bool) {
         let res = self
             .scanner
-            .scan_fragmented(FragmentedSlices { regions: &regions })
+            .scan_fragmented(FragmentedSlices { regions })
             .unwrap();
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
@@ -389,7 +387,7 @@ impl Checker {
             let res = scanner
                 .scan_mem_blocks(YaraBlocks {
                     current: 0,
-                    regions: &regions,
+                    regions,
                 })
                 .unwrap();
             let res = !res.is_empty();
@@ -398,15 +396,17 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_fragmented_full_matches(&self, regions: &[(usize, &[u8])], expected: FullMatches) {
-        let regions = convert_regions(regions);
-
+    pub fn check_fragmented_full_matches(
+        &self,
+        regions: &[(usize, Option<&[u8]>)],
+        expected: FullMatches,
+    ) {
         // We need to compute the full matches for this test
         {
             let mut scanner = self.scanner.clone();
             scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
             let res = scanner
-                .scan_fragmented(FragmentedSlices { regions: &regions })
+                .scan_fragmented(FragmentedSlices { regions })
                 .unwrap();
             let res = get_boreal_full_matches(&res);
             assert_eq!(res, expected, "test failed for boreal");
@@ -420,7 +420,7 @@ impl Checker {
             let res = scanner
                 .scan_mem_blocks(YaraBlocks {
                     current: 0,
-                    regions: &regions,
+                    regions,
                 })
                 .unwrap();
             check_yara_full_matches(&res, expected);
@@ -435,36 +435,29 @@ impl Checker {
     }
 }
 
-fn convert_regions<'a>(regions: &[(usize, &'a [u8])]) -> Vec<Region<'a>> {
-    regions
-        .iter()
-        .map(|(start, mem)| Region { start: *start, mem })
-        .collect()
-}
-
 #[derive(Debug)]
 struct FragmentedSlices<'a, 'b> {
-    regions: &'b [Region<'a>],
+    regions: &'b [(usize, Option<&'a [u8]>)],
 }
 
 impl FragmentedMemory for FragmentedSlices<'_, '_> {
     fn list_regions(&self) -> Vec<RegionDescription> {
         self.regions
             .iter()
-            .map(|r| RegionDescription {
-                start: r.start,
-                length: r.mem.len(),
+            .map(|(start, mem)| RegionDescription {
+                start: *start,
+                length: mem.map_or(10, |v| v.len()),
             })
             .collect()
     }
 
-    fn fetch_region(&mut self, region_desc: RegionDescription) -> Region {
-        for reg in self.regions {
-            if reg.start == region_desc.start {
-                return Region {
-                    start: reg.start,
-                    mem: reg.mem,
-                };
+    fn fetch_region(&mut self, region_desc: RegionDescription) -> Option<Region> {
+        for (start, mem) in self.regions {
+            if *start == region_desc.start {
+                return Some(Region {
+                    start: *start,
+                    mem: (*mem)?,
+                });
             }
         }
         unreachable!()
@@ -968,7 +961,7 @@ pub fn join_str(a: &str, b: &str) -> Vec<u8> {
 
 struct YaraBlocks<'a> {
     current: usize,
-    regions: &'a [Region<'a>],
+    regions: &'a [(usize, Option<&'a [u8]>)],
 }
 
 impl<'a> yara::MemoryBlockIterator for YaraBlocks<'a> {
@@ -978,8 +971,8 @@ impl<'a> yara::MemoryBlockIterator for YaraBlocks<'a> {
     }
 
     fn next(&mut self) -> Option<yara::MemoryBlock> {
-        let region = self.regions.get(self.current)?;
+        let (start, mem) = self.regions.get(self.current)?;
         self.current += 1;
-        Some(MemoryBlock::new(region.start as _, region.mem))
+        Some(yara::MemoryBlock::new(*start as u64, mem.unwrap_or(b"")))
     }
 }

@@ -14,10 +14,11 @@ rule a {
     );
 
     let regions = &[
-        (0, b"cde abc ab".as_slice()),
-        (0x1000, b"abcde cde"),
-        (0x2000, b"cde"),
-        (0x3000, b" abcd "),
+        (0, Some(b"cde abc ab".as_slice())),
+        (0x1000, Some(b"abcde cde")),
+        (0x2000, Some(b"cde")),
+        (0x2A00, None),
+        (0x3000, Some(b" abcd ")),
     ];
     checker.check_fragmented(regions, true);
     checker.check_fragmented_full_matches(
@@ -59,14 +60,14 @@ rule a {
 
     let regions = &[
         // Start offset is 5
-        (0x1000, b"01234abbbbcde".as_slice()),
+        (0x1000, Some(b"01234abbbbcde".as_slice())),
         // Start offset is 0, but reverse validation starts after 5: the previous start offset
         // should not be taken into account or the reverse valid will fail.
-        (0x2000, b"a123456789bcde".as_slice()),
+        (0x2000, Some(b"a123456789bcde".as_slice())),
         // Start offset is 10
-        (0x3000, b"0123456789abcde".as_slice()),
+        (0x3000, Some(b"0123456789abcde".as_slice())),
         // Start offset is 1
-        (0x4000, b" abcde".as_slice()),
+        (0x4000, Some(b" abcde".as_slice())),
     ];
     checker.check_fragmented(regions, true);
     checker.check_fragmented_full_matches(
@@ -113,14 +114,14 @@ rule a {
 
     let regions = &[
         // Start offset is 5
-        (0x1000, b"01234abbbbcde".as_slice()),
+        (0x1000, Some(b"01234abbbbcde".as_slice())),
         // Start offset is 0, but reverse validation starts after 5: the previous start offset
         // should not be taken into account or the reverse valid will fail.
-        (0x2000, b"a123456789bcde".as_slice()),
+        (0x2000, Some(b"a123456789bcde".as_slice())),
         // Start offset is 10
-        (0x3000, b"0123456789abcde".as_slice()),
+        (0x3000, Some(b"0123456789abcde".as_slice())),
         // Start offset is 1
-        (0x4000, b" abcde".as_slice()),
+        (0x4000, Some(b" abcde".as_slice())),
     ];
     checker.check_fragmented(regions, true);
 }
@@ -139,10 +140,23 @@ rule a {
     );
 
     // Disjoint region, should not match
-    checker.check_fragmented(&[(0, b"ab"), (1000, b"cd")], false);
+    checker.check_fragmented(&[(0, Some(b"ab")), (1000, Some(b"cd"))], false);
     // Adjacent region. It does not work, but we could imagine a match mode
     // where it does.
-    checker.check_fragmented(&[(0, b"ab"), (2, b"cd")], false);
+    checker.check_fragmented(&[(0, Some(b"ab")), (2, Some(b"cd"))], false);
+}
+
+#[test]
+fn test_fragmented_empty() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    condition:
+        true
+}"#,
+    );
+
+    checker.check_fragmented(&[(0, None), (10, None)], true);
 }
 
 #[test]
@@ -155,8 +169,8 @@ rule a {
 }"#,
     );
     checker.check(b"0123456789", true);
-    checker.check_fragmented(&[(0, b"0123456789")], false);
-    checker.check_fragmented(&[(0, b"01234"), (5, b"56789")], false);
+    checker.check_fragmented(&[(0, Some(b"0123456789"))], false);
+    checker.check_fragmented(&[(0, Some(b"01234")), (5, Some(b"56789"))], false);
 
     let mut checker = Checker::new(
         r#"
@@ -166,7 +180,7 @@ rule a {
 }"#,
     );
     checker.check(b"0", false);
-    checker.check_fragmented(&[(0, b"0")], true);
+    checker.check_fragmented(&[(0, Some(b"0"))], true);
 }
 
 #[test]
@@ -180,25 +194,28 @@ rule a {
     );
 
     let data = std::iter::repeat(0).take(2000).collect::<Vec<_>>();
-    checker.check_fragmented(&[(0, &data)], false);
+    checker.check_fragmented(&[(0, Some(&data))], false);
 
     let data = std::iter::repeat(0)
         .take(1000)
         .chain([0x78, 0x56, 0x34, 0x12])
         .collect::<Vec<_>>();
-    checker.check_fragmented(&[(0, &data)], true);
-    checker.check_fragmented(&[(0, &data[1..])], false);
-    checker.check_fragmented(&[(200, &data[200..])], true);
-    checker.check_fragmented(&[(200, &data[201..])], false);
-    checker.check_fragmented(&[(200, &data[199..])], false);
-    checker.check_fragmented(&[(500, b"aaa"), (800, &data[800..])], true);
+    checker.check_fragmented(&[(0, Some(&data))], true);
+    checker.check_fragmented(&[(0, Some(&data[1..]))], false);
+    checker.check_fragmented(&[(200, Some(&data[200..]))], true);
+    checker.check_fragmented(&[(200, Some(&data[201..]))], false);
+    checker.check_fragmented(&[(200, Some(&data[199..]))], false);
+    checker.check_fragmented(&[(500, Some(b"aaa")), (800, Some(&data[800..]))], true);
 
     // Check when at the limit
-    checker.check_fragmented(&[(1000, &[0x78, 0x56, 0x34, 0x12])], true);
-    checker.check_fragmented(&[(1000, &[0x78, 0x56, 0x34, 0x12, 0])], true);
-    checker.check_fragmented(&[(999, &[0, 0x78, 0x56, 0x34, 0x12])], true);
-    checker.check_fragmented(&[(1000, &[0x78, 0x56]), (1002, &[0x34, 0x12])], false);
-    checker.check_fragmented(&[(1050, b"")], false);
+    checker.check_fragmented(&[(1000, Some(&[0x78, 0x56, 0x34, 0x12]))], true);
+    checker.check_fragmented(&[(1000, Some(&[0x78, 0x56, 0x34, 0x12, 0]))], true);
+    checker.check_fragmented(&[(999, Some(&[0, 0x78, 0x56, 0x34, 0x12]))], true);
+    checker.check_fragmented(
+        &[(1000, Some(&[0x78, 0x56])), (1002, Some(&[0x34, 0x12]))],
+        false,
+    );
+    checker.check_fragmented(&[(1050, Some(b""))], false);
 }
 
 #[test]
@@ -215,23 +232,42 @@ fn test_fragmented_entrypoint() {
     let mut undefined_checker = Checker::new("rule a { condition: not defined entrypoint }");
     undefined_checker.set_process_memory_flag();
 
-    undefined_checker.check_fragmented(&[(0, b"")], true);
+    undefined_checker.check_fragmented(&[(0, Some(b""))], true);
 
-    checker(0x8048060).check_fragmented(&[(0, ELF32_FILE)], true);
-    checker(0x8048060 + 1000).check_fragmented(&[(0, b"a"), (500, b"b"), (1000, ELF32_FILE)], true);
+    checker(0x8048060).check_fragmented(&[(0, Some(ELF32_FILE))], true);
+    checker(0x8048060 + 1000).check_fragmented(
+        &[(0, Some(b"a")), (500, Some(b"b")), (1000, Some(ELF32_FILE))],
+        true,
+    );
 
-    checker(0x400080 + 500).check_fragmented(&[(500, ELF64_FILE)], true);
+    checker(0x400080 + 500).check_fragmented(&[(500, Some(ELF64_FILE))], true);
 
     // First one found wins
-    checker(0x8048060 + 500)
-        .check_fragmented(&[(0, b"a"), (500, ELF32_FILE), (1000, ELF64_FILE)], true);
-    checker(0x400080 + 500)
-        .check_fragmented(&[(0, b"a"), (500, ELF64_FILE), (1000, ELF32_FILE)], true);
+    checker(0x8048060 + 500).check_fragmented(
+        &[
+            (0, Some(b"a")),
+            (500, Some(ELF32_FILE)),
+            (1000, Some(ELF64_FILE)),
+        ],
+        true,
+    );
+    checker(0x400080 + 500).check_fragmented(
+        &[
+            (0, Some(b"a")),
+            (500, Some(ELF64_FILE)),
+            (1000, Some(ELF32_FILE)),
+        ],
+        true,
+    );
 
     // an elf that is not ET_EXEC is ignored
-    undefined_checker.check_fragmented(&[(0, b"a"), (500, ELF32_SHAREDOBJ)], true);
+    undefined_checker.check_fragmented(&[(0, Some(b"a")), (500, Some(ELF32_SHAREDOBJ))], true);
     checker(0x8048060 + 1000).check_fragmented(
-        &[(0, b"a"), (500, ELF32_SHAREDOBJ), (1000, ELF32_FILE)],
+        &[
+            (0, Some(b"a")),
+            (500, Some(ELF32_SHAREDOBJ)),
+            (1000, Some(ELF32_FILE)),
+        ],
         true,
     );
 
@@ -240,23 +276,33 @@ fn test_fragmented_entrypoint() {
     let pe64 = std::fs::read("tests/assets/libyara/data/pe_mingw").unwrap();
     let dll = std::fs::read("tests/assets/libyara/data/mtxex.dll").unwrap();
 
-    checker(0x14E0).check_fragmented(&[(0, &pe32)], true);
-    checker(0x14E0 + 1000).check_fragmented(&[(0, b"a"), (1000, &pe32)], true);
+    checker(0x14E0).check_fragmented(&[(0, Some(&pe32))], true);
+    checker(0x14E0 + 1000).check_fragmented(&[(0, Some(b"a")), (1000, Some(&pe32))], true);
 
-    checker(0x14F0).check_fragmented(&[(0, &pe64)], true);
-    checker(0x14F0 + 1000).check_fragmented(&[(0, b"a"), (1000, &pe64)], true);
+    checker(0x14F0).check_fragmented(&[(0, Some(&pe64))], true);
+    checker(0x14F0 + 1000).check_fragmented(&[(0, Some(b"a")), (1000, Some(&pe64))], true);
 
     // DLL is ignored
-    undefined_checker.check_fragmented(&[(0, &dll)], true);
-    checker(0x14F0 + 1000).check_fragmented(&[(0, &dll), (1000, &pe64)], true);
+    undefined_checker.check_fragmented(&[(0, Some(&dll))], true);
+    checker(0x14F0 + 1000).check_fragmented(&[(0, Some(&dll)), (1000, Some(&pe64))], true);
 
     // first one picked
     checker(0x8048060 + 1000).check_fragmented(
-        &[(0, b"a"), (500, &dll), (1000, ELF32_FILE), (2000, &pe32)],
+        &[
+            (0, Some(b"a")),
+            (500, Some(&dll)),
+            (1000, Some(ELF32_FILE)),
+            (2000, Some(&pe32)),
+        ],
         true,
     );
     checker(0x14E0 + 1000).check_fragmented(
-        &[(0, b"a"), (500, &dll), (1000, &pe32), (2000, ELF32_FILE)],
+        &[
+            (0, Some(b"a")),
+            (500, Some(&dll)),
+            (1000, Some(&pe32)),
+            (2000, Some(ELF32_FILE)),
+        ],
         true,
     );
 }
@@ -284,14 +330,17 @@ rule dll {
     let pe64 = std::fs::read("tests/assets/libyara/data/pe_mingw").unwrap();
     let dll = std::fs::read("tests/assets/libyara/data/mtxex.dll").unwrap();
 
-    checker.check_fragmented_full_matches(&[(0, &pe32)], vec![("default:pe32".to_owned(), vec![])]);
     checker.check_fragmented_full_matches(
-        &[(0, b"a"), (1000, &pe64), (2000, &pe32)],
+        &[(0, Some(&pe32))],
+        vec![("default:pe32".to_owned(), vec![])],
+    );
+    checker.check_fragmented_full_matches(
+        &[(0, Some(b"a")), (1000, Some(&pe64)), (2000, Some(&pe32))],
         vec![("default:pe64".to_owned(), vec![])],
     );
-    checker.check_fragmented_full_matches(&[(0, &dll), (1000, b"b")], vec![]);
+    checker.check_fragmented_full_matches(&[(0, Some(&dll)), (1000, Some(b"b"))], vec![]);
     checker.check_fragmented_full_matches(
-        &[(0, &dll), (1000, b"b"), (2000, &pe32)],
+        &[(0, Some(&dll)), (1000, Some(b"b")), (2000, Some(&pe32))],
         vec![("default:pe32".to_owned(), vec![])],
     );
 }
@@ -318,21 +367,30 @@ rule so {
     checker.set_process_memory_flag();
 
     checker.check_fragmented_full_matches(
-        &[(0, ELF32_FILE)],
+        &[(0, Some(ELF32_FILE))],
         vec![("default:elf32".to_owned(), vec![])],
     );
 
     // Should stop when finding the first one, and ignore the second one
     checker.check_fragmented_full_matches(
-        &[(0, b"a"), (1000, ELF64_FILE), (2000, ELF32_FILE)],
+        &[
+            (0, Some(b"a")),
+            (1000, Some(ELF64_FILE)),
+            (2000, Some(ELF32_FILE)),
+        ],
         vec![("default:elf64".to_owned(), vec![])],
     );
 
     // Should ignore a SO file
-    checker.check_fragmented_full_matches(&[(0, ELF32_SHAREDOBJ), (1000, b"b")], vec![]);
+    checker
+        .check_fragmented_full_matches(&[(0, Some(ELF32_SHAREDOBJ)), (1000, Some(b"b"))], vec![]);
 
     checker.check_fragmented_full_matches(
-        &[(0, ELF32_SHAREDOBJ), (1000, b"b"), (2000, ELF32_FILE)],
+        &[
+            (0, Some(ELF32_SHAREDOBJ)),
+            (1000, Some(b"b")),
+            (2000, Some(ELF32_FILE)),
+        ],
         vec![("default:elf32".to_owned(), vec![])],
     );
 }
@@ -358,13 +416,17 @@ rule macho64 {
     checker.set_process_memory_flag();
 
     checker.check_fragmented_full_matches(
-        &[(0, macho32)],
+        &[(0, Some(macho32))],
         vec![("default:macho32".to_owned(), vec![])],
     );
 
     // Should stop when finding the first one, and ignore the second one
     checker.check_fragmented_full_matches(
-        &[(0, b"a"), (1000, macho64), (2000, macho32)],
+        &[
+            (0, Some(b"a")),
+            (1000, Some(macho64)),
+            (2000, Some(macho32)),
+        ],
         vec![("default:macho64".to_owned(), vec![])],
     );
 }
