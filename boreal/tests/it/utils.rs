@@ -427,6 +427,40 @@ impl Checker {
         }
     }
 
+    #[track_caller]
+    pub fn check_process(&mut self, pid: u32, expected_res: bool) {
+        let res = match self.scanner.scan_process(pid) {
+            Ok(v) => {
+                self.last_err = None;
+                v
+            }
+            Err((err, v)) => {
+                if self.assert_success {
+                    panic!("scan failed: {:?}", err);
+                }
+                self.last_err = Some(err);
+                v
+            }
+        };
+        let res = !res.matched_rules.is_empty();
+        assert_eq!(res, expected_res, "test failed for boreal");
+
+        if let Some(rules) = &self.yara_rules {
+            let mut scanner = rules.scanner().unwrap();
+            match scanner.scan_process(pid) {
+                Ok(res) => {
+                    let res = !res.is_empty();
+                    assert_eq!(res, expected_res, "conformity test failed for libyara");
+                }
+                Err(err) => {
+                    if self.assert_success {
+                        panic!("yara scan failed: {:?}", err);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn scanner(&self) -> Scanner {
         Scanner {
             scanner: self.scanner.clone(),

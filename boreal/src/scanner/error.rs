@@ -8,6 +8,15 @@ pub enum ScanError {
 
     /// Error when reading the file to scan.
     CannotReadFile(std::io::Error),
+
+    /// Process scanning is not implemented on this operating system.
+    UnsupportedProcessScan,
+
+    /// Unknown process.
+    UnknownProcess,
+
+    /// Error when listing regions of a process before a scan.
+    CannotListProcessRegions(std::io::Error),
 }
 
 impl std::fmt::Display for ScanError {
@@ -15,6 +24,15 @@ impl std::fmt::Display for ScanError {
         match self {
             Self::Timeout => write!(f, "timeout"),
             Self::CannotReadFile(err) => write!(f, "cannot read file to scan: {err}"),
+            Self::UnsupportedProcessScan => {
+                write!(f, "process scanning is not implemented on this OS")
+            }
+            Self::UnknownProcess => {
+                write!(f, "unknown process")
+            }
+            Self::CannotListProcessRegions(error) => {
+                write!(f, "error listing memory regions of process: {error}")
+            }
         }
     }
 }
