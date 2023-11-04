@@ -18,6 +18,7 @@ mod error;
 pub use error::ScanError;
 mod params;
 pub use params::ScanParams;
+mod process;
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
 ///
@@ -191,6 +192,21 @@ impl Scanner {
         }) {
             Ok(mmap) => self.scan_mem(&mmap),
             Err(err) => Err((ScanError::CannotReadFile(err), ScanResult::default())),
+        }
+    }
+
+    /// Scan the memory of a running process.
+    ///
+    /// FIXME improve this doc
+    #[doc(hidden)]
+    pub fn scan_process(&self, pid: u32) -> Result<ScanResult, (ScanError, ScanResult)> {
+        match process::process_memory(pid) {
+            Ok(memory) => self.inner.scan(
+                Memory::new_fragmented(memory),
+                &self.scan_params,
+                &self.external_symbols_values,
+            ),
+            Err(err) => Err((err, ScanResult::default())),
         }
     }
 

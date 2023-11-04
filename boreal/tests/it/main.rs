@@ -30,6 +30,9 @@ mod fragmented;
 // Tests related to different limits set.
 mod limits;
 
+// Tests related to process memory scanning
+mod process;
+
 // Tests related to modules
 #[cfg(feature = "object")]
 mod elf;
