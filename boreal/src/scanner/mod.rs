@@ -14,6 +14,8 @@ use crate::timeout::TimeoutChecker;
 pub use crate::evaluator::variable::StringMatch;
 
 mod ac_scan;
+mod error;
+pub use error::ScanError;
 mod params;
 pub use params::ScanParams;
 
@@ -296,8 +298,7 @@ impl Inner {
 
         let timeout = match self.do_scan(&mut scan_data) {
             Ok(()) => false,
-            Err(EvalError::Undecidable) => unreachable!(),
-            Err(EvalError::Timeout) => true,
+            Err(ScanError::Timeout) => true,
         };
 
         ScanResult {
@@ -311,7 +312,7 @@ impl Inner {
     fn do_scan<'scanner>(
         &'scanner self,
         scan_data: &mut ScanData<'scanner, '_>,
-    ) -> Result<(), EvalError> {
+    ) -> Result<(), ScanError> {
         match scan_data.mem {
             Memory::Direct(mem) => {
                 // We can evaluate module values and then try to evaluate rules without matches.
@@ -334,7 +335,7 @@ impl Inner {
 
                     match res {
                         Ok(()) => return Ok(()),
-                        Err(EvalError::Timeout) => return Err(EvalError::Timeout),
+                        Err(EvalError::Timeout) => return Err(ScanError::Timeout),
                         Err(EvalError::Undecidable) => {
                             // Reset the rules that might have matched already.
                             scan_data.matched_rules.clear();
@@ -368,12 +369,16 @@ impl Inner {
         {
             let var_matches = collect_nb_elems(&mut ac_matches_iter, rule.nb_variables);
 
-            let res = evaluate_rule(
+            let res = match evaluate_rule(
                 rule,
                 Some(evaluator::variable::VarMatches::new(&var_matches)),
                 &previous_results,
                 scan_data,
-            )?;
+            ) {
+                Ok(res) => res,
+                Err(EvalError::Undecidable) => unreachable!(),
+                Err(EvalError::Timeout) => return Err(ScanError::Timeout),
+            };
 
             if is_global && !res {
                 scan_data.matched_rules.clear();
@@ -453,7 +458,7 @@ impl Inner {
         Ok(())
     }
 
-    fn do_memory_scan(&self, scan_data: &mut ScanData) -> Result<Vec<Vec<StringMatch>>, EvalError> {
+    fn do_memory_scan(&self, scan_data: &mut ScanData) -> Result<Vec<Vec<StringMatch>>, ScanError> {
         let mut matches = vec![Vec::new(); self.variables.len()];
 
         #[cfg(feature = "profiling")]

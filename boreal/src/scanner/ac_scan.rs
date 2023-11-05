@@ -4,13 +4,11 @@ use std::collections::HashMap;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
-use super::{EvalError, StringMatch};
+use super::{ScanData, ScanError, StringMatch};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
 use crate::memory::MemoryRegion;
-
-use super::ScanData;
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -121,11 +119,11 @@ impl AcScan {
         variables: &[Variable],
         scan_data: &mut ScanData,
         matches: &mut [Vec<StringMatch>],
-    ) -> Result<(), EvalError> {
+    ) -> Result<(), ScanError> {
         // Iterate over aho-corasick matches, validating those matches
         for mat in self.aho.find_overlapping_iter(region.mem) {
             if scan_data.check_timeout() {
-                return Err(EvalError::Timeout);
+                return Err(ScanError::Timeout);
             }
             self.handle_possible_match(region, &mat, variables, scan_data, matches);
         }
