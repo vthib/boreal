@@ -2,7 +2,7 @@ use crate::utils::{build_rule, check, check_err, Checker};
 
 #[test]
 fn test_variable() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -52,7 +52,7 @@ fn test_variable_err() {
 #[test]
 fn test_variable_regex_modifiers() {
     // \x76 is 'v'
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r"
 rule a {
     strings:
@@ -103,7 +103,7 @@ rule a {
     checker.check(b"aAaQUu", false);
 
     // Test fullword with raw matcher
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -119,7 +119,7 @@ rule a {
     checker.check(b"ab", false);
     checker.check(b"b", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -138,7 +138,7 @@ rule a {
     // second match: ` yay |` => fullword, match
     checker.check(b"a| yay |", true);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -178,7 +178,7 @@ fn to_wide(e: &[u8]) -> Vec<u8> {
 #[test]
 fn test_variable_regex_wide() {
     // Without yara, it does not allow empty regex nodes
-    let checker = Checker::new_without_yara(
+    let mut checker = Checker::new_without_yara(
         r#"
         rule a {
             strings:
@@ -190,14 +190,14 @@ fn test_variable_regex_wide() {
     checker.check(b"", false);
     checker.check(b"\0", true);
 
-    let checker = build_checker(".", "wide");
+    let mut checker = build_checker(".", "wide");
     checker.check(b"", false);
     checker.check(b"\0", false);
     checker.check(b"a", false);
     checker.check(b"a\0", true);
     checker.check(b"ab", false);
 
-    let checker = build_checker("abc", "wide");
+    let mut checker = build_checker("abc", "wide");
     checker.check(b"abc", false);
     checker.check(b"a\0b\0c\0", true);
     checker.check(b"a\0b\0c", false);
@@ -205,7 +205,7 @@ fn test_variable_regex_wide() {
     checker.check(b"\0a\0b\0c\0", true);
     checker.check(b"\0a\0b\0c", false);
 
-    let checker = build_checker("a+b|cd{2,}", "wide");
+    let mut checker = build_checker("a+b|cd{2,}", "wide");
     checker.check(b"ab", false);
     checker.check(b"aaab", false);
     checker.check(b"abcd", false);
@@ -219,7 +219,7 @@ fn test_variable_regex_wide() {
     checker.check(b"c\0d\0d\0", true);
     checker.check(b"c\0d\0d\0d\0d\0", true);
 
-    let checker = build_checker("<[a-z][0-9]*>", "wide");
+    let mut checker = build_checker("<[a-z][0-9]*>", "wide");
     checker.check(b"<a>", false);
     checker.check(b"<\x00a\x00>\x00", true);
     checker.check(b"<\x00a>\x00", false);
@@ -232,7 +232,7 @@ fn test_variable_regex_wide() {
     checker.check(b"<\x00a\x009\x00d\x00>\x00", false);
     checker.check(b"a\x009\x00", false);
 
-    let checker = build_checker(r"\d[^abc]d$", "wide");
+    let mut checker = build_checker(r"\d[^abc]d$", "wide");
     checker.check(b"13d", false);
     checker.check(b"1\x003\x00d\x00", true);
     checker.check(b"1\x003\x00d", false);
@@ -242,7 +242,7 @@ fn test_variable_regex_wide() {
     checker.check(b"1\x00d\x00e\x00", false);
     checker.check(b"1\x00d\x00d\x00", true);
 
-    let checker = build_checker(r"a(b|c+)[def][^g]", "wide ascii");
+    let mut checker = build_checker(r"a(b|c+)[def][^g]", "wide ascii");
     checker.check(b"abdf", true);
     checker.check(b"a\0b\0d\0f\0", true);
     checker.check(b"a\0b\0d\0f", false);
@@ -252,7 +252,7 @@ fn test_variable_regex_wide() {
     checker.check(b"a\0c\0c\0c\0f\0\0\0", true);
     checker.check(b"a\0c\0c\0c\0f\0\0", false);
 
-    let checker = build_checker(r"d\b", "wide ascii");
+    let mut checker = build_checker(r"d\b", "wide ascii");
     checker.check(b"d", true);
     checker.check(b"d\0", true);
     checker.check(b"d.", true);
@@ -262,7 +262,7 @@ fn test_variable_regex_wide() {
     checker.check(b"da", false);
     checker.check(b"da\0", false);
 
-    let checker = build_checker(r"ad\b", "wide ascii");
+    let mut checker = build_checker(r"ad\b", "wide ascii");
     checker.check(b"ad", true);
     checker.check(b"ad\0", true);
     checker.check(b"ad.", true);
@@ -291,7 +291,7 @@ fn test_regex_wide_fullword(regex: &str, mem_ascii: &[u8]) {
     let mem_wide = &to_wide(mem_ascii);
 
     // Ascii fullword
-    let checker = build_checker(regex, "ascii fullword");
+    let mut checker = build_checker(regex, "ascii fullword");
     checker.check(&join(mem_ascii, b"", b""), true);
     checker.check(&join(mem_ascii, b"a", b""), false);
     checker.check(&join(mem_ascii, b"", b"a"), false);
@@ -300,7 +300,7 @@ fn test_regex_wide_fullword(regex: &str, mem_ascii: &[u8]) {
     checker.check(&join(mem_ascii, b"<", b">"), true);
 
     // Wide fullword
-    let checker = build_checker(regex, "wide fullword");
+    let mut checker = build_checker(regex, "wide fullword");
     checker.check(&join(mem_wide, b"", b""), true);
     checker.check(&join(mem_wide, b"a", b""), true);
     checker.check(&join(mem_wide, b"", b"a"), true);
@@ -315,7 +315,7 @@ fn test_regex_wide_fullword(regex: &str, mem_ascii: &[u8]) {
     checker.check(&join(mem_wide, b"a\0<\0", b">\0a\0"), true);
 
     // Ascii wide fullword
-    let checker = build_checker(regex, "ascii wide fullword");
+    let mut checker = build_checker(regex, "ascii wide fullword");
     checker.check(&join(mem_ascii, b"", b""), true);
     checker.check(&join(mem_ascii, b"a", b""), false);
     checker.check(&join(mem_ascii, b"", b"a"), false);
@@ -360,7 +360,7 @@ fn test_variable_regex_wide_fullword() {
 fn test_variable_regex_wide_fullword_raw() {
     // Test the wide fullword behavior with the "raw" matcher.
     // To ensure we get the raw matcher, we use a anchor.
-    let checker = build_checker("^ab", "ascii wide fullword");
+    let mut checker = build_checker("^ab", "ascii wide fullword");
     let mem_ascii = b"ab";
     let mem_wide = b"a\0b\0";
     checker.check(&join(mem_ascii, b"", b""), true);
@@ -375,7 +375,7 @@ fn test_variable_regex_wide_fullword_raw() {
     checker.check(&join(mem_wide, b"", b">\0"), true);
     checker.check(&join(mem_wide, b"", b"a\0"), false);
 
-    let checker = build_checker("ab$", "ascii wide fullword");
+    let mut checker = build_checker("ab$", "ascii wide fullword");
     checker.check(&join(mem_ascii, b"", b""), true);
     checker.check(&join(mem_ascii, b"a", b""), false);
     checker.check(&join(mem_ascii, b"<", b""), true);
@@ -389,7 +389,7 @@ fn test_variable_regex_wide_fullword_raw() {
     checker.check(&join(mem_wide, b"a\0", b""), false);
 
     // Do the same with word boundaries instead of fullword modifier
-    let checker = build_checker(r"\bab$", "ascii wide");
+    let mut checker = build_checker(r"\bab$", "ascii wide");
     checker.check(&join(mem_ascii, b"", b""), true);
     checker.check(&join(mem_ascii, b"a", b""), false);
     checker.check(&join(mem_ascii, b"<", b""), true);
@@ -402,7 +402,7 @@ fn test_variable_regex_wide_fullword_raw() {
     checker.check(&join(mem_wide, b"<\0", b""), true);
     checker.check(&join(mem_wide, b"a\0", b""), false);
 
-    let checker = build_checker(r"^a\x00b\x00", "ascii wide fullword");
+    let mut checker = build_checker(r"^a\x00b\x00", "ascii wide fullword");
     let mem_ascii = b"a\0b\0";
     let mem_wide = &to_wide(mem_ascii);
     checker.check(&join(mem_ascii, b"", b""), true);
@@ -423,7 +423,7 @@ fn test_variable_regex_wide_fullword_raw() {
 fn test_variable_regex_wide_word_boundaries() {
     // Test regex consisting of a single word boundary. No-one will ever use this regex, but
     // it helps comparing with libyara
-    let checker = build_checker(r"\b", "wide");
+    let mut checker = build_checker(r"\b", "wide");
     checker.check(b"", false);
     checker.check(b"\0", false);
     // This one has different behavior from libyara. Does it matter? no, no-one will every use
@@ -432,7 +432,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check_libyara(b"a\0", false);
     checker.check(b"\0a", false);
 
-    let checker = build_checker(r"\B", "wide");
+    let mut checker = build_checker(r"\B", "wide");
     checker.check(b"", false);
     // These ones have different behavior from libyara. Does it matter? no, no-one will every use
     // this regex.
@@ -444,7 +444,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check_libyara(b"\0a", false);
 
     // Check word boundary at start
-    let checker = build_checker(r"\ba+", "wide");
+    let mut checker = build_checker(r"\ba+", "wide");
     checker.check(b"", false);
     checker.check(b"a", false);
     checker.check(b"a\0", true);
@@ -456,7 +456,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(b"b\0a\0", false);
     checker.check(b"[\0a\0", true);
     checker.check(b"b\ra\0", true);
-    let checker = build_checker(r"\Ba", "wide");
+    let mut checker = build_checker(r"\Ba", "wide");
     checker.check(b"", false);
     checker.check(b"a", false);
     checker.check(b"a\0", false);
@@ -470,7 +470,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(b"b\ra\0", false);
 
     // Check word boundary at end
-    let checker = build_checker(r"a+\b", "wide");
+    let mut checker = build_checker(r"a+\b", "wide");
     checker.check(b"", false);
     checker.check(b"a", false);
     checker.check(b"a\0", true);
@@ -482,7 +482,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(b"b\0a\0", true);
     checker.check(b"[\0a\0", true);
     checker.check(b"b\ra\0", true);
-    let checker = build_checker(r"a\B", "wide");
+    let mut checker = build_checker(r"a\B", "wide");
     checker.check(b"", false);
     checker.check(b"a", false);
     checker.check(b"a\0", false);
@@ -496,7 +496,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(b"b\ra\0", false);
 
     // Check word boundary in the middle
-    let checker = build_checker(r"<.+\bA\b.+>", "wide");
+    let mut checker = build_checker(r"<.+\bA\b.+>", "wide");
     checker.check(&to_wide(b""), false);
     checker.check(&to_wide(b"<>"), false);
     checker.check(&to_wide(b"<A>"), false);
@@ -512,7 +512,7 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(&to_wide(b"<a[AA.AAA]>"), false);
     checker.check(&to_wide(b"<a[AA>A.>"), true);
     checker.check(&to_wide(b"<a[AA>AA.>"), false);
-    let checker = build_checker(r"<.+\BA\B.+>", "wide");
+    let mut checker = build_checker(r"<.+\BA\B.+>", "wide");
     checker.check(&to_wide(b""), false);
     checker.check(&to_wide(b"<>"), false);
     checker.check(&to_wide(b"<A>"), false);
@@ -530,14 +530,14 @@ fn test_variable_regex_wide_word_boundaries() {
     checker.check(&to_wide(b"<a[AA>AA.>"), false);
 
     // Test word boundaries do not use unicode syntax
-    let checker = build_checker(r"<\w+\b.a>", "wide");
+    let mut checker = build_checker(r"<\w+\b.a>", "wide");
     checker.check(&to_wide(b"<ave|a>"), true);
     checker.check(&to_wide(b"<aveva>"), false);
     checker.check(&to_wide("<avéva>".as_bytes()), false);
     checker.check(&to_wide("<avé|a>".as_bytes()), false);
 
     // Test word boundaries inside a repetition, regression test
-    let checker = build_checker(r"<(c\b.a){2}>", "wide");
+    let mut checker = build_checker(r"<(c\b.a){2}>", "wide");
     checker.check(&to_wide(b"<c|ac.a>"), true);
     checker.check(&to_wide(b"<cbac.a>"), false);
     checker.check(&to_wide(b"<c|acba>"), false);
@@ -564,7 +564,7 @@ rule a {{
 
     // This works, because we recheck after the initial match, and the repetition is greedy, hence
     // the post match will only reduce the match.
-    let checker = build_checker(r"a.{0,4}\b", "");
+    let mut checker = build_checker(r"a.{0,4}\b", "");
     checker.check(b"z a", true);
     checker.check(b"zz a1", true);
     checker.check(b"zzz a12", true);
@@ -573,7 +573,7 @@ rule a {{
     checker.check(b"zzzzz a1234>", true);
     checker.check(b"zzzz a12>34", true);
     checker.check(b"zzzz a>>>34", true);
-    let checker = build_checker(r"a.{0,4}\b", "wide");
+    let mut checker = build_checker(r"a.{0,4}\b", "wide");
     checker.check(&to_wide(b"zz a"), true);
     checker.check(&to_wide(b"zzzz a1"), true);
     checker.check(&to_wide(b"zzzzzz a12"), true);
@@ -585,7 +585,7 @@ rule a {{
 
     // This works, because we include mmore than the initial match, so the post check can improve
     // the non greedy repetition until it finds a boundary.
-    let checker = build_checker(r"a.{0,4}?\b", "");
+    let mut checker = build_checker(r"a.{0,4}?\b", "");
     checker.check(b"z a", true);
     checker.check(b"zz a1", true);
     checker.check(b"zzz a12", true);
@@ -594,7 +594,7 @@ rule a {{
     checker.check(b"zzzzz a1234>", true);
     checker.check(b"zzz a12>34", true);
     checker.check(b"z a>>>34", true);
-    let checker = build_checker(r"a.{0,4}?\b", "wide");
+    let mut checker = build_checker(r"a.{0,4}?\b", "wide");
     checker.check(&to_wide(b"zz a"), true);
     checker.check(&to_wide(b"zzzz a1"), true);
     checker.check(&to_wide(b"zzzzzz a12"), true);
@@ -608,7 +608,7 @@ rule a {{
 #[test]
 fn test_variable_boundary_ac_confirm() {
     // Make sure the boundary is taken into account when confirming an ac match.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r"
 rule a {
     strings:
@@ -627,7 +627,7 @@ rule a {
 #[test]
 fn test_variable_string_wide_ascii() {
     // \x76 is 'v'
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -666,7 +666,7 @@ rule a {
     checker.check(b"Zbar:", false);
     checker.check(b"0bAR:", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -742,9 +742,9 @@ rule a {
     condition:
         any of them
 }"#;
-    let checker = Checker::new(rule);
+    let mut checker = Checker::new(rule);
 
-    let check_xor = |mem: &[u8], xor_byte: u8, expected_res: bool| {
+    let mut check_xor = |mem: &[u8], xor_byte: u8, expected_res: bool| {
         let mut out = Vec::new();
         out.extend(b"abc");
         out.extend(mem.iter().map(|c| c ^ xor_byte));
@@ -790,7 +790,7 @@ rule a {
 #[test]
 fn test_variable_string_xor_fullword() {
     // Test fullword with xor
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -802,13 +802,14 @@ rule a {
 }"#,
     );
 
-    let check_xor = |mem: &[u8], prefix: &[u8], suffix: &[u8], xor_byte: u8, expected_res: bool| {
-        let mut out = Vec::new();
-        out.extend(prefix);
-        out.extend(mem.iter().map(|c| c ^ xor_byte));
-        out.extend(suffix);
-        checker.check(&out, expected_res);
-    };
+    let mut check_xor =
+        |mem: &[u8], prefix: &[u8], suffix: &[u8], xor_byte: u8, expected_res: bool| {
+            let mut out = Vec::new();
+            out.extend(prefix);
+            out.extend(mem.iter().map(|c| c ^ xor_byte));
+            out.extend(suffix);
+            checker.check(&out, expected_res);
+        };
 
     // ascii xor fullword
     let mem = b"rykard";
@@ -876,7 +877,7 @@ fn base64_encode<T: AsRef<[u8]>>(s: T) -> Vec<u8> {
 
 #[test]
 fn test_variable_base64_small() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -906,7 +907,7 @@ rule a {
 
 #[test]
 fn test_variable_base64() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -969,7 +970,7 @@ rule a {
 
 #[test]
 fn test_variable_base64wide() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1053,7 +1054,7 @@ rule a {
 
 #[test]
 fn test_variable_base64_base64wide() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1179,7 +1180,7 @@ rule a {
 
 #[test]
 fn test_variable_find() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
         rule a {
             strings:
@@ -1195,7 +1196,7 @@ fn test_variable_find() {
     checker.check(b"1234678", false);
     checker.check(b"465", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
         rule a {
             strings:
@@ -1210,7 +1211,7 @@ fn test_variable_find() {
     checker.check(b"44", false);
     checker.check(b"4\n5", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
         rule a {
             strings:
@@ -1225,7 +1226,7 @@ fn test_variable_find() {
     checker.check(b"fo", false);
     checker.check(b"FO", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
         rule a {
             strings:
@@ -1349,7 +1350,7 @@ fn test_variable_find_in_invalid() {
 
 #[test]
 fn test_variable_hex_string_masks() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1412,7 +1413,7 @@ rule a {
         )],
     );
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1465,7 +1466,7 @@ rule a {
 
 #[test]
 fn test_variable_hex_string_jumps() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1557,7 +1558,7 @@ rule a {
 
 #[test]
 fn test_variable_hex_string_alternations() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1620,7 +1621,7 @@ rule a {
 
 #[test]
 fn test_variable_hex_string_atoms() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1655,7 +1656,7 @@ rule a {
         )],
     );
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1700,7 +1701,7 @@ rule a {
 fn test_hex_string_atoms_multiple_matches() {
     // Define variables with the atom after some ungreedy repetitions.
     // This means that for one literal match, there might be multiple actual matches.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1766,7 +1767,7 @@ rule a {
     );
 
     // Do the same with greedy repetitions.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1852,7 +1853,7 @@ rule a {
 fn test_variable_hex_string_negation() {
     let input = (0_u8..=255_u8).collect::<Vec<_>>();
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1876,7 +1877,7 @@ rule a {
         )],
     );
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1900,7 +1901,7 @@ rule a {
         )],
     );
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1928,7 +1929,7 @@ rule a {
 #[test]
 fn test_variable_no_literals() {
     // Test a var with no literals extracted
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:

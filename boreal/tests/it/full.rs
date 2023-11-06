@@ -64,7 +64,7 @@ rule d {
         "2nd namespace",
     );
 
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
 
     checker.check_full_matches(
         b"word, got many words, some full fullwords, some non-fullword \

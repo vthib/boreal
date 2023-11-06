@@ -28,7 +28,7 @@
 //! let scanner = compiler.into_scanner();
 //!
 //! // Use this object to scan strings or files.
-//! let res = scanner.scan_mem(b"<\0t\0m\0p\0.\0d\0a\0t\0>\0");
+//! let res = scanner.scan_mem(b"<\0t\0m\0p\0.\0d\0a\0t\0>\0").unwrap();
 //! assert!(res.matched_rules.iter().any(|rule| rule.name == "example"));
 //!
 //! # Ok::<(), boreal::compiler::AddRuleError>(())

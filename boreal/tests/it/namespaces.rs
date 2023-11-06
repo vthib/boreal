@@ -13,7 +13,7 @@ rule bar { condition: tests.constants.one == 1 }"#,
         r#"
 rule foo { condition: tests.constants.two == 2 }"#,
     );
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
     checker.check_count(b"", 2);
 
     let mut compiler = Compiler::new();
@@ -28,7 +28,7 @@ rule bar { condition: tests.constants.one == 1 }"#,
 rule foo { condition: tests.constants.two == 2 }"#,
         "ns1",
     );
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
     checker.check_count(b"", 2);
 
     // But importing in one namespace does not bring it in others
@@ -61,7 +61,7 @@ fn test_namespaces_errors() {
     compiler.add_rules("rule a { condition: true }");
     compiler.add_rules_in_namespace("rule a { condition: true }", "ns1");
     compiler.add_rules_in_namespace("rule a { condition: true }", "ns2");
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
     checker.check_count(b"", 3);
 
     // Cannot depend on itself
@@ -84,7 +84,7 @@ fn test_rule_dependencies() {
     compiler.add_rules_in_namespace("rule a { strings: $c = /c/ condition: $c }", "ns1");
     compiler.add_rules_in_namespace("rule b { strings: $d = /d/ condition: a or $d }", "ns1");
 
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
     checker.check_rule_matches(b"", &[]);
 
     checker.check_rule_matches(b"a", &["default:a"]);
@@ -161,7 +161,7 @@ fn test_for_expression_rules() {
     compiler.add_rules("rule b2 { condition: 4 of (a0, a*) }");
     compiler.add_rules("rule b3 { condition: 50% of (a1, a2, a3) }");
 
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
     checker.check_rule_matches(b"", &[]);
 
     checker.check_rule_matches(b"a0", &["default:a0"]);
@@ -218,7 +218,7 @@ rule b2 { condition: tests.constants.two == 2 }
         "nsa",
     );
 
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
     checker.check_rule_matches(b"", &["default:a2", "default:a3", "nsa:tests", "nsa:b2"]);
     checker.check_rule_matches(
         b"<tests>",
@@ -347,7 +347,7 @@ rule f {
     compiler.add_file(&path.join("root.yar"));
     compiler.add_file_in_namespace(&path.join("root2.yar"), "ns2");
 
-    let checker = compiler.into_checker();
+    let mut checker = compiler.into_checker();
 
     checker.check_rule_matches(
         b"root2 aaaa bbbb cccc dddd eeee ffff",

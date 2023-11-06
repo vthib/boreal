@@ -7,7 +7,7 @@ use crate::utils::{compare_module_values_on_file, compare_module_values_on_mem, 
 
 #[test]
 fn test_non_elf() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
     import "elf"
 
