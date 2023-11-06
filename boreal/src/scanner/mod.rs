@@ -34,7 +34,7 @@ pub use params::ScanParams;
 /// let scanner = compiler.into_scanner();
 ///
 /// // Use the scanner to run the rules against byte strings or files.
-/// let scan_result = scanner.scan_mem(b"abc");
+/// let scan_result = scanner.scan_mem(b"abc").unwrap();
 /// assert_eq!(scan_result.matched_rules.len(), 1);
 /// # Ok::<(), boreal::compiler::AddRuleError>(())
 /// ```
@@ -53,7 +53,7 @@ pub use params::ScanParams;
 ///     let mut scanner = scanner.clone();
 ///     std::thread::spawn(move || {
 ///         scanner.define_symbol("extension", "exe");
-///         let res = scanner.scan_mem(b"");
+///         let res = scanner.scan_mem(b"").unwrap();
 ///         assert!(res.matched_rules.is_empty());
 ///     })
 /// };
@@ -61,7 +61,7 @@ pub use params::ScanParams;
 ///     let mut scanner = scanner.clone();
 ///     std::thread::spawn(move || {
 ///          scanner.define_symbol("extension", "pdf");
-///          let res = scanner.scan_mem(b"");
+///          let res = scanner.scan_mem(b"").unwrap();
 ///          assert_eq!(res.matched_rules.len(), 1);
 ///     })
 /// };
@@ -128,8 +128,15 @@ impl Scanner {
     /// Scan a byte slice.
     ///
     /// Returns a list of rules that matched on the given byte slice.
-    #[must_use]
-    pub fn scan_mem<'scanner>(&'scanner self, mem: &[u8]) -> ScanResult<'scanner> {
+    ///
+    /// # Errors
+    ///
+    /// Can fail if a timeout has been configured and is reached during the scan. Since results
+    /// can still have been partially computed, results are returned with the error.
+    pub fn scan_mem<'scanner>(
+        &'scanner self,
+        mem: &[u8],
+    ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
         self.inner.scan(
             Memory::Direct(mem),
             &self.scan_params,
@@ -143,10 +150,17 @@ impl Scanner {
     ///
     /// # Errors
     ///
-    /// Fails if the file at the given path cannot be read.
-    pub fn scan_file<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<ScanResult> {
-        let contents = std::fs::read(path.as_ref())?;
-        Ok(self.scan_mem(&contents))
+    /// Fails if the file at the given path cannot be read, or if a timeout has been configured
+    /// and is reached during the scan. Since results can still have been partially computed,
+    /// results are returned with the error.
+    pub fn scan_file<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> Result<ScanResult, (ScanError, ScanResult)> {
+        match std::fs::read(path.as_ref()) {
+            Ok(contents) => self.scan_mem(&contents),
+            Err(err) => Err((ScanError::ScannedFileRead(err), ScanResult::default())),
+        }
     }
 
     /// Scan a file using memmap to read from it.
@@ -155,7 +169,9 @@ impl Scanner {
     ///
     /// # Errors
     ///
-    /// Fails if the file at the given path cannot be opened or memory mapped.
+    /// Fails if the file at the given path cannot be opened or memory mapped, or if a timeout
+    /// has been configured and is reached during the scan. Since results can still have been
+    /// partially computed, results are returned with the error.
     ///
     /// # Safety
     ///
@@ -168,19 +184,22 @@ impl Scanner {
     pub unsafe fn scan_file_memmap<P: AsRef<std::path::Path>>(
         &self,
         path: P,
-    ) -> std::io::Result<ScanResult> {
-        let file = std::fs::File::open(path.as_ref())?;
-
-        // Safety: guaranteed by the safety contract of this function
-        let mmap = unsafe { memmap2::Mmap::map(&file)? };
-
-        Ok(self.scan_mem(&mmap))
+    ) -> Result<ScanResult, (ScanError, ScanResult)> {
+        match std::fs::File::open(path.as_ref()).and_then(|file| {
+            // Safety: guaranteed by the safety contract of this function
+            unsafe { memmap2::Mmap::map(&file) }
+        }) {
+            Ok(mmap) => self.scan_mem(&mmap),
+            Err(err) => Err((ScanError::ScannedFileRead(err), ScanResult::default())),
+        }
     }
 
     // FIXME: clean up proto and doc before release
     #[doc(hidden)]
-    #[must_use]
-    pub fn scan_fragmented(&self, regions: &[MemoryRegion]) -> ScanResult {
+    pub fn scan_fragmented<'scanner>(
+        &'scanner self,
+        regions: &[MemoryRegion],
+    ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
         self.inner.scan(
             Memory::Fragmented { regions },
             &self.scan_params,
@@ -280,7 +299,7 @@ impl Inner {
         mem: Memory,
         params: &'scanner ScanParams,
         external_symbols_values: &'scanner [ExternalValue],
-    ) -> ScanResult<'scanner> {
+    ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
         let mut scan_data = ScanData {
             mem,
             external_symbols_values,
@@ -296,16 +315,16 @@ impl Inner {
             entrypoint: None,
         };
 
-        let timeout = match self.do_scan(&mut scan_data) {
-            Ok(()) => false,
-            Err(ScanError::Timeout) => true,
-        };
-
-        ScanResult {
+        let res = self.do_scan(&mut scan_data);
+        let results = ScanResult {
             matched_rules: scan_data.matched_rules,
             module_values: scan_data.module_values.values,
-            timeout,
             statistics: scan_data.statistics,
+        };
+
+        match res {
+            Ok(()) => Ok(results),
+            Err(err) => Err((err, results)),
         }
     }
 
@@ -592,7 +611,7 @@ fn build_matched_rule<'a>(
 }
 
 /// Result of a scan
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ScanResult<'scanner> {
     /// List of rules that matched.
     pub matched_rules: Vec<MatchedRule<'scanner>>,
@@ -602,13 +621,7 @@ pub struct ScanResult<'scanner> {
     /// First element is the module name, second one is the dynamic values produced by the module.
     pub module_values: Vec<(&'static str, crate::module::Value)>,
 
-    /// Indicates if evaluation timed out.
-    ///
-    /// If true, this means that scanning was cut short because of a timeout, hence the returned
-    /// matched rules may be incomplete.
-    pub timeout: bool,
-
-    /// Statistics related to the scanning.
+    /// Statistics related to the scan.
     pub statistics: Option<statistics::Evaluation>,
 }
 
@@ -1291,7 +1304,6 @@ mod tests {
         test_type_traits_non_clonable(ScanResult {
             matched_rules: Vec::new(),
             module_values: Vec::new(),
-            timeout: false,
             statistics: None,
         });
         test_type_traits_non_clonable(MatchedRule {

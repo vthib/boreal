@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use boreal::scanner::ScanParams;
+use boreal::scanner::{ScanError, ScanParams};
 
 use crate::utils::{Checker, Compiler};
 
@@ -20,7 +20,7 @@ rule a {
     full_text.extend(std::iter::repeat(b'a').take(1024));
     full_text.push(b'b');
 
-    let checker = Checker::new(rule);
+    let mut checker = Checker::new(rule);
     checker.check_full_matches(
         &full_text,
         vec![
@@ -51,7 +51,7 @@ fn test_limit_string_max_nb_matches() {
     let mem: Vec<_> = std::iter::repeat(0).take(1_100_000).collect();
 
     // Default for boreal is limited to 1_000
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -79,7 +79,7 @@ rule a {
 
     // Do this with a non-atomizable regex, to check the limit is also done outside of the ac scan
     // pass.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -153,9 +153,10 @@ rule a {{
     condition: {infinite_cond}
 }}"
     ));
+    checker.assert_success = false;
     checker.set_scan_params(params.clone());
-    let res = checker.check_rule_matches(b"", &[]);
-    assert!(res.timeout);
+    checker.check_rule_matches(b"", &[]);
+    assert!(matches!(checker.last_err, Some(ScanError::Timeout)));
 
     // Same with global rule
     let mut checker = Checker::new_without_yara(&format!(
@@ -165,8 +166,9 @@ global rule a {{
 }}"
     ));
     checker.set_scan_params(params);
-    let res = checker.check_rule_matches(b"", &[]);
-    assert!(res.timeout);
+    checker.assert_success = false;
+    checker.check_rule_matches(b"", &[]);
+    assert!(matches!(checker.last_err, Some(ScanError::Timeout)));
 }
 
 #[test]
@@ -205,8 +207,9 @@ global rule second {{
     ));
     let mut checker = compiler.into_checker();
     checker.set_scan_params(params.clone());
-    let res = checker.check_rule_matches(b"aaa", &["default:first"]);
-    assert!(res.timeout);
+    checker.assert_success = false;
+    checker.check_rule_matches(b"aaa", &["default:first"]);
+    assert!(matches!(checker.last_err, Some(ScanError::Timeout)));
 
     // Normal rule that takes too long
     let mut compiler = Compiler::new_without_yara();
@@ -238,8 +241,9 @@ rule fourth { condition: true }
     );
     let mut checker = compiler.into_checker();
     checker.set_scan_params(params);
-    let res = checker.check_rule_matches(b"aaa", &["default:first", "default:second"]);
-    assert!(res.timeout);
+    checker.assert_success = false;
+    checker.check_rule_matches(b"aaa", &["default:first", "default:second"]);
+    assert!(matches!(checker.last_err, Some(ScanError::Timeout)));
 }
 
 #[test]
@@ -271,15 +275,16 @@ rule second {{
     let mut checker = compiler.into_checker();
     checker
         .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
+    checker.assert_success = false;
 
     let mem = vec![0; 10 * 1024 * 1024];
-    let res = checker.check_rule_matches(&mem, &[]);
-    assert!(res.timeout);
+    checker.check_rule_matches(&mem, &[]);
+    assert!(matches!(checker.last_err, Some(ScanError::Timeout)));
 }
 
 #[test]
 fn test_max_split_match_length_hex_string() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -310,7 +315,7 @@ rule a {
 
 #[test]
 fn test_max_split_match_length_regex() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -331,7 +336,7 @@ rule a {
     mem.extend(b"string");
     checker.check(&mem, false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:

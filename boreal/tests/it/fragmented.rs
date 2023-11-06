@@ -2,7 +2,7 @@ use crate::utils::Checker;
 
 #[test]
 fn test_fragmented_string_scan() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r"
 rule a {
     strings:
@@ -43,7 +43,7 @@ rule a {
 // Check strings matches do not handle spans across regions
 #[test]
 fn test_fragmented_cut() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -62,7 +62,7 @@ rule a {
 
 #[test]
 fn test_fragmented_filesize() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     condition:
@@ -73,7 +73,7 @@ rule a {
     checker.check_fragmented(&[(0, b"0123456789")], false);
     checker.check_fragmented(&[(0, b"01234"), (5, b"56789")], false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     condition:
@@ -86,7 +86,7 @@ rule a {
 
 #[test]
 fn test_fragmented_read_integer() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     condition:

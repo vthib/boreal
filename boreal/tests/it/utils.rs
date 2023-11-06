@@ -4,12 +4,15 @@ use std::sync::Arc;
 
 use boreal::memory::MemoryRegion;
 use boreal::module::{Module, StaticValue, Value as ModuleValue};
-use boreal::scanner::{ScanParams, ScanResult};
+use boreal::scanner::{ScanError, ScanParams, ScanResult};
 use yara::MemoryBlock;
 
 pub struct Checker {
     scanner: boreal::Scanner,
     yara_rules: Option<yara::Rules>,
+
+    pub assert_success: bool,
+    pub last_err: Option<ScanError>,
 }
 
 pub struct Compiler {
@@ -173,6 +176,8 @@ impl Compiler {
         Checker {
             scanner: self.compiler.into_scanner(),
             yara_rules: self.yara_compiler.map(|v| v.compile_rules().unwrap()),
+            assert_success: true,
+            last_err: None,
         }
     }
 }
@@ -228,13 +233,13 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check(&self, mem: &[u8], expected_res: bool) {
+    pub fn check(&mut self, mem: &[u8], expected_res: bool) {
         self.scanner().check(mem, expected_res);
     }
 
     #[track_caller]
-    pub fn check_count(&self, mem: &[u8], count: usize) {
-        let res = self.scanner.scan_mem(mem);
+    pub fn check_count(&mut self, mem: &[u8], count: usize) {
+        let res = self.scan_mem(mem);
         assert_eq!(res.matched_rules.len(), count, "test failed for boreal",);
 
         if let Some(rules) = &self.yara_rules {
@@ -243,12 +248,39 @@ impl Checker {
         }
     }
 
+    pub fn scan_mem(&mut self, mem: &[u8]) -> ScanResult {
+        match self.scanner.scan_mem(mem) {
+            Ok(v) => {
+                self.last_err = None;
+                v
+            }
+            Err((err, v)) => {
+                if self.assert_success {
+                    panic!("scan failed: {:?}", err);
+                }
+                self.last_err = Some(err);
+                v
+            }
+        }
+    }
+
     // Check matches against a list of "<namespace>:<rule_name>" strings.
     #[track_caller]
-    pub fn check_rule_matches(&self, mem: &[u8], expected_matches: &[&str]) -> ScanResult {
+    pub fn check_rule_matches(&mut self, mem: &[u8], expected_matches: &[&str]) -> ScanResult {
         let mut expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
         expected.sort_unstable();
-        let scan_res = self.scanner.scan_mem(mem);
+
+        if let Some(rules) = &self.yara_rules {
+            let res = rules.scan_mem(mem, 1).unwrap();
+            let mut res: Vec<String> = res
+                .iter()
+                .map(|v| format!("{}:{}", v.namespace, v.identifier))
+                .collect();
+            res.sort_unstable();
+            assert_eq!(res, expected, "conformity test failed for libyara");
+        }
+
+        let scan_res = self.scan_mem(mem);
         let mut res: Vec<String> = scan_res
             .matched_rules
             .iter()
@@ -263,27 +295,17 @@ impl Checker {
         res.sort_unstable();
         assert_eq!(res, expected, "test failed for boreal");
 
-        if let Some(rules) = &self.yara_rules {
-            let res = rules.scan_mem(mem, 1).unwrap();
-            let mut res: Vec<String> = res
-                .iter()
-                .map(|v| format!("{}:{}", v.namespace, v.identifier))
-                .collect();
-            res.sort_unstable();
-            assert_eq!(res, expected, "conformity test failed for libyara");
-        }
-
         scan_res
     }
 
     // Check matches against a list of [("<namespace>:<rule_name>", [("var_name", [(offset, length), ...]), ...]]
     #[track_caller]
-    pub fn check_full_matches(&self, mem: &[u8], expected: FullMatches) {
+    pub fn check_full_matches(&mut self, mem: &[u8], expected: FullMatches) {
         // We need to compute the full matches for this test
         {
             let mut scanner = self.scanner.clone();
             scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
-            let res = scanner.scan_mem(mem);
+            let res = scanner.scan_mem(mem).unwrap();
             let res = get_boreal_full_matches(&res);
             assert_eq!(res, expected, "test failed for boreal");
         }
@@ -295,8 +317,8 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
-        let res = self.scanner.scan_mem(mem);
+    pub fn check_boreal(&mut self, mem: &[u8], expected_res: bool) {
+        let res = self.scan_mem(mem);
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
     }
@@ -310,8 +332,8 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_str_has_match(&self, mem: &[u8], expected_match: &[u8]) {
-        let res = self.scanner.scan_mem(mem);
+    pub fn check_str_has_match(&mut self, mem: &[u8], expected_match: &[u8]) {
+        let res = self.scan_mem(mem);
         let mut found = false;
         for r in res.matched_rules {
             for var in r.matches {
@@ -346,9 +368,9 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_fragmented(&self, regions: &[(usize, &[u8])], expected_res: bool) {
+    pub fn check_fragmented(&mut self, regions: &[(usize, &[u8])], expected_res: bool) {
         let regions = convert_regions(regions);
-        let res = self.scanner.scan_fragmented(&regions);
+        let res = self.scanner.scan_fragmented(&regions).unwrap();
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
 
@@ -376,7 +398,7 @@ impl Checker {
         {
             let mut scanner = self.scanner.clone();
             scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
-            let res = scanner.scan_fragmented(&regions);
+            let res = scanner.scan_fragmented(&regions).unwrap();
             let res = get_boreal_full_matches(&res);
             assert_eq!(res, expected, "test failed for boreal");
         }
@@ -447,7 +469,7 @@ impl<'a> Scanner<'a> {
 
     #[track_caller]
     pub fn check_boreal(&self, mem: &[u8], expected_res: bool) {
-        let res = self.scanner.scan_mem(mem);
+        let res = self.scanner.scan_mem(mem).unwrap();
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
     }
@@ -471,19 +493,19 @@ impl<'a> Scanner<'a> {
 // result is the given bool value.
 #[track_caller]
 pub fn check_boreal(rule: &str, mem: &[u8], expected_res: bool) {
-    let checker = Checker::new_without_yara(rule);
+    let mut checker = Checker::new_without_yara(rule);
     checker.check(mem, expected_res);
 }
 
 #[track_caller]
 pub fn check(rule: &str, mem: &[u8], expected_res: bool) {
-    let checker = Checker::new(rule);
+    let mut checker = Checker::new(rule);
     checker.check(mem, expected_res);
 }
 
 #[track_caller]
 pub fn check_count(rule: &str, mem: &[u8], expected_count: usize) {
-    let checker = Checker::new(rule);
+    let mut checker = Checker::new(rule);
     checker.check_count(mem, expected_count);
 }
 
@@ -637,7 +659,7 @@ pub fn compare_module_values_on_mem<M: Module>(
         scanner.set_scan_params(params.process_memory(true));
     }
 
-    let res = scanner.scan_mem(mem);
+    let res = scanner.scan_mem(mem).unwrap();
     let mut boreal_value = res
         .module_values
         .into_iter()

@@ -2707,7 +2707,7 @@ fn test_re() {
 
     #[track_caller]
     fn check_regex_match(regex: &str, mem: &[u8], expected_match: &[u8]) {
-        let checker = Checker::new(&build_regex_rule(regex));
+        let mut checker = Checker::new(&build_regex_rule(regex));
         checker.check_str_has_match(mem, expected_match);
     }
 

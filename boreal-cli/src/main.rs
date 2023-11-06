@@ -3,6 +3,7 @@ use std::process::ExitCode;
 use std::thread::JoinHandle;
 
 use boreal::module::Value as ModuleValue;
+use boreal::scanner::ScanError;
 use boreal::{statistics, Compiler, Scanner};
 
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
@@ -236,13 +237,13 @@ impl ScanOptions {
     }
 }
 
-fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> std::io::Result<()> {
+fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> Result<(), ScanError> {
     let res = if cfg!(feature = "memmap") && !options.no_mmap {
         // Safety: By default, we accept that this CLI tool can abort if the underlying
         // file is truncated while the scan is ongoing.
-        unsafe { scanner.scan_file_memmap(path)? }
+        unsafe { scanner.scan_file_memmap(path).map_err(|(err, _)| err)? }
     } else {
-        scanner.scan_file(path)?
+        scanner.scan_file(path).map_err(|(err, _)| err)?
     };
 
     if options.print_module_data {

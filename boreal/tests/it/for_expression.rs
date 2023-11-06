@@ -160,14 +160,14 @@ fn test_for_identifiers() {
         )
     };
 
-    let checker = Checker::new(&build("for any a in (1..(#a)): (!a[a] == 4)"));
+    let mut checker = Checker::new(&build("for any a in (1..(#a)): (!a[a] == 4)"));
     checker.check(b"", false);
     checker.check(b"ba baa baaaa baa", false);
     checker.check(b"ba baa baaa baa", true);
     checker.check(b"baaa baa", true);
     checker.check(b"ba ba baaa", true);
 
-    let checker = Checker::new(&build("for all a in (1..(#a-1)): (!a[a] == 4)"));
+    let mut checker = Checker::new(&build("for all a in (1..(#a-1)): (!a[a] == 4)"));
     checker.check(b"", false);
     checker.check(b"ba baa baaaa baa", false);
     checker.check(b"baaa baaa baaa", true);
@@ -176,14 +176,14 @@ fn test_for_identifiers() {
     checker.check(b"baaa baaa", true);
     checker.check(b"baaa", false);
 
-    let checker = Checker::new(&build("for any a in (1, #a): (!a[a] == 4)"));
+    let mut checker = Checker::new(&build("for any a in (1, #a): (!a[a] == 4)"));
     checker.check(b"", false);
     checker.check(b"ba baa baaaa baa", false);
     checker.check(b"baaa ba ba", true);
     checker.check(b"ba baaa ba", false);
     checker.check(b"ba ba baaa", true);
 
-    let checker = Checker::new(&build("for all a in (1, #a-1): (!a[a] == 4)"));
+    let mut checker = Checker::new(&build("for all a in (1, #a-1): (!a[a] == 4)"));
     checker.check(b"", false);
     checker.check(b"ba baa baaaa baa", false);
     checker.check(b"baaa ba ba", false);
@@ -213,7 +213,7 @@ fn test_for_identifiers() {
         true,
     );
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     condition:
@@ -285,7 +285,7 @@ fn test_for_modules() {
 #[test]
 fn test_for_identifiers_shadowing() {
     // Bounded identifier shadows a rule name.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a { condition: true }
 rule b { condition: for any a in (2): (a == 2) }
@@ -307,7 +307,7 @@ rule a { condition: for any tests in (2): (tests == 2) }
 
 #[test]
 fn test_for_expression_all() {
-    let checker = Checker::new(&build_rule("all of them"));
+    let mut checker = Checker::new(&build_rule("all of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -319,7 +319,7 @@ fn test_for_expression_all() {
     checker.check(b"a0a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("all of ($*)"));
+    let mut checker = Checker::new(&build_rule("all of ($*)"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -331,7 +331,7 @@ fn test_for_expression_all() {
     checker.check(b"a0a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("all of ($a0, $b1, $c0)"));
+    let mut checker = Checker::new(&build_rule("all of ($a0, $b1, $c0)"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -343,7 +343,7 @@ fn test_for_expression_all() {
     checker.check(b"a0a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("all of ($a*)"));
+    let mut checker = Checker::new(&build_rule("all of ($a*)"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -360,7 +360,7 @@ fn test_for_expression_all() {
 
 #[test]
 fn test_for_expression_any() {
-    let checker = Checker::new(&build_rule("any of them"));
+    let mut checker = Checker::new(&build_rule("any of them"));
     checker.check(b"", false);
     checker.check(b"a0", true);
     checker.check(b"a1", true);
@@ -375,7 +375,7 @@ fn test_for_expression_any() {
 
 #[test]
 fn test_for_expression_none() {
-    let checker = Checker::new(&build_rule("none of them"));
+    let mut checker = Checker::new(&build_rule("none of them"));
     checker.check(b"", true);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -387,7 +387,7 @@ fn test_for_expression_none() {
     checker.check(b"a0a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", false);
 
-    let checker = Checker::new(&build_rule("none of ($b*)"));
+    let mut checker = Checker::new(&build_rule("none of ($b*)"));
     checker.check(b"", true);
     checker.check(b"a0", true);
     checker.check(b"a1", true);
@@ -402,7 +402,7 @@ fn test_for_expression_none() {
 
 #[test]
 fn test_for_expression_number() {
-    let checker = Checker::new(&build_rule("(#a0-10) of them"));
+    let mut checker = Checker::new(&build_rule("(#a0-10) of them"));
     checker.check(b"", true);
     checker.check(b"a0", true);
     checker.check(b"a1", true);
@@ -415,7 +415,7 @@ fn test_for_expression_number() {
     checker.check(b"a0a1a2b0b1", true);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("0 of them"));
+    let mut checker = Checker::new(&build_rule("0 of them"));
     checker.check(b"", true);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -428,7 +428,7 @@ fn test_for_expression_number() {
     checker.check(b"a0a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", false);
 
-    let checker = Checker::new(&build_rule("3 of them"));
+    let mut checker = Checker::new(&build_rule("3 of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -441,7 +441,7 @@ fn test_for_expression_number() {
     checker.check(b"a0a1a2b0b1", true);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("6 of them"));
+    let mut checker = Checker::new(&build_rule("6 of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -454,7 +454,7 @@ fn test_for_expression_number() {
     checker.check(b"a0a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("7 of them"));
+    let mut checker = Checker::new(&build_rule("7 of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -470,7 +470,7 @@ fn test_for_expression_number() {
 
 #[test]
 fn test_for_expression_percent() {
-    let checker = Checker::new(&build_rule("(#c0 - 2)% of them"));
+    let mut checker = Checker::new(&build_rule("(#c0 - 2)% of them"));
     checker.check(b"", true);
     checker.check(b"a0", true);
     checker.check(b"a1", true);
@@ -483,7 +483,7 @@ fn test_for_expression_percent() {
     checker.check(b"a0a1a2b0b1", true);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("(#c0)% of them"));
+    let mut checker = Checker::new(&build_rule("(#c0)% of them"));
     checker.check(b"", true);
     checker.check(b"a0", true);
     checker.check(b"a1", true);
@@ -493,7 +493,7 @@ fn test_for_expression_percent() {
     checker.check(b"a0b1", true);
     checker.check(b"a0a1a2b0b1", true);
 
-    let checker = Checker::new(&build_rule("50% of them"));
+    let mut checker = Checker::new(&build_rule("50% of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -506,7 +506,7 @@ fn test_for_expression_percent() {
     checker.check(b"a0a1a2b0b1", true);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("50% of ($a*)"));
+    let mut checker = Checker::new(&build_rule("50% of ($a*)"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -524,7 +524,7 @@ fn test_for_expression_percent() {
     checker.check(b"a1a2", true);
 
     // Gets rounded up to 4 of them
-    let checker = Checker::new(&build_rule("51% of them"));
+    let mut checker = Checker::new(&build_rule("51% of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -538,7 +538,7 @@ fn test_for_expression_percent() {
     checker.check(b"a0a1a2b0b1", true);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("51% of ($a0, $a1, $a2, $c0)"));
+    let mut checker = Checker::new(&build_rule("51% of ($a0, $a1, $a2, $c0)"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -555,7 +555,7 @@ fn test_for_expression_percent() {
     checker.check(b"a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("100% of them"));
+    let mut checker = Checker::new(&build_rule("100% of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -568,7 +568,7 @@ fn test_for_expression_percent() {
     checker.check(b"a0a1a2b0b1", false);
     checker.check(b"a0a1a2b0b1c0", true);
 
-    let checker = Checker::new(&build_rule("(101 + #c0)% of them"));
+    let mut checker = Checker::new(&build_rule("(101 + #c0)% of them"));
     checker.check(b"", false);
     checker.check(b"a0", false);
     checker.check(b"a1", false);
@@ -587,7 +587,7 @@ fn test_for_expression_percent() {
 fn test_for_expression_overlap() {
     // Even if the selection number is bigger than the number of variables, this does not
     // mean the for expression is false: a variable can be reused.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
     rule a {
         strings:
@@ -603,7 +603,7 @@ fn test_for_expression_overlap() {
     checker.check(b"abcdef", true);
 
     // Same for wildcards
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
     rule a {
         strings:
@@ -699,20 +699,20 @@ fn test_for_identifiers_abbrev() {
         )
     };
 
-    let checker = Checker::new(&build("any of ($a, $b) in (0..5)"));
+    let mut checker = Checker::new(&build("any of ($a, $b) in (0..5)"));
     checker.check(b"", false);
     checker.check(b"aaa a a a", true);
     checker.check(b"a a a aaa", false);
     checker.check(b"a bbb aaa", true);
 
-    let checker = Checker::new(&build("all of ($a, $b*) in (2..5)"));
+    let mut checker = Checker::new(&build("all of ($a, $b*) in (2..5)"));
     checker.check(b"", false);
     checker.check(b"aaabbb", false);
     checker.check(b" aaabbb", false);
     checker.check(b"  aaabbb", true);
     checker.check(b"   aaabbb", false);
 
-    let checker = Checker::new(&build("any of them at 2"));
+    let mut checker = Checker::new(&build("any of them at 2"));
     checker.check(b"", false);
     checker.check(b"aaabbb", false);
     checker.check(b" aaabbb", false);

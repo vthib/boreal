@@ -16,7 +16,7 @@ rule a {{
 fn test_regex_unicode_handling() {
     // The '+' will apply on the last byte of the 'é' utf-8 char, not on the char itself,
     // so this is: `<\xC3\xA9+>`.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -43,13 +43,13 @@ rule a {
     );
 
     // escaped unicode char is accepted.
-    let checker = Checker::new(r"rule a { strings: $a = /\µ/ condition: $a }");
+    let mut checker = Checker::new(r"rule a { strings: $a = /\µ/ condition: $a }");
     checker.check("µ".as_bytes(), true);
 }
 
 #[test]
 fn test_regex_flags() {
-    let checker = Checker::new(&build_rule(r"/a.b/"));
+    let mut checker = Checker::new(&build_rule(r"/a.b/"));
     checker.check(b"ab", false);
     checker.check(b"aab", true);
     checker.check(b"AaB", false);
@@ -59,7 +59,7 @@ fn test_regex_flags() {
     checker.check(b"a\nb", false);
     checker.check(b"A\nB", false);
 
-    let checker = Checker::new(&build_rule(r"/a.b/s"));
+    let mut checker = Checker::new(&build_rule(r"/a.b/s"));
     checker.check(b"ab", false);
     checker.check(b"aab", true);
     checker.check(b"AaB", false);
@@ -69,7 +69,7 @@ fn test_regex_flags() {
     checker.check(b"a\nb", true);
     checker.check(b"A\nB", false);
 
-    let checker = Checker::new(&build_rule(r"/a.b/i"));
+    let mut checker = Checker::new(&build_rule(r"/a.b/i"));
     checker.check(b"ab", false);
     checker.check(b"aab", true);
     checker.check(b"AaB", true);
@@ -79,7 +79,7 @@ fn test_regex_flags() {
     checker.check(b"a\nb", false);
     checker.check(b"A\nB", false);
 
-    let checker = Checker::new(&build_rule(r"/a.b/is"));
+    let mut checker = Checker::new(&build_rule(r"/a.b/is"));
     checker.check(b"ab", false);
     checker.check(b"aab", true);
     checker.check(b"AaB", true);
@@ -92,13 +92,13 @@ fn test_regex_flags() {
 
 #[test]
 fn test_regex_anchors() {
-    let checker = Checker::new(&build_rule(r"/^a/"));
+    let mut checker = Checker::new(&build_rule(r"/^a/"));
     checker.check(b"a", true);
     checker.check(b"ab", true);
     checker.check(b"ba", false);
     checker.check(b"b\ta", false);
     checker.check(b"b\na", false);
-    let checker = Checker::new(&build_rule(r"/a$/"));
+    let mut checker = Checker::new(&build_rule(r"/a$/"));
     checker.check(b"a", true);
     checker.check(b"ab", false);
     checker.check(b"ba", true);
@@ -106,13 +106,13 @@ fn test_regex_anchors() {
     checker.check(b"a\nb", false);
 
     // s flag does not modify this behavior
-    let checker = Checker::new(&build_rule(r"/^a/s"));
+    let mut checker = Checker::new(&build_rule(r"/^a/s"));
     checker.check(b"a", true);
     checker.check(b"ab", true);
     checker.check(b"ba", false);
     checker.check(b"b\ta", false);
     checker.check(b"b\na", false);
-    let checker = Checker::new(&build_rule(r"/a$/s"));
+    let mut checker = Checker::new(&build_rule(r"/a$/s"));
     checker.check(b"a", true);
     checker.check(b"ab", false);
     checker.check(b"ba", true);
@@ -130,23 +130,23 @@ fn test_regex_unneeded_escapes() {
     );
 
     // Escaping for specific regex behavior
-    let checker = Checker::new(&build_rule(r"/<\w\W>/"));
+    let mut checker = Checker::new(&build_rule(r"/<\w\W>/"));
     checker.check(b"<ab>", false);
     checker.check(b"<a/>", true);
     checker.check(b"<_]>", true);
     checker.check(b"<8]>", true);
     checker.check(b"<88>", false);
     checker.check(b"<[]>", false);
-    let checker = Checker::new(&build_rule(r"/<\d\D>/"));
+    let mut checker = Checker::new(&build_rule(r"/<\d\D>/"));
     checker.check(b"<ab>", false);
     checker.check(b"<7b>", true);
     checker.check(b"<77>", false);
-    let checker = Checker::new(&build_rule(r"/<\s\S>/"));
+    let mut checker = Checker::new(&build_rule(r"/<\s\S>/"));
     checker.check(b"<ab>", false);
     checker.check(b"< b>", true);
     checker.check(b"<\tb>", true);
     checker.check(b"<\t >", false);
-    let checker = Checker::new(&build_rule(r"/\bab\B/"));
+    let mut checker = Checker::new(&build_rule(r"/\bab\B/"));
     checker.check(b"ab", false);
     checker.check(b"<ab>", false);
     checker.check(b"abc", true);
@@ -167,7 +167,7 @@ fn test_regex_unneeded_escapes() {
     // Test from libyara: makes no sense, but works because of useless escapes being removed
     // This accepts 0, x, 5, then A-Z [ \\ and ]
     // This is *not* \x5A to \x5D
-    let checker = Checker::new(&build_rule(r"/[\0x5A-\x5D]/"));
+    let mut checker = Checker::new(&build_rule(r"/[\0x5A-\x5D]/"));
     checker.check(b"0", true);
     checker.check(b"1", false);
     checker.check(b"x", true);
@@ -182,46 +182,46 @@ fn test_regex_unneeded_escapes() {
 
 #[test]
 fn test_regex_at_most_repetitions() {
-    let checker = Checker::new(&build_rule(r"/<a{,2}>/"));
+    let mut checker = Checker::new(&build_rule(r"/<a{,2}>/"));
     checker.check(b"<>", true);
     checker.check(b"<a>", true);
     checker.check(b"<aa>", true);
     checker.check(b"<aaa>", false);
 
     // Empty means {0,}, so same as *
-    let checker = Checker::new(&build_rule(r"/<a{,}>/"));
+    let mut checker = Checker::new(&build_rule(r"/<a{,}>/"));
     checker.check(b"<>", true);
     checker.check(b"<a>", true);
     checker.check(b"<aaaaaaaaaaaaaaaaaa>", true);
     checker.check(b"<", false);
     checker.check(b">", false);
 
-    let checker = Checker::new(&build_rule(r"/<a\{,2}>/"));
+    let mut checker = Checker::new(&build_rule(r"/<a\{,2}>/"));
     checker.check(b"<>", false);
     checker.check(b"<a>", false);
     checker.check(b"<a{,2}>", true);
 
-    let checker = Checker::new(&build_rule(r"/<\\{,2}>/"));
+    let mut checker = Checker::new(&build_rule(r"/<\\{,2}>/"));
     checker.check(br"<>", true);
     checker.check(br"<\>", true);
     checker.check(br"<\\>", true);
     checker.check(br"<\\\>", false);
 
-    let checker = Checker::new(&build_rule(r"/<a{\,2}>/"));
+    let mut checker = Checker::new(&build_rule(r"/<a{\,2}>/"));
     checker.check(br"<>", false);
     checker.check(br"<a>", false);
     checker.check(br"<aa>", false);
     checker.check(br"<aaa>", false);
     checker.check(br"<a{,2}>", true);
 
-    let checker = Checker::new(&build_rule(r"/<a{{,2}>/"));
+    let mut checker = Checker::new(&build_rule(r"/<a{{,2}>/"));
     checker.check(br"<a>", true);
     checker.check(br"<a{>", true);
     checker.check(br"<a{{>", true);
     checker.check(br"<a{{{>", false);
     checker.check(br"<a{{,2}>", false);
 
-    let checker = Checker::new(&build_rule(r"/<\{{,2}>/"));
+    let mut checker = Checker::new(&build_rule(r"/<\{{,2}>/"));
     checker.check(br"<>", true);
     checker.check(br"<{>", true);
     checker.check(br"<{{>", true);

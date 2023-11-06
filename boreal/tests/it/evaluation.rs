@@ -159,7 +159,7 @@ fn test_eval_shr() {
 
 #[test]
 fn test_eval_var_count_string() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -186,7 +186,7 @@ rule a {
     );
 
     // Matches can overlap
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -202,7 +202,7 @@ rule a {
 
 #[test]
 fn test_eval_var_length_string() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -214,7 +214,7 @@ rule a {
     checker.check(b"", false);
     checker.check(b"abc", true);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -227,7 +227,7 @@ rule a {
     checker.check(b"abc", false);
     checker.check(b"abc abcc", true);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -249,7 +249,7 @@ rule a {
 
 #[test]
 fn test_eval_var_offset_string() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -265,7 +265,7 @@ rule a {
     checker.check(b"   ab", false);
     checker.check(b"abab", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -294,7 +294,7 @@ rule a {
 
 #[test]
 fn test_eval_var_count_regex() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -326,7 +326,7 @@ rule a {
 
 #[test]
 fn test_eval_var_length_regex() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -341,7 +341,7 @@ rule a {
     // Regexes are greedy
     checker.check(b"aabb", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -354,7 +354,7 @@ rule a {
     checker.check(b"aaabb", false);
     checker.check(b"aa.*b+", true);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -373,7 +373,7 @@ rule a {
 
 #[test]
 fn test_eval_var_offset_regex() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -391,7 +391,7 @@ rule a {
     checker.check(b"abab", false);
 
     // Force the use of a raw matcher
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -408,7 +408,7 @@ rule a {
     checker.check(b"   ab", false);
     checker.check(b"abab", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -431,7 +431,7 @@ rule a {
 
 #[test]
 fn test_eval_var_count_hex_string() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -461,7 +461,7 @@ rule a {
 
 #[test]
 fn test_eval_var_length_hex_string() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -476,7 +476,7 @@ rule a {
     checker.check(b"\xab_\xcd\xcd\xcd", true);
     checker.check(b"\xabpad\xcd", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -521,7 +521,7 @@ rule a {
 
 #[test]
 fn test_eval_var_offset_hex_string() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -688,7 +688,7 @@ fn test_eval_matches() {
 
 #[test]
 fn test_eval_var_count_in_range() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -705,7 +705,7 @@ rule a {
     checker.check(b"  abcabcabc", true);
     checker.check(b"   abcabcabc", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -725,7 +725,7 @@ rule a {
     checker.check(b"    aaabb", false);
 
     // Same but with a variable that uses a raw matcher.
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -744,7 +744,7 @@ rule a {
     checker.check(b"   aaabb", true);
     checker.check(b"    aaabb", false);
 
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -763,7 +763,7 @@ rule a {
     checker.check(b"<<<|||\xab\xab\xab_\xcd", false);
 
     // Range reaching negative is fine
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 rule a {
     strings:
@@ -1084,7 +1084,7 @@ rule b {
 
 #[test]
 fn test_private_rule() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 private rule a { strings: $a0 = "a0" condition: $a0 }
 rule b { condition: a }
@@ -1107,7 +1107,7 @@ private rule f { condition: false }
 
 #[test]
 fn test_private_strings() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 // rule with only private strings
 rule a {
@@ -1175,7 +1175,7 @@ rule c {
 
 #[test]
 fn test_global_rules() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 global rule g1 {
     strings:
@@ -1218,7 +1218,7 @@ rule bar {
 
 #[test]
 fn test_global_rules_in_rulesets() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 global private rule g1 {
     strings:
@@ -1318,7 +1318,7 @@ rule f {
 // properly handled.
 #[test]
 fn test_compute_full_matches_without_ac_scan() {
-    let checker = Checker::new(
+    let mut checker = Checker::new(
         r#"
 global rule a {
     strings:
