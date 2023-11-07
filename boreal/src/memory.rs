@@ -13,7 +13,24 @@ pub enum Memory<'a> {
     /// This is as if the bytes to scan had holes, which is useful when scanning
     /// the memory of a process, which consists of non contiguous regions of
     /// bytes.
-    Fragmented(Box<dyn FragmentedMemory + 'a>),
+    Fragmented(Fragmented<'a>),
+}
+
+/// Fragmented memory
+#[derive(Debug)]
+pub struct Fragmented<'a> {
+    pub(crate) obj: Box<dyn FragmentedMemory + 'a>,
+    pub(crate) regions: Vec<RegionDescription>,
+}
+
+impl<'a> Memory<'a> {
+    pub(crate) fn new_fragmented(obj: Box<dyn FragmentedMemory + 'a>) -> Memory {
+        // Cache the regions in the object. This avoids reallocating a Vec everytime
+        // we list the regions.
+        let regions = obj.list_regions();
+
+        Memory::Fragmented(Fragmented { obj, regions })
+    }
 }
 
 impl Memory<'_> {
@@ -62,8 +79,8 @@ impl Memory<'_> {
                     mem.get(start..end)
                 }
             }
-            Self::Fragmented(obj) => {
-                for region in obj.list_regions() {
+            Self::Fragmented(fragmented) => {
+                for region in &fragmented.regions {
                     let Some(relative_start) = start.checked_sub(region.start) else {
                         break;
                     };
@@ -73,7 +90,7 @@ impl Memory<'_> {
                     let end = end.checked_sub(region.start)?;
                     let end = std::cmp::min(region.length, end);
 
-                    let region = obj.fetch_region(region)?;
+                    let region = fragmented.obj.fetch_region(*region)?;
                     return region.mem.get(relative_start..end);
                 }
 

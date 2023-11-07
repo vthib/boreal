@@ -201,7 +201,7 @@ impl Scanner {
         T: FragmentedMemory,
     {
         self.inner.scan(
-            Memory::Fragmented(Box::new(obj)),
+            Memory::new_fragmented(Box::new(obj)),
             &self.scan_params,
             &self.external_symbols_values,
         )
@@ -498,11 +498,10 @@ impl Inner {
                     &mut matches,
                 )?;
             }
-            Memory::Fragmented(obj) => {
+            Memory::Fragmented(fragmented) => {
                 // Scan each region for all variables occurences.
-                let regions: Vec<_> = obj.list_regions();
-                for region_desc in regions {
-                    let Some(region) = obj.fetch_region(region_desc) else {
+                for region_desc in &fragmented.regions {
+                    let Some(region) = fragmented.obj.fetch_region(*region_desc) else {
                         continue;
                     };
                     self.ac_scan
