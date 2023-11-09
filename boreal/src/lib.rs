@@ -95,5 +95,9 @@ pub mod scanner;
 pub use scanner::Scanner;
 pub mod statistics;
 
+// Re-exports those symbols since they are exposed in the results of a scan. This avoids
+// having to depend on boreal-parser simply to match on those metadatas.
+pub use boreal_parser::rule::{Metadata, MetadataValue};
+
 #[cfg(test)]
 mod test_helpers;
