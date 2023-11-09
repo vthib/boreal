@@ -64,7 +64,7 @@ pub struct Include {
 /// If the input cannot be parsed properly and entirely as a list
 /// of yara rules, an error is returned.
 pub(crate) fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
-    let (mut input, _) = ltrim(input)?;
+    let (mut input, ()) = ltrim(input)?;
 
     let mut file = YaraFile {
         components: Vec::new(),
