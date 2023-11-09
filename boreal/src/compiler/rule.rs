@@ -14,20 +14,20 @@ use crate::statistics;
 
 /// A compiled scanning rule.
 #[derive(Debug)]
-pub struct Rule {
+pub(crate) struct Rule {
     /// Name of the rule.
-    pub name: String,
+    pub(crate) name: String,
 
     /// Namespace containing the rule.
     ///
-    /// `None` if in the default namespace.
-    pub namespace: Option<String>,
+    /// [`None`] if in the default namespace.
+    pub(crate) namespace: Option<String>,
 
     /// Tags associated with the rule.
-    pub tags: Vec<String>,
+    pub(crate) tags: Vec<String>,
 
     /// Metadata associated with the rule.
-    pub metadatas: Vec<Metadata>,
+    pub(crate) metadatas: Vec<Metadata>,
 
     /// Number of variables used by the rule.
     pub(crate) nb_variables: usize,
@@ -35,7 +35,8 @@ pub struct Rule {
     /// Condition of the rule.
     pub(crate) condition: Expression,
 
-    pub is_private: bool,
+    /// Is the rule marked as private.
+    pub(crate) is_private: bool,
 }
 
 /// Object used to compile a rule.
