@@ -6,15 +6,15 @@ pub enum ScanError {
     /// See [`crate::scanner::ScanParams::timeout_duration`] for more details.
     Timeout,
 
-    /// Error when reading a file to scan.
-    ScannedFileRead(std::io::Error),
+    /// Error when reading the file to scan.
+    CannotReadFile(std::io::Error),
 }
 
 impl std::fmt::Display for ScanError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Timeout => write!(f, "timeout"),
-            Self::ScannedFileRead(err) => write!(f, "error reading the file to scan: {err}"),
+            Self::CannotReadFile(err) => write!(f, "cannot read file to scan: {err}"),
         }
     }
 }

@@ -159,7 +159,7 @@ impl Scanner {
     ) -> Result<ScanResult, (ScanError, ScanResult)> {
         match std::fs::read(path.as_ref()) {
             Ok(contents) => self.scan_mem(&contents),
-            Err(err) => Err((ScanError::ScannedFileRead(err), ScanResult::default())),
+            Err(err) => Err((ScanError::CannotReadFile(err), ScanResult::default())),
         }
     }
 
@@ -190,7 +190,7 @@ impl Scanner {
             unsafe { memmap2::Mmap::map(&file) }
         }) {
             Ok(mmap) => self.scan_mem(&mmap),
-            Err(err) => Err((ScanError::ScannedFileRead(err), ScanResult::default())),
+            Err(err) => Err((ScanError::CannotReadFile(err), ScanResult::default())),
         }
     }
 
