@@ -595,8 +595,10 @@ fn build_matched_rule<'a>(
     var_matches: Vec<Vec<StringMatch>>,
 ) -> MatchedRule<'a> {
     MatchedRule {
-        namespace: rule.namespace.as_deref(),
         name: &rule.name,
+        namespace: rule.namespace.as_deref(),
+        tags: &rule.tags,
+        metadatas: &rule.metadatas,
         matches: var_matches
             .into_iter()
             .zip(variables.iter())
@@ -628,11 +630,17 @@ pub struct ScanResult<'scanner> {
 /// Description of a rule that matched during a scan.
 #[derive(Debug)]
 pub struct MatchedRule<'scanner> {
+    /// Name of the rule.
+    pub name: &'scanner str,
+
     /// Namespace containing the rule. None if in the default namespace.
     pub namespace: Option<&'scanner str>,
 
-    /// Name of the rule.
-    pub name: &'scanner str,
+    /// Tags associated with the rule.
+    pub tags: &'scanner [String],
+
+    /// Metadata associated with the rule.
+    pub metadatas: &'scanner [boreal_parser::rule::Metadata],
 
     /// List of matched strings, with details on their matches.
     pub matches: Vec<StringMatches<'scanner>>,
@@ -1307,8 +1315,10 @@ mod tests {
             statistics: None,
         });
         test_type_traits_non_clonable(MatchedRule {
-            namespace: None,
             name: "a",
+            namespace: None,
+            tags: &[],
+            metadatas: &[],
             matches: Vec::new(),
         });
         test_type_traits_non_clonable(StringMatches {

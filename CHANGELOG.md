@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2023-12-11
+
+### Boreal
+
+- Add rule metadata and tags in results of scans. Only the rule name and
+  namespace was listed, which was an oversight.
+  In addition, the `Metadata` and `MetadataValue` structs from `boreal-parser`
+  are re-exported, to avoid having to depend on it to inspect matched rules
+  metadatas.
+  See [PR #85](https://github.com/vthib/boreal/pull/85).
+
 ## [0.3.0] - 2023-09-12
 
 This is a huge release containing several months of work, including:
