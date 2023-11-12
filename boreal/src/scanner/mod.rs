@@ -17,7 +17,7 @@ mod ac_scan;
 mod error;
 pub use error::ScanError;
 mod params;
-pub use params::ScanParams;
+pub use params::{FragmentedScanMode, ScanParams};
 
 #[cfg(feature = "process")]
 mod process;
@@ -351,40 +351,33 @@ impl Inner {
         &'scanner self,
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), ScanError> {
-        match scan_data.mem {
-            Memory::Direct(mem) => {
-                // We can evaluate module values and then try to evaluate rules without matches.
-                scan_data.module_values.scan_region(
-                    &Region { start: 0, mem },
-                    &self.modules,
-                    scan_data.params.process_memory,
-                );
+        if let Some(mem) = scan_data.mem.get_direct() {
+            // We can evaluate module values and then try to evaluate rules without matches.
+            scan_data.module_values.scan_region(
+                &Region { start: 0, mem },
+                &self.modules,
+                scan_data.params.process_memory,
+            );
+        }
 
-                if !scan_data.params.compute_full_matches {
-                    #[cfg(feature = "profiling")]
-                    let start = std::time::Instant::now();
+        if can_use_no_scan_optimization(scan_data) {
+            #[cfg(feature = "profiling")]
+            let start = std::time::Instant::now();
 
-                    let res = self.evaluate_without_matches(scan_data);
+            let res = self.evaluate_without_matches(scan_data);
 
-                    #[cfg(feature = "profiling")]
-                    if let Some(stats) = scan_data.statistics.as_mut() {
-                        stats.no_scan_eval_duration = start.elapsed();
-                    }
-
-                    match res {
-                        Ok(()) => return Ok(()),
-                        Err(EvalError::Timeout) => return Err(ScanError::Timeout),
-                        Err(EvalError::Undecidable) => {
-                            // Reset the rules that might have matched already.
-                            scan_data.matched_rules.clear();
-                        }
-                    }
-                }
+            #[cfg(feature = "profiling")]
+            if let Some(stats) = scan_data.statistics.as_mut() {
+                stats.no_scan_eval_duration = start.elapsed();
             }
-            Memory::Fragmented { .. } => {
-                // Otherwise, we cannot evaluate module values, and thus disable the evaluation
-                // without matches optimisation. module values will be evaluated when we iterate on
-                // each region to scan them.
+
+            match res {
+                Ok(()) => return Ok(()),
+                Err(EvalError::Timeout) => return Err(ScanError::Timeout),
+                Err(EvalError::Undecidable) => {
+                    // Reset the rules that might have matched already.
+                    scan_data.matched_rules.clear();
+                }
             }
         }
 
@@ -541,12 +534,14 @@ impl Inner {
                         });
                     }
 
-                    // And finally, evaluate the module values on each region.
-                    scan_data.module_values.scan_region(
-                        &region,
-                        &self.modules,
-                        scan_data.params.process_memory,
-                    );
+                    if scan_data.params.fragmented_scan_mode.modules_dynamic_values {
+                        // And finally, evaluate the module values on each region.
+                        scan_data.module_values.scan_region(
+                            &region,
+                            &self.modules,
+                            scan_data.params.process_memory,
+                        );
+                    }
                 }
             }
         }
@@ -558,6 +553,16 @@ impl Inner {
 
         Ok(matches)
     }
+}
+
+fn can_use_no_scan_optimization(scan_data: &ScanData) -> bool {
+    if scan_data.params.compute_full_matches {
+        return false;
+    }
+
+    scan_data.mem.get_direct().is_some()
+        || (!scan_data.params.fragmented_scan_mode.modules_dynamic_values
+            && !scan_data.params.fragmented_scan_mode.can_refetch_regions)
 }
 
 #[derive(Debug)]
