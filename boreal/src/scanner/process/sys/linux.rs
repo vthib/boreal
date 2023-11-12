@@ -576,6 +576,7 @@ mod tests {
         let mut params = MemoryParams {
             max_fetched_region_size: 500,
             memory_chunk_size: None,
+            can_refetch_regions: false,
         };
         assert_eq!(
             region.region_description(&params, 0x1000),

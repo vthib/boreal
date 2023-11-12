@@ -37,6 +37,12 @@ pub struct MemoryParams {
     /// See [`crate::scanner::ScanParams::memory_chunk_size`]
     /// for more details.
     pub memory_chunk_size: Option<usize>,
+
+    /// Regions can be fetched multiple times.
+    ///
+    /// See [`crate::scanner::FragmentedScanMode`]
+    /// for more details.
+    pub can_refetch_regions: bool,
 }
 
 impl<'a> Memory<'a> {
@@ -86,6 +92,10 @@ impl Memory<'_> {
                 }
             }
             Self::Fragmented(fragmented) => {
+                if !fragmented.params.can_refetch_regions {
+                    return None;
+                }
+
                 fragmented.obj.reset();
                 while let Some(region) = fragmented.obj.next(&fragmented.params) {
                     let Some(relative_start) = start.checked_sub(region.start) else {
@@ -199,6 +209,7 @@ mod tests {
         test_type_traits_non_clonable(MemoryParams {
             max_fetched_region_size: 0,
             memory_chunk_size: None,
+            can_refetch_regions: false,
         });
         test_type_traits_non_clonable(DummyFragmented);
         test_type_traits_non_clonable(Fragmented {
@@ -206,6 +217,7 @@ mod tests {
             params: MemoryParams {
                 max_fetched_region_size: 0,
                 memory_chunk_size: None,
+                can_refetch_regions: false,
             },
         });
     }

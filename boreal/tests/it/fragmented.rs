@@ -1,6 +1,9 @@
-use boreal::scanner::ScanParams;
+use boreal::{
+    memory::{FragmentedMemory, MemoryParams, Region, RegionDescription},
+    scanner::{FragmentedScanMode, ScanParams},
+};
 
-use crate::utils::Checker;
+use crate::utils::{get_boreal_full_matches, Checker};
 
 #[test]
 fn test_fragmented_string_scan() {
@@ -507,4 +510,143 @@ rule a {
         ],
         true,
     );
+}
+
+#[test]
+#[cfg(feature = "object")]
+fn test_fragmented_scan_mode_modules_dynamic_values() {
+    use boreal::scanner::FragmentedScanMode;
+
+    let rule = r#"
+import "pe"
+
+rule scanned_pe {
+    condition: defined pe.is_pe
+}
+"#;
+    let mut checker = Checker::new_without_yara(rule);
+
+    let pe = std::fs::read("tests/assets/libyara/data/tiny").unwrap();
+
+    // Legacy mode: evaluate modules
+    checker.check_fragmented(&[(0, Some(&pe))], true);
+
+    // Fast mode: do not evaluate modules
+    checker.set_scan_params(ScanParams::default().fragmented_scan_mode(FragmentedScanMode::fast()));
+    checker.check_fragmented(&[(0, Some(&pe))], false);
+
+    // Single-pass mode: evaluate modules
+    checker.set_scan_params(
+        ScanParams::default().fragmented_scan_mode(FragmentedScanMode::single_pass()),
+    );
+    checker.check_fragmented(&[(0, Some(&pe))], true);
+}
+
+#[test]
+fn test_fragmented_scan_mode_can_refetch_regions() {
+    let rule = r#"
+rule refetched_region {
+    condition: uint8(1000) == 0x12
+}
+"#;
+    let mut checker = Checker::new_without_yara(rule);
+
+    // Legacy mode: refetch regions
+    checker.check_fragmented(&[(1000, Some(b"\x12"))], true);
+
+    // Fast mode: do not refetch regions
+    checker.set_scan_params(ScanParams::default().fragmented_scan_mode(FragmentedScanMode::fast()));
+    checker.check_fragmented(&[(1000, Some(b"\x12"))], false);
+
+    // Single-pass mode: do not refetch regions
+    checker.set_scan_params(
+        ScanParams::default().fragmented_scan_mode(FragmentedScanMode::single_pass()),
+    );
+    checker.check_fragmented(&[(1000, Some(b"\x12"))], false);
+}
+
+#[test]
+fn test_fragmented_no_scan_optimization() {
+    let rule = r#"
+rule refetched_region {
+    strings:
+        $a = "fetched"
+    condition:
+        true or $a
+}
+"#;
+    let checker = Checker::new_without_yara(rule);
+    let mut scanner = checker.scanner().scanner;
+
+    let expected_no_opti = vec![(
+        "default:refetched_region".to_owned(),
+        vec![("a", vec![(b"fetched".as_slice(), 100, 7)])],
+    )];
+    let expected_opti = vec![("default:refetched_region".to_owned(), vec![])];
+
+    // Legacy mode: no optimization
+    let mut observer = Observer::new();
+    let res = scanner.scan_fragmented(&mut observer).unwrap();
+    assert!(observer.fetched);
+    let res = get_boreal_full_matches(&res);
+    assert_eq!(&res, &expected_no_opti);
+
+    // Fast mode: optimization
+    let mut observer = Observer::new();
+    scanner.set_scan_params(ScanParams::default().fragmented_scan_mode(FragmentedScanMode::fast()));
+    let res = scanner.scan_fragmented(&mut observer).unwrap();
+    assert!(!observer.fetched);
+    let res = get_boreal_full_matches(&res);
+    assert_eq!(&res, &expected_opti);
+
+    // Single-pass mode: no optimization
+    let mut observer = Observer::new();
+    scanner.set_scan_params(
+        ScanParams::default().fragmented_scan_mode(FragmentedScanMode::single_pass()),
+    );
+    let res = scanner.scan_fragmented(&mut observer).unwrap();
+    assert!(observer.fetched);
+    let res = get_boreal_full_matches(&res);
+    assert_eq!(&res, &expected_no_opti);
+}
+
+#[derive(Debug)]
+struct Observer {
+    idx: usize,
+    fetched: bool,
+}
+
+impl Observer {
+    fn new() -> Self {
+        Self {
+            idx: 0,
+            fetched: false,
+        }
+    }
+}
+
+impl FragmentedMemory for &mut Observer {
+    fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
+        if self.idx == 0 {
+            self.idx = 1;
+            Some(RegionDescription {
+                start: 100,
+                length: 7,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
+        self.fetched = true;
+        Some(Region {
+            start: 100,
+            mem: b"fetched",
+        })
+    }
+
+    fn reset(&mut self) {
+        self.idx = 0;
+    }
 }
