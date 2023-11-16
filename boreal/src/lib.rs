@@ -55,6 +55,7 @@
 // Do the same for clippy
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
+#![deny(clippy::undocumented_unsafe_blocks)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::unnested_or_patterns)]
 #![allow(clippy::match_same_arms)]
