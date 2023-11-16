@@ -1,8 +1,9 @@
+#[cfg(any(target_os = "linux", windows))]
 use std::path::Path;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 use crate::utils::Checker;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 use boreal::scanner::ScanError;
 
 fn xor_bytes(v: &[u8], xor_byte: u8) -> Vec<u8> {
@@ -10,7 +11,7 @@ fn xor_bytes(v: &[u8], xor_byte: u8) -> Vec<u8> {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 fn test_self_scan() {
     // self-scan is a bit tricky, we need to *not* match on some payload
     // from this test, nor from the compiled rule.
@@ -39,7 +40,7 @@ rule a {
 
 /// Test scanning a pid that do not exist.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 fn test_process_not_found() {
     // First, find an unused PID. Lets take a very big number, and have
     // some retry code until we find a proper one.
@@ -54,20 +55,21 @@ fn test_process_not_found() {
 
     checker.check_process(pid, false);
     let err = checker.last_err.unwrap();
-    assert!(matches!(err, ScanError::UnknownProcess));
+    assert!(matches!(err, ScanError::UnknownProcess), "{:?}", err);
     assert_eq!(err.to_string(), "unknown process");
 }
 
 /// Test scanning a pid we do not have permissions for.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 fn test_process_permission_denied() {
+    #[cfg(target_os = "linux")]
     if euid_is_root() {
         println!("Cannot run this test as root, ignoring");
         return;
     }
 
-    let pid = 1;
+    let pid = if cfg!(windows) { 4 } else { 1 };
     let mut checker = Checker::new(r#" rule a { condition: true }"#);
     checker.assert_success = false;
 
@@ -75,7 +77,21 @@ fn test_process_permission_denied() {
     let err = checker.last_err.unwrap();
     match &err {
         ScanError::CannotListProcessRegions(err) => {
-            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+            #[cfg(windows)]
+            {
+                use windows::Win32::Foundation::E_ACCESSDENIED;
+
+                assert_eq!(err.raw_os_error(), Some(E_ACCESSDENIED.0 as _), "{:?}", err);
+            }
+            #[cfg(target_os = "linux")]
+            {
+                assert_eq!(
+                    err.kind(),
+                    std::io::ErrorKind::PermissionDenied,
+                    "{:?}",
+                    err
+                );
+            }
         }
         err => panic!("Unexpected last err: {err:?}"),
     }
