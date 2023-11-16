@@ -516,8 +516,8 @@ impl Inner {
             }
             Memory::Fragmented(fragmented) => {
                 // Scan each region for all variables occurences.
-                for region_desc in &fragmented.regions {
-                    let Some(region) = fragmented.obj.fetch_region(*region_desc) else {
+                while fragmented.obj.next().is_some() {
+                    let Some(region) = fragmented.obj.fetch() else {
                         continue;
                     };
                     self.ac_scan
