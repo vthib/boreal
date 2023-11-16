@@ -26,6 +26,9 @@ rule a {
 }"#,
     );
 
+    // Scanning ourselves can lead to a bit of a weird situation where the buffer
+    // used to hold each region grows and grows as it tries to contain... its own
+    // region. This will end when reaching the max size of the buffer.
     checker.check_process(std::process::id(), false);
 
     // This is "self0123456789scan" when xor'ed

@@ -38,60 +38,10 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
         }
     };
 
-    let mut regions = Vec::new();
-    let mut start_addr: Option<usize> = None;
-    loop {
-        let mut info = MaybeUninit::uninit();
-        // Safety:
-        // - the handle is a valid process handle and has the PROCESS_QUERY_INFORMATION
-        //   permission.
-        let res = unsafe {
-            VirtualQueryEx(
-                handle_to_windows_handle(handle.as_handle()),
-                start_addr.map(|v| v as *const c_void),
-                info.as_mut_ptr(),
-                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-            )
-        };
-
-        if res == 0 {
-            match std::io::Error::last_os_error() {
-                #[allow(clippy::cast_possible_wrap)]
-                err if err.raw_os_error() == Some(ERROR_INVALID_PARAMETER.0 as _) => {
-                    // Returned when the start address is bigger than any region, so it indicates
-                    // the end of the loop.
-                    break;
-                }
-                err => {
-                    return Err(ScanError::CannotListProcessRegions(err));
-                }
-            }
-        }
-
-        // Safety: returned value is not zero, so the function succeeded, and has filled
-        // the info object.
-        let info = unsafe { info.assume_init() };
-
-        if info.State == MEM_COMMIT && info.Protect != PAGE_NOACCESS {
-            regions.push(RegionDescription {
-                start: info.BaseAddress as usize,
-                length: info.RegionSize,
-            });
-        }
-        start_addr = match (info.BaseAddress as usize).checked_add(info.RegionSize) {
-            Some(v) => Some(v),
-            None => {
-                // If this happens, a region actually covers up to u64::MAX, so there cannot
-                // be any region past it. That's unlikely, but lets just be safe about it.
-                break;
-            }
-        };
-    }
-
     Ok(Box::new(WindowsProcessMemory {
         handle,
-        regions,
         buffer: Vec::new(),
+        region: None,
     }))
 }
 
@@ -100,20 +50,69 @@ struct WindowsProcessMemory {
     // Handle to the process being scanned.
     handle: OwnedHandle,
 
-    // List of regions parsed from the /proc/pid/maps file
-    regions: Vec<RegionDescription>,
-
     // Buffer used to hold the duplicated process memory when fetched.
     buffer: Vec<u8>,
+
+    // Description of the current region.
+    region: Option<RegionDescription>,
 }
 
 impl FragmentedMemory for WindowsProcessMemory {
-    fn list_regions(&self) -> Vec<RegionDescription> {
-        self.regions.clone()
+    fn reset(&mut self) {
+        self.region = None;
     }
 
-    fn fetch_region(&mut self, desc: RegionDescription) -> Option<Region> {
-        self.buffer.resize(desc.length, 0);
+    fn next(&mut self) -> Option<RegionDescription> {
+        let mut next_addr = match self.region {
+            Some(region) => Some(region.start.checked_add(region.length)?),
+            None => None,
+        };
+        self.region = loop {
+            let mut info = MaybeUninit::uninit();
+            // Safety:
+            // - the handle is a valid process handle and has the PROCESS_QUERY_INFORMATION
+            //   permission.
+            let res = unsafe {
+                VirtualQueryEx(
+                    handle_to_windows_handle(self.handle.as_handle()),
+                    next_addr.map(|v| v as *const c_void),
+                    info.as_mut_ptr(),
+                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                )
+            };
+
+            if res == 0 {
+                break None;
+            }
+
+            // Safety: returned value is not zero, so the function succeeded, and has filled
+            // the info object.
+            let info = unsafe { info.assume_init() };
+
+            next_addr = match (info.BaseAddress as usize).checked_add(info.RegionSize) {
+                Some(v) => Some(v),
+                None => {
+                    // If this happens, a region actually covers up to u64::MAX, so there cannot
+                    // be any region past it. That's unlikely, but lets just be safe about it.
+                    break None;
+                }
+            };
+            if info.State == MEM_COMMIT && info.Protect != PAGE_NOACCESS {
+                break Some(RegionDescription {
+                    start: info.BaseAddress as usize,
+                    length: info.RegionSize,
+                });
+            }
+        };
+        self.region
+    }
+
+    fn fetch(&mut self) -> Option<Region> {
+        let desc = self.region?;
+
+        // FIXME: make configurable
+        self.buffer
+            .resize(std::cmp::min(desc.length, 100 * 1024 * 1024), 0);
 
         let mut nb_bytes_read = 0;
         // Safety:

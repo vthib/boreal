@@ -12,21 +12,13 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     let mem_file = File::open(proc_pid_path.join("mem")).map_err(open_error_to_scan_error)?;
 
     // Use /proc/pid/maps to list the memory regions to scan.
-    let file = File::open(proc_pid_path.join("maps")).map_err(open_error_to_scan_error)?;
+    let maps_file = File::open(proc_pid_path.join("maps")).map_err(open_error_to_scan_error)?;
 
-    let reader = BufReader::new(file);
-    let mut regions = Vec::new();
-    for line in reader.lines() {
-        let line = line.map_err(ScanError::CannotListProcessRegions)?;
-
-        if let Some(region) = parse_map_line(&line) {
-            regions.push(region);
-        }
-    }
     Ok(Box::new(LinuxProcessMemory {
-        regions,
+        maps_file: BufReader::new(maps_file),
         mem_file,
         buffer: Vec::new(),
+        region: None,
     }))
 }
 
@@ -64,22 +56,43 @@ fn open_error_to_scan_error(open_error: std::io::Error) -> ScanError {
 
 #[derive(Debug)]
 struct LinuxProcessMemory {
-    // List of regions parsed from the /proc/pid/maps file
-    regions: Vec<RegionDescription>,
+    // Opened handle on /proc/pid/maps
+    maps_file: BufReader<File>,
 
     // Opened handle on /proc/pid/mem.
     mem_file: File,
 
     // Buffer used to hold the duplicated process memory when fetched.
     buffer: Vec<u8>,
+
+    // Current region.
+    region: Option<RegionDescription>,
 }
 
 impl FragmentedMemory for LinuxProcessMemory {
-    fn list_regions(&self) -> Vec<RegionDescription> {
-        self.regions.clone()
+    fn reset(&mut self) {
+        let _ = self.maps_file.rewind();
     }
 
-    fn fetch_region(&mut self, desc: RegionDescription) -> Option<Region> {
+    fn next(&mut self) -> Option<RegionDescription> {
+        let mut line = String::new();
+        self.region = loop {
+            line.clear();
+            if self.maps_file.read_line(&mut line).is_err() {
+                break None;
+            }
+            if line.is_empty() {
+                break None;
+            }
+            if let Some(desc) = parse_map_line(&line) {
+                break Some(desc);
+            }
+        };
+        self.region
+    }
+
+    fn fetch(&mut self) -> Option<Region> {
+        let desc = self.region?;
         let _ = self
             .mem_file
             .seek(SeekFrom::Start(desc.start as u64))

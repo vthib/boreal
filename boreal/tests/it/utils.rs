@@ -374,7 +374,10 @@ impl Checker {
     pub fn check_fragmented(&mut self, regions: &[(usize, Option<&[u8]>)], expected_res: bool) {
         let res = self
             .scanner
-            .scan_fragmented(FragmentedSlices { regions })
+            .scan_fragmented(FragmentedSlices {
+                regions,
+                current: None,
+            })
             .unwrap();
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
@@ -406,7 +409,10 @@ impl Checker {
             let mut scanner = self.scanner.clone();
             scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
             let res = scanner
-                .scan_fragmented(FragmentedSlices { regions })
+                .scan_fragmented(FragmentedSlices {
+                    regions,
+                    current: None,
+                })
                 .unwrap();
             let res = get_boreal_full_matches(&res);
             assert_eq!(res, expected, "test failed for boreal");
@@ -472,29 +478,39 @@ impl Checker {
 #[derive(Debug)]
 struct FragmentedSlices<'a, 'b> {
     regions: &'b [(usize, Option<&'a [u8]>)],
+    current: Option<usize>,
 }
 
 impl FragmentedMemory for FragmentedSlices<'_, '_> {
-    fn list_regions(&self) -> Vec<RegionDescription> {
-        self.regions
-            .iter()
-            .map(|(start, mem)| RegionDescription {
-                start: *start,
-                length: mem.map_or(10, |v| v.len()),
-            })
-            .collect()
+    fn reset(&mut self) {
+        self.current = None;
     }
 
-    fn fetch_region(&mut self, region_desc: RegionDescription) -> Option<Region> {
-        for (start, mem) in self.regions {
-            if *start == region_desc.start {
-                return Some(Region {
-                    start: *start,
-                    mem: (*mem)?,
-                });
-            }
+    fn next(&mut self) -> Option<RegionDescription> {
+        let current = match self.current {
+            Some(v) => v + 1,
+            None => 0,
+        };
+        self.current = Some(current);
+
+        if current < self.regions.len() {
+            let region = self.regions[current];
+            Some(RegionDescription {
+                start: region.0,
+                length: region.1.map_or(10, |v| v.len()),
+            })
+        } else {
+            None
         }
-        unreachable!()
+    }
+
+    fn fetch(&mut self) -> Option<Region> {
+        self.regions.get(self.current?).and_then(|(start, mem)| {
+            Some(Region {
+                start: *start,
+                mem: (*mem)?,
+            })
+        })
     }
 }
 

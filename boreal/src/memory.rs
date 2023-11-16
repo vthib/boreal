@@ -20,16 +20,11 @@ pub enum Memory<'a> {
 #[derive(Debug)]
 pub struct Fragmented<'a> {
     pub(crate) obj: Box<dyn FragmentedMemory + 'a>,
-    pub(crate) regions: Vec<RegionDescription>,
 }
 
 impl<'a> Memory<'a> {
     pub(crate) fn new_fragmented(obj: Box<dyn FragmentedMemory + 'a>) -> Memory {
-        // Cache the regions in the object. This avoids reallocating a Vec everytime
-        // we list the regions.
-        let regions = obj.list_regions();
-
-        Memory::Fragmented(Fragmented { obj, regions })
+        Memory::Fragmented(Fragmented { obj })
     }
 }
 
@@ -80,7 +75,8 @@ impl Memory<'_> {
                 }
             }
             Self::Fragmented(fragmented) => {
-                for region in &fragmented.regions {
+                fragmented.obj.reset();
+                while let Some(region) = fragmented.obj.next() {
                     let Some(relative_start) = start.checked_sub(region.start) else {
                         break;
                     };
@@ -90,7 +86,7 @@ impl Memory<'_> {
                     let end = end.checked_sub(region.start)?;
                     let end = std::cmp::min(region.length, end);
 
-                    let region = fragmented.obj.fetch_region(*region)?;
+                    let region = fragmented.obj.fetch()?;
                     return region.mem.get(relative_start..end);
                 }
 
@@ -106,15 +102,14 @@ impl Memory<'_> {
 /// single slice. The main use case is for example scanning the memory of a
 /// process, which is arranged in non contiguous regions of mapped bytes.
 pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
-    /// List non overlapping regions mapping the fragmented memory.
+    /// List the next region that can be scanned.
     ///
-    /// This listing should be cheap. Actually retrieving the memory behind a region
-    /// should only be done in the [`FragmentedMemory::fetch_region`] method.
-    /// This is also the reason why this function cannot fail, the regions should have been
-    /// precomputed already.
-    fn list_regions(&self) -> Vec<RegionDescription>;
+    /// If None is returned, the listing is considered complete.
+    fn next(&mut self) -> Option<RegionDescription>;
 
-    /// Fetch the data of a region.
+    /// Fetch the current region.
+    ///
+    /// Fetch the region that was last returned by a call to [`FragmentedMemory::next`].
     ///
     /// If unable to fetch, None must be returned. The region will be ignored,
     /// but scanning will go on:
@@ -123,7 +118,19 @@ pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
     ///   if used).
     /// - If the fetch was done during evaluation, the expression will evaluate
     ///   as `undefined`.
-    fn fetch_region(&mut self, region_desc: RegionDescription) -> Option<Region>;
+    fn fetch(&mut self) -> Option<Region>;
+
+    /// Reset the object.
+    ///
+    /// This can be called to reset the object to its initial state. After this
+    /// function is called, a call to [`FragmentedMemory::next`] should list
+    /// the first region available.
+    ///
+    /// This is used when multiple iterations over the memory regions are needed.
+    /// For example, a first iteration is done for string scanning, but this method can be
+    /// called to iterate on regions again when evaluating some conditions
+    /// that require access to specific regions.
+    fn reset(&mut self);
 }
 
 /// A description of a region of memory to scan.
