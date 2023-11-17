@@ -1122,12 +1122,12 @@ mod tests {
     fn test_poison_matches() {
         test_eval_with_poison(&empty_rule(r#""ab" matches /a/"#), b"", Some(true));
         test_eval_with_poison(
-            &empty_rule(r#"test.to_bytes(entrypoint) matches /a/"#),
+            &empty_rule(r"test.to_bytes(entrypoint) matches /a/"),
             b"",
             Some(false),
         );
         test_eval_with_poison(
-            &single_var_rule(r#"test.to_bytes(#a) matches /a/"#),
+            &single_var_rule(r"test.to_bytes(#a) matches /a/"),
             b"",
             None,
         );

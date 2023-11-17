@@ -744,7 +744,7 @@ mod tests {
         );
         parse(
             regex,
-            r#"/.{2}/si c"#,
+            r"/.{2}/si c",
             "i c",
             Regex {
                 ast: Node::Repetition {
