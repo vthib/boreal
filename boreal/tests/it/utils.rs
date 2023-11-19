@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use boreal::memory::{FragmentedMemory, Region, RegionDescription};
+use boreal::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use boreal::module::{Module, StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanError, ScanParams, ScanResult};
 
@@ -486,7 +486,7 @@ impl FragmentedMemory for FragmentedSlices<'_, '_> {
         self.current = None;
     }
 
-    fn next(&mut self) -> Option<RegionDescription> {
+    fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
         let current = match self.current {
             Some(v) => v + 1,
             None => 0,
@@ -504,7 +504,7 @@ impl FragmentedMemory for FragmentedSlices<'_, '_> {
         }
     }
 
-    fn fetch(&mut self) -> Option<Region> {
+    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
         self.regions.get(self.current?).and_then(|(start, mem)| {
             Some(Region {
                 start: *start,

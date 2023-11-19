@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use crate::memory::MemoryParams;
+
 /// Parameters used to configure a scan.
 #[derive(Clone, Debug)]
 pub struct ScanParams {
@@ -24,6 +26,12 @@ pub struct ScanParams {
 
     /// Scanned bytes are part of a process memory.
     pub(crate) process_memory: bool,
+
+    /// Maximum size of a fetched region.
+    pub(crate) max_fetched_region_size: usize,
+
+    /// Size of memory chunks to scan.
+    pub(crate) memory_chunk_size: Option<usize>,
 }
 
 impl Default for ScanParams {
@@ -35,6 +43,8 @@ impl Default for ScanParams {
             timeout_duration: None,
             compute_statistics: false,
             process_memory: false,
+            max_fetched_region_size: 1024 * 1024 * 1024,
+            memory_chunk_size: None,
         }
     }
 }
@@ -126,6 +136,65 @@ impl ScanParams {
         self
     }
 
+    /// Maximum size of a fetched region.
+    ///
+    /// This parameter applies to fragmented memory scanning, using either the
+    /// [`crate::Scanner::scan_fragmented`] or [`crate::Scanner::scan_process`]
+    /// function.
+    ///
+    /// If a region is larger than this value, only this size will be
+    /// fetched. For example, if this value is 50MB and a region has a size
+    /// of 80MB, then only the first 50MB will be scanned, and the trailing
+    /// 30MB left will not be scanned.
+    ///
+    /// This parameter exists as a safeguard, to ensure that memory
+    /// consumption will never go above this limit. You may however prefer
+    /// tweaking the [`ScanParams::memory_chunk_size`] parameter, to bound
+    /// memory consumption while still ensuring every byte is scanned.
+    ///
+    /// By default, this parameter is set to 1GB.
+    #[must_use]
+    pub fn max_fetched_region_size(mut self, max_fetched_region_size: usize) -> Self {
+        self.max_fetched_region_size = max_fetched_region_size;
+        self
+    }
+
+    /// Size of memory chunks to scan.
+    ///
+    /// This parameter bounds the size of the chunks of memory that are
+    /// scanned. This only applies to fragmented memory (using either
+    /// [`crate::Scanner::scan_fragmented`] or
+    /// [`crate::Scanner::scan_process`]) and does not apply when
+    /// scanning a contiguous slice of bytes (scanning a file or a
+    /// byteslice).
+    ///
+    /// When this parameter is set, every region that is scanned is
+    /// split into chunks of this size maximum, and each chunk is
+    /// scanned independently. For example, if a process has a region
+    /// of size 80MB, and this parameter is set to 30MB, then:
+    ///
+    /// - the first 30MB are first fetched and scanned
+    /// - the next 30MB are then fetched and scanned
+    /// - the last 20MB are then fetched and scanned
+    ///
+    /// This parameter thus allows setting a bound on the memory
+    /// consumption of fragmented memory scanning, while still
+    /// scanning all of the bytes available.
+    ///
+    /// Note however than setting this parameter can cause false
+    /// negatives, as string scanning does not handle strings that
+    /// are split between different chunks. For example, when
+    /// scanning for the string `boreal`, if one chunk ends with
+    /// `bor`, and the next one starts with `eal`, the string will
+    /// **not** match.
+    ///
+    /// By default, this parameter is unset.
+    #[must_use]
+    pub fn memory_chunk_size(mut self, memory_chunk_size: Option<usize>) -> Self {
+        self.memory_chunk_size = memory_chunk_size;
+        self
+    }
+
     /// Returns whether full matches are computed on matching rules.
     #[must_use]
     pub fn get_compute_full_matches(&self) -> bool {
@@ -161,6 +230,25 @@ impl ScanParams {
     pub fn get_process_memory(&self) -> bool {
         self.process_memory
     }
+
+    /// Returns the maximum size of a fetched region.
+    #[must_use]
+    pub fn get_max_fetched_region_size(&self) -> usize {
+        self.max_fetched_region_size
+    }
+
+    /// Returns the size of memory chunks to scan.
+    #[must_use]
+    pub fn get_memory_chunk_size(&self) -> Option<usize> {
+        self.memory_chunk_size
+    }
+
+    pub(crate) fn to_memory_params(&self) -> MemoryParams {
+        MemoryParams {
+            max_fetched_region_size: self.max_fetched_region_size,
+            memory_chunk_size: self.memory_chunk_size,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -194,5 +282,11 @@ mod tests {
 
         let params = params.process_memory(true);
         assert!(params.get_process_memory());
+
+        let params = params.max_fetched_region_size(100);
+        assert_eq!(params.get_max_fetched_region_size(), 100);
+
+        let params = params.memory_chunk_size(Some(200));
+        assert_eq!(params.get_memory_chunk_size(), Some(200));
     }
 }

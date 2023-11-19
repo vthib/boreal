@@ -20,11 +20,31 @@ pub enum Memory<'a> {
 #[derive(Debug)]
 pub struct Fragmented<'a> {
     pub(crate) obj: Box<dyn FragmentedMemory + 'a>,
+    pub(crate) params: MemoryParams,
+}
+
+/// Parameters related to listing and fetching memory to scan.
+#[derive(Debug)]
+pub struct MemoryParams {
+    /// Maximum size of a fetched region.
+    ///
+    /// See [`crate::scanner::ScanParams::max_fetched_region_size`]
+    /// for more details.
+    pub max_fetched_region_size: usize,
+
+    /// Size of memory chunks to scan.
+    ///
+    /// See [`crate::scanner::ScanParams::memory_chunk_size`]
+    /// for more details.
+    pub memory_chunk_size: Option<usize>,
 }
 
 impl<'a> Memory<'a> {
-    pub(crate) fn new_fragmented(obj: Box<dyn FragmentedMemory + 'a>) -> Memory {
-        Memory::Fragmented(Fragmented { obj })
+    pub(crate) fn new_fragmented(
+        obj: Box<dyn FragmentedMemory + 'a>,
+        params: MemoryParams,
+    ) -> Memory {
+        Memory::Fragmented(Fragmented { obj, params })
     }
 }
 
@@ -76,7 +96,7 @@ impl Memory<'_> {
             }
             Self::Fragmented(fragmented) => {
                 fragmented.obj.reset();
-                while let Some(region) = fragmented.obj.next() {
+                while let Some(region) = fragmented.obj.next(&fragmented.params) {
                     let Some(relative_start) = start.checked_sub(region.start) else {
                         break;
                     };
@@ -86,7 +106,7 @@ impl Memory<'_> {
                     let end = end.checked_sub(region.start)?;
                     let end = std::cmp::min(region.length, end);
 
-                    let region = fragmented.obj.fetch()?;
+                    let region = fragmented.obj.fetch(&fragmented.params)?;
                     return region.mem.get(relative_start..end);
                 }
 
@@ -105,7 +125,7 @@ pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
     /// List the next region that can be scanned.
     ///
     /// If None is returned, the listing is considered complete.
-    fn next(&mut self) -> Option<RegionDescription>;
+    fn next(&mut self, params: &MemoryParams) -> Option<RegionDescription>;
 
     /// Fetch the current region.
     ///
@@ -118,7 +138,7 @@ pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
     ///   if used).
     /// - If the fetch was done during evaluation, the expression will evaluate
     ///   as `undefined`.
-    fn fetch(&mut self) -> Option<Region>;
+    fn fetch(&mut self, params: &MemoryParams) -> Option<Region>;
 
     /// Reset the object.
     ///
