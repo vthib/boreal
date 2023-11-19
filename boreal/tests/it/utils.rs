@@ -478,7 +478,10 @@ impl Checker {
 #[derive(Debug)]
 struct FragmentedSlices<'a, 'b> {
     regions: &'b [(usize, Option<&'a [u8]>)],
-    current: Option<usize>,
+    // Tuple of:
+    // - Index to the current region
+    // - offset into the region mem of the current chunk
+    current: Option<(usize, usize)>,
 }
 
 impl FragmentedMemory for FragmentedSlices<'_, '_> {
@@ -486,29 +489,59 @@ impl FragmentedMemory for FragmentedSlices<'_, '_> {
         self.current = None;
     }
 
-    fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
-        let current = match self.current {
-            Some(v) => v + 1,
-            None => 0,
+    fn next(&mut self, params: &MemoryParams) -> Option<RegionDescription> {
+        // Find next (index, offset) pair
+        let (region_index, offset) = match self.current {
+            Some((region_index, mut offset)) => {
+                match params.memory_chunk_size {
+                    // No chunking, just select the next
+                    None => (region_index + 1, 0),
+                    Some(chunk_size) => {
+                        // Chunking, go to the next chunk of this region.
+                        offset += chunk_size;
+                        let next_region = match self.regions[region_index].1 {
+                            None => true,
+                            Some(mem) => offset >= mem.len(),
+                        };
+                        if next_region {
+                            (region_index + 1, 0)
+                        } else {
+                            (region_index, offset)
+                        }
+                    }
+                }
+            }
+            None => (0, 0),
         };
-        self.current = Some(current);
+        self.current = Some((region_index, offset));
 
-        if current < self.regions.len() {
-            let region = self.regions[current];
+        if region_index < self.regions.len() {
+            let region = self.regions[region_index];
+            let len = region.1.map_or(10, |v| v[offset..].len());
             Some(RegionDescription {
                 start: region.0,
-                length: region.1.map_or(10, |v| v.len()),
+                length: match params.memory_chunk_size {
+                    Some(chunk_size) => std::cmp::min(chunk_size, len),
+                    None => len,
+                },
             })
         } else {
             None
         }
     }
 
-    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
-        self.regions.get(self.current?).and_then(|(start, mem)| {
+    fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
+        let (region_index, offset) = self.current?;
+
+        self.regions.get(region_index).and_then(|(start, mem)| {
+            let mem = &(*mem)?[offset..];
+            let mem = match params.memory_chunk_size {
+                Some(chunk_size) => &mem[..std::cmp::min(mem.len(), chunk_size)],
+                None => mem,
+            };
             Some(Region {
                 start: *start,
-                mem: (*mem)?,
+                mem: &mem[..std::cmp::min(mem.len(), params.max_fetched_region_size)],
             })
         })
     }
