@@ -1,3 +1,5 @@
+use boreal::scanner::ScanParams;
+
 use crate::utils::Checker;
 
 #[test]
@@ -428,5 +430,81 @@ rule macho64 {
             (2000, Some(macho32)),
         ],
         vec![("default:macho64".to_owned(), vec![])],
+    );
+}
+
+#[test]
+fn test_fragmented_param_max_fetched_region_size() {
+    let mut checker = Checker::new_without_yara(
+        r#"
+rule a {
+    strings:
+        $a = "abcdefgh"
+    condition:
+        $a
+}"#,
+    );
+
+    // By default, works fine
+    checker.check_fragmented(&[(0, Some(b"abcdefgh"))], true);
+
+    // This will fail as the limit is very low and cuts the string
+    checker.set_scan_params(ScanParams::default().max_fetched_region_size(4));
+    checker.check_fragmented(&[(0, Some(b"abcdefgh"))], false);
+
+    checker.set_scan_params(ScanParams::default().max_fetched_region_size(20));
+    checker.check_fragmented(&[(0, Some(b"123456789 abcdefgh"))], true);
+    // Cuts the string in two
+    checker.check_fragmented(&[(0, Some(b"123456789 12345 abcdefgh"))], false);
+    // Does not match if the whole string is past the limit, contrary to the
+    // memory_chunk_size parameter.
+    checker.check_fragmented(&[(0, Some(b"123456789 123456789 12345 abcdefgh"))], false);
+}
+
+#[test]
+fn test_fragmented_param_memory_chunk_size() {
+    let mut checker = Checker::new_without_yara(
+        r#"
+rule a {
+    strings:
+        $a = "abcdefgh"
+    condition:
+        $a
+}"#,
+    );
+
+    // By default, works fine
+    checker.check_fragmented(&[(0, Some(b"abcdefgh"))], true);
+
+    // This will fail as the limit is very low and cuts the string
+    checker.set_scan_params(ScanParams::default().memory_chunk_size(Some(4)));
+    checker.check_fragmented(&[(0, Some(b"abcdefgh"))], false);
+
+    checker.set_scan_params(ScanParams::default().memory_chunk_size(Some(20)));
+    checker.check_fragmented(&[(0, Some(b"123456789 abcdefgh"))], true);
+    // Cuts the string in two
+    checker.check_fragmented(&[(0, Some(b"123456789 12345 abcdefgh"))], false);
+    // Match since the string is in the second chunk.
+    checker.check_fragmented(&[(0, Some(b"123456789 123456789 12345 abcdefgh"))], true);
+
+    let mut checker = Checker::new_without_yara(
+        r#"
+rule a {
+    strings:
+        $a = "abcde"
+        $b = "defgh"
+        $c = "ijk"
+    condition:
+        all of them
+}"#,
+    );
+    checker.set_scan_params(ScanParams::default().memory_chunk_size(Some(10)));
+    checker.check_fragmented(
+        &[
+            (1000, Some(b"  abcde 123456")),
+            (2000, Some(b"123456789 12 defgh 3")),
+            (3000, Some(b"123456789 123456789 123456789 1234567ijk")),
+        ],
+        true,
     );
 }
