@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
-use crate::memory::{FragmentedMemory, Region, RegionDescription};
+use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use crate::scanner::ScanError;
 
 pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> {
@@ -74,7 +74,7 @@ impl FragmentedMemory for LinuxProcessMemory {
         let _ = self.maps_file.rewind();
     }
 
-    fn next(&mut self) -> Option<RegionDescription> {
+    fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
         let mut line = String::new();
         self.region = loop {
             line.clear();
@@ -91,7 +91,7 @@ impl FragmentedMemory for LinuxProcessMemory {
         self.region
     }
 
-    fn fetch(&mut self) -> Option<Region> {
+    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
         let desc = self.region?;
         let _ = self
             .mem_file

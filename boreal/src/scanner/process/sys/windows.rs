@@ -9,7 +9,7 @@ use windows::Win32::System::Memory::{
 };
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 
-use crate::memory::{FragmentedMemory, Region, RegionDescription};
+use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use crate::scanner::ScanError;
 
 pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> {
@@ -62,7 +62,7 @@ impl FragmentedMemory for WindowsProcessMemory {
         self.region = None;
     }
 
-    fn next(&mut self) -> Option<RegionDescription> {
+    fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
         let mut next_addr = match self.region {
             Some(region) => Some(region.start.checked_add(region.length)?),
             None => None,
@@ -107,7 +107,7 @@ impl FragmentedMemory for WindowsProcessMemory {
         self.region
     }
 
-    fn fetch(&mut self) -> Option<Region> {
+    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
         let desc = self.region?;
 
         // FIXME: make configurable

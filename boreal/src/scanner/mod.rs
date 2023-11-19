@@ -202,7 +202,7 @@ impl Scanner {
     pub fn scan_process(&self, pid: u32) -> Result<ScanResult, (ScanError, ScanResult)> {
         match process::process_memory(pid) {
             Ok(memory) => self.inner.scan(
-                Memory::new_fragmented(memory),
+                Memory::new_fragmented(memory, self.scan_params.to_memory_params()),
                 &self.scan_params,
                 &self.external_symbols_values,
             ),
@@ -217,7 +217,7 @@ impl Scanner {
         T: FragmentedMemory,
     {
         self.inner.scan(
-            Memory::new_fragmented(Box::new(obj)),
+            Memory::new_fragmented(Box::new(obj), self.scan_params.to_memory_params()),
             &self.scan_params,
             &self.external_symbols_values,
         )
@@ -516,8 +516,8 @@ impl Inner {
             }
             Memory::Fragmented(fragmented) => {
                 // Scan each region for all variables occurences.
-                while fragmented.obj.next().is_some() {
-                    let Some(region) = fragmented.obj.fetch() else {
+                while fragmented.obj.next(&fragmented.params).is_some() {
+                    let Some(region) = fragmented.obj.fetch(&fragmented.params) else {
                         continue;
                     };
                     self.ac_scan
