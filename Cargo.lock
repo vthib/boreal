@@ -891,7 +891,7 @@ checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
 [[package]]
 name = "yara"
 version = "0.21.0"
-source = "git+https://github.com/vthib/yara-rust?branch=version-0.21.0#40fec76618edfcd1220ec5b848aa19d124031281"
+source = "git+https://github.com/vthib/yara-rust?branch=version-0.21.0#4bbe4a8083cf88c900bbbd4539392694388f0c56"
 dependencies = [
  "bitflags 2.4.1",
  "lazy_static",
@@ -902,7 +902,7 @@ dependencies = [
 [[package]]
 name = "yara-sys"
 version = "0.21.0"
-source = "git+https://github.com/vthib/yara-rust?branch=version-0.21.0#40fec76618edfcd1220ec5b848aa19d124031281"
+source = "git+https://github.com/vthib/yara-rust?branch=version-0.21.0#4bbe4a8083cf88c900bbbd4539392694388f0c56"
 dependencies = [
  "bindgen",
  "cc",
