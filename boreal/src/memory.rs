@@ -175,17 +175,47 @@ pub struct Region<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::test_type_traits_non_clonable;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
     use super::*;
+
+    #[derive(Debug)]
+    struct DummyFragmented;
+
+    impl FragmentedMemory for DummyFragmented {
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn reset(&mut self) {}
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
+            None
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
+            None
+        }
+    }
 
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(Memory::Direct(b""));
         test_type_traits_non_clonable(Region { start: 0, mem: b"" });
-        test_type_traits_non_clonable(RegionDescription {
+        test_type_traits(RegionDescription {
             start: 0,
             length: 0,
+        });
+        test_type_traits_non_clonable(MemoryParams {
+            max_fetched_region_size: 0,
+            memory_chunk_size: None,
+        });
+        test_type_traits_non_clonable(DummyFragmented);
+        test_type_traits_non_clonable(Fragmented {
+            obj: Box::new(DummyFragmented),
+            params: MemoryParams {
+                max_fetched_region_size: 0,
+                memory_chunk_size: None,
+            },
         });
     }
 }
