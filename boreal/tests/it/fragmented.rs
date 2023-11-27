@@ -86,6 +86,45 @@ rule a {
     );
 }
 
+#[test]
+fn test_fragmented_match_offset() {
+    // check all the expressions that uses the match offset, to ensure the base of
+    // the region is taken properly into account.
+    let mut checker = Checker::new(
+        r"
+rule a {
+    strings:
+        $a = /a[^a]*?bcde/
+    condition:
+        #a == 4 and
+        // Check offset of match
+        (@a[1] == 0x1005 and !a[1] == 8) and
+        (@a[2] == 0x2000 and !a[2] == 14) and
+        (@a[3] == 0x300A and !a[3] == 5) and
+        (@a[4] == 0x4001 and !a[4] == 5) and
+        // Check count in
+        (#a in (0x2000..0x4000) == 2) and
+        // find at
+        for any of them: ($ at 0x4001) and
+        // find in
+        for any of them: ($ in (0x1000..0x2000))
+}",
+    );
+
+    let regions = &[
+        // Start offset is 5
+        (0x1000, b"01234abbbbcde".as_slice()),
+        // Start offset is 0, but reverse validation starts after 5: the previous start offset
+        // should not be taken into account or the reverse valid will fail.
+        (0x2000, b"a123456789bcde".as_slice()),
+        // Start offset is 10
+        (0x3000, b"0123456789abcde".as_slice()),
+        // Start offset is 1
+        (0x4000, b" abcde".as_slice()),
+    ];
+    checker.check_fragmented(regions, true);
+}
+
 // Check strings matches do not handle spans across regions
 #[test]
 fn test_fragmented_cut() {

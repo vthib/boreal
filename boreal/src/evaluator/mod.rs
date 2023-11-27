@@ -321,7 +321,8 @@ impl Evaluator<'_, '_, '_> {
                             var_matches.find_match_occurence(var_index, v - 1)
                         })?;
 
-                        mat.and_then(|mat| i64::try_from(mat.offset).ok())
+                        mat.and_then(|mat| mat.offset.checked_add(mat.base))
+                            .and_then(|offset| i64::try_from(offset).ok())
                             .map(Value::Integer)
                             .ok_or(PoisonKind::Undefined)
                     }
