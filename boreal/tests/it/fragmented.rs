@@ -40,6 +40,52 @@ rule a {
     );
 }
 
+#[test]
+fn test_fragmented_reverse_validation() {
+    // Check that the optimization to prevent reverse validation to be quadratic does not
+    // break detection with fragmented memory.
+    // To avoid spending too long on reverse validation, the validation is bounded by the starting
+    // offset of the previous match. In the case of fragmented memory however, this starting
+    // offset should not be taken if it comes from another region.
+    let mut checker = Checker::new(
+        r"
+rule a {
+    strings:
+        $a = /a[^a]*?bcde/
+    condition:
+        $a
+}",
+    );
+
+    let regions = &[
+        // Start offset is 5
+        (0x1000, b"01234abbbbcde".as_slice()),
+        // Start offset is 0, but reverse validation starts after 5: the previous start offset
+        // should not be taken into account or the reverse valid will fail.
+        (0x2000, b"a123456789bcde".as_slice()),
+        // Start offset is 10
+        (0x3000, b"0123456789abcde".as_slice()),
+        // Start offset is 1
+        (0x4000, b" abcde".as_slice()),
+    ];
+    checker.check_fragmented(regions, true);
+    checker.check_fragmented_full_matches(
+        regions,
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "a",
+                vec![
+                    (b"abbbbcde", 0x1005, 8),
+                    (b"a123456789bcde", 0x2000, 14),
+                    (b"abcde", 0x300A, 5),
+                    (b"abcde", 0x4001, 5),
+                ],
+            )],
+        )],
+    );
+}
+
 // Check strings matches do not handle spans across regions
 #[test]
 fn test_fragmented_cut() {
