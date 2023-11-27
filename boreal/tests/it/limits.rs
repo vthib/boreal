@@ -157,6 +157,7 @@ rule a {{
     checker.set_scan_params(params.clone());
     checker.check_rule_matches(b"", &[]);
     assert!(matches!(checker.last_err, Some(ScanError::Timeout)));
+    assert_eq!(checker.last_err.unwrap().to_string(), "timeout");
 
     // Same with global rule
     let mut checker = Checker::new_without_yara(&format!(
