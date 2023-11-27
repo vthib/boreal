@@ -227,7 +227,13 @@ impl AcScan {
             // This is invalid, only one match per starting byte can happen.
             // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
             // saved match.
-            let start_position = var_matches.last().map_or(0, |mat| mat.offset + 1);
+            //
+            // This must only be done if the match is in the same region, otherwise the offset
+            // of the previous match makes no sense for this match, and will falsify results.
+            let start_position = match var_matches.last() {
+                Some(mat) if mat.base == region.start => mat.offset + 1,
+                _ => 0,
+            };
 
             let res = var.process_ac_match(region.mem, m, start_position, match_type);
 
