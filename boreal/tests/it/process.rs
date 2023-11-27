@@ -120,3 +120,24 @@ fn euid_is_root() -> bool {
     let euid: u32 = euid.parse().unwrap();
     euid == 0
 }
+
+#[test]
+fn test_process_multiple_passes() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /scan.{10}self/
+    condition:
+        // First pass: string scan
+        $a and
+        // Second pass: uint32 eval
+        uint16be(@a) == 0x7363
+}"#,
+    );
+
+    // This is "scan0123456789self" when xor'ed
+    let payload = xor_bytes(b"|lna?>=<;:9876|jci", 15);
+    checker.check_process(std::process::id(), true);
+    std::hint::black_box(payload);
+}
