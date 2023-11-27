@@ -52,9 +52,10 @@ impl<'a> VarMatches<'a> {
         // TODO: improve algorithm for searching in matches
         let mut count = 0;
         for mat in &self.matches[var_index] {
-            if mat.offset > to {
+            let mat_offset = mat.offset.saturating_add(mat.base);
+            if mat_offset > to {
                 return count;
-            } else if mat.offset >= from {
+            } else if mat_offset >= from {
                 count += 1;
             }
         }
@@ -66,7 +67,8 @@ impl<'a> VarMatches<'a> {
     pub fn find_at(&self, var_index: usize, offset: usize) -> bool {
         // TODO: improve algorithm for searching in matches
         for mat in &self.matches[var_index] {
-            match mat.offset.cmp(&offset) {
+            let mat_offset = mat.offset.saturating_add(mat.base);
+            match mat_offset.cmp(&offset) {
                 Ordering::Less => (),
                 Ordering::Equal => return true,
                 Ordering::Greater => return false,
@@ -80,9 +82,10 @@ impl<'a> VarMatches<'a> {
     pub fn find_in(&self, var_index: usize, from: usize, to: usize) -> bool {
         // TODO: improve algorithm for searching in matches
         for mat in &self.matches[var_index] {
-            if mat.offset > to {
+            let mat_offset = mat.offset.saturating_add(mat.base);
+            if mat_offset > to {
                 return false;
-            } else if mat.offset >= from {
+            } else if mat_offset >= from {
                 return true;
             }
         }
