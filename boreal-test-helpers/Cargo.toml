@@ -1,0 +1,11 @@
+[package]
+name = "boreal-test-helpers"
+version = "0.0.1"
+description = "Test helpers for boreal tests"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+memmap2 = "0.9"
+tempfile = "3.8"

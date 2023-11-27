@@ -4,6 +4,7 @@ members = [
     "boreal-parser",
     "boreal",
     "boreal-cli",
+    "boreal-test-helpers",
 ]
 
 [patch.crates-io]

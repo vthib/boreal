@@ -26,16 +26,27 @@ jobs:
           echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
           echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
           echo "YARA_OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
+
       - uses: actions/checkout@v3
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
-      - run: cargo test --target=${{matrix.target}}
+
+      - name: Build test helpers
+        run: |
+          cd boreal-test-helpers
+          cargo build --target=${{matrix.target}}
+
+      - name: Run tests
         env:
           YARA_CRYPTO_LIB: openssl
-      - run: cargo test --features authenticode --target=${{matrix.target}}
+        run: cargo test --target=${{matrix.target}}
+
+      - name: Run tests with Openssl
         env:
           YARA_CRYPTO_LIB: openssl
+        run: cargo test --features authenticode --target=${{matrix.target}}
 
     strategy:
       fail-fast: false
@@ -77,6 +88,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
+
+      - name: Build test helpers
+        run: |
+          cd boreal-test-helpers
+          cargo build --target=${{matrix.target}}
 
       - name: Run tests
         env:
@@ -140,7 +156,16 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Generate code coverage
-        run: cargo llvm-cov --features authenticode --workspace --lcov --output-path lcov.info
+        run: |
+          # First, build the test helpers in the right target dir
+          cd boreal-test-helpers
+          cargo build --target-dir ../target/llvm-cov-target
+          cd ..
+          # Then, run the tests. This needs to avoid cleaning to not remove
+          # the test helpers from the target dir
+          cargo llvm-cov --features authenticode --workspace --no-clean \
+            --ignore-filename-regex boreal-test-helpers/src/main.rs \
+            --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

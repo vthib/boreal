@@ -91,14 +91,15 @@ impl FragmentedMemory for LinuxProcessMemory {
         self.region
     }
 
-    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
+    fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
         let desc = self.region?;
         let _ = self
             .mem_file
             .seek(SeekFrom::Start(desc.start as u64))
             .ok()?;
 
-        self.buffer.resize(desc.length, 0);
+        let length = std::cmp::min(desc.length, params.max_fetched_region_size);
+        self.buffer.resize(length, 0);
         self.mem_file.read_exact(&mut self.buffer).ok()?;
 
         Some(Region {

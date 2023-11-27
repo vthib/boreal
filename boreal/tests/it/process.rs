@@ -1,3 +1,4 @@
+use std::io::{BufRead, BufReader};
 #[cfg(any(target_os = "linux", windows))]
 use std::path::Path;
 
@@ -6,39 +7,23 @@ use crate::utils::Checker;
 #[cfg(any(target_os = "linux", windows))]
 use boreal::scanner::ScanError;
 
-fn xor_bytes(v: &[u8], xor_byte: u8) -> Vec<u8> {
-    v.iter().map(|b| *b ^ xor_byte).collect()
-}
-
 #[test]
 #[cfg(any(target_os = "linux", windows))]
-fn test_self_scan() {
-    // self-scan is a bit tricky, we need to *not* match on some payload
-    // from this test, nor from the compiled rule.
-    // We do this by using a bit of an obfuscated regex.
+fn test_scan_process() {
+    // Scan for strings found in the bss and the stack of the test process.
     let mut checker = Checker::new(
         r#"
 rule a {
     strings:
-        $a = /self.{10}scan/
+        $a = /test.{10}helper/
+        $b = "PAYLOAD_ON_STACK"
     condition:
-        $a
+        all of them
 }"#,
     );
 
-    // Scanning ourselves can lead to a bit of a weird situation where the buffer
-    // used to hold each region grows and grows as it tries to contain... its own
-    // region. This will end when reaching the max size of the buffer.
-    checker.check_process(std::process::id(), false);
-
-    // This is "self0123456789scan" when xor'ed
-    let payload = xor_bytes(b"|jci?>=<;:9876|lna", 15);
-
-    checker.check_process(std::process::id(), true);
-
-    // Black box to avoid the payload from being optimized away before
-    // the process scan.
-    std::hint::black_box(payload);
+    let helper = BinHelper::run("stack");
+    checker.check_process(helper.pid(), true);
 }
 
 /// Test scanning a pid that do not exist.
@@ -127,17 +112,129 @@ fn test_process_multiple_passes() {
         r#"
 rule a {
     strings:
-        $a = /scan.{10}self/
+        $a = /test.{10}helper/
     condition:
         // First pass: string scan
         $a and
         // Second pass: uint32 eval
-        uint16be(@a) == 0x7363
+        uint16be(@a) == 0x7465
 }"#,
     );
 
-    // This is "scan0123456789self" when xor'ed
-    let payload = xor_bytes(b"|lna?>=<;:9876|jci", 15);
-    checker.check_process(std::process::id(), true);
-    std::hint::black_box(payload);
+    let helper = BinHelper::run("stack");
+    checker.check_process(helper.pid(), true);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", windows))]
+fn test_process_max_fetched_region_size() {
+    use boreal::scanner::ScanParams;
+
+    use crate::utils::get_boreal_full_matches;
+
+    let checker = Checker::new_without_yara(
+        r#"
+rule a {
+    strings:
+        $a = "Dwb6r5gd"
+    condition:
+        $a
+}"#,
+    );
+    let mut scanner = checker.scanner().scanner;
+    scanner.set_scan_params(ScanParams::default().max_fetched_region_size(20));
+
+    let helper = BinHelper::run("max_fetched_region_size");
+    assert_eq!(helper.output.len(), 4);
+    let region1 = usize::from_str_radix(&helper.output[0], 16).unwrap();
+    let region2 = usize::from_str_radix(&helper.output[1], 16).unwrap();
+    let region3 = usize::from_str_radix(&helper.output[2], 16).unwrap();
+    let region4 = usize::from_str_radix(&helper.output[3], 16).unwrap();
+
+    let res = scanner.scan_process(helper.pid()).unwrap();
+    let res = get_boreal_full_matches(&res);
+    let mut expected = vec![
+        (b"Dwb6r5gd".as_slice(), region1, 8),
+        (b"Dwb6r5gd".as_slice(), region2 + 10, 8),
+    ];
+    // Sort by address, since the provided regions might not be in the same order as creation.
+    expected.sort_by_key(|v| v.1);
+
+    assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
+
+    scanner.set_scan_params(ScanParams::default().max_fetched_region_size(40));
+    let res = scanner.scan_process(helper.pid()).unwrap();
+    let res = get_boreal_full_matches(&res);
+    let mut expected = vec![
+        (b"Dwb6r5gd".as_slice(), region1, 8),
+        (b"Dwb6r5gd".as_slice(), region2 + 10, 8),
+        (b"Dwb6r5gd".as_slice(), region3 + 16, 8),
+        (b"Dwb6r5gd".as_slice(), region4 + 26, 8),
+    ];
+    // Sort by address, since the provided regions might not be in the same order as creation.
+    expected.sort_by_key(|v| v.1);
+
+    assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
+}
+
+struct BinHelper {
+    proc: std::process::Child,
+    output: Vec<String>,
+}
+
+impl BinHelper {
+    fn run(arg: &str) -> Self {
+        // Path to current exe
+        let path = std::env::current_exe().unwrap();
+        // Path to "deps" dir
+        let path = path.parent().unwrap();
+        // Path to parent of deps dir, ie destination of build artifacts
+        let path = path.parent().unwrap();
+        // Now select the bin helper
+        let path = path.join(if cfg!(windows) {
+            "boreal-test-helpers.exe"
+        } else {
+            "boreal-test-helpers"
+        });
+        if !path.exists() {
+            panic!(
+                "File {} not found. \
+                You need to compile the `boreal-test-helpers` crate to run this test",
+                path.display()
+            );
+        }
+        let mut child = std::process::Command::new(path)
+            .arg(arg)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        // Accumulate read inputs until the "ready" line is found
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut lines = Vec::new();
+        let mut buffer = String::new();
+        loop {
+            buffer.clear();
+            stdout.read_line(&mut buffer).unwrap();
+            if buffer.trim() == "ready" {
+                break;
+            }
+            lines.push(buffer.trim().to_owned());
+        }
+        Self {
+            proc: child,
+            output: lines,
+        }
+    }
+
+    fn pid(&self) -> u32 {
+        self.proc.id()
+    }
+}
+
+impl Drop for BinHelper {
+    fn drop(&mut self) {
+        let _ = self.proc.kill();
+        let _ = self.proc.wait();
+    }
 }

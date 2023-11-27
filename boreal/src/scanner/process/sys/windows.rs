@@ -107,12 +107,13 @@ impl FragmentedMemory for WindowsProcessMemory {
         self.region
     }
 
-    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
+    fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
         let desc = self.region?;
 
-        // FIXME: make configurable
-        self.buffer
-            .resize(std::cmp::min(desc.length, 100 * 1024 * 1024), 0);
+        self.buffer.resize(
+            std::cmp::min(desc.length, params.max_fetched_region_size),
+            0,
+        );
 
         let mut nb_bytes_read = 0;
         // Safety:

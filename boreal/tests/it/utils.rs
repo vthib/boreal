@@ -548,7 +548,7 @@ impl FragmentedMemory for FragmentedSlices<'_, '_> {
 }
 
 pub struct Scanner<'a> {
-    scanner: boreal::Scanner,
+    pub scanner: boreal::Scanner,
     yara_scanner: Option<yara::Scanner<'a>>,
 }
 
@@ -646,9 +646,9 @@ pub fn check_warnings(rule: &str, expected_warnings: &[&str]) {
     compiler.check_add_rules_warnings(rule, expected_warnings);
 }
 
-type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(&'a [u8], usize, usize)>)>)>;
+pub type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(&'a [u8], usize, usize)>)>)>;
 
-fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
+pub fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
     res.matched_rules
         .iter()
         .map(|v| {
