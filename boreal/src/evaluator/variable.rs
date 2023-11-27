@@ -94,7 +94,18 @@ impl<'a> VarMatches<'a> {
 /// Details on a match on a string during a scan.
 #[derive(Clone, Debug)]
 pub struct StringMatch {
-    /// Offset of the match
+    /// Base offset of the region containing the match.
+    ///
+    /// When scanning a file, this is 0. When scanning fragmented memory such as a process
+    /// memory, this is the starting offset of the region containing the match.
+    pub base: usize,
+
+    /// Offset of the match.
+    ///
+    /// This is relative to the base offset. For example, on a match at address
+    /// `0x7FFF_0050`, in a region that starts at offset `0x7FFF_0000`:
+    /// - `base` is `0x7FFF_0000`.
+    /// - `offset` is `0x50`.
     pub offset: usize,
 
     /// Actual length of the match.
@@ -118,12 +129,13 @@ impl StringMatch {
         let capped_length = std::cmp::min(length, match_max_length);
 
         Self {
+            base: region.start,
             data: region.mem[mat.start..]
                 .iter()
                 .take(capped_length)
                 .copied()
                 .collect(),
-            offset: mat.start.saturating_add(region.start),
+            offset: mat.start,
             length,
         }
     }
@@ -139,6 +151,7 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(VarMatches { matches: &[] });
         test_type_traits(StringMatch {
+            base: 0,
             offset: 0,
             length: 0,
             data: Vec::new(),
