@@ -41,6 +41,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     Ok(Box::new(WindowsProcessMemory {
         handle,
         buffer: Vec::new(),
+        current_position: None,
         region: None,
     }))
 }
@@ -53,8 +54,67 @@ struct WindowsProcessMemory {
     // Buffer used to hold the duplicated process memory when fetched.
     buffer: Vec<u8>,
 
-    // Description of the current region.
+    // Current position: current region and offset in the region of the current chunk.
+    current_position: Option<(RegionDescription, usize)>,
+
+    // Current region returned by the next call, which needs to be fetched.
     region: Option<RegionDescription>,
+}
+
+impl WindowsProcessMemory {
+    fn next_position(&self, params: &MemoryParams) -> Option<(RegionDescription, usize)> {
+        let next_addr = match self.current_position {
+            Some((desc, mut offset)) => {
+                if let Some(chunk_size) = params.memory_chunk_size {
+                    offset = offset.saturating_add(chunk_size);
+                    if offset < desc.length {
+                        // Region has a next chunk, so simply select it.
+                        return Some((desc, offset));
+                    }
+                }
+
+                desc.start.checked_add(desc.length)?
+            }
+            None => 0,
+        };
+
+        query_next_region(self.handle.as_handle(), next_addr).map(|desc| (desc, 0))
+    }
+}
+
+fn query_next_region(handle: BorrowedHandle, mut next_addr: usize) -> Option<RegionDescription> {
+    loop {
+        let mut info = MaybeUninit::uninit();
+        // Safety:
+        // - the handle is a valid process handle and has the PROCESS_QUERY_INFORMATION
+        //   permission.
+        let res = unsafe {
+            VirtualQueryEx(
+                handle_to_windows_handle(handle.as_handle()),
+                Some(next_addr as *const c_void),
+                info.as_mut_ptr(),
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            )
+        };
+
+        if res == 0 {
+            return None;
+        }
+
+        // Safety: returned value is not zero, so the function succeeded, and has filled
+        // the info object.
+        let info = unsafe { info.assume_init() };
+
+        // If this checked_add fails, a region actually covers up to u64::MAX, so there cannot
+        // be any region past it. That's unlikely, but lets just be safe about it.
+        next_addr = (info.BaseAddress as usize).checked_add(info.RegionSize)?;
+        if info.State == MEM_COMMIT && info.Protect != PAGE_NOACCESS {
+            return Some(RegionDescription {
+                start: info.BaseAddress as usize,
+                length: info.RegionSize,
+            });
+        }
+    }
 }
 
 impl FragmentedMemory for WindowsProcessMemory {
@@ -62,48 +122,18 @@ impl FragmentedMemory for WindowsProcessMemory {
         self.region = None;
     }
 
-    fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
-        let mut next_addr = match self.region {
-            Some(region) => Some(region.start.checked_add(region.length)?),
-            None => None,
-        };
-        self.region = loop {
-            let mut info = MaybeUninit::uninit();
-            // Safety:
-            // - the handle is a valid process handle and has the PROCESS_QUERY_INFORMATION
-            //   permission.
-            let res = unsafe {
-                VirtualQueryEx(
-                    handle_to_windows_handle(self.handle.as_handle()),
-                    next_addr.map(|v| v as *const c_void),
-                    info.as_mut_ptr(),
-                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-                )
-            };
+    fn next(&mut self, params: &MemoryParams) -> Option<RegionDescription> {
+        self.current_position = self.next_position(params);
 
-            if res == 0 {
-                break None;
-            }
-
-            // Safety: returned value is not zero, so the function succeeded, and has filled
-            // the info object.
-            let info = unsafe { info.assume_init() };
-
-            next_addr = match (info.BaseAddress as usize).checked_add(info.RegionSize) {
-                Some(v) => Some(v),
-                None => {
-                    // If this happens, a region actually covers up to u64::MAX, so there cannot
-                    // be any region past it. That's unlikely, but lets just be safe about it.
-                    break None;
-                }
-            };
-            if info.State == MEM_COMMIT && info.Protect != PAGE_NOACCESS {
-                break Some(RegionDescription {
-                    start: info.BaseAddress as usize,
-                    length: info.RegionSize,
-                });
-            }
-        };
+        self.region = self
+            .current_position
+            .map(|(desc, offset)| match params.memory_chunk_size {
+                Some(chunk_size) => RegionDescription {
+                    start: desc.start.saturating_add(offset),
+                    length: std::cmp::min(chunk_size, desc.length),
+                },
+                None => desc,
+            });
         self.region
     }
 
