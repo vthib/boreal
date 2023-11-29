@@ -18,6 +18,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
         maps_file: BufReader::new(maps_file),
         mem_file,
         buffer: Vec::new(),
+        current_position: None,
         region: None,
     }))
 }
@@ -65,18 +66,29 @@ struct LinuxProcessMemory {
     // Buffer used to hold the duplicated process memory when fetched.
     buffer: Vec<u8>,
 
-    // Current region.
+    // Current position: current region and offset in the region of the current chunk.
+    current_position: Option<(RegionDescription, usize)>,
+
+    // Current region returned by the next call, which needs to be fetched.
     region: Option<RegionDescription>,
 }
 
-impl FragmentedMemory for LinuxProcessMemory {
-    fn reset(&mut self) {
-        let _ = self.maps_file.rewind();
-    }
+impl LinuxProcessMemory {
+    fn next_position(&mut self, params: &MemoryParams) {
+        if let Some(chunk_size) = params.memory_chunk_size {
+            if let Some((desc, mut offset)) = self.current_position {
+                offset = offset.saturating_add(chunk_size);
+                if offset < desc.length {
+                    // Region has a next chunk, so simply select it.
+                    self.current_position = Some((desc, offset));
+                    return;
+                }
+            }
+        }
 
-    fn next(&mut self, _params: &MemoryParams) -> Option<RegionDescription> {
+        // Otherwise, read the next line from the maps file
         let mut line = String::new();
-        self.region = loop {
+        self.current_position = loop {
             line.clear();
             if self.maps_file.read_line(&mut line).is_err() {
                 break None;
@@ -85,9 +97,29 @@ impl FragmentedMemory for LinuxProcessMemory {
                 break None;
             }
             if let Some(desc) = parse_map_line(&line) {
-                break Some(desc);
+                break Some((desc, 0));
             }
         };
+    }
+}
+
+impl FragmentedMemory for LinuxProcessMemory {
+    fn reset(&mut self) {
+        let _ = self.maps_file.rewind();
+    }
+
+    fn next(&mut self, params: &MemoryParams) -> Option<RegionDescription> {
+        self.next_position(params);
+
+        self.region = self
+            .current_position
+            .map(|(desc, offset)| match params.memory_chunk_size {
+                Some(chunk_size) => RegionDescription {
+                    start: desc.start.saturating_add(offset),
+                    length: std::cmp::min(chunk_size, desc.length),
+                },
+                None => desc,
+            });
         self.region
     }
 
@@ -99,6 +131,7 @@ impl FragmentedMemory for LinuxProcessMemory {
             .ok()?;
 
         let length = std::cmp::min(desc.length, params.max_fetched_region_size);
+
         self.buffer.resize(length, 0);
         self.mem_file.read_exact(&mut self.buffer).ok()?;
 

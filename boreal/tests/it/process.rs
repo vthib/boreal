@@ -177,6 +177,65 @@ rule a {
     assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
 }
 
+#[test]
+#[cfg(any(target_os = "linux", windows))]
+fn test_process_memory_chunk_size() {
+    use boreal::scanner::ScanParams;
+
+    use crate::utils::get_boreal_full_matches;
+
+    let checker = Checker::new_without_yara(
+        r#"
+rule a {
+    strings:
+        $a = "T5aI0uhg7S"
+    condition:
+        $a
+}"#,
+    );
+    let mut scanner = checker.scanner().scanner;
+    let tenmb = 10 * 1024 * 1024;
+    scanner.set_scan_params(ScanParams::default().memory_chunk_size(Some(tenmb)));
+
+    let helper = BinHelper::run("memory_chunk_size");
+    assert_eq!(helper.output.len(), 3);
+    dbg!(&helper.output);
+    let region1 = usize::from_str_radix(&helper.output[0], 16).unwrap();
+    let region2 = usize::from_str_radix(&helper.output[1], 16).unwrap();
+    let region3 = usize::from_str_radix(&helper.output[2], 16).unwrap();
+
+    let res = scanner.scan_process(helper.pid()).unwrap();
+    let res = get_boreal_full_matches(&res);
+    let tenmb = 10 * 1024 * 1024;
+    let mut expected = vec![
+        (b"T5aI0uhg7S".as_slice(), region1 + (tenmb - 10), 10),
+        (
+            b"T5aI0uhg7S".as_slice(),
+            region3 + tenmb + 5 * 1024 * 1024 - 5,
+            10,
+        ),
+        (b"T5aI0uhg7S".as_slice(), region3 + 2 * tenmb + 4096, 10),
+    ];
+    // Sort by address, since the provided regions might not be in the same order as creation.
+    expected.sort_by_key(|v| v.1);
+    assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
+
+    scanner.set_scan_params(ScanParams::default().memory_chunk_size(Some(15 * 1024 * 1024)));
+    let res = scanner.scan_process(helper.pid()).unwrap();
+    let res = get_boreal_full_matches(&res);
+    let mut expected = vec![
+        (b"T5aI0uhg7S".as_slice(), region1 + (tenmb - 10), 10),
+        // We now see the one in region2
+        (b"T5aI0uhg7S".as_slice(), region2 + tenmb - 5, 10),
+        // But no longer see the first one in region3
+        (b"T5aI0uhg7S".as_slice(), region3 + 2 * tenmb + 4096, 10),
+    ];
+    // Sort by address, since the provided regions might not be in the same order as creation.
+    expected.sort_by_key(|v| v.1);
+
+    assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
+}
+
 struct BinHelper {
     proc: std::process::Child,
     output: Vec<String>,
