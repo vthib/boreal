@@ -162,7 +162,6 @@ dependencies = [
  "memchr",
  "memmap2",
  "object",
- "once_cell",
  "regex-automata",
  "regex-syntax",
  "sha1",
@@ -494,12 +493,6 @@ source = "git+https://github.com/vthib/boreal-object?branch=version-0.32#6576d42
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "once_cell"
-version = "1.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
 
 [[package]]
 name = "peeking_take_while"
