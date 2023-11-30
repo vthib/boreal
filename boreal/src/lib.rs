@@ -79,8 +79,6 @@ use base64 as _;
 #[cfg(test)]
 use glob as _;
 #[cfg(test)]
-use once_cell as _;
-#[cfg(test)]
 use tempfile as _;
 #[cfg(test)]
 use yara as _;
