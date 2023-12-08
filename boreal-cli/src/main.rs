@@ -136,6 +136,10 @@ fn main() -> ExitCode {
         #[cfg(not(feature = "authenticode"))]
         let mut compiler = Compiler::new();
 
+        let _r = compiler.add_module(boreal::module::Console::with_callback(Box::new(|log| {
+            println!("{log}");
+        })));
+
         compiler.set_params(
             boreal::compiler::CompilerParams::default()
                 .fail_on_warnings(args.get_flag("fail_on_warnings"))

@@ -123,6 +123,7 @@ free. If however someone can provide a valid use-case, this difference can be re
   - `pe.imphash()` is behind the _hash_ feature
 - [x] string
 - [x] time
+- [x] console
 
 Modules not yet supported:
 
@@ -130,7 +131,6 @@ Modules not yet supported:
 - [ ] dex
 - [ ] dotnet
 - [ ] magic
-- [ ] console
 
 ## Missing Features
 

@@ -23,6 +23,7 @@ object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.3
 
 # yara-rust:
 # - Add ScanFlags::PROCESS_MEMORY: https://github.com/Hugal31/yara-rust/pull/130
+# - Add CallbackMsg::ConsoleLog: https://github.com/Hugal31/yara-rust/pull/139
 # yara:
 # - Add base address to elf entrypoint: https://github.com/VirusTotal/yara/pull/1989
 # - Fixes for macho module and process memory: https://github.com/VirusTotal/yara/pull/1995

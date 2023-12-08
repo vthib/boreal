@@ -15,7 +15,7 @@ pub struct Checker {
 }
 
 pub struct Compiler {
-    compiler: boreal::Compiler,
+    pub compiler: boreal::Compiler,
     yara_compiler: Option<yara::Compiler>,
 }
 
@@ -472,6 +472,24 @@ impl Checker {
             scanner: self.scanner.clone(),
             yara_scanner: self.yara_rules.as_ref().map(|v| v.scanner().unwrap()),
         }
+    }
+
+    pub fn capture_yara_logs(&mut self, mem: &[u8]) -> Vec<String> {
+        let mut logs = Vec::new();
+
+        let Some(rules) = &mut self.yara_rules else {
+            return logs;
+        };
+
+        rules
+            .scan_mem_callback(mem, 0, |msg| {
+                if let yara::CallbackMsg::ConsoleLog(log) = msg {
+                    logs.push(log.to_string_lossy().to_string());
+                }
+                yara::CallbackReturn::Continue
+            })
+            .unwrap();
+        logs
     }
 }
 

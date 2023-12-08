@@ -86,12 +86,15 @@ struct ImportedModule {
 impl Compiler {
     /// Create a new object to compile YARA rules.
     ///
-    /// Almost available modules are enabled by default:
+    /// Modules enabled by default:
     /// - `time`
     /// - `math`
     /// - `string`
     /// - `hash` if the `hash` feature is enabled
     /// - `elf`, `macho` and `pe` if the `object` feature is enabled
+    ///
+    /// Modules disabled by default:
+    /// - `console`
     ///
     /// However, the pe module does not include signatures handling. To include it, you should have
     /// the `authenticode` feature enabled, and use [`Compiler::new_with_pe_signatures`]
