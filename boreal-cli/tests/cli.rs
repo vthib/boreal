@@ -594,6 +594,7 @@ rule a {
         .stderr("")
         .success();
 }
+
 // Test when some inputs in a dir cannot be read
 #[test]
 #[cfg(unix)]
@@ -672,6 +673,31 @@ rule second {
         .arg(input.path())
         .assert()
         .stdout(predicate::eq(format!("first {}\n", input.path().display())))
+        .stderr("")
+        .success();
+}
+
+#[test]
+fn test_console_log() {
+    let rule_file = test_file(
+        r#"
+import "console"
+
+rule logger {
+    condition:
+        console.log("this is ", "a log")
+}"#,
+    );
+
+    let input = test_file("");
+    cmd()
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!(
+            "this is a log\nlogger {}\n",
+            input.path().display()
+        )))
         .stderr("")
         .success();
 }

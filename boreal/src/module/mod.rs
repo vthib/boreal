@@ -44,6 +44,9 @@ use std::sync::Arc;
 use crate::memory::{Memory, Region};
 use crate::regex::Regex;
 
+mod console;
+pub use console::{Console, LogCallback};
+
 mod time;
 pub use time::Time;
 

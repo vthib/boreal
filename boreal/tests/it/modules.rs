@@ -1,4 +1,6 @@
-use crate::utils::{check, check_boreal, check_err};
+use std::sync::Mutex;
+
+use crate::utils::{check, check_boreal, check_err, Compiler};
 
 #[track_caller]
 fn check_tests_err(condition: &str, expected_err: &str) {
@@ -439,6 +441,71 @@ fn test_module_hash() {
     test("not defined hash.crc32(0, -1)");
     test("not defined hash.crc32(-1, 0)");
     test("not defined hash.crc32(100, 2)");
+}
+
+#[test]
+fn test_module_console() {
+    static LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let mut compiler = Compiler::new();
+    let res = compiler
+        .compiler
+        .add_module(boreal::module::Console::with_callback(Box::new(|log| {
+            LOGS.lock().unwrap().push(log);
+        })));
+    assert!(res);
+
+    compiler.add_rules(
+        r#"import "console"
+rule a {
+    condition:
+        console.log("a\n\xBAc\x00-") and
+        console.log("bytes: ", "bo\tr") and
+        console.log(15) and
+        console.log("value", 15) and
+        console.log(3.59231) and
+        console.log("float: ", 015.340) and
+        console.log("", "bar") and
+        console.hex(12872) and
+        console.hex("val: ", -12872) and
+        false and
+        console.log("missing")
+
+}"#,
+    );
+
+    let mut checker = compiler.into_checker();
+    checker.check(b"", false);
+
+    assert_eq!(
+        &*LOGS.lock().unwrap(),
+        &[
+            r"a\n\xbac\x00-",
+            r"bytes: bo\tr",
+            "15",
+            "value15",
+            "3.59231",
+            "float: 15.34",
+            "bar",
+            "0x3248",
+            "val: 0xffffffffffffcdb8",
+        ]
+    );
+
+    let yara_logs = checker.capture_yara_logs(b"");
+    assert_eq!(
+        yara_logs,
+        &[
+            r"a\x0a\xbac\x00-",
+            r"bytes: bo\x09r",
+            "15",
+            "value15",
+            "3.592310",
+            "float: 15.340000",
+            "bar",
+            "0x3248",
+            "val: 0xffffffffffffcdb8",
+        ]
+    );
 }
 
 #[test]
