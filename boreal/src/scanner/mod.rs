@@ -357,7 +357,7 @@ impl Inner {
                     scan_data.params.process_memory,
                 );
 
-                if !scan_data.params.compute_full_matches && scan_data.mem.is_direct() {
+                if !scan_data.params.compute_full_matches {
                     #[cfg(feature = "profiling")]
                     let start = std::time::Instant::now();
 

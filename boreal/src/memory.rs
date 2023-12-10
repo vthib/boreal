@@ -56,15 +56,6 @@ impl Memory<'_> {
         }
     }
 
-    /// True if all the memory is readily available.
-    #[must_use]
-    pub fn is_direct(&self) -> bool {
-        match self {
-            Self::Direct(_) => true,
-            Self::Fragmented { .. } => false,
-        }
-    }
-
     /// Returns the byte slice of the whole scanned memory if available.
     #[must_use]
     pub fn get_direct(&self) -> Option<&[u8]> {
