@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_boreal, check_err, Checker};
+use crate::utils::{build_rule, check, check_boreal, check_err, Checker, Compiler};
 
 fn build_empty_rule(condition: &str) -> String {
     format!(
@@ -1231,6 +1231,106 @@ rule bar {
     // Matching both globals work
     checker.check_rule_matches(b"g1 foo g2", &["default:g1", "default:foo", "default:bar"]);
     checker.check_rule_matches(b"g1 g3", &["default:g1", "default:bar"]);
+}
+
+#[test]
+fn test_global_rules_in_namespaces() {
+    let mut compiler = Compiler::new();
+    compiler.add_rules(
+        r#"
+global rule g11 {
+    strings:
+        $ = "g11"
+    condition: all of them
+}
+
+global rule g12 {
+    strings:
+        $ = "g12"
+    condition: all of them
+}
+
+rule foo {
+    strings:
+        $ = "foo"
+    condition: all of them
+}"#,
+    );
+
+    compiler.add_rules_in_namespace(
+        r#"
+private global rule g2 {
+    strings:
+        $ = "g2"
+    condition: all of them
+}
+
+rule bar {
+    strings:
+        $ = "bar"
+    condition: all of them
+}
+"#,
+        "ns2",
+    );
+    let mut checker = compiler.into_checker();
+
+    // Nothing matches
+    checker.check_rule_matches(b"", &[]);
+
+    // Matching a rule without the namespace global does not work
+    checker.check_rule_matches(b"foo", &[]);
+    checker.check_rule_matches(b"bar", &[]);
+
+    // Matching only one of the global rules work for this namespace
+    checker.check_rule_matches(b"g11 foo bar", &[]);
+    checker.check_rule_matches(b"g12 foo bar", &[]);
+    checker.check_rule_matches(
+        b"g11 g12 foo bar",
+        &["default:g11", "default:g12", "default:foo"],
+    );
+    checker.check_rule_matches(b"g2 foo bar", &["ns2:bar"]);
+    checker.check_rule_matches(b"g2 bar", &["ns2:bar"]);
+}
+
+#[test]
+fn test_global_rules_no_scan_optim() {
+    let mut compiler = Compiler::new();
+    compiler.add_rules(
+        r#"
+global rule g1 {
+    condition: filesize >= 8
+}
+
+rule foo {
+    condition: filesize >= 5
+}"#,
+    );
+
+    compiler.add_rules_in_namespace(
+        r#"
+private global rule g2 {
+    condition: uint8(0) >= 0xA0
+}
+
+rule bar {
+    condition: uint8(0) >= 0x80
+}
+"#,
+        "ns2",
+    );
+    let mut checker = compiler.into_checker();
+
+    // Nothing matches
+    checker.check_rule_matches(b"", &[]);
+
+    // Matching a rule without the namespace global does not work
+    checker.check_rule_matches(b"123456", &[]);
+    checker.check_rule_matches(b"\x85", &[]);
+
+    // Matching only one of the global rules work for this namespace
+    checker.check_rule_matches(b"123456789", &["default:g1", "default:foo"]);
+    checker.check_rule_matches(b"\xFF", &["ns2:bar"]);
 }
 
 #[test]

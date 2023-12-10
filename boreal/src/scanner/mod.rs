@@ -456,7 +456,15 @@ impl Inner {
         let ac_matches = self.do_memory_scan(scan_data)?;
         let mut ac_matches_iter = ac_matches.into_iter();
 
+        // Results of "previous" rules". This is filled while iterating on rules
+        // and used when rules refer to the result of previous rules.
         let mut previous_results = Vec::with_capacity(self.rules.len());
+        // Is a namespace "disabled" or not. A namespace is disabled when it
+        // contains a global rule that is false.
+        let mut namespace_disabled = vec![false; self.namespaces.len()];
+        // Number of disabled namespaces. Used to stop evaluating rules if
+        // equal to the number of namespaces.
+        let mut nb_namespaces_disabled = 0;
 
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
@@ -469,6 +477,12 @@ impl Inner {
             .chain(self.rules.iter().map(|v| (v, false)))
         {
             let var_matches = collect_nb_elems(&mut ac_matches_iter, rule.nb_variables);
+            let vars = &self.variables[var_index..(var_index + rule.nb_variables)];
+            var_index += rule.nb_variables;
+
+            if namespace_disabled[rule.namespace_index] {
+                continue;
+            }
 
             let res = match evaluate_rule(
                 rule,
@@ -482,19 +496,23 @@ impl Inner {
             };
 
             if is_global && !res {
-                scan_data.matched_rules.clear();
-
-                #[cfg(feature = "profiling")]
-                if let Some(stats) = scan_data.statistics.as_mut() {
-                    stats.rules_eval_duration = start.elapsed();
+                namespace_disabled[rule.namespace_index] = true;
+                nb_namespaces_disabled += 1;
+                if nb_namespaces_disabled == self.namespaces.len() {
+                    // All namespaces are disabled, clean results and return: there is no
+                    // need to evaluate rules any more.
+                    scan_data.matched_rules.clear();
+                    #[cfg(feature = "profiling")]
+                    if let Some(stats) = scan_data.statistics.as_mut() {
+                        stats.rules_eval_duration = start.elapsed();
+                    }
+                    return Ok(());
                 }
-
-                return Ok(());
             }
             if res && !rule.is_private {
                 scan_data.matched_rules.push(build_matched_rule(
                     rule,
-                    &self.variables[var_index..(var_index + rule.nb_variables)],
+                    vars,
                     &self.namespaces,
                     var_matches,
                 ));
@@ -503,7 +521,6 @@ impl Inner {
             if !is_global {
                 previous_results.push(res);
             }
-            var_index += rule.nb_variables;
         }
 
         #[cfg(feature = "profiling")]
@@ -522,6 +539,7 @@ impl Inner {
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
         let mut previous_results = Vec::with_capacity(self.rules.len());
+        let mut namespace_disabled = vec![false; self.namespaces.len()];
 
         // First, check global rules
         let mut has_unknown_globals = false;
@@ -537,12 +555,17 @@ impl Inner {
                         ));
                     }
                 }
-                Ok(false) => return Ok(()),
+                Ok(false) => {
+                    namespace_disabled[rule.namespace_index] = true;
+                }
                 // Do not rethrow immediately, so that if one of the globals is false, it is
                 // detected.
                 Err(EvalError::Undecidable) => has_unknown_globals = true,
                 Err(EvalError::Timeout) => return Err(EvalError::Timeout),
             }
+        }
+        if namespace_disabled.iter().all(|v| *v) {
+            return Ok(());
         }
         if has_unknown_globals {
             return Err(EvalError::Undecidable);
