@@ -44,24 +44,29 @@ fn stack() {
     std::hint::black_box(STATIC_PAYLOAD);
 }
 
+// Use this value as the "page_size" we use to construct our regions. This should
+// always be a multiple of the page size.
+const PAGE_SIZE: usize = 4 * 1024 * 1024;
+
 fn max_fetched_region_size() {
-    // The searched string is "Dwb6r5gd", and the fetch limit is 20 bytes
+    // The searched string is "Dwb6r5gd", and the fetch limit is 12MB
+    let pattern = b"Kxm9}:hk";
 
     // One page will contain the whole string.
     // This is "Dwb6r5gd"
-    let region1 = Region::new(b"Kxm9}:hk");
+    let region1 = Region::new(pattern);
 
-    // This one will still match, since it is exactly 20 bytes
-    // This is "123456789 Dwb6r5gd"
-    let region2 = Region::new(b">=<;:9876/Kxm9}:hk");
+    // This one will still match, since it is exactly 12MB
+    let mut region2 = Region::zeroed(PAGE_SIZE);
+    region2.write_at(PAGE_SIZE - 8, pattern);
 
-    // This one will not match as it gets cut
-    // This is "123456789 12345 Dwb6r5gd"
-    let region3 = Region::new(b">=<;:9876/>=<;:/Kxm9}:hk");
+    // This one will not match as it gets cut in the middle
+    let mut region3 = Region::zeroed(PAGE_SIZE + 10);
+    region3.write_at(PAGE_SIZE - 4, pattern);
 
     // Past the limit so will not get matched
-    // This is "123456789 123456789 12345 Dwb6r5gd"
-    let region4 = Region::new(b">=<;:9876/>=<;:9876/>=<;:/Kxm9}:hk");
+    let mut region4 = Region::zeroed(PAGE_SIZE + 500);
+    region4.write_at(PAGE_SIZE + 200, pattern);
 
     // Send the base addresses of the region back to the test
     println!("{:x}", region1.addr());
@@ -74,23 +79,23 @@ fn max_fetched_region_size() {
 }
 
 fn memory_chunk_size() {
-    // The searched string is "T5aI0uhg7S", and the chunk size is 10MB
-    let tenmb = 10 * 1024 * 1024;
+    // The searched string is "T5aI0uhg7S", and the chunk size is 4MB
+    let pattern = b"[:nF?zgh8\\";
 
     // One page will contain the string, right at the end.
-    let mut region1 = Region::zeroed(tenmb);
-    region1.write_at(tenmb - 10, b"[:nF?zgh8\\");
+    let mut region1 = Region::zeroed(PAGE_SIZE);
+    region1.write_at(PAGE_SIZE - 10, pattern);
 
     // One page will split the string in two
-    let mut region2 = Region::zeroed(tenmb + 20);
-    region2.write_at(tenmb - 5, b"[:nF?zgh8\\");
+    let mut region2 = Region::zeroed(2 * PAGE_SIZE + 20);
+    region2.write_at(2 * PAGE_SIZE - 5, pattern);
 
     // One page will contain the string, twice, in two separate chunks
-    let mut region3 = Region::zeroed(tenmb * 3);
-    // First one is right at the 15MB limit
-    region3.write_at(tenmb + 5 * 1024 * 1024 - 5, b"[:nF?zgh8\\");
-    // Second one is after 20MB
-    region3.write_at(2 * tenmb + 4096, b"[:nF?zgh8\\");
+    let mut region3 = Region::zeroed(PAGE_SIZE * 5);
+    // First one is right at the 3 * PAGE_SIZE limit
+    region3.write_at(3 * PAGE_SIZE - 5, pattern);
+    // Second one is after 4 pages
+    region3.write_at(4 * PAGE_SIZE + 4096, pattern);
 
     // Send the base addresses of the region back to the test
     println!("{:x}", region1.addr());
