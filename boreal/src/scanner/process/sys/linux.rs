@@ -20,6 +20,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     // Safety: We are on Linux, sysconf is always safe to call
     let res = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     let page_size = match res.try_into() {
+        // Default to 4096, which tends to always be the default on linux
         Err(_) | Ok(0) => 4096,
         Ok(v) => v,
     };
@@ -163,7 +164,7 @@ impl FragmentedMemory for LinuxProcessMemory {
 
         self.current_region
             .as_ref()
-            .map(|line| line.region_description(params))
+            .map(|line| line.region_description(params, self.page_size))
     }
 
     fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
@@ -222,12 +223,19 @@ impl CurrentRegion {
         }
     }
 
-    fn region_description(&self, params: &MemoryParams) -> RegionDescription {
+    fn region_description(&self, params: &MemoryParams, page_size: usize) -> RegionDescription {
         match params.memory_chunk_size {
-            Some(chunk_size) => RegionDescription {
-                start: self.desc.start.saturating_add(self.current_offset),
-                length: std::cmp::min(chunk_size, self.desc.length),
-            },
+            Some(chunk_size) => {
+                // Ensure chunk_size is a multiple of the page_size, we need the
+                // different chunks to be on different pages to properly handle
+                // the pagemap optimization.
+                let chunk_size = round_to_page_size(chunk_size, page_size);
+
+                RegionDescription {
+                    start: self.desc.start.saturating_add(self.current_offset),
+                    length: std::cmp::min(chunk_size, self.desc.length),
+                }
+            }
             None => RegionDescription {
                 start: self.desc.start,
                 length: self.desc.length,
@@ -264,8 +272,11 @@ impl CurrentRegion {
         pagemap_file: &mut File,
         buffer: &'a mut Vec<u8>,
     ) -> Option<Region<'a>> {
-        let desc = self.region_description(params);
-        let length = std::cmp::min(desc.length, params.max_fetched_region_size);
+        // Ensure max_fetched_region_size is a multiple of the page_size.
+        let max_fetched_region_size = round_to_page_size(params.max_fetched_region_size, page_size);
+
+        let desc = self.region_description(params, page_size);
+        let length = std::cmp::min(desc.length, max_fetched_region_size);
 
         buffer.resize(length, 0);
 
@@ -318,8 +329,6 @@ impl CurrentRegion {
                     pagemap_file.read_exact(bytes_vec).ok()?;
                 }
 
-                // FIXME: alignment/value validation with parameters, chunk size might not be a
-                // multiple of a page, etc
                 for (page_index, page_bits) in page_details.into_iter().enumerate() {
                     // Keep only the last 4 bits
                     let page_bits = page_bits >> 60;
@@ -374,6 +383,20 @@ impl CurrentRegion {
             }
             None => false,
         }
+    }
+}
+
+// Ensure value is a multiple of page_size by rounding it down.
+//
+// This rounds down as it makes it easier to avoid overflows.
+// This function ensures the returned value is not 0. If value < page_size,
+// page_size is returned.
+fn round_to_page_size(value: usize, page_size: usize) -> usize {
+    let res = value - (value % page_size);
+    if res == 0 {
+        page_size
+    } else {
+        res
     }
 }
 
@@ -493,5 +516,17 @@ mod tests {
         assert_eq!(parse_map_line("00400000-00452000 r-xp 0 1:2 "), None);
         assert_eq!(parse_map_line("00400000-00452000 r-xp 0 1:2 g "), None);
         assert_eq!(parse_map_line("2-1 r--p 0002c000 08:10 37209"), None);
+    }
+
+    #[test]
+    fn test_round_to_page_size() {
+        assert_eq!(round_to_page_size(0, 4096), 4096);
+        assert_eq!(round_to_page_size(500, 4096), 4096);
+        assert_eq!(round_to_page_size(4095, 4096), 4096);
+        assert_eq!(round_to_page_size(4096, 4096), 4096);
+        assert_eq!(round_to_page_size(4097, 4096), 4096);
+        assert_eq!(round_to_page_size(8000, 4096), 4096);
+        assert_eq!(round_to_page_size(9000, 4096), 8192);
+        assert_eq!(round_to_page_size(usize::MAX, 4096), usize::MAX - 4095);
     }
 }

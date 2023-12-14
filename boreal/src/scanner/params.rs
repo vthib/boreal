@@ -152,6 +152,9 @@ impl ScanParams {
     /// tweaking the [`ScanParams::memory_chunk_size`] parameter, to bound
     /// memory consumption while still ensuring every byte is scanned.
     ///
+    /// Please note that this value may be adjusted to ensure it is a
+    /// multiple of the page size.
+    ///
     /// By default, this parameter is set to 1GB.
     #[must_use]
     pub fn max_fetched_region_size(mut self, max_fetched_region_size: usize) -> Self {
@@ -187,6 +190,9 @@ impl ScanParams {
     /// scanning for the string `boreal`, if one chunk ends with
     /// `bor`, and the next one starts with `eal`, the string will
     /// **not** match.
+    ///
+    /// Please note that, if set, this value may be adjusted to ensure it
+    /// is a multiple of the page size.
     ///
     /// By default, this parameter is unset.
     #[must_use]

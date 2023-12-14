@@ -7,6 +7,8 @@ use crate::utils::Checker;
 #[cfg(any(target_os = "linux", windows))]
 use boreal::scanner::ScanError;
 
+const PAGE_SIZE: usize = 4 * 1024 * 1024;
+
 #[test]
 #[cfg(any(target_os = "linux", windows))]
 fn test_scan_process() {
@@ -142,7 +144,7 @@ rule a {
 }"#,
     );
     let mut scanner = checker.scanner().scanner;
-    scanner.set_scan_params(ScanParams::default().max_fetched_region_size(20));
+    scanner.set_scan_params(ScanParams::default().max_fetched_region_size(PAGE_SIZE));
 
     let helper = BinHelper::run("max_fetched_region_size");
     assert_eq!(helper.output.len(), 4);
@@ -155,21 +157,21 @@ rule a {
     let res = get_boreal_full_matches(&res);
     let mut expected = vec![
         (b"Dwb6r5gd".as_slice(), region1, 8),
-        (b"Dwb6r5gd".as_slice(), region2 + 10, 8),
+        (b"Dwb6r5gd".as_slice(), region2 + PAGE_SIZE - 8, 8),
     ];
     // Sort by address, since the provided regions might not be in the same order as creation.
     expected.sort_by_key(|v| v.1);
 
     assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
 
-    scanner.set_scan_params(ScanParams::default().max_fetched_region_size(40));
+    scanner.set_scan_params(ScanParams::default().max_fetched_region_size(PAGE_SIZE * 2));
     let res = scanner.scan_process(helper.pid()).unwrap();
     let res = get_boreal_full_matches(&res);
     let mut expected = vec![
         (b"Dwb6r5gd".as_slice(), region1, 8),
-        (b"Dwb6r5gd".as_slice(), region2 + 10, 8),
-        (b"Dwb6r5gd".as_slice(), region3 + 16, 8),
-        (b"Dwb6r5gd".as_slice(), region4 + 26, 8),
+        (b"Dwb6r5gd".as_slice(), region2 + PAGE_SIZE - 8, 8),
+        (b"Dwb6r5gd".as_slice(), region3 + PAGE_SIZE - 4, 8),
+        (b"Dwb6r5gd".as_slice(), region4 + PAGE_SIZE + 200, 8),
     ];
     // Sort by address, since the provided regions might not be in the same order as creation.
     expected.sort_by_key(|v| v.1);
@@ -194,41 +196,34 @@ rule a {
 }"#,
     );
     let mut scanner = checker.scanner().scanner;
-    let tenmb = 10 * 1024 * 1024;
-    scanner.set_scan_params(ScanParams::default().memory_chunk_size(Some(tenmb)));
+    scanner.set_scan_params(ScanParams::default().memory_chunk_size(Some(2 * PAGE_SIZE)));
 
     let helper = BinHelper::run("memory_chunk_size");
     assert_eq!(helper.output.len(), 3);
-    dbg!(&helper.output);
     let region1 = usize::from_str_radix(&helper.output[0], 16).unwrap();
     let region2 = usize::from_str_radix(&helper.output[1], 16).unwrap();
     let region3 = usize::from_str_radix(&helper.output[2], 16).unwrap();
 
     let res = scanner.scan_process(helper.pid()).unwrap();
     let res = get_boreal_full_matches(&res);
-    let tenmb = 10 * 1024 * 1024;
     let mut expected = vec![
-        (b"T5aI0uhg7S".as_slice(), region1 + (tenmb - 10), 10),
-        (
-            b"T5aI0uhg7S".as_slice(),
-            region3 + tenmb + 5 * 1024 * 1024 - 5,
-            10,
-        ),
-        (b"T5aI0uhg7S".as_slice(), region3 + 2 * tenmb + 4096, 10),
+        (b"T5aI0uhg7S".as_slice(), region1 + (PAGE_SIZE - 10), 10),
+        (b"T5aI0uhg7S".as_slice(), region3 + 3 * PAGE_SIZE - 5, 10),
+        (b"T5aI0uhg7S".as_slice(), region3 + 4 * PAGE_SIZE + 4096, 10),
     ];
     // Sort by address, since the provided regions might not be in the same order as creation.
     expected.sort_by_key(|v| v.1);
     assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
 
-    scanner.set_scan_params(ScanParams::default().memory_chunk_size(Some(15 * 1024 * 1024)));
+    scanner.set_scan_params(ScanParams::default().memory_chunk_size(Some(3 * PAGE_SIZE)));
     let res = scanner.scan_process(helper.pid()).unwrap();
     let res = get_boreal_full_matches(&res);
     let mut expected = vec![
-        (b"T5aI0uhg7S".as_slice(), region1 + (tenmb - 10), 10),
+        (b"T5aI0uhg7S".as_slice(), region1 + (PAGE_SIZE - 10), 10),
         // We now see the one in region2
-        (b"T5aI0uhg7S".as_slice(), region2 + tenmb - 5, 10),
+        (b"T5aI0uhg7S".as_slice(), region2 + 2 * PAGE_SIZE - 5, 10),
         // But no longer see the first one in region3
-        (b"T5aI0uhg7S".as_slice(), region3 + 2 * tenmb + 4096, 10),
+        (b"T5aI0uhg7S".as_slice(), region3 + 4 * PAGE_SIZE + 4096, 10),
     ];
     // Sort by address, since the provided regions might not be in the same order as creation.
     expected.sort_by_key(|v| v.1);
