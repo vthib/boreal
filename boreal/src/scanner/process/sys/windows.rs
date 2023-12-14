@@ -41,8 +41,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     Ok(Box::new(WindowsProcessMemory {
         handle,
         buffer: Vec::new(),
-        current_position: None,
-        region: None,
+        current_region: None,
     }))
 }
 
@@ -54,22 +53,21 @@ struct WindowsProcessMemory {
     // Buffer used to hold the duplicated process memory when fetched.
     buffer: Vec<u8>,
 
-    // Current position: current region and offset in the region of the current chunk.
-    current_position: Option<(RegionDescription, usize)>,
-
-    // Current region returned by the next call, which needs to be fetched.
-    region: Option<RegionDescription>,
+    // Current region being listed.
+    current_region: Option<RegionDescription>,
 }
 
 impl WindowsProcessMemory {
-    fn next_position(&self, params: &MemoryParams) -> Option<(RegionDescription, usize)> {
-        let next_addr = match self.current_position {
-            Some((desc, mut offset)) => {
+    fn next_region(&self, params: &MemoryParams) -> Option<RegionDescription> {
+        let next_addr = match self.current_region {
+            Some(desc) => {
                 if let Some(chunk_size) = params.memory_chunk_size {
-                    offset = offset.saturating_add(chunk_size);
-                    if offset < desc.length {
+                    if chunk_size < desc.length {
                         // Region has a next chunk, so simply select it.
-                        return Some((desc, offset));
+                        return Some(RegionDescription {
+                            start: desc.start.saturating_add(chunk_size),
+                            length: desc.length.saturating_sub(chunk_size),
+                        });
                     }
                 }
 
@@ -78,7 +76,7 @@ impl WindowsProcessMemory {
             None => 0,
         };
 
-        query_next_region(self.handle.as_handle(), next_addr).map(|desc| (desc, 0))
+        query_next_region(self.handle.as_handle(), next_addr)
     }
 }
 
@@ -119,26 +117,17 @@ fn query_next_region(handle: BorrowedHandle, mut next_addr: usize) -> Option<Reg
 
 impl FragmentedMemory for WindowsProcessMemory {
     fn reset(&mut self) {
-        self.region = None;
+        self.current_region = None;
     }
 
     fn next(&mut self, params: &MemoryParams) -> Option<RegionDescription> {
-        self.current_position = self.next_position(params);
-
-        self.region = self
-            .current_position
-            .map(|(desc, offset)| match params.memory_chunk_size {
-                Some(chunk_size) => RegionDescription {
-                    start: desc.start.saturating_add(offset),
-                    length: std::cmp::min(chunk_size, desc.length),
-                },
-                None => desc,
-            });
-        self.region
+        self.current_region = self.next_region(params);
+        self.current_region
+            .map(|region| get_chunked_region(region, params))
     }
 
     fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
-        let desc = self.region?;
+        let desc = get_chunked_region(self.current_region?, params);
 
         self.buffer.resize(
             std::cmp::min(desc.length, params.max_fetched_region_size),
@@ -169,6 +158,16 @@ impl FragmentedMemory for WindowsProcessMemory {
             start: desc.start,
             mem: &self.buffer,
         })
+    }
+}
+
+fn get_chunked_region(desc: RegionDescription, params: &MemoryParams) -> RegionDescription {
+    match params.memory_chunk_size {
+        Some(chunk_size) => RegionDescription {
+            start: desc.start,
+            length: std::cmp::min(chunk_size, desc.length),
+        },
+        None => desc,
     }
 }
 
