@@ -224,23 +224,19 @@ impl CurrentRegion {
     }
 
     fn region_description(&self, params: &MemoryParams, page_size: usize) -> RegionDescription {
-        match params.memory_chunk_size {
-            Some(chunk_size) => {
-                // Ensure chunk_size is a multiple of the page_size, we need the
-                // different chunks to be on different pages to properly handle
-                // the pagemap optimization.
-                let chunk_size = round_to_page_size(chunk_size, page_size);
+        let mut desc = RegionDescription {
+            start: self.desc.start.saturating_add(self.current_offset),
+            length: self.desc.length.saturating_sub(self.current_offset),
+        };
+        if let Some(chunk_size) = params.memory_chunk_size {
+            // Ensure chunk_size is a multiple of the page_size, we need the
+            // different chunks to be on different pages to properly handle
+            // the pagemap optimization.
+            let chunk_size = round_to_page_size(chunk_size, page_size);
 
-                RegionDescription {
-                    start: self.desc.start.saturating_add(self.current_offset),
-                    length: std::cmp::min(chunk_size, self.desc.length),
-                }
-            }
-            None => RegionDescription {
-                start: self.desc.start,
-                length: self.desc.length,
-            },
+            desc.length = std::cmp::min(chunk_size, desc.length);
         }
+        desc
     }
 
     /// Open the file backing the region.
@@ -528,5 +524,72 @@ mod tests {
         assert_eq!(round_to_page_size(8000, 4096), 4096);
         assert_eq!(round_to_page_size(9000, 4096), 8192);
         assert_eq!(round_to_page_size(usize::MAX, 4096), usize::MAX - 4095);
+    }
+
+    #[test]
+    fn test_chunking() {
+        let mut region = CurrentRegion::new(MapRegion {
+            start: 0x5000,
+            length: 0x1200,
+            dev_major: 0,
+            dev_minor: 0,
+            inode: 0,
+            offset: 0,
+            path: None,
+        });
+
+        let mut params = MemoryParams {
+            max_fetched_region_size: 500,
+            memory_chunk_size: None,
+        };
+        assert_eq!(
+            region.region_description(&params, 0x1000),
+            RegionDescription {
+                start: 0x5000,
+                length: 0x1200,
+            }
+        );
+        params.memory_chunk_size = Some(0x800);
+        assert_eq!(
+            region.region_description(&params, 0x1000),
+            RegionDescription {
+                start: 0x5000,
+                length: 0x1000,
+            }
+        );
+        assert_eq!(
+            region.region_description(&params, 0x300),
+            RegionDescription {
+                start: 0x5000,
+                length: 0x600,
+            }
+        );
+        assert_eq!(
+            region.region_description(&params, 0x800),
+            RegionDescription {
+                start: 0x5000,
+                length: 0x800,
+            }
+        );
+
+        assert!(region.update_to_next_chunk(&params));
+        assert_eq!(
+            region.region_description(&params, 0x800),
+            RegionDescription {
+                start: 0x5800,
+                length: 0x800,
+            }
+        );
+
+        assert!(region.update_to_next_chunk(&params));
+        assert_eq!(
+            region.region_description(&params, 0x800),
+            RegionDescription {
+                start: 0x6000,
+                length: 0x200,
+            }
+        );
+
+        assert!(!region.update_to_next_chunk(&params));
     }
 }
