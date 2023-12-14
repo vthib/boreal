@@ -12,7 +12,7 @@ edition = "2021"
 rust-version = "1.65"
 
 [features]
-default = ["hash", "object", "memmap"]
+default = ["hash", "object", "memmap", "process"]
 
 # Enables the "hash" module.
 hash = ["md-5", "sha1", "sha2", "hex", "crc32fast", "tlsh2"]
@@ -30,6 +30,9 @@ authenticode = ["dep:authenticode-parser"]
 # Adds an API to scan files using memory maps.
 memmap = ["dep:memmap2"]
 
+# Adds APIs to scan process memories.
+process = ["dep:libc", "dep:windows"]
+
 # Enables computation of statistics during scanning.
 profiling = []
 
@@ -43,7 +46,6 @@ codespan-reporting = "0.11"
 aho-corasick = "1.0"
 memchr = "2.5"
 # Remove unicode feature
-# TODO: regex only enables dfa-onepass, and not all of dfa. Check which option we want.
 regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "perf", "meta", "nfa", "dfa", "hybrid"] }
 # No default features to disable unicode, we do not need it
 regex-syntax = { version = "0.8", default-features = false }
@@ -69,10 +71,10 @@ authenticode-parser = { version = "0.3", optional = true }
 memmap2 = { version = "0.9", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-libc = "0.2"
+libc = { version = "0.2", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.48", features = [
+windows = { version = "0.48", optional = true, features = [
     "Win32_Foundation",
     # ReadProcessMemory
     "Win32_System_Diagnostics_Debug",

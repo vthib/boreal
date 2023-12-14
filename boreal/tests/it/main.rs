@@ -31,6 +31,7 @@ mod fragmented;
 mod limits;
 
 // Tests related to process memory scanning
+#[cfg(feature = "process")]
 mod process;
 
 // Tests related to modules

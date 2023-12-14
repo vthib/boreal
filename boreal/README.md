@@ -193,9 +193,11 @@ of all signatures, imports, exports, resources, etc on every scan.
 
 ## crate feature flags
 
-- `hash`: adds dependencies to compute hashes, enables the `hash` module and the `pe.imphash()` function
-  if the `object` feature is also enabled.
-- `object`: add dependencies to parse object files, enables the `elf`, `macho` and `pe` module.
-- `openssl`: add dependency on openssl, enables the `signatures` part of the `pe` module.
+- `object`: enables the `elf`, `macho` and `pe` module.
+- `hash`: enables the `hash` module, as well as the `pe.imphash()` function if the `object`
+  feature is also enabled.
+- `authenticode`: this enables the `signatures` part of the `pe` module. This adds
+  a dependency on OpenSSL.
+- `process`: enables the process scanning API.
 
-By default, `hash` and `object` are enabled, `openssl` is not.
+By default, `hash`, `object` and `process` are enabled, `authenticode` is not.
