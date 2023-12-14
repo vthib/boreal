@@ -145,7 +145,7 @@ pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
 }
 
 /// A description of a region of memory to scan.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct RegionDescription {
     /// Index of the start of the region.
     pub start: usize,
