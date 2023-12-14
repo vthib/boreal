@@ -18,6 +18,8 @@ mod error;
 pub use error::ScanError;
 mod params;
 pub use params::ScanParams;
+
+#[cfg(feature = "process")]
 mod process;
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
@@ -199,6 +201,7 @@ impl Scanner {
     ///
     /// FIXME improve this doc
     #[doc(hidden)]
+    #[cfg(feature = "process")]
     pub fn scan_process(&self, pid: u32) -> Result<ScanResult, (ScanError, ScanResult)> {
         match process::process_memory(pid) {
             Ok(memory) => self.inner.scan(
