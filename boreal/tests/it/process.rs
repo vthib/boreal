@@ -236,6 +236,92 @@ rule a {
     assert_eq!(res, vec![("default:a".to_owned(), vec![("a", expected)])]);
 }
 
+#[test]
+#[cfg(any(target_os = "linux", windows))]
+fn test_process_file_copy_on_write() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        // String written in the file
+        $a = "RAmEtbQfVE"
+    condition:
+        $a
+}
+
+rule b {
+    strings:
+        // String written over the file contents in the private copy
+        // of the process
+        $b = "ste3Cd9Te8"
+    condition:
+        $b
+}"#,
+    );
+
+    let helper = BinHelper::run("file_copy_on_write");
+    assert_eq!(helper.output.len(), 2);
+    let region1 = usize::from_str_radix(&helper.output[0], 16).unwrap();
+    let region2 = usize::from_str_radix(&helper.output[1], 16).unwrap();
+
+    let mut expected = vec![
+        (b"ste3Cd9Te8".as_slice(), region1 + 2048 - 500, 10),
+        (b"ste3Cd9Te8".as_slice(), region2 + 1000, 10),
+        (b"ste3Cd9Te8".as_slice(), region2 + 4096 - 5, 10),
+    ];
+    expected.sort_by_key(|v| v.1);
+
+    checker.check_process_full_matches(
+        helper.pid(),
+        vec![("default:b".to_owned(), vec![("b", expected)])],
+    );
+}
+
+// Check that the RAM of a process does not grow too much when it is scanned.
+// This is the purpose of the pagemap optimization on linux, so it is only
+// implemented on linux.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_process_scan_ram_increase() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = "PAYLOAD_ON_STACK"
+    condition:
+        all of them
+}"#,
+    );
+
+    let helper = BinHelper::run("stack");
+
+    fn get_vm_rss(pid: u32) -> u64 {
+        let status = std::fs::read_to_string(format!("/proc/{}/status", pid)).unwrap();
+        let rss_line = status
+            .split('\n')
+            .find(|line| line.starts_with("VmRSS"))
+            .unwrap();
+        let value = rss_line.split_ascii_whitespace().nth(1).unwrap();
+        // Value is in kB
+        value.parse::<u64>().unwrap() * 1024
+    }
+
+    let vm_rss_before = get_vm_rss(helper.pid());
+    checker.check_process(helper.pid(), true);
+    let vm_rss_after = get_vm_rss(helper.pid());
+
+    // Check that the RSS after is "close" to the RSS before, ie, less than 10% more.
+    // This fails if just reading all of /proc/pid/mem.
+    let diff = vm_rss_after.saturating_sub(vm_rss_before);
+    assert!(
+        diff < vm_rss_before / 10,
+        "rss before: {}, rss after: {}, increase: {:.2}%",
+        vm_rss_before,
+        vm_rss_after,
+        (diff as f64) * 100. / (vm_rss_before as f64)
+    );
+}
+
 struct BinHelper {
     proc: std::process::Child,
     output: Vec<String>,

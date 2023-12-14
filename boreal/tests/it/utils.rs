@@ -320,6 +320,23 @@ impl Checker {
     }
 
     #[track_caller]
+    pub fn check_process_full_matches(&mut self, pid: u32, expected: FullMatches) {
+        // We need to compute the full matches for this test
+        {
+            let mut scanner = self.scanner.clone();
+            scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
+            let res = scanner.scan_process(pid).unwrap();
+            let res = get_boreal_full_matches(&res);
+            assert_eq!(res, expected, "test failed for boreal");
+        }
+
+        if let Some(rules) = &self.yara_rules {
+            let res = rules.scan_process(pid, 1).unwrap();
+            check_yara_full_matches(&res, expected);
+        }
+    }
+
+    #[track_caller]
     pub fn check_boreal(&mut self, mem: &[u8], expected_res: bool) {
         let res = self.scan_mem(mem);
         let res = !res.matched_rules.is_empty();
