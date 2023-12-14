@@ -17,10 +17,18 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     let pagemap_file =
         File::open(proc_pid_path.join("pagemap")).map_err(open_error_to_scan_error)?;
 
+    // Safety: We are on Linux, sysconf is always safe to call
+    let res = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    let page_size = match res.try_into() {
+        Err(_) | Ok(0) => 4096,
+        Ok(v) => v,
+    };
+
     Ok(Box::new(LinuxProcessMemory {
         maps_file: BufReader::new(maps_file),
         mem_file,
         pagemap_file,
+        page_size,
         buffer: Vec::new(),
         current_region: None,
     }))
@@ -107,6 +115,9 @@ struct LinuxProcessMemory {
     // Opened handle on /proc/pid/pagemap
     pagemap_file: File,
 
+    // Size of a page on this system.
+    page_size: usize,
+
     // Buffer used to hold the duplicated process memory when fetched.
     buffer: Vec<u8>,
 
@@ -159,6 +170,7 @@ impl FragmentedMemory for LinuxProcessMemory {
         let current_region = self.current_region.as_mut()?;
         current_region.fetch(
             params,
+            self.page_size,
             &mut self.mem_file,
             &mut self.pagemap_file,
             &mut self.buffer,
@@ -199,9 +211,6 @@ struct CurrentRegion {
     /// Used to handle chunking of the region.
     current_offset: usize,
 }
-
-// FIXME: get page size
-const PAGE_SIZE: usize = 4096;
 
 impl CurrentRegion {
     fn new(desc: MapRegion) -> Self {
@@ -250,6 +259,7 @@ impl CurrentRegion {
     fn fetch<'a>(
         &mut self,
         params: &MemoryParams,
+        page_size: usize,
         mem_file: &mut File,
         pagemap_file: &mut File,
         buffer: &'a mut Vec<u8>,
@@ -290,9 +300,9 @@ impl CurrentRegion {
 
                 // Read the page details for this region, by fetching the u64 value for each
                 // page.
-                let mut page_details: Vec<u64> = vec![0; length / PAGE_SIZE];
+                let mut page_details: Vec<u64> = vec![0; length / page_size];
                 let _ = pagemap_file
-                    .seek(SeekFrom::Start((desc.start / PAGE_SIZE * 8) as u64))
+                    .seek(SeekFrom::Start((desc.start / page_size * 8) as u64))
                     .ok()?;
                 {
                     // According to man proc(5), pagemap contains details about pages
@@ -328,12 +338,12 @@ impl CurrentRegion {
 
                     // Since the page may have been modified by the process, fetch it
                     // from the mem file directly.
-                    let buf_offset = page_index * PAGE_SIZE;
+                    let buf_offset = page_index * page_size;
                     let _ = mem_file
                         .seek(SeekFrom::Start(desc.start.checked_add(buf_offset)? as u64))
                         .ok()?;
                     mem_file
-                        .read_exact(&mut buffer[buf_offset..(buf_offset + PAGE_SIZE)])
+                        .read_exact(&mut buffer[buf_offset..(buf_offset + page_size)])
                         .ok()?;
                 }
             }
