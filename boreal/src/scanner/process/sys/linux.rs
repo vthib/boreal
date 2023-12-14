@@ -13,28 +13,21 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     // Use /proc/pid/maps to list the memory regions to scan.
     let maps_file = File::open(proc_pid_path.join("maps")).map_err(open_error_to_scan_error)?;
 
+    // Used to find dirty pages when reading from file-based memory regions.
+    let pagemap_file =
+        File::open(proc_pid_path.join("pagemap")).map_err(open_error_to_scan_error)?;
+
     Ok(Box::new(LinuxProcessMemory {
         maps_file: BufReader::new(maps_file),
         mem_file,
+        pagemap_file,
         buffer: Vec::new(),
-        current_position: None,
-        region: None,
+        current_region: None,
     }))
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct MapLine {
-    start: usize,
-    length: usize,
-    dev_major: u32,
-    dev_minor: u32,
-    inode: u64,
-    offset: u64,
-    path: Option<PathBuf>,
-}
-
 // Parse a line from the /proc/pid/maps file.
-fn parse_map_line(line: &str) -> Option<MapLine> {
+fn parse_map_line(line: &str) -> Option<MapRegion> {
     // See man proc(5). Each line is:
     //
     // <start addr>-<end addr> <perms> <offset> <dev-major>:<dev-minor> <inode> <pathname>
@@ -85,7 +78,7 @@ fn parse_map_line(line: &str) -> Option<MapLine> {
         }
     };
 
-    Some(MapLine {
+    Some(MapRegion {
         start: start_addr,
         length: end_addr.checked_sub(start_addr)?,
         dev_major,
@@ -111,32 +104,30 @@ struct LinuxProcessMemory {
     // Opened handle on /proc/pid/mem.
     mem_file: File,
 
+    // Opened handle on /proc/pid/pagemap
+    pagemap_file: File,
+
     // Buffer used to hold the duplicated process memory when fetched.
     buffer: Vec<u8>,
 
-    // Current position: current region and offset in the region of the current chunk.
-    current_position: Option<(MapLine, usize)>,
-
-    // Current region returned by the next call, which needs to be fetched.
-    region: Option<RegionDescription>,
+    // Current region.
+    current_region: Option<CurrentRegion>,
 }
 
 impl LinuxProcessMemory {
     fn next_position(&mut self, params: &MemoryParams) {
-        if let Some(chunk_size) = params.memory_chunk_size {
-            if let Some((desc, offset)) = &mut self.current_position {
-                let new_offset = offset.saturating_add(chunk_size);
-                if new_offset < desc.length {
-                    // Region has a next chunk, so simply select it.
-                    *offset = new_offset;
-                    return;
-                }
-            }
+        // Update current line to point to next chunk if possible.
+        if self
+            .current_region
+            .as_mut()
+            .map_or(false, |line| line.update_to_next_chunk(params))
+        {
+            return;
         }
 
         // Otherwise, read the next line from the maps file
         let mut line = String::new();
-        self.current_position = loop {
+        self.current_region = loop {
             line.clear();
             if self.maps_file.read_line(&mut line).is_err() {
                 break None;
@@ -145,7 +136,7 @@ impl LinuxProcessMemory {
                 break None;
             }
             if let Some(desc) = parse_map_line(&line) {
-                break Some((desc, 0));
+                break Some(CurrentRegion::new(desc));
             }
         };
     }
@@ -159,38 +150,220 @@ impl FragmentedMemory for LinuxProcessMemory {
     fn next(&mut self, params: &MemoryParams) -> Option<RegionDescription> {
         self.next_position(params);
 
-        self.region =
-            self.current_position
-                .as_ref()
-                .map(|(desc, offset)| match params.memory_chunk_size {
-                    Some(chunk_size) => RegionDescription {
-                        start: desc.start.saturating_add(*offset),
-                        length: std::cmp::min(chunk_size, desc.length),
-                    },
-                    None => RegionDescription {
-                        start: desc.start,
-                        length: desc.length,
-                    },
-                });
-        self.region
+        self.current_region
+            .as_ref()
+            .map(|line| line.region_description(params))
     }
 
     fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
-        let desc = self.region?;
-        let _ = self
-            .mem_file
-            .seek(SeekFrom::Start(desc.start as u64))
-            .ok()?;
+        let current_region = self.current_region.as_mut()?;
+        current_region.fetch(
+            params,
+            &mut self.mem_file,
+            &mut self.pagemap_file,
+            &mut self.buffer,
+        )
+    }
+}
 
+#[derive(Debug, PartialEq, Eq)]
+struct MapRegion {
+    start: usize,
+    length: usize,
+    dev_major: u32,
+    dev_minor: u32,
+    inode: u64,
+    offset: u64,
+    path: Option<PathBuf>,
+}
+
+/// Description of a region currently being listed or fetched
+#[derive(Debug)]
+struct CurrentRegion {
+    /// Description of the region
+    desc: MapRegion,
+
+    /// Opened handle on the file backing the region.
+    ///
+    /// Only set if:
+    /// - the region is file-backed
+    /// - the region has been fetched once, and we managed to open the file
+    ///
+    file: Option<File>,
+
+    /// Size of the file backing the region.
+    file_size: usize,
+
+    /// Current offset into the region.
+    ///
+    /// Used to handle chunking of the region.
+    current_offset: usize,
+}
+
+// FIXME: get page size
+const PAGE_SIZE: usize = 4096;
+
+impl CurrentRegion {
+    fn new(desc: MapRegion) -> Self {
+        Self {
+            desc,
+            file: None,
+            file_size: 0,
+            current_offset: 0,
+        }
+    }
+
+    fn region_description(&self, params: &MemoryParams) -> RegionDescription {
+        match params.memory_chunk_size {
+            Some(chunk_size) => RegionDescription {
+                start: self.desc.start.saturating_add(self.current_offset),
+                length: std::cmp::min(chunk_size, self.desc.length),
+            },
+            None => RegionDescription {
+                start: self.desc.start,
+                length: self.desc.length,
+            },
+        }
+    }
+
+    /// Open the file backing the region.
+    ///
+    /// This is not done when the object is created to avoid opening the file if the
+    /// region is only listed and not fetched.
+    fn open_backing_file(&mut self) {
+        if self.file.is_some() {
+            return;
+        }
+        let Some(path) = &self.desc.path else {
+            return;
+        };
+        let Ok(file) = std::fs::File::open(path) else {
+            return;
+        };
+        let Some(file_size) = file.metadata().ok().and_then(|v| v.len().try_into().ok()) else {
+            return;
+        };
+        self.file_size = file_size;
+        self.file = Some(file);
+    }
+
+    fn fetch<'a>(
+        &mut self,
+        params: &MemoryParams,
+        mem_file: &mut File,
+        pagemap_file: &mut File,
+        buffer: &'a mut Vec<u8>,
+    ) -> Option<Region<'a>> {
+        let desc = self.region_description(params);
         let length = std::cmp::min(desc.length, params.max_fetched_region_size);
 
-        self.buffer.resize(length, 0);
-        self.mem_file.read_exact(&mut self.buffer).ok()?;
+        buffer.resize(length, 0);
+
+        // If the region is file-backed, prefer reading from the file rather than from
+        // the process memory. This avoids making the OS bring those pages into RAM
+        // and inflating the memory usage of the process.
+        // However, since the process memory may have modified its copy of the region,
+        // we use the pagemap file to find which pages still needs to be fetched from
+        // the memory.
+        self.open_backing_file();
+        match self.file.as_mut() {
+            Some(file) => {
+                // We need to add the offset from the map line, which indicates at which
+                // offset the file was mapped.
+                let offset = (self.current_offset as u64).checked_add(self.desc.offset)?;
+                let _ = file.seek(SeekFrom::Start(offset)).ok()?;
+
+                let max_length: usize = self.file_size.checked_sub(offset.try_into().ok()?)?;
+                if max_length < length {
+                    // It is possible for the file to be smaller than the region, as the region
+                    // should be multiples of the page size. In that case, the rest of the bytes
+                    // are null.
+                    // Since there might still be data left from a previous read past the
+                    // max_file_length byte, it needs to be reset to 0.
+                    // This is done by resizing back and forth.
+                    buffer.resize(max_length, 0);
+                    file.read_exact(buffer).ok()?;
+                    buffer.resize(length, 0);
+                } else {
+                    file.read_exact(buffer).ok()?;
+                }
+
+                // Read the page details for this region, by fetching the u64 value for each
+                // page.
+                let mut page_details: Vec<u64> = vec![0; length / PAGE_SIZE];
+                let _ = pagemap_file
+                    .seek(SeekFrom::Start((desc.start / PAGE_SIZE * 8) as u64))
+                    .ok()?;
+                {
+                    // According to man proc(5), pagemap contains details about pages
+                    // as u64 values, but no indication of the byte ordering of those values
+                    // is specified. We assume here that this means the byte ordering is
+                    // native, so simply reading bytes and interpreting it as u64 values
+                    // will work.
+                    //
+                    // Safety: it is safe to align a slice of u64 into a slice of u8, since
+                    // there is no alignment constraint for the u8 type, and there is prefix or
+                    // suffix.
+                    let (_, bytes_vec, _) = unsafe { page_details.align_to_mut::<u8>() };
+                    pagemap_file.read_exact(bytes_vec).ok()?;
+                }
+
+                // FIXME: alignment/value validation with parameters, chunk size might not be a
+                // multiple of a page, etc
+                for (page_index, page_bits) in page_details.into_iter().enumerate() {
+                    // Keep only the last 4 bits
+                    let page_bits = page_bits >> 60;
+                    // If the two higher bits are 0, the page is not in RAM or swap, it has never
+                    // been fetched by the process. Since it is file-backed, keeping the data from
+                    // the page is fine.
+                    if page_bits & 0xC == 0 {
+                        continue;
+                    }
+                    // Otherwise, the page has been fetched, and the 62th bit is set to 1 only if
+                    // the page is file-backed. If not, it has been modified, and we need to fetch
+                    // it from the process memory.
+                    if page_bits & 0x2 != 0 {
+                        continue;
+                    }
+
+                    // Since the page may have been modified by the process, fetch it
+                    // from the mem file directly.
+                    let buf_offset = page_index * PAGE_SIZE;
+                    let _ = mem_file
+                        .seek(SeekFrom::Start(desc.start.checked_add(buf_offset)? as u64))
+                        .ok()?;
+                    mem_file
+                        .read_exact(&mut buffer[buf_offset..(buf_offset + PAGE_SIZE)])
+                        .ok()?;
+                }
+            }
+            None => {
+                // not file backed, simply read from the mem file
+                let _ = mem_file.seek(SeekFrom::Start(desc.start as u64)).ok()?;
+                mem_file.read_exact(buffer).ok()?;
+            }
+        }
 
         Some(Region {
             start: desc.start,
-            mem: &self.buffer,
+            mem: buffer,
         })
+    }
+
+    fn update_to_next_chunk(&mut self, params: &MemoryParams) -> bool {
+        match params.memory_chunk_size {
+            Some(chunk_size) => {
+                let new_offset = self.current_offset.saturating_add(chunk_size);
+                if new_offset < self.desc.length {
+                    // Current line has a next chunk, so simply select it.
+                    self.current_offset = new_offset;
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        }
     }
 }
 
@@ -204,7 +377,7 @@ mod tests {
     fn test_types_traits() {
         let memory = process_memory(std::process::id()).unwrap();
         test_type_traits_non_clonable(memory);
-        test_type_traits_non_clonable(MapLine {
+        test_type_traits_non_clonable(MapRegion {
             start: 0,
             length: 0,
             dev_major: 0,
@@ -212,6 +385,20 @@ mod tests {
             inode: 0,
             offset: 0,
             path: None,
+        });
+        test_type_traits_non_clonable(CurrentRegion {
+            desc: MapRegion {
+                start: 0,
+                length: 0,
+                dev_major: 0,
+                dev_minor: 0,
+                inode: 0,
+                offset: 0,
+                path: None,
+            },
+            file: None,
+            file_size: 0,
+            current_offset: 0,
         });
     }
 
@@ -221,7 +408,7 @@ mod tests {
             parse_map_line(
                 "00400000-00452000 r-xp 00051000 08:02 173521      /usr/bin/dbus-daemon"
             ),
-            Some(MapLine {
+            Some(MapRegion {
                 start: 0x40_00_00,
                 length: 0x05_20_00,
                 dev_major: 8,
@@ -234,7 +421,7 @@ mod tests {
         // Test with a special name that isn't a path
         assert_eq!(
             parse_map_line("00e03000-00e24000 rw-p 00000000 00:00 0           [heap]",),
-            Some(MapLine {
+            Some(MapRegion {
                 start: 0xe0_30_00,
                 length: 0x02_10_00,
                 dev_major: 0,
@@ -250,7 +437,7 @@ mod tests {
                 "7f122cd4-7f123cd4  r--p  0002c000   08:10    \
                  37209  /usr/lib/x86_64 linux gnu/ld-2.31.so\n"
             ),
-            Some(MapLine {
+            Some(MapRegion {
                 start: 0x7f_12_2c_d4,
                 length: 0x10_00,
                 dev_major: 8,
@@ -263,7 +450,7 @@ mod tests {
         // Test with no special name or path
         assert_eq!(
             parse_map_line("7f122cd4-7f123cd4 r--p 0002c000 08:10 37209"),
-            Some(MapLine {
+            Some(MapRegion {
                 start: 0x7f_12_2c_d4,
                 length: 0x10_00,
                 dev_major: 8,
