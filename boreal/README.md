@@ -198,6 +198,7 @@ of all signatures, imports, exports, resources, etc on every scan.
   feature is also enabled.
 - `authenticode`: this enables the `signatures` part of the `pe` module. This adds
   a dependency on OpenSSL.
-- `process`: enables the process scanning API.
+- `process`: adds the process scanning API.
+- `memmap`: adds APIs to scan files using memory maps.
 
-By default, `hash`, `object` and `process` are enabled, `authenticode` is not.
+By default, `hash`, `object`, `process` and `memmap` are enabled, `authenticode` is not.
