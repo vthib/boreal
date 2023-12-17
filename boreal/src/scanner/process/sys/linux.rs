@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
@@ -192,6 +193,45 @@ struct MapRegion {
     path: Option<PathBuf>,
 }
 
+impl MapRegion {
+    fn open_file(&self) -> Option<(File, usize)> {
+        let check_metadata = |metadata: std::fs::Metadata| -> bool {
+            let dev = metadata.dev();
+            // Safety: this is always safe to call.
+            let (dmaj, dmin) = unsafe { (libc::major(dev), libc::minor(dev)) };
+
+            metadata.ino() == self.inode
+                && dmaj == self.dev_major
+                && dmin == self.dev_minor
+                && metadata.mode() & libc::S_IFMT == libc::S_IFREG
+                && metadata.len() > self.offset
+        };
+
+        // Do not try to map the file if it does not belong to any device
+        if self.dev_major == 0 && self.dev_minor == 0 {
+            return None;
+        }
+
+        let path = self.path.as_ref()?;
+        // First, do a sanity check on the metadata of the path, this avoids opening
+        // the file if it does not pass those checks.
+        if !check_metadata(std::fs::metadata(path).ok()?) {
+            return None;
+        }
+
+        let file = std::fs::File::open(path).ok()?;
+
+        // Then, redo the checks but on the metadata of the opened files, to prevent
+        // any TOCTOU issues.
+        if !check_metadata(file.metadata().ok()?) {
+            return None;
+        }
+
+        let file_size = file.metadata().ok()?.len().try_into().ok()?;
+        Some((file, file_size))
+    }
+}
+
 /// Description of a region currently being listed or fetched
 #[derive(Debug)]
 struct CurrentRegion {
@@ -249,17 +289,10 @@ impl CurrentRegion {
         if self.file.is_some() {
             return;
         }
-        let Some(path) = &self.desc.path else {
-            return;
-        };
-        let Ok(file) = std::fs::File::open(path) else {
-            return;
-        };
-        let Some(file_size) = file.metadata().ok().and_then(|v| v.len().try_into().ok()) else {
-            return;
-        };
-        self.file_size = file_size;
-        self.file = Some(file);
+        if let Some((file, file_size)) = self.desc.open_file() {
+            self.file = Some(file);
+            self.file_size = file_size;
+        }
     }
 
     fn fetch<'a>(
