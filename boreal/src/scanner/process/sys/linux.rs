@@ -70,8 +70,10 @@ fn parse_map_line(line: &str) -> Option<MapRegion> {
     let offset = u64::from_str_radix(offset, 16).ok()?;
 
     let mut device = next_elem()?.split(':');
-    let dev_major: u32 = device.next()?.parse().ok()?;
-    let dev_minor: u32 = device.next()?.parse().ok()?;
+    let dev_major = device.next()?;
+    let dev_major = u32::from_str_radix(dev_major, 16).ok()?;
+    let dev_minor = device.next()?;
+    let dev_minor = u32::from_str_radix(dev_minor, 16).ok()?;
 
     let (inode, path) = match next_elem() {
         Some(inode) => {
@@ -470,7 +472,7 @@ mod tests {
                 start: 0x7f_12_2c_d4,
                 length: 0x10_00,
                 dev_major: 8,
-                dev_minor: 10,
+                dev_minor: 16,
                 inode: 37_209,
                 offset: 0x2c000,
                 path: Some(PathBuf::from("/usr/lib/x86_64 linux gnu/ld-2.31.so")),
@@ -483,7 +485,7 @@ mod tests {
                 start: 0x7f_12_2c_d4,
                 length: 0x10_00,
                 dev_major: 8,
-                dev_minor: 10,
+                dev_minor: 16,
                 inode: 37_209,
                 offset: 0x2c000,
                 path: None,
@@ -507,8 +509,8 @@ mod tests {
         assert_eq!(parse_map_line("00400000-00452000 r-xp g "), None);
         assert_eq!(parse_map_line("00400000-00452000 r-xp 0 "), None);
         assert_eq!(parse_map_line("00400000-00452000 r-xp 0 12 "), None);
-        assert_eq!(parse_map_line("00400000-00452000 r-xp 0 a:2 "), None);
-        assert_eq!(parse_map_line("00400000-00452000 r-xp 0 1:a "), None);
+        assert_eq!(parse_map_line("00400000-00452000 r-xp 0 g:2 "), None);
+        assert_eq!(parse_map_line("00400000-00452000 r-xp 0 1:g "), None);
         assert_eq!(parse_map_line("00400000-00452000 r-xp 0 1:2 "), None);
         assert_eq!(parse_map_line("00400000-00452000 r-xp 0 1:2 g "), None);
         assert_eq!(parse_map_line("2-1 r--p 0002c000 08:10 37209"), None);
