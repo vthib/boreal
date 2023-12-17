@@ -16,18 +16,8 @@ fn main() {
         "max_fetched_region_size" => max_fetched_region_size(),
         "memory_chunk_size" => memory_chunk_size(),
         "file_copy_on_write" => file_copy_on_write(),
+        "rework_file" => rework_file(),
         _ => panic!("unknown arg {}", arg),
-    }
-}
-
-struct Region {
-    _file: tempfile::NamedTempFile,
-    map: memmap2::MmapMut,
-}
-
-impl Region {
-    fn addr(&self) -> usize {
-        self.map.as_ptr() as usize
     }
 }
 
@@ -137,6 +127,68 @@ fn file_copy_on_write() {
     std::thread::sleep(std::time::Duration::from_secs(500));
 }
 
+fn rework_file() {
+    // Pattern is "z8Nwed8LTu"
+    let bad = b"u7Axjk7C[z";
+    // Pattern is "i7B7hm8PoV"
+    let good = b"f8M8gb7_`Y";
+
+    // Region 1: replace the backing file after mapping
+
+    // Create a region backed by a file, and write the good pattern
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+    let mut contents = vec![0; 2 * PAGE_SIZE];
+    let offset = PAGE_SIZE + 100;
+    xor_bytes_into(good, 15, &mut contents[offset..(offset + good.len())]);
+    file.write_all(&contents).unwrap();
+    let path = file.path().to_path_buf();
+    let map1 = unsafe { memmap2::MmapMut::map_mut(file.as_file()).unwrap() };
+    erase(contents);
+
+    // Drop the file, and write an new file in its place, with the bad pattern.
+    std::mem::drop(file);
+
+    // Since the file has been dropped, the maps file will contain `<path> (deleted)`.
+    // We can actually create a file with this suffix to try and trick the scanner.
+    let mut path = path.display().to_string();
+    path.push_str(" (deleted)");
+    let mut new_file = std::fs::File::create(&path).unwrap();
+    let mut new_contents = vec![0; PAGE_SIZE];
+    let new_offset = PAGE_SIZE - 100;
+    xor_bytes_into(
+        bad,
+        15,
+        &mut new_contents[new_offset..(new_offset + bad.len())],
+    );
+    new_file.write_all(&new_contents).unwrap();
+    erase(new_contents);
+
+    // Region 2: shorten the file prior to the offset.
+    let mut contents = vec![0; 3 * PAGE_SIZE];
+    let offset = 3 * PAGE_SIZE - 300;
+    xor_bytes_into(bad, 15, &mut contents[offset..(offset + bad.len())]);
+    let region2 = Region::copy_on_write(contents, 2 * PAGE_SIZE as u64);
+    region2.file.as_file().set_len((PAGE_SIZE) as u64).unwrap();
+
+    // Region 3: shorten the backing file after mapping
+    let mut region3 = Region::zeroed(3 * PAGE_SIZE);
+    region3.write_at(PAGE_SIZE - 500, good);
+    region3.write_at(3 * PAGE_SIZE - 500, bad);
+    region3.file.as_file().set_len((PAGE_SIZE) as u64).unwrap();
+
+    println!("{:x}", map1.as_ptr() as usize);
+    println!("{:x}", region2.addr());
+    println!("{:x}", region3.addr());
+
+    println!("ready");
+    std::thread::sleep(std::time::Duration::from_secs(500));
+}
+
+struct Region {
+    file: tempfile::NamedTempFile,
+    map: memmap2::MmapMut,
+}
+
 impl Region {
     fn new(contents: &[u8]) -> Self {
         let mut this = Self::zeroed(contents.len());
@@ -150,7 +202,7 @@ impl Region {
         file.write_all(&contents).unwrap();
         let map = unsafe { memmap2::MmapMut::map_mut(file.as_file()).unwrap() };
 
-        Self { _file: file, map }
+        Self { file, map }
     }
 
     fn copy_on_write(mut contents: Vec<u8>, offset: u64) -> Self {
@@ -170,11 +222,15 @@ impl Region {
                 .unwrap()
         };
 
-        Self { _file: file, map }
+        Self { file, map }
     }
 
     fn write_at(&mut self, offset: usize, payload: &[u8]) {
         xor_bytes_into(payload, 15, &mut self.map[offset..(offset + payload.len())]);
+    }
+
+    fn addr(&self) -> usize {
+        self.map.as_ptr() as usize
     }
 }
 
@@ -185,5 +241,12 @@ fn xor_bytes(v: &[u8], xor_byte: u8) -> Vec<u8> {
 fn xor_bytes_into(v: &[u8], xor_byte: u8, dest: &mut [u8]) {
     for (v, d) in v.iter().zip(dest.iter_mut()) {
         *d = *v ^ xor_byte;
+    }
+}
+
+fn erase(mut contents: Vec<u8>) {
+    // Erase contents to not let it live in our RAM.
+    for b in &mut contents {
+        *b = 0;
     }
 }

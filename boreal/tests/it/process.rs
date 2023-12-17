@@ -317,6 +317,44 @@ rule a {
     );
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn test_process_rework_file() {
+    let mut checker = Checker::new(
+        r#"
+rule good {
+    strings:
+        $good = "i7B7hm8PoV"
+    condition:
+        $good
+}
+
+rule bad {
+    strings:
+        $bad = "z8Nwed8LTu"
+    condition:
+        $bad
+}"#,
+    );
+
+    let helper = BinHelper::run("rework_file");
+    assert_eq!(helper.output.len(), 3);
+    let region1 = usize::from_str_radix(&helper.output[0], 16).unwrap();
+    let _region2 = usize::from_str_radix(&helper.output[1], 16).unwrap();
+    let region3 = usize::from_str_radix(&helper.output[2], 16).unwrap();
+
+    let mut expected = vec![
+        (b"i7B7hm8PoV".as_slice(), region1 + PAGE_SIZE + 100, 10),
+        (b"i7B7hm8PoV".as_slice(), region3 + PAGE_SIZE - 500, 10),
+    ];
+    expected.sort_by_key(|v| v.1);
+
+    checker.check_process_full_matches(
+        helper.pid(),
+        vec![("default:good".to_owned(), vec![("good", expected)])],
+    );
+}
+
 struct BinHelper {
     proc: std::process::Child,
     output: Vec<String>,
