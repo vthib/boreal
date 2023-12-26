@@ -544,25 +544,66 @@ rule scanned_pe {
 
 #[test]
 fn test_fragmented_scan_mode_can_refetch_regions() {
-    let rule = r#"
-rule refetched_region {
+    let mut checker1 = Checker::new_without_yara(
+        r#"
+rule refetched_region1 {
     condition: uint8(1000) == 0x12
-}
-"#;
-    let mut checker = Checker::new_without_yara(rule);
+}"#,
+    );
+    let mut checker2 = Checker::new_without_yara(
+        r#"
+import "math"
+rule refetched_region2 {
+    condition: math.mean(1000, 2) == 25.0
+}"#,
+    );
 
     // Legacy mode: refetch regions
-    checker.check_fragmented(&[(1000, Some(b"\x12"))], true);
+    checker1.check_fragmented(&[(1000, Some(b"\x12\x20"))], true);
+    checker2.check_fragmented(&[(1000, Some(b"\x12")), (1001, Some(b"\x20"))], true);
 
     // Fast mode: do not refetch regions
-    checker.set_scan_params(ScanParams::default().fragmented_scan_mode(FragmentedScanMode::fast()));
-    checker.check_fragmented(&[(1000, Some(b"\x12"))], false);
+    let params = ScanParams::default().fragmented_scan_mode(FragmentedScanMode::fast());
+    checker1.set_scan_params(params.clone());
+    checker1.check_fragmented(&[(1000, Some(b"\x12"))], false);
+    checker2.set_scan_params(params);
+    checker2.check_fragmented(&[(1000, Some(b"\x12")), (1001, Some(b"\x20"))], false);
 
     // Single-pass mode: do not refetch regions
-    checker.set_scan_params(
-        ScanParams::default().fragmented_scan_mode(FragmentedScanMode::single_pass()),
+    let params = ScanParams::default().fragmented_scan_mode(FragmentedScanMode::single_pass());
+    checker1.set_scan_params(params.clone());
+    checker1.check_fragmented(&[(1000, Some(b"\x12"))], false);
+    checker2.set_scan_params(params);
+    checker2.check_fragmented(&[(1000, Some(b"\x12")), (1001, Some(b"\x20"))], false);
+}
+
+#[test]
+fn test_fragmented_failed_fetch() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    condition: defined uint8(1000)
+}"#,
     );
-    checker.check_fragmented(&[(1000, Some(b"\x12"))], false);
+
+    checker.check_fragmented(&[(1000, None)], false);
+
+    let mut checker = Checker::new_without_yara(
+        r#"
+import "math"
+rule a {
+    condition: defined math.mean(1000, 2)
+}"#,
+    );
+
+    checker.check_fragmented(&[(0, None), (1000, Some(b"\x12\x20"))], true);
+    checker.check_fragmented(&[(1000, None)], false);
+    checker.check_fragmented(&[(1000, Some(b"\x12")), (1001, None)], false);
+    // FIXME: yara fails this test, this is a bug.
+    checker.check_fragmented(
+        &[(1000, Some(b"\x12")), (1001, Some(b"\x20")), (1002, None)],
+        true,
+    );
 }
 
 #[test]

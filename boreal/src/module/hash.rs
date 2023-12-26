@@ -82,14 +82,25 @@ impl ModuleData for Hash {
     type Data = Data;
 }
 
-fn compute_hash<D: Digest>(bytes: &[u8]) -> Value {
+fn compute_hash_from_bytes<D: Digest>(bytes: &[u8]) -> Value {
     Value::bytes(hex::encode(D::digest(bytes)))
+}
+
+fn compute_hash_from_mem<D: Digest>(
+    ctx: &mut EvalContext,
+    offset: usize,
+    end: usize,
+) -> Option<Value> {
+    let mut digest = D::new();
+
+    ctx.mem.on_range(offset, end, |data| digest.update(data))?;
+    Some(Value::bytes(hex::encode(digest.finalize())))
 }
 
 impl Hash {
     fn md5(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         match get_args(args)? {
-            Args::Bytes(s) => Some(compute_hash::<Md5>(&s)),
+            Args::Bytes(s) => Some(compute_hash_from_bytes::<Md5>(&s)),
             Args::Range(offset, end) => {
                 let data = ctx.module_data.get::<Hash>()?;
 
@@ -99,7 +110,7 @@ impl Hash {
                     }
                 }
 
-                let hash = compute_hash::<Md5>(ctx.mem.get(offset, end)?);
+                let hash = compute_hash_from_mem::<Md5>(ctx, offset, end)?;
                 let _r = data
                     .cache
                     .write()
@@ -113,7 +124,7 @@ impl Hash {
 
     fn sha1(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         match get_args(args)? {
-            Args::Bytes(s) => Some(compute_hash::<Sha1>(&s)),
+            Args::Bytes(s) => Some(compute_hash_from_bytes::<Sha1>(&s)),
             Args::Range(offset, end) => {
                 let data = ctx.module_data.get::<Hash>()?;
 
@@ -123,7 +134,7 @@ impl Hash {
                     }
                 }
 
-                let hash = compute_hash::<Sha1>(ctx.mem.get(offset, end)?);
+                let hash = compute_hash_from_mem::<Sha1>(ctx, offset, end)?;
                 let _r = data
                     .cache
                     .write()
@@ -137,7 +148,7 @@ impl Hash {
 
     fn sha2(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         match get_args(args)? {
-            Args::Bytes(s) => Some(compute_hash::<Sha256>(&s)),
+            Args::Bytes(s) => Some(compute_hash_from_bytes::<Sha256>(&s)),
             Args::Range(offset, end) => {
                 let data = ctx.module_data.get::<Hash>()?;
 
@@ -147,7 +158,7 @@ impl Hash {
                     }
                 }
 
-                let hash = compute_hash::<Sha256>(ctx.mem.get(offset, end)?);
+                let hash = compute_hash_from_mem::<Sha256>(ctx, offset, end)?;
                 let _r = data
                     .cache
                     .write()
@@ -160,19 +171,36 @@ impl Hash {
     }
 
     fn checksum32(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        apply(ctx, args, |s| {
-            let checksum = s
-                .iter()
-                .fold(0u32, |acc, byte| acc.wrapping_add(u32::from(*byte)));
-            Value::Integer(i64::from(checksum))
-        })
+        let mut checksum: u32 = 0;
+        match get_args(args)? {
+            Args::Bytes(s) => {
+                for b in s {
+                    checksum = checksum.wrapping_add(u32::from(b));
+                }
+            }
+            Args::Range(offset, end) => {
+                ctx.mem.on_range(offset, end, |data| {
+                    for b in data {
+                        checksum = checksum.wrapping_add(u32::from(*b));
+                    }
+                })?;
+            }
+        }
+        Some(Value::Integer(i64::from(checksum)))
     }
 
     fn crc32(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        apply(ctx, args, |s| {
-            let crc = crc32fast::hash(s);
-            Value::Integer(i64::from(crc))
-        })
+        match get_args(args)? {
+            Args::Bytes(s) => {
+                let crc = crc32fast::hash(&s);
+                Some(Value::Integer(i64::from(crc)))
+            }
+            Args::Range(offset, end) => {
+                let mut hasher = crc32fast::Hasher::new();
+                ctx.mem.on_range(offset, end, |data| hasher.update(data))?;
+                Some(Value::Integer(i64::from(hasher.finalize())))
+            }
+        }
     }
 }
 
@@ -198,15 +226,5 @@ fn get_args(args: Vec<Value>) -> Option<Args> {
             }
         }
         _ => None,
-    }
-}
-
-fn apply<F>(ctx: &mut EvalContext, args: Vec<Value>, fun: F) -> Option<Value>
-where
-    F: FnOnce(&[u8]) -> Value,
-{
-    match get_args(args)? {
-        Args::Bytes(s) => Some(fun(&s)),
-        Args::Range(offset, end) => Some(fun(ctx.mem.get(offset, end)?)),
     }
 }

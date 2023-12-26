@@ -132,14 +132,6 @@ impl Module for Math {
     }
 }
 
-fn get_mem_slice<'a>(ctx: &'a mut EvalContext, offset: i64, length: i64) -> Option<&'a [u8]> {
-    let start: usize = offset.try_into().ok()?;
-    let length: usize = length.try_into().ok()?;
-    let end = start.checked_add(length)?;
-
-    ctx.mem.get(start, end)
-}
-
 impl Math {
     fn in_range(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
@@ -155,13 +147,15 @@ impl Math {
         let deviation = match args.next()? {
             Value::Bytes(bytes) => {
                 let mean: f64 = args.next()?.try_into().ok()?;
-                compute_deviation(&bytes, mean)
+                compute_deviation(distribution_from_bytes(&bytes), mean)
             }
             Value::Integer(offset) => {
                 let length: i64 = args.next()?.try_into().ok()?;
                 let mean: f64 = args.next()?.try_into().ok()?;
 
-                compute_deviation(get_mem_slice(ctx, offset, length)?, mean)
+                let start: usize = offset.try_into().ok()?;
+                let length: usize = length.try_into().ok()?;
+                compute_deviation(distribution(ctx, start, length)?, mean)
             }
             _ => return None,
         };
@@ -172,11 +166,11 @@ impl Math {
     fn mean(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let mean = match args.next()? {
-            Value::Bytes(bytes) => compute_mean(&bytes),
+            Value::Bytes(bytes) => compute_from_bytes(&bytes, Mean::new())?,
             Value::Integer(offset) => {
                 let length: i64 = args.next()?.try_into().ok()?;
 
-                compute_mean(get_mem_slice(ctx, offset, length)?)
+                compute_from_mem(ctx, offset, length, Mean::new())?
             }
             _ => return None,
         };
@@ -187,11 +181,11 @@ impl Math {
     fn serial_correlation(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let scc = match args.next()? {
-            Value::Bytes(bytes) => compute_serial_correlation(&bytes),
+            Value::Bytes(bytes) => compute_from_bytes(&bytes, SerialCorrelation::new())?,
             Value::Integer(offset) => {
                 let length: i64 = args.next()?.try_into().ok()?;
 
-                compute_serial_correlation(get_mem_slice(ctx, offset, length)?)
+                compute_from_mem(ctx, offset, length, SerialCorrelation::new())?
             }
             _ => return None,
         };
@@ -202,30 +196,33 @@ impl Math {
     fn monte_carlo_pi(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let mc = match args.next()? {
-            Value::Bytes(bytes) => compute_monte_carlo_pi(&bytes),
+            Value::Bytes(bytes) => compute_from_bytes(&bytes, MonteCarloPi::new())?,
             Value::Integer(offset) => {
                 let length: i64 = args.next()?.try_into().ok()?;
 
-                compute_monte_carlo_pi(get_mem_slice(ctx, offset, length)?)
+                compute_from_mem(ctx, offset, length, MonteCarloPi::new())?
             }
             _ => return None,
         };
 
-        mc.map(Value::Float)
+        Some(Value::Float(mc))
     }
 
     fn entropy(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
-        let entropy = match args.next()? {
-            Value::Bytes(bytes) => compute_entropy(&bytes),
+        let distribution = match args.next()? {
+            Value::Bytes(bytes) => distribution_from_bytes(&bytes),
             Value::Integer(offset) => {
                 let length: i64 = args.next()?.try_into().ok()?;
-                compute_entropy(get_mem_slice(ctx, offset, length)?)
+
+                let start: usize = offset.try_into().ok()?;
+                let length: usize = length.try_into().ok()?;
+                distribution(ctx, start, length)?
             }
             _ => return None,
         };
 
-        Some(Value::Float(entropy))
+        Some(Value::Float(compute_entropy(distribution)))
     }
 
     fn min(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -294,16 +291,16 @@ impl Math {
 
         let dist = match (args.next(), args.next()) {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
-                distribution(get_mem_slice(ctx, offset, length)?)
+                let start: usize = offset.try_into().ok()?;
+                let length: usize = length.try_into().ok()?;
+                distribution(ctx, start, length)?
             }
-            (None, None) => match ctx.mem.get_direct() {
-                Some(mem) => distribution(mem),
-                None => return None,
-            },
+            (None, None) => distribution_from_bytes(ctx.mem.get_direct()?),
             _ => return None,
         };
 
-        dist.get(byte as usize)
+        dist.counters
+            .get(byte as usize)
             .and_then(|v| i64::try_from(*v).ok())
             .map(Value::Integer)
     }
@@ -315,19 +312,17 @@ impl Math {
 
         let dist = match (args.next(), args.next()) {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
-                distribution(get_mem_slice(ctx, offset, length)?)
+                let start: usize = offset.try_into().ok()?;
+                let length: usize = length.try_into().ok()?;
+                distribution(ctx, start, length)?
             }
-            (None, None) => match ctx.mem.get_direct() {
-                Some(mem) => distribution(mem),
-                None => return None,
-            },
+            (None, None) => distribution_from_bytes(ctx.mem.get_direct()?),
             _ => return None,
         };
 
-        let count = dist.get(byte)?;
-        let sum: u64 = dist.iter().sum();
+        let count = dist.counters.get(byte)?;
 
-        Some(Value::Float((*count as f64) / (sum as f64)))
+        Some(Value::Float((*count as f64) / (dist.nb_values as f64)))
     }
 
     fn mode(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -335,18 +330,23 @@ impl Math {
 
         let dist = match (args.next(), args.next()) {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
-                distribution(get_mem_slice(ctx, offset, length)?)
+                let start: usize = offset.try_into().ok()?;
+                let length: usize = length.try_into().ok()?;
+                distribution(ctx, start, length)?
             }
-            (None, None) => match ctx.mem.get_direct() {
-                Some(mem) => distribution(mem),
-                None => return None,
-            },
+            (None, None) => distribution_from_bytes(ctx.mem.get_direct()?),
             _ => return None,
         };
 
         // Find the index of the most common byte
         // Reverse to return the first index of the maximum value and not the last one.
-        let most_common = dist.iter().enumerate().rev().max_by_key(|(_, n)| *n)?.0;
+        let most_common = dist
+            .counters
+            .iter()
+            .enumerate()
+            .rev()
+            .max_by_key(|(_, n)| *n)?
+            .0;
         most_common.try_into().ok().map(Value::Integer)
     }
 
@@ -369,131 +369,257 @@ impl Math {
     }
 }
 
-fn compute_mean(bytes: &[u8]) -> f64 {
-    let sum: u64 = bytes.iter().map(|v| u64::from(*v)).sum();
-
-    (sum as f64) / (bytes.len() as f64)
+trait MathDigest {
+    fn update(&mut self, data: &[u8]);
+    fn finalize(self) -> Option<f64>;
 }
 
-fn compute_deviation(bytes: &[u8], mean: f64) -> f64 {
-    let dist = distribution(bytes);
-    let sum: f64 = dist
+struct Mean {
+    sum: u64,
+    nb: usize,
+}
+
+impl Mean {
+    fn new() -> Self {
+        Self { sum: 0, nb: 0 }
+    }
+}
+
+impl MathDigest for Mean {
+    fn update(&mut self, data: &[u8]) {
+        for b in data {
+            self.sum = self.sum.saturating_add(u64::from(*b));
+        }
+        self.nb = self.nb.saturating_add(data.len());
+    }
+
+    fn finalize(self) -> Option<f64> {
+        Some((self.sum as f64) / (self.nb as f64))
+    }
+}
+
+// Algorithm can also be found here:
+// https://github.com/Fourmilab/ent_random_sequence_tester/blob/master/src/randtest.c
+//
+// Basically, for a sequence of bytes [a0, a1, ..., aN]:
+//
+// scct1 = sum(a0 * a1 + a1 * a2 + ... + a(N-1) * aN + aN * a0)
+// scct2 = sum(ax) ** 2
+// scct3 = sum(ax * ax)
+//
+// scc = (N*scct1 - scct2) / (N*scct3 - scct2)
+struct SerialCorrelation {
+    scct1: f64,
+    scct2: f64,
+    scct3: f64,
+    prev: f64,
+    first: u8,
+    first_range: bool,
+    last: u8,
+    nb_values: usize,
+}
+
+impl SerialCorrelation {
+    fn new() -> Self {
+        Self {
+            scct1: 0.0,
+            scct2: 0.0,
+            scct3: 0.0,
+            prev: 0.0,
+            first: 0,
+            first_range: true,
+            last: 0,
+            nb_values: 0,
+        }
+    }
+}
+
+impl MathDigest for SerialCorrelation {
+    fn update(&mut self, data: &[u8]) {
+        if !data.is_empty() {
+            if self.first_range {
+                self.first_range = false;
+                self.first = data[0];
+            }
+            self.last = data[data.len() - 1];
+        }
+        for c in data {
+            let c = f64::from(*c);
+            self.scct1 += self.prev * c;
+            self.scct2 += c;
+            self.scct3 += c * c;
+            self.prev = c;
+        }
+        self.nb_values += data.len();
+    }
+
+    fn finalize(mut self) -> Option<f64> {
+        // Yes, this breaks the formula for len <= 2. But its how those implementations basically
+        // handle this...
+        if self.nb_values > 0 {
+            self.scct1 += f64::from(u32::from(self.first) * u32::from(self.last));
+        }
+        self.scct2 *= self.scct2;
+
+        let n = self.nb_values as f64;
+        let scc = n * self.scct3 - self.scct2;
+        Some(if scc == 0.0 {
+            -100_000.0
+        } else {
+            (n * self.scct1 - self.scct2) / scc
+        })
+    }
+}
+
+// Algorithm can also be found here:
+// https://github.com/Fourmilab/ent_random_sequence_tester/blob/master/src/randtest.c
+//
+// As described here: <https://www.fourmilab.ch/random/>
+//
+// > Each successive sequence of six bytes is used as 24 bit X and Y co-ordinates within a
+// > square. If the distance of the randomly-generated point is less than the radius of a
+// > circle inscribed within the square, the six-byte sequence is considered a “hit”. The
+// > percentage of hits can be used to calculate the value of Pi. For very large streams
+// > (this approximation converges very slowly), the value will approach the correct value of
+// > Pi if the sequence is close to random.
+struct MonteCarloPi {
+    inmount: u32,
+    mcount: u32,
+    incirc: f64,
+}
+
+const MONTEN: usize = 6;
+const MONTEN_HALF: i32 = 3;
+
+impl MonteCarloPi {
+    fn new() -> Self {
+        Self {
+            inmount: 0,
+            mcount: 0,
+            incirc: (256.0_f64.powi(MONTEN_HALF) - 1.0).powi(2),
+        }
+    }
+}
+
+impl MathDigest for MonteCarloPi {
+    fn update(&mut self, data: &[u8]) {
+        for w in data.chunks_exact(MONTEN) {
+            let mut mx = 0.0_f64;
+            let mut my = 0.0_f64;
+
+            for j in 0..(MONTEN / 2) {
+                mx = (mx * 256.0) + f64::from(w[j]);
+                my = (my * 256.0) + f64::from(w[j + MONTEN / 2]);
+            }
+
+            self.mcount += 1;
+            if (mx * mx + my * my) <= self.incirc {
+                self.inmount += 1;
+            }
+        }
+    }
+
+    fn finalize(self) -> Option<f64> {
+        use std::f64::consts::PI;
+
+        if self.mcount == 0 {
+            None
+        } else {
+            let mpi = 4.0 * f64::from(self.inmount) / f64::from(self.mcount);
+            Some(((mpi - PI) / PI).abs())
+        }
+    }
+}
+
+fn compute_from_bytes<T: MathDigest>(data: &[u8], mut digest: T) -> Option<f64> {
+    digest.update(data);
+    digest.finalize()
+}
+
+fn compute_from_mem<T: MathDigest>(
+    ctx: &mut EvalContext,
+    offset: i64,
+    length: i64,
+    mut digest: T,
+) -> Option<f64> {
+    let (start, end) = offset_length_to_start_end(offset, length)?;
+    ctx.mem.on_range(start, end, |data| digest.update(data))?;
+    digest.finalize()
+}
+
+fn compute_deviation(distribution: Distribution, mean: f64) -> f64 {
+    let Distribution {
+        counters,
+        nb_values,
+    } = distribution;
+    let sum: f64 = counters
         .into_iter()
         .enumerate()
         .filter(|(_, n)| *n != 0)
         .map(|(c, n)| ((c as f64) - mean).abs() * (n as f64))
         .sum();
 
-    sum / (bytes.len() as f64)
+    sum / (nb_values as f64)
 }
 
-fn compute_entropy(bytes: &[u8]) -> f64 {
-    let dist = distribution(bytes);
+fn compute_entropy(distribution: Distribution) -> f64 {
+    let Distribution {
+        counters,
+        nb_values,
+    } = distribution;
 
-    let len = bytes.len() as f64;
-    dist.into_iter()
+    let nb_values = nb_values as f64;
+    counters
+        .into_iter()
         .filter(|n| *n != 0)
         .map(|n| {
-            let x = (n as f64) / len;
+            let x = (n as f64) / nb_values;
             -(x * x.log2())
         })
         .sum()
 }
 
-fn compute_serial_correlation(bytes: &[u8]) -> f64 {
-    // Algorithm can also be found here:
-    // https://github.com/Fourmilab/ent_random_sequence_tester/blob/master/src/randtest.c
-    //
-    // Basically, for a sequence of bytes [a0, a1, ..., aN]:
-    //
-    // scct1 = sum(a0 * a1 + a1 * a2 + ... + a(N-1) * aN + aN * a0)
-    // scct2 = sum(ax) ** 2
-    // scct3 = sum(ax * ax)
-    //
-    // scc = (N*scct1 - scct2) / (N*scct3 - scct2)
-    let mut scct1 = 0.0_f64;
-    let mut scct2 = 0.0_f64;
-    let mut scct3 = 0.0_f64;
-    let mut prev = 0.0_f64;
-
-    for c in bytes {
-        let c = f64::from(*c);
-        scct1 += prev * c;
-        scct2 += c;
-        scct3 += c * c;
-        prev = c;
-    }
-
-    // Yes, this breaks the formula for len <= 2. But its how those implementations basically
-    // handle this...
-    if !bytes.is_empty() {
-        scct1 += f64::from(u32::from(bytes[0]) * u32::from(bytes[bytes.len() - 1]));
-    }
-    scct2 *= scct2;
-
-    let n = bytes.len() as f64;
-    let scc = n * scct3 - scct2;
-    if scc == 0.0 {
-        -100_000.0
-    } else {
-        (n * scct1 - scct2) / scc
-    }
+struct Distribution {
+    counters: Vec<u64>,
+    nb_values: usize,
 }
 
-fn compute_monte_carlo_pi(bytes: &[u8]) -> Option<f64> {
-    // Algorithm can also be found here:
-    // https://github.com/Fourmilab/ent_random_sequence_tester/blob/master/src/randtest.c
-    //
-    // As described here: <https://www.fourmilab.ch/random/>
-    //
-    // > Each successive sequence of six bytes is used as 24 bit X and Y co-ordinates within a
-    // > square. If the distance of the randomly-generated point is less than the radius of a
-    // > circle inscribed within the square, the six-byte sequence is considered a “hit”. The
-    // > percentage of hits can be used to calculate the value of Pi. For very large streams
-    // > (this approximation converges very slowly), the value will approach the correct value of
-    // > Pi if the sequence is close to random.
-    use std::f64::consts::PI;
+fn distribution(ctx: &mut EvalContext, start: usize, length: usize) -> Option<Distribution> {
+    let mut distrib = Distribution {
+        counters: vec![0u64; 256],
+        nb_values: 0,
+    };
 
-    const MONTEN: usize = 6;
-    const MONTEN_HALF: i32 = 3;
-
-    let incirc: f64 = (256.0_f64.powi(MONTEN_HALF) - 1.0).powi(2);
-
-    let mut inmount = 0_u32;
-    let mut mcount = 0_u32;
-
-    for w in bytes.chunks_exact(MONTEN) {
-        let mut mx = 0.0_f64;
-        let mut my = 0.0_f64;
-
-        for j in 0..(MONTEN / 2) {
-            mx = (mx * 256.0) + f64::from(w[j]);
-            my = (my * 256.0) + f64::from(w[j + MONTEN / 2]);
+    let end = start.checked_add(length)?;
+    ctx.mem.on_range(start, end, |bytes| {
+        for b in bytes {
+            distrib.counters[*b as usize] += 1;
         }
+        distrib.nb_values += bytes.len();
+    })?;
 
-        mcount += 1;
-        if (mx * mx + my * my) <= incirc {
-            inmount += 1;
-        }
-    }
-
-    if mcount == 0 {
-        None
-    } else {
-        let mpi = 4.0 * f64::from(inmount) / f64::from(mcount);
-        Some(((mpi - PI) / PI).abs())
-    }
+    Some(distrib)
 }
 
 #[inline]
-fn distribution(bytes: &[u8]) -> [u64; 256] {
-    let mut counters = [0u64; 256];
+fn distribution_from_bytes(bytes: &[u8]) -> Distribution {
+    let mut distrib = Distribution {
+        counters: vec![0u64; 256],
+        nb_values: bytes.len(),
+    };
 
     for b in bytes {
-        counters[*b as usize] += 1;
+        distrib.counters[*b as usize] += 1;
     }
 
-    counters
+    distrib
+}
+
+fn offset_length_to_start_end(offset: i64, length: i64) -> Option<(usize, usize)> {
+    let start: usize = offset.try_into().ok()?;
+    let length: usize = length.try_into().ok()?;
+    let end = start.checked_add(length)?;
+    Some((start, end))
 }
 
 #[cfg(test)]
