@@ -45,7 +45,7 @@ fn test_invalid_path() {
 }
 
 #[test]
-fn test_single_rule() {
+fn test_scan_file() {
     let rule_file = test_file(
         r#"
 rule my_rule {
@@ -76,6 +76,87 @@ rule my_rule {
             "my_rule {}\n",
             input.path().display()
         )))
+        .stderr("")
+        .success();
+}
+
+#[test]
+// TODO: is there a way to make this code work, ie have
+// enough permissions to scan a process?
+#[ignore]
+fn test_scan_process() {
+    let rule_file = test_file(
+        r#"
+rule process_scan {
+    strings:
+        $a = "PAYLOAD_ON_STACK"
+    condition:
+        $a
+}"#,
+    );
+
+    // let proc = BinHelper::run();
+    // let pid = proc.pid();
+    let pid = 1;
+
+    // Not matching
+    cmd()
+        .arg(rule_file.path())
+        .arg(pid.to_string())
+        .assert()
+        .stdout(predicate::eq(format!("process_scan {}\n", pid)))
+        .stderr("")
+        .success();
+}
+
+#[test]
+fn test_scan_process_not_found() {
+    let rule_file = test_file("rule process_scan { condition: true }");
+
+    // First, find an unused PID. Lets take a very big number, and have
+    // some retry code until we find a proper one.
+    let mut pid = 999_999_999;
+    while Path::new("proc").join(pid.to_string()).exists() {
+        pid += 1;
+    }
+
+    // Not matching
+    cmd()
+        .arg(rule_file.path())
+        .arg(pid.to_string())
+        .assert()
+        .stdout("")
+        .stderr(predicate::eq(format!(
+            "Cannot scan {}: unknown process\n",
+            pid
+        )))
+        .failure();
+}
+
+#[test]
+fn test_scan_file_with_process_name() {
+    // Test that scanning a file with an integer name works, and does not
+    // attempt to scan a process.
+    let rule_file = test_file(
+        r#"
+rule is_file {
+    strings:
+        $a = "buzo"
+    condition:
+        any of them
+}"#,
+    );
+
+    let temp = TempDir::new().unwrap();
+    let file = temp.path().join("1");
+    fs::write(file, "gabuzomeu").unwrap();
+    // Matching
+    cmd()
+        .current_dir(temp.path())
+        .arg(rule_file.path())
+        .arg("1")
+        .assert()
+        .stdout(predicate::eq("is_file 1\n"))
         .stderr("")
         .success();
 }
