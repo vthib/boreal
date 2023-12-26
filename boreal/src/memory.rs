@@ -74,14 +74,22 @@ impl Memory<'_> {
     /// Retrieve the data that matches the given range, potentially truncated.
     ///
     /// This will fetch the memory region containing this range and return the data slice
-    /// matching the exact range, possibly truncated.
+    /// matching the exact range.
     ///
     /// If the start does not belong to any memory region, None is returned.
     ///
-    /// If the end is after the end of the region, the slice is truncated.
-    // TODO: return an iterator if the range overlaps multiple regions that are contiguous?
+    /// This will only return data from the first memory chunk that intersects the provided
+    /// range, and only if this chunk contains the full range. For this reason, in almost
+    /// all use cases, it is recommended to use the [`Memory::on_range`] instead, which
+    /// will iterate properly on all chunks covering the provided range.
+    /// This function exists mostly for retrieval of very small byte slices, such as for
+    /// the `uintXX(offset)` expressions.
     #[must_use]
-    pub fn get(&mut self, start: usize, end: usize) -> Option<&[u8]> {
+    pub(crate) fn get_contiguous(&mut self, start: usize, end: usize) -> Option<&[u8]> {
+        if end < start {
+            return None;
+        }
+
         match self {
             Self::Direct(mem) => {
                 if start >= mem.len() {
@@ -104,14 +112,132 @@ impl Memory<'_> {
                     if relative_start >= region.length {
                         continue;
                     }
-                    let end = end.checked_sub(region.start)?;
-                    let end = std::cmp::min(region.length, end);
+                    let end = std::cmp::min(region.length, end - region.start);
 
                     let region = fragmented.obj.fetch(&fragmented.params)?;
                     return region.mem.get(relative_start..end);
                 }
 
                 None
+            }
+        }
+    }
+
+    /// Call a callback on each data slice covering a given range.
+    ///
+    /// This will fetch the memory regions that contain data in this range, and call the
+    /// callback on each contiguous data slice.
+    ///
+    /// As soon as the range is entirely covered or contains indexes that are not covered by any
+    /// region, the iteration will end.
+    ///
+    /// In other words:
+    ///
+    /// - The first data slice starts on the starting index of the range.
+    /// - If the callback is called multiple times, each data slice is guaranteed to be exactly
+    ///   following the previous one (no undefined bytes in between).
+    /// - The range may not be covered entirely, e.g. asking for `[0; 2*filesize[` will lead
+    ///   to the callback being called once, on `[0; filesize[`.
+    ///
+    /// `None` is returned if either:
+    /// - the callback has not been called at least once (so no memory region contains the
+    ///   starting bytes of the range).
+    /// - there are undefined bytes in between two regions covering the range.
+    /// - a region cannot be fetched.
+    ///
+    /// For example, when providing the range `[50; 100[`, and with regions:
+    ///
+    /// - `[0;70[`
+    /// - `[70; 80[`
+    /// - `[80; 150[`
+    ///
+    /// The callback will be called with `[50; 70[`, `[70; 80[` and `[80; 100[` then
+    /// `Some(())` will be returned.
+    ///
+    /// with regions:
+    ///
+    /// - `[0;70[`
+    /// - `[70; 80[`
+    /// - `[90; 150[`
+    ///
+    /// The callback will be called with `[50; 70[` and `[70; 80[`, then `None` will
+    /// be returned.
+    ///
+    /// with regions:
+    ///
+    /// - `[0;70[`
+    ///
+    /// The callback will be called with `[50; 70[` only, then `Some(())` will be
+    /// returned.
+    ///
+    /// And with regions:
+    ///
+    /// - `[60;70[`
+    ///
+    /// The callback will not be called at all, and `None` will be returned.
+    #[must_use]
+    pub fn on_range<F>(&mut self, mut start: usize, end: usize, mut cb: F) -> Option<()>
+    where
+        F: FnMut(&[u8]),
+    {
+        if end < start {
+            return None;
+        }
+
+        match self {
+            Self::Direct(mem) => {
+                if start >= mem.len() {
+                    None
+                } else {
+                    let end = std::cmp::min(mem.len(), end);
+                    cb(&mem[start..end]);
+                    Some(())
+                }
+            }
+            Self::Fragmented(fragmented) => {
+                if !fragmented.params.can_refetch_regions {
+                    return None;
+                }
+
+                let mut has_called_cb = false;
+
+                fragmented.obj.reset();
+                while let Some(region) = fragmented.obj.next(&fragmented.params) {
+                    // If we already called the callback once, the next regions should
+                    // be contiguous.
+                    if has_called_cb && start != region.start {
+                        return None;
+                    }
+                    // Adjust starting offset relative to the region base
+                    let Some(relative_start) = start.checked_sub(region.start) else {
+                        break;
+                    };
+                    if relative_start >= region.length {
+                        continue;
+                    }
+
+                    // Adjust ending offset relative to the region base and length
+                    let relative_end = std::cmp::min(region.length, end - region.start);
+
+                    let Some(fetched_region) = fragmented.obj.fetch(&fragmented.params) else {
+                        return None;
+                    };
+                    cb(&fetched_region.mem[relative_start..relative_end]);
+                    has_called_cb = true;
+
+                    // Update the starting offset for the next region.
+                    start = region.start.checked_add(region.length)?;
+                    if start >= end {
+                        // Range has been entirely covered.
+                        break;
+                    }
+                }
+
+                if has_called_cb {
+                    Some(())
+                } else {
+                    None
+                }
             }
         }
     }
@@ -220,5 +346,13 @@ mod tests {
                 can_refetch_regions: false,
             },
         });
+    }
+
+    #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn test_proper_range() {
+        let mut mem = Memory::Direct(b"abc");
+        assert_eq!(mem.get_contiguous(2, 1), None);
+        assert_eq!(mem.on_range(2, 1, |_| {}), None);
     }
 }

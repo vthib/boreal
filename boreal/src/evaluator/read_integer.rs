@@ -26,7 +26,7 @@ pub(super) fn evaluate_read_integer(
 
     let mem = addr
         .checked_add(length)
-        .and_then(|end| evaluator.scan_data.mem.get(addr, end))
+        .and_then(|end| evaluator.scan_data.mem.get_contiguous(addr, end))
         .ok_or(PoisonKind::Undefined)?;
 
     match ty {
