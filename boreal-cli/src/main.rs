@@ -3,7 +3,7 @@ use std::process::ExitCode;
 use std::thread::JoinHandle;
 
 use boreal::module::Value as ModuleValue;
-use boreal::scanner::ScanError;
+use boreal::scanner::{ScanError, ScanResult};
 use boreal::{statistics, Compiler, Scanner};
 
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
@@ -62,7 +62,7 @@ fn build_command() -> Command {
         )
         .arg(
             Arg::new("input")
-                .value_parser(value_parser!(PathBuf))
+                .value_parser(value_parser!(String))
                 .required_unless_present("module_names")
                 .help("File or directory to scan"),
         )
@@ -167,56 +167,89 @@ fn main() -> ExitCode {
         boreal::scanner::ScanParams::default().compute_statistics(args.get_flag("scan_statistics")),
     );
 
-    let input: &PathBuf = args.get_one("input").unwrap();
-    if input.is_dir() {
-        let mut walker = WalkDir::new(input).follow_links(!args.get_flag("no_follow_symlinks"));
-        if !args.get_flag("recursive") {
-            walker = walker.max_depth(1);
-        }
-
-        let (thread_pool, sender) = ThreadPool::new(&scanner, &args);
-
-        for entry in walker {
-            let entry = match entry {
-                Ok(v) => v,
-                Err(err) => {
-                    eprintln!("{err}");
-                    continue;
-                }
-            };
-
-            if !entry.file_type().is_file() {
-                continue;
+    let input: &String = args.get_one("input").unwrap();
+    match Input::new(input) {
+        Input::Directory(path) => {
+            let mut walker = WalkDir::new(path).follow_links(!args.get_flag("no_follow_symlinks"));
+            if !args.get_flag("recursive") {
+                walker = walker.max_depth(1);
             }
 
-            if let Some(max_size) = args.get_one::<u64>("skip_larger") {
-                if *max_size > 0 && entry.depth() > 0 {
-                    let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
-                    if file_length >= *max_size {
-                        eprintln!(
-                            "skipping {} ({} bytes) because it's larger than {} bytes.",
-                            entry.path().display(),
-                            file_length,
-                            max_size
-                        );
+            let (thread_pool, sender) = ThreadPool::new(&scanner, &args);
+
+            for entry in walker {
+                let entry = match entry {
+                    Ok(v) => v,
+                    Err(err) => {
+                        eprintln!("{err}");
                         continue;
                     }
+                };
+
+                if !entry.file_type().is_file() {
+                    continue;
                 }
+
+                if let Some(max_size) = args.get_one::<u64>("skip_larger") {
+                    if *max_size > 0 && entry.depth() > 0 {
+                        let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
+                        if file_length >= *max_size {
+                            eprintln!(
+                                "skipping {} ({} bytes) because it's larger than {} bytes.",
+                                entry.path().display(),
+                                file_length,
+                                max_size
+                            );
+                            continue;
+                        }
+                    }
+                }
+
+                sender.send(entry.path().to_path_buf()).unwrap();
             }
 
-            sender.send(entry.path().to_path_buf()).unwrap();
+            drop(sender);
+            thread_pool.join();
+
+            ExitCode::SUCCESS
         }
-
-        drop(sender);
-        thread_pool.join();
-
-        ExitCode::SUCCESS
-    } else {
-        match scan_file(&scanner, input, ScanOptions::new(&args)) {
+        Input::File(path) => match scan_file(&scanner, &path, ScanOptions::new(&args)) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
-                eprintln!("Cannot scan {}: {}", input.display(), err);
+                eprintln!("Cannot scan {}: {}", path.display(), err);
                 ExitCode::FAILURE
+            }
+        },
+        Input::Process(pid) => match scan_process(&scanner, pid, ScanOptions::new(&args)) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(err) => {
+                eprintln!("Cannot scan {}: {}", pid, err);
+                ExitCode::FAILURE
+            }
+        },
+    }
+}
+
+#[derive(Debug)]
+enum Input {
+    Directory(PathBuf),
+    File(PathBuf),
+    Process(u32),
+}
+
+impl Input {
+    fn new(input: &str) -> Self {
+        // Same semantics as YARA: only parse it as a PID if there is no
+        // file with this name.
+        let path = PathBuf::from(input);
+        if path.is_dir() {
+            Input::Directory(path)
+        } else if path.exists() {
+            Input::File(path)
+        } else {
+            match input.parse() {
+                Ok(pid) => Self::Process(pid),
+                Err(_) => Input::File(path),
             }
         }
     }
@@ -245,11 +278,39 @@ fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> Result<(),
     let res = if cfg!(feature = "memmap") && !options.no_mmap {
         // Safety: By default, we accept that this CLI tool can abort if the underlying
         // file is truncated while the scan is ongoing.
-        unsafe { scanner.scan_file_memmap(path).map_err(|(err, _)| err)? }
+        unsafe { scanner.scan_file_memmap(path) }
     } else {
-        scanner.scan_file(path).map_err(|(err, _)| err)?
+        scanner.scan_file(path)
     };
 
+    let what = path.display().to_string();
+    match res {
+        Ok(res) => {
+            display_scan_results(res, &what, options);
+            Ok(())
+        }
+        Err((err, res)) => {
+            display_scan_results(res, &what, options);
+            Err(err)
+        }
+    }
+}
+
+fn scan_process(scanner: &Scanner, pid: u32, options: ScanOptions) -> Result<(), ScanError> {
+    let what = pid.to_string();
+    match scanner.scan_process(pid) {
+        Ok(res) => {
+            display_scan_results(res, &what, options);
+            Ok(())
+        }
+        Err((err, res)) => {
+            display_scan_results(res, &what, options);
+            Err(err)
+        }
+    }
+}
+
+fn display_scan_results(res: ScanResult, what: &str, options: ScanOptions) {
     if options.print_module_data {
         for (module_name, module_value) in res.module_values {
             // A module value must be an object. Filter out empty ones, it means the module has not
@@ -263,13 +324,11 @@ fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> Result<(),
         }
     }
     for rule in res.matched_rules {
-        println!("{} {}", &rule.name, path.display());
+        println!("{} {}", &rule.name, what);
     }
     if let Some(stats) = res.statistics {
-        println!("{}: {:#?}", path.display(), stats);
+        println!("{}: {:#?}", what, stats);
     }
-
-    Ok(())
 }
 
 struct ThreadPool {
@@ -456,10 +515,14 @@ mod tests {
             let _r = t.clone();
             let _r = format!("{:?}", &t);
         }
+        fn test_non_clonable<T: std::fmt::Debug + Send + Sync>(t: T) {
+            let _r = format!("{:?}", &t);
+        }
 
         test(ScanOptions {
             print_module_data: false,
             no_mmap: false,
         });
+        test_non_clonable(Input::Process(32));
     }
 }
