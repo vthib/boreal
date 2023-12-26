@@ -1,6 +1,4 @@
 use std::io::{BufRead, BufReader};
-#[cfg(any(target_os = "linux", windows))]
-use std::path::Path;
 
 #[cfg(any(target_os = "linux", windows))]
 use crate::utils::Checker;
@@ -32,13 +30,7 @@ rule a {
 #[test]
 #[cfg(any(target_os = "linux", windows))]
 fn test_process_not_found() {
-    // First, find an unused PID. Lets take a very big number, and have
-    // some retry code until we find a proper one.
-
-    let mut pid = 999_999_999;
-    while Path::new("proc").join(pid.to_string()).exists() {
-        pid += 1;
-    }
+    let pid = 999_999_999;
 
     let mut checker = Checker::new(r#" rule a { condition: true }"#);
     checker.assert_success = false;
