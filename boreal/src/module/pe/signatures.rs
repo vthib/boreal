@@ -113,7 +113,7 @@ fn countersig_to_value(countersig: &Countersignature) -> Value {
 fn get_legacy_signer_data(sig: &Authenticode) -> HashMap<&'static str, Value> {
     sig.signer()
         .as_ref()
-        .and_then(|signer| signer.certificate_chain().get(0))
+        .and_then(|signer| signer.certificate_chain().first())
         .map(|v| cert_to_map(v, true))
         .unwrap_or_default()
 }

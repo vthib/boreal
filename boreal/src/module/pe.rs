@@ -2000,7 +2000,7 @@ impl Pe {
 
         // Finally, add the filesize
         #[allow(clippy::cast_possible_truncation)]
-        (csum as usize).wrapping_add(mem.len()).try_into().ok()
+        Some((csum as usize).wrapping_add(mem.len()).into())
     }
 
     fn section_index(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -2014,7 +2014,7 @@ impl Pe {
                 .sections
                 .iter()
                 .position(|sec| sec.name == section_name)
-                .and_then(|v| v.try_into().ok()),
+                .map(Into::into),
             Value::Integer(addr) => {
                 let index = if ctx.process_memory {
                     data.sections.iter().position(|sec| {
@@ -2027,7 +2027,7 @@ impl Pe {
                     })?
                 };
 
-                index.try_into().ok()
+                Some(index.into())
             }
             _ => None,
         }
@@ -2098,7 +2098,7 @@ impl Pe {
             _ => return None,
         };
 
-        res.try_into().ok()
+        Some(res.into())
     }
 
     fn imports(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -2123,7 +2123,7 @@ impl Pe {
                 ))
             }
             (Value::Bytes(dll_name), None, None) => {
-                data.nb_functions(&dll_name, false).try_into().ok()
+                Some(data.nb_functions(&dll_name, false).into())
             }
             (Value::Regex(dll_name), Some(Value::Regex(function_name)), None) => Some(
                 data.nb_functions_regex(&dll_name, &function_name, false)
@@ -2181,7 +2181,7 @@ impl Pe {
                 if flags & (ImportType::Delayed as i64) != 0 {
                     res += data.nb_functions(&dll_name, true);
                 }
-                res.try_into().ok()
+                Some(res.into())
             }
             (
                 Value::Integer(flags),
@@ -2195,7 +2195,7 @@ impl Pe {
                 if flags & (ImportType::Delayed as i64) != 0 {
                     res += data.nb_functions_regex(&dll_name, &function_name, true);
                 }
-                res.try_into().ok()
+                Some(res.into())
             }
             _ => None,
         }
@@ -2291,7 +2291,7 @@ impl Pe {
             _ => return None,
         };
 
-        res.try_into().ok()
+        Some(res.into())
     }
 
     fn rich_signature_toolid(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -2309,7 +2309,7 @@ impl Pe {
             _ => return None,
         };
 
-        res.try_into().ok()
+        Some(res.into())
     }
 
     #[cfg(feature = "hash")]
