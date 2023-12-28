@@ -782,3 +782,20 @@ rule logger {
         .stderr("")
         .success();
 }
+
+#[test]
+fn test_invalid_fragmented_scan_mode() {
+    // Invalid path to rule
+    cmd()
+        .arg("--fragmented-scan-mode")
+        .arg("bad_value")
+        .arg("rules.yar")
+        .arg("input")
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid value 'bad_value' for \
+            '--fragmented-scan-mode <legacy|fast|singlepass>\': invalid value",
+        ))
+        .failure();
+}
