@@ -56,15 +56,15 @@
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::undocumented_unsafe_blocks)]
+// Allow some useless pedantic lints
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::unnested_or_patterns)]
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::single_match_else)]
 #![allow(clippy::inline_always)]
-// Completely useless lint
+#![allow(clippy::struct_field_names)]
 #![allow(clippy::struct_excessive_bools)]
-// Would be nice to not need this, thanks macho module
 #![allow(unsafe_code)]
 #![deny(missing_docs)]
 #![deny(clippy::cargo)]

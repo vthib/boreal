@@ -660,15 +660,18 @@ impl Type {
     }
 }
 
+/// Error converting into a [`Value`].
+pub struct ValueTryFromError;
+
 macro_rules! try_from_value {
     ($ty:ty, $name:ident) => {
         impl TryFrom<Value> for $ty {
-            type Error = ();
+            type Error = ValueTryFromError;
 
-            fn try_from(value: Value) -> Result<$ty, ()> {
+            fn try_from(value: Value) -> Result<$ty, Self::Error> {
                 match value {
                     Value::$name(v) => Ok(v),
-                    _ => Err(()),
+                    _ => Err(ValueTryFromError),
                 }
             }
         }

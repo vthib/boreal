@@ -759,7 +759,7 @@ impl MachO {
             }
 
             let entry_point = file.entry_point?;
-            return file.arch_offset.saturating_add(entry_point).try_into().ok();
+            return Some(file.arch_offset.saturating_add(entry_point).into());
         }
         None
     }
