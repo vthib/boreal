@@ -3,7 +3,7 @@ use std::process::ExitCode;
 use std::thread::JoinHandle;
 
 use boreal::module::Value as ModuleValue;
-use boreal::scanner::{ScanError, ScanResult};
+use boreal::scanner::{FragmentedScanMode, ScanError, ScanParams, ScanResult};
 use boreal::{statistics, Compiler, Scanner};
 
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
@@ -90,6 +90,27 @@ fn build_command() -> Command {
                 .long("scan-stats")
                 .action(ArgAction::SetTrue)
                 .help("Display statistics on rules' evaluation"),
+        )
+        .arg(
+            Arg::new("memory_chunk_size")
+                .long("max-process-memory-chunk")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(usize))
+                .help("Maximum chunk size when scanning processes"),
+        )
+        .arg(
+            Arg::new("max_fetched_region_size")
+                .long("max-fetched-region-size")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(usize))
+                .help("Maximum size fetched from a process region"),
+        )
+        .arg(
+            Arg::new("fragmented_scan_mode")
+                .long("fragmented-scan-mode")
+                .value_name("legacy|fast|singlepass")
+                .value_parser(parse_fragmented_scan_mode)
+                .help("Specify scan mode for fragmented memory (e.g. process scanning)"),
         );
 
     if cfg!(feature = "memmap") {
@@ -163,9 +184,8 @@ fn main() -> ExitCode {
 
         compiler.into_scanner()
     };
-    scanner.set_scan_params(
-        boreal::scanner::ScanParams::default().compute_statistics(args.get_flag("scan_statistics")),
-    );
+
+    scanner.set_scan_params(scan_params_from_args(&args));
 
     let input: &String = args.get_one("input").unwrap();
     match Input::new(input) {
@@ -252,6 +272,31 @@ impl Input {
                 Err(_) => Input::File(path),
             }
         }
+    }
+}
+
+fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
+    let mut scan_params = ScanParams::default()
+        .compute_statistics(args.get_flag("scan_statistics"))
+        .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied());
+
+    if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
+        scan_params = scan_params.max_fetched_region_size(*size);
+    }
+
+    if let Some(scan_mode) = args.get_one::<FragmentedScanMode>("fragmented_scan_mode") {
+        scan_params = scan_params.fragmented_scan_mode(*scan_mode);
+    }
+
+    scan_params
+}
+
+fn parse_fragmented_scan_mode(scan_mode: &str) -> Result<FragmentedScanMode, String> {
+    match scan_mode {
+        "legacy" => Ok(FragmentedScanMode::legacy()),
+        "fast" => Ok(FragmentedScanMode::fast()),
+        "singlepass" => Ok(FragmentedScanMode::single_pass()),
+        _ => Err("invalid value".to_string()),
     }
 }
 
@@ -524,5 +569,35 @@ mod tests {
             no_mmap: false,
         });
         test_non_clonable(Input::Process(32));
+    }
+
+    #[test]
+    fn test_scan_params_from_args() {
+        fn parse(cmdline: &str) -> ScanParams {
+            let args = build_command().get_matches_from(cmdline.split(' '));
+            scan_params_from_args(&args)
+        }
+
+        let params = parse("boreal --max-process-memory-chunk 500 rules input");
+        assert_eq!(params.get_memory_chunk_size(), Some(500));
+
+        let params = parse("boreal --max-fetched-region-size 500 rules input");
+        assert_eq!(params.get_max_fetched_region_size(), 500);
+
+        let params = parse("boreal --fragmented-scan-mode legacy rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::legacy()
+        );
+        let params = parse("boreal --fragmented-scan-mode fast rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::fast()
+        );
+        let params = parse("boreal --fragmented-scan-mode singlepass rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::single_pass()
+        );
     }
 }
