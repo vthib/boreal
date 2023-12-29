@@ -111,6 +111,37 @@ fn build_command() -> Command {
                 .value_name("legacy|fast|singlepass")
                 .value_parser(parse_fragmented_scan_mode)
                 .help("Specify scan mode for fragmented memory (e.g. process scanning)"),
+        )
+        .arg(
+            Arg::new("print_strings")
+                .short('s')
+                .long("print-strings")
+                .action(ArgAction::SetTrue)
+                .help("Print strings matches")
+                .long_help(
+                    "Note that enabling this parameter will force the \
+                     computation of all string matches,\ndisabling \
+                     the no scan optimization in the process.",
+                ),
+        )
+        .arg(
+            Arg::new("print_string_length")
+                .short('L')
+                .long("print-string-length")
+                .action(ArgAction::SetTrue)
+                .help("Print the length of strings matches")
+                .long_help(
+                    "Note that enabling this parameter will force the \
+                     computation of all string matches,\ndisabling \
+                     the no scan optimization in the process.",
+                ),
+        )
+        .arg(
+            Arg::new("print_tags")
+                .short('g')
+                .long("print-tags")
+                .action(ArgAction::SetTrue)
+                .help("Print rule tags"),
         );
 
     if cfg!(feature = "memmap") {
@@ -185,7 +216,13 @@ fn main() -> ExitCode {
         compiler.into_scanner()
     };
 
-    scanner.set_scan_params(scan_params_from_args(&args));
+    let scan_options = ScanOptions::new(&args);
+
+    let mut scan_params = scan_params_from_args(&args);
+    if scan_options.print_strings_matches() {
+        scan_params = scan_params.compute_full_matches(true);
+    }
+    scanner.set_scan_params(scan_params);
 
     let input: &String = args.get_one("input").unwrap();
     match Input::new(input) {
@@ -195,7 +232,7 @@ fn main() -> ExitCode {
                 walker = walker.max_depth(1);
             }
 
-            let (thread_pool, sender) = ThreadPool::new(&scanner, &args);
+            let (thread_pool, sender) = ThreadPool::new(&scanner, scan_options, &args);
 
             for entry in walker {
                 let entry = match entry {
@@ -233,14 +270,14 @@ fn main() -> ExitCode {
 
             ExitCode::SUCCESS
         }
-        Input::File(path) => match scan_file(&scanner, &path, ScanOptions::new(&args)) {
+        Input::File(path) => match scan_file(&scanner, &path, scan_options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", path.display(), err);
                 ExitCode::FAILURE
             }
         },
-        Input::Process(pid) => match scan_process(&scanner, pid, ScanOptions::new(&args)) {
+        Input::Process(pid) => match scan_process(&scanner, pid, scan_options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", pid, err);
@@ -303,6 +340,9 @@ fn parse_fragmented_scan_mode(scan_mode: &str) -> Result<FragmentedScanMode, Str
 #[derive(Copy, Clone, Debug)]
 struct ScanOptions {
     print_module_data: bool,
+    print_strings_matches_data: bool,
+    print_string_length: bool,
+    print_tags: bool,
     no_mmap: bool,
 }
 
@@ -310,12 +350,19 @@ impl ScanOptions {
     fn new(args: &ArgMatches) -> Self {
         Self {
             print_module_data: args.get_flag("print_module_data"),
+            print_strings_matches_data: args.get_flag("print_strings"),
+            print_string_length: args.get_flag("print_string_length"),
+            print_tags: args.get_flag("print_tags"),
             no_mmap: if cfg!(feature = "memmap") {
                 args.get_flag("no_mmap")
             } else {
                 false
             },
         }
+    }
+
+    fn print_strings_matches(self) -> bool {
+        self.print_strings_matches_data || self.print_string_length
     }
 }
 
@@ -356,6 +403,7 @@ fn scan_process(scanner: &Scanner, pid: u32, options: ScanOptions) -> Result<(),
 }
 
 fn display_scan_results(res: ScanResult, what: &str, options: ScanOptions) {
+    // Print module data first
     if options.print_module_data {
         for (module_name, module_value) in res.module_values {
             // A module value must be an object. Filter out empty ones, it means the module has not
@@ -368,9 +416,40 @@ fn display_scan_results(res: ScanResult, what: &str, options: ScanOptions) {
             }
         }
     }
+
+    // Then, print matching rules.
     for rule in res.matched_rules {
-        println!("{} {}", &rule.name, what);
+        // <rulename> [<ruletags>] <matched object>
+        print!("{}", &rule.name);
+        if options.print_tags {
+            print!(" [{}]", rule.tags.join(","));
+        }
+        println!(" {}", what);
+
+        if options.print_strings_matches() {
+            for string in &rule.matches {
+                for m in &string.matches {
+                    // <offset>:<length>:<name>: <match>
+                    print!("0x{:x}:", m.base + m.offset);
+                    if options.print_string_length {
+                        print!("{}:", m.length);
+                    }
+                    print!("${}", string.name);
+                    if options.print_strings_matches_data {
+                        print!(": ");
+                        for c in &m.data {
+                            for b in std::ascii::escape_default(*c) {
+                                print!("{}", b as char);
+                            }
+                        }
+                    }
+                    println!();
+                }
+            }
+        }
     }
+
+    // Finally, print the statistics
     if let Some(stats) = res.statistics {
         println!("{}: {:#?}", what, stats);
     }
@@ -381,7 +460,11 @@ struct ThreadPool {
 }
 
 impl ThreadPool {
-    fn new(scanner: &Scanner, args: &ArgMatches) -> (Self, Sender<PathBuf>) {
+    fn new(
+        scanner: &Scanner,
+        scan_options: ScanOptions,
+        args: &ArgMatches,
+    ) -> (Self, Sender<PathBuf>) {
         let nb_cpus = if let Some(nb) = args.get_one::<usize>("threads") {
             std::cmp::min(1, *nb)
         } else {
@@ -391,11 +474,10 @@ impl ThreadPool {
         };
 
         let (sender, receiver) = bounded(nb_cpus * 5);
-        let options = ScanOptions::new(args);
         (
             Self {
                 threads: (0..nb_cpus)
-                    .map(|_| Self::worker_thread(scanner, &receiver, options))
+                    .map(|_| Self::worker_thread(scanner, &receiver, scan_options))
                     .collect(),
             },
             sender,
@@ -566,6 +648,9 @@ mod tests {
 
         test(ScanOptions {
             print_module_data: false,
+            print_strings_matches_data: false,
+            print_string_length: false,
+            print_tags: false,
             no_mmap: false,
         });
         test_non_clonable(Input::Process(32));
