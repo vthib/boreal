@@ -72,10 +72,7 @@ rule my_rule {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
-            "my_rule {}\n",
-            input.path().display()
-        )))
+        .stdout(format!("my_rule {}\n", input.path().display()))
         .stderr("")
         .success();
 }
@@ -104,7 +101,7 @@ rule process_scan {
         .arg(rule_file.path())
         .arg(pid.to_string())
         .assert()
-        .stdout(predicate::eq(format!("process_scan {}\n", pid)))
+        .stdout(format!("process_scan {}\n", pid))
         .stderr("")
         .success();
 }
@@ -126,10 +123,7 @@ fn test_scan_process_not_found() {
         .arg(pid.to_string())
         .assert()
         .stdout("")
-        .stderr(predicate::eq(format!(
-            "Cannot scan {}: unknown process\n",
-            pid
-        )))
+        .stderr(format!("Cannot scan {}: unknown process\n", pid))
         .failure();
 }
 
@@ -156,7 +150,7 @@ rule is_file {
         .arg(rule_file.path())
         .arg("1")
         .assert()
-        .stdout(predicate::eq("is_file 1\n"))
+        .stdout("is_file 1\n")
         .stderr("")
         .success();
 }
@@ -200,10 +194,7 @@ fn test_rule_warning() {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
-            "rule_with_warning {}\n",
-            input.path().display()
-        )))
+        .stdout(format!("rule_with_warning {}\n", input.path().display()))
         .stderr(
             predicate::str::contains("warning").and(predicate::str::contains(
                 "implicit cast from a bytes value to a boolean",
@@ -266,10 +257,7 @@ rule includer {
         .arg(&rule_a)
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
-            "included {}\n",
-            input.path().display()
-        )))
+        .stdout(format!("included {}\n", input.path().display()))
         .success();
 
     // Match on both
@@ -630,11 +618,11 @@ rule a {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
+        .stdout(format!(
             "default:a (from {}){}",
             rule_file.path().display(),
             stats
-        )))
+        ))
         .stderr("")
         .success();
 }
@@ -753,7 +741,7 @@ rule second {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!("first {}\n", input.path().display())))
+        .stdout(format!("first {}\n", input.path().display()))
         .stderr("")
         .success();
 }
@@ -775,10 +763,10 @@ rule logger {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
+        .stdout(format!(
             "this is a log\nlogger {}\n",
             input.path().display()
-        )))
+        ))
         .stderr("")
         .success();
 }
@@ -828,11 +816,11 @@ rule tag3: first second third {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
+        .stdout(format!(
             "notag [] {path}\n\
              tag1 [first] {path}\n\
              tag3 [first,second,third] {path}\n"
-        )))
+        ))
         .stderr("")
         .success();
 
@@ -843,7 +831,7 @@ rule tag3: first second third {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!("tag1 {path}\ntag3 {path}\n")))
+        .stdout(format!("tag1 {path}\ntag3 {path}\n"))
         .stderr("")
         .success();
     cmd()
@@ -851,7 +839,7 @@ rule tag3: first second third {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!("tag3 {path}\n")))
+        .stdout(format!("tag3 {path}\n"))
         .stderr("")
         .success();
     cmd()
@@ -897,7 +885,7 @@ rule my_rule {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
+        .stdout(format!(
             r#"my_rule {path}
 0x0:$a: <a>
 0x5:$a: <<abc>
@@ -907,7 +895,7 @@ rule my_rule {
 0x1c:$a: <a\xff>
 0x7:$b: abc
 "#
-        )))
+        ))
         .stderr("")
         .success();
 
@@ -917,7 +905,7 @@ rule my_rule {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
+        .stdout(format!(
             r#"my_rule {path}
 0x0:3:$a
 0x5:6:$a
@@ -927,7 +915,7 @@ rule my_rule {
 0x1c:4:$a
 0x7:3:$b
 "#
-        )))
+        ))
         .stderr("")
         .success();
 
@@ -938,7 +926,7 @@ rule my_rule {
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(predicate::eq(format!(
+        .stdout(format!(
             r#"my_rule {path}
 0x0:3:$a: <a>
 0x5:6:$a: <<abc>
@@ -948,7 +936,7 @@ rule my_rule {
 0x1c:4:$a: <a\xff>
 0x7:3:$b: abc
 "#
-        )))
+        ))
         .stderr("")
         .success();
 }
