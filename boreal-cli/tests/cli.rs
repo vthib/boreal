@@ -801,7 +801,7 @@ fn test_invalid_fragmented_scan_mode() {
 }
 
 #[test]
-fn test_print_tags() {
+fn test_tags() {
     let rule_file = test_file(
         br#"
 rule notag {
@@ -822,7 +822,7 @@ rule tag3: first second third {
     let input = test_file(b"");
     let path = input.path().display();
 
-    // Test match data only
+    // Test print tags
     cmd()
         .arg("-g")
         .arg(rule_file.path())
@@ -833,6 +833,34 @@ rule tag3: first second third {
              tag1 [first] {path}\n\
              tag3 [first,second,third] {path}\n"
         )))
+        .stderr("")
+        .success();
+
+    // Test filter by tag
+    cmd()
+        .arg("-t")
+        .arg("first")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!("tag1 {path}\ntag3 {path}\n")))
+        .stderr("")
+        .success();
+    cmd()
+        .arg("--tag=third")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!("tag3 {path}\n")))
+        .stderr("")
+        .success();
+    cmd()
+        .arg("-t")
+        .arg("")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout("")
         .stderr("")
         .success();
 }

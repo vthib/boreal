@@ -142,6 +142,14 @@ fn build_command() -> Command {
                 .long("print-tags")
                 .action(ArgAction::SetTrue)
                 .help("Print rule tags"),
+        )
+        .arg(
+            Arg::new("tag")
+                .short('t')
+                .long("tag")
+                .value_name("TAG")
+                .value_parser(value_parser!(String))
+                .help("Print only rules with the given tag"),
         );
 
     if cfg!(feature = "memmap") {
@@ -232,7 +240,7 @@ fn main() -> ExitCode {
                 walker = walker.max_depth(1);
             }
 
-            let (thread_pool, sender) = ThreadPool::new(&scanner, scan_options, &args);
+            let (thread_pool, sender) = ThreadPool::new(&scanner, &scan_options, &args);
 
             for entry in walker {
                 let entry = match entry {
@@ -270,14 +278,14 @@ fn main() -> ExitCode {
 
             ExitCode::SUCCESS
         }
-        Input::File(path) => match scan_file(&scanner, &path, scan_options) {
+        Input::File(path) => match scan_file(&scanner, &path, &scan_options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", path.display(), err);
                 ExitCode::FAILURE
             }
         },
-        Input::Process(pid) => match scan_process(&scanner, pid, scan_options) {
+        Input::Process(pid) => match scan_process(&scanner, pid, &scan_options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", pid, err);
@@ -337,13 +345,14 @@ fn parse_fragmented_scan_mode(scan_mode: &str) -> Result<FragmentedScanMode, Str
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct ScanOptions {
     print_module_data: bool,
     print_strings_matches_data: bool,
     print_string_length: bool,
     print_tags: bool,
     no_mmap: bool,
+    tag: Option<String>,
 }
 
 impl ScanOptions {
@@ -358,15 +367,16 @@ impl ScanOptions {
             } else {
                 false
             },
+            tag: args.get_one("tag").cloned(),
         }
     }
 
-    fn print_strings_matches(self) -> bool {
+    fn print_strings_matches(&self) -> bool {
         self.print_strings_matches_data || self.print_string_length
     }
 }
 
-fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> Result<(), ScanError> {
+fn scan_file(scanner: &Scanner, path: &Path, options: &ScanOptions) -> Result<(), ScanError> {
     let res = if cfg!(feature = "memmap") && !options.no_mmap {
         // Safety: By default, we accept that this CLI tool can abort if the underlying
         // file is truncated while the scan is ongoing.
@@ -388,7 +398,7 @@ fn scan_file(scanner: &Scanner, path: &Path, options: ScanOptions) -> Result<(),
     }
 }
 
-fn scan_process(scanner: &Scanner, pid: u32, options: ScanOptions) -> Result<(), ScanError> {
+fn scan_process(scanner: &Scanner, pid: u32, options: &ScanOptions) -> Result<(), ScanError> {
     let what = pid.to_string();
     match scanner.scan_process(pid) {
         Ok(res) => {
@@ -402,7 +412,7 @@ fn scan_process(scanner: &Scanner, pid: u32, options: ScanOptions) -> Result<(),
     }
 }
 
-fn display_scan_results(res: ScanResult, what: &str, options: ScanOptions) {
+fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
     // Print module data first
     if options.print_module_data {
         for (module_name, module_value) in res.module_values {
@@ -419,6 +429,12 @@ fn display_scan_results(res: ScanResult, what: &str, options: ScanOptions) {
 
     // Then, print matching rules.
     for rule in res.matched_rules {
+        if let Some(tag) = options.tag.as_ref() {
+            if rule.tags.iter().all(|t| t != tag) {
+                continue;
+            }
+        }
+
         // <rulename> [<ruletags>] <matched object>
         print!("{}", &rule.name);
         if options.print_tags {
@@ -462,7 +478,7 @@ struct ThreadPool {
 impl ThreadPool {
     fn new(
         scanner: &Scanner,
-        scan_options: ScanOptions,
+        scan_options: &ScanOptions,
         args: &ArgMatches,
     ) -> (Self, Sender<PathBuf>) {
         let nb_cpus = if let Some(nb) = args.get_one::<usize>("threads") {
@@ -493,14 +509,15 @@ impl ThreadPool {
     fn worker_thread(
         scanner: &Scanner,
         receiver: &Receiver<PathBuf>,
-        scan_options: ScanOptions,
+        scan_options: &ScanOptions,
     ) -> JoinHandle<()> {
         let scanner = scanner.clone();
         let receiver = receiver.clone();
+        let scan_options = scan_options.clone();
 
         std::thread::spawn(move || {
             while let Ok(path) = receiver.recv() {
-                if let Err(err) = scan_file(&scanner, &path, scan_options) {
+                if let Err(err) = scan_file(&scanner, &path, &scan_options) {
                     eprintln!("Cannot scan file {}: {}", path.display(), err);
                 }
             }
@@ -652,6 +669,7 @@ mod tests {
             print_string_length: false,
             print_tags: false,
             no_mmap: false,
+            tag: None,
         });
         test_non_clonable(Input::Process(32));
     }
