@@ -10,9 +10,9 @@ fn cmd() -> Command {
     Command::cargo_bin("boreal").unwrap()
 }
 
-fn test_file(contents: &str) -> NamedTempFile {
+fn test_file(contents: &[u8]) -> NamedTempFile {
     let mut file = NamedTempFile::new().unwrap();
-    file.write_all(contents.as_bytes()).unwrap();
+    file.write_all(contents).unwrap();
     file
 }
 
@@ -34,7 +34,7 @@ fn test_invalid_path() {
         .failure();
 
     // Invalid path to input
-    let rule_file = test_file("");
+    let rule_file = test_file(b"");
     cmd()
         .arg(rule_file.path())
         .arg("bad_input")
@@ -47,7 +47,7 @@ fn test_invalid_path() {
 #[test]
 fn test_scan_file() {
     let rule_file = test_file(
-        r#"
+        br#"
 rule my_rule {
     strings:
         $a = "abc"
@@ -56,7 +56,7 @@ rule my_rule {
 }"#,
     );
 
-    let input = test_file("aaa");
+    let input = test_file(b"aaa");
     // Not matching
     cmd()
         .arg(rule_file.path())
@@ -66,7 +66,7 @@ rule my_rule {
         .stderr("")
         .success();
 
-    let input = test_file("zeabce");
+    let input = test_file(b"zeabce");
     // Matching
     cmd()
         .arg(rule_file.path())
@@ -86,7 +86,7 @@ rule my_rule {
 #[ignore]
 fn test_scan_process() {
     let rule_file = test_file(
-        r#"
+        br#"
 rule process_scan {
     strings:
         $a = "PAYLOAD_ON_STACK"
@@ -111,7 +111,7 @@ rule process_scan {
 
 #[test]
 fn test_scan_process_not_found() {
-    let rule_file = test_file("rule process_scan { condition: true }");
+    let rule_file = test_file(b"rule process_scan { condition: true }");
 
     // First, find an unused PID. Lets take a very big number, and have
     // some retry code until we find a proper one.
@@ -138,7 +138,7 @@ fn test_scan_file_with_process_name() {
     // Test that scanning a file with an integer name works, and does not
     // attempt to scan a process.
     let rule_file = test_file(
-        r#"
+        br#"
 rule is_file {
     strings:
         $a = "buzo"
@@ -164,13 +164,13 @@ rule is_file {
 #[test]
 fn test_rule_error() {
     let rule_file = test_file(
-        r#"rule a {
+        br#"rule a {
         strings: $a = /[z-a]/
         condition: $a
     }"#,
     );
 
-    let input = test_file("");
+    let input = test_file(b"");
     cmd()
         .arg(rule_file.path())
         .arg(input.path())
@@ -186,14 +186,14 @@ fn test_rule_error() {
 #[test]
 fn test_rule_warning() {
     let rule_file = test_file(
-        r#"rule rule_with_warning {
+        br#"rule rule_with_warning {
             condition:
                 "a"
         }
         "#,
     );
 
-    let input = test_file("");
+    let input = test_file(b"");
 
     // Warning is OK and rule is eval'ed
     cmd()
@@ -261,7 +261,7 @@ rule includer {
     .unwrap();
 
     // Match on the included
-    let input = test_file("abc");
+    let input = test_file(b"abc");
     cmd()
         .arg(&rule_a)
         .arg(input.path())
@@ -273,7 +273,7 @@ rule includer {
         .success();
 
     // Match on both
-    let input = test_file("xyz abc");
+    let input = test_file(b"xyz abc");
     cmd()
         .arg(rule_a)
         .arg(input.path())
@@ -308,7 +308,7 @@ rule included {
     fs::write(&rule_a, r#"include "b.yar""#).unwrap();
 
     // Match on the included
-    let input = test_file("");
+    let input = test_file(b"");
     cmd()
         .arg(rule_a)
         .arg(input.path())
@@ -336,7 +336,7 @@ rule included {
 fn test_rule_dir() {
     use std::os::unix::fs::symlink;
 
-    let rule_file = test_file("rule a { condition: true }");
+    let rule_file = test_file(b"rule a { condition: true }");
 
     let temp = TempDir::new().unwrap();
     let temp2 = TempDir::new().unwrap();
@@ -443,7 +443,7 @@ fn test_rule_dir() {
 
 #[test]
 fn test_skip_larger() {
-    let rule_file = test_file("rule a { condition: true }");
+    let rule_file = test_file(b"rule a { condition: true }");
 
     let temp = TempDir::new().unwrap();
 
@@ -521,7 +521,7 @@ fn test_skip_larger() {
 #[test]
 fn test_print_module_data() {
     let rule_file = test_file(
-        r#"
+        br#"
 import "pe"
 rule a {
     condition: false
@@ -588,7 +588,7 @@ rule a {
 #[test]
 fn test_print_string_stats() {
     let rule_file = test_file(
-        r#"
+        br#"
 rule a {
     strings:
         $a = "ab<de>g"
@@ -624,7 +624,7 @@ rule a {
     algo: Raw
 "#;
 
-    let input = test_file("");
+    let input = test_file(b"");
     cmd()
         .arg("--string-stats")
         .arg(rule_file.path())
@@ -642,7 +642,7 @@ rule a {
 #[test]
 fn test_print_scan_stats() {
     let rule_file = test_file(
-        r#"
+        br#"
 rule a {
     strings:
         $a = "abc"
@@ -652,7 +652,7 @@ rule a {
 "#,
     );
 
-    let input = test_file("abc");
+    let input = test_file(b"abc");
     cmd()
         .arg("--scan-stats")
         .arg(rule_file.path())
@@ -682,7 +682,7 @@ rule a {
 fn test_input_cannot_read() {
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-    let rule_file = test_file("rule bee { condition: true }");
+    let rule_file = test_file(b"rule bee { condition: true }");
 
     let temp = TempDir::new().unwrap();
     let child = temp.path().join("child");
@@ -731,7 +731,7 @@ fn test_module_names() {
 #[cfg(feature = "memmap")]
 fn test_no_mmap() {
     let rule_file = test_file(
-        r#"
+        br#"
 rule first {
     strings:
         $a = "abc"
@@ -746,7 +746,7 @@ rule second {
 }"#,
     );
 
-    let input = test_file("xyabcz");
+    let input = test_file(b"xyabcz");
     // Not matching
     cmd()
         .arg("--no-mmap")
@@ -761,7 +761,7 @@ rule second {
 #[test]
 fn test_console_log() {
     let rule_file = test_file(
-        r#"
+        br#"
 import "console"
 
 rule logger {
@@ -770,7 +770,7 @@ rule logger {
 }"#,
     );
 
-    let input = test_file("");
+    let input = test_file(b"");
     cmd()
         .arg(rule_file.path())
         .arg(input.path())
@@ -798,4 +798,129 @@ fn test_invalid_fragmented_scan_mode() {
             '--fragmented-scan-mode <legacy|fast|singlepass>\': invalid value",
         ))
         .failure();
+}
+
+#[test]
+fn test_print_tags() {
+    let rule_file = test_file(
+        br#"
+rule notag {
+    condition:
+        true
+}
+rule tag1: first {
+    condition:
+        true
+}
+rule tag3: first second third {
+    condition:
+        true
+}
+"#,
+    );
+
+    let input = test_file(b"");
+    let path = input.path().display();
+
+    // Test match data only
+    cmd()
+        .arg("-g")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!(
+            "notag [] {path}\n\
+             tag1 [first] {path}\n\
+             tag3 [first,second,third] {path}\n"
+        )))
+        .stderr("")
+        .success();
+}
+
+#[test]
+fn test_print_string_matches() {
+    let rule_file = test_file(
+        br#"
+rule my_rule {
+    strings:
+        $a = /<.{1,5}?>/
+        $b = "abc"
+    condition:
+        // The rule can be evaluated without scanning the strings.
+        // This ensures that printing strings forces the computation of the
+        // string matches.
+        true or any of them
+}"#,
+    );
+
+    let input = test_file(
+        b"<a>\n
+<<abc>d>\n
+<\x01\x02>\n
+<a\tv>\n
+<a\xFF>>\n
+",
+    );
+    let path = input.path().display();
+
+    // Test match data only
+    cmd()
+        .arg("-s")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!(
+            r#"my_rule {path}
+0x0:$a: <a>
+0x5:$a: <<abc>
+0x6:$a: <abc>
+0xf:$a: <\x01\x02>
+0x15:$a: <a\tv>
+0x1c:$a: <a\xff>
+0x7:$b: abc
+"#
+        )))
+        .stderr("")
+        .success();
+
+    // Test match length only
+    cmd()
+        .arg("-L")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!(
+            r#"my_rule {path}
+0x0:3:$a
+0x5:6:$a
+0x6:5:$a
+0xf:4:$a
+0x15:5:$a
+0x1c:4:$a
+0x7:3:$b
+"#
+        )))
+        .stderr("")
+        .success();
+
+    // Test both
+    cmd()
+        .arg("--print-strings")
+        .arg("--print-string-length")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(predicate::eq(format!(
+            r#"my_rule {path}
+0x0:3:$a: <a>
+0x5:6:$a: <<abc>
+0x6:5:$a: <abc>
+0xf:4:$a: <\x01\x02>
+0x15:5:$a: <a\tv>
+0x1c:4:$a: <a\xff>
+0x7:3:$b: abc
+"#
+        )))
+        .stderr("")
+        .success();
 }
