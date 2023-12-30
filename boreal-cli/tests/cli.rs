@@ -1094,3 +1094,25 @@ rule too_long {
         .stderr(format!("Cannot scan {path}: timeout\n"))
         .failure();
 }
+
+#[test]
+fn test_print_namespace() {
+    let rule_file = test_file(
+        br#"
+rule first { condition: true }
+"#,
+    );
+
+    let input = test_file(b"");
+    let path = input.path().display();
+
+    // Test filter by identifier
+    cmd()
+        .arg("-e")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("default:first {path}\n"))
+        .stderr("")
+        .success();
+}

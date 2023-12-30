@@ -114,6 +114,13 @@ fn build_command() -> Command {
                 .help("Specify scan mode for fragmented memory (e.g. process scanning)"),
         )
         .arg(
+            Arg::new("print_namespace")
+                .short('e')
+                .long("print-namespace")
+                .action(ArgAction::SetTrue)
+                .help("Print rule namespace"),
+        )
+        .arg(
             Arg::new("print_strings")
                 .short('s')
                 .long("print-strings")
@@ -402,6 +409,7 @@ struct ScanOptions {
     print_strings_matches_data: bool,
     print_string_length: bool,
     print_metadata: bool,
+    print_namespace: bool,
     print_tags: bool,
     no_mmap: bool,
     identifier: Option<String>,
@@ -415,6 +423,7 @@ impl ScanOptions {
             print_strings_matches_data: args.get_flag("print_strings"),
             print_string_length: args.get_flag("print_string_length"),
             print_metadata: args.get_flag("print_metadata"),
+            print_namespace: args.get_flag("print_namespace"),
             print_tags: args.get_flag("print_tags"),
             no_mmap: if cfg!(feature = "memmap") {
                 args.get_flag("no_mmap")
@@ -495,7 +504,10 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
             }
         }
 
-        // <rulename> [<ruletags>] <matched object>
+        // <rule_namespace>:<rule_name> [<ruletags>] <matched object>
+        if options.print_namespace {
+            print!("{}:", rule.namespace.unwrap_or("default"));
+        }
         print!("{}", &rule.name);
         if options.print_tags {
             print!(" [{}]", rule.tags.join(","));
@@ -759,6 +771,7 @@ mod tests {
             print_strings_matches_data: false,
             print_string_length: false,
             print_metadata: false,
+            print_namespace: false,
             print_tags: false,
             no_mmap: false,
             identifier: None,
