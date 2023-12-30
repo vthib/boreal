@@ -181,6 +181,13 @@ fn build_command() -> Command {
                 .value_name("SECONDS")
                 .value_parser(value_parser!(u64))
                 .help("Set the timeout duration before scanning is aborted"),
+        )
+        .arg(
+            Arg::new("no_warnings")
+                .short('w')
+                .long("no-warnings")
+                .action(ArgAction::SetTrue)
+                .help("Do not print warnings"),
         );
 
     if cfg!(feature = "memmap") {
@@ -246,8 +253,10 @@ fn main() -> ExitCode {
 
         match compiler.add_rules_file(rules_file) {
             Ok(status) => {
-                for warn in status.warnings() {
-                    display_diagnostic(rules_file, warn);
+                if !args.get_flag("no_warnings") {
+                    for warn in status.warnings() {
+                        display_diagnostic(rules_file, warn);
+                    }
                 }
                 for rule_stat in status.statistics() {
                     display_rule_stats(rule_stat);
