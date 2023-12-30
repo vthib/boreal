@@ -759,14 +759,23 @@ rule logger {
     );
 
     let input = test_file(b"");
+    let path = input.path().display();
+
     cmd()
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(format!(
-            "this is a log\nlogger {}\n",
-            input.path().display()
-        ))
+        .stdout(format!("this is a log\nlogger {path}\n"))
+        .stderr("")
+        .success();
+
+    // Logs can be disabled with the -q flag
+    cmd()
+        .arg("-q")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("logger {path}\n"))
         .stderr("")
         .success();
 }

@@ -150,6 +150,13 @@ fn build_command() -> Command {
                 .value_name("TAG")
                 .value_parser(value_parser!(String))
                 .help("Print only rules with the given tag"),
+        )
+        .arg(
+            Arg::new("no_console_logs")
+                .short('q')
+                .long("disable-console-logs")
+                .action(ArgAction::SetTrue)
+                .help("Disable printing console log messages"),
         );
 
     if cfg!(feature = "memmap") {
@@ -196,9 +203,16 @@ fn main() -> ExitCode {
         #[cfg(not(feature = "authenticode"))]
         let mut compiler = Compiler::new();
 
-        let _r = compiler.add_module(boreal::module::Console::with_callback(Box::new(|log| {
-            println!("{log}");
-        })));
+        let no_console_logs = args.get_flag("no_console_logs");
+        // Even if the console logs are disabled, add the module so that rules that use it
+        // can still compile properly.
+        let _r = compiler.add_module(boreal::module::Console::with_callback(Box::new(
+            move |log| {
+                if !no_console_logs {
+                    println!("{log}");
+                }
+            },
+        )));
 
         compiler.set_params(
             boreal::compiler::CompilerParams::default()
