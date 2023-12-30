@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use boreal::module::Value as ModuleValue;
 use boreal::scanner::{FragmentedScanMode, ScanError, ScanParams, ScanResult};
@@ -172,6 +173,14 @@ fn build_command() -> Command {
                 .long("disable-console-logs")
                 .action(ArgAction::SetTrue)
                 .help("Disable printing console log messages"),
+        )
+        .arg(
+            Arg::new("timeout")
+                .short('a')
+                .long("timeout")
+                .value_name("SECONDS")
+                .value_parser(value_parser!(u64))
+                .help("Set the timeout duration before scanning is aborted"),
         );
 
     if cfg!(feature = "memmap") {
@@ -352,7 +361,11 @@ impl Input {
 fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
     let mut scan_params = ScanParams::default()
         .compute_statistics(args.get_flag("scan_statistics"))
-        .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied());
+        .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied())
+        .timeout_duration(
+            args.get_one::<u64>("timeout")
+                .map(|s| Duration::from_secs(*s)),
+        );
 
     if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
         scan_params = scan_params.max_fetched_region_size(*size);
