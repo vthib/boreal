@@ -3,6 +3,7 @@ use std::process::ExitCode;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use boreal::compiler::ExternalValue;
 use boreal::module::Value as ModuleValue;
 use boreal::scanner::{FragmentedScanMode, ScanError, ScanParams, ScanResult};
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
@@ -66,6 +67,15 @@ fn build_command() -> Command {
                 .value_parser(value_parser!(String))
                 .required_unless_present("module_names")
                 .help("File or directory to scan"),
+        )
+        .arg(
+            Arg::new("define")
+                .short('d')
+                .long("define")
+                .value_name("VAR=VALUE")
+                .action(ArgAction::Append)
+                .value_parser(parse_define)
+                .help("Define a symbol that can be used in rules"),
         )
         .arg(
             Arg::new("fail_on_warnings")
@@ -216,7 +226,7 @@ fn build_command() -> Command {
 }
 
 fn main() -> ExitCode {
-    let args = build_command().get_matches();
+    let mut args = build_command().get_matches();
 
     if args.get_flag("module_names") {
         let compiler = Compiler::new();
@@ -232,7 +242,7 @@ fn main() -> ExitCode {
     }
 
     let mut scanner = {
-        let rules_file: &PathBuf = args.get_one("rules_file").unwrap();
+        let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
 
         #[cfg(feature = "authenticode")]
         // Safety: this is done before any multithreading context, so there is no risk of racing
@@ -258,11 +268,17 @@ fn main() -> ExitCode {
                 .compute_statistics(args.get_flag("string_statistics")),
         );
 
-        match compiler.add_rules_file(rules_file) {
+        if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
+            for (name, value) in defines {
+                compiler.define_symbol(name, value);
+            }
+        }
+
+        match compiler.add_rules_file(&rules_file) {
             Ok(status) => {
                 if !args.get_flag("no_warnings") {
                     for warn in status.warnings() {
-                        display_diagnostic(rules_file, warn);
+                        display_diagnostic(&rules_file, warn);
                     }
                 }
                 for rule_stat in status.statistics() {
@@ -270,7 +286,7 @@ fn main() -> ExitCode {
                 }
             }
             Err(err) => {
-                display_diagnostic(rules_file, &err);
+                display_diagnostic(&rules_file, &err);
                 return ExitCode::FAILURE;
             }
         }
@@ -392,6 +408,30 @@ fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
     }
 
     scan_params
+}
+
+fn parse_define(arg: &str) -> Result<(String, ExternalValue), String> {
+    let Some((name, value)) = arg.split_once('=') else {
+        return Err("missing '=' delimiter".to_owned());
+    };
+
+    let external_value = if value == "true" {
+        ExternalValue::Boolean(true)
+    } else if value == "false" {
+        ExternalValue::Boolean(false)
+    } else if value.contains('.') {
+        match value.parse::<f64>() {
+            Ok(v) => ExternalValue::Float(v),
+            Err(_) => ExternalValue::Bytes(value.as_bytes().to_vec()),
+        }
+    } else {
+        match value.parse::<i64>() {
+            Ok(v) => ExternalValue::Integer(v),
+            Err(_) => ExternalValue::Bytes(value.as_bytes().to_vec()),
+        }
+    };
+
+    Ok((name.to_owned(), external_value))
 }
 
 fn parse_fragmented_scan_mode(scan_mode: &str) -> Result<FragmentedScanMode, String> {

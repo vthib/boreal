@@ -1116,3 +1116,78 @@ rule first { condition: true }
         .stderr("")
         .success();
 }
+
+#[test]
+fn test_define_symbol() {
+    let input = test_file(b"");
+    let path = input.path().display();
+
+    let rule_file = test_file(
+        br#"
+rule symbols {
+    condition:
+        symbol_float + 4.3 == 2.5 and
+        symbol_int + 5 == 2 and
+        symbol_true == true and
+        symbol_false == false and
+        symbol_str == "a_string" and
+        symbol_str2 == "2.5a" and
+        symbol_empty == ""
+}
+"#,
+    );
+
+    cmd()
+        .arg("-d")
+        .arg("symbol_float=-1.8")
+        .arg("--define=symbol_int=-3")
+        .arg("--define")
+        .arg("symbol_true=true")
+        .arg("--define")
+        .arg("symbol_false=false")
+        .arg("--define")
+        .arg("symbol_str=a_string")
+        .arg("--define")
+        .arg("symbol_str2=2.5a")
+        .arg("--define")
+        .arg("symbol_empty=")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("symbols {path}\n"))
+        .stderr("")
+        .success();
+
+    // Test a bad define
+    cmd()
+        .arg("-d")
+        .arg("name")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid value 'name' for '--define <VAR=VALUE>': \
+            missing '=' delimiter",
+        ))
+        .failure();
+
+    // Test a mismatched type
+    let bad_rule = test_file(
+        br#"
+rule bad_symbols {
+    condition:
+        symbol_float == "-1.8"
+}
+"#,
+    );
+    cmd()
+        .arg("-d")
+        .arg("symbol_float=-1.8")
+        .arg(bad_rule.path())
+        .arg(input.path())
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains("expressions have invalid types"))
+        .failure();
+}
