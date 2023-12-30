@@ -1050,3 +1050,36 @@ rule my_rule {
         .stderr("")
         .success();
 }
+
+#[test]
+fn test_timeout() {
+    let rule_file = test_file(
+        br#"
+rule too_long {
+    condition:
+        for all i in (0..9223372036854775807) : (
+            for all j in (0..9223372036854775807) : (
+                for all k in (0..9223372036854775807) : (
+                    for all l in (0..9223372036854775807) : (
+                        i + j + k + l >= 0
+                    )
+                )
+            )
+        )
+}"#,
+    );
+
+    let input = test_file(b"");
+    let path = input.path().display();
+
+    // Test filter by identifier
+    cmd()
+        .arg("-a")
+        .arg("1")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout("")
+        .stderr(format!("Cannot scan {path}: timeout\n"))
+        .failure();
+}
