@@ -188,13 +188,14 @@ fn test_rule_warning() {
     );
 
     let input = test_file(b"");
+    let path = input.path().display();
 
     // Warning is OK and rule is eval'ed
     cmd()
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
-        .stdout(format!("rule_with_warning {}\n", input.path().display()))
+        .stdout(format!("rule_with_warning {path}\n"))
         .stderr(
             predicate::str::contains("warning").and(predicate::str::contains(
                 "implicit cast from a bytes value to a boolean",
@@ -215,6 +216,16 @@ fn test_rule_warning() {
             )),
         )
         .failure();
+
+    // Ignore warnings
+    cmd()
+        .arg("-w")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("rule_with_warning {path}\n"))
+        .stderr("")
+        .success();
 }
 
 #[test]
