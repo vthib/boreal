@@ -903,6 +903,67 @@ rule second { condition: true }
 }
 
 #[test]
+fn test_print_meta() {
+    let rule_file = test_file(
+        br#"
+rule first: tag {
+    meta:
+        integer = -15
+        string = "d mol"
+        test = true
+    condition:
+        true
+}
+rule second: tag {
+    condition:
+        true
+}
+rule third: tag {
+    meta:
+        value = "ok"
+    condition:
+        true
+}
+rule fourth { condition: true }
+"#,
+    );
+
+    let input = test_file(b"");
+    let path = input.path().display();
+
+    // Test print meta
+    cmd()
+        .arg("-m")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!(
+            "first [integer=-15,string=\"d mol\",test=true] {path}\n\
+             second [] {path}\n\
+             third [value=\"ok\"] {path}\n\
+             fourth [] {path}\n"
+        ))
+        .stderr("")
+        .success();
+
+    // Test print meta + tag
+    cmd()
+        .arg("-g")
+        .arg("--print-meta")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!(
+            "first [tag] [integer=-15,string=\"d mol\",test=true] {path}\n\
+             second [tag] [] {path}\n\
+             third [tag] [value=\"ok\"] {path}\n\
+             fourth [] [] {path}\n"
+        ))
+        .stderr("")
+        .success();
+}
+
+#[test]
 fn test_print_string_matches() {
     let rule_file = test_file(
         br#"

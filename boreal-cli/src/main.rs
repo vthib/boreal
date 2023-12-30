@@ -4,7 +4,7 @@ use std::thread::JoinHandle;
 
 use boreal::module::Value as ModuleValue;
 use boreal::scanner::{FragmentedScanMode, ScanError, ScanParams, ScanResult};
-use boreal::{statistics, Compiler, Scanner};
+use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
 
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
 use codespan_reporting::files::SimpleFile;
@@ -135,6 +135,13 @@ fn build_command() -> Command {
                      computation of all string matches,\ndisabling \
                      the no scan optimization in the process.",
                 ),
+        )
+        .arg(
+            Arg::new("print_metadata")
+                .short('m')
+                .long("print-meta")
+                .action(ArgAction::SetTrue)
+                .help("Print rule metadatas"),
         )
         .arg(
             Arg::new("print_tags")
@@ -372,6 +379,7 @@ struct ScanOptions {
     print_module_data: bool,
     print_strings_matches_data: bool,
     print_string_length: bool,
+    print_metadata: bool,
     print_tags: bool,
     no_mmap: bool,
     identifier: Option<String>,
@@ -384,6 +392,7 @@ impl ScanOptions {
             print_module_data: args.get_flag("print_module_data"),
             print_strings_matches_data: args.get_flag("print_strings"),
             print_string_length: args.get_flag("print_string_length"),
+            print_metadata: args.get_flag("print_metadata"),
             print_tags: args.get_flag("print_tags"),
             no_mmap: if cfg!(feature = "memmap") {
                 args.get_flag("no_mmap")
@@ -469,6 +478,9 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
         if options.print_tags {
             print!(" [{}]", rule.tags.join(","));
         }
+        if options.print_metadata {
+            print_metadata(rule.metadatas);
+        }
         println!(" {}", what);
 
         if options.print_strings_matches() {
@@ -482,11 +494,7 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
                     print!("${}", string.name);
                     if options.print_strings_matches_data {
                         print!(": ");
-                        for c in &m.data {
-                            for b in std::ascii::escape_default(*c) {
-                                print!("{}", b as char);
-                            }
-                        }
+                        print_bytes(&m.data);
                     }
                     println!();
                 }
@@ -497,6 +505,38 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
     // Finally, print the statistics
     if let Some(stats) = res.statistics {
         println!("{}: {:#?}", what, stats);
+    }
+}
+
+fn print_metadata(metadatas: &[Metadata]) {
+    print!(" [");
+    for (i, meta) in metadatas.iter().enumerate() {
+        if i != 0 {
+            print!(",");
+        }
+        print!("{}=", meta.name);
+        match &meta.value {
+            MetadataValue::Bytes(b) => {
+                print!("\"");
+                print_bytes(b);
+                print!("\"");
+            }
+            MetadataValue::Integer(i) => {
+                print!("{}", i);
+            }
+            MetadataValue::Boolean(b) => {
+                print!("{}", b);
+            }
+        }
+    }
+    print!("]");
+}
+
+fn print_bytes(data: &[u8]) {
+    for c in data {
+        for b in std::ascii::escape_default(*c) {
+            print!("{}", b as char);
+        }
     }
 }
 
@@ -696,6 +736,7 @@ mod tests {
             print_module_data: false,
             print_strings_matches_data: false,
             print_string_length: false,
+            print_metadata: false,
             print_tags: false,
             no_mmap: false,
             identifier: None,
