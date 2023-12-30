@@ -144,6 +144,14 @@ fn build_command() -> Command {
                 .help("Print rule tags"),
         )
         .arg(
+            Arg::new("identifier")
+                .short('i')
+                .long("identifier")
+                .value_name("IDENTIFIER")
+                .value_parser(value_parser!(String))
+                .help("Print only rules with the given name"),
+        )
+        .arg(
             Arg::new("tag")
                 .short('t')
                 .long("tag")
@@ -366,6 +374,7 @@ struct ScanOptions {
     print_string_length: bool,
     print_tags: bool,
     no_mmap: bool,
+    identifier: Option<String>,
     tag: Option<String>,
 }
 
@@ -381,6 +390,7 @@ impl ScanOptions {
             } else {
                 false
             },
+            identifier: args.get_one("identifier").cloned(),
             tag: args.get_one("tag").cloned(),
         }
     }
@@ -443,6 +453,11 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
 
     // Then, print matching rules.
     for rule in res.matched_rules {
+        if let Some(id) = options.identifier.as_ref() {
+            if rule.name != id {
+                continue;
+            }
+        }
         if let Some(tag) = options.tag.as_ref() {
             if rule.tags.iter().all(|t| t != tag) {
                 continue;
@@ -683,6 +698,7 @@ mod tests {
             print_string_length: false,
             print_tags: false,
             no_mmap: false,
+            identifier: None,
             tag: None,
         });
         test_non_clonable(Input::Process(32));

@@ -863,6 +863,46 @@ rule tag3: first second third {
 }
 
 #[test]
+fn test_identifier() {
+    let rule_file = test_file(
+        br#"
+rule first { condition: true }
+rule second { condition: true }
+"#,
+    );
+
+    let input = test_file(b"");
+    let path = input.path().display();
+
+    // Test filter by identifier
+    cmd()
+        .arg("-i")
+        .arg("first")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("first {path}\n"))
+        .stderr("")
+        .success();
+    cmd()
+        .arg("--identifier=second")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("second {path}\n"))
+        .stderr("")
+        .success();
+    cmd()
+        .arg("--identifier=third")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout("")
+        .stderr("")
+        .success();
+}
+
+#[test]
 fn test_print_string_matches() {
     let rule_file = test_file(
         br#"
