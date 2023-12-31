@@ -1219,7 +1219,6 @@ fn test_scan_list() {
     // dir1 + c, will match the 3 filse
     let list = test_file(format!("{}\n{}\n", dir1.path().display(), file_c.display()).as_bytes());
     cmd()
-        .arg("--threads=1")
         .arg("--scan-list")
         .arg(rule_file.path())
         .arg(list.path())
@@ -1235,8 +1234,6 @@ fn test_scan_list() {
     // a + dir2, but not recursive, will match only a
     let list = test_file(format!("{}\n{}\n", file_a.display(), dir2.path().display()).as_bytes());
     cmd()
-        // TODO: avoid messing up the output with multiple threads
-        .arg("--threads=1")
         .arg("--scan-list")
         .arg(rule_file.path())
         .arg(list.path())
@@ -1251,7 +1248,6 @@ fn test_scan_list() {
 
     // When recursive, will match c
     cmd()
-        .arg("--threads=1")
         .arg("--scan-list")
         .arg("-r")
         .arg(rule_file.path())

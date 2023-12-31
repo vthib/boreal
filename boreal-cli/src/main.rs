@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, StdoutLock, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread::JoinHandle;
@@ -577,6 +577,9 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
         }
     }
 
+    // Lock stdout to avoid having multiple threads interlap their writes
+    let mut stdout = std::io::stdout().lock();
+
     // Then, print matching rules.
     for rule in res.matched_rules {
         if let Some(id) = options.identifier.as_ref() {
@@ -592,31 +595,31 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
 
         // <rule_namespace>:<rule_name> [<ruletags>] <matched object>
         if options.print_namespace {
-            print!("{}:", rule.namespace.unwrap_or("default"));
+            write!(stdout, "{}:", rule.namespace.unwrap_or("default")).unwrap();
         }
-        print!("{}", &rule.name);
+        write!(stdout, "{}", &rule.name).unwrap();
         if options.print_tags {
-            print!(" [{}]", rule.tags.join(","));
+            write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
         }
         if options.print_metadata {
-            print_metadata(rule.metadatas);
+            print_metadata(&mut stdout, rule.metadatas);
         }
-        println!(" {}", what);
+        writeln!(stdout, " {}", what).unwrap();
 
         if options.print_strings_matches() {
             for string in &rule.matches {
                 for m in &string.matches {
                     // <offset>:<length>:<name>: <match>
-                    print!("0x{:x}:", m.base + m.offset);
+                    write!(stdout, "0x{:x}:", m.base + m.offset).unwrap();
                     if options.print_string_length {
-                        print!("{}:", m.length);
+                        write!(stdout, "{}:", m.length).unwrap();
                     }
-                    print!("${}", string.name);
+                    write!(stdout, "${}", string.name).unwrap();
                     if options.print_strings_matches_data {
-                        print!(": ");
-                        print_bytes(&m.data);
+                        write!(stdout, ": ").unwrap();
+                        print_bytes(&mut stdout, &m.data);
                     }
-                    println!();
+                    writeln!(stdout).unwrap();
                 }
             }
         }
@@ -624,38 +627,38 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
 
     // Finally, print the statistics
     if let Some(stats) = res.statistics {
-        println!("{}: {:#?}", what, stats);
+        writeln!(stdout, "{}: {:#?}", what, stats).unwrap();
     }
 }
 
-fn print_metadata(metadatas: &[Metadata]) {
-    print!(" [");
+fn print_metadata(stdout: &mut StdoutLock, metadatas: &[Metadata]) {
+    write!(stdout, " [").unwrap();
     for (i, meta) in metadatas.iter().enumerate() {
         if i != 0 {
-            print!(",");
+            write!(stdout, ",").unwrap();
         }
-        print!("{}=", meta.name);
+        write!(stdout, "{}=", meta.name).unwrap();
         match &meta.value {
             MetadataValue::Bytes(b) => {
-                print!("\"");
-                print_bytes(b);
-                print!("\"");
+                write!(stdout, "\"").unwrap();
+                print_bytes(stdout, b);
+                write!(stdout, "\"").unwrap();
             }
             MetadataValue::Integer(i) => {
-                print!("{}", i);
+                write!(stdout, "{}", i).unwrap();
             }
             MetadataValue::Boolean(b) => {
-                print!("{}", b);
+                write!(stdout, "{}", b).unwrap();
             }
         }
     }
-    print!("]");
+    write!(stdout, "]").unwrap();
 }
 
-fn print_bytes(data: &[u8]) {
+fn print_bytes(stdout: &mut StdoutLock, data: &[u8]) {
     for c in data {
         for b in std::ascii::escape_default(*c) {
-            print!("{}", b as char);
+            write!(stdout, "{}", b as char).unwrap();
         }
     }
 }
