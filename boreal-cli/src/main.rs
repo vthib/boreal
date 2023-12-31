@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread::JoinHandle;
@@ -205,6 +207,12 @@ fn build_command() -> Command {
                 .long("no-warnings")
                 .action(ArgAction::SetTrue)
                 .help("Do not print warnings"),
+        )
+        .arg(
+            Arg::new("scan_list")
+                .long("scan-list")
+                .action(ArgAction::SetTrue)
+                .help("Scan files listed in input, each line is a path to a file or directory"),
         );
 
     if cfg!(feature = "memmap") {
@@ -302,66 +310,49 @@ fn main() -> ExitCode {
     }
     scanner.set_scan_params(scan_params);
 
-    let input: &String = args.get_one("input").unwrap();
-    match Input::new(input) {
-        Input::Directory(path) => {
-            let mut walker = WalkDir::new(path).follow_links(!args.get_flag("no_follow_symlinks"));
-            if !args.get_flag("recursive") {
-                walker = walker.max_depth(1);
-            }
-
+    match Input::new(&args) {
+        Ok(Input::Directory(path)) => {
             let (thread_pool, sender) = ThreadPool::new(&scanner, &scan_options, &args);
 
-            for entry in walker {
-                let entry = match entry {
-                    Ok(v) => v,
-                    Err(err) => {
-                        eprintln!("{err}");
-                        continue;
-                    }
-                };
-
-                if !entry.file_type().is_file() {
-                    continue;
-                }
-
-                if let Some(max_size) = args.get_one::<u64>("skip_larger") {
-                    if *max_size > 0 && entry.depth() > 0 {
-                        let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
-                        if file_length >= *max_size {
-                            eprintln!(
-                                "skipping {} ({} bytes) because it's larger than {} bytes.",
-                                entry.path().display(),
-                                file_length,
-                                max_size
-                            );
-                            continue;
-                        }
-                    }
-                }
-
-                sender.send(entry.path().to_path_buf()).unwrap();
-            }
-
+            send_directory(&path, &args, &sender);
             drop(sender);
             thread_pool.join();
 
             ExitCode::SUCCESS
         }
-        Input::File(path) => match scan_file(&scanner, &path, &scan_options) {
+        Ok(Input::File(path)) => match scan_file(&scanner, &path, &scan_options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", path.display(), err);
                 ExitCode::FAILURE
             }
         },
-        Input::Process(pid) => match scan_process(&scanner, pid, &scan_options) {
+        Ok(Input::Process(pid)) => match scan_process(&scanner, pid, &scan_options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", pid, err);
                 ExitCode::FAILURE
             }
         },
+        Ok(Input::Files(files)) => {
+            let (thread_pool, sender) = ThreadPool::new(&scanner, &scan_options, &args);
+
+            for path in files {
+                if path.is_dir() {
+                    send_directory(&path, &args, &sender);
+                } else {
+                    sender.send(path).unwrap();
+                }
+            }
+            drop(sender);
+            thread_pool.join();
+
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("{}", err);
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -370,14 +361,31 @@ enum Input {
     Directory(PathBuf),
     File(PathBuf),
     Process(u32),
+    Files(Vec<PathBuf>),
 }
 
 impl Input {
-    fn new(input: &str) -> Self {
+    fn new(args: &ArgMatches) -> Result<Self, String> {
+        let input: &String = args.get_one("input").unwrap();
+        let scan_list = args.get_flag("scan_list");
+
         // Same semantics as YARA: only parse it as a PID if there is no
         // file with this name.
         let path = PathBuf::from(input);
-        if path.is_dir() {
+
+        Ok(if scan_list {
+            let file = File::open(&path)
+                .map_err(|err| format!("cannot open scan list {}: {}", path.display(), err))?;
+            let reader = BufReader::new(file);
+            let mut files = Vec::new();
+            for line in reader.lines() {
+                let line = line.map_err(|err| {
+                    format!("cannot read from scan list {}: {}", path.display(), err)
+                })?;
+                files.push(PathBuf::from(line));
+            }
+            Input::Files(files)
+        } else if path.is_dir() {
             Input::Directory(path)
         } else if path.exists() {
             Input::File(path)
@@ -386,7 +394,45 @@ impl Input {
                 Ok(pid) => Self::Process(pid),
                 Err(_) => Input::File(path),
             }
+        })
+    }
+}
+
+fn send_directory(path: &Path, args: &ArgMatches, sender: &Sender<PathBuf>) {
+    let mut walker = WalkDir::new(path).follow_links(!args.get_flag("no_follow_symlinks"));
+    if !args.get_flag("recursive") {
+        walker = walker.max_depth(1);
+    }
+
+    for entry in walker {
+        let entry = match entry {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!("{err}");
+                continue;
+            }
+        };
+
+        if !entry.file_type().is_file() {
+            continue;
         }
+
+        if let Some(max_size) = args.get_one::<u64>("skip_larger") {
+            if *max_size > 0 && entry.depth() > 0 {
+                let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
+                if file_length >= *max_size {
+                    eprintln!(
+                        "skipping {} ({} bytes) because it's larger than {} bytes.",
+                        entry.path().display(),
+                        file_length,
+                        max_size
+                    );
+                    continue;
+                }
+            }
+        }
+
+        sender.send(entry.path().to_path_buf()).unwrap();
     }
 }
 
