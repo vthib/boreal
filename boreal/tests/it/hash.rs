@@ -1,5 +1,7 @@
 use crate::libyara_compat::util::TEXT_1024_BYTES;
-use crate::utils::check;
+use crate::utils::{check, Checker};
+
+const TEXT: &[u8] = TEXT_1024_BYTES.as_bytes();
 
 fn make_rule(cond: &str) -> String {
     format!(
@@ -25,11 +27,11 @@ fn test_md5() {
     );
     test(
         r#"hash.md5(0, filesize) == "dcc824971a00e589619ba0c0bba41515""#,
-        TEXT_1024_BYTES.as_bytes(),
+        TEXT,
     );
     test(
         r#"hash.md5(50, 100) == "5c026f2a09609f79c46a7dab7398d4ac""#,
-        TEXT_1024_BYTES.as_bytes(),
+        TEXT,
     );
 
     test(
@@ -54,6 +56,43 @@ fn test_md5() {
     test(r#"not defined hash.md5(5, filesize)"#, b"a");
     test(r#"not defined hash.md5(-1, filesize)"#, b"a");
     test(r#"not defined hash.md5(0, -1)"#, b"a");
+
+    // Test that fragmented memory still works if chunks are contiguous
+    let mut checker = Checker::new(&make_rule(
+        r#"hash.md5(50, 100) == "5c026f2a09609f79c46a7dab7398d4ac""#,
+    ));
+    checker.check_fragmented(&[(0, Some(TEXT))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..150]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..]))], true);
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..130])),
+            (130, Some(&TEXT[130..150])),
+            (150, Some(&TEXT[150..])),
+        ],
+        true,
+    );
+
+    // Will still return a result if last region truncates the range
+    let mut checker = Checker::new(&make_rule(
+        r#"hash.md5(50, 200) == "5c026f2a09609f79c46a7dab7398d4ac""#,
+    ));
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..150])),
+        ],
+        true,
+    );
+
+    // Missing starting bytes of holes means undefined
+    let mut checker = Checker::new(&make_rule("not defined hash.md5(50, 100)"));
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (51, Some(&TEXT[51..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (170, Some(&TEXT[170..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..70])), (80, Some(&TEXT[80..]))], true);
 }
 
 #[test]
@@ -64,11 +103,11 @@ fn test_sha1() {
     );
     test(
         r#"hash.sha1(0, filesize) == "ccb665bf4d6e19b56d3f70e9cc2837dfe3f3a745""#,
-        TEXT_1024_BYTES.as_bytes(),
+        TEXT,
     );
     test(
         r#"hash.sha1(50, 100) == "1d17cf1bd2c85210e088796fe302d08beb27dd5a""#,
-        TEXT_1024_BYTES.as_bytes(),
+        TEXT,
     );
 
     test(
@@ -93,6 +132,43 @@ fn test_sha1() {
     test(r#"not defined hash.sha1(5, filesize)"#, b"a");
     test(r#"not defined hash.sha1(-1, filesize)"#, b"a");
     test(r#"not defined hash.sha1(0, -1)"#, b"a");
+
+    // Test that fragmented memory still works if chunks are contiguous
+    let mut checker = Checker::new(&make_rule(
+        r#"hash.sha1(50, 100) == "1d17cf1bd2c85210e088796fe302d08beb27dd5a""#,
+    ));
+    checker.check_fragmented(&[(0, Some(TEXT))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..150]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..]))], true);
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..130])),
+            (130, Some(&TEXT[130..150])),
+            (150, Some(&TEXT[150..])),
+        ],
+        true,
+    );
+
+    // Will still return a result if last region truncates the range
+    let mut checker = Checker::new(&make_rule(
+        r#"hash.sha1(50, 200) == "1d17cf1bd2c85210e088796fe302d08beb27dd5a""#,
+    ));
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..150])),
+        ],
+        true,
+    );
+
+    // Missing starting bytes of holes means undefined
+    let mut checker = Checker::new(&make_rule("not defined hash.sha1(50, 100)"));
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (51, Some(&TEXT[51..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (170, Some(&TEXT[170..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..70])), (80, Some(&TEXT[80..]))], true);
 }
 
 #[test]
@@ -105,12 +181,12 @@ fn test_sha256() {
     test(
         "hash.sha256(0, filesize) == \
             \"62b33f9e7880055a0cb2f195e296f5c5f88043e08d5521199d1ae4f16df7b17b\"",
-        TEXT_1024_BYTES.as_bytes(),
+        TEXT,
     );
     test(
         "hash.sha256(50, 100) == \
             \"a8b65993e5cda9e8c6a93b8913062ae503df81cdebe0af070fd5ec3de4cf7dbf\"",
-        TEXT_1024_BYTES.as_bytes(),
+        TEXT,
     );
 
     test(
@@ -137,19 +213,52 @@ fn test_sha256() {
     test(r#"not defined hash.sha256(5, filesize)"#, b"a");
     test(r#"not defined hash.sha256(-1, filesize)"#, b"a");
     test(r#"not defined hash.sha256(0, -1)"#, b"a");
+
+    // Test that fragmented memory still works if chunks are contiguous
+    let mut checker = Checker::new(&make_rule(
+        "hash.sha256(50, 100) == \
+            \"a8b65993e5cda9e8c6a93b8913062ae503df81cdebe0af070fd5ec3de4cf7dbf\"",
+    ));
+    checker.check_fragmented(&[(0, Some(TEXT))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..150]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..]))], true);
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..130])),
+            (130, Some(&TEXT[130..150])),
+            (150, Some(&TEXT[150..])),
+        ],
+        true,
+    );
+
+    // Will still return a result if last region truncates the range
+    let mut checker = Checker::new(&make_rule(
+        "hash.sha256(50, 200) == \
+            \"a8b65993e5cda9e8c6a93b8913062ae503df81cdebe0af070fd5ec3de4cf7dbf\"",
+    ));
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..150])),
+        ],
+        true,
+    );
+
+    // Missing starting bytes of holes means undefined
+    let mut checker = Checker::new(&make_rule("not defined hash.sha256(50, 100)"));
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (51, Some(&TEXT[51..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (170, Some(&TEXT[170..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..70])), (80, Some(&TEXT[80..]))], true);
 }
 
 #[test]
 fn test_checksum32() {
     test("hash.checksum32(0, filesize) == 97", b"a");
-    test(
-        "hash.checksum32(0, filesize) == 52946",
-        TEXT_1024_BYTES.as_bytes(),
-    );
-    test(
-        "hash.checksum32(50, 100) == 5215",
-        TEXT_1024_BYTES.as_bytes(),
-    );
+    test("hash.checksum32(0, filesize) == 52946", TEXT);
+    test("hash.checksum32(50, 100) == 5215", TEXT);
 
     test(
         "hash.checksum32(\"abcdefghijklmnopqrstuvwxyz\") == 2847",
@@ -168,19 +277,46 @@ fn test_checksum32() {
     test(r#"not defined hash.checksum32(5, filesize)"#, b"a");
     test(r#"not defined hash.checksum32(-1, filesize)"#, b"a");
     test(r#"not defined hash.checksum32(0, -1)"#, b"a");
+
+    // Test that fragmented memory still works if chunks are contiguous
+    let mut checker = Checker::new(&make_rule("hash.checksum32(50, 100) == 5215"));
+    checker.check_fragmented(&[(0, Some(TEXT))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..150]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..]))], true);
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..130])),
+            (130, Some(&TEXT[130..150])),
+            (150, Some(&TEXT[150..])),
+        ],
+        true,
+    );
+
+    // Will still return a result if last region truncates the range
+    let mut checker = Checker::new(&make_rule("hash.checksum32(50, 200) == 5215"));
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..150])),
+        ],
+        true,
+    );
+
+    // Missing starting bytes of holes means undefined
+    let mut checker = Checker::new(&make_rule("not defined hash.checksum32(50, 100)"));
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (51, Some(&TEXT[51..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (170, Some(&TEXT[170..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..70])), (80, Some(&TEXT[80..]))], true);
 }
 
 #[test]
 fn test_crc32() {
     test("hash.crc32(0, filesize) == 0xe8b7be43", b"a");
-    test(
-        "hash.crc32(0, filesize) == 0x74cb171",
-        TEXT_1024_BYTES.as_bytes(),
-    );
-    test(
-        "hash.crc32(50, 100) == 0x25c34eec",
-        TEXT_1024_BYTES.as_bytes(),
-    );
+    test("hash.crc32(0, filesize) == 0x74cb171", TEXT);
+    test("hash.crc32(50, 100) == 0x25c34eec", TEXT);
 
     test(
         "hash.crc32(\"abcdefghijklmnopqrstuvwxyz\") == 0x4c2750bd",
@@ -199,4 +335,37 @@ fn test_crc32() {
     test(r#"not defined hash.crc32(5, filesize)"#, b"a");
     test(r#"not defined hash.crc32(-1, filesize)"#, b"a");
     test(r#"not defined hash.crc32(0, -1)"#, b"a");
+
+    // Test that fragmented memory still works if chunks are contiguous
+    let mut checker = Checker::new(&make_rule("hash.crc32(50, 100) == 0x25c34eec"));
+    checker.check_fragmented(&[(0, Some(TEXT))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..150]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..75])), (75, Some(&TEXT[75..]))], true);
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..130])),
+            (130, Some(&TEXT[130..150])),
+            (150, Some(&TEXT[150..])),
+        ],
+        true,
+    );
+
+    // Will still return a result if last region truncates the range
+    let mut checker = Checker::new(&make_rule("hash.crc32(50, 200) == 0x25c34eec"));
+    checker.check_fragmented(
+        &[
+            (0, Some(&TEXT[0..50])),
+            (50, Some(&TEXT[50..70])),
+            (70, Some(&TEXT[70..150])),
+        ],
+        true,
+    );
+
+    // Missing starting bytes of holes means undefined
+    let mut checker = Checker::new(&make_rule("not defined hash.crc32(50, 100)"));
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (51, Some(&TEXT[51..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..40])), (170, Some(&TEXT[170..]))], true);
+    checker.check_fragmented(&[(0, Some(&TEXT[0..70])), (80, Some(&TEXT[80..]))], true);
 }
