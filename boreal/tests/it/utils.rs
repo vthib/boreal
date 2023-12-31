@@ -797,6 +797,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     process_memory: bool,
     ignored_diffs: &[&str],
 ) {
+    // Setup boreal scanner
     let mut compiler = build_compiler();
     compiler
         .add_rules_str(&format!(
@@ -810,7 +811,32 @@ pub fn compare_module_values_on_mem<M: Module>(
         scanner.set_scan_params(params.process_memory(true));
     }
 
-    let res = scanner.scan_mem(mem).unwrap();
+    // Setup yara scanner
+    let c = yara::Compiler::new().unwrap();
+    let c = c
+        .add_rules_str(&format!(
+            "import \"{}\" rule a {{ condition: true }}",
+            module.get_name()
+        ))
+        .unwrap();
+    let yara_rules = c.compile_rules().unwrap();
+    let mut yara_scanner = yara_rules.scanner().unwrap();
+    if process_memory {
+        yara_scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
+    }
+
+    // Retrieve boreal module values.
+    let res = if process_memory {
+        scanner
+            .scan_fragmented(FragmentedSlices {
+                regions: &[(1000, Some(mem))],
+                current: None,
+            })
+            .unwrap()
+    } else {
+        scanner.scan_mem(mem).unwrap()
+    };
+
     let mut boreal_value = res
         .module_values
         .into_iter()
@@ -826,71 +852,69 @@ pub fn compare_module_values_on_mem<M: Module>(
     // Enrich value using the static values, so that it can be compared with yara's
     enrich_with_static_values(&mut boreal_value, module.get_static_values());
 
-    let c = yara::Compiler::new().unwrap();
-    let c = c
-        .add_rules_str(&format!(
-            "import \"{}\" rule a {{ condition: true }}",
-            module.get_name()
-        ))
-        .unwrap();
-    let rules = c.compile_rules().unwrap();
-    let mut scanner = rules.scanner().unwrap();
+    let yara_cb = |msg| {
+        if let yara::CallbackMsg::ModuleImported(obj) = msg {
+            let mut yara_value = convert_yara_obj_to_module_value(obj);
 
-    if process_memory {
-        // TODO: add a base/start offset for the region, to check it is properly taken
-        // into account.
-        scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
-    }
-
-    scanner
-        .scan_mem_callback(mem, |msg| {
-            if let yara::CallbackMsg::ModuleImported(obj) = msg {
-                let mut yara_value = convert_yara_obj_to_module_value(obj);
-
-                // This is a hack to remove the "rich_signature" field from the pe module
-                // when the file is not a PE. The PE module on yara has a lot of idiosyncracies,
-                // but two of them conflates here: it is the only module that has values when it
-                // does not parse anything (the is_pe field is set, either to 1 or 0), and it
-                // always sets the rich_signature field even if it does not contain anything
-                // (because it contains two functions).
-                // This is very annoying to handle when comparing module values, so just remove
-                // this dummy value when the file is not a pe, it serves no purpose.
-                if let ModuleValue::Object(map) = &mut yara_value {
-                    if matches!(map.get("is_pe"), Some(ModuleValue::Integer(0))) {
-                        map.remove("rich_signature");
-                    }
-                }
-
-                let mut diffs = Vec::new();
-                compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
-
-                // Remove ignored diffs from the reported ones.
-                for path in ignored_diffs {
-                    match diffs.iter().position(|d| &d.path == path) {
-                        Some(pos) => {
-                            diffs.remove(pos);
-                        }
-                        None => {
-                            panic!(
-                                "ignored diff on path {path} but there is no diff on this path",
-                            );
-                        }
-                    }
-                }
-
-                if !diffs.is_empty() {
-                    panic!(
-                        "found differences for module {} on {}{}: {:#?}",
-                        module.get_name(),
-                        mem_name,
-                        if process_memory { " with process memory flag" } else { "" },
-                        diffs
-                    );
+            // This is a hack to remove the "rich_signature" field from the pe module
+            // when the file is not a PE. The PE module on yara has a lot of idiosyncracies,
+            // but two of them conflates here: it is the only module that has values when it
+            // does not parse anything (the is_pe field is set, either to 1 or 0), and it
+            // always sets the rich_signature field even if it does not contain anything
+            // (because it contains two functions).
+            // This is very annoying to handle when comparing module values, so just remove
+            // this dummy value when the file is not a pe, it serves no purpose.
+            if let ModuleValue::Object(map) = &mut yara_value {
+                if matches!(map.get("is_pe"), Some(ModuleValue::Integer(0))) {
+                    map.remove("rich_signature");
                 }
             }
-            yara::CallbackReturn::Continue
-        })
-        .unwrap();
+
+            let mut diffs = Vec::new();
+            compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
+
+            // Remove ignored diffs from the reported ones.
+            for path in ignored_diffs {
+                match diffs.iter().position(|d| &d.path == path) {
+                    Some(pos) => {
+                        diffs.remove(pos);
+                    }
+                    None => {
+                        panic!("ignored diff on path {path} but there is no diff on this path",);
+                    }
+                }
+            }
+
+            if !diffs.is_empty() {
+                panic!(
+                    "found differences for module {} on {}{}: {:#?}",
+                    module.get_name(),
+                    mem_name,
+                    if process_memory {
+                        " with process memory flag"
+                    } else {
+                        ""
+                    },
+                    diffs
+                );
+            }
+        }
+        yara::CallbackReturn::Continue
+    };
+
+    if process_memory {
+        yara_scanner
+            .scan_mem_blocks_callback(
+                YaraBlocks {
+                    current: 0,
+                    regions: &[(1000, Some(mem))],
+                },
+                yara_cb,
+            )
+            .unwrap();
+    } else {
+        yara_scanner.scan_mem_callback(mem, yara_cb).unwrap();
+    }
 }
 
 fn enrich_with_static_values(

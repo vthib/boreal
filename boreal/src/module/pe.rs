@@ -1321,7 +1321,7 @@ impl Pe {
                                 ("toolid", Value::function(Pe::rich_signature_toolid)),
                             ])
                         },
-                        |info| rich_signature(info, region.mem, data),
+                        |info| rich_signature(info, region, data),
                     ),
             ),
             ("number_of_version_infos", 0.into()),
@@ -1352,7 +1352,7 @@ impl Pe {
     }
 }
 
-fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
+fn rich_signature(info: RichHeaderInfo, region: &Region, data: &mut Data) -> Value {
     data.rich_entries = info
         .unmasked_entries()
         .map(|entry| DataRichEntry {
@@ -1364,8 +1364,8 @@ fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
 
     let length = info.length.saturating_sub(8);
 
-    let raw = if info.offset + length <= mem.len() {
-        Some(mem[info.offset..(info.offset + length)].to_vec())
+    let raw = if info.offset + length <= region.mem.len() {
+        Some(region.mem[info.offset..(info.offset + length)].to_vec())
     } else {
         None
     };
@@ -1384,7 +1384,7 @@ fn rich_signature(info: RichHeaderInfo, mem: &[u8], data: &mut Data) -> Value {
     }
 
     Value::object([
-        ("offset", info.offset.into()),
+        ("offset", (region.start + info.offset).into()),
         ("length", length.into()),
         ("key", info.xor_key.into()),
         ("raw_data", raw.into()),
