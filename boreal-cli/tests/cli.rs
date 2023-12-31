@@ -1191,3 +1191,118 @@ rule bad_symbols {
         .stderr(predicate::str::contains("expressions have invalid types"))
         .failure();
 }
+
+#[test]
+fn test_scan_list() {
+    let rule_file = test_file(b"rule a { condition: true }");
+
+    // dir1
+    //   a
+    //   b
+    // dir2
+    //   subdir
+    //     c
+    let dir1 = TempDir::new().unwrap();
+    let file_a = dir1.path().join("a");
+    fs::write(&file_a, "").unwrap();
+    let file_b = dir1.path().join("b");
+    fs::write(&file_b, "").unwrap();
+
+    let dir2 = TempDir::new().unwrap();
+    let subdir = dir2.path().join("subdir");
+    fs::create_dir(&subdir).unwrap();
+    let file_c = subdir.join("c");
+    fs::write(&file_c, "").unwrap();
+
+    let match_str = |input: &Path| predicate::str::contains(format!("a {}", input.display()));
+
+    // dir1 + c, will match the 3 filse
+    let list = test_file(format!("{}\n{}\n", dir1.path().display(), file_c.display()).as_bytes());
+    cmd()
+        .arg("--threads=1")
+        .arg("--scan-list")
+        .arg(rule_file.path())
+        .arg(list.path())
+        .assert()
+        .stdout(
+            match_str(&file_a)
+                .and(match_str(&file_b))
+                .and(match_str(&file_c)),
+        )
+        .stderr("")
+        .success();
+
+    // a + dir2, but not recursive, will match only a
+    let list = test_file(format!("{}\n{}\n", file_a.display(), dir2.path().display()).as_bytes());
+    cmd()
+        // TODO: avoid messing up the output with multiple threads
+        .arg("--threads=1")
+        .arg("--scan-list")
+        .arg(rule_file.path())
+        .arg(list.path())
+        .assert()
+        .stdout(
+            match_str(&file_a)
+                .and(match_str(&file_b).not())
+                .and(match_str(&file_c).not()),
+        )
+        .stderr("")
+        .success();
+
+    // When recursive, will match c
+    cmd()
+        .arg("--threads=1")
+        .arg("--scan-list")
+        .arg("-r")
+        .arg(rule_file.path())
+        .arg(list.path())
+        .assert()
+        .stdout(
+            match_str(&file_a)
+                .and(match_str(&file_b).not())
+                .and(match_str(&file_c)),
+        )
+        .stderr("")
+        .success();
+
+    // Empty
+    let list = test_file(b"");
+    cmd()
+        .arg("--scan-list")
+        .arg(rule_file.path())
+        .arg(list.path())
+        .assert()
+        .stdout("")
+        .stderr("")
+        .success();
+
+    // Do these tests only on linux, as the error messages can depend on the OS.
+    if cfg!(target_os = "linux") {
+        // path is a directory
+        // On linux, the open on a dir works but the read fails, making
+        // this a great test to test the read failure case.
+        cmd()
+            .arg("--scan-list")
+            .arg(rule_file.path())
+            .arg(dir1.path())
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(format!(
+                "cannot read from scan list {}: Is a directory",
+                dir1.path().display()
+            )))
+            .failure();
+
+        // path does not exist
+        cmd()
+            .arg("--scan-list")
+            .arg(rule_file.path())
+            .arg("invalid_path")
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(
+                "cannot open scan list invalid_path: No such file or directory",
+            ))
+            .failure();
+    }
+}
