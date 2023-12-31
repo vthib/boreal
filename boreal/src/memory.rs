@@ -95,7 +95,6 @@ impl Memory<'_> {
                 if start >= mem.len() {
                     None
                 } else {
-                    let end = std::cmp::min(mem.len(), end);
                     mem.get(start..end)
                 }
             }
@@ -112,10 +111,9 @@ impl Memory<'_> {
                     if relative_start >= region.length {
                         continue;
                     }
-                    let end = std::cmp::min(region.length, end - region.start);
 
                     let region = fragmented.obj.fetch(&fragmented.params)?;
-                    return region.mem.get(relative_start..end);
+                    return region.mem.get(relative_start..(end - region.start));
                 }
 
                 None
