@@ -199,8 +199,27 @@ impl Scanner {
 
     /// Scan the memory of a running process.
     ///
-    /// FIXME improve this doc
-    #[doc(hidden)]
+    /// Scan the memory regions of the process. By default, the behavior from libyara
+    /// is kept, but this may not match exactly what is desired. For more details on
+    /// the exact semantics of the scan, and how to adjust them, see
+    /// [`ScanParams::fragmented_scan_mode`].
+    ///
+    /// Each memory region will by default be fetched entirely to be scanned. This can
+    /// greatly increase memory usage during the scan. It can be a good idea to split
+    /// those regions in chunks to bound this memory usage, which can be done using
+    /// [`ScanParams::memory_chunk_size`].
+    ///
+    /// For greater control over which memory regions are scanned, the
+    /// [`Scanner::scan_fragmented`] API can also be used, but the iterator over
+    /// the memory region will need to be implemented manually. You will also need
+    /// to set the [`ScanParams::process_memory`] flag to ensure the file-analysis
+    /// modules keep their behavior.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the process cannot be opened or its memory cannot be listed.
+    /// Should fetches from some memory regions of the process fail, those regions will not be
+    /// scanned, but the scan will keep going.
     #[cfg(feature = "process")]
     pub fn scan_process(&self, pid: u32) -> Result<ScanResult, (ScanError, ScanResult)> {
         match process::process_memory(pid) {
@@ -213,8 +232,27 @@ impl Scanner {
         }
     }
 
-    // FIXME: clean up proto and doc before release
-    #[doc(hidden)]
+    /// Scan fragmented memory, i.e. multiple byte slices, potentially disjointed.
+    ///
+    /// This API allows scanning a set of non-overlapping byte slices, instead
+    /// of a single contiguous one.
+    ///
+    /// This is for example how process memory scanning works, as the memory of a
+    /// process is a set of memory regions that are often non contiguous.
+    ///
+    /// For the exact semantics of this API, and how to adjust them, see
+    /// [`ScanParams::fragmented_scan_mode`].
+    ///
+    /// If the fragmented memory belongs to a process, you probably want to
+    /// set the [`ScanParams::process_memory`] flag. This is used by
+    /// file-analysis modules to modify how they generate data from this
+    /// memory.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the process cannot be opened or its memory cannot be listed.
+    /// Should fetches from some memory regions of the process fail, those regions will not be
+    /// scanned, but the scan will keep going.
     pub fn scan_fragmented<T>(&self, obj: T) -> Result<ScanResult, (ScanError, ScanResult)>
     where
         T: FragmentedMemory,

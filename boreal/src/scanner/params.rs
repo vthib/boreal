@@ -38,6 +38,10 @@ pub struct ScanParams {
 }
 
 /// Scan mode to use on fragmented memory, including process scanning.
+///
+/// There are several different ways to handle how multiple
+/// disjointed memory regions are scanned. Use this parameter to
+/// change how this scanning is done.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct FragmentedScanMode {
     /// Modules can parse scanned memory to generate dynamic values.
@@ -374,6 +378,9 @@ impl ScanParams {
     ///
     /// This parameter configures how fragmented memory is scanned.
     /// See [`FragmentedScanMode`] for more details.
+    ///
+    /// This parameter is used for both the [`crate::Scanner::scan_process`]
+    /// and the [`crate::Scanner::scan_fragmented`] APIs.
     ///
     /// By default, this parameter uses the legacy scan mode.
     #[must_use]
