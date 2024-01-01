@@ -59,3 +59,11 @@ Then compile with:
 
 This generates a DLL with no imports/exports, and some custom resources with names and not just IDs.
 I haven't found a way to get names for languages however, not sure it is possible.
+
+* `long_name_exporter.exe` and `long_name_importer.exe` are very simple PE files generated from C.
+
+* `long_dll_name.exe` is `long_name_importer.exe` but with a dll name modified in a hex editor to be
+  over 256 characters.
+
+* `invalid_dll_names.exe` is `pe_imports` from libyara assets, modified in a hex editor
+  to make a standard and delayed imported dll name invalid.

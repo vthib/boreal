@@ -676,6 +676,50 @@ fn test_coverage_pe_c6f9709f() {
 }
 
 #[test]
+fn test_coverage_pe_long_name_exporter() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/pe/long_name_exporter.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
+fn test_coverage_pe_long_dll_name() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/pe/long_dll_name.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
+fn test_coverage_pe_long_name_importer() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/pe/long_name_importer.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
+fn test_coverage_pe_invalid_dll_names() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+    ];
+    let path = "tests/assets/pe/invalid_dll_names.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
 #[cfg(feature = "hash")]
 fn test_imphash() {
     fn test_imphash(file: &str, value: &str) {

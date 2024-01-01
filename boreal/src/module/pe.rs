@@ -26,6 +26,7 @@ const MAX_PE_SECTIONS: usize = 96;
 const MAX_PE_IMPORTS: usize = 16384;
 const MAX_PE_EXPORTS: usize = 16384;
 const MAX_EXPORT_NAME_LENGTH: usize = 512;
+const MAX_IMPORT_DLL_NAME_LENGTH: usize = 256;
 const MAX_RESOURCES: usize = 65536;
 const MAX_NB_DATA_DIRECTORIES: usize = 32768;
 const MAX_NB_VERSION_INFOS: usize = 32768;
@@ -1414,8 +1415,11 @@ fn add_imports<Pe: ImageNtHeaders>(
                 Ok(name) => name.to_vec(),
                 Err(_) => continue,
             };
-            let mut data_functions = Vec::new();
+            if library.len() >= MAX_IMPORT_DLL_NAME_LENGTH || !dll_name_is_valid(&library) {
+                continue;
+            }
 
+            let mut data_functions = Vec::new();
             let import_thunk_list = table
                 .thunks(import_desc.original_first_thunk.get(LE))
                 .or_else(|_| table.thunks(import_desc.first_thunk.get(LE)));
@@ -1577,6 +1581,10 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
                 Ok(name) => name.to_vec(),
                 Err(_) => continue,
             };
+            if !dll_name_is_valid(&library) {
+                continue;
+            }
+
             let mut data_functions = Vec::new();
             let functions = table
                 .thunks(import_desc.import_name_table_rva.get(LE))
@@ -1623,6 +1631,18 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
         ("number_of_delayed_imports", imports.len().into()),
         ("delayed_import_details", Value::Array(imports)),
     ]);
+}
+
+fn dll_name_is_valid(dll_name: &[u8]) -> bool {
+    dll_name.iter().all(|c| {
+        *c >= b' '
+            && *c != b'\"'
+            && *c != b'*'
+            && *c != b'<'
+            && *c != b'>'
+            && *c != b'?'
+            && *c != b'|'
+    })
 }
 
 fn add_exports(
