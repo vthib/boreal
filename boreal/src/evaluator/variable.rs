@@ -1,6 +1,4 @@
 //! Implement scanning for variables
-use std::cmp::Ordering;
-
 use crate::memory::Region;
 
 /// Variable evaluation context.
@@ -49,15 +47,23 @@ impl<'a> VarMatches<'a> {
 
     /// Count number of matches in between two bounds.
     pub fn count_matches_in(&self, var_index: usize, from: usize, to: usize) -> u32 {
-        // TODO: improve algorithm for searching in matches
+        // Find the idx of the first match which starts after from
+        let start_idx = match self.matches[var_index]
+            .binary_search_by_key(&from, |mat| mat.offset.saturating_add(mat.base))
+        {
+            // the match at idx starts exactly at from
+            Ok(idx) => idx,
+            // the match at idx is the first that is > from
+            Err(idx) => idx,
+        };
+
         let mut count = 0;
-        for mat in &self.matches[var_index] {
+        for mat in self.matches[var_index].iter().skip(start_idx) {
             let mat_offset = mat.offset.saturating_add(mat.base);
             if mat_offset > to {
                 return count;
-            } else if mat_offset >= from {
-                count += 1;
             }
+            count += 1;
         }
 
         count
@@ -65,32 +71,27 @@ impl<'a> VarMatches<'a> {
 
     /// Search occurrence of a variable at a given offset
     pub fn find_at(&self, var_index: usize, offset: usize) -> bool {
-        // TODO: improve algorithm for searching in matches
-        for mat in &self.matches[var_index] {
-            let mat_offset = mat.offset.saturating_add(mat.base);
-            match mat_offset.cmp(&offset) {
-                Ordering::Less => (),
-                Ordering::Equal => return true,
-                Ordering::Greater => return false,
-            }
-        }
-
-        false
+        self.matches[var_index]
+            .binary_search_by_key(&offset, |mat| mat.offset.saturating_add(mat.base))
+            .is_ok()
     }
 
     /// Search occurrence of a variable in between given offset
     pub fn find_in(&self, var_index: usize, from: usize, to: usize) -> bool {
-        // TODO: improve algorithm for searching in matches
-        for mat in &self.matches[var_index] {
-            let mat_offset = mat.offset.saturating_add(mat.base);
-            if mat_offset > to {
-                return false;
-            } else if mat_offset >= from {
-                return true;
-            }
-        }
+        // Find the idx of the first match which starts after from
+        let start_idx = match self.matches[var_index]
+            .binary_search_by_key(&from, |mat| mat.offset.saturating_add(mat.base))
+        {
+            // the match at idx starts exactly at from
+            Ok(idx) => idx,
+            // the match at idx is the first that is > from
+            Err(idx) => idx,
+        };
 
-        false
+        self.matches[var_index].get(start_idx).map_or(false, |mat| {
+            let mat_offset = mat.offset.saturating_add(mat.base);
+            mat_offset <= to
+        })
     }
 }
 

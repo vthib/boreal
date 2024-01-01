@@ -704,6 +704,22 @@ rule a {
     checker.check(b" abcabcabc", true);
     checker.check(b"  abcabcabc", true);
     checker.check(b"   abcabcabc", false);
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = "abc"
+    condition:
+        #a in (4..8) == 2
+}"#,
+    );
+    checker.check(b"", false);
+    checker.check(b"abcabc", false);
+    checker.check(b"abcabcabc", false);
+    checker.check(b"abcabcabc", false);
+    checker.check(b" abcabcabc", true);
+    checker.check(b"  abcabcabc", true);
+    checker.check(b"   abcabcabc", false);
 
     let mut checker = Checker::new(
         r#"

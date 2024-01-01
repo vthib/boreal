@@ -1282,6 +1282,7 @@ fn test_variable_find_at() {
 
 #[test]
 fn test_variable_find_in() {
+    #[track_caller]
     fn check_in(mem: &[u8], from: u64, to: u64, res: bool) {
         let rule = format!(
             r#"
@@ -1305,6 +1306,13 @@ fn test_variable_find_in() {
     check_in(b"01234567", 2, 3, true);
     check_in(b"01234567", 1, 2, false);
     check_in(b"34353435", 1, 6, false);
+    check_in(b"34501234567", 3, 23, true);
+    check_in(b"34501234567", 5, 9, true);
+    check_in(b"34501234567", 6, 8, true);
+    check_in(b"34501234567", 6, 7, true);
+    check_in(b"34501234567", 6, 6, true);
+    check_in(b"34501234567", 5, 6, true);
+    check_in(b"34501234567", 4, 5, false);
 
     check_in(b"abc", 0, 4, true);
     check_in(b"0123abc", 0, 4, true);
