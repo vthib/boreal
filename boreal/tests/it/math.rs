@@ -442,9 +442,9 @@ fn test_math_count() {
     test("math.count(0, 150, 250) == 158", ELF32_MIPS_FILE);
     test("math.count(115) == 112", ELF32_MIPS_FILE);
 
-    // Value is casted to a u8
-    test("math.count(-1) == 1", b"\xFF");
-    test("math.count(258) == 1", b"\x02");
+    // Value outside of 0-255 means undefined
+    test("not defined math.count(-1)", b"");
+    test("not defined math.count(256)", b"");
 
     test("not defined math.count(0, -1, 5)", b"");
     test("not defined math.count(0, 0, -2)", b"");
@@ -524,11 +524,12 @@ fn test_math_percentage() {
         ELF32_MIPS_FILE,
     );
 
-    test("not defined math.percentage(-1)", b"");
-    test("not defined math.percentage(12345678)", b"");
-    test("not defined math.percentage(0, -1, 5)", b"");
-    test("not defined math.percentage(0, 0, -2)", b"");
-    test("not defined math.percentage(0, 1, 5)", b"");
+    test("not defined math.percentage(-1)", b"1");
+    test("not defined math.percentage(256)", b"1");
+    test("not defined math.percentage(12345678)", b"1");
+    test("not defined math.percentage(0, -1, 5)", b"1");
+    test("not defined math.percentage(0, 0, -2)", b"1");
+    test("not defined math.percentage(0, 1, 5)", b"1");
 
     test_err(
         "math.percentage(true) == 1",

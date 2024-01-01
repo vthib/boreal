@@ -284,10 +284,7 @@ impl Math {
     fn count(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
         let mut args = args.into_iter();
         let byte: i64 = args.next()?.try_into().ok()?;
-        // libyara type cast this to a byte directly.
-        #[allow(clippy::cast_possible_truncation)]
-        #[allow(clippy::cast_sign_loss)]
-        let byte: u8 = byte as u8;
+        let byte: usize = byte.try_into().ok()?;
 
         let dist = match (args.next(), args.next()) {
             (Some(Value::Integer(offset)), Some(Value::Integer(length))) => {
@@ -300,7 +297,7 @@ impl Math {
         };
 
         dist.counters
-            .get(byte as usize)
+            .get(byte)
             .and_then(|v| i64::try_from(*v).ok())
             .map(Value::Integer)
     }
