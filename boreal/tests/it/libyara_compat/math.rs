@@ -79,6 +79,47 @@ fn test_math() {
         "import \"math\"
       rule test {
         condition:
+          math.count(0x41, 4, 10) == 1
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
+          not defined math.count(0x41, 10, 3)
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
+          not defined math.count(0x41, 0, -3)
+
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
+          not defined math.count(-1)
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
           math.count(0x41) == 2
       }",
         b"ABAB",
@@ -109,9 +150,59 @@ fn test_math() {
         "import \"math\"
       rule test {
         condition:
+          not defined math.percentage(0x41, 0, 0)
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
+          not defined math.percentage(0x41, 10, 3)
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
+          not defined math.percentage(0x41, 0, -3)
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
+          not defined math.percentage(-1)
+      }",
+        b"AABAAB",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
           math.mode() == 0x41
       }",
         b"ABABA",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
+          math.mode() == 0x41
+      }",
+        b"ABAB",
         true,
     );
 
