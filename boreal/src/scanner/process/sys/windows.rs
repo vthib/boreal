@@ -146,7 +146,6 @@ impl FragmentedMemory for WindowsProcessMemory {
                 self.buffer.len(),
                 Some(&mut nb_bytes_read),
             )
-            .ok()
         };
 
         if res.is_err() {
