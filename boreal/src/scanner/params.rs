@@ -166,44 +166,6 @@ impl FragmentedScanMode {
             can_refetch_regions: false,
         }
     }
-
-    // Independent mode.
-    //
-    // In this mode, each region is scanned independently, as
-    // if [`crate::Scanner::scan_mem`] was called on each region.
-    // The semantics are thus identical to a direct memory scan.
-    // However, the match results are accumulated, so that if a
-    // rule matches on multiple regions, it will be returned
-    // multiple times.
-    //
-    // In this mode, the no-scan optimization is enabled.
-    //
-    // This mode can be faster than the legacy one, thanks to the
-    // fact that the no-scan optimization is enabled, and that
-    // there is no additional fetch of the data done during the
-    // evaluation of conditions.
-    // In legacy mode:
-    // - String scanning is done on each region, and results are
-    //   accumulated.
-    // - File scanning modules (PE, ELF, etc) parses each region
-    //   until one region matches, then ignores the subsequent
-    //   regions.
-    // - Conditions that depend on offsets will trigger new
-    //   fetches of data. For example, use of `uint32(offset)`
-    //   or `hash.md5sum(offset, length)` will cause a new
-    //   fetch of this data, separate from the fetch done
-    //   for string scanning. This **can** add up if many
-    //   such conditions are used, causing higher memory usage
-    //   and longer scan durations.
-    // - The filesize condition is undefined.
-    // TODO
-    // fn independent() -> Self {
-    //     Self {
-    //         independent: true,
-    //         modules_dynamic_values: true,
-    //         conditions_can_refetch_regions: true,
-    //     }
-    // }
 }
 
 impl Default for ScanParams {
