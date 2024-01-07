@@ -76,11 +76,13 @@ libc = { version = "0.2", optional = true }
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", optional = true, features = [
     "Win32_Foundation",
+    # LookupPrivilegeValue, AdjustTokenPrivileges
+    "Win32_Security",
     # ReadProcessMemory
     "Win32_System_Diagnostics_Debug",
     # VirtualQueryEx
     "Win32_System_Memory",
-    # OpenProcess
+    # GetCurrentProcess, OpenProcess, OpenProcessToken,
     "Win32_System_Threading",
 ] }
 

@@ -2,17 +2,31 @@ use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
 
-use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, HANDLE};
+use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, HANDLE, LUID};
+use windows::Win32::Security::{
+    AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_DEBUG_NAME,
+    SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
+};
 use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 use windows::Win32::System::Memory::{
     VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_NOACCESS,
 };
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
+use windows::Win32::System::Threading::{
+    GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+};
 
 use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use crate::scanner::ScanError;
 
 pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> {
+    // Enable the SeDebug privilege on our process, so as to be able to
+    // open any process.
+    if enable_se_debug_privilege().is_err() {
+        // Attempt to open the process regardless, we might not need
+        // the SE_DEBUG privilege for this one.
+        // TODO: log this once logging is added.
+    }
+
     // Safety: this is always safe to call.
     let res = unsafe {
         OpenProcess(
@@ -43,6 +57,38 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
         buffer: Vec::new(),
         current_region: None,
     }))
+}
+
+fn enable_se_debug_privilege() -> Result<(), windows::core::Error> {
+    let mut self_token = HANDLE::default();
+
+    // Safety: this is always safe to call.
+    let self_handle = unsafe { GetCurrentProcess() };
+    // Safety:
+    // - handle is valid and has PROCESS_QUERY_LIMITED_INFORMATION
+    //   permission since it was retrieve with GetCurrentProcess.
+    // - TOKEN_ADJUST_PRIVILEGES is a valid access to ask for.
+    unsafe { OpenProcessToken(self_handle, TOKEN_ADJUST_PRIVILEGES, &mut self_token) }?;
+
+    let mut debug_privilege_luid = LUID::default();
+    // Safety:
+    // - SE_DEBUG_NAME is a wide string ending with a null byte.
+    unsafe { LookupPrivilegeValueW(None, SE_DEBUG_NAME, &mut debug_privilege_luid) }?;
+
+    let cfg = TOKEN_PRIVILEGES {
+        PrivilegeCount: 1,
+        Privileges: [LUID_AND_ATTRIBUTES {
+            Luid: debug_privilege_luid,
+            Attributes: SE_PRIVILEGE_ENABLED,
+        }],
+    };
+    // Safety:
+    // - token is valid and opened with TOKEN_ADJUST_PRIVILEGES
+    // - NewState is well-formed, count is 1 and the Privileges array has one element
+    // - Rest of arguments are optional
+    unsafe { AdjustTokenPrivileges(self_token, false, Some(&cfg), 0, None, None) }?;
+
+    Ok(())
 }
 
 #[derive(Debug)]
