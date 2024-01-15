@@ -8,9 +8,6 @@
 Boreal is an evaluator of [YARA](https://virustotal.github.io/yara/) rules, used to scan bytes for textual and
 binary pattern, predominantly for malware detections.
 
-Although it is quite young, it should already be usable in place of yara in many use cases.
-See [missing features](#missing-features) for details on what is missing.
-
 ## Description
 
 Boreal is designed to be a drop-in replacement of YARA, while also adding improvements.
@@ -22,14 +19,15 @@ The main goals of the project are:
 
 ## Features
 
-* Full compatibility with YARA 4.2 and [most modules](#modules). Any existing rule can be used as is.
+* Full compatibility with YARA 4.3 and [most modules](#modules). Any existing rule can be used as is.
 * Avoid scanning for strings when not required, greatly reducing execution time on carefully crafted
   rules. See [no scan optimization](#no-scan-optimization).
 * Protection against any untrusted inputs, be it rules or scanned bytes. Ill-crafted rules or inputs should never
   lead to a crash or deteriorated performances.
-* Improved performances when using a few hundred rules. See the [benchmarks](/benches/README.md) for details.
-
-There is a lot of room to improve performances much more, as working on performances has not been the main focus yet.
+* Improved performances in most cases, especially when using a few hundred rules.
+  See the [benchmarks](/benches/README.md) for details.
+* Process scanning on Windows, Linux and macOS, with different scanning modes available. See the
+  [FragmentedScanMode documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.FragmentedScanMode.html).
 
 ## Installation & use
 
@@ -85,7 +83,7 @@ There are however, some exceptions to this compatibility:
 
 * Evaluation bugs. Boreal may not suffer from some of them, or may has already fixed some of them.
   For example, there are many bugs that are already fixed in boreal and YARA, but have not yet
-  been released by YARA, so even though boreal supports YARA 4.2, some bugs are fixed in boreal
+  been released by YARA, so even though boreal supports YARA 4.3, some bugs are fixed in boreal
   and not in YARA.
 
 * Overflows or underflows. Those are not specified by YARA and in fact, signed overflows is UB in
@@ -132,27 +130,6 @@ Modules not yet supported:
 - [ ] dotnet
 - [ ] magic
 
-## Missing Features
-
-A few key features are still missing. If you are looking into using boreal in place of YARA,
-some of those might be blockers for you:
-
-#### Process scanning
-
-Only scanning files or bytes is available for the moment.
-
-#### Missing modules
-
-See the module list [above](#modules). This will greatly depend on declared interest,
-as I'm unsure how often those are used. If you would like to use boreal but a module that you
-need is not implemented, please create an issue.
-
-#### Saving and loading compiled rules
-
-I am not quite sure what are the use-cases for this YARA feature, as the compilation of YARA rules
-is not that time consuming. Please create an issue with a use-case if this is a feature you would
-need.
-
 ## Pay for what you use
 
 YARA is an amazing software that is however mainly designed to optimize for the worst case
@@ -185,6 +162,23 @@ There are still some work to do on this. For example, the common "$a at X" rule 
 properly handle and will require a scan for the string. If you think you have a rule that should
 not require scanning but does, please report it.
 
+## Missing Features
+
+A few features that are available in YARA are still missing. If you are looking into using
+boreal in place of YARA, some of those might be blockers for you:
+
+#### Missing modules
+
+See the module list [above](#modules). This will greatly depend on declared interest,
+as I'm unsure how often those are used. If you would like to use boreal but a module that you
+need is not implemented, please create an issue.
+
+#### Saving and loading compiled rules
+
+I am not quite sure what are the use-cases for this YARA feature, as the compilation of YARA rules
+is not that time consuming. Please create an issue with a use-case if this is a feature you would
+need.
+
 ## Other optimizations
 
 Another optimization that is planned but not ready yet include slimmed down modules, where for
@@ -200,5 +194,7 @@ of all signatures, imports, exports, resources, etc on every scan.
   a dependency on OpenSSL.
 - `process`: adds the process scanning API.
 - `memmap`: adds APIs to scan files using memory maps.
+- `profiling`: compute statistics during compilation and evaluation.
 
-By default, `hash`, `object`, `process` and `memmap` are enabled, `authenticode` is not.
+By default, `hash`, `object`, `process` and `memmap` are enabled,
+`authenticode` and `profiling` are not.
