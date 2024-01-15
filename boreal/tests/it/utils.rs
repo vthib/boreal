@@ -321,6 +321,7 @@ impl Checker {
 
     #[track_caller]
     #[cfg(feature = "process")]
+    #[cfg(any(target_os = "linux", windows))]
     pub fn check_process_full_matches(&mut self, pid: u32, expected: FullMatches) {
         // We need to compute the full matches for this test
         {
@@ -453,6 +454,7 @@ impl Checker {
 
     #[track_caller]
     #[cfg(feature = "process")]
+    #[cfg(any(target_os = "linux", windows))]
     pub fn check_process(&mut self, pid: u32, expected_res: bool) {
         let res = match self.scanner.scan_process(pid) {
             Ok(v) => {
