@@ -116,6 +116,30 @@ jobs:
             vcpkg_triplet: x86-windows-static
             target: i686-pc-windows-msvc
 
+  test-macos:
+    name: Test Macos 12
+    runs-on: macos-12
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build test helpers
+        run: |
+          cd boreal-test-helpers
+          cargo build
+
+      - name: Run tests
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: cargo test
+
+      - name: Run tests with Openssl
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: cargo test --features authenticode
+
   clippy:
     name: Clippy
     runs-on: ubuntu-22.04

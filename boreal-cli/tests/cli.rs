@@ -107,6 +107,7 @@ rule process_scan {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn test_scan_process_not_found() {
     let rule_file = test_file(b"rule process_scan { condition: true }");
 

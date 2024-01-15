@@ -1,14 +1,11 @@
 use std::io::{BufRead, BufReader};
 
-#[cfg(any(target_os = "linux", windows))]
 use crate::utils::Checker;
-#[cfg(any(target_os = "linux", windows))]
 use boreal::scanner::ScanError;
 
 const PAGE_SIZE: usize = 4 * 1024 * 1024;
 
 #[test]
-#[cfg(any(target_os = "linux", windows))]
 fn test_scan_process() {
     // Scan for strings found in the bss and the stack of the test process.
     let mut checker = Checker::new(
@@ -28,7 +25,6 @@ rule a {
 
 /// Test scanning a pid that do not exist.
 #[test]
-#[cfg(any(target_os = "linux", windows))]
 fn test_process_not_found() {
     let pid = 999_999_999;
 
@@ -43,7 +39,6 @@ fn test_process_not_found() {
 
 /// Test scanning a pid we do not have permissions for.
 #[test]
-#[cfg(any(target_os = "linux", windows))]
 fn test_process_permission_denied() {
     #[cfg(target_os = "linux")]
     if euid_is_root() {
@@ -120,7 +115,6 @@ rule a {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", windows))]
 fn test_process_max_fetched_region_size() {
     use boreal::scanner::ScanParams;
 
@@ -172,7 +166,6 @@ rule a {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", windows))]
 fn test_process_memory_chunk_size() {
     use boreal::scanner::ScanParams;
 
@@ -224,7 +217,6 @@ rule a {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", windows))]
 fn test_process_file_copy_on_write() {
     let mut checker = Checker::new(
         r#"
