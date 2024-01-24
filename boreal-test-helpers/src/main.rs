@@ -234,10 +234,12 @@ impl Region {
     }
 }
 
+#[inline(never)]
 fn xor_bytes(v: &[u8], xor_byte: u8) -> Vec<u8> {
     v.iter().map(|b| *b ^ xor_byte).collect()
 }
 
+#[inline(never)]
 fn xor_bytes_into(v: &[u8], xor_byte: u8, dest: &mut [u8]) {
     for (v, d) in v.iter().zip(dest.iter_mut()) {
         *d = *v ^ xor_byte;
