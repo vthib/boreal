@@ -133,12 +133,24 @@ jobs:
       - name: Run tests
         env:
           YARA_CRYPTO_LIB: openssl
-        run: cargo test
+        run: |
+          cargo test -- --skip process::
 
       - name: Run tests with Openssl
         env:
           YARA_CRYPTO_LIB: openssl
-        run: cargo test --features authenticode
+        run: |
+          cargo test --features authenticode -- --skip macos_need_sudo
+
+      # Some tests on macos need to be super user
+      - name: Run process tests
+        env:
+          YARA_CRYPTO_LIB: openssl
+        # --test-threads=1 to avoid a bug that makes the vm_read_overwrite
+        # fail when multiple tests are running in parallel.
+        # This is very suspect, and should be investigated and reported.
+        run: |
+          sudo env "CARGO_HOME=$HOME/.cargo" cargo test --features authenticode macos_need_sudo -- --test-threads=1
 
   clippy:
     name: Clippy
