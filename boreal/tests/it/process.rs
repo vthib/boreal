@@ -69,6 +69,10 @@ fn test_process_permission_denied() {
                     err
                 );
             }
+            #[cfg(target_os = "macos")]
+            {
+                assert_eq!(err.kind(), std::io::ErrorKind::Other, "{:?}", err);
+            }
         }
         err => panic!("Unexpected last err: {err:?}"),
     }
