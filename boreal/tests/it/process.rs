@@ -6,7 +6,7 @@ use boreal::scanner::ScanError;
 const PAGE_SIZE: usize = 4 * 1024 * 1024;
 
 #[test]
-fn test_scan_process() {
+fn test_scan_process_macos_need_sudo() {
     // Scan for strings found in the bss and the stack of the test process.
     let mut checker = Checker::new(
         r#"
@@ -25,7 +25,7 @@ rule a {
 
 /// Test scanning a pid that do not exist.
 #[test]
-fn test_process_not_found() {
+fn test_process_not_found_macos_need_sudo() {
     let pid = 999_999_999;
 
     let mut checker = Checker::new(r#" rule a { condition: true }"#);
@@ -100,7 +100,7 @@ fn euid_is_root() -> bool {
 }
 
 #[test]
-fn test_process_multiple_passes() {
+fn test_process_multiple_passes_macos_need_sudo() {
     let mut checker = Checker::new(
         r#"
 rule a {
@@ -119,7 +119,7 @@ rule a {
 }
 
 #[test]
-fn test_process_max_fetched_region_size() {
+fn test_process_max_fetched_region_size_macos_need_sudo() {
     use boreal::scanner::ScanParams;
 
     use crate::utils::get_boreal_full_matches;
@@ -170,7 +170,7 @@ rule a {
 }
 
 #[test]
-fn test_process_memory_chunk_size() {
+fn test_process_memory_chunk_size_macos_need_sudo() {
     use boreal::scanner::ScanParams;
 
     use crate::utils::get_boreal_full_matches;
@@ -221,7 +221,7 @@ rule a {
 }
 
 #[test]
-fn test_process_file_copy_on_write() {
+fn test_process_file_copy_on_write_macos_need_sudo() {
     let mut checker = Checker::new(
         r#"
 rule a {
