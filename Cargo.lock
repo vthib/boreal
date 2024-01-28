@@ -159,6 +159,7 @@ dependencies = [
  "glob",
  "hex",
  "libc",
+ "mach2",
  "md-5",
  "memchr",
  "memmap2",
@@ -454,6 +455,15 @@ name = "linux-raw-sys"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4cd1a83af159aa67994778be9070f0ae1bd732942279cabb14f86f986a21456"
+
+[[package]]
+name = "mach2"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19b955cdeb2a02b9117f121ce63aa52d08ade45de53e48fe6a38b39c10f6f709"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "md-5"
@@ -910,7 +920,7 @@ checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
 [[package]]
 name = "yara"
 version = "0.24.0"
-source = "git+https://github.com/vthib/yara-rust?branch=version-0.24.0#1bbfc6b66c272000848e8eb32191907244ad6f55"
+source = "git+https://github.com/vthib/yara-rust?branch=version-0.24.0#cb66bbedbdf416bc56f1dcc16b5674d71699f3c8"
 dependencies = [
  "bitflags 2.4.1",
  "lazy_static",
@@ -921,7 +931,7 @@ dependencies = [
 [[package]]
 name = "yara-sys"
 version = "0.24.0"
-source = "git+https://github.com/vthib/yara-rust?branch=version-0.24.0#1bbfc6b66c272000848e8eb32191907244ad6f55"
+source = "git+https://github.com/vthib/yara-rust?branch=version-0.24.0#cb66bbedbdf416bc56f1dcc16b5674d71699f3c8"
 dependencies = [
  "bindgen",
  "cc",

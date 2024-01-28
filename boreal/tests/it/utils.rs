@@ -321,7 +321,7 @@ impl Checker {
 
     #[track_caller]
     #[cfg(feature = "process")]
-    #[cfg(any(target_os = "linux", windows))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     pub fn check_process_full_matches(&mut self, pid: u32, expected: FullMatches) {
         // We need to compute the full matches for this test
         {
@@ -333,7 +333,8 @@ impl Checker {
         }
 
         if let Some(rules) = &self.yara_rules {
-            let res = rules.scan_process(pid, 1).unwrap();
+            let mut scanner = rules.scanner().unwrap();
+            let res = scanner.scan_process(pid).unwrap();
             check_yara_full_matches(&res, expected);
         }
     }
@@ -454,7 +455,7 @@ impl Checker {
 
     #[track_caller]
     #[cfg(feature = "process")]
-    #[cfg(any(target_os = "linux", windows))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     pub fn check_process(&mut self, pid: u32, expected_res: bool) {
         let res = match self.scanner.scan_process(pid) {
             Ok(v) => {
