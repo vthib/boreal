@@ -78,7 +78,9 @@ rule my_rule {
 }
 
 #[test]
-fn test_scan_process_macos_need_sudo() {
+// Need super user to run on linux and macos
+#[cfg_attr(unix, ignore)]
+fn test_scan_process() {
     let rule_file = test_file(
         br#"
 rule process_scan {

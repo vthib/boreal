@@ -6,7 +6,9 @@ use boreal::scanner::ScanError;
 const PAGE_SIZE: usize = 4 * 1024 * 1024;
 
 #[test]
-fn test_scan_process_macos_need_sudo() {
+// Need super user to run on macos
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_scan_process() {
     // Scan for strings found in the bss and the stack of the test process.
     let mut checker = Checker::new(
         r#"
@@ -25,7 +27,9 @@ rule a {
 
 /// Test scanning a pid that do not exist.
 #[test]
-fn test_process_not_found_macos_need_sudo() {
+// Need super user to run on macos
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_process_not_found() {
     let pid = 999_999_999;
 
     let mut checker = Checker::new(r#" rule a { condition: true }"#);
@@ -100,7 +104,9 @@ fn euid_is_root() -> bool {
 }
 
 #[test]
-fn test_process_multiple_passes_macos_need_sudo() {
+// Need super user to run on macos
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_process_multiple_passes() {
     let mut checker = Checker::new(
         r#"
 rule a {
@@ -119,7 +125,9 @@ rule a {
 }
 
 #[test]
-fn test_process_max_fetched_region_size_macos_need_sudo() {
+// Need super user to run on macos
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_process_max_fetched_region_size() {
     use boreal::scanner::ScanParams;
 
     use crate::utils::get_boreal_full_matches;
@@ -170,7 +178,9 @@ rule a {
 }
 
 #[test]
-fn test_process_memory_chunk_size_macos_need_sudo() {
+// Need super user to run on macos
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_process_memory_chunk_size() {
     use boreal::scanner::ScanParams;
 
     use crate::utils::get_boreal_full_matches;
@@ -221,7 +231,9 @@ rule a {
 }
 
 #[test]
-fn test_process_file_copy_on_write_macos_need_sudo() {
+// Need super user to run on macos
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_process_file_copy_on_write() {
     let mut checker = Checker::new(
         r#"
 rule a {
