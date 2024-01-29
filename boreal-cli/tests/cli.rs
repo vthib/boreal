@@ -1,6 +1,6 @@
-use std::fs;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::Path;
+use std::{fs, io::BufReader};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -78,10 +78,7 @@ rule my_rule {
 }
 
 #[test]
-// TODO: is there a way to make this code work, ie have
-// enough permissions to scan a process?
-#[ignore]
-fn test_scan_process() {
+fn test_scan_process_macos_need_sudo() {
     let rule_file = test_file(
         br#"
 rule process_scan {
@@ -92,9 +89,8 @@ rule process_scan {
 }"#,
     );
 
-    // let proc = BinHelper::run();
-    // let pid = proc.pid();
-    let pid = 1;
+    let proc = BinHelper::run("stack");
+    let pid = proc.pid();
 
     // Not matching
     cmd()
@@ -1301,5 +1297,63 @@ fn test_scan_list() {
                 "cannot open scan list invalid_path: No such file or directory",
             ))
             .failure();
+    }
+}
+
+// Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
+// modified too frequently.
+struct BinHelper {
+    proc: std::process::Child,
+}
+
+impl BinHelper {
+    fn run(arg: &str) -> Self {
+        // Path to current exe
+        let path = std::env::current_exe().unwrap();
+        // Path to "deps" dir
+        let path = path.parent().unwrap();
+        // Path to parent of deps dir, ie destination of build artifacts
+        let path = path.parent().unwrap();
+        // Now select the bin helper
+        let path = path.join(if cfg!(windows) {
+            "boreal-test-helpers.exe"
+        } else {
+            "boreal-test-helpers"
+        });
+        if !path.exists() {
+            panic!(
+                "File {} not found. \
+                You need to compile the `boreal-test-helpers` crate to run this test",
+                path.display()
+            );
+        }
+        let mut child = std::process::Command::new(path)
+            .arg(arg)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        // Accumulate read inputs until the "ready" line is found
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut buffer = String::new();
+        loop {
+            buffer.clear();
+            stdout.read_line(&mut buffer).unwrap();
+            if buffer.trim() == "ready" {
+                break;
+            }
+        }
+        Self { proc: child }
+    }
+
+    fn pid(&self) -> u32 {
+        self.proc.id()
+    }
+}
+
+impl Drop for BinHelper {
+    fn drop(&mut self) {
+        let _ = self.proc.kill();
+        let _ = self.proc.wait();
     }
 }
