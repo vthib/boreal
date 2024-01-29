@@ -245,71 +245,70 @@ fn test_arithmetic_operators() {
     );
 }
 
-#[test]
 // Arithmetic operations are not reduced during compilation.
-#[ignore]
-fn test_arithmetic_operators_runtimes() {
-    check(
-        "rule test { condition: 0x7FFFFFFFFFFFFFFF + 1 > 0 }",
-        &[],
-        false,
-    );
-
-    check(
-        "rule test { condition: 9223372036854775807 + 1 > 0 }",
-        &[],
-        false,
-    );
-
-    check(
-        "rule test { condition: -9223372036854775807 - 2 > 0 }",
-        &[],
-        false,
-    );
-
-    check(
-        "rule test { condition: -2 + -9223372036854775807 > 0 }",
-        &[],
-        false,
-    );
-
-    check(
-        "rule test { condition: 1 - -9223372036854775807 > 0 }",
-        &[],
-        false,
-    );
-
-    check(
-        "rule test { condition: 0x4000000000000000 * 2 }",
-        &[],
-        false,
-    );
-
-    check(
-        "rule test { condition: 4611686018427387904 * 2 }",
-        &[],
-        false,
-    );
-
-    // CHANGE: Those two return OVERFLOW on libyara due to how
-    // overflow is detected. However, they do NOT actually overflow.
-    check(
-        "rule test { condition: 4611686018427387904 * -2 < 0 }",
-        &[],
-        true,
-    );
-    check(
-        "rule test { condition: -4611686018427387904 * 2 < 0 }",
-        &[],
-        true,
-    );
-
-    check(
-        "rule test { condition: -4611686018427387904 * -2 }",
-        &[],
-        false,
-    );
-}
+// #[test]
+// fn test_arithmetic_operators_runtimes() {
+//     check(
+//         "rule test { condition: 0x7FFFFFFFFFFFFFFF + 1 > 0 }",
+//         &[],
+//         false,
+//     );
+//
+//     check(
+//         "rule test { condition: 9223372036854775807 + 1 > 0 }",
+//         &[],
+//         false,
+//     );
+//
+//     check(
+//         "rule test { condition: -9223372036854775807 - 2 > 0 }",
+//         &[],
+//         false,
+//     );
+//
+//     check(
+//         "rule test { condition: -2 + -9223372036854775807 > 0 }",
+//         &[],
+//         false,
+//     );
+//
+//     check(
+//         "rule test { condition: 1 - -9223372036854775807 > 0 }",
+//         &[],
+//         false,
+//     );
+//
+//     check(
+//         "rule test { condition: 0x4000000000000000 * 2 }",
+//         &[],
+//         false,
+//     );
+//
+//     check(
+//         "rule test { condition: 4611686018427387904 * 2 }",
+//         &[],
+//         false,
+//     );
+//
+//     // CHANGE: Those two return OVERFLOW on libyara due to how
+//     // overflow is detected. However, they do NOT actually overflow.
+//     check(
+//         "rule test { condition: 4611686018427387904 * -2 < 0 }",
+//         &[],
+//         true,
+//     );
+//     check(
+//         "rule test { condition: -4611686018427387904 * 2 < 0 }",
+//         &[],
+//         true,
+//     );
+//
+//     check(
+//         "rule test { condition: -4611686018427387904 * -2 }",
+//         &[],
+//         false,
+//     );
+// }
 
 #[test]
 fn test_bitwise_operators() {

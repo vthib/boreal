@@ -48,6 +48,15 @@ jobs:
           YARA_CRYPTO_LIB: openssl
         run: cargo test --features authenticode --target=${{matrix.target}}
 
+      # Some tests need to be super user
+      - name: Run super user tests
+        env:
+          YARA_CRYPTO_LIB: openssl
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: "sudo -E"
+          CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_RUNNER: "sudo -E"
+        run: |
+          cargo test --features authenticode --target=${{matrix.target}} -- --test-threads=1 --ignored
+
     strategy:
       fail-fast: false
       matrix:
@@ -133,24 +142,22 @@ jobs:
       - name: Run tests
         env:
           YARA_CRYPTO_LIB: openssl
-        run: |
-          cargo test -- --skip process::
+        run: cargo test
 
       - name: Run tests with Openssl
         env:
           YARA_CRYPTO_LIB: openssl
-        run: |
-          cargo test --features authenticode -- --skip macos_need_sudo
+        run: cargo test --features authenticode
 
       # Some tests on macos need to be super user
-      - name: Run process tests
+      - name: Run super user tests
         env:
           YARA_CRYPTO_LIB: openssl
         # --test-threads=1 to avoid a bug that makes the vm_read_overwrite
-        # fail when multiple tests are running in parallel.
+        # fail when multiple tests scanning processes are running in parallel.
         # This is very suspect, and should be investigated and reported.
         run: |
-          sudo env "CARGO_HOME=$HOME/.cargo" cargo test --features authenticode macos_need_sudo -- --test-threads=1
+          sudo cargo test --features authenticode -- --test-threads=1 --ignored
 
   clippy:
     name: Clippy

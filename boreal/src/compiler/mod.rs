@@ -121,14 +121,14 @@ impl Compiler {
     ///
     /// You can also directly create the Pe module early, and add it to a compiler later on.
     ///
-    /// ```ignore
+    /// ```
     /// // Safety: called before setting up multithreading context.
     /// let mut compiler = unsafe { boreal::Compiler::new_with_pe_signatures() };
     ///
     /// // Setup multithreading runtime
     ///
     /// // Later on, in any thread:
-    /// compiler.add_rules("...");
+    /// compiler.add_rules_str("...");
     ///
     /// // Or
     ///
