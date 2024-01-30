@@ -200,15 +200,18 @@ jobs:
 
       - name: Generate code coverage
         run: |
-          # First, build the test helpers in the right target dir
-          cd boreal-test-helpers
-          cargo build --target-dir ../target/llvm-cov-target
-          cd ..
-          # Then, run the tests. This needs to avoid cleaning to not remove
-          # the test helpers from the target dir
-          cargo llvm-cov --features authenticode --workspace --no-clean \
-            --ignore-filename-regex boreal-test-helpers/src/main.rs \
-            --lcov --output-path lcov.info
+          # Export cargo llvm-cov env stuff so that we can run "cargo test"
+          # and have coverage
+          source <(cargo llvm-cov show-env --export-prefix)
+          cargo build -p boreal-test-helpers
+          # Run the normal tests
+          cargo test --features authenticode
+          # And run the super user tests
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sudo -E" cargo \
+            test --features authenticode -- --ignored
+          # Finally, generate the report
+          cargo llvm-cov report --lcov --output-path lcov.info \
+            --ignore-filename-regex boreal-test-helpers/src/main.rs
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
