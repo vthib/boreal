@@ -117,7 +117,7 @@ free. If however someone can provide a valid use-case, this difference can be re
 - [x] math
 - [x] macho (with the _object_ feature)
 - [x] pe (with the _object_ feature)
-  - `pe.signatures` is behind the _openssl_ feature
+  - `pe.signatures` is behind the _authenticode_ feature
   - `pe.imphash()` is behind the _hash_ feature
 - [x] string
 - [x] time
