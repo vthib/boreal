@@ -4,7 +4,7 @@
 # Retrieve all assets
 ./retrieve-assets.sh
 # Run the benches
-cargo run --features openssl,bench
+cargo bench
 ```
 
 ## Scan duration
