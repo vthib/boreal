@@ -661,10 +661,13 @@ rule a {
                 r"Evaluation \{
     no_scan_eval_duration: .*,
     ac_duration: .*,
+    fetch_memory_duration: .*,
     ac_confirm_duration: .*,
     nb_ac_matches: .*,
     rules_eval_duration: .*,
     raw_regexes_eval_duration: .*,
+    memory_scanned_size: .*,
+    nb_memory_chunks: .*,
 \}
 ",
             )
