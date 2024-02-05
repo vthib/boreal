@@ -551,9 +551,18 @@ impl Inner {
             Memory::Fragmented(fragmented) => {
                 // Scan each region for all variables occurences.
                 while fragmented.obj.next(&fragmented.params).is_some() {
+                    #[cfg(feature = "profiling")]
+                    let start_fetch = std::time::Instant::now();
+
                     let Some(region) = fragmented.obj.fetch(&fragmented.params) else {
                         continue;
                     };
+
+                    #[cfg(feature = "profiling")]
+                    if let Some(stats) = ac_scan_data.statistics.as_mut() {
+                        stats.fetch_memory_duration += start_fetch.elapsed();
+                    }
+
                     self.ac_scan
                         .scan_region(&region, &mut ac_scan_data, &mut matches)?;
 

@@ -149,6 +149,12 @@ impl AcScan {
         scan_data: &mut ScanData,
         matches: &mut [Vec<StringMatch>],
     ) -> Result<(), ScanError> {
+        #[cfg(feature = "profiling")]
+        if let Some(stats) = scan_data.statistics.as_mut() {
+            stats.nb_memory_chunks += 1;
+            stats.memory_scanned_size += region.mem.len();
+        }
+
         // Iterate over aho-corasick matches, validating those matches
         for mat in self.aho.find_overlapping_iter(region.mem) {
             if scan_data.check_timeout() {

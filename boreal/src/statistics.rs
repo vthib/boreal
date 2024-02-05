@@ -1,6 +1,7 @@
 //! Statistics used to investigate performance of rules.
 
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
+use std::time::Duration;
 
 /// Compilation statistics for a rule.
 #[derive(Clone, Debug)]
@@ -56,8 +57,25 @@ pub struct Evaluation {
     /// This is used for the no-scan optimization.
     pub no_scan_eval_duration: Duration,
 
-    /// Time spent running the Aho-Corasick algorithm.
+    /// Time spent scanning for strings.
+    ///
+    /// Note that this is the complete duration of the scan, which contains:
+    ///
+    /// - the time spent fetching memory, see [`Evaluation::fetch_memory_duration`].
+    /// - the time spent running the Aho-Corasick algorithm.
+    /// - the time spent confirming Aho-Corasick matches, see
+    ///   [`Evaluation::ac_confirm_duration`].
     pub ac_duration: Duration,
+
+    /// Time spent fetching memory.
+    ///
+    /// When scanning a file, this will always be zero.
+    /// However, when scanning fragmented memory such as a process memory,
+    /// this will be the total amount of time spent fetching memory to
+    /// be scanned.
+    ///
+    /// This is a subtotal of `ac_duration`.
+    pub fetch_memory_duration: Duration,
 
     /// Time spent confirming matches of the Aho-Corasick algorithm.
     ///
@@ -74,6 +92,12 @@ pub struct Evaluation {
     ///
     /// This is an aggregation of the time spent evaluating "raw" variables regexes.
     pub raw_regexes_eval_duration: Duration,
+
+    /// Total amount of memory scanned.
+    pub memory_scanned_size: usize,
+
+    /// Number of memory chunks scanned.
+    pub nb_memory_chunks: u32,
 }
 
 #[cfg(test)]
