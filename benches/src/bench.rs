@@ -34,7 +34,7 @@ fn bench_compilation(c: &mut Criterion) {
             b.iter_with_large_drop(|| {
                 let mut compiler = build_boreal_compiler();
                 for path in rules {
-                    compiler.add_rules_file(&path).unwrap();
+                    compiler.add_rules_file(path).unwrap();
                 }
                 compiler.into_scanner()
             })
@@ -43,7 +43,7 @@ fn bench_compilation(c: &mut Criterion) {
             b.iter_with_large_drop(|| {
                 let mut compiler = build_yara_compiler();
                 for path in rules {
-                    compiler = compiler.add_rules_file(&path).unwrap();
+                    compiler = compiler.add_rules_file(path).unwrap();
                 }
                 compiler.compile_rules().unwrap()
             })
@@ -82,6 +82,33 @@ fn bench_scan_pes(c: &mut Criterion) {
 
             group.finish();
         }
+    }
+}
+
+fn bench_scan_process(c: &mut Criterion) {
+    // To update accordingly when benching the scan of a process.
+    let pid = 19766;
+
+    for (name, rules_path) in &RULES_SETS {
+        let mut boreal_compiler = build_boreal_compiler();
+        let yara_compiler = build_yara_compiler();
+
+        let rules = get_yara_files_from_path(rules_path);
+        let yara_compiler = add_rules(&rules, &mut boreal_compiler, yara_compiler);
+
+        let boreal_scanner = boreal_compiler.into_scanner();
+        let yara_compiled_rules = yara_compiler.compile_rules().unwrap();
+
+        let mut group = c.benchmark_group(format!("Scan process {} using {} rules", pid, name));
+        group.sample_size(20);
+        group.bench_with_input("boreal", &boreal_scanner, |b, scanner| {
+            b.iter(|| scanner.scan_process(pid))
+        });
+        group.bench_with_input("libyara", &yara_compiled_rules, |b, yara| {
+            b.iter(|| yara.scan_process(pid, 0))
+        });
+
+        group.finish();
     }
 }
 
@@ -137,14 +164,14 @@ fn add_rules(
     mut yara_compiler: yara::Compiler,
 ) -> yara::Compiler {
     for path in rules {
-        boreal_compiler.add_rules_file(&path).unwrap_or_else(|err| {
+        boreal_compiler.add_rules_file(path).unwrap_or_else(|err| {
             panic!(
                 "cannot parse rules from {} for boreal: {:?}",
                 path.display(),
                 err
             )
         });
-        yara_compiler = yara_compiler.add_rules_file(&path).unwrap_or_else(|err| {
+        yara_compiler = yara_compiler.add_rules_file(path).unwrap_or_else(|err| {
             panic!(
                 "cannot parse rules from {} for libyara: {:?}",
                 path.display(),
@@ -156,5 +183,10 @@ fn add_rules(
     yara_compiler
 }
 
-criterion_group!(benches, bench_compilation, bench_scan_pes);
+criterion_group!(
+    benches,
+    bench_compilation,
+    bench_scan_pes,
+    bench_scan_process
+);
 criterion_main!(benches);
