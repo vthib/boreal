@@ -14,10 +14,11 @@ Tests done on a i7-10750H with an SSD.
 - Boreal compiled with `--release --features authenticode`
 - Yara used through yara-rust
 
-Parsing & compiling is not taken into account, only the scanning of a file, using
-compiled rules.
+Parsing & compiling is not taken into account, only the scan in itself, using compiled rules.
 
 Percentage displayed shows the differences between boreal and yara.
+
+### File scan
 
 | Rules set \ File scanned                                                                             | vulkan-1.dll (737KB) | libGLESv2.dll (5.5MB) | firefox.msi (56MB) | tests.exe (157MB) |
 | ---------------------------------------------------------------------------------------------------- | -------------------- | --------------------- | ------------------ | ----------------- |
@@ -35,10 +36,19 @@ A few observations:
   computed without having to scan for strings.
   See [no scan optimization](/boreal/README.md#no-scan-optimization).
 - Increase in number of strings, in file size, and decrease in strings
-  quality all lead to deteriorating performances compared to YARA.
-  This is somewhat expected as optimizations was not the main focus in
-  development in early versions. Improving performances on all those cases
-  is now however the priority.
+  quality all tend to bring the performances closer to those of YARA.
+
+### Process scan on Linux:
+
+| Rules set \ File scanned                                                                             | containerd (71MB resident, 207MB scanned) | alacritty (110MB resident, 465MB scanned) |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| [orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 456 ms (-55%)                             | 2.02 s (-10%)                             |
+| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 517 ms (-47%)                             | 2.19 s (+1.6%)                            |
+| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 511 ms (-53%)                             | 2.26 s (-17%)                             |
+| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 925 ms  (+7%)                             | 1.92 s (-1.9%)                            |
+| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 4.19 s (+13%)                             | 83 s   (+52%)                             |
+| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | 517 ms (-40%)                             | 1.98 s (+1.1%)                            |
+| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 1.99 s (+35%)                             | 4.73 s (-4.7%)                            |
 
 ## Memory usage:
 
