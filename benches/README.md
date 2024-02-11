@@ -50,6 +50,18 @@ A few observations:
 | [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | 517 ms (-40%)                             | 1.98 s (+1.1%)                            |
 | [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 1.99 s (+35%)                             | 4.73 s (-4.7%)                            |
 
+### Process scan on Windows:
+
+| Rules set \ Process scanned                                                                          | chrome.exe (295MB private, 900MB scanned) | WavesSvc64.exe (217MB , 298MB scanned) |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------- |
+| [orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 2.30 s (-55%)                             | 931 ms (-73%)              |
+| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 2.50 s (-51%)                             | 1.05 s (-63%)              |
+| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 2.83 s (-71%)                             | 1.35 s (-86%)              |
+| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 1.82 s (-56%)                             | 661 ms (-65%)              |
+| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             |  107 s  (+7%)                             | 13.4 s (-11%)              |
+| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | 2.46 s (-60%)                             | 1.01 s (-77%)              |
+| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 7.40 s (-75%)                             | 3.44 s (-88%)              |
+
 ## Memory usage:
 
 | rules set      | boreal  | yara   |
