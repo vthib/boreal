@@ -81,7 +81,7 @@ jobs:
       with:
         appendedCacheKey: ${{matrix.vcpkg_triplet}}
         vcpkgDirectory: '${{ runner.workspace }}/vcpkg'
-        vcpkgGitCommitId: '163fe7bd3d67c41200617caaa245b5ba2ba854e6'
+        vcpkgGitCommitId: '4cac260c4b7331538d31886f57739fea0bffa27e'
         runVcpkgInstall: true
 
     - name: Export VCPKGRS_TRIPLET and OPENSSL_DIR env var
