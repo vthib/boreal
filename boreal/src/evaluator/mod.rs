@@ -43,7 +43,7 @@ use crate::scanner::ScanData;
 use memchr::memmem;
 
 use crate::compiler::ExternalValue;
-use crate::module::{ModuleDataMap, Value as ModuleValue};
+use crate::module::Value as ModuleValue;
 
 mod error;
 pub use error::EvalError;
@@ -101,16 +101,6 @@ impl From<ExternalValue> for Value {
             ExternalValue::Boolean(v) => Value::Boolean(v),
         }
     }
-}
-
-/// Data related to modules used for evaluation.
-#[derive(Debug)]
-pub struct ModulesData<'a> {
-    /// List of dynamic values per module.
-    pub dynamic_values: &'a [(&'static str, ModuleValue)],
-
-    /// Map of modules' private data.
-    pub data_map: &'a ModuleDataMap,
 }
 
 /// Evaluates an expression on a given byte slice.
@@ -989,10 +979,6 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits(Value::Integer(0));
-        test_type_traits_non_clonable(ModulesData {
-            dynamic_values: &[],
-            data_map: &ModuleDataMap::default(),
-        });
         test_type_traits_non_clonable(ForSelectionEvaluation::Value(Value::Integer(0)));
         test_type_traits_non_clonable(ForSelectionEvaluator::None);
         test_type_traits_non_clonable(PoisonKind::Undefined);
