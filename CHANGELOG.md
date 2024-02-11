@@ -5,6 +5,80 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2024-02-11
+
+This release introduces process memory scanning, implemented on Windows, Linux and macOS. In addition,
+different modes of scanning are available, documenting the exact semantics of scanning a process memory.
+This allows picking a mode that is less surpresing and faster than the default mode which reproduces
+YARA's behavior. See [`FragmentedScanMode`](https://docs.rs/boreal/latest/boreal/scanner/struct.FragmentedScanMode.html) for more details,
+as well as the updated [updated benchmarks](/benches/README.md).
+
+In addition, an API to scan fragmented memory is now available. This is the API which is used during
+process scanning, and allows custom handling of which memory blocks to scan.
+
+Finally, a few additional features have been added, including an API to mmap files to scan, and the ability
+to get partial results when the scanning fails, for example due to a timeout.
+
+### boreal
+
+#### Added
+
+- Process scanning API on linux, windows [#88](https://github.com/vthib/boreal/pull/88) and macOS [#110](https://github.com/vthib/boreal/pull/110).
+- Different scanning modes for fragmented memory, including process memory [#101](https://github.com/vthib/boreal/pull/101)
+- New `memmap` feature exposing API to open files to scan using `mmap`/`MapViewOfFile` [#76](https://github.com/vthib/boreal/pull/76)
+- New `process` feature exposing API to scan process memory [#97](https://github.com/vthib/boreal/pull/97)
+- Implementation of `console` module [fe89efb](https://github.com/vthib/boreal/commit/fe89efb299c0711c70d16f2fae8a795efd26098a)
+- Add fragmented memory handling API [#82](https://github.com/vthib/boreal/pull/82)
+- Add `ScanError` and return Result in scanning API [#83](https://github.com/vthib/boreal/pull/83)
+
+#### Changed:
+
+Public API:
+
+- Update MSRV to 1.65 [1d5b005](https://github.com/vthib/boreal/commit/1d5b005297f4e5a7e54f079dfdcbd4100465f460)
+
+Internal API:
+
+- Rework raw variables matching [#77](https://github.com/vthib/boreal/pull/77)
+- Compute match details on match [#78](https://github.com/vthib/boreal/pull/78)
+- Simplify module evaluation [#80](https://github.com/vthib/boreal/pull/80)
+- Rework internal Scanner/Evaluator API [#81](https://github.com/vthib/boreal/pull/81)
+- Handle access to memory split in multiple fragments in modules [#103](https://github.com/vthib/boreal/pull/103)
+
+CI:
+
+- Add macos 12 x64 tests in CI [#109](https://github.com/vthib/boreal/pull/109)
+- Add tests related to process scanning [#111](https://github.com/vthib/boreal/pull/111)
+
+### boreal-cli
+
+#### Added
+
+- Handling of many flags to mirror the yara CLI tool [#102](https://github.com/vthib/boreal/pull/102).
+
+  - `--scan-list` to specify a file listing the files to scan [9982c15](https://github.com/vthib/boreal/commit/9982c15f4a211d5c79a5c18a3cbb7bae24873a2b)
+  - `-d` to define external symbols [c584d6a](https://github.com/vthib/boreal/commit/c584d6ae75258b5470dba462210753082e99c639)
+  - `-e` to print the namespace of matching rules [4485352](https://github.com/vthib/boreal/commit/44853529afc99996681b7e05d9fab2a1ead635c8)
+  - `-w` to disable warnings [f9077bf](https://github.com/vthib/boreal/commit/f9077bf1c7fa36629cbfbb5353138e9576c22092)
+  - `-a` to specify a timeout [183d430](https://github.com/vthib/boreal/commit/183d430569b8b30a09dd4e031bb9e5d46ee635c5)
+  - `-m` to print metadatas of matching rules [d44cfef](https://github.com/vthib/boreal/commit/d44cfefc555ad93338b53f0afde40b192de7dae7)
+  - `-i` to filter matching rules by name [25a35f8](https://github.com/vthib/boreal/commit/25a35f83feabf3b66812cc90d0137be4c73ae4c8)
+  - `--tag` to filter matching rules by tag in boreal-cli [cecaa7f](https://github.com/vthib/boreal/commit/cecaa7fad68ce13193bf9a65109cc7024137e897)
+  - `-q` to disable console logs [ce64391](https://github.com/vthib/boreal/commit/ce643914ea4b1e40ed6c2d1614e53431e23a64ab)
+  - `-g`, `-s` and `-L` to print details of the strings of matching rules [277f89f](https://github.com/vthib/boreal/commit/277f89f58ac488cb7a1ce3eaa5d82d252e664e3d)
+
+- Launching a process scan when argument is interpreted as a PID [#100](https://github.com/vthib/boreal/pull/100)
+
+- Flags to control process scanning behavior [#101](https://github.com/vthib/boreal/pull/101)
+
+  - `--max-process-memory-chunk` to control the size of the memory chunks to scan from the process memory.
+  - `--max-fetched-region-size` to control the maximum size of scanned chunks.
+  - `--fragmented-scan-mode` to control the mode of scanning, see doc on [`FragmentedScanMode`](https://docs.rs/boreal/latest/boreal/scanner/struct.FragmentedScanMode.html).
+
+#### Fixed
+
+- Prevent prints to be interleaved when using threads [8ef0b57](https://github.com/vthib/boreal/commit/8ef0b575eb4ff6980d9fa6774c2fba6d6f06a2d6)
+
 ## [0.3.1] - 2023-12-11
 
 ### Boreal
@@ -191,6 +265,9 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/vthib/boreal/releases/tag/v0.2.0
+[unreleased]: https://github.com/vthib/boreal/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/vthib/boreal/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/vthib/boreal/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/vthib/boreal/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/vthib/boreal/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vthib/boreal/releases/tag/v0.1.0
