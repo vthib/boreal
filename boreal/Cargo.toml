@@ -10,6 +10,7 @@ categories = ["text-processing"]
 edition = "2021"
 # MSRV
 rust-version = "1.65"
+exclude = ["/tests"]
 
 [features]
 default = ["hash", "object", "memmap", "process"]
