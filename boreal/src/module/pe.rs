@@ -1347,6 +1347,7 @@ impl Pe {
                 let _r = map.insert("signatures", Value::Array(signatures));
             } else {
                 let _r = map.insert("number_of_signatures", Value::Integer(0));
+                let _r = map.insert("is_signed", Value::Integer(0));
             }
         }
 
