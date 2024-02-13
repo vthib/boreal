@@ -425,22 +425,14 @@ fn test_variable_regex_wide_word_boundaries() {
     let mut checker = build_checker(r"\b", "wide");
     checker.check(b"", false);
     checker.check(b"\0", false);
-    // This one has different behavior from libyara. Does it matter? no, no-one will every use
-    // this regex.
-    checker.check_boreal(b"a\0", true);
-    checker.check_libyara(b"a\0", false);
+    checker.check(b"a\0", true);
     checker.check(b"\0a", false);
 
     let mut checker = build_checker(r"\B", "wide");
     checker.check(b"", false);
-    // These ones have different behavior from libyara. Does it matter? no, no-one will every use
-    // this regex.
-    checker.check_boreal(b"\0", true);
-    checker.check_libyara(b"\0", false);
-    checker.check_boreal(b"a\0", true);
-    checker.check_libyara(b"a\0", false);
-    checker.check_boreal(b"\0a", true);
-    checker.check_libyara(b"\0a", false);
+    checker.check(b"\0", true);
+    checker.check(b"a\0", true);
+    checker.check(b"\0a", true);
 
     // Check word boundary at start
     let mut checker = build_checker(r"\ba+", "wide");

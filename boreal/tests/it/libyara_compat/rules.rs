@@ -3193,8 +3193,10 @@ fn test_re() {
     check(&build_regex_rule("^(ab|cd)e"), b"abcde", false);
     check_regex_match("(abc|)ef", b"abcdef", b"ef");
     check_regex_match("(abc|)ef", b"abcef", b"abcef");
+    check_regex_match("(abc|)", b"foo", b"");
     check_regex_match("\\babc", b"abc", b"abc");
     check_regex_match("abc\\b", b"abc", b"abc");
+    check_regex_match("\\b", b"abc", b"");
     check(&build_regex_rule("\\babc"), b"1abc", false);
     check(&build_regex_rule("abc\\b"), b"abc1", false);
     check_regex_match("abc\\s\\b", b"abc x", b"abc ");
