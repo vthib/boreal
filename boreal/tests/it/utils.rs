@@ -347,14 +347,6 @@ impl Checker {
     }
 
     #[track_caller]
-    pub fn check_libyara(&self, mem: &[u8], expected_res: bool) {
-        if let Some(rules) = &self.yara_rules {
-            let res = !rules.scan_mem(mem, 1).unwrap().is_empty();
-            assert_eq!(res, expected_res, "conformity test failed for libyara");
-        }
-    }
-
-    #[track_caller]
     pub fn check_str_has_match(&mut self, mem: &[u8], expected_match: &[u8]) {
         let res = self.scan_mem(mem);
         let mut found = false;
