@@ -3253,6 +3253,8 @@ fn test_re() {
     check(&build_regex_rule("(bc+d$|ef*g.|h?i(j|k))"), b"effg", false);
     check(&build_regex_rule("(bc+d$|ef*g.|h?i(j|k))"), b"bcdd", false);
     check_regex_match("(bc+d$|ef*g.|h?i(j|k))", b"reffgz", b"effgz");
+    check_regex_match("abcx{0,0}", b"abcx", b"abc");
+    check_regex_match("abcx{0}", b"abcx", b"abc");
 
     // Test case for issue #324
     check_regex_match("whatever|   x.   x", b"   xy   x", b"   xy   x");
@@ -3266,10 +3268,6 @@ fn test_re() {
         &build_regex_rule("\\x"),
         "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string"
     );
-
-    // XXX: not allowed by libyara, ok for us, this is fine
-    // check_err(&build_regex_rule("x{0,0}"), "z");
-    // check_err(&build_regex_rule("x{0}"), "z");
 
     check_err(
         &build_regex_rule("\\xxy"),
