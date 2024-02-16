@@ -66,7 +66,7 @@ tlsh2 = { version = "0.3", optional = true }
 object = { version = "0.32", optional = true, default-features = false, features = ["read"] }
 
 # "authenticode" feature
-authenticode-parser = { version = "0.3", optional = true }
+authenticode-parser = { version = "0.5", optional = true }
 
 # "memmap" feature
 memmap2 = { version = "0.9", optional = true }
