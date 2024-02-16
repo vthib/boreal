@@ -8,4 +8,4 @@ publish = false
 
 [dependencies]
 memmap2 = "0.9"
-tempfile = "3.8"
+tempfile = "3.10"
