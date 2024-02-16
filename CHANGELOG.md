@@ -5,19 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2024-02-16
 
-Yara 4.5:
+This release mainly consists of Yara 4.5 compatibility features and fixes:
+
+### boreal
+
+#### Added:
+
+YARA 4.5 support:
 
 - New Warning on unknown escape sequences in regexes. See [PR #68](https://github.com/vthib/boreal/pull/68).
-  This warning is however more broad than the YARA one.
-- Do not report strings whose name starts with `_` as unused.
-- Add `pe.export_details[*].rva` field.
+  This warning is more broad than the YARA one from YARA 4.5.
+- always expose `pe.is_signed` [97d1d11](https://github.com/vthib/boreal/commit/97d1d11b8a30980906f1aa01e88da70d0fbd4da8)
+- Do not report strings whose name starts with `_` as unused [1a8a8cd](https://github.com/vthib/boreal/commit/1a8a8cdf32dbde114afeb7cd558a62efe8d9527f)
+- Add `pe.export_details[*].rva` field [7597d3f](https://github.com/vthib/boreal/commit/7597d3f6a227f9b45efa58562fb38a8722125bc2)
 - `math.count` and `math.percentage` now returns an undefined value when given a
-  value outside the `[0; 255]` range.
-- Imported dlls are ignored if the dll name is longer than 255 bytes.
-- Fix endianness issue in `macho.magic` field, see the [Yara fix](https://github.com/VirusTotal/yara/pull/2041).
-- Always expose `pe.is_signed` as long as the `authenticode` feature is enabled.
+  value outside the `[0; 255]` range. [6a09ed2](https://github.com/vthib/boreal/commit/6a09ed23f61be1a0ff7d08a8ad00216fa5c05856)
+- Imported dlls are ignored if the dll name is longer than 255 bytes [28f8626](https://github.com/vthib/boreal/commit/28f86267f9ed39fd7c5f2826d89796665bb7bda5)
+- Fix endianness issue in `macho.magic` field, see the [Yara fix](https://github.com/VirusTotal/yara/pull/2041) [50d418d](https://github.com/vthib/boreal/commit/50d418d1d40fb2d6cc61d34d1d813a8e7b373783)
+- filter imported functions with invalid name in pe module [5a0cb4e](https://github.com/vthib/boreal/commit/5a0cb4e22c24c6101e42cb9ae3f21377c7c47500)
+- bump limit on number of listed export symbols in pe module to 16384 [98032b3](https://github.com/vthib/boreal/commit/98032b3d23b41650e84a5c56f594f33d8bbad8d4)
+
+#### Changed:
+
+- crc32-fast dependency updated to 1.4 [f1ae01a](https://github.com/vthib/boreal/commit/f1ae01af06b773e5dd3038199ccbcf3e57c67ed7)
+- authenticode-parser dependency updated [e68dde7](https://github.com/vthib/boreal/commit/e68dde73a74b1a7c8e4a4e4939d86bfb0546e577)
+
+#### Fixed:
+
+- Exclude test assets in package [24ca838](https://github.com/vthib/boreal/commit/24ca83801b34b8e959d7c1bc11022409f1e9230d).
+  This avoids having the package be flagged by antiviruses, as unfortunately, some of the binaries copied from the yara repository
+  and used for testing seems trigger false positives.
 
 ## [0.4.0] - 2024-02-11
 
@@ -279,7 +298,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v0.4.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/vthib/boreal/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vthib/boreal/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/vthib/boreal/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/vthib/boreal/compare/v0.2.0...v0.3.0
