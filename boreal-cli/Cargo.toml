@@ -45,5 +45,5 @@ walkdir = "2.4"
 [dev-dependencies]
 # Testing for the CLI
 assert_cmd = "2.0"
-tempfile = "3.8"
+tempfile = "3.10"
 predicates = { version = "3.0", default-features = false, features = ["regex"] }
