@@ -184,6 +184,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
     .into();
 
     add_guids(&metadata, &mut res);
+    add_user_strings(&metadata, &mut res);
 
     // TODO
 
@@ -197,8 +198,6 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
         ("assembly", Value::Undefined),
         ("modulerefs", Value::Undefined),
         ("number_of_modulerefs", Value::Undefined),
-        ("user_strings", Value::Undefined),
-        ("number_of_user_strings", Value::Undefined),
         ("typelib", Value::Undefined),
         ("constants", Value::Undefined),
         ("number_of_constants", Value::Undefined),
@@ -209,20 +208,12 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
 }
 
 fn add_guids(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Value>) {
-    // Search for guid stream
-    let Some(guid_stream) = metadata
-        .streams()
-        .filter_map(Result::ok)
-        .find(|stream| stream.name == b"#GUID")
-    else {
+    let Some(stream_data) = metadata.get_stream(b"#GUID") else {
         return;
     };
 
-    let Ok(stream_data) = metadata.get(u64::from(guid_stream.offset), guid_stream.size as usize)
-    else {
-        return;
-    };
-
+    // The stream data is a sequence of GUIDS.
+    // See ECMA 335 II.24.2.5
     let nb_guids = stream_data.len() / 16;
     let guids = stream_data
         .chunks_exact(16)
@@ -242,9 +233,74 @@ fn add_guids(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Value>) {
         .collect();
 
     res.extend([
-        ("number_of_guids", i64::try_from(nb_guids).ok().into()),
+        ("number_of_guids", nb_guids.into()),
         ("guids", Value::Array(guids)),
     ]);
+}
+
+fn add_user_strings(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Value>) {
+    let Some(stream_data) = metadata.get_stream(b"#US") else {
+        return;
+    };
+
+    // See ECMA 335 II.24.2.4
+    // The stream data is a sequence of UTF-16 unicode strings with some special encoding.
+    let mut strings = Vec::new();
+    let mut bytes = Bytes(stream_data);
+    // Skip the "empty" blob.
+    let _ = bytes.skip(1);
+    while let Some(v) = read_user_string(&mut bytes) {
+        // XXX: the yara module seems to ignore strings if they are empty.
+        if !v.is_empty() {
+            strings.push(Value::bytes(v));
+        }
+    }
+
+    res.extend([
+        ("number_of_user_strings", strings.len().into()),
+        ("user_strings", Value::Array(strings)),
+    ]);
+}
+
+fn read_user_string<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
+    // See II.24.2.4 in ECMA 335 for details on the encoding.
+
+    // The first part, is the length.
+    // It is either encoded in one byte, two bytes or four bytes.
+    let length = {
+        fn get_byte(bytes: &mut Bytes) -> Option<u8> {
+            let b = bytes.0.first()?;
+            let _ = bytes.skip(1);
+            Some(*b)
+        }
+
+        let a = get_byte(bytes)?;
+        if a & 0x80 == 0 {
+            a as usize
+        } else if a & 0xC0 == 0x80 {
+            let a = a & 0x4F;
+            let b = get_byte(bytes)?;
+
+            ((a as usize) << 8) | (b as usize)
+        } else if a & 0xE0 == 0xC0 {
+            let a = a & 0x1F;
+            let b = get_byte(bytes)?;
+            let c = get_byte(bytes)?;
+            let d = get_byte(bytes)?;
+
+            ((a as usize) << 24) | ((b as usize) << 16) | ((c as usize) << 8) | (d as usize)
+        } else {
+            return None;
+        }
+    };
+
+    // The length is the number of bytes and not of utf-16 characters. However, it includes the
+    // additional byte that we do not care about, so ignore it
+    let length = length.checked_sub(1)?;
+    let string = bytes.read_slice(length).ok()?;
+    // Skip the additional byte, we do not care about it.
+    bytes.skip(1).ok()?;
+    Some(string)
 }
 
 fn get_streams(metadata: &MetadataRoot, metadata_root_offset: u64) -> Vec<Value> {
@@ -383,8 +439,15 @@ impl<'data> MetadataRoot<'data> {
         }
     }
 
-    fn get(&self, offset: u64, size: usize) -> Result<&'data [u8], ()> {
-        self.data.read_slice_at(offset, size)
+    fn get_stream(&self, name: &[u8]) -> Option<&'data [u8]> {
+        let stream = self
+            .streams()
+            .filter_map(Result::ok)
+            .find(|stream| stream.name == name)?;
+
+        self.data
+            .read_slice_at(u64::from(stream.offset), stream.size as usize)
+            .ok()
     }
 }
 
