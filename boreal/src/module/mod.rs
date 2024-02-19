@@ -63,14 +63,21 @@ mod hash;
 pub use hash::Hash;
 
 #[cfg(feature = "object")]
+mod dotnet;
+#[cfg(feature = "object")]
+pub use dotnet::Dotnet;
+
+#[cfg(feature = "object")]
 // pub to allow use of the entry_point for the entrypoint expression.
 pub(crate) mod elf;
 #[cfg(feature = "object")]
 pub use elf::Elf;
+
 #[cfg(feature = "object")]
 mod macho;
 #[cfg(feature = "object")]
 pub use macho::MachO;
+
 #[cfg(feature = "object")]
 mod pe;
 #[cfg(feature = "object")]
