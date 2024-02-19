@@ -169,41 +169,82 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
         .into();
     let metadata = cli_header.metadata(mem, &sections).ok()?;
 
-    Some(
-        [
-            ("is_dotnet", Value::Integer(1)),
-            ("version", Value::bytes(metadata.version)),
-            ("module_name", Value::Undefined),
-            (
-                "streams",
-                Value::Array(get_streams(&metadata, metadata_root_offset)),
-            ),
-            (
-                "number_of_streams",
-                Value::Integer(metadata.number_of_streams.into()),
-            ),
-            // TODO
-            ("guids", Value::Undefined),
-            ("number_of_guids", Value::Undefined),
-            ("resources", Value::Undefined),
-            ("number_of_resources", Value::Undefined),
-            ("classes", Value::Undefined),
-            ("number_of_classes", Value::Undefined),
-            ("assembly_refs", Value::Undefined),
-            ("number_of_assembly_refs", Value::Undefined),
-            ("assembly", Value::Undefined),
-            ("modulerefs", Value::Undefined),
-            ("number_of_modulerefs", Value::Undefined),
-            ("user_strings", Value::Undefined),
-            ("number_of_user_strings", Value::Undefined),
-            ("typelib", Value::Undefined),
-            ("constants", Value::Undefined),
-            ("number_of_constants", Value::Undefined),
-            ("field_offsets", Value::Undefined),
-            ("number_of_field_offsets", Value::Undefined),
-        ]
-        .into(),
-    )
+    let streams = get_streams(&metadata, metadata_root_offset);
+
+    let mut res: HashMap<&'static str, Value> = [
+        ("is_dotnet", Value::Integer(1)),
+        ("version", Value::bytes(metadata.version)),
+        ("module_name", Value::Undefined),
+        ("streams", Value::Array(streams)),
+        (
+            "number_of_streams",
+            Value::Integer(metadata.number_of_streams.into()),
+        ),
+    ]
+    .into();
+
+    add_guids(&metadata, &mut res);
+
+    // TODO
+
+    res.extend([
+        ("resources", Value::Undefined),
+        ("number_of_resources", Value::Undefined),
+        ("classes", Value::Undefined),
+        ("number_of_classes", Value::Undefined),
+        ("assembly_refs", Value::Undefined),
+        ("number_of_assembly_refs", Value::Undefined),
+        ("assembly", Value::Undefined),
+        ("modulerefs", Value::Undefined),
+        ("number_of_modulerefs", Value::Undefined),
+        ("user_strings", Value::Undefined),
+        ("number_of_user_strings", Value::Undefined),
+        ("typelib", Value::Undefined),
+        ("constants", Value::Undefined),
+        ("number_of_constants", Value::Undefined),
+        ("field_offsets", Value::Undefined),
+        ("number_of_field_offsets", Value::Undefined),
+    ]);
+    Some(res)
+}
+
+fn add_guids(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Value>) {
+    // Search for guid stream
+    let Some(guid_stream) = metadata
+        .streams()
+        .filter_map(Result::ok)
+        .find(|stream| stream.name == b"#GUID")
+    else {
+        return;
+    };
+
+    let Ok(stream_data) = metadata.get(u64::from(guid_stream.offset), guid_stream.size as usize)
+    else {
+        return;
+    };
+
+    let nb_guids = stream_data.len() / 16;
+    let guids = stream_data
+        .chunks_exact(16)
+        .map(|g| {
+            // ECMA 335 does not, afaict, define how GUID are stored. It tends to be
+            // parsed as a u32-u16-u16-u8[8] object, so lets parse it as such.
+            let a = u32::from_le_bytes([g[0], g[1], g[2], g[3]]);
+            let b = u16::from_le_bytes([g[4], g[5]]);
+            let c = u16::from_le_bytes([g[6], g[7]]);
+            let guid = format!(
+                "{:08x}-{:04x}-{:04x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                a, b, c, g[8], g[9], g[10], g[11], g[12], g[13], g[14], g[15],
+            );
+
+            Value::Bytes(guid.into_bytes())
+        })
+        .collect();
+
+    res.extend([
+        ("number_of_guids", i64::try_from(nb_guids).ok().into()),
+        ("guids", Value::Array(guids)),
+    ]);
 }
 
 fn get_streams(metadata: &MetadataRoot, metadata_root_offset: u64) -> Vec<Value> {
@@ -295,24 +336,25 @@ struct MetadataRoot<'data> {
     version: &'data [u8],
     _flags: u16,
     number_of_streams: u16,
-    streams_data: &'data [u8],
+    streams_data: Bytes<'data>,
+    data: &'data [u8],
 }
 
 impl<'data> MetadataRoot<'data> {
     fn parse(data: &'data [u8]) -> Result<Self, &'static str> {
-        let mut data = Bytes(data);
+        let mut bytes = Bytes(data);
 
-        let header = *data
+        let header = *bytes
             .read::<MetadataRootHeader>()
             .map_err(|()| "Cannot read metadata root header")?;
-        let version = data
+        let version = bytes
             .read_slice(header.length.get(LE) as usize)
             .map_err(|()| "Cannot read metadata root version")?;
-        let flags = data
+        let flags = bytes
             .read::<U16<LE>>()
             .map_err(|()| "Cannot read metadata root flags")?
             .get(LE);
-        let number_of_streams = data
+        let number_of_streams = bytes
             .read::<U16<LE>>()
             .map_err(|()| "Cannot read number of streams")?
             .get(LE);
@@ -329,15 +371,20 @@ impl<'data> MetadataRoot<'data> {
             version: &version[..null_pos],
             _flags: flags,
             number_of_streams,
-            streams_data: data.0,
+            streams_data: bytes,
+            data,
         })
     }
 
     fn streams(&self) -> StreamIterator {
         StreamIterator {
             nb_streams_left: self.number_of_streams,
-            data: Bytes(self.streams_data),
+            data: self.streams_data,
         }
+    }
+
+    fn get(&self, offset: u64, size: usize) -> Result<&'data [u8], ()> {
+        self.data.read_slice_at(offset, size)
     }
 }
 
