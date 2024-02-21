@@ -185,6 +185,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
 
     add_guids(&metadata, &mut res);
     add_user_strings(&metadata, &mut res);
+    add_metadata_tables(&metadata, &mut res);
 
     // TODO
 
@@ -262,6 +263,350 @@ fn add_user_strings(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Val
     ]);
 }
 
+fn add_metadata_tables(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Value>) {
+    let Some(stream_data) = metadata.get_stream(b"#~") else {
+        return;
+    };
+
+    // See ECMA 335 II.24.2.6
+    let mut bytes = Bytes(stream_data);
+    let Ok(header) = bytes.read::<MetadataStreamHeader>() else {
+        return;
+    };
+
+    // After the header, there is 'n' u32 values, where n is the number of table kinds.
+    let valid = header.valid.get(LE);
+    let nb_table_kinds = valid.count_ones();
+    let rows = match bytes.read_bytes((nb_table_kinds as usize) * 4) {
+        Ok(v) => v.0,
+        Err(()) => return,
+    };
+
+    let mut tables_data = TablesData::new(bytes, header.heap_sizes);
+
+    // First, set the index sizes in tables_data, which depends on the number
+    // of tables of different kinds.
+    // Technically, a table B with an index into table A seems to always have
+    // an index greater than the index of table A. So, we could probably parse
+    // rows directly and store those sizes as they come. I'd rather be safe though,
+    // and properly set those in advance.
+    for (nb_tables, table_index) in TablesIterator::new(valid, rows) {
+        tables_data.set_table_index_size(table_index, nb_tables);
+    }
+
+    // We can now parse the tables
+    for (nb_tables, table_index) in TablesIterator::new(valid, rows) {
+        for _ in 0..nb_tables {
+            if tables_data.parse_table(table_index, res).is_err() {
+                return;
+            }
+        }
+    }
+}
+
+struct TablesIterator<'data> {
+    valid: u64,
+    rows: &'data [u8],
+    rows_index: usize,
+    current_index: u8,
+}
+
+impl<'data> TablesIterator<'data> {
+    fn new(valid: u64, rows: &'data [u8]) -> Self {
+        Self {
+            valid,
+            rows,
+            current_index: 0,
+            rows_index: 0,
+        }
+    }
+}
+
+impl Iterator for TablesIterator<'_> {
+    type Item = (u32, u8);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.current_index < 64 {
+            let i = self.current_index;
+            self.current_index += 1;
+
+            if self.valid & (1 << i) == 0 {
+                continue;
+            }
+
+            // Get the number of tables of this kind from the rows field.
+            let nb_tables = u32::from_le_bytes([
+                self.rows[self.rows_index],
+                self.rows[self.rows_index + 1],
+                self.rows[self.rows_index + 2],
+                self.rows[self.rows_index + 3],
+            ]);
+            self.rows_index += 4;
+
+            return Some((nb_tables, i));
+        }
+        None
+    }
+}
+
+struct TablesData<'data> {
+    data: Bytes<'data>,
+
+    // These values are the size of indexes used in tables.
+    // They are either equal to 2 or 4.
+    string_index_size: u8,
+    guid_index_size: u8,
+    blob_index_size: u8,
+    field_index_size: u8,
+    assembly_ref_index_size: u8,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum IndexKind {
+    String,
+    Guid,
+    Blob,
+}
+
+impl<'data> TablesData<'data> {
+    fn new(data: Bytes<'data>, heap_sizes: u8) -> Self {
+        // Get index sizes for indexing in other streams
+        let wide_string_index = heap_sizes & 0x01 != 0;
+        let wide_guid_index = heap_sizes & 0x02 != 0;
+        let wide_blob_index = heap_sizes & 0x04 != 0;
+
+        Self {
+            data,
+            string_index_size: if wide_string_index { 4 } else { 2 },
+            guid_index_size: if wide_guid_index { 4 } else { 2 },
+            blob_index_size: if wide_blob_index { 4 } else { 2 },
+
+            // Those sizes will be set properly by the `set_table_index_size` call.
+            field_index_size: 2,
+            assembly_ref_index_size: 2,
+        }
+    }
+
+    fn set_table_index_size(&mut self, table_index: u8, nb_tables: u32) {
+        if nb_tables < (1 << 16) {
+            // Values are initialized to the default size (2 bytes), we only
+            // need to fix them if the indexes are wide
+            return;
+        }
+
+        match table_index {
+            0x04 => self.field_index_size = 4,
+            0x23 => self.assembly_ref_index_size = 4,
+            _ => (),
+        }
+    }
+    // Parse a table of the given index code.
+    //
+    // If Err is returned, the end of the data has been reached and nothing more can be read.
+    fn parse_table(
+        &mut self,
+        table_index: u8,
+        res: &mut HashMap<&'static str, Value>,
+    ) -> Result<(), ()> {
+        match table_index {
+            // Module, see II.22.30
+            0x00 => self.skip(2 + self.string_index_size + 3 * self.guid_index_size),
+            // TypeRef, see II.22.38
+            0x01 => todo!(),
+            // TypeDef, see II.22.37
+            0x02 => todo!(),
+            // Field, see II.22.15
+            0x04 => self.skip(2 + self.string_index_size + self.blob_index_size),
+            // MethodDef, see II.22.26
+            0x06 => todo!(),
+            // Param, see II.22.33
+            0x08 => self.skip(4 + self.string_index_size),
+            // InterfaceImpl, see II.22.23
+            0x09 => todo!(),
+            // MemberRef, see II.22.25
+            0x0A => todo!(),
+            // Constant, see II.22.9
+            0x0B => todo!(),
+            // CustomAttribute, see II.22.10
+            0x0C => todo!(),
+            // FieldMarshall, see II.22.17
+            0x0D => todo!(),
+            // DeclSecurity, see II.22.11
+            0x0E => todo!(),
+            // ClassLayout, see II.22.8
+            0x0F => todo!(),
+            // FieldLayout, see II.22.16
+            0x10 => self.skip(4 + self.field_index_size),
+            // StandAloneSig, see II.22.36
+            0x11 => self.skip(self.blob_index_size),
+            // EventMap, see II.22.12
+            0x12 => todo!(),
+            // Event, see II.22.13
+            0x14 => todo!(),
+            // PropertyMap, see II.22.35
+            0x15 => todo!(),
+            // Property, see II.22.34
+            0x17 => self.skip(2 + self.string_index_size + self.blob_index_size),
+            // MethodSemantics, see II.22.28
+            0x18 => todo!(),
+            // MethodImpl, see II.22.27
+            0x19 => todo!(),
+            // ModuleRef, see II.22.31
+            0x1A => self.skip(self.string_index_size),
+            // TypeSpec, see II.22.39
+            0x1B => self.skip(self.blob_index_size),
+            // ImplMap, see II.22.22
+            0x1C => todo!(),
+            // FieldRVA, see II.22.18
+            0x1D => self.skip(4 + self.field_index_size),
+            // Assembly, see II.22.2
+            0x20 => self.parse_assembly_table(res),
+            // Assembly Processor, see II.22.4
+            0x21 => self.skip(4),
+            // Assembly OS, see II.22.3
+            0x22 => self.skip(12),
+            // Assembly Ref, see II.22.5
+            0x23 => self.parse_assembly_ref_table(res),
+            // Assembly Ref Processor, see II.22.7
+            0x24 => self.skip(4 + self.assembly_ref_index_size),
+            // Assembly Ref OS, see II.22.6
+            0x25 => self.skip(12 + self.assembly_ref_index_size),
+            // File, see II.22.19
+            0x26 => self.skip(4 + self.string_index_size + self.blob_index_size),
+            // ExportedType, see II.22.14
+            0x27 => todo!(),
+            // ManifestResource, see II.22.24
+            0x28 => todo!(),
+            // NestedClass, see II.22.32
+            0x29 => todo!(),
+            // GenericParam, see II.22.20
+            0x2A => todo!(),
+            // MethodSpec, see II.22.29
+            0x2B => todo!(),
+            // GenericParamConstraint, see II.22.21
+            0x2C => todo!(),
+            _ => {
+                // We are matching an unknown table. This means we are no longer to parse
+                // anything, since we do not know the size of this table, and can't parse the
+                // rest. We thus abort the parsing.
+                Err(())
+            }
+        }
+    }
+
+    // ECMA 335, II.22.2
+    fn parse_assembly_table(&mut self, res: &mut HashMap<&'static str, Value>) -> Result<(), ()> {
+        self.skip(4)?; // hash_alg_id
+        let major_version = self.read_u16()?;
+        let minor_version = self.read_u16()?;
+        let build_number = self.read_u16()?;
+        let revision_number = self.read_u16()?;
+        self.skip(4)?; // flags
+        self.skip_index(IndexKind::Blob)?; // public key
+        let _name = self.read_index(IndexKind::String)?;
+        let _culture = self.read_index(IndexKind::String)?;
+
+        res.extend([(
+            "assembly",
+            Value::object([
+                (
+                    "version",
+                    Value::object([
+                        ("major", major_version.into()),
+                        ("minor_version", minor_version.into()),
+                        ("build_number", build_number.into()),
+                        ("revision_number", revision_number.into()),
+                    ]),
+                ),
+                // TODO
+                ("name", Value::Undefined),
+                ("culture", Value::Undefined),
+            ]),
+        )]);
+        Ok(())
+    }
+
+    // ECMA 335, II.22.5
+    fn parse_assembly_ref_table(
+        &mut self,
+        res: &mut HashMap<&'static str, Value>,
+    ) -> Result<(), ()> {
+        let major_version = self.read_u16()?;
+        let minor_version = self.read_u16()?;
+        let build_number = self.read_u16()?;
+        let revision_number = self.read_u16()?;
+        self.skip(4)?; // flags
+        let _public_key_or_token = self.read_index(IndexKind::Blob)?;
+        let _name = self.read_index(IndexKind::String)?;
+        self.skip_index(IndexKind::String)?; // culture
+        self.skip_index(IndexKind::Blob)?; // hash value
+
+        let len = match res
+            .entry("assembly_refs")
+            .or_insert_with(|| Value::Array(Vec::new()))
+        {
+            Value::Array(vec) => {
+                vec.push(Value::object([
+                    (
+                        "version",
+                        Value::object([
+                            ("major", major_version.into()),
+                            ("minor_version", minor_version.into()),
+                            ("build_number", build_number.into()),
+                            ("revision_number", revision_number.into()),
+                        ]),
+                    ),
+                    // TODO
+                    ("public_key_or_token", Value::Undefined),
+                    ("name", Value::Undefined),
+                ]));
+                vec.len()
+            }
+            // Safety: the "assembly_refs" key can only contain a Value::Array by construction
+            // in this module.
+            _ => unreachable!(),
+        };
+        let _ = res.insert("number_of_assembly_refs", len.into());
+
+        Ok(())
+    }
+
+    fn skip(&mut self, nb_bytes: u8) -> Result<(), ()> {
+        self.data.skip(usize::from(nb_bytes))
+    }
+
+    #[inline(always)]
+    fn skip_index(&mut self, kind: IndexKind) -> Result<(), ()> {
+        self.skip(match kind {
+            IndexKind::String => self.string_index_size,
+            IndexKind::Guid => self.guid_index_size,
+            IndexKind::Blob => self.blob_index_size,
+        })
+    }
+
+    #[inline(always)]
+    fn read_index(&mut self, kind: IndexKind) -> Result<u32, ()> {
+        let size = match kind {
+            IndexKind::String => self.string_index_size,
+            IndexKind::Guid => self.guid_index_size,
+            IndexKind::Blob => self.blob_index_size,
+        };
+        if size == 4 {
+            self.read_u32()
+        } else {
+            self.read_u16().map(u32::from)
+        }
+    }
+
+    fn read_u16(&mut self) -> Result<u16, ()> {
+        self.data.read::<U16<LE>>().map(|v| v.get(LE))
+    }
+
+    fn read_u32(&mut self) -> Result<u32, ()> {
+        self.data.read::<U32<LE>>().map(|v| v.get(LE))
+    }
+}
+
 fn read_user_string<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
     // See II.24.2.4 in ECMA 335 for details on the encoding.
 
@@ -326,6 +671,25 @@ fn get_streams(metadata: &MetadataRoot, metadata_root_offset: u64) -> Vec<Value>
         })
         .collect()
 }
+
+/// Metadata stream header, as defined in ECMA 335 II.24.2.6
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct MetadataStreamHeader {
+    pub reserved: U32<LE>,
+    pub major_version: u8,
+    pub minor_version: u8,
+    pub heap_sizes: u8,
+    pub reserved2: u8,
+    pub valid: U64<LE>,
+    pub sorted: U64<LE>,
+}
+
+// Safety:
+// - MetadataStreamHeader is `#[repr(C)]`
+// - has no invalid byte values (all values are unsigned integers)
+// - has no padding
+unsafe impl Pod for MetadataStreamHeader {}
 
 /// CLI Header, as defined in ECMA 335 II.25.3.3
 #[derive(Debug, Clone, Copy)]
