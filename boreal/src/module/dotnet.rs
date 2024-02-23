@@ -247,10 +247,13 @@ fn add_user_strings(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Val
     let mut bytes = Bytes(stream_data);
     // Skip the "empty" blob.
     let _ = bytes.skip(1);
-    while let Some(v) = read_user_string(&mut bytes) {
+    while let Some(v) = read_blob(&mut bytes) {
         // XXX: the yara module seems to ignore strings if they are empty.
-        if !v.is_empty() {
-            strings.push(Value::bytes(v));
+        // Since there is an additional byte that we we filter, this means
+        // we want a blob that has at least two bytes (one valid, and the additional
+        // one).
+        if v.len() >= 2 {
+            strings.push(Value::bytes(&v[..(v.len() - 1)]));
         }
     }
 
@@ -264,6 +267,8 @@ fn add_metadata_tables(metadata: &MetadataRoot, res: &mut HashMap<&'static str, 
     let Some(stream_data) = metadata.get_stream(b"#~") else {
         return;
     };
+    let strings_stream = metadata.get_stream(b"#Strings");
+    let blobs_stream = metadata.get_stream(b"#Blob");
 
     // See ECMA 335 II.24.2.6
     let mut bytes = Bytes(stream_data);
@@ -301,7 +306,13 @@ fn add_metadata_tables(metadata: &MetadataRoot, res: &mut HashMap<&'static str, 
 
     // Build our parsing helper: this will hold the current cursor on
     // the data, as well as the sizes of all the indexes.
-    let mut tables_data = TablesData::new(bytes, &table_counts, header.heap_sizes);
+    let mut tables_data = TablesData::new(
+        bytes,
+        strings_stream,
+        blobs_stream,
+        &table_counts,
+        header.heap_sizes,
+    );
 
     // Then, parsing every table in order
     for table_index in 0..64 {
@@ -396,6 +407,11 @@ mod table_type {
 struct TablesData<'data> {
     data: Bytes<'data>,
 
+    // Contents of the string stream
+    strings_stream: Option<&'data [u8]>,
+    // Contents of the blob stream
+    blobs_stream: Option<&'data [u8]>,
+
     // The following values are the size of indexes used in tables.
     // They are either equal to 2 or 4.
 
@@ -432,7 +448,13 @@ struct TablesData<'data> {
 }
 
 impl<'data> TablesData<'data> {
-    fn new(data: Bytes<'data>, table_counts: &[u32; 64], heap_sizes: u8) -> Self {
+    fn new(
+        data: Bytes<'data>,
+        strings_stream: Option<&'data [u8]>,
+        blobs_stream: Option<&'data [u8]>,
+        table_counts: &[u32; 64],
+        heap_sizes: u8,
+    ) -> Self {
         // Get index sizes for indexing in other streams
         let wide_string_index = heap_sizes & 0x01 != 0;
         let wide_guid_index = heap_sizes & 0x02 != 0;
@@ -456,6 +478,9 @@ impl<'data> TablesData<'data> {
 
         Self {
             data,
+            strings_stream,
+            blobs_stream,
+
             string_index_size: if wide_string_index { 4 } else { 2 },
             guid_index_size: if wide_guid_index { 4 } else { 2 },
             blob_index_size: if wide_blob_index { 4 } else { 2 },
@@ -680,8 +705,8 @@ impl<'data> TablesData<'data> {
         let build_number = self.read_u16()?;
         let revision_number = self.read_u16()?;
         self.skip(4 + self.blob_index_size)?; // flags
-        let _name = self.read_index(self.string_index_size)?;
-        let _culture = self.read_index(self.string_index_size)?;
+        let name = self.read_string()?;
+        let culture = self.read_string()?;
 
         res.extend([(
             "assembly",
@@ -690,14 +715,13 @@ impl<'data> TablesData<'data> {
                     "version",
                     Value::object([
                         ("major", major_version.into()),
-                        ("minor_version", minor_version.into()),
+                        ("minor", minor_version.into()),
                         ("build_number", build_number.into()),
                         ("revision_number", revision_number.into()),
                     ]),
                 ),
-                // TODO
-                ("name", Value::Undefined),
-                ("culture", Value::Undefined),
+                ("name", name.map(Value::bytes).into()),
+                ("culture", culture.map(Value::bytes).into()),
             ]),
         )]);
         Ok(())
@@ -713,8 +737,8 @@ impl<'data> TablesData<'data> {
         let build_number = self.read_u16()?;
         let revision_number = self.read_u16()?;
         self.skip(4)?; // flags
-        let _public_key_or_token = self.read_index(self.blob_index_size)?;
-        let _name = self.read_index(self.string_index_size)?;
+        let public_key_or_token = self.read_blob()?;
+        let name = self.read_string()?;
         self.skip(self.string_index_size + self.blob_index_size)?;
 
         let len = match res
@@ -727,14 +751,16 @@ impl<'data> TablesData<'data> {
                         "version",
                         Value::object([
                             ("major", major_version.into()),
-                            ("minor_version", minor_version.into()),
+                            ("minor", minor_version.into()),
                             ("build_number", build_number.into()),
                             ("revision_number", revision_number.into()),
                         ]),
                     ),
-                    // TODO
-                    ("public_key_or_token", Value::Undefined),
-                    ("name", Value::Undefined),
+                    (
+                        "public_key_or_token",
+                        public_key_or_token.map(Value::bytes).into(),
+                    ),
+                    ("name", name.map(Value::bytes).into()),
                 ]));
                 vec.len()
             }
@@ -751,13 +777,40 @@ impl<'data> TablesData<'data> {
         self.data.skip(usize::from(nb_bytes))
     }
 
-    #[inline(always)]
     fn read_index(&mut self, index_size: u8) -> Result<u32, ()> {
         if index_size == 4 {
             self.read_u32()
         } else {
             self.read_u16().map(u32::from)
         }
+    }
+
+    fn read_string(&mut self) -> Result<Option<&'data [u8]>, ()> {
+        let index = self.read_index(self.string_index_size)? as usize;
+        if index == 0 {
+            return Ok(None);
+        }
+
+        let Some(slice) = self.strings_stream.and_then(|v| v.get(index..)) else {
+            return Ok(None);
+        };
+
+        match slice.iter().position(|c| *c == b'\0') {
+            Some(pos) => Ok(Some(&slice[..pos])),
+            None => Ok(None),
+        }
+    }
+
+    fn read_blob(&mut self) -> Result<Option<&'data [u8]>, ()> {
+        let index = self.read_index(self.blob_index_size)? as usize;
+        if index == 0 {
+            return Ok(None);
+        }
+
+        Ok(self
+            .blobs_stream
+            .and_then(|v| v.get(index..))
+            .and_then(|slice| read_blob(&mut Bytes(slice))))
     }
 
     fn read_u16(&mut self) -> Result<u16, ()> {
@@ -769,7 +822,7 @@ impl<'data> TablesData<'data> {
     }
 }
 
-fn read_user_string<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
+fn read_blob<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
     // See II.24.2.4 in ECMA 335 for details on the encoding.
 
     // The first part, is the length.
@@ -801,13 +854,7 @@ fn read_user_string<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
         }
     };
 
-    // The length is the number of bytes and not of utf-16 characters. However, it includes the
-    // additional byte that we do not care about, so ignore it
-    let length = length.checked_sub(1)?;
-    let string = bytes.read_slice(length).ok()?;
-    // Skip the additional byte, we do not care about it.
-    bytes.skip(1).ok()?;
-    Some(string)
+    bytes.read_slice(length).ok()
 }
 
 fn get_streams(metadata: &MetadataRoot, metadata_root_offset: u64) -> Vec<Value> {
