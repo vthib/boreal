@@ -1968,7 +1968,7 @@ pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str
     ]);
 }
 
-fn va_to_file_offset(mem: &[u8], sections: &SectionTable, va: u32) -> Option<u32> {
+pub fn va_to_file_offset(mem: &[u8], sections: &SectionTable, va: u32) -> Option<u32> {
     va_to_file_offset_inner(sections, va).and_then(|v| {
         let len: u32 = mem.len().try_into().ok()?;
         if v < len {

@@ -7,6 +7,7 @@ use object::pe::{
 use object::read::pe::ImageNtHeaders;
 use object::{Bytes, FileKind, LittleEndian as LE, Pod, ReadRef, U16, U32, U64};
 
+use super::pe::va_to_file_offset;
 use super::{Module, ScanContext, StaticValue, Type, Value};
 
 /// `dotnet` module. Allows inspecting dotnet binaries
@@ -185,7 +186,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
 
     add_guids(&metadata, &mut res);
     add_user_strings(&metadata, &mut res);
-    add_metadata_tables(&metadata, &mut res);
+    add_metadata_tables(mem, &metadata, sections, &mut res);
 
     // TODO
 
@@ -199,8 +200,6 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
         ("typelib", Value::Undefined),
         ("constants", Value::Undefined),
         ("number_of_constants", Value::Undefined),
-        ("field_offsets", Value::Undefined),
-        ("number_of_field_offsets", Value::Undefined),
     ]);
     Some(res)
 }
@@ -263,7 +262,12 @@ fn add_user_strings(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Val
     ]);
 }
 
-fn add_metadata_tables(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Value>) {
+fn add_metadata_tables<'data>(
+    mem: &'data [u8],
+    metadata: &MetadataRoot<'data>,
+    sections: SectionTable<'data>,
+    res: &mut HashMap<&'static str, Value>,
+) {
     let Some(stream_data) = metadata.get_stream(b"#~") else {
         return;
     };
@@ -307,7 +311,9 @@ fn add_metadata_tables(metadata: &MetadataRoot, res: &mut HashMap<&'static str, 
     // Build our parsing helper: this will hold the current cursor on
     // the data, as well as the sizes of all the indexes.
     let mut tables_data = TablesData::new(
+        mem,
         bytes,
+        sections,
         strings_stream,
         blobs_stream,
         &table_counts,
@@ -405,7 +411,10 @@ mod table_type {
 }
 
 struct TablesData<'data> {
+    mem: &'data [u8],
     data: Bytes<'data>,
+
+    sections: SectionTable<'data>,
 
     // Contents of the string stream
     strings_stream: Option<&'data [u8]>,
@@ -449,7 +458,9 @@ struct TablesData<'data> {
 
 impl<'data> TablesData<'data> {
     fn new(
+        mem: &'data [u8],
         data: Bytes<'data>,
+        sections: SectionTable<'data>,
         strings_stream: Option<&'data [u8]>,
         blobs_stream: Option<&'data [u8]>,
         table_counts: &[u32; 64],
@@ -477,7 +488,9 @@ impl<'data> TablesData<'data> {
         };
 
         Self {
+            mem,
             data,
+            sections,
             strings_stream,
             blobs_stream,
 
@@ -664,7 +677,7 @@ impl<'data> TablesData<'data> {
                     + self.string_index_size
                     + self.module_ref_index_size,
             ),
-            table_type::FIELD_RVA => self.skip(4 + self.field_index_size),
+            table_type::FIELD_RVA => self.parse_field_rva(res),
             table_type::ASSEMBLY => self.parse_assembly_table(res),
             table_type::ASSEMBLY_PROCESSOR => self.skip(4),
             table_type::ASSEMBLY_OS => self.skip(12),
@@ -695,6 +708,28 @@ impl<'data> TablesData<'data> {
                 Err(())
             }
         }
+    }
+
+    // ECMA 335, II.22.18
+    fn parse_field_rva(&mut self, res: &mut HashMap<&'static str, Value>) -> Result<(), ()> {
+        let rva = self.read_u32()?;
+        self.skip(self.field_index_size)?;
+
+        let len = match res
+            .entry("field_offsets")
+            .or_insert_with(|| Value::Array(Vec::new()))
+        {
+            Value::Array(vec) => {
+                vec.push(va_to_file_offset(self.mem, &self.sections, rva).into());
+                vec.len()
+            }
+            // Safety: the "field_offsets" key can only contain a Value::Array by construction
+            // in this module.
+            _ => unreachable!(),
+        };
+
+        let _ = res.insert("number_of_field_offsets", len.into());
+        Ok(())
     }
 
     // ECMA 335, II.22.2
