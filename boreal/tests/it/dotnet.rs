@@ -5,13 +5,11 @@ use crate::utils::compare_module_values_on_file;
 #[test]
 fn test_coverage_0ca09bde() {
     let diffs = [
-        "dotnet.field_offsets",
         "dotnet.constants",
         "dotnet.is_dotnet",
         "dotnet.modulerefs",
         "dotnet.version",
         "dotnet.number_of_modulerefs",
-        "dotnet.number_of_field_offsets",
         "dotnet.classes",
         "dotnet.number_of_classes",
         "dotnet.number_of_resources",
@@ -28,12 +26,10 @@ fn test_coverage_0ca09bde() {
 #[test]
 fn test_coverage_756684f4() {
     let diffs = [
-        "dotnet.field_offsets",
         "dotnet.constants",
         "dotnet.number_of_constants",
         "dotnet.modulerefs",
         "dotnet.number_of_modulerefs",
-        "dotnet.number_of_field_offsets",
         "dotnet.classes",
         "dotnet.number_of_classes",
         "dotnet.number_of_resources",
@@ -48,13 +44,11 @@ fn test_coverage_756684f4() {
 #[test]
 fn test_coverage_bad_dotnet_pe() {
     let diffs = [
-        "dotnet.field_offsets",
         "dotnet.constants",
         "dotnet.is_dotnet",
         "dotnet.modulerefs",
         "dotnet.version",
         "dotnet.number_of_modulerefs",
-        "dotnet.number_of_field_offsets",
         "dotnet.classes",
         "dotnet.number_of_classes",
         "dotnet.number_of_resources",
