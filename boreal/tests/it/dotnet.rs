@@ -7,9 +7,7 @@ fn test_coverage_0ca09bde() {
     let diffs = [
         "dotnet.constants",
         "dotnet.is_dotnet",
-        "dotnet.modulerefs",
         "dotnet.version",
-        "dotnet.number_of_modulerefs",
         "dotnet.classes",
         "dotnet.number_of_classes",
         "dotnet.number_of_resources",
@@ -28,8 +26,6 @@ fn test_coverage_756684f4() {
     let diffs = [
         "dotnet.constants",
         "dotnet.number_of_constants",
-        "dotnet.modulerefs",
-        "dotnet.number_of_modulerefs",
         "dotnet.classes",
         "dotnet.number_of_classes",
         "dotnet.number_of_resources",
@@ -46,9 +42,7 @@ fn test_coverage_bad_dotnet_pe() {
     let diffs = [
         "dotnet.constants",
         "dotnet.is_dotnet",
-        "dotnet.modulerefs",
         "dotnet.version",
-        "dotnet.number_of_modulerefs",
         "dotnet.classes",
         "dotnet.number_of_classes",
         "dotnet.number_of_resources",
