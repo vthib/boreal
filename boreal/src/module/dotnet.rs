@@ -195,8 +195,6 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
         ("number_of_resources", Value::Undefined),
         ("classes", Value::Undefined),
         ("number_of_classes", Value::Undefined),
-        ("modulerefs", Value::Undefined),
-        ("number_of_modulerefs", Value::Undefined),
         ("typelib", Value::Undefined),
         ("constants", Value::Undefined),
         ("number_of_constants", Value::Undefined),
@@ -670,7 +668,7 @@ impl<'data> TablesData<'data> {
             table_type::METHOD_IMPL => {
                 self.skip(self.type_def_index_size + 2 * self.method_def_or_ref_index_size)
             }
-            table_type::MODULE_REF => self.skip(self.string_index_size),
+            table_type::MODULE_REF => self.parse_module_ref(res),
             table_type::TYPE_SPEC => self.skip(self.blob_index_size),
             table_type::IMPL_MAP => self.skip(
                 2 + self.member_forwarded_index_size
@@ -708,6 +706,27 @@ impl<'data> TablesData<'data> {
                 Err(())
             }
         }
+    }
+
+    // ECMA 335, II.22.31
+    fn parse_module_ref(&mut self, res: &mut HashMap<&'static str, Value>) -> Result<(), ()> {
+        let name = self.read_string()?;
+
+        let len = match res
+            .entry("modulerefs")
+            .or_insert_with(|| Value::Array(Vec::new()))
+        {
+            Value::Array(vec) => {
+                vec.push(name.map(Value::bytes).into());
+                vec.len()
+            }
+            // Safety: the "modulesrefs" key can only contain a Value::Array by construction
+            // in this module.
+            _ => unreachable!(),
+        };
+
+        let _ = res.insert("number_of_modulerefs", len.into());
+        Ok(())
     }
 
     // ECMA 335, II.22.18
