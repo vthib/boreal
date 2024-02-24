@@ -191,8 +191,6 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
     // TODO
 
     res.extend([
-        ("resources", Value::Undefined),
-        ("number_of_resources", Value::Undefined),
         ("classes", Value::Undefined),
         ("number_of_classes", Value::Undefined),
         ("typelib", Value::Undefined),
@@ -686,9 +684,7 @@ impl<'data> TablesData<'data> {
             table_type::EXPORTED_TYPE => {
                 self.skip(8 + 2 * self.string_index_size + self.implementation_index_size)
             }
-            table_type::MANIFEST_RESOURCE => {
-                self.skip(8 + self.string_index_size + self.implementation_index_size)
-            }
+            table_type::MANIFEST_RESOURCE => self.parse_manifest_resource_table(res),
             table_type::NESTED_CLASS => self.skip(2 * self.type_def_index_size),
             table_type::GENERIC_PARAM => {
                 self.skip(4 + self.type_or_method_def_index_size + self.string_index_size)
@@ -823,6 +819,38 @@ impl<'data> TablesData<'data> {
             _ => unreachable!(),
         };
         let _ = res.insert("number_of_assembly_refs", len.into());
+
+        Ok(())
+    }
+
+    // ECMA 335, II.22.24
+    fn parse_manifest_resource_table(
+        &mut self,
+        res: &mut HashMap<&'static str, Value>,
+    ) -> Result<(), ()> {
+        let offset = self.read_u32()?;
+        self.skip(4)?;
+        let name = self.read_string()?;
+        self.skip(self.implementation_index_size)?;
+
+        let len = match res
+            .entry("resources")
+            .or_insert_with(|| Value::Array(Vec::new()))
+        {
+            Value::Array(vec) => {
+                vec.push(Value::object([
+                    ("offset", offset.into()),
+                    // TODO
+                    ("length", Value::Undefined),
+                    ("name", name.map(Value::bytes).into()),
+                ]));
+                vec.len()
+            }
+            // Safety: the "resources" key can only contain a Value::Array by construction
+            // in this module.
+            _ => unreachable!(),
+        };
+        let _ = res.insert("number_of_resources", len.into());
 
         Ok(())
     }
