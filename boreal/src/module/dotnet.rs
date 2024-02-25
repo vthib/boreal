@@ -193,7 +193,6 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
     res.extend([
         ("classes", Value::Undefined),
         ("number_of_classes", Value::Undefined),
-        ("typelib", Value::Undefined),
         ("constants", Value::Undefined),
         ("number_of_constants", Value::Undefined),
     ]);
@@ -422,6 +421,14 @@ struct TablesData<'data> {
     // Contents of the blob stream
     blobs_stream: Option<&'data [u8]>,
 
+    // Slices matching some tables. Used to parse
+    // on demand some tables when retrieving details for
+    // some fields (eg typelib).
+    // Those are filled on demand: the table type must have been
+    // already parsed, otherwise the field will always be None.
+    type_ref_table_data: Option<Bytes<'data>>,
+    member_ref_table_data: Option<Bytes<'data>>,
+
     // The following values are the size of indexes used in tables.
     // They are either equal to 2 or 4.
 
@@ -494,6 +501,9 @@ impl<'data> TablesData<'data> {
             sections,
             strings_stream,
             blobs_stream,
+
+            type_ref_table_data: None,
+            member_ref_table_data: None,
 
             string_index_size: if wide_string_index { 4 } else { 2 },
             guid_index_size: if wide_guid_index { 4 } else { 2 },
@@ -632,11 +642,9 @@ impl<'data> TablesData<'data> {
                 self.data.skip(len)
             }
             table_type::TYPE_REF => {
-                let len = get_tables_len(
-                    nb_tables,
-                    self.resolution_scope_index_size + 2 * self.string_index_size,
-                )?;
-                self.data.skip(len)
+                let len = get_tables_len(nb_tables, self.type_ref_table_size())?;
+                self.type_ref_table_data = Some(self.data.read_bytes(len)?);
+                Ok(())
             }
             table_type::TYPE_DEF => {
                 let len = get_tables_len(
@@ -672,13 +680,9 @@ impl<'data> TablesData<'data> {
                 self.data.skip(len)
             }
             table_type::MEMBER_REF => {
-                let len = get_tables_len(
-                    nb_tables,
-                    self.member_ref_parent_index_size
-                        + self.string_index_size
-                        + self.blob_index_size,
-                )?;
-                self.data.skip(len)
+                let len = get_tables_len(nb_tables, self.member_ref_table_size())?;
+                self.member_ref_table_data = Some(self.data.read_bytes(len)?);
+                Ok(())
             }
             table_type::CONSTANT => {
                 let len = get_tables_len(
@@ -687,15 +691,7 @@ impl<'data> TablesData<'data> {
                 )?;
                 self.data.skip(len)
             }
-            table_type::CUSTOM_ATTRIBUTE => {
-                let len = get_tables_len(
-                    nb_tables,
-                    self.has_custom_attribute_index_size
-                        + self.custom_attribute_type_index_size
-                        + self.blob_index_size,
-                )?;
-                self.data.skip(len)
-            }
+            table_type::CUSTOM_ATTRIBUTE => self.parse_custom_attributes(nb_tables, res),
             table_type::FIELD_MARSHALL => {
                 let len = get_tables_len(
                     nb_tables,
@@ -840,6 +836,146 @@ impl<'data> TablesData<'data> {
         }
     }
 
+    // ECMA 335, II.22.10
+    fn parse_custom_attributes(
+        &mut self,
+        nb_tables: usize,
+        res: &mut HashMap<&str, Value>,
+    ) -> Result<(), ()> {
+        let mut found_typelib = false;
+        let mut typelib = None;
+
+        for _ in 0..nb_tables {
+            let parent = read_index(&mut self.data, self.has_custom_attribute_index_size)?;
+            let typ = read_index(&mut self.data, self.custom_attribute_type_index_size)?;
+
+            if !found_typelib && self.custom_attribute_is_typelib(parent, typ) {
+                found_typelib = true;
+                // See II.23.3
+                typelib = self
+                    .read_blob()?
+                    .and_then(|blob| {
+                        // Remove prolog
+                        blob.strip_prefix(b"\x01\x00")
+                    })
+                    .and_then(|v| {
+                        // We expect the length in a single byte, then the string
+                        if v.is_empty() {
+                            None
+                        } else {
+                            let packed_len = v[0];
+                            if packed_len == 0x00 || packed_len == 0xFF {
+                                None
+                            } else {
+                                v.get(1..=usize::from(packed_len))
+                            }
+                        }
+                    });
+            } else {
+                self.data.skip(usize::from(self.blob_index_size))?;
+            }
+        }
+
+        let _r = res.insert("typelib", typelib.map(Value::bytes).into());
+        Ok(())
+    }
+
+    fn custom_attribute_is_typelib(&self, parent: u32, typ: u32) -> bool {
+        // Try to find typelib from the custom attribute.
+        // We want to find a custom attribute:
+        // - with a parent that must be an Assembly table
+        // - with a type that must be a MemberRef table
+        // - this member must have a class that is a TypeRef table
+        // - type type name must be "GuidAttribute"
+
+        // Check parent points to an assembly table.
+        // See "HasCustomAttribute" coded index in ECMA 335 II.24.2.6:
+        // Assembly is the tag 14.
+        if (parent & 0x1F) != 14 {
+            return false;
+        }
+
+        // Check type is a MemberRef table.
+        // See "CustomAttributeType" coded index in ECMA 335 II.24.2.6:
+        // MemberRef is the tag 3.
+        if (typ & 0x07) != 3 {
+            return false;
+        }
+
+        // Get the data for the memberref table, and skip all previous memberref
+        // until we reach our index.
+        let Some(mut member_ref_table_data) = self.member_ref_table_data else {
+            return false;
+        };
+        let member_ref_index = typ >> 3;
+        if member_ref_index == 0 {
+            // 0 means null reference, index is not valid
+            return false;
+        }
+
+        let member_ref_size = usize::from(self.member_ref_table_size());
+        if member_ref_size
+            .checked_mul((member_ref_index - 1) as usize)
+            .and_then(|v| member_ref_table_data.skip(v).ok())
+            .is_none()
+        {
+            return false;
+        }
+
+        // Read the first field, which is the class linked to the member ref.
+        // See ECMA 335 II.22.25
+        let Ok(class) = read_index(
+            &mut member_ref_table_data,
+            self.member_ref_parent_index_size,
+        ) else {
+            return false;
+        };
+
+        // This class must be an index into the TypeRef table.
+        // See "MemberRefParent" coded index in ECMA 335 II.24.2.6:
+        // TypeRef is the tag 1.
+        if (class & 0x07) != 1 {
+            return false;
+        }
+
+        // Get the data for the typeref table, and skip all previous typeref
+        // until we reach our index.
+        let Some(mut type_ref_table_data) = self.type_ref_table_data else {
+            return false;
+        };
+        let type_ref_index = class >> 3;
+        if type_ref_index == 0 {
+            // 0 means null reference, index is not valid
+            return false;
+        }
+
+        let type_ref_size = usize::from(self.type_ref_table_size());
+        if type_ref_size
+            .checked_mul((type_ref_index - 1) as usize)
+            .and_then(|v| type_ref_table_data.skip(v).ok())
+            .is_none()
+        {
+            return false;
+        }
+
+        // See ECMA 335 II.22.38
+        // Skip ResolutionScope and read name index
+        if type_ref_table_data
+            .skip(usize::from(self.resolution_scope_index_size))
+            .is_err()
+        {
+            return false;
+        }
+        let Ok(name) = read_index(&mut type_ref_table_data, self.string_index_size) else {
+            return false;
+        };
+        let Some(type_ref_name) = self.get_string(name as usize) else {
+            return false;
+        };
+
+        type_ref_name == b"GuidAttribute"
+    }
+
     // ECMA 335, II.22.31
     fn parse_module_ref(
         &mut self,
@@ -868,7 +1004,7 @@ impl<'data> TablesData<'data> {
     ) -> Result<(), ()> {
         let modulerefs: Vec<Value> = (0..nb_tables)
             .map(|_| {
-                let rva = self.read_u32()?;
+                let rva = read_u32(&mut self.data)?;
                 self.data.skip(usize::from(self.field_index_size))?;
 
                 Ok(va_to_file_offset(self.mem, &self.sections, rva).into())
@@ -890,10 +1026,10 @@ impl<'data> TablesData<'data> {
     ) -> Result<(), ()> {
         for _ in 0..nb_tables {
             self.data.skip(4)?; // hash_alg_id
-            let major_version = self.read_u16()?;
-            let minor_version = self.read_u16()?;
-            let build_number = self.read_u16()?;
-            let revision_number = self.read_u16()?;
+            let major_version = read_u16(&mut self.data)?;
+            let minor_version = read_u16(&mut self.data)?;
+            let build_number = read_u16(&mut self.data)?;
+            let revision_number = read_u16(&mut self.data)?;
             self.data.skip(usize::from(4 + self.blob_index_size))?; // flags
             let name = self.read_string()?;
             let culture = self.read_string()?;
@@ -926,10 +1062,10 @@ impl<'data> TablesData<'data> {
     ) -> Result<(), ()> {
         let assembly_refs: Vec<Value> = (0..nb_tables)
             .map(|_| {
-                let major_version = self.read_u16()?;
-                let minor_version = self.read_u16()?;
-                let build_number = self.read_u16()?;
-                let revision_number = self.read_u16()?;
+                let major_version = read_u16(&mut self.data)?;
+                let minor_version = read_u16(&mut self.data)?;
+                let build_number = read_u16(&mut self.data)?;
+                let revision_number = read_u16(&mut self.data)?;
                 self.data.skip(4)?; // flags
                 let public_key_or_token = self.read_blob()?;
                 let name = self.read_string()?;
@@ -970,7 +1106,7 @@ impl<'data> TablesData<'data> {
     ) -> Result<(), ()> {
         let resources: Vec<Value> = (0..nb_tables)
             .map(|_| {
-                let offset = self.read_u32()?;
+                let offset = read_u32(&mut self.data)?;
                 self.data.skip(4)?;
                 let name = self.read_string()?;
                 self.data
@@ -992,32 +1128,32 @@ impl<'data> TablesData<'data> {
         Ok(())
     }
 
-    fn read_index(&mut self, index_size: u8) -> Result<u32, ()> {
-        if index_size == 4 {
-            self.read_u32()
-        } else {
-            self.read_u16().map(u32::from)
-        }
+    fn type_ref_table_size(&self) -> u8 {
+        self.resolution_scope_index_size + 2 * self.string_index_size
+    }
+
+    fn member_ref_table_size(&self) -> u8 {
+        self.member_ref_parent_index_size + self.string_index_size + self.blob_index_size
     }
 
     fn read_string(&mut self) -> Result<Option<&'data [u8]>, ()> {
-        let index = self.read_index(self.string_index_size)? as usize;
+        let index = read_index(&mut self.data, self.string_index_size)? as usize;
+
+        Ok(self.get_string(index))
+    }
+
+    fn get_string(&self, index: usize) -> Option<&'data [u8]> {
         if index == 0 {
-            return Ok(None);
+            return None;
         }
+        let slice = self.strings_stream?.get(index..)?;
+        let pos = slice.iter().position(|c| *c == b'\0')?;
 
-        let Some(slice) = self.strings_stream.and_then(|v| v.get(index..)) else {
-            return Ok(None);
-        };
-
-        match slice.iter().position(|c| *c == b'\0') {
-            Some(pos) => Ok(Some(&slice[..pos])),
-            None => Ok(None),
-        }
+        Some(&slice[..pos])
     }
 
     fn read_blob(&mut self) -> Result<Option<&'data [u8]>, ()> {
-        let index = self.read_index(self.blob_index_size)? as usize;
+        let index = read_index(&mut self.data, self.blob_index_size)? as usize;
         if index == 0 {
             return Ok(None);
         }
@@ -1027,14 +1163,22 @@ impl<'data> TablesData<'data> {
             .and_then(|v| v.get(index..))
             .and_then(|slice| read_blob(&mut Bytes(slice))))
     }
+}
 
-    fn read_u16(&mut self) -> Result<u16, ()> {
-        self.data.read::<U16<LE>>().map(|v| v.get(LE))
+fn read_index(data: &mut Bytes, index_size: u8) -> Result<u32, ()> {
+    if index_size == 4 {
+        read_u32(data)
+    } else {
+        read_u16(data).map(u32::from)
     }
+}
 
-    fn read_u32(&mut self) -> Result<u32, ()> {
-        self.data.read::<U32<LE>>().map(|v| v.get(LE))
-    }
+fn read_u16(data: &mut Bytes) -> Result<u16, ()> {
+    data.read::<U16<LE>>().map(|v| v.get(LE))
+}
+
+fn read_u32(data: &mut Bytes) -> Result<u32, ()> {
+    data.read::<U32<LE>>().map(|v| v.get(LE))
 }
 
 fn read_blob<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
