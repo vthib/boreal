@@ -175,7 +175,6 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
     let mut res: HashMap<&'static str, Value> = [
         ("is_dotnet", Value::Integer(1)),
         ("version", Value::bytes(metadata.version)),
-        ("module_name", Value::Undefined),
         ("streams", Value::Array(streams)),
         (
             "number_of_streams",
@@ -634,13 +633,7 @@ impl<'data> TablesData<'data> {
         }
 
         match table_index {
-            table_type::MODULE => {
-                let len = get_tables_len(
-                    nb_tables,
-                    2 + self.string_index_size + 3 * self.guid_index_size,
-                )?;
-                self.data.skip(len)
-            }
+            table_type::MODULE => self.parse_modules(nb_tables, res),
             table_type::TYPE_REF => {
                 let len = get_tables_len(nb_tables, self.type_ref_table_size())?;
                 self.type_ref_table_data = Some(self.data.read_bytes(len)?);
@@ -834,6 +827,22 @@ impl<'data> TablesData<'data> {
                 Err(())
             }
         }
+    }
+
+    // EMCA 335, II.22.30
+    fn parse_modules(
+        &mut self,
+        nb_tables: usize,
+        res: &mut HashMap<&str, Value>,
+    ) -> Result<(), ()> {
+        for _ in 0..nb_tables {
+            self.data.skip(2)?; // generation
+            let name = self.read_string()?;
+            self.data.skip(3 * usize::from(self.guid_index_size))?;
+
+            let _r = res.insert("module_name", name.map(Value::bytes).into());
+        }
+        Ok(())
     }
 
     // ECMA 335, II.22.10
