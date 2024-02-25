@@ -318,11 +318,16 @@ fn add_metadata_tables<'data>(
 
     // Then, parsing every table in order
     for table_index in 0..64 {
-        let nb_tables = table_counts[usize::from(table_index)];
-        for _ in 0..nb_tables {
-            if tables_data.parse_table(table_index, res).is_err() {
-                return;
-            }
+        let nb_tables = table_counts[usize::from(table_index)] as usize;
+        if nb_tables == 0 {
+            continue;
+        }
+
+        if tables_data
+            .parse_table_type(table_index, nb_tables, res)
+            .is_err()
+        {
+            return;
         }
     }
 }
@@ -608,92 +613,223 @@ impl<'data> TablesData<'data> {
     // Parse a table of the given index code.
     //
     // If Err is returned, the end of the data has been reached and nothing more can be read.
-    fn parse_table(
+    fn parse_table_type(
         &mut self,
         table_index: u8,
+        nb_tables: usize,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
+        fn get_tables_len(nb_tables: usize, table_size: u8) -> Result<usize, ()> {
+            nb_tables.checked_mul(usize::from(table_size)).ok_or(())
+        }
+
         match table_index {
-            table_type::MODULE => self.skip(2 + self.string_index_size + 3 * self.guid_index_size),
+            table_type::MODULE => {
+                let len = get_tables_len(
+                    nb_tables,
+                    2 + self.string_index_size + 3 * self.guid_index_size,
+                )?;
+                self.data.skip(len)
+            }
             table_type::TYPE_REF => {
-                self.skip(self.resolution_scope_index_size + 2 * self.string_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    self.resolution_scope_index_size + 2 * self.string_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::TYPE_DEF => self.skip(
-                4 + 2 * self.string_index_size
-                    + self.type_def_or_ref_index_size
-                    + self.field_index_size
-                    + self.method_def_index_size,
-            ),
-            table_type::FIELD => self.skip(2 + self.string_index_size + self.blob_index_size),
+            table_type::TYPE_DEF => {
+                let len = get_tables_len(
+                    nb_tables,
+                    4 + 2 * self.string_index_size
+                        + self.type_def_or_ref_index_size
+                        + self.field_index_size
+                        + self.method_def_index_size,
+                )?;
+                self.data.skip(len)
+            }
+            table_type::FIELD => {
+                let len =
+                    get_tables_len(nb_tables, 2 + self.string_index_size + self.blob_index_size)?;
+                self.data.skip(len)
+            }
             table_type::METHOD_DEF => {
-                self.skip(8 + self.string_index_size + self.blob_index_size + self.param_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    8 + self.string_index_size + self.blob_index_size + self.param_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::PARAM => self.skip(4 + self.string_index_size),
+            table_type::PARAM => {
+                let len = get_tables_len(nb_tables, 4 + self.string_index_size)?;
+                self.data.skip(len)
+            }
             table_type::INTERFACE_IMPL => {
-                self.skip(self.type_def_index_size + self.type_def_or_ref_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    self.type_def_index_size + self.type_def_or_ref_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::MEMBER_REF => self.skip(
-                self.member_ref_parent_index_size + self.string_index_size + self.blob_index_size,
-            ),
+            table_type::MEMBER_REF => {
+                let len = get_tables_len(
+                    nb_tables,
+                    self.member_ref_parent_index_size
+                        + self.string_index_size
+                        + self.blob_index_size,
+                )?;
+                self.data.skip(len)
+            }
             table_type::CONSTANT => {
-                self.skip(2 + self.blob_index_size + self.has_constant_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    2 + self.blob_index_size + self.has_constant_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::CUSTOM_ATTRIBUTE => self.skip(
-                self.has_custom_attribute_index_size
-                    + self.custom_attribute_type_index_size
-                    + self.blob_index_size,
-            ),
+            table_type::CUSTOM_ATTRIBUTE => {
+                let len = get_tables_len(
+                    nb_tables,
+                    self.has_custom_attribute_index_size
+                        + self.custom_attribute_type_index_size
+                        + self.blob_index_size,
+                )?;
+                self.data.skip(len)
+            }
             table_type::FIELD_MARSHALL => {
-                self.skip(self.has_field_marshall_index_size + self.blob_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    self.has_field_marshall_index_size + self.blob_index_size,
+                )?;
+                self.data.skip(len)
             }
             table_type::DECL_SECURITY => {
-                self.skip(2 + self.has_decl_security_index_size + self.blob_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    2 + self.has_decl_security_index_size + self.blob_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::CLASS_LAYOUT => self.skip(6 + self.type_def_index_size),
-            table_type::FIELD_LAYOUT => self.skip(4 + self.field_index_size),
-            table_type::STAND_ALONE_SIG => self.skip(self.blob_index_size),
-            table_type::EVENT_MAP => self.skip(self.type_def_index_size + self.event_index_size),
+            table_type::CLASS_LAYOUT => {
+                let len = get_tables_len(nb_tables, 6 + self.type_def_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::FIELD_LAYOUT => {
+                let len = get_tables_len(nb_tables, 4 + self.field_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::STAND_ALONE_SIG => {
+                let len = get_tables_len(nb_tables, self.blob_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::EVENT_MAP => {
+                let len =
+                    get_tables_len(nb_tables, self.type_def_index_size + self.event_index_size)?;
+                self.data.skip(len)
+            }
             table_type::EVENT => {
-                self.skip(2 + self.string_index_size + self.type_def_or_ref_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    2 + self.string_index_size + self.type_def_or_ref_index_size,
+                )?;
+                self.data.skip(len)
             }
             table_type::PROPERTY_MAP => {
-                self.skip(self.type_def_index_size + self.property_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    self.type_def_index_size + self.property_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::PROPERTY => self.skip(2 + self.string_index_size + self.blob_index_size),
+            table_type::PROPERTY => {
+                let len =
+                    get_tables_len(nb_tables, 2 + self.string_index_size + self.blob_index_size)?;
+                self.data.skip(len)
+            }
             table_type::METHOD_SEMANTICS => {
-                self.skip(2 + self.method_def_index_size + self.has_semantics_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    2 + self.method_def_index_size + self.has_semantics_index_size,
+                )?;
+                self.data.skip(len)
             }
             table_type::METHOD_IMPL => {
-                self.skip(self.type_def_index_size + 2 * self.method_def_or_ref_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    self.type_def_index_size + 2 * self.method_def_or_ref_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::MODULE_REF => self.parse_module_ref(res),
-            table_type::TYPE_SPEC => self.skip(self.blob_index_size),
-            table_type::IMPL_MAP => self.skip(
-                2 + self.member_forwarded_index_size
-                    + self.string_index_size
-                    + self.module_ref_index_size,
-            ),
-            table_type::FIELD_RVA => self.parse_field_rva(res),
-            table_type::ASSEMBLY => self.parse_assembly_table(res),
-            table_type::ASSEMBLY_PROCESSOR => self.skip(4),
-            table_type::ASSEMBLY_OS => self.skip(12),
-            table_type::ASSEMBLY_REF => self.parse_assembly_ref_table(res),
-            table_type::ASSEMBLY_REF_PROCESSOR => self.skip(4 + self.assembly_ref_index_size),
-            table_type::ASSEMBLY_REF_OS => self.skip(12 + self.assembly_ref_index_size),
-            table_type::FILE => self.skip(4 + self.string_index_size + self.blob_index_size),
+            table_type::MODULE_REF => self.parse_module_ref(nb_tables, res),
+            table_type::TYPE_SPEC => {
+                let len = get_tables_len(nb_tables, self.blob_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::IMPL_MAP => {
+                let len = get_tables_len(
+                    nb_tables,
+                    2 + self.member_forwarded_index_size
+                        + self.string_index_size
+                        + self.module_ref_index_size,
+                )?;
+                self.data.skip(len)
+            }
+            table_type::FIELD_RVA => self.parse_field_rva(nb_tables, res),
+            table_type::ASSEMBLY => self.parse_assembly_table(nb_tables, res),
+            table_type::ASSEMBLY_PROCESSOR => {
+                let len = get_tables_len(nb_tables, 4)?;
+                self.data.skip(len)
+            }
+            table_type::ASSEMBLY_OS => {
+                let len = get_tables_len(nb_tables, 12)?;
+                self.data.skip(len)
+            }
+            table_type::ASSEMBLY_REF => self.parse_assembly_ref_table(nb_tables, res),
+            table_type::ASSEMBLY_REF_PROCESSOR => {
+                let len = get_tables_len(nb_tables, 4 + self.assembly_ref_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::ASSEMBLY_REF_OS => {
+                let len = get_tables_len(nb_tables, 12 + self.assembly_ref_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::FILE => {
+                let len =
+                    get_tables_len(nb_tables, 4 + self.string_index_size + self.blob_index_size)?;
+                self.data.skip(len)
+            }
             table_type::EXPORTED_TYPE => {
-                self.skip(8 + 2 * self.string_index_size + self.implementation_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    8 + 2 * self.string_index_size + self.implementation_index_size,
+                )?;
+                self.data.skip(len)
             }
-            table_type::MANIFEST_RESOURCE => self.parse_manifest_resource_table(res),
-            table_type::NESTED_CLASS => self.skip(2 * self.type_def_index_size),
+            table_type::MANIFEST_RESOURCE => self.parse_manifest_resource_table(nb_tables, res),
+            table_type::NESTED_CLASS => {
+                let len = get_tables_len(nb_tables, 2 * self.type_def_index_size)?;
+                self.data.skip(len)
+            }
             table_type::GENERIC_PARAM => {
-                self.skip(4 + self.type_or_method_def_index_size + self.string_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    4 + self.type_or_method_def_index_size + self.string_index_size,
+                )?;
+                self.data.skip(len)
             }
             table_type::METHOD_SPEC => {
-                self.skip(self.method_def_or_ref_index_size + self.blob_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    self.method_def_or_ref_index_size + self.blob_index_size,
+                )?;
+                self.data.skip(len)
             }
             table_type::GENERIC_PARAM_CONSTRAINT => {
-                self.skip(self.generic_param_index_size + self.type_def_or_ref_index_size)
+                let len = get_tables_len(
+                    nb_tables,
+                    self.generic_param_index_size + self.type_def_or_ref_index_size,
+                )?;
+                self.data.skip(len)
             }
             _ => {
                 // We are matching an unknown table. This means we are no longer to parse
@@ -705,98 +841,102 @@ impl<'data> TablesData<'data> {
     }
 
     // ECMA 335, II.22.31
-    fn parse_module_ref(&mut self, res: &mut HashMap<&'static str, Value>) -> Result<(), ()> {
-        let name = self.read_string()?;
+    fn parse_module_ref(
+        &mut self,
+        nb_tables: usize,
+        res: &mut HashMap<&'static str, Value>,
+    ) -> Result<(), ()> {
+        let modulerefs: Vec<Value> = (0..nb_tables)
+            .map(|_| match self.read_string()? {
+                Some(v) => Ok(Value::bytes(v)),
+                None => Ok(Value::Undefined),
+            })
+            .collect::<Result<Vec<Value>, ()>>()?;
 
-        let len = match res
-            .entry("modulerefs")
-            .or_insert_with(|| Value::Array(Vec::new()))
-        {
-            Value::Array(vec) => {
-                vec.push(name.map(Value::bytes).into());
-                vec.len()
-            }
-            // Safety: the "modulesrefs" key can only contain a Value::Array by construction
-            // in this module.
-            _ => unreachable!(),
-        };
-
-        let _ = res.insert("number_of_modulerefs", len.into());
+        res.extend([
+            ("number_of_modulerefs", modulerefs.len().into()),
+            ("modulerefs", Value::Array(modulerefs)),
+        ]);
         Ok(())
     }
 
     // ECMA 335, II.22.18
-    fn parse_field_rva(&mut self, res: &mut HashMap<&'static str, Value>) -> Result<(), ()> {
-        let rva = self.read_u32()?;
-        self.skip(self.field_index_size)?;
+    fn parse_field_rva(
+        &mut self,
+        nb_tables: usize,
+        res: &mut HashMap<&'static str, Value>,
+    ) -> Result<(), ()> {
+        let modulerefs: Vec<Value> = (0..nb_tables)
+            .map(|_| {
+                let rva = self.read_u32()?;
+                self.data.skip(usize::from(self.field_index_size))?;
 
-        let len = match res
-            .entry("field_offsets")
-            .or_insert_with(|| Value::Array(Vec::new()))
-        {
-            Value::Array(vec) => {
-                vec.push(va_to_file_offset(self.mem, &self.sections, rva).into());
-                vec.len()
-            }
-            // Safety: the "field_offsets" key can only contain a Value::Array by construction
-            // in this module.
-            _ => unreachable!(),
-        };
+                Ok(va_to_file_offset(self.mem, &self.sections, rva).into())
+            })
+            .collect::<Result<Vec<Value>, ()>>()?;
 
-        let _ = res.insert("number_of_field_offsets", len.into());
+        res.extend([
+            ("number_of_field_offsets", modulerefs.len().into()),
+            ("field_offsets", Value::Array(modulerefs)),
+        ]);
         Ok(())
     }
 
     // ECMA 335, II.22.2
-    fn parse_assembly_table(&mut self, res: &mut HashMap<&'static str, Value>) -> Result<(), ()> {
-        self.skip(4)?; // hash_alg_id
-        let major_version = self.read_u16()?;
-        let minor_version = self.read_u16()?;
-        let build_number = self.read_u16()?;
-        let revision_number = self.read_u16()?;
-        self.skip(4 + self.blob_index_size)?; // flags
-        let name = self.read_string()?;
-        let culture = self.read_string()?;
+    fn parse_assembly_table(
+        &mut self,
+        nb_tables: usize,
+        res: &mut HashMap<&'static str, Value>,
+    ) -> Result<(), ()> {
+        for _ in 0..nb_tables {
+            self.data.skip(4)?; // hash_alg_id
+            let major_version = self.read_u16()?;
+            let minor_version = self.read_u16()?;
+            let build_number = self.read_u16()?;
+            let revision_number = self.read_u16()?;
+            self.data.skip(usize::from(4 + self.blob_index_size))?; // flags
+            let name = self.read_string()?;
+            let culture = self.read_string()?;
 
-        res.extend([(
-            "assembly",
-            Value::object([
-                (
-                    "version",
-                    Value::object([
-                        ("major", major_version.into()),
-                        ("minor", minor_version.into()),
-                        ("build_number", build_number.into()),
-                        ("revision_number", revision_number.into()),
-                    ]),
-                ),
-                ("name", name.map(Value::bytes).into()),
-                ("culture", culture.map(Value::bytes).into()),
-            ]),
-        )]);
+            res.extend([(
+                "assembly",
+                Value::object([
+                    (
+                        "version",
+                        Value::object([
+                            ("major", major_version.into()),
+                            ("minor", minor_version.into()),
+                            ("build_number", build_number.into()),
+                            ("revision_number", revision_number.into()),
+                        ]),
+                    ),
+                    ("name", name.map(Value::bytes).into()),
+                    ("culture", culture.map(Value::bytes).into()),
+                ]),
+            )]);
+        }
         Ok(())
     }
 
     // ECMA 335, II.22.5
     fn parse_assembly_ref_table(
         &mut self,
+        nb_tables: usize,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
-        let major_version = self.read_u16()?;
-        let minor_version = self.read_u16()?;
-        let build_number = self.read_u16()?;
-        let revision_number = self.read_u16()?;
-        self.skip(4)?; // flags
-        let public_key_or_token = self.read_blob()?;
-        let name = self.read_string()?;
-        self.skip(self.string_index_size + self.blob_index_size)?;
+        let assembly_refs: Vec<Value> = (0..nb_tables)
+            .map(|_| {
+                let major_version = self.read_u16()?;
+                let minor_version = self.read_u16()?;
+                let build_number = self.read_u16()?;
+                let revision_number = self.read_u16()?;
+                self.data.skip(4)?; // flags
+                let public_key_or_token = self.read_blob()?;
+                let name = self.read_string()?;
+                self.data
+                    .skip(usize::from(self.string_index_size + self.blob_index_size))?;
 
-        let len = match res
-            .entry("assembly_refs")
-            .or_insert_with(|| Value::Array(Vec::new()))
-        {
-            Value::Array(vec) => {
-                vec.push(Value::object([
+                Ok(Value::object([
                     (
                         "version",
                         Value::object([
@@ -811,52 +951,45 @@ impl<'data> TablesData<'data> {
                         public_key_or_token.map(Value::bytes).into(),
                     ),
                     ("name", name.map(Value::bytes).into()),
-                ]));
-                vec.len()
-            }
-            // Safety: the "assembly_refs" key can only contain a Value::Array by construction
-            // in this module.
-            _ => unreachable!(),
-        };
-        let _ = res.insert("number_of_assembly_refs", len.into());
+                ]))
+            })
+            .collect::<Result<Vec<Value>, ()>>()?;
 
+        res.extend([
+            ("number_of_assembly_refs", assembly_refs.len().into()),
+            ("assembly_refs", Value::Array(assembly_refs)),
+        ]);
         Ok(())
     }
 
     // ECMA 335, II.22.24
     fn parse_manifest_resource_table(
         &mut self,
+        nb_tables: usize,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
-        let offset = self.read_u32()?;
-        self.skip(4)?;
-        let name = self.read_string()?;
-        self.skip(self.implementation_index_size)?;
+        let resources: Vec<Value> = (0..nb_tables)
+            .map(|_| {
+                let offset = self.read_u32()?;
+                self.data.skip(4)?;
+                let name = self.read_string()?;
+                self.data
+                    .skip(usize::from(self.implementation_index_size))?;
 
-        let len = match res
-            .entry("resources")
-            .or_insert_with(|| Value::Array(Vec::new()))
-        {
-            Value::Array(vec) => {
-                vec.push(Value::object([
+                Ok(Value::object([
                     ("offset", offset.into()),
                     // TODO
                     ("length", Value::Undefined),
                     ("name", name.map(Value::bytes).into()),
-                ]));
-                vec.len()
-            }
-            // Safety: the "resources" key can only contain a Value::Array by construction
-            // in this module.
-            _ => unreachable!(),
-        };
-        let _ = res.insert("number_of_resources", len.into());
+                ]))
+            })
+            .collect::<Result<Vec<Value>, ()>>()?;
 
+        res.extend([
+            ("number_of_resources", resources.len().into()),
+            ("resources", Value::Array(resources)),
+        ]);
         Ok(())
-    }
-
-    fn skip(&mut self, nb_bytes: u8) -> Result<(), ()> {
-        self.data.skip(usize::from(nb_bytes))
     }
 
     fn read_index(&mut self, index_size: u8) -> Result<u32, ()> {
