@@ -192,12 +192,6 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
 
     add_metadata_tables(mem, &metadata, resource_base, sections, &mut res);
 
-    // TODO
-
-    res.extend([
-        ("classes", Value::Undefined),
-        ("number_of_classes", Value::Undefined),
-    ]);
     Some(res)
 }
 
@@ -648,16 +642,7 @@ impl<'data> TablesData<'data> {
                 self.type_ref_table_data = Some(self.data.read_bytes(len)?);
                 Ok(())
             }
-            table_type::TYPE_DEF => {
-                let len = get_tables_len(
-                    nb_tables,
-                    4 + 2 * self.string_index_size
-                        + self.type_def_or_ref_index_size
-                        + self.field_index_size
-                        + self.method_def_index_size,
-                )?;
-                self.data.skip(len)
-            }
+            table_type::TYPE_DEF => self.parse_type_defs(nb_tables, res),
             table_type::FIELD => {
                 let len =
                     get_tables_len(nb_tables, 2 + self.string_index_size + self.blob_index_size)?;
@@ -845,6 +830,89 @@ impl<'data> TablesData<'data> {
 
             let _r = res.insert("module_name", name.map(Value::bytes).into());
         }
+        Ok(())
+    }
+
+    // ECMA 335, II.22.37
+    fn parse_type_defs(
+        &mut self,
+        nb_tables: usize,
+        res: &mut HashMap<&str, Value>,
+    ) -> Result<(), ()> {
+        let mut classes = Vec::new();
+        for i in 0..nb_tables {
+            // Values for flags can be found in II.23.1.15
+            let flags = read_u32(&mut self.data)?; // Flags
+            let name = self.read_string()?;
+            let namespace = self.read_string()?;
+
+            self.data.skip(usize::from(
+                self.type_def_or_ref_index_size
+                    + self.field_index_size
+                    + self.method_def_index_size,
+            ))?;
+
+            // Ignore the first row, it's always set to a pseudo class
+            if i == 0 {
+                continue;
+            }
+
+            let typ = if flags & 0x20 != 0 {
+                b"interface".as_slice()
+            } else {
+                b"class"
+            };
+
+            let fullname = match (namespace, name) {
+                (Some(ns), Some(name)) => {
+                    let mut full = Vec::with_capacity(ns.len() + name.len() + 1);
+                    full.extend(ns);
+                    full.push(b'.');
+                    full.extend(name);
+                    Some(full)
+                }
+                (_, _) => None,
+            };
+            let visibility = match flags & 0x07 {
+                // NotPublic or NestedAssembly
+                0x00 | 0x05 => "interal",
+                // Public or NestedPublic
+                0x01 | 0x02 => "public",
+                // NestedPrivate
+                0x03 => "private",
+                // NestedFamily
+                0x04 => "protected",
+                // NestedFamANDAssem
+                0x06 => "private protected",
+                // NestedFamORAssem
+                0x07 => "protected internal",
+                _ => "private",
+            };
+            let abstrac = i64::from((flags & 0x80) != 0);
+            let sealed = i64::from((flags & 0x100) != 0);
+
+            classes.push(Value::object([
+                ("fullname", fullname.map(Value::Bytes).into()),
+                ("name", name.map(Value::bytes).into()),
+                ("namespace", namespace.map(Value::bytes).into()),
+                ("visibility", Value::bytes(visibility)),
+                ("type", Value::bytes(typ)),
+                ("abstract", abstrac.into()),
+                ("sealed", sealed.into()),
+                // TODO
+                ("number_of_generic_parameters", Value::Undefined),
+                ("generic_parameters", Value::Undefined),
+                ("number_of_base_types", Value::Undefined),
+                ("base_types", Value::Undefined),
+                ("number_of_methods", Value::Undefined),
+                ("methods", Value::Undefined),
+            ]));
+        }
+
+        res.extend([
+            ("number_of_classes", classes.len().into()),
+            ("classes", Value::Array(classes)),
+        ]);
         Ok(())
     }
 
