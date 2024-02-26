@@ -185,15 +185,18 @@ fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static st
 
     add_guids(&metadata, &mut res);
     add_user_strings(&metadata, &mut res);
-    add_metadata_tables(mem, &metadata, sections, &mut res);
+
+    let resource_base = sections
+        .pe_file_range_at(cli_header.resources_metadata.get(LE))
+        .map(|v| u64::from(v.0));
+
+    add_metadata_tables(mem, &metadata, resource_base, sections, &mut res);
 
     // TODO
 
     res.extend([
         ("classes", Value::Undefined),
         ("number_of_classes", Value::Undefined),
-        ("constants", Value::Undefined),
-        ("number_of_constants", Value::Undefined),
     ]);
     Some(res)
 }
@@ -259,6 +262,7 @@ fn add_user_strings(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Val
 fn add_metadata_tables<'data>(
     mem: &'data [u8],
     metadata: &MetadataRoot<'data>,
+    resource_base: Option<u64>,
     sections: SectionTable<'data>,
     res: &mut HashMap<&'static str, Value>,
 ) {
@@ -308,6 +312,7 @@ fn add_metadata_tables<'data>(
         mem,
         bytes,
         sections,
+        resource_base,
         strings_stream,
         blobs_stream,
         &table_counts,
@@ -413,6 +418,7 @@ struct TablesData<'data> {
     mem: &'data [u8],
     data: Bytes<'data>,
 
+    resource_base: Option<u64>,
     sections: SectionTable<'data>,
 
     // Contents of the string stream
@@ -464,10 +470,12 @@ struct TablesData<'data> {
 }
 
 impl<'data> TablesData<'data> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         mem: &'data [u8],
         data: Bytes<'data>,
         sections: SectionTable<'data>,
+        resource_base: Option<u64>,
         strings_stream: Option<&'data [u8]>,
         blobs_stream: Option<&'data [u8]>,
         table_counts: &[u32; 64],
@@ -498,6 +506,7 @@ impl<'data> TablesData<'data> {
             mem,
             data,
             sections,
+            resource_base,
             strings_stream,
             blobs_stream,
 
@@ -677,13 +686,7 @@ impl<'data> TablesData<'data> {
                 self.member_ref_table_data = Some(self.data.read_bytes(len)?);
                 Ok(())
             }
-            table_type::CONSTANT => {
-                let len = get_tables_len(
-                    nb_tables,
-                    2 + self.blob_index_size + self.has_constant_index_size,
-                )?;
-                self.data.skip(len)
-            }
+            table_type::CONSTANT => self.parse_constants(nb_tables, res),
             table_type::CUSTOM_ATTRIBUTE => self.parse_custom_attributes(nb_tables, res),
             table_type::FIELD_MARSHALL => {
                 let len = get_tables_len(
@@ -842,6 +845,36 @@ impl<'data> TablesData<'data> {
 
             let _r = res.insert("module_name", name.map(Value::bytes).into());
         }
+        Ok(())
+    }
+
+    // ECMA 335, II.22.9
+    fn parse_constants(
+        &mut self,
+        nb_tables: usize,
+        res: &mut HashMap<&str, Value>,
+    ) -> Result<(), ()> {
+        let mut constants = Vec::new();
+        for _ in 0..nb_tables {
+            // Parse the constant table, keep the type and blob index
+            let ty = read_u16(&mut self.data)?;
+            self.data.skip(usize::from(self.has_constant_index_size))?;
+            let value = read_index(&mut self.data, self.blob_index_size)?;
+
+            // We only keep the string constants, see II.23.1.16
+            if ty != 0x0e {
+                continue;
+            }
+            constants.push(match self.get_blob(value as usize) {
+                Some(v) => Value::bytes(v),
+                None => Value::Undefined,
+            });
+        }
+
+        res.extend([
+            ("number_of_constants", constants.len().into()),
+            ("constants", Value::Array(constants)),
+        ]);
         Ok(())
     }
 
@@ -1113,22 +1146,40 @@ impl<'data> TablesData<'data> {
         nb_tables: usize,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
-        let resources: Vec<Value> = (0..nb_tables)
-            .map(|_| {
-                let offset = read_u32(&mut self.data)?;
-                self.data.skip(4)?;
-                let name = self.read_string()?;
-                self.data
-                    .skip(usize::from(self.implementation_index_size))?;
+        let Some(resource_base) = self.resource_base else {
+            return Ok(());
+        };
 
-                Ok(Value::object([
-                    ("offset", offset.into()),
-                    // TODO
-                    ("length", Value::Undefined),
-                    ("name", name.map(Value::bytes).into()),
-                ]))
-            })
-            .collect::<Result<Vec<Value>, ()>>()?;
+        let mut resources = Vec::new();
+        for _ in 0..nb_tables {
+            let offset = read_u32(&mut self.data)?;
+            self.data.skip(4)?;
+            let name = self.read_string()?;
+            let implementation = read_index(&mut self.data, self.implementation_index_size)?;
+            if implementation != 0 {
+                // Resource is not in this file, so ignore
+                continue;
+            }
+
+            // Offset is relative to the resource entry in this file.
+            let Some(real_offset) = resource_base.checked_add(u64::from(offset)) else {
+                continue;
+            };
+
+            // We can get the length from reading into the entry
+            // XXX: this comes from the yara logic, I haven't really understood where
+            // this length comes from
+            let Ok(length) = self.mem.read_at::<U32<LE>>(real_offset) else {
+                continue;
+            };
+
+            resources.push(Value::object([
+                // Add 4 to skip the size we just read
+                ("offset", real_offset.checked_add(4).into()),
+                ("length", length.get(LE).into()),
+                ("name", name.map(Value::bytes).into()),
+            ]));
+        }
 
         res.extend([
             ("number_of_resources", resources.len().into()),
@@ -1163,14 +1214,17 @@ impl<'data> TablesData<'data> {
 
     fn read_blob(&mut self) -> Result<Option<&'data [u8]>, ()> {
         let index = read_index(&mut self.data, self.blob_index_size)? as usize;
+
+        Ok(self.get_blob(index))
+    }
+
+    fn get_blob(&self, index: usize) -> Option<&'data [u8]> {
         if index == 0 {
-            return Ok(None);
+            return None;
         }
 
-        Ok(self
-            .blobs_stream
-            .and_then(|v| v.get(index..))
-            .and_then(|slice| read_blob(&mut Bytes(slice))))
+        let slice = self.blobs_stream?.get(index..)?;
+        read_blob(&mut Bytes(slice))
     }
 }
 
