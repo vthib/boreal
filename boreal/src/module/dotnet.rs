@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use object::coff::SectionTable;
 use object::pe::{
@@ -315,7 +315,7 @@ fn add_metadata_tables<'data>(
 
     // Then, parsing every table in order
     for table_index in 0..64 {
-        let nb_tables = table_counts[usize::from(table_index)] as usize;
+        let nb_tables = table_counts[usize::from(table_index)];
         if nb_tables == 0 {
             continue;
         }
@@ -324,9 +324,11 @@ fn add_metadata_tables<'data>(
             .parse_table_type(table_index, nb_tables, res)
             .is_err()
         {
-            return;
+            break;
         }
     }
+
+    tables_data.finalize(res);
 }
 
 mod table_type {
@@ -428,6 +430,13 @@ struct TablesData<'data> {
     type_ref_table_data: Option<Bytes<'data>>,
     member_ref_table_data: Option<Bytes<'data>>,
 
+    // Details on classes.
+    //
+    // Since we get data for classes from multiple tables,
+    // this object is used to stored the details while we are
+    // processing tables.
+    classes: BTreeMap<u32, Class>,
+
     // The following values are the size of indexes used in tables.
     // They are either equal to 2 or 4.
 
@@ -510,6 +519,8 @@ impl<'data> TablesData<'data> {
             string_index_size: if wide_string_index { 4 } else { 2 },
             guid_index_size: if wide_guid_index { 4 } else { 2 },
             blob_index_size: if wide_blob_index { 4 } else { 2 },
+
+            classes: BTreeMap::new(),
 
             // Simple indexes
             type_def_index_size: compute_index_size(table_type::TYPE_DEF),
@@ -622,17 +633,29 @@ impl<'data> TablesData<'data> {
         }
     }
 
+    fn finalize(self, res: &mut HashMap<&'static str, Value>) {
+        // The "classes" field is built progressively while parsing tables.
+        // Once all tables are parsed, we can generate the final values.
+        let classes: Vec<Value> = self.classes.into_values().map(Class::into_value).collect();
+        res.extend([
+            ("number_of_classes", classes.len().into()),
+            ("classes", Value::Array(classes)),
+        ]);
+    }
+
     // Parse a table of the given index code.
     //
     // If Err is returned, the end of the data has been reached and nothing more can be read.
     fn parse_table_type(
         &mut self,
         table_index: u8,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
-        fn get_tables_len(nb_tables: usize, table_size: u8) -> Result<usize, ()> {
-            nb_tables.checked_mul(usize::from(table_size)).ok_or(())
+        fn get_tables_len(nb_tables: u32, table_size: u8) -> Result<usize, ()> {
+            (nb_tables as usize)
+                .checked_mul(usize::from(table_size))
+                .ok_or(())
         }
 
         match table_index {
@@ -642,7 +665,7 @@ impl<'data> TablesData<'data> {
                 self.type_ref_table_data = Some(self.data.read_bytes(len)?);
                 Ok(())
             }
-            table_type::TYPE_DEF => self.parse_type_defs(nb_tables, res),
+            table_type::TYPE_DEF => self.parse_type_defs(nb_tables),
             table_type::FIELD => {
                 let len =
                     get_tables_len(nb_tables, 2 + self.string_index_size + self.blob_index_size)?;
@@ -818,11 +841,7 @@ impl<'data> TablesData<'data> {
     }
 
     // EMCA 335, II.22.30
-    fn parse_modules(
-        &mut self,
-        nb_tables: usize,
-        res: &mut HashMap<&str, Value>,
-    ) -> Result<(), ()> {
+    fn parse_modules(&mut self, nb_tables: u32, res: &mut HashMap<&str, Value>) -> Result<(), ()> {
         for _ in 0..nb_tables {
             self.data.skip(2)?; // generation
             let name = self.read_string()?;
@@ -834,12 +853,7 @@ impl<'data> TablesData<'data> {
     }
 
     // ECMA 335, II.22.37
-    fn parse_type_defs(
-        &mut self,
-        nb_tables: usize,
-        res: &mut HashMap<&str, Value>,
-    ) -> Result<(), ()> {
-        let mut classes = Vec::new();
+    fn parse_type_defs(&mut self, nb_tables: u32) -> Result<(), ()> {
         for i in 0..nb_tables {
             // Values for flags can be found in II.23.1.15
             let flags = read_u32(&mut self.data)?; // Flags
@@ -857,69 +871,22 @@ impl<'data> TablesData<'data> {
                 continue;
             }
 
-            let typ = if flags & 0x20 != 0 {
-                b"interface".as_slice()
-            } else {
-                b"class"
-            };
-
-            let fullname = match (namespace, name) {
-                (Some(ns), Some(name)) => {
-                    let mut full = Vec::with_capacity(ns.len() + name.len() + 1);
-                    full.extend(ns);
-                    full.push(b'.');
-                    full.extend(name);
-                    Some(full)
-                }
-                (_, _) => None,
-            };
-            let visibility = match flags & 0x07 {
-                // NotPublic or NestedAssembly
-                0x00 | 0x05 => "interal",
-                // Public or NestedPublic
-                0x01 | 0x02 => "public",
-                // NestedPrivate
-                0x03 => "private",
-                // NestedFamily
-                0x04 => "protected",
-                // NestedFamANDAssem
-                0x06 => "private protected",
-                // NestedFamORAssem
-                0x07 => "protected internal",
-                _ => "private",
-            };
-            let abstrac = i64::from((flags & 0x80) != 0);
-            let sealed = i64::from((flags & 0x100) != 0);
-
-            classes.push(Value::object([
-                ("fullname", fullname.map(Value::Bytes).into()),
-                ("name", name.map(Value::bytes).into()),
-                ("namespace", namespace.map(Value::bytes).into()),
-                ("visibility", Value::bytes(visibility)),
-                ("type", Value::bytes(typ)),
-                ("abstract", abstrac.into()),
-                ("sealed", sealed.into()),
-                // TODO
-                ("number_of_generic_parameters", Value::Undefined),
-                ("generic_parameters", Value::Undefined),
-                ("number_of_base_types", Value::Undefined),
-                ("base_types", Value::Undefined),
-                ("number_of_methods", Value::Undefined),
-                ("methods", Value::Undefined),
-            ]));
+            let _ = self.classes.insert(
+                i,
+                Class {
+                    flags,
+                    name: name.map(ToOwned::to_owned),
+                    namespace: namespace.map(ToOwned::to_owned),
+                },
+            );
         }
-
-        res.extend([
-            ("number_of_classes", classes.len().into()),
-            ("classes", Value::Array(classes)),
-        ]);
         Ok(())
     }
 
     // ECMA 335, II.22.9
     fn parse_constants(
         &mut self,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&str, Value>,
     ) -> Result<(), ()> {
         let mut constants = Vec::new();
@@ -949,7 +916,7 @@ impl<'data> TablesData<'data> {
     // ECMA 335, II.22.10
     fn parse_custom_attributes(
         &mut self,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&str, Value>,
     ) -> Result<(), ()> {
         let mut found_typelib = false;
@@ -1089,7 +1056,7 @@ impl<'data> TablesData<'data> {
     // ECMA 335, II.22.31
     fn parse_module_ref(
         &mut self,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
         let modulerefs: Vec<Value> = (0..nb_tables)
@@ -1109,7 +1076,7 @@ impl<'data> TablesData<'data> {
     // ECMA 335, II.22.18
     fn parse_field_rva(
         &mut self,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
         let modulerefs: Vec<Value> = (0..nb_tables)
@@ -1131,7 +1098,7 @@ impl<'data> TablesData<'data> {
     // ECMA 335, II.22.2
     fn parse_assembly_table(
         &mut self,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
         for _ in 0..nb_tables {
@@ -1167,7 +1134,7 @@ impl<'data> TablesData<'data> {
     // ECMA 335, II.22.5
     fn parse_assembly_ref_table(
         &mut self,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
         let assembly_refs: Vec<Value> = (0..nb_tables)
@@ -1211,7 +1178,7 @@ impl<'data> TablesData<'data> {
     // ECMA 335, II.22.24
     fn parse_manifest_resource_table(
         &mut self,
-        nb_tables: usize,
+        nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
         let Some(resource_base) = self.resource_base else {
@@ -1293,6 +1260,68 @@ impl<'data> TablesData<'data> {
 
         let slice = self.blobs_stream?.get(index..)?;
         read_blob(&mut Bytes(slice))
+    }
+}
+
+#[derive(Debug)]
+struct Class {
+    flags: u32,
+    name: Option<Vec<u8>>,
+    namespace: Option<Vec<u8>>,
+}
+
+impl Class {
+    fn into_value(self) -> Value {
+        let typ = if self.flags & 0x20 != 0 {
+            b"interface".as_slice()
+        } else {
+            b"class"
+        };
+
+        let fullname = match (self.namespace.as_deref(), self.name.as_deref()) {
+            (Some(ns), Some(name)) => {
+                let mut full = Vec::with_capacity(ns.len() + name.len() + 1);
+                full.extend(ns);
+                full.push(b'.');
+                full.extend(name);
+                Some(full)
+            }
+            (_, _) => None,
+        };
+        let visibility = match self.flags & 0x07 {
+            // NotPublic or NestedAssembly
+            0x00 | 0x05 => "interal",
+            // Public or NestedPublic
+            0x01 | 0x02 => "public",
+            // NestedPrivate
+            0x03 => "private",
+            // NestedFamily
+            0x04 => "protected",
+            // NestedFamANDAssem
+            0x06 => "private protected",
+            // NestedFamORAssem
+            0x07 => "protected internal",
+            _ => "private",
+        };
+        let abstrac = i64::from((self.flags & 0x80) != 0);
+        let sealed = i64::from((self.flags & 0x100) != 0);
+
+        Value::object([
+            ("fullname", fullname.into()),
+            ("name", self.name.into()),
+            ("namespace", self.namespace.into()),
+            ("visibility", Value::bytes(visibility)),
+            ("type", Value::bytes(typ)),
+            ("abstract", abstrac.into()),
+            ("sealed", sealed.into()),
+            // TODO
+            ("number_of_generic_parameters", Value::Undefined),
+            ("generic_parameters", Value::Undefined),
+            ("number_of_base_types", Value::Undefined),
+            ("base_types", Value::Undefined),
+            ("number_of_methods", Value::Undefined),
+            ("methods", Value::Undefined),
+        ])
     }
 }
 
