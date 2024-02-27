@@ -821,13 +821,7 @@ impl<'data> TablesData<'data> {
                 let len = get_tables_len(nb_tables, 2 * self.type_def_index_size)?;
                 self.data.skip(len)
             }
-            table_type::GENERIC_PARAM => {
-                let len = get_tables_len(
-                    nb_tables,
-                    4 + self.type_or_method_def_index_size + self.string_index_size,
-                )?;
-                self.data.skip(len)
-            }
+            table_type::GENERIC_PARAM => self.parse_generic_params(nb_tables),
             table_type::METHOD_SPEC => {
                 let len = get_tables_len(
                     nb_tables,
@@ -885,6 +879,7 @@ impl<'data> TablesData<'data> {
                 name: name.map(ToOwned::to_owned),
                 namespace: namespace.map(ToOwned::to_owned),
                 methods: Vec::new(),
+                generic_params: Vec::new(),
                 method_def_first_index: if method_def_index == 0 {
                     None
                 } else {
@@ -909,6 +904,7 @@ impl<'data> TablesData<'data> {
             self.methods.push(Method {
                 flags,
                 name: name.map(ToOwned::to_owned),
+                generic_params: Vec::new(),
             });
         }
         Ok(())
@@ -1254,6 +1250,39 @@ impl<'data> TablesData<'data> {
         Ok(())
     }
 
+    // ECMA 335, II.22.20
+    fn parse_generic_params(&mut self, nb_tables: u32) -> Result<(), ()> {
+        for _ in 0..nb_tables {
+            self.data.skip(4)?; // "Number" and "Flags"
+            let owner = read_index(&mut self.data, self.type_or_method_def_index_size)?;
+            let name = self.read_string()?;
+
+            // Indexing is 1-based, 0 means unset.
+            let Some(owner_index) = ((owner >> 1) as usize).checked_sub(1) else {
+                continue;
+            };
+
+            // II.24.2.6:
+            // 0 if the index points to a TypeDef
+            // 1 if the index points to a MethodDef
+            if owner & 0x01 == 0 {
+                if let Some(class) = self.classes.get_mut(owner_index) {
+                    class.generic_params.push(match name {
+                        Some(v) => Value::bytes(v),
+                        None => Value::Undefined,
+                    });
+                }
+            } else if let Some(method) = self.methods.get_mut(owner_index) {
+                method.generic_params.push(match name {
+                    Some(v) => Value::bytes(v),
+                    None => Value::Undefined,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     fn type_ref_table_size(&self) -> u8 {
         self.resolution_scope_index_size + 2 * self.string_index_size
     }
@@ -1301,6 +1330,7 @@ struct Class {
     namespace: Option<Vec<u8>>,
     methods: Vec<Value>,
     method_def_first_index: Option<u32>,
+    generic_params: Vec<Value>,
 }
 
 impl Class {
@@ -1350,9 +1380,12 @@ impl Class {
             ("sealed", sealed.into()),
             ("number_of_methods", self.methods.len().into()),
             ("methods", Value::Array(self.methods)),
+            (
+                "number_of_generic_parameters",
+                self.generic_params.len().into(),
+            ),
+            ("generic_parameters", Value::Array(self.generic_params)),
             // TODO
-            ("number_of_generic_parameters", Value::Undefined),
-            ("generic_parameters", Value::Undefined),
             ("number_of_base_types", Value::Undefined),
             ("base_types", Value::Undefined),
         ])
@@ -1363,6 +1396,7 @@ impl Class {
 struct Method {
     flags: u16,
     name: Option<Vec<u8>>,
+    generic_params: Vec<Value>,
 }
 
 impl Method {
@@ -1396,9 +1430,12 @@ impl Method {
             ("static", flag_static.into()),
             ("visibility", Value::bytes(visibility)),
             ("name", self.name.into()),
+            (
+                "number_of_generic_parameters",
+                self.generic_params.len().into(),
+            ),
+            ("generic_parameters", Value::Array(self.generic_params)),
             // TODO
-            ("generic_parameters", Value::Undefined),
-            ("number_of_generic_parameters", Value::Undefined),
             ("parameters", Value::Undefined),
             ("number_of_parameters", Value::Undefined),
             ("return_type", Value::Undefined),
