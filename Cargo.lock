@@ -131,12 +131,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "327762f6e5a765692301e5bb513e0d9fef63be86bbc14528052b1cd3e6f03e07"
 
 [[package]]
-name = "bitmaps"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "703642b98a00b3b90513279a8ede3fcfa479c126c5fb46e78f3051522f021403"
-
-[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -152,7 +146,6 @@ dependencies = [
  "aho-corasick",
  "authenticode-parser",
  "base64",
- "bitmaps",
  "boreal-parser",
  "codespan-reporting",
  "crc32fast",

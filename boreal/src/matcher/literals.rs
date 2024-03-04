@@ -1,7 +1,7 @@
 //! Literal extraction and computation from variable expressions.
 use crate::atoms::{atoms_rank, byte_rank};
+use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
-use bitmaps::Bitmap;
 
 pub fn get_literals_details(hir: &Hir, dot_all: bool) -> LiteralsDetails {
     let extractor = visit(hir, Extractor::new(dot_all));
@@ -84,14 +84,14 @@ struct Extractor {
 #[derive(Debug)]
 enum HirPartKind {
     Literal(u8),
-    Class { bitmap: Bitmap<256> },
+    Class { bitmap: Bitmap },
 }
 
 impl HirPartKind {
     fn combinations(&self) -> usize {
         match self {
             Self::Literal(_) => 1,
-            Self::Class { bitmap } => bitmap.len(),
+            Self::Class { bitmap } => bitmap.count_ones(),
         }
     }
 }
@@ -197,13 +197,9 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
                 literals = literals
                     .iter()
                     .flat_map(|prefix| {
-                        bitmap.into_iter().map(|b| {
+                        bitmap.iter().map(|b| {
                             #[allow(clippy::cast_possible_truncation)]
-                            prefix
-                                .iter()
-                                .copied()
-                                .chain(std::iter::once(b as u8))
-                                .collect()
+                            prefix.iter().copied().chain(std::iter::once(b)).collect()
                         })
                     })
                     .collect();
@@ -296,19 +292,15 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
             HirPartKind::Literal(b) => {
                 quality += byte_rank(*b);
 
-                if !bitmap.get(*b as usize) {
-                    let _r = bitmap.set(*b as usize, true);
+                if !bitmap.get(*b) {
+                    bitmap.set(*b, true);
                     nb_uniq += 1;
                 }
             }
             #[allow(clippy::cast_possible_truncation)]
             HirPartKind::Class { bitmap: class } => {
-                quality += class
-                    .into_iter()
-                    .map(|v| byte_rank(v as u8))
-                    .min()
-                    .unwrap_or(0);
-                if class.into_iter().any(|b| !bitmap.get(b)) {
+                quality += class.iter().map(byte_rank).min().unwrap_or(0);
+                if class.iter().any(|b| !bitmap.get(b)) {
                     nb_uniq += 1;
                 }
                 bitmap |= *class;
@@ -355,7 +347,7 @@ impl Visitor for Extractor {
             Hir::Dot => {
                 let mut bitmap = Bitmap::new();
                 if !self.dot_all {
-                    let _r = bitmap.set(usize::from(b'\n'), true);
+                    bitmap.set(b'\n', true);
                 }
                 bitmap.invert();
                 self.add_part(HirPartKind::Class { bitmap });
@@ -373,11 +365,11 @@ impl Visitor for Extractor {
                 let mut bitmap = Bitmap::new();
                 if *mask == 0x0F {
                     for c in 0..=15 {
-                        let _ = bitmap.set(usize::from((c << 4) | *value), true);
+                        bitmap.set((c << 4) | *value, true);
                     }
                 } else {
                     for c in 0..=15 {
-                        let _ = bitmap.set(usize::from(c | *value), true);
+                        bitmap.set(c | *value, true);
                     }
                 }
                 if *negated {
