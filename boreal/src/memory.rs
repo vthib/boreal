@@ -217,9 +217,7 @@ impl Memory<'_> {
                     // Adjust ending offset relative to the region base and length
                     let relative_end = std::cmp::min(region.length, end - region.start);
 
-                    let Some(fetched_region) = fragmented.obj.fetch(&fragmented.params) else {
-                        return None;
-                    };
+                    let fetched_region = fragmented.obj.fetch(&fragmented.params)?;
                     cb(&fetched_region.mem[relative_start..relative_end]);
                     has_called_cb = true;
 

@@ -689,6 +689,7 @@ fn test_input_cannot_read() {
     let child = temp.path().join("child");
     let _file = fs::OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .mode(0o000)
         .open(&child)

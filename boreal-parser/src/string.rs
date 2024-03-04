@@ -1,5 +1,4 @@
 //! Parsing related to strings and identifiers.
-use std::borrow::ToOwned;
 
 use nom::{
     bytes::complete::take_while,
