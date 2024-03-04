@@ -351,9 +351,7 @@ fn rule_enum_element(input: Input) -> ParseResult<SetElement> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::{
-        Identifier, IdentifierOperation, IdentifierOperationType,
-    };
+    use crate::expression::{Identifier, IdentifierOperation, IdentifierOperationType};
     use crate::test_helpers::{parse, parse_err, test_public_type};
 
     #[test]
