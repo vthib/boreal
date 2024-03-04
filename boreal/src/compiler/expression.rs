@@ -972,9 +972,9 @@ pub enum ForSelection {
     /// None of the variables in the set must match the condition.
     None,
     /// Expression that should evaluate to a number, indicating:
-    /// - if as_percent is false, how many variables in the set must match
+    /// - if `as_percent` is false, how many variables in the set must match
     ///   the condition.
-    /// - if as_percent is true, which percentage of variables in the set
+    /// - if `as_percent` is true, which percentage of variables in the set
     ///   must match the condition.
     ///   the condition.
     ///
@@ -1307,8 +1307,7 @@ fn compile_identifier_as_iterator(
     } else if compiler
         .namespace
         .rules_indexes
-        .get(&identifier.name)
-        .is_some()
+        .contains_key(&identifier.name)
     {
         return Err(CompilationError::NonIterableIdentifier {
             span: identifier_span.clone(),

@@ -47,7 +47,7 @@ pub fn analyze_hir(hir: &Hir, dot_all: bool) -> HirAnalysis {
 }
 
 struct HirAnalyser {
-    /// Is the dot_all flag set.
+    /// Is the `dot_all` flag set.
     ///
     /// This is an input of the visitor, and not an output as other fields are.
     dot_all: bool,
