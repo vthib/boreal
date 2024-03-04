@@ -13,7 +13,7 @@ impl Bitmap {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     fn mask(bit: u8) -> u128 {
         1u128 << (bit & 127)
     }
@@ -25,7 +25,7 @@ impl Bitmap {
             self.high
         }
     }
-    
+
     fn get_half_mut(&mut self, bit: u8) -> &mut u128 {
         if bit < Self::HALF {
             &mut self.low
