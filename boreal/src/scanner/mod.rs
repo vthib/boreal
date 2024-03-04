@@ -762,8 +762,6 @@ impl std::fmt::Display for DefineSymbolError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use crate::module::{EvalContext, ScanContext, StaticValue, Type, Value as ModuleValue};
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
     use crate::Compiler;

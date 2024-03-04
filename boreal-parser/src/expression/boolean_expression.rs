@@ -322,7 +322,7 @@ mod tests {
     use super::*;
     use crate::{
         expression::{Identifier, MAX_EXPR_RECURSION},
-        regex::{self, Literal, Regex},
+        regex::{self, Literal},
         test_helpers::{parse, parse_check, parse_err, parse_err_type, test_public_type},
     };
     use std::ops::Range;

@@ -563,7 +563,7 @@ fn condition(input: Input) -> ParseResult<Expression> {
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::{Expression, ExpressionKind, ForSelection, VariableSet};
+    use crate::expression::{ExpressionKind, ForSelection, VariableSet};
     use crate::hex_string::{Mask, Token};
     use crate::regex::Literal;
     use crate::test_helpers::test_public_type;
