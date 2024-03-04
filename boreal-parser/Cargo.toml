@@ -1,6 +1,6 @@
 [package]
 name = "boreal-parser"
-version = "0.4.0"
+version = "0.5.0"
 description = "A parser library for YARA files, intended for use with the boreal library"
 repository = "https://github.com/vthib/boreal"
 readme = "README.md"

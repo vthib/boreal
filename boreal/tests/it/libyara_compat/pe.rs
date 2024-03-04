@@ -26,10 +26,10 @@ fn test_pe() {
         "import \"pe\"
       rule test {
         condition:
-          pe.imports(\"KERNEL32.dll\", \"DeleteCriticalSection\")
+          pe.number_of_imports == 0 and pe.number_of_imported_functions == 0
       }",
         "tests/assets/libyara/data/tiny-idata-5200",
-        false,
+        true,
     );
 
     check_file(
@@ -50,26 +50,6 @@ fn test_pe() {
       }",
         "tests/assets/libyara/data/tiny",
         true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(/.*/, /.*/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(/.*/, /.*CriticalSection/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
     );
 
     ///////////////////////////////
@@ -98,16 +78,6 @@ fn test_pe() {
         "import \"pe\"
       rule test {
         condition:
-          pe.imports(pe.IMPORT_STANDARD, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
           pe.imports(pe.IMPORT_STANDARD, /.*/, /.*CriticalSection/) == 4
       }",
         "tests/assets/libyara/data/tiny",
@@ -122,26 +92,6 @@ fn test_pe() {
       }",
         "tests/assets/libyara/data/tiny",
         true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_STANDARD, /.*/, /.*/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_STANDARD, /.*/, /.*CriticalSection/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
     );
 
     check_file(
@@ -241,16 +191,6 @@ fn test_pe() {
         "import \"pe\"
       rule test {
         condition:
-          pe.imports(pe.IMPORT_ANY, \"KERNEL32.dll\", \"DeleteCriticalSection\")
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
           pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/) == 4
       }",
         "tests/assets/libyara/data/tiny",
@@ -265,26 +205,6 @@ fn test_pe() {
       }",
         "tests/assets/libyara/data/tiny",
         true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_ANY, /.*/, /.*/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        true,
-    );
-
-    check_file(
-        "import \"pe\"
-      rule test {
-        condition:
-          pe.imports(pe.IMPORT_ANY, /.*/, /.*CriticalSection/)
-      }",
-        "tests/assets/libyara/data/tiny-idata-5200",
-        false,
     );
 
     check(
@@ -365,6 +285,28 @@ fn test_pe() {
         "tests/assets/libyara/data/tiny",
         true,
     );
+
+    // Make sure imports with no ordinal and an empty name are skipped. This is
+    // consistent with the behavior of pefile.
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.imphash() == \"b441b7fd09648ae6a06cea0e090128d6\"
+      }",
+        "tests/assets/libyara/data/tiny_empty_import_name",
+        true,
+    );
+
+    check_file(
+        "import \"pe\"
+        rule test {
+          condition:
+            pe.imphash() == \"d49b7870cb53f29ec3f42b11cc8bea8b\"
+        }",
+        "tests/assets/libyara/data/e3d45a2865818756068757d7e319258fef40dad54532ee4355b86bc129f27345",
+        true
+    ) ;
 
     #[cfg(feature = "authenticode")]
     check_file(
@@ -471,6 +413,28 @@ fn test_pe() {
     #[cfg(feature = "authenticode")]
     check_file(
         "import \"pe\"
+      rule test {
+        condition:
+          not pe.is_signed
+      }",
+        "tests/assets/libyara/data/e3d45a2865818756068757d7e319258fef40dad54532ee4355b86bc129f27345",
+        true,
+    );
+
+    #[cfg(feature = "authenticode")]
+    check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.is_signed
+      }",
+        "tests/assets/libyara/data/3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c",
+        true,
+    );
+
+    #[cfg(feature = "authenticode")]
+    check_file(
+        "import \"pe\"
         rule test {
           condition:
             pe.number_of_signatures == 2
@@ -560,12 +524,24 @@ fn test_pe() {
     );
 
     check_file(
+        "import \"pe\"
+      rule test {
+        condition:
+          pe.pdb_path == \"/Users/runner/work/OpenCorePkg/OpenCorePkg/UDK/Build/OpenCorePkg/\
+          DEBUG_XCODE5/X64/OpenCorePkg/Application/ChipTune/ChipTune/DEBUG/ChipTune.dll\"
+      }",
+        "tests/assets/libyara/data/ChipTune.efi",
+        true,
+    );
+
+    check_file(
       "import \"pe\"
       rule test {
         condition:
-          pe.pdb_path == \"/Users/runner/work/OpenCorePkg/OpenCorePkg/UDK/Build/OpenCorePkg/DEBUG_XCODE5/X64/OpenCorePkg/Application/ChipTune/ChipTune/DEBUG/ChipTune.dll\"
+          pe.pdb_path == \"2AC71AF3-A338-495C-834E-977A6DD5C6FD\"
       }",
-      "tests/assets/libyara/data/ChipTune.efi", true);
+      "tests/assets/libyara/data/6c2abf4b80a87e63eee2996e5cea8f004d49ec0c1806080fa72e960529cba14c",
+      true);
 
     check_file(
         "import \"pe\"
@@ -613,6 +589,10 @@ fn test_pe() {
           pe.export_details[0].offset == 1072 and
           pe.export_details[0].name == \"DllGetClassObject\" and
           pe.export_details[0].ordinal == 1 and
+          pe.export_details[0].rva == 0x1030 and
+          pe.export_details[1].rva == 0x267d and
+          pe.export_details[2].rva == 0x26a8 and
+          pe.export_details[3].rva == 0x26ca and
           pe.export_details[1].forward_name == \"COMSVCS.GetObjectContext\"
       }",
         "tests/assets/libyara/data/mtxex.dll",
@@ -667,7 +647,8 @@ fn test_pe() {
         "import \"pe\"
       rule test {
         condition:
-          pe.export_details[0].name == \"CP_PutItem\"
+          pe.export_details[0].name == \"CP_PutItem\" and
+          pe.export_details[0].rva == 0x106c
       }",
         "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx",
         true,
@@ -969,32 +950,59 @@ fn test_pe() {
         true,
     );
 
+    // These are intentionally using DLL and function names with incorrect case
+    // to be sure the string compare is case insensitive.
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule test {
         condition:
-          pe.import_rva(\"PtImageRW.dll\", \"ord4\") == 254924 and
-          pe.import_rva(\"PtPDF417Decode.dll\", 4) == 254948
+          pe.import_rva(\"ptimagerw.dll\", \"ORD4\") == 254924 and
+          pe.import_rva(\"ptPDF417decode.dll\", 4) == 254948
       }",
-      "tests/assets/libyara/data/ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386", true);
+        "tests/assets/libyara/data/\
+      ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386",
+        true,
+    );
 
+    // These are intentionally using DLL and function names with incorrect case
+    // to be sure the string compare is case insensitive.
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule test {
         condition:
-          pe.delayed_import_rva(\"QDB.dll\", \"ord116\") ==
-          pe.delayed_import_rva(\"QDB.dll\", 116)
+          pe.delayed_import_rva(\"qdb.dll\", \"ORD116\") ==
+          pe.delayed_import_rva(\"qdb.dll\", 116)
       }",
-      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+        "tests/assets/libyara/data/\
+      079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
 
     // The first 0x410 bytes of
     // c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba are enough
     // to trigger the bug in https://github.com/VirusTotal/yara/pull/1561
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule rva_to_offset_weird_sections {
         condition:
           pe.rva_to_offset(4096) == 1024
       }",
-      "tests/assets/libyara/data/c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h", true);
+        "tests/assets/libyara/data/\
+      c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h",
+        true,
+    );
+
+    check_file(
+        "import \"pe\"
+      rule invalid_offset {
+        condition:
+          not defined pe.export_details[0].offset and
+          not defined pe.export_details[7].offset and
+          not defined pe.export_details[15].offset and
+          not defined pe.export_details[21].offset
+      }",
+        "tests/assets/libyara/data/\
+        05cd06e6a202e12be22a02700ed6f1604e803ca8867277d852e8971efded0650",
+        true,
+    );
 }

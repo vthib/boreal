@@ -284,6 +284,14 @@ fn test_macho() {
         true,
     );
 
+    check_file(
+        "import \"macho\" rule test { condition:
+    macho.file[0].magic == 0xcefaedfe and
+    macho.file[1].magic == 0xcffaedfe }",
+        "tests/assets/libyara/data/tiny-universal",
+        true,
+    );
+
     // Entry points for files (LC_MAIN)
 
     check_file(

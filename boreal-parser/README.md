@@ -14,4 +14,4 @@ evaluation of YARA rules.
 
 ### YARA version supported
 
-All features available in the 4.2 version of YARA are handled.
+All features available in the 4.5 version of YARA are handled.

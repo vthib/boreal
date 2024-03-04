@@ -24,8 +24,9 @@ mod version_info;
 
 const MAX_PE_SECTIONS: usize = 96;
 const MAX_PE_IMPORTS: usize = 16384;
-const MAX_PE_EXPORTS: usize = 8192;
+const MAX_PE_EXPORTS: usize = 16384;
 const MAX_EXPORT_NAME_LENGTH: usize = 512;
+const MAX_IMPORT_DLL_NAME_LENGTH: usize = 256;
 const MAX_RESOURCES: usize = 65536;
 const MAX_NB_DATA_DIRECTORIES: usize = 32768;
 const MAX_NB_VERSION_INFOS: usize = 32768;
@@ -954,6 +955,7 @@ impl Module for Pe {
                     ("name", Type::Bytes),
                     ("forward_name", Type::Bytes),
                     ("ordinal", Type::Integer),
+                    ("rva", Type::Integer),
                 ])),
             ),
             (
@@ -1345,6 +1347,7 @@ impl Pe {
                 let _r = map.insert("signatures", Value::Array(signatures));
             } else {
                 let _r = map.insert("number_of_signatures", Value::Integer(0));
+                let _r = map.insert("is_signed", Value::Integer(0));
             }
         }
 
@@ -1413,8 +1416,11 @@ fn add_imports<Pe: ImageNtHeaders>(
                 Ok(name) => name.to_vec(),
                 Err(_) => continue,
             };
-            let mut data_functions = Vec::new();
+            if library.len() >= MAX_IMPORT_DLL_NAME_LENGTH || !dll_name_is_valid(&library) {
+                continue;
+            }
 
+            let mut data_functions = Vec::new();
             let import_thunk_list = table
                 .thunks(import_desc.original_first_thunk.get(LE))
                 .or_else(|_| table.thunks(import_desc.first_thunk.get(LE)));
@@ -1429,6 +1435,9 @@ fn add_imports<Pe: ImageNtHeaders>(
                     &mut nb_functions_total,
                 )
             });
+            if functions.as_ref().map_or(true, Vec::is_empty) {
+                continue;
+            }
 
             data.imports.push(DataImport {
                 dll_name: library.clone(),
@@ -1477,16 +1486,17 @@ where
         if *nb_functions_total >= MAX_PE_IMPORTS {
             break;
         }
-        *nb_functions_total += 1;
 
-        add_thunk::<Pe, _>(
+        if add_thunk::<Pe, _>(
             thunk,
             dll_name,
             rva,
             &hint_name,
             &mut functions,
             data_functions,
-        );
+        ) {
+            *nb_functions_total += 1;
+        }
         rva += if is_32 { 4 } else { 8 };
     }
     functions
@@ -1499,7 +1509,8 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
     hint_name: F,
     functions: &mut Vec<Value>,
     data_functions: &mut Vec<DataFunction>,
-) where
+) -> bool
+where
     F: Fn(u32) -> object::Result<Vec<u8>>,
 {
     if thunk.is_ordinal() {
@@ -1517,10 +1528,15 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
             ("ordinal", ordinal.into()),
             ("rva", rva.into()),
         ]));
+        true
     } else {
         let Ok(name) = hint_name(thunk.address()) else {
-            return;
+            return false;
         };
+
+        if !is_import_name_valid(&name) {
+            return false;
+        }
 
         data_functions.push(DataFunction {
             name: name.clone(),
@@ -1528,6 +1544,20 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
             rva,
         });
         functions.push(Value::object([("name", name.into()), ("rva", rva.into())]));
+        true
+    }
+}
+
+// This mirrors what pefile does.
+// See https://github.com/erocarrera/pefile/blob/593d094e35198dad92aaf040bef17eb800c8a373/pefile.py#L2326-L2348
+fn is_import_name_valid(name: &[u8]) -> bool {
+    if name.is_empty() {
+        false
+    } else {
+        name.iter().all(|b| {
+            b.is_ascii_alphanumeric()
+                || [b'.', b'_', b'?', b'@', b'$', b'(', b')', b'<', b'>'].contains(b)
+        })
     }
 }
 
@@ -1552,6 +1582,10 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
                 Ok(name) => name.to_vec(),
                 Err(_) => continue,
             };
+            if !dll_name_is_valid(&library) {
+                continue;
+            }
+
             let mut data_functions = Vec::new();
             let functions = table
                 .thunks(import_desc.import_name_table_rva.get(LE))
@@ -1600,6 +1634,18 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
     ]);
 }
 
+fn dll_name_is_valid(dll_name: &[u8]) -> bool {
+    dll_name.iter().all(|c| {
+        *c >= b' '
+            && *c != b'\"'
+            && *c != b'*'
+            && *c != b'<'
+            && *c != b'>'
+            && *c != b'?'
+            && *c != b'|'
+    })
+}
+
 fn add_exports(
     data_dirs: &DataDirectories,
     mem: &[u8],
@@ -1643,6 +1689,7 @@ fn add_exports(
                         },
                     ),
                     ("forward_name", forward_name.into()),
+                    ("rva", address.into()),
                 ])
             })
             .collect();

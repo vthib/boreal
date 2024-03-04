@@ -276,11 +276,10 @@ fn test_import_rva() {
         file1,
         r#"pe.import_rva("USER32.dll", "KillTimer") == 255012"#,
     );
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(
-    //     file1,
-    //     r#"pe.import_rva("user32.dll", "killtimer") == 255012"#,
-    // );
+    test(
+        file1,
+        r#"pe.import_rva("user32.dll", "killtimer") == 255012"#,
+    );
     test(file1, r#"not defined pe.import_rva("user32.dll", 3)"#);
     // delayed imports are not found
     test(
@@ -293,8 +292,7 @@ fn test_import_rva() {
     test(file1, r#"not defined pe.import_rva("PtDMDecode.dll", 2)"#);
     test(file1, r#"not defined pe.import_rva("KERNEL32.dll", 2)"#);
     test(file1, r#"pe.import_rva("PtImageRW.dll", 7) == 254928"#);
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(file1, r#"pe.import_rva("ptimagerW.dLL", 7) == 254928"#);
+    test(file1, r#"pe.import_rva("ptimagerW.dLL", 7) == 254928"#);
     // delayed imports are not found
     test(file2, r#"not defined pe.import_rva("OLEAUT32.dll", 8)"#);
 
@@ -307,11 +305,10 @@ fn test_import_rva() {
         file2,
         r#"pe.delayed_import_rva("OLEAUT32.dll", "VariantInit") == 80000"#,
     );
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(
-    //     file2,
-    //     r#"pe.delayed_import_rva("oleaut32.DLL", "VariantINIT") == 80000"#,
-    // );
+    test(
+        file2,
+        r#"pe.delayed_import_rva("oleaut32.DLL", "VariantINIT") == 80000"#,
+    );
     test(
         file2,
         r#"not defined pe.delayed_import_rva("oleaut32.DLL", "VariantINI")"#,
@@ -334,11 +331,10 @@ fn test_import_rva() {
         file2,
         r#"pe.delayed_import_rva("OLEAUT32.dll", 8) == 80000"#,
     );
-    // FIXME: comformity test on libyara, fixed for >4.3.2
-    // test(
-    //     file2,
-    //     r#"pe.delayed_import_rva("OLEaut32.DLL", 8) == 80000"#,
-    // );
+    test(
+        file2,
+        r#"pe.delayed_import_rva("OLEaut32.DLL", 8) == 80000"#,
+    );
 }
 
 #[test]
@@ -437,6 +433,8 @@ fn test_coverage_pe_ord_and_delay() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/pe/ord_and_delay.exe";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -448,6 +446,8 @@ fn test_coverage_pe_resources_only() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/pe/resources_only.dll";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -476,6 +476,8 @@ fn test_coverage_pe_libyara_079a472d_upx() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/\
         079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx";
@@ -488,6 +490,8 @@ fn test_coverage_pe_libyara_0ca09bde() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/\
         0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";
@@ -500,6 +504,8 @@ fn test_coverage_pe_libyara_33fc70f9() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/\
         33fc70f99be6d2833ae48852d611c8048d0c053ed0b2c626db4dbe902832a08b";
@@ -528,6 +534,8 @@ fn test_coverage_pe_libyara_ca21e1c32() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/\
         ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386";
@@ -540,6 +548,8 @@ fn test_coverage_pe_libyara_mtxex() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/mtxex.dll";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -551,6 +561,8 @@ fn test_coverage_pe_libyara_mtxex_modified() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -562,6 +574,8 @@ fn test_coverage_pe_libyara_pe_imports() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/pe_imports";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -573,6 +587,8 @@ fn test_coverage_pe_libyara_pe_mingw() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/pe_mingw";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -584,6 +600,8 @@ fn test_coverage_pe_libyara_tiny() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/tiny";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -595,58 +613,34 @@ fn test_coverage_pe_libyara_tiny_51ff() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/tiny-idata-51ff";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
     compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }
 
-// FIXME
-// #[test]
-// #[ignore]
-// fn test_coverage_pe_libyara_tiny_5200() {
-//     let diffs = [
-//         "pe.import_details[1].functions",
-//         "pe.import_details[1].number_of_functions",
-//         "pe.import_details[2].functions",
-//         "pe.import_details[2].number_of_functions",
-//         "pe.import_details[3].functions",
-//         "pe.import_details[3].number_of_functions",
-//         "pe.import_details[4].functions",
-//         "pe.import_details[4].number_of_functions",
-//         "pe.import_details[5].functions",
-//         "pe.import_details[5].number_of_functions",
-//         "pe.import_details[6].functions",
-//         "pe.import_details[6].number_of_functions",
-//         "pe.import_details[7].functions",
-//         "pe.import_details[7].number_of_functions",
-//         "pe.import_details[8].functions",
-//         "pe.import_details[8].number_of_functions",
-//         "pe.import_details[9].functions",
-//         "pe.import_details[9].number_of_functions",
-//         "pe.import_details[10].functions",
-//         "pe.import_details[10].number_of_functions",
-//         // libyara allows getting the hint name from outside the .idata section, which
-//         // returns garbage. boreal do not do it, hence the differences
-//         "pe.import_details[0].functions[1].name",
-//         "pe.import_details[0].functions[2].name",
-//         "pe.import_details[0].functions[3].name",
-//         // TODO: invalid imports are still counted by libyara. Is that desirable? I don't think
-//         // so
-//         "pe.number_of_imports",
-//         #[cfg(not(feature = "authenticode"))]
-//         "pe.number_of_signatures",
-//     ];
-//     let path = "tests/assets/libyara/data/tiny-idata-5200";
-//     compare_module_values_on_file(Pe::default(), path, false, &diffs);
-//     compare_module_values_on_file(Pe::default(), path, true, &diffs);
-// }
+#[test]
+fn test_coverage_pe_libyara_tiny_5200() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
+    ];
+    let path = "tests/assets/libyara/data/tiny-idata-5200";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
 
 #[test]
 fn test_coverage_pe_libyara_tiny_overlay() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/tiny-overlay";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -658,6 +652,8 @@ fn test_coverage_pe_1561_std() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/x64/FileTest.exe";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -669,6 +665,8 @@ fn test_coverage_pe_1561_align_40() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/x64/FileTest_alignment_40.exe";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -680,6 +678,8 @@ fn test_coverage_pe_1561_32_align_40() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/Win32/FileTest_Alignment_40.exe";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -691,6 +691,8 @@ fn test_coverage_pe_1561_32_section1() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/Win32/FileTest_Section1_Starts_at_header.exe";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
@@ -702,9 +704,63 @@ fn test_coverage_pe_c6f9709f() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
         "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/\
          c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
+fn test_coverage_pe_long_name_exporter() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
+    ];
+    let path = "tests/assets/pe/long_name_exporter.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
+fn test_coverage_pe_long_dll_name() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
+    ];
+    let path = "tests/assets/pe/long_dll_name.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
+fn test_coverage_pe_long_name_importer() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
+    ];
+    let path = "tests/assets/pe/long_name_importer.exe";
+    compare_module_values_on_file(Pe::default(), path, false, &diffs);
+    compare_module_values_on_file(Pe::default(), path, true, &diffs);
+}
+
+#[test]
+fn test_coverage_pe_invalid_dll_names() {
+    let diffs = [
+        #[cfg(not(feature = "authenticode"))]
+        "pe.number_of_signatures",
+        #[cfg(not(feature = "authenticode"))]
+        "pe.is_signed",
+    ];
+    let path = "tests/assets/pe/invalid_dll_names.exe";
     compare_module_values_on_file(Pe::default(), path, false, &diffs);
     compare_module_values_on_file(Pe::default(), path, true, &diffs);
 }

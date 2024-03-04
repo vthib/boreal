@@ -328,12 +328,11 @@ fn test_regex_wide_fullword(regex: &str, mem_ascii: &[u8]) {
     checker.check(&join(mem_ascii, b"<\0a\0", b"b\0>\0"), false);
     checker.check(&join(mem_ascii, b"a\0<\0", b">\0a\0"), true);
 
-    // TODO: This is caused by <https://github.com/VirusTotal/yara/issues/1933>
-    checker.check_boreal(&join(mem_wide, b"", b""), true);
-    checker.check_boreal(&join(mem_wide, b"a", b""), true);
-    checker.check_boreal(&join(mem_wide, b"", b"a"), true);
-    checker.check_boreal(&join(mem_wide, b"a", b"a"), true);
-    checker.check_boreal(&join(mem_wide, b"<", b">"), true);
+    checker.check(&join(mem_wide, b"", b""), true);
+    checker.check(&join(mem_wide, b"a", b""), true);
+    checker.check(&join(mem_wide, b"", b"a"), true);
+    checker.check(&join(mem_wide, b"a", b"a"), true);
+    checker.check(&join(mem_wide, b"<", b">"), true);
 
     checker.check_boreal(&join(mem_wide, b"<\0", b">\0"), true);
     checker.check_boreal(&join(mem_wide, b"<\0", b"b\0"), false);
@@ -426,22 +425,14 @@ fn test_variable_regex_wide_word_boundaries() {
     let mut checker = build_checker(r"\b", "wide");
     checker.check(b"", false);
     checker.check(b"\0", false);
-    // This one has different behavior from libyara. Does it matter? no, no-one will every use
-    // this regex.
-    checker.check_boreal(b"a\0", true);
-    checker.check_libyara(b"a\0", false);
+    checker.check(b"a\0", true);
     checker.check(b"\0a", false);
 
     let mut checker = build_checker(r"\B", "wide");
     checker.check(b"", false);
-    // These ones have different behavior from libyara. Does it matter? no, no-one will every use
-    // this regex.
-    checker.check_boreal(b"\0", true);
-    checker.check_libyara(b"\0", false);
-    checker.check_boreal(b"a\0", true);
-    checker.check_libyara(b"a\0", false);
-    checker.check_boreal(b"\0a", true);
-    checker.check_libyara(b"\0a", false);
+    checker.check(b"\0", true);
+    checker.check(b"a\0", true);
+    checker.check(b"\0a", true);
 
     // Check word boundary at start
     let mut checker = build_checker(r"\ba+", "wide");

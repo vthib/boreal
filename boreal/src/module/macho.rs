@@ -833,7 +833,7 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     }
 
     [
-        ("magic", header.magic().to_be().into()),
+        ("magic", header.magic().into()),
         ("cputype", cputype.into()),
         ("cpusubtype", cpusubtype.into()),
         ("filetype", header.filetype(e).into()),
