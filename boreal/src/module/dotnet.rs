@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use object::coff::SectionTable;
 use object::pe::{
@@ -435,7 +435,9 @@ struct TablesData<'data> {
     // Since we get data for classes from multiple tables,
     // this object is used to stored the details while we are
     // processing tables.
-    classes: BTreeMap<u32, Class>,
+    classes: Vec<Class>,
+    // Details on methods.
+    methods: Vec<Method>,
 
     // The following values are the size of indexes used in tables.
     // They are either equal to 2 or 4.
@@ -520,7 +522,8 @@ impl<'data> TablesData<'data> {
             guid_index_size: if wide_guid_index { 4 } else { 2 },
             blob_index_size: if wide_blob_index { 4 } else { 2 },
 
-            classes: BTreeMap::new(),
+            classes: Vec::new(),
+            methods: Vec::new(),
 
             // Simple indexes
             type_def_index_size: compute_index_size(table_type::TYPE_DEF),
@@ -633,10 +636,24 @@ impl<'data> TablesData<'data> {
         }
     }
 
-    fn finalize(self, res: &mut HashMap<&'static str, Value>) {
+    fn finalize(mut self, res: &mut HashMap<&'static str, Value>) {
         // The "classes" field is built progressively while parsing tables.
         // Once all tables are parsed, we can generate the final values.
-        let classes: Vec<Value> = self.classes.into_values().map(Class::into_value).collect();
+
+        // First, add the methods to the right classes. To do so, we iterate over classes
+        // in reverse: this allows us to always know the end of the range of methods for
+        // a given class.
+        for class in self.classes.iter_mut().rev() {
+            if let Some(idx) = class.method_def_first_index {
+                let idx = idx as usize;
+                if idx <= self.methods.len() {
+                    class.methods = self.methods.drain(idx..).map(Method::into_value).collect();
+                }
+            }
+        }
+
+        let classes: Vec<Value> = self.classes.into_iter().map(Class::into_value).collect();
+
         res.extend([
             ("number_of_classes", classes.len().into()),
             ("classes", Value::Array(classes)),
@@ -671,13 +688,7 @@ impl<'data> TablesData<'data> {
                     get_tables_len(nb_tables, 2 + self.string_index_size + self.blob_index_size)?;
                 self.data.skip(len)
             }
-            table_type::METHOD_DEF => {
-                let len = get_tables_len(
-                    nb_tables,
-                    8 + self.string_index_size + self.blob_index_size + self.param_index_size,
-                )?;
-                self.data.skip(len)
-            }
+            table_type::METHOD_DEF => self.parse_method_defs(nb_tables),
             table_type::PARAM => {
                 let len = get_tables_len(nb_tables, 4 + self.string_index_size)?;
                 self.data.skip(len)
@@ -855,30 +866,50 @@ impl<'data> TablesData<'data> {
     // ECMA 335, II.22.37
     fn parse_type_defs(&mut self, nb_tables: u32) -> Result<(), ()> {
         for i in 0..nb_tables {
-            // Values for flags can be found in II.23.1.15
             let flags = read_u32(&mut self.data)?; // Flags
             let name = self.read_string()?;
             let namespace = self.read_string()?;
 
             self.data.skip(usize::from(
-                self.type_def_or_ref_index_size
-                    + self.field_index_size
-                    + self.method_def_index_size,
+                self.type_def_or_ref_index_size + self.field_index_size,
             ))?;
+            let method_def_index = read_index(&mut self.data, self.method_def_index_size)?;
 
             // Ignore the first row, it's always set to a pseudo class
             if i == 0 {
                 continue;
             }
 
-            let _ = self.classes.insert(
-                i,
-                Class {
-                    flags,
-                    name: name.map(ToOwned::to_owned),
-                    namespace: namespace.map(ToOwned::to_owned),
+            self.classes.push(Class {
+                flags,
+                name: name.map(ToOwned::to_owned),
+                namespace: namespace.map(ToOwned::to_owned),
+                methods: Vec::new(),
+                method_def_first_index: if method_def_index == 0 {
+                    None
+                } else {
+                    Some(method_def_index - 1)
                 },
-            );
+            });
+        }
+
+        Ok(())
+    }
+
+    // ECMA 335, II.22.26
+    fn parse_method_defs(&mut self, nb_tables: u32) -> Result<(), ()> {
+        for _ in 0..nb_tables {
+            // skip RVA, ImplFlags
+            self.data.skip(6)?;
+            let flags = read_u16(&mut self.data)?;
+            let name = self.read_string()?;
+            self.data
+                .skip(usize::from(self.blob_index_size + self.param_index_size))?; // Signature and param
+
+            self.methods.push(Method {
+                flags,
+                name: name.map(ToOwned::to_owned),
+            });
         }
         Ok(())
     }
@@ -1268,10 +1299,13 @@ struct Class {
     flags: u32,
     name: Option<Vec<u8>>,
     namespace: Option<Vec<u8>>,
+    methods: Vec<Value>,
+    method_def_first_index: Option<u32>,
 }
 
 impl Class {
     fn into_value(self) -> Value {
+        // Values for flags can be found in II.23.1.15
         let typ = if self.flags & 0x20 != 0 {
             b"interface".as_slice()
         } else {
@@ -1314,13 +1348,60 @@ impl Class {
             ("type", Value::bytes(typ)),
             ("abstract", abstrac.into()),
             ("sealed", sealed.into()),
+            ("number_of_methods", self.methods.len().into()),
+            ("methods", Value::Array(self.methods)),
             // TODO
             ("number_of_generic_parameters", Value::Undefined),
             ("generic_parameters", Value::Undefined),
             ("number_of_base_types", Value::Undefined),
             ("base_types", Value::Undefined),
-            ("number_of_methods", Value::Undefined),
-            ("methods", Value::Undefined),
+        ])
+    }
+}
+
+#[derive(Debug)]
+struct Method {
+    flags: u16,
+    name: Option<Vec<u8>>,
+}
+
+impl Method {
+    fn into_value(self) -> Value {
+        // Values for flags can be found in II.23.1.10
+        let flag_static = i64::from((self.flags & 0x10) != 0);
+        let flag_final = i64::from((self.flags & 0x20) != 0);
+        let flag_virtual = i64::from((self.flags & 0x40) != 0);
+        let flag_abstract = i64::from((self.flags & 0x400) != 0);
+
+        let visibility = match self.flags & 0x07 {
+            // Private
+            0x01 => "private",
+            // FamANDAssem
+            0x02 => "private protected",
+            // Assem
+            0x03 => "internal",
+            // Family
+            0x04 => "protected",
+            // FamORAssem
+            0x05 => "protected internal",
+            // Public
+            0x06 => "public",
+            _ => "private",
+        };
+
+        Value::object([
+            ("abstract", flag_abstract.into()),
+            ("final", flag_final.into()),
+            ("virtual", flag_virtual.into()),
+            ("static", flag_static.into()),
+            ("visibility", Value::bytes(visibility)),
+            ("name", self.name.into()),
+            // TODO
+            ("generic_parameters", Value::Undefined),
+            ("number_of_generic_parameters", Value::Undefined),
+            ("parameters", Value::Undefined),
+            ("number_of_parameters", Value::Undefined),
+            ("return_type", Value::Undefined),
         ])
     }
 }
