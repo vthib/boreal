@@ -282,7 +282,7 @@ pub enum ExpressionKind {
         /// Which variables to select.
         set: VariableSet,
 
-        /// ParsedExpr to evaluate for each variable.
+        /// `ParsedExpr` to evaluate for each variable.
         ///
         /// The body can contain `$`, `#`, `@` or `!` to refer to the
         /// currently selected variable.
@@ -383,10 +383,10 @@ pub enum ForSelection {
     All,
     /// None of the variables in the set must match the condition.
     None,
-    /// ParsedExpr that should evaluate to a number, indicating:
-    /// - if as_percent is false, how many variables in the set must match
+    /// `ParsedExpr` that should evaluate to a number, indicating:
+    /// - if `as_percent` is false, how many variables in the set must match
     ///   the condition.
-    /// - if as_percent is true, which percentage of variables in the set
+    /// - if `as_percent` is true, which percentage of variables in the set
     ///   msut match the condition.
     ///   the condition.
     ///
