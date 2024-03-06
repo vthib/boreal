@@ -284,7 +284,7 @@ fn string_enum_element(input: Input) -> ParseResult<SetElement> {
 /// Equivalent to the `for_variables` pattern in grammar.y in libyara.
 fn for_variables(input: Input) -> ParseResult<(Vec<String>, Range<usize>)> {
     let start = input.pos();
-    let (input, identifiers) = separated_list1(rtrim(char(',')), crate::string::identifier)(input)?;
+    let (input, identifiers) = separated_list1(rtrim(char(',')), string::identifier)(input)?;
     Ok((input, (identifiers, input.get_span_from(start))))
 }
 

@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(compile_module(&crate::module::Time));
+        test_type_traits_non_clonable(compile_module(&module::Time));
         test_type_traits_non_clonable(ValueOperation::Subfield("a".to_owned()));
         test_type_traits_non_clonable(BoundedValueIndex::Module(0));
         test_type_traits_non_clonable(ModuleOperations {

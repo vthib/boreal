@@ -2004,7 +2004,7 @@ impl Pe {
 
         // Compute offset of checksum in the file: this is replaced by 0 when computing the
         // checksum
-        let dos_header = pe::ImageDosHeader::parse(mem).ok()?;
+        let dos_header = ImageDosHeader::parse(mem).ok()?;
         // 64 is the offset of the checksum in the optional header, and 24 is the offset of the
         // optional header in the nt headers: See
         // <https://docs.microsoft.com/en-us/windows/win32/debug/pe-format>

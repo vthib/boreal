@@ -21,7 +21,7 @@ pub(crate) use visitor::{visit, VisitAction, Visitor};
 /// Regex following the YARA format.
 #[derive(Clone, Debug)]
 pub struct Regex {
-    meta: regex_automata::meta::Regex,
+    meta: meta::Regex,
     expr: String,
 }
 
