@@ -99,20 +99,18 @@ impl Iterator for Iter {
             return Some(t);
         }
 
-        // this always result in a value that fits in a u8
+        // this always result in a value that fits in a u8, and we know there is at
+        // least one value here due to previous filtering
         let mut t: u8 = self
             .0
             .high
             .trailing_zeros()
             .try_into()
             .expect("u128::trailing_zeros always fits into u8");
-        if t != Bitmap::HALF {
-            t += 128;
-            self.0.set(t, false);
-            return Some(t);
-        }
 
-        None
+        t += 128;
+        self.0.set(t, false);
+        Some(t)
     }
 }
 
@@ -143,6 +141,14 @@ mod test {
         for i in 0..=255 {
             assert_eq!(bitmap.get(i), !indexes.contains(&i));
         }
+    }
+
+    #[test]
+    fn test_bitmap_all() {
+        let mut bitmap = Bitmap::new();
+        assert_eq!(bitmap.iter().count(), 0);
+        bitmap.invert();
+        assert_eq!(bitmap.iter().count(), 255);
     }
 
     #[test]
