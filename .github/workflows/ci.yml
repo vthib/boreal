@@ -8,13 +8,13 @@ on:
   schedule:
     - cron: '45 4 * * 3'
 
-env:
-  RUSTFLAGS: -Dwarnings
-
 jobs:
   test-linux:
     name: Test ${{matrix.build}}
     runs-on: ubuntu-22.04
+
+    env:
+      RUSTFLAGS: -Dwarnings
 
     steps:
       - name: Install openssl x86 and 32 support for gcc
@@ -70,6 +70,9 @@ jobs:
   test-windows:
     name: Test ${{matrix.build}}
     runs-on: windows-2022
+
+    env:
+      RUSTFLAGS: -Dwarnings
 
     steps:
       - uses: actions/checkout@v3
@@ -129,6 +132,9 @@ jobs:
     name: Test Macos 12
     runs-on: macos-12
 
+    env:
+      RUSTFLAGS: -Dwarnings
+
     steps:
       - uses: actions/checkout@v3
 
@@ -162,6 +168,8 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-22.04
+    env:
+      RUSTFLAGS: -Dwarnings
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -222,6 +230,8 @@ jobs:
   msrv:
     name: Rust 1.65.0
     runs-on: ubuntu-22.04
+    env:
+      RUSTFLAGS: -Dwarnings
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@1.65.0
