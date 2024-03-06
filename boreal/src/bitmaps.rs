@@ -148,7 +148,7 @@ mod test {
         let mut bitmap = Bitmap::new();
         assert_eq!(bitmap.iter().count(), 0);
         bitmap.invert();
-        assert_eq!(bitmap.iter().count(), 255);
+        assert_eq!(bitmap.iter().count(), 256);
     }
 
     #[test]
