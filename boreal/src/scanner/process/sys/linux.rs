@@ -219,7 +219,7 @@ impl MapRegion {
             return None;
         }
 
-        let file = std::fs::File::open(path).ok()?;
+        let file = File::open(path).ok()?;
 
         // Then, redo the checks but on the metadata of the opened files, to prevent
         // any TOCTOU issues.
