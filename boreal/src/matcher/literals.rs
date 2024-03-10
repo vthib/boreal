@@ -197,10 +197,9 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
                 literals = literals
                     .iter()
                     .flat_map(|prefix| {
-                        bitmap.iter().map(|b| {
-                            #[allow(clippy::cast_possible_truncation)]
-                            prefix.iter().copied().chain(std::iter::once(b)).collect()
-                        })
+                        bitmap
+                            .iter()
+                            .map(|b| prefix.iter().copied().chain(std::iter::once(b)).collect())
                     })
                     .collect();
             }
@@ -293,11 +292,10 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
                 quality += byte_rank(*b);
 
                 if !bitmap.get(*b) {
-                    bitmap.set(*b, true);
+                    bitmap.set(*b);
                     nb_uniq += 1;
                 }
             }
-            #[allow(clippy::cast_possible_truncation)]
             HirPartKind::Class { bitmap: class } => {
                 quality += class.iter().map(byte_rank).min().unwrap_or(0);
                 if class.iter().any(|b| !bitmap.get(b)) {
@@ -347,7 +345,7 @@ impl Visitor for Extractor {
             Hir::Dot => {
                 let mut bitmap = Bitmap::new();
                 if !self.dot_all {
-                    bitmap.set(b'\n', true);
+                    bitmap.set(b'\n');
                 }
                 bitmap.invert();
                 self.add_part(HirPartKind::Class { bitmap });
@@ -365,11 +363,11 @@ impl Visitor for Extractor {
                 let mut bitmap = Bitmap::new();
                 if *mask == 0x0F {
                     for c in 0..=15 {
-                        bitmap.set((c << 4) | *value, true);
+                        bitmap.set((c << 4) | *value);
                     }
                 } else {
                     for c in 0..=15 {
-                        bitmap.set(c | *value, true);
+                        bitmap.set(c | *value);
                     }
                 }
                 if *negated {

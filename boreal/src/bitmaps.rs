@@ -43,14 +43,10 @@ impl Bitmap {
     }
 
     #[inline(always)]
-    pub fn set(&mut self, bit: u8, value: bool) {
+    pub fn set(&mut self, bit: u8) {
         let mask = Self::mask(bit);
         let half = self.get_half_mut(bit);
-        if value {
-            *half |= mask;
-        } else {
-            *half &= !mask;
-        }
+        *half |= mask;
     }
 
     #[inline(always)]
@@ -83,34 +79,18 @@ impl Iterator for Iter {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.0.low == 0 && self.0.high == 0 {
+        let (v, offset) = if self.0.low != 0 {
+            (&mut self.0.low, 0)
+        } else if self.0.high != 0 {
+            (&mut self.0.high, 128)
+        } else {
             return None;
-        }
+        };
 
-        // this always result in a value that fits in a u8
-        let t: u8 = self
-            .0
-            .low
-            .trailing_zeros()
-            .try_into()
-            .expect("u128::trailing_zeros always fits into u8");
-        if t != Bitmap::HALF {
-            self.0.set(t, false);
-            return Some(t);
-        }
-
-        // this always result in a value that fits in a u8, and we know there is at
-        // least one value here due to previous filtering
-        let mut t: u8 = self
-            .0
-            .high
-            .trailing_zeros()
-            .try_into()
-            .expect("u128::trailing_zeros always fits into u8");
-
-        t += 128;
-        self.0.set(t, false);
-        Some(t)
+        // Safety: this value is contained in [0; 127] so it always fits in a u8.
+        let t: u8 = v.trailing_zeros().try_into().unwrap();
+        *v &= !(1 << t);
+        Some(offset + t)
     }
 }
 
@@ -125,7 +105,7 @@ mod test {
 
         let indexes = vec![0, 10, 17, 120, 127, 128, 129, 200, 255];
         for i in &indexes {
-            bitmap.set(*i, true);
+            bitmap.set(*i);
             assert!(bitmap.get(*i));
         }
 
@@ -154,11 +134,11 @@ mod test {
     #[test]
     fn test_bitmap_or_assign() {
         let mut bitmap = Bitmap::new();
-        bitmap.set(10, true);
-        bitmap.set(30, true);
+        bitmap.set(10);
+        bitmap.set(30);
 
         let mut bitmap2 = Bitmap::new();
-        bitmap2.set(20, true);
+        bitmap2.set(20);
         bitmap2 |= bitmap;
 
         assert_eq!(vec![10, 20, 30], bitmap2.iter().collect::<Vec<_>>());

@@ -253,13 +253,13 @@ fn class_to_bitmap(class_kind: &ClassKind, warnings: &mut Vec<RegexAstError>) ->
                     }
                     BracketedClassItem::Literal(lit) => {
                         let byte = unwrap_literal(lit, warnings);
-                        bitmap.set(byte, true);
+                        bitmap.set(byte);
                     }
                     BracketedClassItem::Range(lita, litb) => {
                         let a = unwrap_literal(lita, warnings);
                         let b = unwrap_literal(litb, warnings);
                         for c in a..=b {
-                            bitmap.set(c, true);
+                            bitmap.set(c);
                         }
                     }
                 }
@@ -280,24 +280,24 @@ fn perl_class_to_bitmap(cls: &PerlClass) -> Bitmap {
     match kind {
         PerlClassKind::Word => {
             for c in b'0'..=b'9' {
-                bitmap.set(c, true);
+                bitmap.set(c);
             }
             for c in b'A'..=b'Z' {
-                bitmap.set(c, true);
+                bitmap.set(c);
             }
-            bitmap.set(b'_', true);
+            bitmap.set(b'_');
             for c in b'a'..=b'z' {
-                bitmap.set(c, true);
+                bitmap.set(c);
             }
         }
         PerlClassKind::Space => {
             for c in [b'\t', b'\n', b'\x0B', b'\x0C', b'\r', b' '] {
-                bitmap.set(c, true);
+                bitmap.set(c);
             }
         }
         PerlClassKind::Digit => {
             for c in b'0'..=b'9' {
-                bitmap.set(c, true);
+                bitmap.set(c);
             }
         }
     }
@@ -319,7 +319,7 @@ impl From<Token> for Hir {
             Token::Byte(b) => Hir::Literal(b),
             Token::NotByte(b) => {
                 let mut bitmap = Bitmap::new();
-                bitmap.set(b, true);
+                bitmap.set(b);
                 bitmap.invert();
 
                 Hir::Class(Class {
