@@ -1,5 +1,4 @@
-use bitmaps::Bitmap;
-
+use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 /// Can the hex string be expressed using only literals.
@@ -48,7 +47,7 @@ impl Extractor {
         self.cartesian_product(&suffixes);
     }
 
-    fn add_class(&mut self, bitmap: &Bitmap<256>) {
+    fn add_class(&mut self, bitmap: &Bitmap) {
         // First, commit the local buffer, to have a proper list of all possible literals
         self.commit_buffer();
 
@@ -56,11 +55,10 @@ impl Extractor {
             *all = all
                 .iter()
                 .flat_map(|prefix| {
-                    bitmap.into_iter().map(move |byte| {
+                    bitmap.iter().map(move |byte| {
                         let mut v = Vec::with_capacity(prefix.len() + 1);
                         v.extend(prefix);
-                        #[allow(clippy::cast_possible_truncation)]
-                        v.push(byte as u8);
+                        v.push(byte);
                         v
                     })
                 })

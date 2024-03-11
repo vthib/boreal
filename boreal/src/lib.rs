@@ -85,6 +85,7 @@ use tempfile as _;
 use yara as _;
 
 pub(crate) mod atoms;
+mod bitmaps;
 pub mod compiler;
 pub use compiler::Compiler;
 mod evaluator;

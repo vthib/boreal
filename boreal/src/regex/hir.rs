@@ -1,11 +1,10 @@
-use std::ops::Range;
-
-use bitmaps::Bitmap;
+use crate::bitmaps::Bitmap;
 use boreal_parser::hex_string::{Mask, Token};
 use boreal_parser::regex::{
     AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Literal, LiteralChar, Node,
     PerlClass, PerlClassKind, RepetitionKind, RepetitionRange,
 };
+use std::ops::Range;
 
 /// HIR of a regular expression.
 ///
@@ -83,7 +82,7 @@ pub struct Class {
     pub definition: ClassKind,
 
     /// Bitfield of which bytes are in the class.
-    pub bitmap: Bitmap<256>,
+    pub bitmap: Bitmap,
 }
 
 /// Convert a parsed regex AST into our HIR.
@@ -241,7 +240,7 @@ fn is_meta_character(byte: u8) -> bool {
     )
 }
 
-fn class_to_bitmap(class_kind: &ClassKind, warnings: &mut Vec<RegexAstError>) -> Bitmap<256> {
+fn class_to_bitmap(class_kind: &ClassKind, warnings: &mut Vec<RegexAstError>) -> Bitmap {
     match class_kind {
         ClassKind::Perl(p) => perl_class_to_bitmap(p),
         ClassKind::Bracketed(BracketedClass { items, negated }) => {
@@ -254,13 +253,13 @@ fn class_to_bitmap(class_kind: &ClassKind, warnings: &mut Vec<RegexAstError>) ->
                     }
                     BracketedClassItem::Literal(lit) => {
                         let byte = unwrap_literal(lit, warnings);
-                        let _ = bitmap.set(usize::from(byte), true);
+                        bitmap.set(byte);
                     }
                     BracketedClassItem::Range(lita, litb) => {
                         let a = unwrap_literal(lita, warnings);
                         let b = unwrap_literal(litb, warnings);
                         for c in a..=b {
-                            let _ = bitmap.set(usize::from(c), true);
+                            bitmap.set(c);
                         }
                     }
                 }
@@ -274,31 +273,31 @@ fn class_to_bitmap(class_kind: &ClassKind, warnings: &mut Vec<RegexAstError>) ->
     }
 }
 
-fn perl_class_to_bitmap(cls: &PerlClass) -> Bitmap<256> {
+fn perl_class_to_bitmap(cls: &PerlClass) -> Bitmap {
     let PerlClass { kind, negated } = cls;
 
     let mut bitmap = Bitmap::new();
     match kind {
         PerlClassKind::Word => {
             for c in b'0'..=b'9' {
-                let _ = bitmap.set(usize::from(c), true);
+                bitmap.set(c);
             }
             for c in b'A'..=b'Z' {
-                let _ = bitmap.set(usize::from(c), true);
+                bitmap.set(c);
             }
-            let _ = bitmap.set(usize::from(b'_'), true);
+            bitmap.set(b'_');
             for c in b'a'..=b'z' {
-                let _ = bitmap.set(usize::from(c), true);
+                bitmap.set(c);
             }
         }
         PerlClassKind::Space => {
             for c in [b'\t', b'\n', b'\x0B', b'\x0C', b'\r', b' '] {
-                let _ = bitmap.set(usize::from(c), true);
+                bitmap.set(c);
             }
         }
         PerlClassKind::Digit => {
             for c in b'0'..=b'9' {
-                let _ = bitmap.set(usize::from(c), true);
+                bitmap.set(c);
             }
         }
     }
@@ -320,7 +319,7 @@ impl From<Token> for Hir {
             Token::Byte(b) => Hir::Literal(b),
             Token::NotByte(b) => {
                 let mut bitmap = Bitmap::new();
-                let _ = bitmap.set(usize::from(b), true);
+                bitmap.set(b);
                 bitmap.invert();
 
                 Hir::Class(Class {

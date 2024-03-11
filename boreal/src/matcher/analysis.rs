@@ -115,7 +115,7 @@ impl Visitor for HirAnalyser {
             }
             Hir::Class(Class { bitmap, .. }) => {
                 if let Some(count) = &mut self.nb_alt_literals {
-                    self.nb_alt_literals = count.checked_mul(bitmap.len());
+                    self.nb_alt_literals = count.checked_mul(bitmap.count_ones());
                 }
                 self.has_classes = true;
             }
