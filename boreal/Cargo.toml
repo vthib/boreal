@@ -44,8 +44,8 @@ boreal-parser = { path = "../boreal-parser", version = "0.5.0" }
 codespan-reporting = "0.11"
 
 # Scanning for bytes
-aho-corasick = "1.0"
-memchr = "2.5"
+aho-corasick = "1.1"
+memchr = "2.7"
 # Remove unicode feature
 regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "perf", "meta", "nfa", "dfa", "hybrid"] }
 # No default features to disable unicode, we do not need it
@@ -76,7 +76,7 @@ libc = { version = "0.2", optional = true }
 mach2 = { version = "0.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.52", optional = true, features = [
+windows = { version = "0.54", optional = true, features = [
     "Win32_Foundation",
     # LookupPrivilegeValue, AdjustTokenPrivileges
     "Win32_Security",
@@ -89,7 +89,7 @@ windows = { version = "0.52", optional = true, features = [
 ] }
 
 [dev-dependencies]
-base64 = "0.21"
+base64 = "0.22"
 glob = "0.3.1"
 tempfile = "3.10"
 yara = { version = "0.26", features = ["vendored"] }
