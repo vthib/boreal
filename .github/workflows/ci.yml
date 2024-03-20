@@ -27,7 +27,7 @@ jobs:
           echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
           echo "YARA_OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -75,7 +75,7 @@ jobs:
       RUSTFLAGS: -Dwarnings
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
 
       - name: Install OpenSSL on windows
         uses: lukka/run-vcpkg@v10
@@ -136,7 +136,7 @@ jobs:
       RUSTFLAGS: -Dwarnings
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -171,7 +171,7 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -181,7 +181,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -191,7 +191,7 @@ jobs:
     name: Deny
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
       - uses: EmbarkStudios/cargo-deny-action@v1
 
   coverage:
@@ -200,7 +200,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@nightly
 
       - name: Install cargo-llvm-cov
@@ -233,7 +233,7 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@1.65.0
       # Only check boreal (and boreal-parser).
       # boreal-cli is a useful tool, but MSRV on it is not really useful.
