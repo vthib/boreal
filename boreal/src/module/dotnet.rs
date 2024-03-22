@@ -428,6 +428,8 @@ struct TablesData<'data> {
     // Those are filled on demand: the table type must have been
     // already parsed, otherwise the field will always be None.
     type_ref_table_data: Option<Bytes<'data>>,
+    type_spec_table_data: Option<Bytes<'data>>,
+    interface_impl_table_data: Option<Bytes<'data>>,
     member_ref_table_data: Option<Bytes<'data>>,
 
     // Details on classes.
@@ -516,6 +518,8 @@ impl<'data> TablesData<'data> {
             blobs_stream,
 
             type_ref_table_data: None,
+            type_spec_table_data: None,
+            interface_impl_table_data: None,
             member_ref_table_data: None,
 
             string_index_size: if wide_string_index { 4 } else { 2 },
@@ -652,6 +656,36 @@ impl<'data> TablesData<'data> {
             }
         }
 
+        // Then, resolve the 'extends' index
+        for i in 0..self.classes.len() {
+            let extends_index = self.classes[i].extends_index;
+            if let Some(base_class) = self.get_type_fullname(extends_index) {
+                self.classes[i].base_types.push(Value::Bytes(base_class));
+            }
+        }
+
+        // Then, resolve the interface implementations
+        if let Some(mut interface_impl_table) = self.interface_impl_table_data.take() {
+            while let Some((class_index, type_def_or_ref_index)) =
+                self.read_interface(&mut interface_impl_table)
+            {
+                let Ok(class_index) = usize::try_from(class_index) else {
+                    continue;
+                };
+                // 0 is invalid index, and 1 points to the first class, which we do not include.
+                // So remove 2 to get the real index into our vec
+                if class_index <= 1 || (class_index - 2) >= self.classes.len() {
+                    continue;
+                }
+                if let Some(interface_name) = self.get_type_fullname(type_def_or_ref_index) {
+                    self.classes[class_index - 2]
+                        .base_types
+                        .push(Value::Bytes(interface_name));
+                }
+            }
+        }
+
+        // Finally, convert to the final value
         let classes: Vec<Value> = self.classes.into_iter().map(Class::into_value).collect();
 
         res.extend([
@@ -698,7 +732,8 @@ impl<'data> TablesData<'data> {
                     nb_tables,
                     self.type_def_index_size + self.type_def_or_ref_index_size,
                 )?;
-                self.data.skip(len)
+                self.interface_impl_table_data = Some(self.data.read_bytes(len)?);
+                Ok(())
             }
             table_type::MEMBER_REF => {
                 let len = get_tables_len(nb_tables, self.member_ref_table_size())?;
@@ -773,8 +808,9 @@ impl<'data> TablesData<'data> {
             }
             table_type::MODULE_REF => self.parse_module_ref(nb_tables, res),
             table_type::TYPE_SPEC => {
-                let len = get_tables_len(nb_tables, self.blob_index_size)?;
-                self.data.skip(len)
+                let len = get_tables_len(nb_tables, self.type_spec_table_size())?;
+                self.type_spec_table_data = Some(self.data.read_bytes(len)?);
+                Ok(())
             }
             table_type::IMPL_MAP => {
                 let len = get_tables_len(
@@ -864,9 +900,8 @@ impl<'data> TablesData<'data> {
             let name = self.read_string()?;
             let namespace = self.read_string()?;
 
-            self.data.skip(usize::from(
-                self.type_def_or_ref_index_size + self.field_index_size,
-            ))?;
+            let extends_index = read_index(&mut self.data, self.type_def_or_ref_index_size)?;
+            self.data.skip(usize::from(self.field_index_size))?;
             let method_def_index = read_index(&mut self.data, self.method_def_index_size)?;
 
             // Ignore the first row, it's always set to a pseudo class
@@ -885,6 +920,8 @@ impl<'data> TablesData<'data> {
                 } else {
                     Some(method_def_index - 1)
                 },
+                extends_index,
+                base_types: Vec::new(),
             });
         }
 
@@ -1008,30 +1045,16 @@ impl<'data> TablesData<'data> {
 
         // Get the data for the memberref table, and skip all previous memberref
         // until we reach our index.
-        let Some(mut member_ref_table_data) = self.member_ref_table_data else {
+        let member_ref_index = typ >> 3;
+        let Some(mut member_ref_data) = self.member_ref_table_data.and_then(|table| {
+            get_record_in_table(table, self.member_ref_table_size(), member_ref_index)
+        }) else {
             return false;
         };
-        let member_ref_index = typ >> 3;
-        if member_ref_index == 0 {
-            // 0 means null reference, index is not valid
-            return false;
-        }
-
-        let member_ref_size = usize::from(self.member_ref_table_size());
-        if member_ref_size
-            .checked_mul((member_ref_index - 1) as usize)
-            .and_then(|v| member_ref_table_data.skip(v).ok())
-            .is_none()
-        {
-            return false;
-        }
 
         // Read the first field, which is the class linked to the member ref.
         // See ECMA 335 II.22.25
-        let Ok(class) = read_index(
-            &mut member_ref_table_data,
-            self.member_ref_parent_index_size,
-        ) else {
+        let Ok(class) = read_index(&mut member_ref_data, self.member_ref_parent_index_size) else {
             return false;
         };
 
@@ -1044,33 +1067,22 @@ impl<'data> TablesData<'data> {
 
         // Get the data for the typeref table, and skip all previous typeref
         // until we reach our index.
-        let Some(mut type_ref_table_data) = self.type_ref_table_data else {
+        let type_ref_index = class >> 3;
+        let Some(mut type_ref_data) = self.type_ref_table_data.and_then(|table| {
+            get_record_in_table(table, self.type_ref_table_size(), type_ref_index)
+        }) else {
             return false;
         };
-        let type_ref_index = class >> 3;
-        if type_ref_index == 0 {
-            // 0 means null reference, index is not valid
-            return false;
-        }
-
-        let type_ref_size = usize::from(self.type_ref_table_size());
-        if type_ref_size
-            .checked_mul((type_ref_index - 1) as usize)
-            .and_then(|v| type_ref_table_data.skip(v).ok())
-            .is_none()
-        {
-            return false;
-        }
 
         // See ECMA 335 II.22.38
         // Skip ResolutionScope and read name index
-        if type_ref_table_data
+        if type_ref_data
             .skip(usize::from(self.resolution_scope_index_size))
             .is_err()
         {
             return false;
         }
-        let Ok(name) = read_index(&mut type_ref_table_data, self.string_index_size) else {
+        let Ok(name) = read_index(&mut type_ref_data, self.string_index_size) else {
             return false;
         };
         let Some(type_ref_name) = self.get_string(name as usize) else {
@@ -1283,8 +1295,59 @@ impl<'data> TablesData<'data> {
         Ok(())
     }
 
+    fn read_interface(&self, interface_impl_table: &mut Bytes) -> Option<(u32, u32)> {
+        let class_index = read_index(interface_impl_table, self.type_def_index_size).ok()?;
+        let type_index = read_index(interface_impl_table, self.type_def_or_ref_index_size).ok()?;
+
+        Some((class_index, type_index))
+    }
+
+    // retrieve the name of the type referred to by a TypeDefOrRef index.
+    fn get_type_fullname(&self, type_def_or_ref_index: u32) -> Option<Vec<u8>> {
+        let tag = type_def_or_ref_index & 0x03;
+        let index = type_def_or_ref_index >> 2;
+
+        #[allow(clippy::if_same_then_else)]
+        if tag == 0 {
+            // TypeDef. This is a Class which has been parsed already.
+            if index <= 1 {
+                None
+            } else {
+                let class = self.classes.get((index - 2) as usize)?;
+                match (class.namespace.as_ref(), class.name.as_ref()) {
+                    (Some(ns), Some(name)) => Some(build_fullname(ns, name)),
+                    _ => None,
+                }
+            }
+        } else if tag == 1 {
+            // TypeRef
+            let mut data =
+                get_record_in_table(self.type_ref_table_data?, self.type_ref_table_size(), index)?;
+            // Skip resolution scope, then get name and namespace
+            data.skip(usize::from(self.resolution_scope_index_size))
+                .ok()?;
+
+            let name_index = read_index(&mut data, self.string_index_size).ok()? as usize;
+            let name = self.get_string(name_index)?;
+            let ns_index = read_index(&mut data, self.string_index_size).ok()? as usize;
+            let ns = self.get_string(ns_index)?;
+
+            Some(build_fullname(ns, name))
+        } else if tag == 2 {
+            // TypeSpec
+            // TODO
+            None
+        } else {
+            None
+        }
+    }
+
     fn type_ref_table_size(&self) -> u8 {
         self.resolution_scope_index_size + 2 * self.string_index_size
+    }
+
+    fn type_spec_table_size(&self) -> u8 {
+        self.blob_index_size
     }
 
     fn member_ref_table_size(&self) -> u8 {
@@ -1323,6 +1386,19 @@ impl<'data> TablesData<'data> {
     }
 }
 
+fn get_record_in_table(mut table: Bytes, record_size: u8, index: u32) -> Option<Bytes> {
+    if index == 0 {
+        // 0 means null reference
+        return None;
+    }
+
+    let record_size = usize::from(record_size);
+    let offset = record_size.checked_mul((index - 1) as usize)?;
+    table.skip(offset).ok()?;
+
+    table.read_bytes(record_size).ok()
+}
+
 #[derive(Debug)]
 struct Class {
     flags: u32,
@@ -1331,6 +1407,8 @@ struct Class {
     methods: Vec<Value>,
     method_def_first_index: Option<u32>,
     generic_params: Vec<Value>,
+    base_types: Vec<Value>,
+    extends_index: u32,
 }
 
 impl Class {
@@ -1343,18 +1421,12 @@ impl Class {
         };
 
         let fullname = match (self.namespace.as_deref(), self.name.as_deref()) {
-            (Some(ns), Some(name)) => {
-                let mut full = Vec::with_capacity(ns.len() + name.len() + 1);
-                full.extend(ns);
-                full.push(b'.');
-                full.extend(name);
-                Some(full)
-            }
+            (Some(ns), Some(name)) => Some(build_fullname(ns, name)),
             (_, _) => None,
         };
         let visibility = match self.flags & 0x07 {
             // NotPublic or NestedAssembly
-            0x00 | 0x05 => "interal",
+            0x00 | 0x05 => "internal",
             // Public or NestedPublic
             0x01 | 0x02 => "public",
             // NestedPrivate
@@ -1385,9 +1457,8 @@ impl Class {
                 self.generic_params.len().into(),
             ),
             ("generic_parameters", Value::Array(self.generic_params)),
-            // TODO
-            ("number_of_base_types", Value::Undefined),
-            ("base_types", Value::Undefined),
+            ("number_of_base_types", self.base_types.len().into()),
+            ("base_types", Value::Array(self.base_types)),
         ])
     }
 }
@@ -1492,6 +1563,14 @@ fn read_blob<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
     };
 
     bytes.read_slice(length).ok()
+}
+
+fn build_fullname(ns: &[u8], name: &[u8]) -> Vec<u8> {
+    let mut full = Vec::with_capacity(ns.len() + name.len() + 1);
+    full.extend(ns);
+    full.push(b'.');
+    full.extend(name);
+    full
 }
 
 fn get_streams(metadata: &MetadataRoot, metadata_root_offset: u64) -> Vec<Value> {
