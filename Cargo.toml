@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "boreal-parser",
     "boreal",
     "boreal-cli",
+    "boreal-parser",
     "boreal-test-helpers",
 ]
 
