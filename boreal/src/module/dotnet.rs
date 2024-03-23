@@ -1678,13 +1678,22 @@ struct Param {
 
 impl Method {
     fn into_value(self) -> Value {
-        // Values for flags can be found in II.23.1.10
-        let flag_static = i64::from((self.flags & 0x10) != 0);
-        let flag_final = i64::from((self.flags & 0x20) != 0);
-        let flag_virtual = i64::from((self.flags & 0x40) != 0);
-        let flag_abstract = i64::from((self.flags & 0x400) != 0);
+        let Self {
+            flags,
+            name,
+            generic_params,
+            mut return_type,
+            params,
+            param_name_first_index: _param_name_first_index,
+        } = self;
 
-        let visibility = match self.flags & 0x07 {
+        // Values for flags can be found in II.23.1.10
+        let flag_static = i64::from((flags & 0x10) != 0);
+        let flag_final = i64::from((flags & 0x20) != 0);
+        let flag_virtual = i64::from((flags & 0x40) != 0);
+        let flag_abstract = i64::from((flags & 0x400) != 0);
+
+        let visibility = match flags & 0x07 {
             // Private
             0x01 => "private",
             // FamANDAssem
@@ -1700,11 +1709,17 @@ impl Method {
             _ => "private",
         };
 
-        let parameters: Vec<_> = self
-            .params
+        let parameters: Vec<_> = params
             .into_iter()
             .map(|Param { name, typ }| Value::object([("name", name), ("type", typ)]))
             .collect();
+
+        // For some reason, in yara, the return_type is forced to undefined for constructors.
+        if let Some(name) = name.as_ref() {
+            if name == b".ctor" || name == b".cctor" {
+                return_type = None;
+            }
+        }
 
         Value::object([
             ("abstract", flag_abstract.into()),
@@ -1712,13 +1727,10 @@ impl Method {
             ("virtual", flag_virtual.into()),
             ("static", flag_static.into()),
             ("visibility", Value::bytes(visibility)),
-            ("name", self.name.into()),
-            (
-                "number_of_generic_parameters",
-                self.generic_params.len().into(),
-            ),
-            ("generic_parameters", Value::Array(self.generic_params)),
-            ("return_type", self.return_type.map(Value::Bytes).into()),
+            ("name", name.into()),
+            ("number_of_generic_parameters", generic_params.len().into()),
+            ("generic_parameters", Value::Array(generic_params)),
+            ("return_type", return_type.map(Value::Bytes).into()),
             ("number_of_parameters", parameters.len().into()),
             ("parameters", Value::Array(parameters)),
         ])
