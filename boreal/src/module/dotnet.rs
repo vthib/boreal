@@ -440,6 +440,8 @@ struct TablesData<'data> {
     classes: Vec<Class>,
     // Details on methods.
     methods: Vec<Method>,
+    // Details on param names.
+    param_names: Vec<Value>,
 
     // The following values are the size of indexes used in tables.
     // They are either equal to 2 or 4.
@@ -528,6 +530,7 @@ impl<'data> TablesData<'data> {
 
             classes: Vec::new(),
             methods: Vec::new(),
+            param_names: Vec::new(),
 
             // Simple indexes
             type_def_index_size: compute_index_size(table_type::TYPE_DEF),
@@ -644,9 +647,23 @@ impl<'data> TablesData<'data> {
         // The "classes" field is built progressively while parsing tables.
         // Once all tables are parsed, we can generate the final values.
 
-        // First, add the methods to the right classes. To do so, we iterate over classes
-        // in reverse: this allows us to always know the end of the range of methods for
-        // a given class.
+        // First, add the param names to the right methods. To do so, we iterate over methods
+        // in reverse: this allows us to always know the end of the range of params for
+        // a given method.
+        for method in self.methods.iter_mut().rev() {
+            if let Some(idx) = method.param_name_first_index {
+                let idx = idx as usize;
+                if idx <= self.param_names.len() {
+                    for (param_name, param) in
+                        self.param_names.drain(idx..).zip(method.params.iter_mut())
+                    {
+                        param.name = param_name;
+                    }
+                }
+            }
+        }
+
+        // Then, add the methods to the right classes, using the same reverse trick.
         for class in self.classes.iter_mut().rev() {
             if let Some(idx) = class.method_def_first_index {
                 let idx = idx as usize;
@@ -723,10 +740,7 @@ impl<'data> TablesData<'data> {
                 self.data.skip(len)
             }
             table_type::METHOD_DEF => self.parse_method_defs(nb_tables),
-            table_type::PARAM => {
-                let len = get_tables_len(nb_tables, 4 + self.string_index_size)?;
-                self.data.skip(len)
-            }
+            table_type::PARAM => self.parse_params(nb_tables),
             table_type::INTERFACE_IMPL => {
                 let len = get_tables_len(
                     nb_tables,
@@ -936,7 +950,7 @@ impl<'data> TablesData<'data> {
             let flags = read_u16(&mut self.data)?;
             let name = self.read_string()?;
             let signature = self.read_blob()?;
-            let _param_index = read_index(&mut self.data, self.param_index_size)?;
+            let param_index = read_index(&mut self.data, self.param_index_size)?;
 
             let mut return_type = None;
             let mut params = Vec::new();
@@ -946,8 +960,9 @@ impl<'data> TablesData<'data> {
                 params = parsed_sig
                     .params_types
                     .into_iter()
-                    .map(|param_type| {
-                        Value::object([("type", param_type.map(Value::Bytes).into())])
+                    .map(|param_type| Param {
+                        name: Value::Undefined,
+                        typ: param_type.map(Value::Bytes).into(),
                     })
                     .collect();
             }
@@ -958,7 +973,24 @@ impl<'data> TablesData<'data> {
                 generic_params: Vec::new(),
                 return_type,
                 params,
+                param_name_first_index: if param_index == 0 {
+                    None
+                } else {
+                    Some(param_index - 1)
+                },
             });
+        }
+        Ok(())
+    }
+
+    // ECMA 335, II.22.33
+    fn parse_params(&mut self, nb_tables: u32) -> Result<(), ()> {
+        for _ in 0..nb_tables {
+            // skip Flags and Sequence
+            self.data.skip(4)?;
+            let name = self.read_string()?;
+
+            self.param_names.push(name.map(Value::bytes).into());
         }
         Ok(())
     }
@@ -1611,7 +1643,14 @@ struct Method {
     name: Option<Vec<u8>>,
     generic_params: Vec<Value>,
     return_type: Option<Vec<u8>>,
-    params: Vec<Value>,
+    params: Vec<Param>,
+    param_name_first_index: Option<u32>,
+}
+
+#[derive(Debug)]
+struct Param {
+    name: Value,
+    typ: Value,
 }
 
 impl Method {
@@ -1638,6 +1677,12 @@ impl Method {
             _ => "private",
         };
 
+        let parameters: Vec<_> = self
+            .params
+            .into_iter()
+            .map(|Param { name, typ }| Value::object([("name", name), ("type", typ)]))
+            .collect();
+
         Value::object([
             ("abstract", flag_abstract.into()),
             ("final", flag_final.into()),
@@ -1651,8 +1696,8 @@ impl Method {
             ),
             ("generic_parameters", Value::Array(self.generic_params)),
             ("return_type", self.return_type.map(Value::Bytes).into()),
-            ("number_of_parameters", self.params.len().into()),
-            ("parameters", Value::Array(self.params)),
+            ("number_of_parameters", parameters.len().into()),
+            ("parameters", Value::Array(parameters)),
         ])
     }
 }
