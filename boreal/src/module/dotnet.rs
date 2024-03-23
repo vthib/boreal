@@ -1376,7 +1376,14 @@ impl<'data> TablesData<'data> {
                 .ok()?;
 
             let name_index = read_index(&mut data, self.string_index_size).ok()? as usize;
-            let name = self.get_string(name_index)?;
+            let mut name = self.get_string(name_index)?;
+
+            // Generic names end with the ` character and an number indicating the number
+            // of generic types, we remove it.
+            if let Some(pos) = name.iter().position(|b| *b == b'`') {
+                name = &name[..pos];
+            }
+
             let ns_index = read_index(&mut data, self.string_index_size).ok()? as usize;
             let ns = self.get_string(ns_index)?;
 
@@ -1481,7 +1488,23 @@ impl<'data> TablesData<'data> {
             // ELEMENT_TYPE_ARRAY
             0x14 => None, // TODO
             // ELEMENT_TYPE_GENERICINST
-            0x15 => None, // TODO
+            0x15 => {
+                // type type-arg-count type-1 ... type-n
+                let generic_type = self.parse_sig_type(sig)?;
+                let count = read_encoded_uint(sig)?;
+
+                let mut res = Vec::new();
+                res.extend(generic_type);
+                res.push(b'<');
+                for i in 0..count {
+                    if i != 0 {
+                        res.push(b',');
+                    }
+                    res.extend(self.parse_sig_type(sig)?);
+                }
+                res.push(b'>');
+                Some(res)
+            }
             // ELEMENT_TYPE_TYPEDBYREF
             0x16 => Some(b"TypedReference".to_vec()),
             // ELEMENT_TYPE_I
