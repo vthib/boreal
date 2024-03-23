@@ -935,13 +935,29 @@ impl<'data> TablesData<'data> {
             self.data.skip(6)?;
             let flags = read_u16(&mut self.data)?;
             let name = self.read_string()?;
-            self.data
-                .skip(usize::from(self.blob_index_size + self.param_index_size))?; // Signature and param
+            let signature = self.read_blob()?;
+            let _param_index = read_index(&mut self.data, self.param_index_size)?;
+
+            let mut return_type = None;
+            let mut params = Vec::new();
+            if let Some(parsed_sig) = signature.and_then(|sig| self.parse_method_def_signature(sig))
+            {
+                return_type = Some(parsed_sig.return_type);
+                params = parsed_sig
+                    .params_types
+                    .into_iter()
+                    .map(|param_type| {
+                        Value::object([("type", param_type.map(Value::Bytes).into())])
+                    })
+                    .collect();
+            }
 
             self.methods.push(Method {
                 flags,
                 name: name.map(ToOwned::to_owned),
                 generic_params: Vec::new(),
+                return_type,
+                params,
             });
         }
         Ok(())
@@ -1342,6 +1358,126 @@ impl<'data> TablesData<'data> {
         }
     }
 
+    // See II.23.2.1
+    fn parse_method_def_signature(&self, sig: &[u8]) -> Option<Signature> {
+        let mut sig = Bytes(sig);
+
+        // First byte has flags
+        let flags = sig.read::<u8>().ok()?;
+        // If the generic flags is set, it is followed by the generic param count,
+        // we do not care about it
+        if (flags & 0x10) != 0 {
+            let _ = read_encoded_uint(&mut sig)?;
+        }
+        // Then we have the param count
+        let param_count = read_encoded_uint(&mut sig)?;
+
+        // And then the return type
+        let return_type = self.parse_sig_type(&mut sig)?;
+
+        let params_types = (0..param_count)
+            .map(|_| self.parse_sig_type(&mut sig))
+            .collect();
+
+        Some(Signature {
+            return_type,
+            params_types,
+        })
+    }
+
+    // See II.23.1.16
+    fn parse_sig_type(&self, sig: &mut Bytes) -> Option<Vec<u8>> {
+        let ty = sig.read::<u8>().ok()?;
+
+        match ty {
+            // ELEMENT_TYPE_VOID
+            0x01 => Some(b"void".to_vec()),
+            // ELEMENT_TYPE_BOOLEAN
+            0x02 => Some(b"bool".to_vec()),
+            // ELEMENT_TYPE_CHAR
+            0x03 => Some(b"char".to_vec()),
+            // ELEMENT_TYPE_I1
+            0x04 => Some(b"sbyte".to_vec()),
+            // ELEMENT_TYPE_U1
+            0x05 => Some(b"byte".to_vec()),
+            // ELEMENT_TYPE_I2
+            0x06 => Some(b"short".to_vec()),
+            // ELEMENT_TYPE_U2
+            0x07 => Some(b"ushort".to_vec()),
+            // ELEMENT_TYPE_I4
+            0x08 => Some(b"int".to_vec()),
+            // ELEMENT_TYPE_U4
+            0x09 => Some(b"uint".to_vec()),
+            // ELEMENT_TYPE_I8
+            0x0a => Some(b"long".to_vec()),
+            // ELEMENT_TYPE_U8
+            0x0b => Some(b"ulong".to_vec()),
+            // ELEMENT_TYPE_R4
+            0x0c => Some(b"float".to_vec()),
+            // ELEMENT_TYPE_R8
+            0x0d => Some(b"double".to_vec()),
+            // ELEMENT_TYPE_STRING
+            0x0e => Some(b"string".to_vec()),
+            // ELEMENT_TYPE_PTR
+            0x0f => {
+                // followed by a type
+                // TODO: add recursion guard
+                let inner_type = self.parse_sig_type(sig)?;
+                let mut res = Vec::new();
+                res.extend(b"Ptr<");
+                res.extend(inner_type);
+                res.push(b'>');
+                Some(res)
+            }
+            // ELEMENT_TYPE_BYREF
+            0x10 => {
+                // followed by a type
+                let inner_type = self.parse_sig_type(sig)?;
+                let mut res = Vec::new();
+                res.extend(b"ref ");
+                res.extend(inner_type);
+                Some(res)
+            }
+            // ELEMENT_TYPE_VALUETYPE and ELEMENT_TYPE_CLASS
+            0x11 | 0x12 => {
+                // followed by a typed ref or typed def token
+                let index = read_encoded_uint(sig)?;
+                self.get_type_fullname(index)
+            }
+            // ELEMENT_TYPE_VAR and ELEMENT_TYPE_MVAR
+            0x13 | 0x1e => None, // TODO
+            // ELEMENT_TYPE_ARRAY
+            0x14 => None, // TODO
+            // ELEMENT_TYPE_GENERICINST
+            0x15 => None, // TODO
+            // ELEMENT_TYPE_TYPEDBYREF
+            0x16 => Some(b"TypedReference".to_vec()),
+            // ELEMENT_TYPE_I
+            0x18 => Some(b"IntPtr".to_vec()),
+            // ELEMENT_TYPE_U
+            0x19 => Some(b"UintPtr".to_vec()),
+            // ELEMENT_TYPE_FNPTR
+            0x1b => None, // TODO
+            // ELEMENT_TYPE_OBJECT
+            0x1c => Some(b"object".to_vec()),
+            // ELEMENT_TYPE_SZARRAY
+            0x1d => {
+                let inner_type = self.parse_sig_type(sig)?;
+                let mut res = Vec::new();
+                res.extend(inner_type);
+                res.extend(b"[]");
+                Some(res)
+            }
+            // ELEMENT_TYPE_CMOD_REDQ and ELEMENT_TYPE_CMOD_OPT
+            0x1f | 0x20 => {
+                // Ignore the type def or ref index, and return the following type
+                let _index = read_encoded_uint(sig)?;
+                self.parse_sig_type(sig)
+            }
+            _ => None,
+        }
+    }
+
     fn type_ref_table_size(&self) -> u8 {
         self.resolution_scope_index_size + 2 * self.string_index_size
     }
@@ -1397,6 +1533,12 @@ fn get_record_in_table(mut table: Bytes, record_size: u8, index: u32) -> Option<
     table.skip(offset).ok()?;
 
     table.read_bytes(record_size).ok()
+}
+
+#[derive(Debug)]
+struct Signature {
+    return_type: Vec<u8>,
+    params_types: Vec<Option<Vec<u8>>>,
 }
 
 #[derive(Debug)]
@@ -1468,6 +1610,8 @@ struct Method {
     flags: u16,
     name: Option<Vec<u8>>,
     generic_params: Vec<Value>,
+    return_type: Option<Vec<u8>>,
+    params: Vec<Value>,
 }
 
 impl Method {
@@ -1506,10 +1650,9 @@ impl Method {
                 self.generic_params.len().into(),
             ),
             ("generic_parameters", Value::Array(self.generic_params)),
-            // TODO
-            ("parameters", Value::Undefined),
-            ("number_of_parameters", Value::Undefined),
-            ("return_type", Value::Undefined),
+            ("return_type", self.return_type.map(Value::Bytes).into()),
+            ("number_of_parameters", self.params.len().into()),
+            ("parameters", Value::Array(self.params)),
         ])
     }
 }
@@ -1532,37 +1675,37 @@ fn read_u32(data: &mut Bytes) -> Result<u32, ()> {
 
 fn read_blob<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
     // See II.24.2.4 in ECMA 335 for details on the encoding.
-
-    // The first part, is the length.
-    // It is either encoded in one byte, two bytes or four bytes.
-    let length = {
-        fn get_byte(bytes: &mut Bytes) -> Option<u8> {
-            let b = bytes.0.first()?;
-            let _ = bytes.skip(1);
-            Some(*b)
-        }
-
-        let a = get_byte(bytes)?;
-        if a & 0x80 == 0 {
-            a as usize
-        } else if a & 0xC0 == 0x80 {
-            let a = a & 0x4F;
-            let b = get_byte(bytes)?;
-
-            ((a as usize) << 8) | (b as usize)
-        } else if a & 0xE0 == 0xC0 {
-            let a = a & 0x1F;
-            let b = get_byte(bytes)?;
-            let c = get_byte(bytes)?;
-            let d = get_byte(bytes)?;
-
-            ((a as usize) << 24) | ((b as usize) << 16) | ((c as usize) << 8) | (d as usize)
-        } else {
-            return None;
-        }
-    };
-
+    let length = read_encoded_uint(bytes)? as usize;
     bytes.read_slice(length).ok()
+}
+
+fn read_encoded_uint(bytes: &mut Bytes) -> Option<u32> {
+    // See II.24.2.4 and II.23.2
+    // Both use the same encoding for unsigned int, so we use the same helper.
+    fn get_byte(bytes: &mut Bytes) -> Option<u8> {
+        let b = bytes.0.first()?;
+        let _ = bytes.skip(1);
+        Some(*b)
+    }
+
+    let a = get_byte(bytes)?;
+    if a & 0x80 == 0 {
+        Some(u32::from(a))
+    } else if a & 0xC0 == 0x80 {
+        let a = a & 0x4F;
+        let b = get_byte(bytes)?;
+
+        Some(u32::from_le_bytes([b, a, 0, 0]))
+    } else if a & 0xE0 == 0xC0 {
+        let a = a & 0x1F;
+        let b = get_byte(bytes)?;
+        let c = get_byte(bytes)?;
+        let d = get_byte(bytes)?;
+
+        Some(u32::from_le_bytes([d, c, b, a]))
+    } else {
+        None
+    }
 }
 
 fn build_fullname(ns: &[u8], name: &[u8]) -> Vec<u8> {
