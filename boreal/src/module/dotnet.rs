@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use object::coff::SectionTable;
 use object::pe::{
     ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64, IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
+    IMAGE_FILE_DLL,
 };
-use object::read::pe::ImageNtHeaders;
+use object::read::pe::{DataDirectories, ImageNtHeaders};
 use object::{Bytes, FileKind, LittleEndian as LE, Pod, ReadRef, U16, U32, U64};
 
 use super::pe::va_to_file_offset;
-use super::{Module, ScanContext, StaticValue, Type, Value};
+use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 
 /// `dotnet` module. Allows inspecting dotnet binaries
 #[derive(Debug)]
@@ -135,29 +136,77 @@ impl Module for Dotnet {
         .into()
     }
 
+    fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
+        data_map.insert::<Self>(Data::default());
+    }
+
     fn get_dynamic_values(&self, ctx: &mut ScanContext, out: &mut HashMap<&'static str, Value>) {
+        let Some(data) = ctx.module_data.get_mut::<Self>() else {
+            return;
+        };
+
+        if data.found_pe {
+            // We already found a PE in a region, so ignore the others
+            return;
+        }
+
         let res = match FileKind::parse(ctx.region.mem) {
-            Ok(FileKind::Pe32) => parse_file::<ImageNtHeaders32>(ctx.region.mem),
-            Ok(FileKind::Pe64) => parse_file::<ImageNtHeaders64>(ctx.region.mem),
+            Ok(FileKind::Pe32) => {
+                parse_file::<ImageNtHeaders32>(ctx.region.mem, ctx.process_memory)
+            }
+            Ok(FileKind::Pe64) => {
+                parse_file::<ImageNtHeaders64>(ctx.region.mem, ctx.process_memory)
+            }
             _ => None,
         };
 
-        match res {
-            Some(values) => {
-                *out = values;
-            }
-            None => *out = [("is_dotnet", 0.into())].into(),
-        };
+        if let Some(values) = res {
+            *out = values;
+            data.found_pe = true;
+        }
     }
 }
 
-fn parse_file<HEADERS: ImageNtHeaders>(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
+#[derive(Default)]
+pub struct Data {
+    found_pe: bool,
+}
+
+impl ModuleData for Dotnet {
+    type Data = Data;
+}
+
+fn parse_file<HEADERS: ImageNtHeaders>(
+    mem: &[u8],
+    process_memory: bool,
+) -> Option<HashMap<&'static str, Value>> {
     // A dotnet file is a PE, with details stored in it. First, parse the PE headers.
     let dos_header = ImageDosHeader::parse(mem).ok()?;
     let mut offset = dos_header.nt_headers_offset().into();
     let (nt_headers, data_dirs) = HEADERS::parse(mem, &mut offset).ok()?;
-    let sections = nt_headers.sections(mem, offset).ok()?;
 
+    if process_memory {
+        let hdr = nt_headers.file_header();
+        let characteristics = hdr.characteristics.get(LE);
+        if (characteristics & IMAGE_FILE_DLL) != 0 {
+            return None;
+        }
+    }
+
+    // Once we passed those checks, we always at least set is_dotnet, but not before.
+    // This is annoying, would be nice to change this behavior in YARA.
+    let sections = nt_headers.sections(mem, offset).ok()?;
+    Some(
+        parse_file_inner(mem, data_dirs, sections)
+            .unwrap_or_else(|| [("is_dotnet", 0.into())].into()),
+    )
+}
+
+fn parse_file_inner(
+    mem: &[u8],
+    data_dirs: DataDirectories,
+    sections: SectionTable,
+) -> Option<HashMap<&'static str, Value>> {
     // II.25.3.3 : the PE contains a data directory named "CLI header"
     let dir = data_dirs.get(IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR)?;
     let cli_data = dir.data(mem, &sections).ok()?;
