@@ -867,10 +867,7 @@ impl<'data> TablesData<'data> {
                 self.data.skip(len)
             }
             table_type::MANIFEST_RESOURCE => self.parse_manifest_resource_table(nb_tables, res),
-            table_type::NESTED_CLASS => {
-                let len = get_tables_len(nb_tables, 2 * self.type_def_index_size)?;
-                self.data.skip(len)
-            }
+            table_type::NESTED_CLASS => self.parse_nested_class(nb_tables),
             table_type::GENERIC_PARAM => self.parse_generic_params(nb_tables),
             table_type::METHOD_SPEC => {
                 let len = get_tables_len(
@@ -1310,6 +1307,32 @@ impl<'data> TablesData<'data> {
         Ok(())
     }
 
+    // ECMA 335, II.22.32
+    fn parse_nested_class(&mut self, nb_tables: u32) -> Result<(), ()> {
+        for _ in 0..nb_tables {
+            let nested_class = read_index(&mut self.data, self.type_def_index_size)? as usize;
+            let enclosing_class = read_index(&mut self.data, self.type_def_index_size)? as usize;
+
+            // 0 is unset, and we skip the first class, so this only makes sense
+            // with indexes >= 2.
+            if nested_class <= 1 || enclosing_class <= 1 {
+                continue;
+            }
+
+            // Fix nested namespace by setting it from the enclosing class fullname
+            // XXX: if the enclosing is also nested, this depends on the order in the nested class
+            // table. If there an issue here?
+            let namespace = self
+                .classes
+                .get(enclosing_class - 2)
+                .and_then(Class::get_fullname);
+            if let Some(nested) = self.classes.get_mut(nested_class - 2) {
+                nested.namespace = namespace;
+            }
+        }
+        Ok(())
+    }
+
     // ECMA 335, II.22.20
     fn parse_generic_params(&mut self, nb_tables: u32) -> Result<(), ()> {
         for _ in 0..nb_tables {
@@ -1362,6 +1385,7 @@ impl<'data> TablesData<'data> {
                 None
             } else {
                 let class = self.classes.get((index - 2) as usize)?;
+                // TODO: what if the class is nested?
                 match (class.namespace.as_ref(), class.name.as_ref()) {
                     (Some(ns), Some(name)) => Some(build_fullname(ns, name)),
                     _ => None,
@@ -1609,6 +1633,14 @@ struct Class {
 }
 
 impl Class {
+    fn get_fullname(&self) -> Option<Vec<u8>> {
+        match (self.namespace.as_deref(), self.name.as_deref()) {
+            (Some(ns), Some(name)) => Some(build_fullname(ns, name)),
+            (None, Some(name)) => Some(name.to_vec()),
+            _ => None,
+        }
+    }
+
     fn into_value(self) -> Value {
         // Values for flags can be found in II.23.1.15
         let typ = if self.flags & 0x20 != 0 {
@@ -1617,10 +1649,7 @@ impl Class {
             b"class"
         };
 
-        let fullname = match (self.namespace.as_deref(), self.name.as_deref()) {
-            (Some(ns), Some(name)) => Some(build_fullname(ns, name)),
-            (_, _) => None,
-        };
+        let fullname = self.get_fullname();
         let visibility = match self.flags & 0x07 {
             // NotPublic or NestedAssembly
             0x00 | 0x05 => "internal",
