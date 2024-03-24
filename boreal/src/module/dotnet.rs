@@ -1402,10 +1402,10 @@ impl<'data> TablesData<'data> {
             } else {
                 let class = self.classes.get((index - 2) as usize)?;
                 // TODO: what if the class is nested?
-                match (class.namespace.as_ref(), class.name.as_ref()) {
-                    (Some(ns), Some(name)) => Some(build_fullname(ns, name)),
-                    _ => None,
-                }
+                class
+                    .name
+                    .as_ref()
+                    .map(|name| build_fullname(class.namespace.as_deref(), name))
             }
         } else if tag == 1 {
             // TypeRef
@@ -1425,7 +1425,7 @@ impl<'data> TablesData<'data> {
             }
 
             let ns_index = read_index(&mut data, self.string_index_size).ok()? as usize;
-            let ns = self.get_string(ns_index)?;
+            let ns = self.get_string(ns_index);
 
             Some(build_fullname(ns, name))
         } else if tag == 2 {
@@ -1702,11 +1702,9 @@ struct Class {
 
 impl Class {
     fn get_fullname(&self) -> Option<Vec<u8>> {
-        match (self.namespace.as_deref(), self.name.as_deref()) {
-            (Some(ns), Some(name)) => Some(build_fullname(ns, name)),
-            (None, Some(name)) => Some(name.to_vec()),
-            _ => None,
-        }
+        self.name
+            .as_ref()
+            .map(|name| build_fullname(self.namespace.as_deref(), name))
     }
 
     fn into_value(self) -> Value {
@@ -1908,12 +1906,17 @@ fn read_encoded_uint(bytes: &mut Bytes) -> Option<u32> {
     }
 }
 
-fn build_fullname(ns: &[u8], name: &[u8]) -> Vec<u8> {
-    let mut full = Vec::with_capacity(ns.len() + name.len() + 1);
-    full.extend(ns);
-    full.push(b'.');
-    full.extend(name);
-    full
+fn build_fullname(ns: Option<&[u8]>, name: &[u8]) -> Vec<u8> {
+    match ns {
+        Some(ns) => {
+            let mut full = Vec::with_capacity(ns.len() + name.len() + 1);
+            full.extend(ns);
+            full.push(b'.');
+            full.extend(name);
+            full
+        }
+        None => name.to_vec(),
+    }
 }
 
 fn get_streams(metadata: &MetadataRoot, metadata_root_offset: u64) -> Vec<Value> {
