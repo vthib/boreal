@@ -644,12 +644,36 @@ impl<'data> TablesData<'data> {
     }
 
     fn finalize(mut self, res: &mut HashMap<&'static str, Value>) {
-        // The "classes" field is built progressively while parsing tables.
-        // Once all tables are parsed, we can generate the final values.
+        // The classes and methods details are built using many tables, with some not in
+        // the right order to build everything progressively. In those cases, the computation
+        // of details is delayed until this method, when we have finished parsing all tables and
+        // can cross reference everything.
 
-        // First, add the param names to the right methods. To do so, we iterate over methods
-        // in reverse: this allows us to always know the end of the range of params for
-        // a given method.
+        // First, compute the types of the methods.
+        // To do so, we iterate over methods in reverse: this allows us to always know
+        // the end of the range of params for a given method.
+        // This is delayed until now because we need the class generic params to do this.
+        for class in self.classes.iter().rev() {
+            if let Some(idx) = class.method_def_first_index {
+                let idx = idx as usize;
+                if idx <= self.methods.len() {
+                    for i in idx..self.methods.len() {
+                        if let Some(sig) = self.methods[i].signature.as_ref() {
+                            let mut sig = Bytes(sig);
+                            if let Some(sig) = self.parse_method_def_signature(
+                                &mut sig,
+                                &class.generic_params,
+                                &self.methods[i].generic_params,
+                            ) {
+                                self.methods[i].set_signature(sig);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Then, add the param names to the right methods, using the same reverse trick.
         for method in self.methods.iter_mut().rev() {
             if let Some(idx) = method.param_name_first_index {
                 let idx = idx as usize;
@@ -676,7 +700,9 @@ impl<'data> TablesData<'data> {
         // Then, resolve the 'extends' index
         for i in 0..self.classes.len() {
             let extends_index = self.classes[i].extends_index;
-            if let Some(base_class) = self.get_type_fullname(extends_index) {
+            if let Some(base_class) =
+                self.get_type_fullname(extends_index, &self.classes[i].generic_params, &[])
+            {
                 self.classes[i].base_types.push(Value::Bytes(base_class));
             }
         }
@@ -694,7 +720,11 @@ impl<'data> TablesData<'data> {
                 if class_index <= 1 || (class_index - 2) >= self.classes.len() {
                     continue;
                 }
-                if let Some(interface_name) = self.get_type_fullname(type_def_or_ref_index) {
+                if let Some(interface_name) = self.get_type_fullname(
+                    type_def_or_ref_index,
+                    &self.classes[class_index - 2].generic_params,
+                    &[],
+                ) {
                     self.classes[class_index - 2]
                         .base_types
                         .push(Value::Bytes(interface_name));
@@ -949,34 +979,19 @@ impl<'data> TablesData<'data> {
             let signature = self.read_blob()?;
             let param_index = read_index(&mut self.data, self.param_index_size)?;
 
-            let mut return_type = None;
-            let mut params = Vec::new();
-            if let Some(parsed_sig) = signature.and_then(|sig| {
-                let mut sig = Bytes(sig);
-                self.parse_method_def_signature(&mut sig)
-            }) {
-                return_type = Some(parsed_sig.return_type);
-                params = parsed_sig
-                    .params_types
-                    .into_iter()
-                    .map(|param_type| Param {
-                        name: Value::Undefined,
-                        typ: param_type.map(Value::Bytes).into(),
-                    })
-                    .collect();
-            }
-
             self.methods.push(Method {
                 flags,
                 name: name.map(ToOwned::to_owned),
                 generic_params: Vec::new(),
-                return_type,
-                params,
+                return_type: None,
+                params: Vec::new(),
                 param_name_first_index: if param_index == 0 {
                     None
                 } else {
                     Some(param_index - 1)
                 },
+                // TODO: avoid cloning the slice here, we should be able to keep it as a slice.
+                signature: signature.map(<[u8]>::to_vec),
             });
         }
         Ok(())
@@ -1352,16 +1367,10 @@ impl<'data> TablesData<'data> {
             // 1 if the index points to a MethodDef
             if owner & 0x01 == 0 {
                 if let Some(class) = self.classes.get_mut(owner_index) {
-                    class.generic_params.push(match name {
-                        Some(v) => Value::bytes(v),
-                        None => Value::Undefined,
-                    });
+                    class.generic_params.push(name.map(ToOwned::to_owned));
                 }
             } else if let Some(method) = self.methods.get_mut(owner_index) {
-                method.generic_params.push(match name {
-                    Some(v) => Value::bytes(v),
-                    None => Value::Undefined,
-                });
+                method.generic_params.push(name.map(ToOwned::to_owned));
             }
         }
 
@@ -1376,7 +1385,12 @@ impl<'data> TablesData<'data> {
     }
 
     // retrieve the name of the type referred to by a TypeDefOrRef index.
-    fn get_type_fullname(&self, type_def_or_ref_index: u32) -> Option<Vec<u8>> {
+    fn get_type_fullname(
+        &self,
+        type_def_or_ref_index: u32,
+        class_gen_params: &[Option<Vec<u8>>],
+        method_gen_params: &[Option<Vec<u8>>],
+    ) -> Option<Vec<u8>> {
         let tag = type_def_or_ref_index & 0x03;
         let index = type_def_or_ref_index >> 2;
 
@@ -1427,14 +1441,19 @@ impl<'data> TablesData<'data> {
             // II.23.2.14 : the signature is directly a type.
             // The type is more restrictive than what we parse, but since we would rather
             // be permissive in this module, this is perfectly fine.
-            self.parse_sig_type(&mut sig)
+            self.parse_sig_type(&mut sig, class_gen_params, method_gen_params)
         } else {
             None
         }
     }
 
     // See II.23.2.1
-    fn parse_method_def_signature(&self, sig: &mut Bytes) -> Option<Signature> {
+    fn parse_method_def_signature(
+        &self,
+        sig: &mut Bytes,
+        class_gen_params: &[Option<Vec<u8>>],
+        method_gen_params: &[Option<Vec<u8>>],
+    ) -> Option<Signature> {
         // First byte has flags
         let flags = sig.read::<u8>().ok()?;
         // If the generic flags is set, it is followed by the generic param count,
@@ -1446,9 +1465,11 @@ impl<'data> TablesData<'data> {
         let param_count = read_encoded_uint(sig)?;
 
         // And then the return type
-        let return_type = self.parse_sig_type(sig)?;
+        let return_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
 
-        let params_types = (0..param_count).map(|_| self.parse_sig_type(sig)).collect();
+        let params_types = (0..param_count)
+            .map(|_| self.parse_sig_type(sig, class_gen_params, method_gen_params))
+            .collect();
 
         Some(Signature {
             return_type,
@@ -1457,7 +1478,12 @@ impl<'data> TablesData<'data> {
     }
 
     // See II.23.1.16
-    fn parse_sig_type(&self, sig: &mut Bytes) -> Option<Vec<u8>> {
+    fn parse_sig_type(
+        &self,
+        sig: &mut Bytes,
+        class_gen_params: &[Option<Vec<u8>>],
+        method_gen_params: &[Option<Vec<u8>>],
+    ) -> Option<Vec<u8>> {
         let ty = sig.read::<u8>().ok()?;
 
         match ty {
@@ -1493,7 +1519,7 @@ impl<'data> TablesData<'data> {
             0x0f => {
                 // followed by a type
                 // TODO: add recursion guard
-                let inner_type = self.parse_sig_type(sig)?;
+                let inner_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
                 let mut res = Vec::new();
                 res.extend(b"Ptr<");
                 res.extend(inner_type);
@@ -1503,7 +1529,7 @@ impl<'data> TablesData<'data> {
             // ELEMENT_TYPE_BYREF
             0x10 => {
                 // followed by a type
-                let inner_type = self.parse_sig_type(sig)?;
+                let inner_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
                 let mut res = Vec::new();
                 res.extend(b"ref ");
                 res.extend(inner_type);
@@ -1513,16 +1539,22 @@ impl<'data> TablesData<'data> {
             0x11 | 0x12 => {
                 // followed by a typed ref or typed def token
                 let index = read_encoded_uint(sig)?;
-                self.get_type_fullname(index)
+                self.get_type_fullname(index, class_gen_params, method_gen_params)
             }
-            // ELEMENT_TYPE_VAR and ELEMENT_TYPE_MVAR
-            0x13 | 0x1e => None, // TODO
+            // ELEMENT_TYPE_VAR
+            0x13 => {
+                let index = read_encoded_uint(sig)? as usize;
+                class_gen_params
+                    .get(index)
+                    .and_then(|v| v.as_ref())
+                    .cloned()
+            }
             // ELEMENT_TYPE_ARRAY
             0x14 => None, // TODO
             // ELEMENT_TYPE_GENERICINST
             0x15 => {
                 // type type-arg-count type-1 ... type-n
-                let generic_type = self.parse_sig_type(sig)?;
+                let generic_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
                 let count = read_encoded_uint(sig)?;
 
                 let mut res = Vec::new();
@@ -1532,7 +1564,7 @@ impl<'data> TablesData<'data> {
                     if i != 0 {
                         res.push(b',');
                     }
-                    res.extend(self.parse_sig_type(sig)?);
+                    res.extend(self.parse_sig_type(sig, class_gen_params, method_gen_params)?);
                 }
                 res.push(b'>');
                 Some(res)
@@ -1548,7 +1580,7 @@ impl<'data> TablesData<'data> {
                 let Signature {
                     return_type,
                     params_types,
-                } = self.parse_method_def_signature(sig)?;
+                } = self.parse_method_def_signature(sig, class_gen_params, method_gen_params)?;
 
                 let mut res = Vec::new();
                 res.extend(b"FnPtr<");
@@ -1569,17 +1601,25 @@ impl<'data> TablesData<'data> {
             0x1c => Some(b"object".to_vec()),
             // ELEMENT_TYPE_SZARRAY
             0x1d => {
-                let inner_type = self.parse_sig_type(sig)?;
+                let inner_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
                 let mut res = Vec::new();
                 res.extend(inner_type);
                 res.extend(b"[]");
                 Some(res)
             }
+            // ELEMENT_TYPE_MVAR
+            0x1e => {
+                let index = read_encoded_uint(sig)? as usize;
+                method_gen_params
+                    .get(index)
+                    .and_then(|v| v.as_ref())
+                    .cloned()
+            }
             // ELEMENT_TYPE_CMOD_REDQ and ELEMENT_TYPE_CMOD_OPT
             0x1f | 0x20 => {
                 // Ignore the type def or ref index, and return the following type
                 let _index = read_encoded_uint(sig)?;
-                self.parse_sig_type(sig)
+                self.parse_sig_type(sig, class_gen_params, method_gen_params)
             }
             _ => None,
         }
@@ -1655,7 +1695,7 @@ struct Class {
     namespace: Option<Vec<u8>>,
     methods: Vec<Value>,
     method_def_first_index: Option<u32>,
-    generic_params: Vec<Value>,
+    generic_params: Vec<Option<Vec<u8>>>,
     base_types: Vec<Value>,
     extends_index: u32,
 }
@@ -1710,7 +1750,10 @@ impl Class {
                 "number_of_generic_parameters",
                 self.generic_params.len().into(),
             ),
-            ("generic_parameters", Value::Array(self.generic_params)),
+            (
+                "generic_parameters",
+                Value::Array(self.generic_params.into_iter().map(Into::into).collect()),
+            ),
             ("number_of_base_types", self.base_types.len().into()),
             ("base_types", Value::Array(self.base_types)),
         ])
@@ -1721,10 +1764,11 @@ impl Class {
 struct Method {
     flags: u16,
     name: Option<Vec<u8>>,
-    generic_params: Vec<Value>,
+    generic_params: Vec<Option<Vec<u8>>>,
     return_type: Option<Vec<u8>>,
     params: Vec<Param>,
     param_name_first_index: Option<u32>,
+    signature: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -1734,6 +1778,21 @@ struct Param {
 }
 
 impl Method {
+    fn set_signature(&mut self, signature: Signature) {
+        let Signature {
+            return_type,
+            params_types,
+        } = signature;
+        self.return_type = Some(return_type);
+        self.params = params_types
+            .into_iter()
+            .map(|param_type| Param {
+                name: Value::Undefined,
+                typ: param_type.map(Value::Bytes).into(),
+            })
+            .collect();
+    }
+
     fn into_value(self) -> Value {
         let Self {
             flags,
@@ -1742,6 +1801,7 @@ impl Method {
             mut return_type,
             params,
             param_name_first_index: _param_name_first_index,
+            signature: _sig,
         } = self;
 
         // Values for flags can be found in II.23.1.10
@@ -1786,7 +1846,10 @@ impl Method {
             ("visibility", Value::bytes(visibility)),
             ("name", name.into()),
             ("number_of_generic_parameters", generic_params.len().into()),
-            ("generic_parameters", Value::Array(generic_params)),
+            (
+                "generic_parameters",
+                Value::Array(generic_params.into_iter().map(Into::into).collect()),
+            ),
             ("return_type", return_type.map(Value::Bytes).into()),
             ("number_of_parameters", parameters.len().into()),
             ("parameters", Value::Array(parameters)),
