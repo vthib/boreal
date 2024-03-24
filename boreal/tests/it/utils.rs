@@ -882,7 +882,8 @@ pub fn compare_module_values_on_mem<M: Module>(
 
             if !diffs.is_empty() {
                 panic!(
-                    "found differences for module {} on {}{}: {:#?}",
+                    "found {} differences for module {} on {}{}: {:#?}",
+                    diffs.len(),
                     module.get_name(),
                     mem_name,
                     if process_memory {
@@ -1063,9 +1064,8 @@ fn is_undefined(value: &ModuleValue) -> bool {
         ModuleValue::Array(vec) => vec.is_empty(),
         ModuleValue::Dictionary(obj) => obj.is_empty(),
         ModuleValue::Object(obj) => {
-            // An object where all values are the undefined value is allowed (same eval behavior).
-            obj.values()
-                .all(|value| matches!(value, ModuleValue::Undefined))
+            // An object where all values are considered undefined is allowed (same eval behavior).
+            obj.values().all(is_undefined)
         }
         _ => false,
     }
