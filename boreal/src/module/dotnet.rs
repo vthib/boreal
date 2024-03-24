@@ -951,8 +951,10 @@ impl<'data> TablesData<'data> {
 
             let mut return_type = None;
             let mut params = Vec::new();
-            if let Some(parsed_sig) = signature.and_then(|sig| self.parse_method_def_signature(sig))
-            {
+            if let Some(parsed_sig) = signature.and_then(|sig| {
+                let mut sig = Bytes(sig);
+                self.parse_method_def_signature(&mut sig)
+            }) {
                 return_type = Some(parsed_sig.return_type);
                 params = parsed_sig
                     .params_types
@@ -1432,25 +1434,21 @@ impl<'data> TablesData<'data> {
     }
 
     // See II.23.2.1
-    fn parse_method_def_signature(&self, sig: &[u8]) -> Option<Signature> {
-        let mut sig = Bytes(sig);
-
+    fn parse_method_def_signature(&self, sig: &mut Bytes) -> Option<Signature> {
         // First byte has flags
         let flags = sig.read::<u8>().ok()?;
         // If the generic flags is set, it is followed by the generic param count,
         // we do not care about it
         if (flags & 0x10) != 0 {
-            let _ = read_encoded_uint(&mut sig)?;
+            let _ = read_encoded_uint(sig)?;
         }
         // Then we have the param count
-        let param_count = read_encoded_uint(&mut sig)?;
+        let param_count = read_encoded_uint(sig)?;
 
         // And then the return type
-        let return_type = self.parse_sig_type(&mut sig)?;
+        let return_type = self.parse_sig_type(sig)?;
 
-        let params_types = (0..param_count)
-            .map(|_| self.parse_sig_type(&mut sig))
-            .collect();
+        let params_types = (0..param_count).map(|_| self.parse_sig_type(sig)).collect();
 
         Some(Signature {
             return_type,
@@ -1546,7 +1544,27 @@ impl<'data> TablesData<'data> {
             // ELEMENT_TYPE_U
             0x19 => Some(b"UintPtr".to_vec()),
             // ELEMENT_TYPE_FNPTR
-            0x1b => None, // TODO
+            0x1b => {
+                let Signature {
+                    return_type,
+                    params_types,
+                } = self.parse_method_def_signature(sig)?;
+
+                let mut res = Vec::new();
+                res.extend(b"FnPtr<");
+                res.extend(return_type);
+                res.push(b'(');
+                for (i, ptype) in params_types.into_iter().enumerate() {
+                    if let Some(ptype) = ptype {
+                        if i != 0 {
+                            res.extend(b", ");
+                        }
+                        res.extend(ptype);
+                    }
+                }
+                res.extend(b")>");
+                Some(res)
+            }
             // ELEMENT_TYPE_OBJECT
             0x1c => Some(b"object".to_vec()),
             // ELEMENT_TYPE_SZARRAY
