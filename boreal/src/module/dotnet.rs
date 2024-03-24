@@ -1414,8 +1414,18 @@ impl<'data> TablesData<'data> {
             Some(build_fullname(ns, name))
         } else if tag == 2 {
             // TypeSpec
-            // TODO
-            None
+            let mut data = get_record_in_table(
+                self.type_spec_table_data?,
+                self.type_spec_table_size(),
+                index,
+            )?;
+            let blob_index = read_index(&mut data, self.blob_index_size).ok()? as usize;
+            let mut sig = Bytes(self.get_blob(blob_index)?);
+
+            // II.23.2.14 : the signature is directly a type.
+            // The type is more restrictive than what we parse, but since we would rather
+            // be permissive in this module, this is perfectly fine.
+            self.parse_sig_type(&mut sig)
         } else {
             None
         }
