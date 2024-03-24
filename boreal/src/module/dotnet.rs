@@ -1737,7 +1737,7 @@ impl Class {
         Value::object([
             ("fullname", fullname.into()),
             ("name", self.name.into()),
-            ("namespace", self.namespace.into()),
+            ("namespace", self.namespace.unwrap_or_default().into()),
             ("visibility", Value::bytes(visibility)),
             ("type", Value::bytes(typ)),
             ("abstract", abstrac.into()),
