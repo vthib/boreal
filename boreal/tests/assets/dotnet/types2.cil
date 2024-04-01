@@ -1,0 +1,31 @@
+.class public Cmk {}
+
+.class public VolatileMethods {
+    .method public instance void withCmod(
+        int32 modreq(Cmk)* i,
+        int32 modopt(Cmk) j
+    ) { ret }
+
+    .method public instance void withArrays(
+        // Some examples coming from ECMA 335
+        int32[0...2] a,
+        uint32[0...3, 1...2,0,,,] b,
+        int16[1...2, 6...8] c,
+        uint64[5, 3...5, , ] d,
+        uint8[8...23, , 5, 2...2, -5...8, 3...4] e,
+        // The size can be unset, and the lower bound can be negative
+        int8[53..., -34...] f,
+        // Test some values outside the smallest range
+        uint16[1032...8388608, -1032...512, -8388608...-1032] g
+    ) { ret }
+
+    // Test values at the bounds of compression ranges, see II.23.2
+    .method public instance void compressionValues(
+        // for lower bound
+        int8[-65..., -64..., 63..., 64...] a,
+        int8[-8193..., -8192..., 8191..., 8192...] b,
+        int8[-268435456..., 268435455...] c,
+        // for size
+        int8[0, 127, 128, 256, 16383, 16384, 268435455] d
+    ) { ret }
+}

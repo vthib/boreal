@@ -1,0 +1,4 @@
+Files used to test the dotnet module.
+
+Source files used to generate the files are kept next to the generated artifacts.
+`build.ps1` indicates how those files are compiled and can be regenerated.
