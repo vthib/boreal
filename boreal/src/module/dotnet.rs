@@ -29,7 +29,7 @@ impl Module for Dotnet {
             // Integers depending on scan
             ("is_dotnet", Type::Integer),
             ("version", Type::Bytes),
-            ("module_name", Type::Integer),
+            ("module_name", Type::Bytes),
             (
                 "streams",
                 Type::array(Type::object([
@@ -987,7 +987,16 @@ impl<'data> TablesData<'data> {
     fn parse_type_defs(&mut self, nb_tables: u32) -> Result<(), ()> {
         for i in 0..nb_tables {
             let flags = read_u32(&mut self.data)?; // Flags
-            let name = self.read_string()?;
+            let mut name = self.read_string()?;
+
+            // Generic names end with the ` character and an number indicating the number
+            // of generic types, we remove it.
+            if let Some(name) = name.as_mut() {
+                if let Some(pos) = name.iter().position(|b| *b == b'`') {
+                    *name = &name[..pos];
+                }
+            }
+
             let namespace = self.read_string()?;
 
             let extends_index = read_index(&mut self.data, self.type_def_or_ref_index_size)?;
@@ -1415,8 +1424,11 @@ impl<'data> TablesData<'data> {
             // 0 if the index points to a TypeDef
             // 1 if the index points to a MethodDef
             if owner & 0x01 == 0 {
-                if let Some(class) = self.classes.get_mut(owner_index) {
-                    class.generic_params.push(name.map(ToOwned::to_owned));
+                // We skip the first class in the classes vec.
+                if owner_index >= 1 {
+                    if let Some(class) = self.classes.get_mut(owner_index - 1) {
+                        class.generic_params.push(name.map(ToOwned::to_owned));
+                    }
                 }
             } else if let Some(method) = self.methods.get_mut(owner_index) {
                 method.generic_params.push(name.map(ToOwned::to_owned));
@@ -1623,7 +1635,7 @@ impl<'data> TablesData<'data> {
             // ELEMENT_TYPE_I
             0x18 => Some(b"IntPtr".to_vec()),
             // ELEMENT_TYPE_U
-            0x19 => Some(b"UintPtr".to_vec()),
+            0x19 => Some(b"UIntPtr".to_vec()),
             // ELEMENT_TYPE_FNPTR
             0x1b => {
                 let Signature {
@@ -1926,20 +1938,20 @@ fn read_blob<'data>(bytes: &mut Bytes<'data>) -> Option<&'data [u8]> {
     bytes.read_slice(length).ok()
 }
 
+fn get_byte(bytes: &mut Bytes) -> Option<u8> {
+    let b = bytes.0.first()?;
+    let _ = bytes.skip(1);
+    Some(*b)
+}
+
 fn read_encoded_uint(bytes: &mut Bytes) -> Option<u32> {
     // See II.24.2.4 and II.23.2
     // Both use the same encoding for unsigned int, so we use the same helper.
-    fn get_byte(bytes: &mut Bytes) -> Option<u8> {
-        let b = bytes.0.first()?;
-        let _ = bytes.skip(1);
-        Some(*b)
-    }
-
     let a = get_byte(bytes)?;
     if a & 0x80 == 0 {
         Some(u32::from(a))
     } else if a & 0xC0 == 0x80 {
-        let a = a & 0x4F;
+        let a = a & 0x3F;
         let b = get_byte(bytes)?;
 
         Some(u32::from_le_bytes([b, a, 0, 0]))
