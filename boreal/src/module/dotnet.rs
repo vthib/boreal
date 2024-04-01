@@ -1611,7 +1611,49 @@ impl<'data> TablesData<'data> {
                     .cloned()
             }
             // ELEMENT_TYPE_ARRAY
-            0x14 => None, // TODO
+            0x14 => {
+                // type rank boundsCount bound1 .. loCount lo1 ..
+
+                let ty = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
+                let mut res = Vec::new();
+                res.extend(ty);
+                res.push(b'[');
+
+                // See II.23.2.13
+                let rank = read_encoded_uint(sig)? as usize;
+                let num_sizes = read_encoded_uint(sig)?;
+                let sizes: Vec<i64> = (0..num_sizes)
+                    .map(|_| read_encoded_uint(sig).map(i64::from))
+                    .collect::<Option<Vec<_>>>()?;
+
+                let num_lo_bounds = read_encoded_uint(sig)?;
+                let lo_bounds: Vec<i32> = (0..num_lo_bounds)
+                    .map(|_| read_encoded_sint(sig))
+                    .collect::<Option<Vec<_>>>()?;
+
+                for i in 0..rank {
+                    if i > 0 {
+                        res.push(b',');
+                    }
+                    match (sizes.get(i), lo_bounds.get(i)) {
+                        (Some(size), Some(lo)) if *lo != 0 => {
+                            res.extend(lo.to_string().as_bytes());
+                            res.extend(b"...");
+                            res.extend((i64::from(*lo) + *size - 1).to_string().as_bytes());
+                        }
+                        (Some(size), _) => res.extend(size.to_string().as_bytes()),
+                        (None, Some(lo)) if *lo != 0 => {
+                            res.extend(lo.to_string().as_bytes());
+                            res.extend(b"...");
+                        }
+                        _ => (),
+                    }
+                }
+
+                res.push(b']');
+
+                Some(res)
+            }
             // ELEMENT_TYPE_GENERICINST
             0x15 => {
                 // type type-arg-count type-1 ... type-n
@@ -1962,6 +2004,43 @@ fn read_encoded_uint(bytes: &mut Bytes) -> Option<u32> {
         let d = get_byte(bytes)?;
 
         Some(u32::from_le_bytes([d, c, b, a]))
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::cast_possible_wrap)]
+fn read_encoded_sint(bytes: &mut Bytes) -> Option<i32> {
+    // See II.23.2
+    let a = get_byte(bytes)?;
+    if a & 0x80 == 0 {
+        // Value was rotated left 1 bit on 7 bits.
+        // Rotate it back right to retrieve right value.
+        let mut res = i32::from(a) >> 1;
+        if (a & 0x01) != 0 {
+            res |= 0xFF_FF_FF_C0u32 as i32;
+        }
+        Some(res)
+    } else if a & 0xC0 == 0x80 {
+        let a = a & 0x3F;
+        let b = get_byte(bytes)?;
+
+        let mut res = i32::from_le_bytes([b, a, 0, 0]) >> 1;
+        if (b & 0x01) != 0 {
+            res |= 0xFF_FF_E0_00u32 as i32;
+        }
+        Some(res)
+    } else if a & 0xE0 == 0xC0 {
+        let a = a & 0x1F;
+        let b = get_byte(bytes)?;
+        let c = get_byte(bytes)?;
+        let d = get_byte(bytes)?;
+
+        let mut res = i32::from_le_bytes([d, c, b, a]) >> 1;
+        if (d & 0x01) != 0 {
+            res |= 0xF0_00_00_00u32 as i32;
+        }
+        Some(res)
     } else {
         None
     }
