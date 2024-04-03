@@ -1,0 +1,26 @@
+.assembly ?iD.gabu.Zo$.@mEu {
+	.custom instance void [Kwee]Some.object::.cctor()
+	.hash algorithm 32772
+	// Contrary to what ECMA 335 says, .culture does not work but .locale does...
+	.locale "de-ch"
+	.ver 57:239:120:249120042
+}
+
+.assembly extern one.two.three {}
+
+.assembly extern four.five {
+	.publickey = (DE 45 23 89 82 06 07 A6 BB AA BB EE 11 22 33 00)
+}
+
+.assembly extern 'in external'.Assembly@ {
+	.custom instance int16 [muwu]mogu::ugom() = ( 01 00 08 00 00 00 00 00 )
+	.publickeytoken = (BB AA BB EE 11 22 33 00)
+	.locale "es-ES"
+	.ver 912:232328:283:212
+}
+.mresource public _my.Resource.Public? {
+	.assembly extern 'in external'.Assembly@
+	.custom instance void [muwu]Boo::.ctor(bool, bool) = ( 01 00 00 01 00 00 )
+	.file Manifest.resource.File at 123456
+}
+.file nometadata Manifest.resource.File .hash = (01 FE)

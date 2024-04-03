@@ -1340,10 +1340,6 @@ impl<'data> TablesData<'data> {
         nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
-        let Some(resource_base) = self.resource_base else {
-            return Ok(());
-        };
-
         let mut resources = Vec::new();
         for _ in 0..nb_tables {
             let offset = read_u32(&mut self.data)?;
@@ -1356,7 +1352,10 @@ impl<'data> TablesData<'data> {
             }
 
             // Offset is relative to the resource entry in this file.
-            let Some(real_offset) = resource_base.checked_add(u64::from(offset)) else {
+            let Some(real_offset) = self
+                .resource_base
+                .and_then(|base| base.checked_add(u64::from(offset)))
+            else {
                 continue;
             };
 
