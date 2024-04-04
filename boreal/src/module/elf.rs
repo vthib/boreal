@@ -6,9 +6,9 @@ use object::{Endianness, FileKind};
 
 use crate::memory::Region;
 
-use super::{
-    EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
-};
+#[cfg(feature = "hash")]
+use super::EvalContext;
+use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 
 const MAX_NB_SEGMENTS: usize = 32_768;
 const MAX_NB_SECTIONS: usize = 32_768;
@@ -272,6 +272,7 @@ pub struct Data {
     symbols: Vec<DataSymbol>,
 }
 
+#[allow(dead_code)]
 pub struct DataSymbol {
     name: Vec<u8>,
     shndx: u16,
@@ -281,6 +282,7 @@ pub struct DataSymbol {
 }
 
 impl Data {
+    #[cfg(feature = "hash")]
     fn get_import_string<F>(&self, f: F) -> Option<Vec<u8>>
     where
         F: Fn(&DataSymbol) -> bool,
