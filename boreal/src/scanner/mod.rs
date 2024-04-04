@@ -5,7 +5,9 @@ use std::sync::Arc;
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-use crate::evaluator::{self, entrypoint, evaluate_rule, EvalError};
+#[cfg(feature = "object")]
+use crate::evaluator::entrypoint;
+use crate::evaluator::{self, evaluate_rule, EvalError};
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::Module;
 use crate::statistics;
@@ -369,6 +371,7 @@ impl Inner {
             },
             timeout_checker: params.timeout_duration.map(TimeoutChecker::new),
             params,
+            #[cfg(feature = "object")]
             entrypoint: None,
         };
 
@@ -646,6 +649,7 @@ pub(crate) struct ScanData<'scanner, 'mem> {
     /// However, when scanning direct memory (such as a file), this is
     /// unset and to be computed on demand, so as to not incur the
     /// cost of this computation on rules that do not use it.
+    #[cfg(feature = "object")]
     pub(crate) entrypoint: Option<u64>,
 }
 

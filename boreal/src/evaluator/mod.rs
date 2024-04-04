@@ -37,6 +37,7 @@
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
+#[cfg(feature = "object")]
 use crate::memory::Memory;
 use crate::regex::Regex;
 use crate::scanner::ScanData;
