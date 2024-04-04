@@ -16,7 +16,7 @@ exclude = ["/tests"]
 default = ["hash", "object", "memmap", "process"]
 
 # Enables the "hash" module.
-hash = ["md-5", "sha1", "sha2", "hex", "crc32fast", "tlsh2"]
+hash = ["dep:md-5", "dep:sha1", "dep:sha2", "dep:hex", "dep:crc32fast", "dep:tlsh2"]
 
 # Enables the "pe", "elf" and "macho" modules.
 #
