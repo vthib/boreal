@@ -103,6 +103,7 @@ impl Compiler {
     /// create a [`Compiler`] without any modules, then add back only the desired modules.
     #[must_use]
     pub fn new() -> Self {
+        #[allow(unused_mut)]
         let mut this = Self::new_without_pe_module();
 
         #[cfg(feature = "object")]
