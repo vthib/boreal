@@ -415,6 +415,316 @@ fn test_types2_dll() {
 }
 
 #[test]
+fn test_classes() {
+    // Split checks in multiple rules so that if one fails, we at least know a bit
+    // more precisely which part of the check failed.
+    let mut checker = Checker::new(
+        r#"import "dotnet"
+    rule c0 {
+      condition:
+        dotnet.number_of_classes == 14 and
+        dotnet.classes[0].name == "Public" and
+        dotnet.classes[0].namespace == "" and
+        dotnet.classes[0].fullname == "Public" and
+        dotnet.classes[0].type == "class" and
+        dotnet.classes[0].visibility == "public" and
+        dotnet.classes[0].number_of_base_types == 1 and
+        dotnet.classes[0].base_types[0] == "System.Object"
+    }
+
+    rule c1 {
+      condition:
+        dotnet.classes[1].name == "Outer" and
+        dotnet.classes[1].namespace == "" and
+        dotnet.classes[1].fullname == "Outer" and
+        dotnet.classes[1].type == "class" and
+        dotnet.classes[1].visibility == "internal" and
+        dotnet.classes[1].number_of_base_types == 1 and
+        dotnet.classes[1].base_types[0] == "System.Object"
+    }
+
+    rule c2 {
+      condition:
+        dotnet.classes[2].name == "All" and
+        dotnet.classes[2].namespace == "" and
+        dotnet.classes[2].fullname == "All" and
+        dotnet.classes[2].type == "class" and
+        dotnet.classes[2].visibility == "internal" and
+        dotnet.classes[2].number_of_base_types == 1 and
+        dotnet.classes[2].base_types[0] == "Public"
+    }
+
+    rule c3 {
+      condition:
+        dotnet.classes[3].name == "NestedNaked" and
+        dotnet.classes[3].namespace == "Outer" and
+        dotnet.classes[3].fullname == "Outer.NestedNaked" and
+        dotnet.classes[3].type == "class" and
+        dotnet.classes[3].visibility == "private" and
+        dotnet.classes[3].number_of_base_types == 1 and
+        dotnet.classes[3].base_types[0] == "System.Object" and
+        dotnet.classes[3].abstract == 0
+    }
+
+    rule c4 {
+      condition:
+        dotnet.classes[4].name == "NestedPublic" and
+        dotnet.classes[4].namespace == "Outer" and
+        dotnet.classes[4].fullname == "Outer.NestedPublic" and
+        dotnet.classes[4].type == "class" and
+        dotnet.classes[4].visibility == "public" and
+        dotnet.classes[4].number_of_base_types == 1 and
+        dotnet.classes[4].base_types[0] == "System.Object" and
+        dotnet.classes[4].sealed == 0 and
+        dotnet.classes[4].abstract == 1
+    }
+
+    rule c5 {
+      condition:
+        dotnet.classes[5].name == "NestedPrivate" and
+        dotnet.classes[5].namespace == "Outer" and
+        dotnet.classes[5].fullname == "Outer.NestedPrivate" and
+        dotnet.classes[5].type == "interface" and
+        dotnet.classes[5].visibility == "private" and
+        dotnet.classes[5].number_of_base_types == 0 and
+        dotnet.classes[5].sealed == 0 and
+        dotnet.classes[5].abstract == 1
+    }
+
+    rule c6 {
+      condition:
+        dotnet.classes[6].name == "NestedInternal" and
+        dotnet.classes[6].namespace == "Outer" and
+        dotnet.classes[6].fullname == "Outer.NestedInternal" and
+        dotnet.classes[6].type == "class" and
+        dotnet.classes[6].visibility == "internal" and
+        dotnet.classes[6].number_of_base_types == 1 and
+        dotnet.classes[6].base_types[0] == "System.Object" and
+        dotnet.classes[6].sealed == 1 and
+        dotnet.classes[6].abstract == 0
+    }
+
+    rule c7 {
+      condition:
+        dotnet.classes[7].name == "Inner" and
+        dotnet.classes[7].namespace == "Outer" and
+        dotnet.classes[7].fullname == "Outer.Inner" and
+        dotnet.classes[7].type == "class" and
+        dotnet.classes[7].visibility == "private" and
+        dotnet.classes[7].number_of_base_types == 1 and
+        dotnet.classes[7].base_types[0] == "System.Object"
+    }
+
+    rule c8 {
+      condition:
+        dotnet.classes[8].name == "Iface1" and
+        dotnet.classes[8].namespace == "Outer" and
+        dotnet.classes[8].fullname == "Outer.Iface1" and
+        dotnet.classes[8].type == "interface" and
+        dotnet.classes[8].visibility == "private" and
+        dotnet.classes[8].number_of_base_types == 0
+    }
+
+    rule c9 {
+      condition:
+        dotnet.classes[9].name == "Iface2" and
+        dotnet.classes[9].namespace == "Outer" and
+        dotnet.classes[9].fullname == "Outer.Iface2" and
+        dotnet.classes[9].type == "interface" and
+        dotnet.classes[9].visibility == "private" and
+        dotnet.classes[9].number_of_base_types == 0
+    }
+
+    rule c10 {
+      condition:
+        dotnet.classes[10].name == "Grandchild" and
+        dotnet.classes[10].namespace == "Outer" and
+        dotnet.classes[10].fullname == "Outer.Grandchild" and
+        dotnet.classes[10].type == "class" and
+        dotnet.classes[10].visibility == "private" and
+        dotnet.classes[10].number_of_base_types == 3 and
+        dotnet.classes[10].base_types[0] == "Outer.NestedNaked" and
+        dotnet.classes[10].base_types[1] == "Outer.Iface2" and
+        dotnet.classes[10].base_types[2] == "Outer.Iface1"
+    }
+
+    rule c11 {
+      condition:
+        dotnet.classes[11].name == "NestedProtected" and
+        dotnet.classes[11].namespace == "Outer.Inner" and
+        dotnet.classes[11].fullname == "Outer.Inner.NestedProtected" and
+        dotnet.classes[11].type == "interface" and
+        dotnet.classes[11].visibility == "protected"
+    }
+
+    rule c12 {
+      condition:
+        dotnet.classes[12].name == "NestedPrivateProtected" and
+        dotnet.classes[12].namespace == "Outer.Inner" and
+        dotnet.classes[12].fullname == "Outer.Inner.NestedPrivateProtected" and
+        dotnet.classes[12].type == "class" and
+        dotnet.classes[12].visibility == "private protected"
+    }
+
+    rule c13 {
+      condition:
+        dotnet.classes[13].name == "NestedProtectedInternal" and
+        dotnet.classes[13].namespace == "Outer.Inner" and
+        dotnet.classes[13].fullname == "Outer.Inner.NestedProtectedInternal" and
+        dotnet.classes[13].type == "interface" and
+        dotnet.classes[13].visibility == "protected internal"
+    }
+    "#,
+    );
+
+    let mem = std::fs::read("tests/assets/dotnet/classes.dll").unwrap();
+    checker.check_rule_matches(
+        &mem,
+        &[
+            "default:c0",
+            "default:c1",
+            "default:c2",
+            "default:c3",
+            "default:c4",
+            "default:c5",
+            "default:c6",
+            "default:c7",
+            "default:c8",
+            "default:c9",
+            "default:c10",
+            "default:c11",
+            "default:c12",
+            "default:c13",
+        ],
+    );
+}
+
+#[test]
+fn test_methods() {
+    // Split checks in multiple rules so that if one fails, we at least know a bit
+    // more precisely which part of the check failed.
+    let mut checker = Checker::new(
+        r#"import "dotnet"
+    rule main {
+      condition:
+        dotnet.classes[2].name == "All" and
+        dotnet.classes[2].number_of_methods == 9
+    }
+
+    rule m0 {
+      condition:
+        dotnet.classes[2].methods[0].name == ".cctor" and
+        dotnet.classes[2].methods[0].abstract == 0 and
+        dotnet.classes[2].methods[0].final == 0 and
+        dotnet.classes[2].methods[0].static == 1 and
+        dotnet.classes[2].methods[0].virtual == 0 and
+        dotnet.classes[2].methods[0].visibility == "private" and
+        not defined dotnet.classes[2].methods[0].return_type
+    }
+
+    rule m1 {
+      condition:
+        dotnet.classes[2].methods[1].name == ".ctor" and
+        dotnet.classes[2].methods[1].abstract == 0 and
+        dotnet.classes[2].methods[1].final == 0 and
+        dotnet.classes[2].methods[1].static == 0 and
+        dotnet.classes[2].methods[1].virtual == 0 and
+        dotnet.classes[2].methods[1].visibility == "private" and
+        not defined dotnet.classes[2].methods[1].return_type
+    }
+
+    rule m2 {
+      condition:
+        dotnet.classes[2].methods[2].name == "mNaked" and
+        dotnet.classes[2].methods[2].abstract == 0 and
+        dotnet.classes[2].methods[2].final == 0 and
+        dotnet.classes[2].methods[2].static == 1 and
+        dotnet.classes[2].methods[2].virtual == 0 and
+        dotnet.classes[2].methods[2].visibility == "private" and
+        dotnet.classes[2].methods[2].return_type == "void"
+    }
+
+    rule m3 {
+      condition:
+        dotnet.classes[2].methods[3].name == "mPublic" and
+        dotnet.classes[2].methods[3].abstract == 0 and
+        dotnet.classes[2].methods[3].final == 1 and
+        dotnet.classes[2].methods[3].static == 0 and
+        dotnet.classes[2].methods[3].virtual == 1 and
+        dotnet.classes[2].methods[3].visibility == "public"
+    }
+
+    rule m4 {
+      condition:
+        dotnet.classes[2].methods[4].name == "mPrivate" and
+        dotnet.classes[2].methods[4].abstract == 0 and
+        dotnet.classes[2].methods[4].final == 0 and
+        dotnet.classes[2].methods[4].static == 0 and
+        dotnet.classes[2].methods[4].virtual == 0 and
+        dotnet.classes[2].methods[4].visibility == "private"
+    }
+
+    rule m5 {
+      condition:
+        dotnet.classes[2].methods[5].name == "mInternal" and
+        dotnet.classes[2].methods[5].abstract == 1 and
+        dotnet.classes[2].methods[5].final == 0 and
+        dotnet.classes[2].methods[5].static == 0 and
+        dotnet.classes[2].methods[5].virtual == 1 and
+        dotnet.classes[2].methods[5].visibility == "internal"
+    }
+
+    rule m6 {
+      condition:
+        dotnet.classes[2].methods[6].name == "mProtected" and
+        dotnet.classes[2].methods[6].abstract == 0 and
+        dotnet.classes[2].methods[6].final == 0 and
+        dotnet.classes[2].methods[6].static == 0 and
+        dotnet.classes[2].methods[6].virtual == 1 and
+        dotnet.classes[2].methods[6].visibility == "protected"
+    }
+
+    rule m7 {
+      condition:
+        dotnet.classes[2].methods[7].name == "mPrivateProtected" and
+        dotnet.classes[2].methods[7].abstract == 0 and
+        dotnet.classes[2].methods[7].final == 0 and
+        dotnet.classes[2].methods[7].static == 0 and
+        dotnet.classes[2].methods[7].virtual == 0 and
+        dotnet.classes[2].methods[7].visibility == "private protected"
+    }
+
+    rule m8 {
+      condition:
+        dotnet.classes[2].methods[8].name == "mProtectedInternal" and
+        dotnet.classes[2].methods[8].abstract == 0 and
+        dotnet.classes[2].methods[8].final == 0 and
+        dotnet.classes[2].methods[8].static == 1 and
+        dotnet.classes[2].methods[8].virtual == 0 and
+        dotnet.classes[2].methods[8].visibility == "protected internal"
+    }
+    "#,
+    );
+
+    let mem = std::fs::read("tests/assets/dotnet/classes.dll").unwrap();
+    checker.check_rule_matches(
+        &mem,
+        &[
+            "default:main",
+            "default:m0",
+            "default:m1",
+            "default:m2",
+            "default:m3",
+            "default:m4",
+            "default:m5",
+            "default:m6",
+            "default:m7",
+            "default:m8",
+        ],
+    );
+}
+
+#[test]
 fn test_coverage_0ca09bde() {
     let diffs = [];
     let path = "tests/assets/libyara/data/0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";
@@ -471,6 +781,16 @@ fn test_coverage_types2() {
 fn test_coverage_assembly() {
     let diffs = [];
     let path = "tests/assets/dotnet/assembly.dll";
+    compare_module_values_on_file(Dotnet, path, false, &diffs);
+
+    // DLL so not considered when scanning as a process memory
+    compare_module_values_on_file(Dotnet, path, true, &[]);
+}
+
+#[test]
+fn test_coverage_classes() {
+    let diffs = [];
+    let path = "tests/assets/dotnet/classes.dll";
     compare_module_values_on_file(Dotnet, path, false, &diffs);
 
     // DLL so not considered when scanning as a process memory
