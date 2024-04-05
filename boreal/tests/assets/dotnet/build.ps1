@@ -6,3 +6,6 @@ ilasm.exe /dll /noautoinherit types2.cil
 
 Write-Host "compiling assembly.dll..."
 ilasm.exe /dll assembly.cil
+
+Write-Host "compiling classes.dll..."
+csc.exe /target:library /platform:x64 classes.cs
