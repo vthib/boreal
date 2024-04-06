@@ -3,6 +3,33 @@ use boreal::module::Dotnet;
 use crate::utils::{check_file, compare_module_values_on_file, Checker};
 
 #[test]
+fn test_not_dotnet() {
+    // On a non PE file, nothing is set
+    check_file(
+        r#"
+import "dotnet"
+rule test {
+    condition:
+        not defined dotnet.is_dotnet
+}"#,
+        "tests/assets/libyara/data/tiny-macho",
+        true,
+    );
+
+    // On a PE file that is not dotnet, the is_dotnet field is set
+    check_file(
+        r#"
+import "dotnet"
+rule test {
+    condition:
+        dotnet.is_dotnet == 0
+}"#,
+        "tests/assets/libyara/data/pe_mingw",
+        true,
+    );
+}
+
+#[test]
 fn test_streams() {
     check_file(
         r##"
