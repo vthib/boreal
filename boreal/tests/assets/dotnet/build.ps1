@@ -9,3 +9,6 @@ ilasm.exe /dll assembly.cil
 
 Write-Host "compiling classes.dll..."
 csc.exe /target:library /platform:x64 classes.cs
+
+Write-Host "compiling constants.exe..."
+csc.exe /platform:x64 constants.cs

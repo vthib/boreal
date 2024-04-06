@@ -752,6 +752,41 @@ fn test_methods() {
 }
 
 #[test]
+fn test_constants() {
+    check_file(
+        r#"import "dotnet"
+    rule main {
+      condition:
+        dotnet.number_of_user_strings == 3 and
+        dotnet.user_strings[0] == "I\x00 \x00A\x00M\x00 \x00S\x00T\x00A\x00T\x00I\x00C\x00" and
+        dotnet.user_strings[1] == "I\x00 \x00A\x00M\x00 \x00r\x00e\x00a\x00d\x00o\x00n\x00l\x00y\x00" and
+        dotnet.user_strings[2] == "a\x00b\x00c\x00" and
+        dotnet.number_of_constants == 1 and
+        dotnet.constants[0] == "t\x00o\x00t\x00o\x00"
+    }
+    "#,
+        "tests/assets/dotnet/constants.exe",
+        true,
+    );
+}
+
+#[test]
+fn test_module_refs() {
+    check_file(
+        r#"import "dotnet"
+    rule main {
+      condition:
+        dotnet.number_of_modulerefs == 2 and
+        dotnet.modulerefs[0] == "Counter.dll" and
+        dotnet.modulerefs[1] == "Strike.dll"
+    }
+    "#,
+        "tests/assets/dotnet/assembly.dll",
+        true,
+    );
+}
+
+#[test]
 fn test_coverage_0ca09bde() {
     let diffs = [];
     let path = "tests/assets/libyara/data/0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";
@@ -822,4 +857,12 @@ fn test_coverage_classes() {
 
     // DLL so not considered when scanning as a process memory
     compare_module_values_on_file(Dotnet, path, true, &[]);
+}
+
+#[test]
+fn test_coverage_constants() {
+    let diffs = [];
+    let path = "tests/assets/dotnet/constants.exe";
+    compare_module_values_on_file(Dotnet, path, false, &diffs);
+    compare_module_values_on_file(Dotnet, path, true, &diffs);
 }
