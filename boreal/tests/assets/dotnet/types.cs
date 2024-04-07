@@ -39,6 +39,8 @@ public class Container<C, D>
     ) {}
 }
 
+class Child : Container<Color, IntPtr> {}
+
 public enum Color : long
 {
     Red,
