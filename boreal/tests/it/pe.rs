@@ -429,6 +429,7 @@ rule test {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_ord_and_delay() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -442,6 +443,7 @@ fn test_coverage_pe_ord_and_delay() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_resources_only() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -455,6 +457,7 @@ fn test_coverage_pe_resources_only() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_079a472d() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -472,6 +475,7 @@ fn test_coverage_pe_libyara_079a472d() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_079a472d_upx() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -486,6 +490,7 @@ fn test_coverage_pe_libyara_079a472d_upx() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_0ca09bde() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -500,6 +505,7 @@ fn test_coverage_pe_libyara_0ca09bde() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_33fc70f9() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -514,6 +520,7 @@ fn test_coverage_pe_libyara_33fc70f9() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_3b8b9015() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -530,6 +537,7 @@ fn test_coverage_pe_libyara_3b8b9015() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_ca21e1c32() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -544,6 +552,7 @@ fn test_coverage_pe_libyara_ca21e1c32() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_mtxex() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -557,6 +566,7 @@ fn test_coverage_pe_libyara_mtxex() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_mtxex_modified() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -570,6 +580,7 @@ fn test_coverage_pe_libyara_mtxex_modified() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_pe_imports() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -583,6 +594,7 @@ fn test_coverage_pe_libyara_pe_imports() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_pe_mingw() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -596,6 +608,7 @@ fn test_coverage_pe_libyara_pe_mingw() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_tiny() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -609,6 +622,7 @@ fn test_coverage_pe_libyara_tiny() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_tiny_51ff() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -622,6 +636,7 @@ fn test_coverage_pe_libyara_tiny_51ff() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_tiny_5200() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -635,6 +650,7 @@ fn test_coverage_pe_libyara_tiny_5200() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_libyara_tiny_overlay() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -648,6 +664,7 @@ fn test_coverage_pe_libyara_tiny_overlay() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_1561_std() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -661,6 +678,7 @@ fn test_coverage_pe_1561_std() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_1561_align_40() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -674,6 +692,7 @@ fn test_coverage_pe_1561_align_40() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_1561_32_align_40() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -687,6 +706,7 @@ fn test_coverage_pe_1561_32_align_40() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_1561_32_section1() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -700,6 +720,7 @@ fn test_coverage_pe_1561_32_section1() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_c6f9709f() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -714,6 +735,7 @@ fn test_coverage_pe_c6f9709f() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_long_name_exporter() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -727,6 +749,7 @@ fn test_coverage_pe_long_name_exporter() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_long_dll_name() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -740,6 +763,7 @@ fn test_coverage_pe_long_dll_name() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_long_name_importer() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]
@@ -753,6 +777,7 @@ fn test_coverage_pe_long_name_importer() {
 }
 
 #[test]
+#[cfg(feature = "hash")]
 fn test_coverage_pe_invalid_dll_names() {
     let diffs = [
         #[cfg(not(feature = "authenticode"))]

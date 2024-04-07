@@ -240,3 +240,32 @@ jobs:
       - run: |
           cd boreal
           cargo check --all-features
+
+  features-matrix:
+    name: Test features ${{matrix.features}}
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4.1.1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build test helpers
+        run: |
+          cd boreal-test-helpers
+          cargo build
+
+      - name: Run tests
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: cargo test --no-default-features ${{matrix.features}}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        features: [
+          "",
+          "--features=hash",
+          "--features=object",
+          "--features=process",
+          "--features=hash,object",
+          "--features=object,authenticode"
+        ]
