@@ -766,10 +766,11 @@ fn test_constants() {
         r#"import "dotnet"
     rule main {
       condition:
-        dotnet.number_of_user_strings == 3 and
+        dotnet.number_of_user_strings == 4 and
         dotnet.user_strings[0] == "I\x00 \x00A\x00M\x00 \x00S\x00T\x00A\x00T\x00I\x00C\x00" and
         dotnet.user_strings[1] == "I\x00 \x00A\x00M\x00 \x00r\x00e\x00a\x00d\x00o\x00n\x00l\x00y\x00" and
         dotnet.user_strings[2] == "a\x00b\x00c\x00" and
+        dotnet.user_strings[3] == "H\x00e\x00l\x00l\x00o\x00 \x00W\x00o\x00r\x00l\x00d\x00" and
         dotnet.number_of_constants == 1 and
         dotnet.constants[0] == "t\x00o\x00t\x00o\x00"
     }
