@@ -157,7 +157,7 @@ fn test_types_exe() {
       condition:
         dotnet.is_dotnet == 1 and
         dotnet.module_name == "types.exe" and
-        dotnet.number_of_classes == 3 and
+        dotnet.number_of_classes == 4 and
         dotnet.classes[0].fullname == "Container" and
         dotnet.classes[0].number_of_generic_parameters == 2 and
         dotnet.classes[0].generic_parameters[0] == "C" and
@@ -328,6 +328,14 @@ fn test_types_exe() {
         dotnet.classes[0].methods[8].parameters[2].name == "fp2" and
         dotnet.classes[0].methods[8].parameters[2].type == "Ptr<FnPtr<IntPtr(sbyte, ref Ptr<int>)>>"
     }
+
+    rule c1 {
+      condition:
+        dotnet.classes[1].name == "Child" and
+        dotnet.classes[1].namespace == "" and
+        dotnet.classes[1].number_of_base_types == 1 and
+        dotnet.classes[1].base_types[0] == "Container<Color,IntPtr>"
+    }
     "#,
     );
 
@@ -345,6 +353,7 @@ fn test_types_exe() {
             "default:c0m6",
             "default:c0m7",
             "default:c0m8",
+            "default:c1",
         ],
     );
 }
