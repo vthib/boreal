@@ -796,6 +796,20 @@ fn test_module_refs() {
 }
 
 #[test]
+fn test_typelib() {
+    check_file(
+        r#"import "dotnet"
+    rule main {
+      condition:
+        dotnet.typelib == "d423ad2d-e9ab-4c2c-b580-8f64808751ab"
+    }
+    "#,
+        "tests/assets/dotnet/classes.dll",
+        true,
+    );
+}
+
+#[test]
 fn test_coverage_0ca09bde() {
     let diffs = [];
     let path = "tests/assets/libyara/data/0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";

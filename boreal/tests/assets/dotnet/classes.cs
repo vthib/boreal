@@ -1,3 +1,7 @@
+using System.Runtime.InteropServices;
+
+[assembly: Guid("d423ad2d-e9ab-4c2c-b580-8f64808751ab")]
+
 public class Public {
     public virtual void mPublic() {}
 }
