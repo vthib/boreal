@@ -5,8 +5,6 @@ use std::sync::Arc;
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-#[cfg(feature = "object")]
-use crate::evaluator::entrypoint;
 use crate::evaluator::{self, evaluate_rule, EvalError};
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::Module;
@@ -574,7 +572,7 @@ impl Inner {
                     // them later on when evaluating the expression.
                     #[cfg(feature = "object")]
                     if scan_data.entrypoint.is_none() {
-                        scan_data.entrypoint = entrypoint::get_pe_or_elf_entry_point(
+                        scan_data.entrypoint = evaluator::entrypoint::get_pe_or_elf_entry_point(
                             region.mem,
                             scan_data.params.process_memory,
                         )
@@ -869,6 +867,7 @@ mod tests {
             statistics: None,
             timeout_checker: None,
             params: &ScanParams::default(),
+            #[cfg(feature = "object")]
             entrypoint: None,
         };
         let mut previous_results = Vec::new();
@@ -1413,6 +1412,7 @@ mod tests {
             },
             statistics: None,
             timeout_checker: None,
+            #[cfg(feature = "object")]
             entrypoint: None,
             params: &ScanParams::default(),
         });

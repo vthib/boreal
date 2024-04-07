@@ -26,7 +26,7 @@ object = ["dep:object"]
 
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
-authenticode = ["dep:authenticode-parser"]
+authenticode = ["dep:authenticode-parser", "dep:hex"]
 
 # Adds an API to scan files using memory maps.
 memmap = ["dep:memmap2"]

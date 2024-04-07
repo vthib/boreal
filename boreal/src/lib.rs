@@ -84,6 +84,13 @@ use tempfile as _;
 #[cfg(test)]
 use yara as _;
 
+// If the "hash" feature is enabled but not the "object" feature, the tlsh2 crate
+// is added but unused, Since it depends on both being enabled. I don't think
+// there is a way to express this in the cargo dependencies, and this dependency
+// is extremely light, so it is just ignored in this case.
+#[cfg(all(feature = "hash", not(feature = "object")))]
+use tlsh2 as _;
+
 pub(crate) mod atoms;
 mod bitmaps;
 pub mod compiler;

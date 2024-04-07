@@ -276,6 +276,7 @@ fn test_pe() {
         true,
     );
 
+    #[cfg(feature = "hash")]
     check_file(
         "import \"pe\"
         rule test {
@@ -288,6 +289,7 @@ fn test_pe() {
 
     // Make sure imports with no ordinal and an empty name are skipped. This is
     // consistent with the behavior of pefile.
+    #[cfg(feature = "hash")]
     check_file(
         "import \"pe\"
       rule test {
@@ -298,6 +300,7 @@ fn test_pe() {
         true,
     );
 
+    #[cfg(feature = "hash")]
     check_file(
         "import \"pe\"
         rule test {
