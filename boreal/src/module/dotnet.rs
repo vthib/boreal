@@ -713,6 +713,7 @@ impl<'data> TablesData<'data> {
                                 &mut sig,
                                 &class.generic_params,
                                 &self.methods[i].generic_params,
+                                0,
                             ) {
                                 self.methods[i].set_signature(sig);
                             }
@@ -750,7 +751,7 @@ impl<'data> TablesData<'data> {
         for i in 0..self.classes.len() {
             let extends_index = self.classes[i].extends_index;
             if let Some(base_class) =
-                self.get_type_fullname(extends_index, &self.classes[i].generic_params, &[])
+                self.get_type_fullname(extends_index, &self.classes[i].generic_params, &[], 0)
             {
                 self.classes[i].base_types.push(Value::Bytes(base_class));
             }
@@ -773,6 +774,7 @@ impl<'data> TablesData<'data> {
                     type_def_or_ref_index,
                     &self.classes[class_index - 2].generic_params,
                     &[],
+                    0,
                 ) {
                     self.classes[class_index - 2]
                         .base_types
@@ -1450,6 +1452,7 @@ impl<'data> TablesData<'data> {
         type_def_or_ref_index: u32,
         class_gen_params: &[Option<Vec<u8>>],
         method_gen_params: &[Option<Vec<u8>>],
+        rec_level: u8,
     ) -> Option<Vec<u8>> {
         let tag = type_def_or_ref_index & 0x03;
         let index = type_def_or_ref_index >> 2;
@@ -1501,7 +1504,7 @@ impl<'data> TablesData<'data> {
             // II.23.2.14 : the signature is directly a type.
             // The type is more restrictive than what we parse, but since we would rather
             // be permissive in this module, this is perfectly fine.
-            self.parse_sig_type(&mut sig, class_gen_params, method_gen_params)
+            self.parse_sig_type(&mut sig, class_gen_params, method_gen_params, rec_level)
         } else {
             None
         }
@@ -1513,6 +1516,7 @@ impl<'data> TablesData<'data> {
         sig: &mut Bytes,
         class_gen_params: &[Option<Vec<u8>>],
         method_gen_params: &[Option<Vec<u8>>],
+        rec_level: u8,
     ) -> Option<Signature> {
         // First byte has flags
         let flags = sig.read::<u8>().ok()?;
@@ -1525,10 +1529,11 @@ impl<'data> TablesData<'data> {
         let param_count = read_encoded_uint(sig)?;
 
         // And then the return type
-        let return_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
+        let return_type =
+            self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level)?;
 
         let params_types = (0..param_count)
-            .map(|_| self.parse_sig_type(sig, class_gen_params, method_gen_params))
+            .map(|_| self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level))
             .collect();
 
         Some(Signature {
@@ -1543,8 +1548,13 @@ impl<'data> TablesData<'data> {
         sig: &mut Bytes,
         class_gen_params: &[Option<Vec<u8>>],
         method_gen_params: &[Option<Vec<u8>>],
+        rec_level: u8,
     ) -> Option<Vec<u8>> {
         let ty = sig.read::<u8>().ok()?;
+
+        if rec_level > 16 {
+            return None;
+        }
 
         match ty {
             // ELEMENT_TYPE_VOID
@@ -1578,8 +1588,8 @@ impl<'data> TablesData<'data> {
             // ELEMENT_TYPE_PTR
             0x0f => {
                 // followed by a type
-                // TODO: add recursion guard
-                let inner_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
+                let inner_type =
+                    self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level + 1)?;
                 let mut res = Vec::new();
                 res.extend(b"Ptr<");
                 res.extend(inner_type);
@@ -1589,7 +1599,8 @@ impl<'data> TablesData<'data> {
             // ELEMENT_TYPE_BYREF
             0x10 => {
                 // followed by a type
-                let inner_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
+                let inner_type =
+                    self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level + 1)?;
                 let mut res = Vec::new();
                 res.extend(b"ref ");
                 res.extend(inner_type);
@@ -1599,7 +1610,7 @@ impl<'data> TablesData<'data> {
             0x11 | 0x12 => {
                 // followed by a typed ref or typed def token
                 let index = read_encoded_uint(sig)?;
-                self.get_type_fullname(index, class_gen_params, method_gen_params)
+                self.get_type_fullname(index, class_gen_params, method_gen_params, rec_level + 1)
             }
             // ELEMENT_TYPE_VAR
             0x13 => {
@@ -1613,7 +1624,8 @@ impl<'data> TablesData<'data> {
             0x14 => {
                 // type rank boundsCount bound1 .. loCount lo1 ..
 
-                let ty = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
+                let ty =
+                    self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level + 1)?;
                 let mut res = Vec::new();
                 res.extend(ty);
                 res.push(b'[');
@@ -1656,7 +1668,8 @@ impl<'data> TablesData<'data> {
             // ELEMENT_TYPE_GENERICINST
             0x15 => {
                 // type type-arg-count type-1 ... type-n
-                let generic_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
+                let generic_type =
+                    self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level)?;
                 let count = read_encoded_uint(sig)?;
 
                 let mut res = Vec::new();
@@ -1666,7 +1679,12 @@ impl<'data> TablesData<'data> {
                     if i != 0 {
                         res.push(b',');
                     }
-                    res.extend(self.parse_sig_type(sig, class_gen_params, method_gen_params)?);
+                    res.extend(self.parse_sig_type(
+                        sig,
+                        class_gen_params,
+                        method_gen_params,
+                        rec_level,
+                    )?);
                 }
                 res.push(b'>');
                 Some(res)
@@ -1682,7 +1700,12 @@ impl<'data> TablesData<'data> {
                 let Signature {
                     return_type,
                     params_types,
-                } = self.parse_method_def_signature(sig, class_gen_params, method_gen_params)?;
+                } = self.parse_method_def_signature(
+                    sig,
+                    class_gen_params,
+                    method_gen_params,
+                    rec_level + 1,
+                )?;
 
                 let mut res = Vec::new();
                 res.extend(b"FnPtr<");
@@ -1703,7 +1726,8 @@ impl<'data> TablesData<'data> {
             0x1c => Some(b"object".to_vec()),
             // ELEMENT_TYPE_SZARRAY
             0x1d => {
-                let inner_type = self.parse_sig_type(sig, class_gen_params, method_gen_params)?;
+                let inner_type =
+                    self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level)?;
                 let mut res = Vec::new();
                 res.extend(inner_type);
                 res.extend(b"[]");
@@ -1721,7 +1745,7 @@ impl<'data> TablesData<'data> {
             0x1f | 0x20 => {
                 // Ignore the type def or ref index, and return the following type
                 let _index = read_encoded_uint(sig)?;
-                self.parse_sig_type(sig, class_gen_params, method_gen_params)
+                self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level)
             }
             _ => None,
         }

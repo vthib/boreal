@@ -12,3 +12,7 @@ csc.exe /target:library /platform:x64 classes.cs
 
 Write-Host "compiling constants.exe..."
 csc.exe /platform:x64 /r:MyClasses=classes.dll constants.cs
+
+Write-Host "compiling recursive_limit.dll..."
+csc.exe /unsafe /target:library recursive_limit.cs
+
