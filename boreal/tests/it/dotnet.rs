@@ -811,6 +811,32 @@ fn test_typelib() {
 }
 
 #[test]
+fn test_recursive_limit() {
+    // Yara has a different behavior: if the parsing of the type of a single parameter fails,
+    // the whole parameter list is left undefined.
+    // There is no need to be so drastic so boreal's behavior is different.
+    let mut checker = Checker::new_without_yara(
+        r#"import "dotnet"
+    rule main {
+      condition:
+        dotnet.classes[0].name == "Test" and
+        dotnet.classes[0].methods[0].name == "foo" and
+        dotnet.classes[0].methods[0].parameters[0].name == "a" and
+
+        dotnet.classes[0].methods[0].parameters[0].type ==
+"Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<Ptr<int>>>>>>>>>>>>>>>>" and
+
+        dotnet.classes[0].methods[0].parameters[1].name == "b" and
+        not defined dotnet.classes[0].methods[0].parameters[1].type
+    }
+    "#,
+    );
+
+    let mem = std::fs::read("tests/assets/dotnet/recursive_limit.dll").unwrap();
+    checker.check(&mem, true);
+}
+
+#[test]
 fn test_coverage_0ca09bde() {
     let diffs = [];
     let path = "tests/assets/libyara/data/0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";
