@@ -309,7 +309,10 @@ fn add_metadata_tables<'data>(
     sections: SectionTable<'data>,
     res: &mut HashMap<&'static str, Value>,
 ) {
-    let Some(stream_data) = metadata.get_stream(b"#~") else {
+    let Some(stream_data) = metadata
+        .get_stream(b"#~")
+        .or_else(|| metadata.get_stream(b"#-"))
+    else {
         return;
     };
     let strings_stream = metadata.get_stream(b"#Strings");
@@ -457,6 +460,19 @@ mod table_type {
     pub const METHOD_SPEC: u8 = 0x2B;
     // II.22.21
     pub const GENERIC_PARAM_CONSTRAINT: u8 = 0x2C;
+
+    // The following tables are undocumented in ECMA 335
+    // However, we can find traces of them in microsoft's documentation
+    // and the CLR source code.
+    // See for example in
+    // <https://learn.microsoft.com/en-us/dotnet/api/system.reflection.metadata.ecma335.tableindex>
+    pub const FIELD_PTR: u8 = 0x03;
+    pub const METHOD_PTR: u8 = 0x05;
+    pub const PARAM_PTR: u8 = 0x07;
+    pub const EVENT_PTR: u8 = 0x13;
+    pub const PROPERTY_PTR: u8 = 0x16;
+    pub const ENC_LOG: u8 = 0x1E;
+    pub const ENC_MAP: u8 = 0x1F;
 }
 
 struct TablesData<'data> {
@@ -531,7 +547,7 @@ impl<'data> TablesData<'data> {
     #[allow(clippy::too_many_arguments)]
     fn new(
         mem: &'data [u8],
-        data: Bytes<'data>,
+        mut data: Bytes<'data>,
         sections: SectionTable<'data>,
         resource_base: Option<u64>,
         strings_stream: Option<&'data [u8]>,
@@ -543,6 +559,12 @@ impl<'data> TablesData<'data> {
         let wide_string_index = heap_sizes & 0x01 != 0;
         let wide_guid_index = heap_sizes & 0x02 != 0;
         let wide_blob_index = heap_sizes & 0x04 != 0;
+
+        if (heap_sizes & 0x40) != 0 {
+            // See
+            // <https://github.com/dotnet/coreclr/blob/fcd2d327/src/md/inc/metamodel.h#L247>
+            let _r = data.skip(4);
+        }
 
         let compute_index_size = |table_type: u8| {
             if table_counts[usize::from(table_type)] >= (1 << 16) {
@@ -962,6 +984,39 @@ impl<'data> TablesData<'data> {
                     nb_tables,
                     self.generic_param_index_size + self.type_def_or_ref_index_size,
                 )?;
+                self.data.skip(len)
+            }
+
+            // Undocumented table types.
+            // To find out their sizes, the CLR source code can be used.
+            // See for example:
+            // <https://github.com/dotnet/coreclr/blob/ed5dc83/src/inc/metamodelpub.h#L208>
+            table_type::FIELD_PTR => {
+                let len = get_tables_len(nb_tables, self.field_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::METHOD_PTR => {
+                let len = get_tables_len(nb_tables, self.method_def_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::PARAM_PTR => {
+                let len = get_tables_len(nb_tables, self.param_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::EVENT_PTR => {
+                let len = get_tables_len(nb_tables, self.event_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::PROPERTY_PTR => {
+                let len = get_tables_len(nb_tables, self.property_index_size)?;
+                self.data.skip(len)
+            }
+            table_type::ENC_LOG => {
+                let len = get_tables_len(nb_tables, 8)?;
+                self.data.skip(len)
+            }
+            table_type::ENC_MAP => {
+                let len = get_tables_len(nb_tables, 4)?;
                 self.data.skip(len)
             }
             _ => {
