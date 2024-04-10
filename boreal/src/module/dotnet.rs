@@ -1030,12 +1030,14 @@ impl<'data> TablesData<'data> {
 
     // EMCA 335, II.22.30
     fn parse_modules(&mut self, nb_tables: u32, res: &mut HashMap<&str, Value>) -> Result<(), ()> {
-        for _ in 0..nb_tables {
+        for i in 0..nb_tables {
             self.data.skip(2)?; // generation
             let name = self.read_string()?;
             self.data.skip(3 * usize::from(self.guid_index_size))?;
 
-            let _r = res.insert("module_name", name.map(Value::bytes).into());
+            if i == 0 {
+                let _r = res.insert("module_name", name.map(Value::bytes).into());
+            }
         }
         Ok(())
     }
@@ -1317,7 +1319,7 @@ impl<'data> TablesData<'data> {
         nb_tables: u32,
         res: &mut HashMap<&'static str, Value>,
     ) -> Result<(), ()> {
-        for _ in 0..nb_tables {
+        for i in 0..nb_tables {
             self.data.skip(4)?; // hash_alg_id
             let major_version = read_u16(&mut self.data)?;
             let minor_version = read_u16(&mut self.data)?;
@@ -1327,22 +1329,24 @@ impl<'data> TablesData<'data> {
             let name = self.read_string()?;
             let culture = self.read_string()?;
 
-            res.extend([(
-                "assembly",
-                Value::object([
-                    (
-                        "version",
-                        Value::object([
-                            ("major", major_version.into()),
-                            ("minor", minor_version.into()),
-                            ("build_number", build_number.into()),
-                            ("revision_number", revision_number.into()),
-                        ]),
-                    ),
-                    ("name", name.map(Value::bytes).into()),
-                    ("culture", culture.map(Value::bytes).into()),
-                ]),
-            )]);
+            if i == 0 {
+                res.extend([(
+                    "assembly",
+                    Value::object([
+                        (
+                            "version",
+                            Value::object([
+                                ("major", major_version.into()),
+                                ("minor", minor_version.into()),
+                                ("build_number", build_number.into()),
+                                ("revision_number", revision_number.into()),
+                            ]),
+                        ),
+                        ("name", name.map(Value::bytes).into()),
+                        ("culture", culture.map(Value::bytes).into()),
+                    ]),
+                )]);
+            }
         }
         Ok(())
     }
