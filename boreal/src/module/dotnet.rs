@@ -751,11 +751,15 @@ impl<'data> TablesData<'data> {
         for method in self.methods.iter_mut().rev() {
             if let Some(idx) = method.param_name_first_index {
                 let idx = idx as usize;
-                if idx <= self.param_names.len() {
-                    for (param_name, param) in
-                        self.param_names.drain(idx..).zip(method.params.iter_mut())
-                    {
-                        param.name = param_name;
+
+                for (i, param) in method.params.iter_mut().enumerate() {
+                    match self.param_names.get(idx + i) {
+                        Some(param_name) => {
+                            param.name = param_name.clone();
+                        }
+                        None => {
+                            param.name = Value::Bytes(format!("P_{i}").into_bytes());
+                        }
                     }
                 }
             }
@@ -1123,7 +1127,9 @@ impl<'data> TablesData<'data> {
             self.data.skip(4)?;
             let name = self.read_string()?;
 
-            self.param_names.push(name.map(Value::bytes).into());
+            // YARA uses an empty string here instead of undefined for index=0
+            self.param_names
+                .push(Value::bytes(name.unwrap_or_default()));
         }
         Ok(())
     }
@@ -1145,9 +1151,14 @@ impl<'data> TablesData<'data> {
             if ty != 0x0e {
                 continue;
             }
-            constants.push(match self.get_blob(value as usize) {
-                Some(v) => Value::bytes(v),
-                None => Value::Undefined,
+
+            constants.push(if value == 0 {
+                Value::Bytes(Vec::new())
+            } else {
+                match self.get_blob(value as usize) {
+                    Some(v) => Value::bytes(v),
+                    None => Value::Undefined,
+                }
             });
         }
 
