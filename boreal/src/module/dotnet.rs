@@ -1536,7 +1536,6 @@ impl<'data> TablesData<'data> {
                 None
             } else {
                 let class = self.classes.get((index - 2) as usize)?;
-                // TODO: what if the class is nested?
                 class
                     .name
                     .as_ref()
