@@ -724,11 +724,12 @@ impl<'data> TablesData<'data> {
         // To do so, we iterate over methods in reverse: this allows us to always know
         // the end of the range of params for a given method.
         // This is delayed until now because we need the class generic params to do this.
+        let mut last_method_index = self.methods.len();
         for class in self.classes.iter().rev() {
             if let Some(idx) = class.method_def_first_index {
                 let idx = idx as usize;
                 if idx <= self.methods.len() {
-                    for i in idx..self.methods.len() {
+                    for i in idx..last_method_index {
                         if let Some(sig) = self.methods[i].signature.as_ref() {
                             let mut sig = Bytes(sig);
                             if let Some(sig) = self.parse_method_def_signature(
@@ -742,6 +743,7 @@ impl<'data> TablesData<'data> {
                         }
                     }
                 }
+                last_method_index = idx;
             }
         }
 
