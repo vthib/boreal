@@ -157,7 +157,7 @@ fn test_types_exe() {
       condition:
         dotnet.is_dotnet == 1 and
         dotnet.module_name == "types.exe" and
-        dotnet.number_of_classes == 4 and
+        dotnet.number_of_classes == 10 and
         dotnet.classes[0].fullname == "Container" and
         dotnet.classes[0].number_of_generic_parameters == 2 and
         dotnet.classes[0].generic_parameters[0] == "C" and
@@ -336,6 +336,16 @@ fn test_types_exe() {
         dotnet.classes[1].number_of_base_types == 1 and
         dotnet.classes[1].base_types[0] == "Container<Color,IntPtr>"
     }
+
+    rule c7 {
+      condition:
+        dotnet.classes[7].fullname == "Outer2.Inner" and
+        dotnet.classes[7].number_of_methods == 2 and
+        dotnet.classes[7].methods[0].name == "foo" and
+        dotnet.classes[7].methods[0].number_of_parameters == 2 and
+        dotnet.classes[7].methods[0].parameters[0].type == "Outer.Inner.VeryInner" and
+        dotnet.classes[7].methods[0].parameters[1].type == "Outer2.Inner"
+    }
     "#,
     );
 
@@ -354,6 +364,7 @@ fn test_types_exe() {
             "default:c0m7",
             "default:c0m8",
             "default:c1",
+            "default:c7",
         ],
     );
 }

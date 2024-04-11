@@ -41,6 +41,19 @@ public class Container<C, D>
 
 class Child : Container<Color, IntPtr> {}
 
+public class Outer {
+    public class Inner {
+        public class VeryInner {}
+        public interface IfaceVeryInner {}
+    }
+}
+
+class Outer2 {
+    class Inner: Outer.Inner.VeryInner, Outer.Inner.IfaceVeryInner {
+        void foo(Outer.Inner.VeryInner b, Outer2.Inner c) {}
+    }
+}
+
 public enum Color : long
 {
     Red,
