@@ -1382,7 +1382,10 @@ impl<'data> TablesData<'data> {
                 let build_number = read_u16(&mut self.data)?;
                 let revision_number = read_u16(&mut self.data)?;
                 self.data.skip(4)?; // flags
-                let public_key_or_token = self.read_blob()?;
+                let public_key_or_token = match self.read_blob()? {
+                    Some(v) if !v.is_empty() => Some(v),
+                    _ => None,
+                };
                 let name = self.read_string()?;
                 self.data
                     .skip(usize::from(self.string_index_size + self.blob_index_size))?;
@@ -1868,10 +1871,6 @@ impl<'data> TablesData<'data> {
     }
 
     fn get_blob(&self, index: usize) -> Option<&'data [u8]> {
-        if index == 0 {
-            return None;
-        }
-
         let slice = self.blobs_stream?.get(index..)?;
         read_blob(&mut Bytes(slice))
     }
