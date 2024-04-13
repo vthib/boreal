@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use object::{
     macho::{
-        self, FatHeader, MachHeader32, MachHeader64, SegmentCommand32, SegmentCommand64,
+        self, FatArch32, FatArch64, MachHeader32, MachHeader64, SegmentCommand32, SegmentCommand64,
         ThreadCommand,
     },
-    read::macho::{FatArch, LoadCommandData, MachHeader, Section, Segment},
+    read::macho::{FatArch, LoadCommandData, MachHeader, MachOFatFile, Section, Segment},
     BigEndian, Bytes, Endianness, FileKind, U32, U64,
 };
 
@@ -799,9 +799,9 @@ fn parse_file(
                 arch_offset,
             ))
         }
-        FileKind::MachOFat32 => parse_fat(region, process_memory, data, false),
+        FileKind::MachOFat32 => parse_fat::<FatArch32>(region, process_memory, data),
         // TODO: add test on this format
-        FileKind::MachOFat64 => parse_fat(region, process_memory, data, true),
+        FileKind::MachOFat64 => parse_fat::<FatArch64>(region, process_memory, data),
         _ => None,
     }
 }
@@ -1125,47 +1125,25 @@ fn sections64(
     )
 }
 
-fn parse_fat(
+fn parse_fat<Fat: FatArch>(
     region: &Region,
     process_memory: bool,
     data: &mut Data,
-    is64: bool,
 ) -> Option<HashMap<&'static str, Value>> {
-    let (magic, nfat_arch) = match FatHeader::parse(region.mem) {
-        Ok(header) => (
-            header.magic.get(BigEndian).into(),
-            header.nfat_arch.get(BigEndian).into(),
-        ),
-        Err(_) => (Value::Undefined, Value::Undefined),
-    };
+    let fat = MachOFatFile::<Fat>::parse(region.mem).ok()?;
 
     let mut archs = Vec::new();
     let mut files = Vec::new();
-
-    if is64 {
-        for arch in FatHeader::parse_arch64(region.mem)
-            .ok()?
-            .iter()
-            .take(MAX_NB_ARCHS)
-        {
-            archs.push(fat_arch_to_value(arch));
-            files.push(fat_arch_to_file_value(arch, data, region, process_memory));
-        }
-    } else {
-        for arch in FatHeader::parse_arch32(region.mem)
-            .ok()?
-            .iter()
-            .take(MAX_NB_ARCHS)
-        {
-            archs.push(fat_arch_to_value(arch));
-            files.push(fat_arch_to_file_value(arch, data, region, process_memory));
-        }
+    let header = fat.header();
+    for arch in fat.arches().iter().take(MAX_NB_ARCHS) {
+        archs.push(fat_arch_to_value(arch));
+        files.push(fat_arch_to_file_value(arch, data, region, process_memory));
     }
 
     Some(
         [
-            ("fat_magic", magic),
-            ("nfat_arch", nfat_arch),
+            ("fat_magic", header.magic.get(BigEndian).into()),
+            ("nfat_arch", header.nfat_arch.get(BigEndian).into()),
             ("fat_arch", Value::Array(archs)),
             ("file", Value::Array(files)),
         ]
