@@ -11,6 +11,9 @@ use object::{Bytes, FileKind, LittleEndian as LE, Pod, ReadRef, U16, U32, U64};
 use super::pe::va_to_file_offset;
 use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 
+const MAX_PARAM_COUNT: u32 = 2000;
+const MAX_GEN_PARAM_COUNT: u32 = 1000;
+
 /// `dotnet` module. Allows inspecting dotnet binaries
 #[derive(Debug)]
 pub struct Dotnet;
@@ -254,6 +257,8 @@ fn add_guids(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Value>) {
     let nb_guids = stream_data.len() / 16;
     let guids = stream_data
         .chunks_exact(16)
+        // Only pick 16 guids max
+        .take(16)
         .map(|g| {
             // ECMA 335 does not, afaict, define how GUID are stored. It tends to be
             // parsed as a u32-u16-u16-u8[8] object, so lets parse it as such.
@@ -288,7 +293,7 @@ fn add_user_strings(metadata: &MetadataRoot, res: &mut HashMap<&'static str, Val
     let _ = bytes.skip(1);
     while let Some(v) = read_blob(&mut bytes) {
         // XXX: the yara module seems to ignore strings if they are empty.
-        // Since there is an additional byte that we we filter, this means
+        // Since there is an additional byte that we filter, this means
         // we want a blob that has at least two bytes (one valid, and the additional
         // one).
         if v.len() >= 2 {
@@ -1219,7 +1224,7 @@ impl<'data> TablesData<'data> {
         // - with a parent that must be an Assembly table
         // - with a type that must be a MemberRef table
         // - this member must have a class that is a TypeRef table
-        // - type type name must be "GuidAttribute"
+        // - type name must be "GuidAttribute"
 
         // Check parent points to an assembly table.
         // See "HasCustomAttribute" coded index in ECMA 335 II.24.2.6:
@@ -1598,6 +1603,9 @@ impl<'data> TablesData<'data> {
         }
         // Then we have the param count
         let param_count = read_encoded_uint(sig)?;
+        if param_count > MAX_PARAM_COUNT {
+            return None;
+        }
 
         // And then the return type
         let return_type =
@@ -1742,6 +1750,9 @@ impl<'data> TablesData<'data> {
                 let generic_type =
                     self.parse_sig_type(sig, class_gen_params, method_gen_params, rec_level)?;
                 let count = read_encoded_uint(sig)?;
+                if count > MAX_GEN_PARAM_COUNT {
+                    return None;
+                }
 
                 let mut res = Vec::new();
                 res.extend(generic_type);
