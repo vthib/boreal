@@ -76,7 +76,7 @@ libc = { version = "0.2", optional = true }
 mach2 = { version = "0.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.54", optional = true, features = [
+windows = { version = "0.56", optional = true, features = [
     "Win32_Foundation",
     # LookupPrivilegeValue, AdjustTokenPrivileges
     "Win32_Security",
