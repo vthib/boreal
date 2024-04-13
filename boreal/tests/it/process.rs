@@ -58,13 +58,11 @@ fn test_process_permission_denied() {
     let err = checker.last_err.unwrap();
     match &err {
         ScanError::CannotListProcessRegions(err) => {
-            #[cfg(windows)]
+            #[cfg(target_os = "macos")]
             {
-                use windows::Win32::Foundation::E_ACCESSDENIED;
-
-                assert_eq!(err.raw_os_error(), Some(E_ACCESSDENIED.0 as _), "{:?}", err);
+                assert_eq!(err.kind(), std::io::ErrorKind::Other, "{:?}", err);
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(not(target_os = "macos"))]
             {
                 assert_eq!(
                     err.kind(),
@@ -72,10 +70,6 @@ fn test_process_permission_denied() {
                     "{:?}",
                     err
                 );
-            }
-            #[cfg(target_os = "macos")]
-            {
-                assert_eq!(err.kind(), std::io::ErrorKind::Other, "{:?}", err);
             }
         }
         err => panic!("Unexpected last err: {err:?}"),
