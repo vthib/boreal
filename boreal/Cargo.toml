@@ -32,7 +32,7 @@ authenticode = ["dep:authenticode-parser", "dep:hex"]
 memmap = ["dep:memmap2"]
 
 # Adds APIs to scan process memories.
-process = ["dep:libc", "dep:windows", "dep:mach2"]
+process = ["dep:libc", "dep:windows-sys", "dep:mach2"]
 
 # Enables computation of statistics during scanning.
 profiling = []
@@ -76,7 +76,7 @@ libc = { version = "0.2", optional = true }
 mach2 = { version = "0.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.56", optional = true, features = [
+windows-sys = { version = "0.52", optional = true, features = [
     "Win32_Foundation",
     # LookupPrivilegeValue, AdjustTokenPrivileges
     "Win32_Security",

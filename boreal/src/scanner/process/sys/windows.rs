@@ -2,16 +2,16 @@ use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
 
-use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, HANDLE, LUID};
-use windows::Win32::Security::{
+use windows_sys::Win32::Foundation::{ERROR_INVALID_PARAMETER, HANDLE, LUID};
+use windows_sys::Win32::Security::{
     AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_DEBUG_NAME,
     SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
 };
-use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-use windows::Win32::System::Memory::{
+use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+use windows_sys::Win32::System::Memory::{
     VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_NOACCESS,
 };
-use windows::Win32::System::Threading::{
+use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
 };
 
@@ -33,24 +33,27 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
             // PROCESS_QUERY_INFORMATION for VirtualQueryEx
             // PROCESS_VM_READ for ReadProcessMemory
             PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-            false,
+            0,
             pid,
         )
     };
-    let handle = match res {
-        Ok(handle) => {
-            // Safety:
-            // - The handle is valid since the call to OpenProcess succeeded
-            // - The handle must be closed with `CloseHandle`.
-            unsafe { OwnedHandle::from_raw_handle(handle.0 as _) }
-        }
-        Err(err) if err.code() == ERROR_INVALID_PARAMETER.into() => {
-            return Err(ScanError::UnknownProcess);
-        }
-        Err(err) => {
-            return Err(ScanError::CannotListProcessRegions(err.into()));
-        }
-    };
+
+    if res == 0 {
+        let err = std::io::Error::last_os_error();
+        return Err(
+            #[allow(clippy::cast_possible_wrap)]
+            if err.raw_os_error() == Some(ERROR_INVALID_PARAMETER as _) {
+                ScanError::UnknownProcess
+            } else {
+                ScanError::CannotListProcessRegions(err)
+            },
+        );
+    }
+
+    // Safety:
+    // - The handle is valid since the call to OpenProcess succeeded
+    // - The handle must be closed with `CloseHandle`.
+    let handle = unsafe { OwnedHandle::from_raw_handle(res as _) };
 
     Ok(Box::new(WindowsProcessMemory {
         handle,
@@ -59,7 +62,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     }))
 }
 
-fn enable_se_debug_privilege() -> Result<(), windows::core::Error> {
+fn enable_se_debug_privilege() -> Result<(), std::io::Error> {
     let mut self_token = HANDLE::default();
 
     // Safety: this is always safe to call.
@@ -68,12 +71,28 @@ fn enable_se_debug_privilege() -> Result<(), windows::core::Error> {
     // - handle is valid and has PROCESS_QUERY_LIMITED_INFORMATION
     //   permission since it was retrieve with GetCurrentProcess.
     // - TOKEN_ADJUST_PRIVILEGES is a valid access to ask for.
-    unsafe { OpenProcessToken(self_handle, TOKEN_ADJUST_PRIVILEGES, &mut self_token) }?;
+    let res = unsafe { OpenProcessToken(self_handle, TOKEN_ADJUST_PRIVILEGES, &mut self_token) };
+    if res == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
 
-    let mut debug_privilege_luid = LUID::default();
+    let mut debug_privilege_luid = LUID {
+        LowPart: 0,
+        HighPart: 0,
+    };
+
     // Safety:
     // - SE_DEBUG_NAME is a wide string ending with a null byte.
-    unsafe { LookupPrivilegeValueW(None, SE_DEBUG_NAME, &mut debug_privilege_luid) }?;
+    let res = unsafe {
+        LookupPrivilegeValueW(
+            std::ptr::null_mut(),
+            SE_DEBUG_NAME,
+            &mut debug_privilege_luid,
+        )
+    };
+    if res == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
 
     let cfg = TOKEN_PRIVILEGES {
         PrivilegeCount: 1,
@@ -86,7 +105,19 @@ fn enable_se_debug_privilege() -> Result<(), windows::core::Error> {
     // - token is valid and opened with TOKEN_ADJUST_PRIVILEGES
     // - NewState is well-formed, count is 1 and the Privileges array has one element
     // - Rest of arguments are optional
-    unsafe { AdjustTokenPrivileges(self_token, false, Some(&cfg), 0, None, None) }?;
+    let res = unsafe {
+        AdjustTokenPrivileges(
+            self_token,
+            0,
+            &cfg,
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if res == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
 
     Ok(())
 }
@@ -135,7 +166,7 @@ fn query_next_region(handle: BorrowedHandle, mut next_addr: usize) -> Option<Reg
         let res = unsafe {
             VirtualQueryEx(
                 handle_to_windows_handle(handle.as_handle()),
-                Some(next_addr as *const c_void),
+                next_addr as *const c_void,
                 info.as_mut_ptr(),
                 std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
             )
@@ -190,11 +221,11 @@ impl FragmentedMemory for WindowsProcessMemory {
                 desc.start as _,
                 self.buffer.as_mut_ptr().cast(),
                 self.buffer.len(),
-                Some(&mut nb_bytes_read),
+                &mut nb_bytes_read,
             )
         };
 
-        if res.is_err() {
+        if res == 0 {
             return None;
         }
 
@@ -217,7 +248,7 @@ fn get_chunked_region(desc: RegionDescription, params: &MemoryParams) -> RegionD
 }
 
 fn handle_to_windows_handle(handle: BorrowedHandle) -> HANDLE {
-    HANDLE(handle.as_raw_handle() as _)
+    handle.as_raw_handle() as HANDLE
 }
 
 #[cfg(test)]
