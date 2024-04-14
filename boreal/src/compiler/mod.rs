@@ -92,6 +92,7 @@ impl Compiler {
     /// - `string`
     /// - `hash` if the `hash` feature is enabled
     /// - `elf`, `macho`, `pe` and `dotnet` if the `object` feature is enabled
+    /// - `magic` if the `magic` feature is enabled
     ///
     /// Modules disabled by default:
     /// - `console`
@@ -176,6 +177,9 @@ impl Compiler {
         let _r = this.add_module(crate::module::MachO);
         #[cfg(feature = "object")]
         let _r = this.add_module(crate::module::Dotnet);
+
+        #[cfg(feature = "magic")]
+        let _r = this.add_module(crate::module::Magic);
 
         this
     }

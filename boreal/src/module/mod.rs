@@ -83,6 +83,11 @@ mod pe;
 #[cfg(feature = "object")]
 pub use pe::Pe;
 
+#[cfg(feature = "magic")]
+mod magic;
+#[cfg(feature = "magic")]
+pub use self::magic::Magic;
+
 /// Module providing custom values and functions in rules.
 ///
 /// A module can provide values in two ways:
