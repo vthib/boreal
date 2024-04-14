@@ -50,5 +50,8 @@ mod string;
 #[cfg(feature = "hash")]
 mod hash;
 
+#[cfg(feature = "magic")]
+mod magic;
+
 // utils to run tests both with boreal and with yara
 mod utils;
