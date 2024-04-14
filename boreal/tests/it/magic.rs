@@ -9,7 +9,8 @@ fn test(cond: &str, data: &[u8]) {
 import "magic"
 
 rule test {{
-    condition: {cond}
+    // Repeat the condition to exercise the inner cache of the module
+    condition: {cond} and {cond}
 }}"#,
         ),
         data,
