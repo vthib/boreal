@@ -57,6 +57,11 @@ jobs:
         run: |
           cargo test --features authenticode --target=${{matrix.target}} -- --test-threads=1 --ignored
 
+      - name: Run optional module tests
+        if: ${{ matrix.build == 'linux' }}
+        run: |
+          cargo test --features magic --target=${{matrix.target}}
+
     strategy:
       fail-fast: false
       matrix:
@@ -213,10 +218,10 @@ jobs:
           source <(cargo llvm-cov show-env --export-prefix)
           cargo build -p boreal-test-helpers
           # Run the normal tests
-          cargo test --features authenticode
+          cargo test --features magic,authenticode
           # And run the super user tests
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sudo -E" cargo \
-            test --features authenticode -- --ignored
+            test --features magic,authenticode -- --ignored
           # Finally, generate the report
           cargo llvm-cov report --lcov --output-path lcov.info \
             --ignore-filename-regex boreal-test-helpers/src/main.rs
@@ -258,16 +263,17 @@ jobs:
       - name: Run tests
         env:
           YARA_CRYPTO_LIB: openssl
-        run: cargo test --no-default-features ${{matrix.features}}
+        run: cargo test ${{matrix.features}}
 
     strategy:
       fail-fast: false
       matrix:
         features: [
-          "",
-          "--features=hash",
-          "--features=object",
-          "--features=process",
-          "--features=hash,object",
-          "--features=object,authenticode"
+          "--no-default-features",
+          "--no-default-features --features=hash",
+          "--no-default-features --features=object",
+          "--no-default-features --features=process",
+          "--no-default-features --features=hash,object",
+          "--no-default-features --features=object,authenticode",
+          "--all-features"
         ]
