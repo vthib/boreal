@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2024-04-14
+
+This release mainly adds the `dotnet` module and simplifies a few dependencies.
+
+### boreal
+
+#### Added:
+
+* The `dotnet` module is now available behind the `object` feature (enabled by default).
+  [#127](https://github.com/vthib/boreal/pull/127), [#131](https://github.com/vthib/boreal/pull/131),
+  [#133](https://github.com/vthib/boreal/pull/133), [#135](https://github.com/vthib/boreal/pull/135).
+
+#### Fixed:
+
+- Fixed compilation when using `--no-default-features` and other feature combinations.
+  [#129](https://github.com/vthib/boreal/pull/129), [#130](https://github.com/vthib/boreal/pull/130).
+- Fixed exposure of some optional dependencies as their own features.
+  [#128](https://github.com/vthib/boreal/pull/128).
+- Added CI jobs to ensure common combinations of features compile and run tests properly.
+  [#132](https://github.com/vthib/boreal/pull/132).
+
+#### Changed:
+
+* The `bitmap` dependency has been removed and replaced by an custom implementation for our
+  very limited usecase. [#120](https://github.com/vthib/boreal/pull/120).
+* The `windows` dependency has been replaced by `windows-sys`.
+  [#137](https://github.com/vthib/boreal/pull/137).
+* All dependencies have been updated to their latest versions.
+
+Thanks to @demoray for their contributions.
+
 ## [0.5.0] - 2024-02-16
 
 This release mainly consists of Yara 4.5 compatibility features and fixes:
@@ -298,7 +329,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v0.5.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/vthib/boreal/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vthib/boreal/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vthib/boreal/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/vthib/boreal/compare/v0.3.0...v0.3.1

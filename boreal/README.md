@@ -116,6 +116,7 @@ free. If however someone can provide a valid use-case, this difference can be re
 - [x] pe (with the _object_ feature)
   - `pe.signatures` is behind the _authenticode_ feature
   - `pe.imphash()` is behind the _hash_ feature
+- [x] dotnet
 - [x] string
 - [x] time
 - [x] console
@@ -124,7 +125,6 @@ Modules not yet supported:
 
 - [ ] cuckoo
 - [ ] dex
-- [ ] dotnet
 - [ ] magic
 
 ## Pay for what you use
@@ -184,7 +184,7 @@ of all signatures, imports, exports, resources, etc on every scan.
 
 ## crate feature flags
 
-- `object`: enables the `elf`, `macho` and `pe` module.
+- `object`: enables the `elf`, `macho`, `pe` and `object` module.
 - `hash`: enables the `hash` module, as well as the `pe.imphash()` function if the `object`
   feature is also enabled.
 - `authenticode`: this enables the `signatures` part of the `pe` module. This adds
