@@ -120,12 +120,12 @@ free. If however someone can provide a valid use-case, this difference can be re
 - [x] string
 - [x] time
 - [x] console
+- [x] magic
 
 Modules not yet supported:
 
 - [ ] cuckoo
 - [ ] dex
-- [ ] magic
 
 ## Pay for what you use
 
