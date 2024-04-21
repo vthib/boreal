@@ -1140,7 +1140,7 @@ impl Module for Pe {
 }
 
 impl ModuleData for Pe {
-    type Data = Data;
+    type PrivateData = Data;
 }
 
 impl Pe {

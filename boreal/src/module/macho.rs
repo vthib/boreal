@@ -717,7 +717,7 @@ struct FileData {
 }
 
 impl ModuleData for MachO {
-    type Data = Data;
+    type PrivateData = Data;
 }
 
 impl MachO {

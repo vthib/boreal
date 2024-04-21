@@ -274,7 +274,7 @@ impl std::fmt::Debug for ModuleDataMap {
 /// }
 ///
 /// impl ModuleData for Foo {
-///     type Data = FooData;
+///     type PrivateData = FooData;
 /// }
 ///
 /// impl Module for Foo {
@@ -309,26 +309,26 @@ impl std::fmt::Debug for ModuleDataMap {
 /// ```
 pub trait ModuleData: Module {
     /// Data to associate with the module.
-    type Data: Any + Send + Sync;
+    type PrivateData: Any + Send + Sync;
 }
 
 impl ModuleDataMap {
-    /// Insert the data of a module in the map.
-    pub fn insert<T: Module + ModuleData + 'static>(&mut self, data: T::Data) {
+    /// Insert the private data of a module in the map.
+    pub fn insert<T: Module + ModuleData + 'static>(&mut self, data: T::PrivateData) {
         let _r = self.0.insert(TypeId::of::<T>(), Box::new(data));
     }
 
-    /// Retrieve the data of a module.
+    /// Retrieve the private data of a module.
     #[must_use]
-    pub fn get<T: Module + ModuleData + 'static>(&self) -> Option<&T::Data> {
+    pub fn get<T: Module + ModuleData + 'static>(&self) -> Option<&T::PrivateData> {
         self.0
             .get(&TypeId::of::<T>())
             .and_then(|v| v.downcast_ref())
     }
 
-    /// Retrieve a mutable borrow on the data of a module.
+    /// Retrieve a mutable borrow on the private data of a module.
     #[must_use]
-    pub fn get_mut<T: Module + ModuleData + 'static>(&mut self) -> Option<&mut T::Data> {
+    pub fn get_mut<T: Module + ModuleData + 'static>(&mut self) -> Option<&mut T::PrivateData> {
         self.0
             .get_mut(&TypeId::of::<T>())
             .and_then(|v| v.downcast_mut())

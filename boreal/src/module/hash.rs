@@ -79,7 +79,7 @@ pub struct Cache {
 }
 
 impl ModuleData for Hash {
-    type Data = Data;
+    type PrivateData = Data;
 }
 
 fn compute_hash_from_bytes<D: Digest>(bytes: &[u8]) -> Value {

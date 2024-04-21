@@ -176,7 +176,7 @@ pub struct Data {
 }
 
 impl ModuleData for Dotnet {
-    type Data = Data;
+    type PrivateData = Data;
 }
 
 fn parse_file<HEADERS: ImageNtHeaders>(

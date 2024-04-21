@@ -264,7 +264,7 @@ impl Module for Elf {
 }
 
 impl ModuleData for Elf {
-    type Data = Data;
+    type PrivateData = Data;
 }
 
 #[derive(Default)]
