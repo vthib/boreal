@@ -52,7 +52,7 @@ pub enum CacheEntry {
 }
 
 impl ModuleData for Magic {
-    type Data = Data;
+    type PrivateData = Data;
 }
 
 impl Magic {
