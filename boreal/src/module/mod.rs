@@ -83,6 +83,11 @@ mod pe;
 #[cfg(feature = "object")]
 pub use pe::Pe;
 
+#[cfg(feature = "object")]
+mod dex;
+#[cfg(feature = "object")]
+pub use dex::Dex;
+
 #[cfg(feature = "magic")]
 mod magic;
 #[cfg(feature = "magic")]
