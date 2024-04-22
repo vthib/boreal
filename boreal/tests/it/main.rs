@@ -37,6 +37,8 @@ mod process;
 
 // Tests related to modules
 #[cfg(feature = "object")]
+mod dex;
+#[cfg(feature = "object")]
 mod dotnet;
 #[cfg(feature = "object")]
 mod elf;
