@@ -30,7 +30,9 @@ fn test_invalid_path() {
         .arg("input")
         .assert()
         .stdout("")
-        .stderr(predicate::str::contains("IO error"))
+        .stderr(predicate::str::contains(
+            "Cannot read rules file do_not_exist: ",
+        ))
         .failure();
 
     // Invalid path to input

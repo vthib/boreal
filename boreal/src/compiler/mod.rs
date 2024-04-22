@@ -246,7 +246,10 @@ impl Compiler {
     ) -> Result<(), AddRuleError> {
         let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError {
             path: Some(path.to_path_buf()),
-            kind: AddRuleErrorKind::IO(error),
+            kind: AddRuleErrorKind::IO {
+                path: path.to_path_buf(),
+                error,
+            },
         })?;
         self.add_rules_str_inner(&contents, namespace, Some(path), status)
     }
@@ -600,7 +603,13 @@ enum AddRuleErrorKind {
     /// - when using the [`Compiler::add_rules_file`] or [`Compiler::add_rules_file_in_namespace`]
     ///   and failing to read from the provided path.
     /// - On `include` clauses.
-    IO(std::io::Error),
+    IO {
+        /// Path to the file.
+        path: PathBuf,
+
+        /// IO error on this path.
+        error: std::io::Error,
+    },
 
     InvalidInclude {
         /// Path in the include clause that is invalid.
@@ -655,7 +664,11 @@ impl AddRuleError {
 impl AddRuleErrorKind {
     fn to_diagnostic(&self) -> Diagnostic<()> {
         match self {
-            Self::IO(error) => Diagnostic::error().with_message(format!("IO error: {error}")),
+            Self::IO { path, error } => Diagnostic::error().with_message(format!(
+                "Cannot read rules file {}: {}",
+                path.display(),
+                error
+            )),
             Self::InvalidInclude { path, span, error } => Diagnostic::error()
                 .with_message(format!("cannot include `{}`: {error}", path.display()))
                 .with_labels(vec![Label::primary((), span.clone())]),
