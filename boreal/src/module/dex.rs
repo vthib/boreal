@@ -292,49 +292,54 @@ impl ModuleData for Dex {
 }
 
 fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
-    let mut mem = Bytes(mem);
+    let header = parse_dex_header(mem)?;
 
-    let header = parse_dex_header(&mut mem)?;
+    let string_ids_size = header.string_ids_size.get(LE);
+    let string_ids_off = header.string_ids_off.get(LE);
+    let string_ids = parse_string_ids(mem, string_ids_size, string_ids_off);
 
     Some(
-        [(
-            "header",
-            Value::object([
-                ("magic", Value::bytes(header.magic)),
-                ("checksum", header.checksum.get(LE).into()),
-                ("signature", Value::bytes(header.signature)),
-                ("file_size", header.filesize.get(LE).into()),
-                ("header_size", header.header_size.get(LE).into()),
-                ("endian_tag", header.endian_tag.get(LE).into()),
-                ("link_size", header.link_size.get(LE).into()),
-                ("link_offset", header.link_off.get(LE).into()),
-                ("map_offset", header.map_off.get(LE).into()),
-                ("string_ids_size", header.string_ids_size.get(LE).into()),
-                ("string_ids_offset", header.string_ids_off.get(LE).into()),
-                ("type_ids_size", header.type_ids_size.get(LE).into()),
-                ("type_ids_offset", header.type_ids_off.get(LE).into()),
-                ("proto_ids_size", header.proto_ids_size.get(LE).into()),
-                ("proto_ids_offset", header.proto_ids_off.get(LE).into()),
-                ("field_ids_size", header.field_ids_size.get(LE).into()),
-                ("field_ids_offset", header.field_ids_off.get(LE).into()),
-                ("method_ids_size", header.method_ids_size.get(LE).into()),
-                ("method_ids_offset", header.method_ids_off.get(LE).into()),
-                ("class_defs_size", header.class_defs_size.get(LE).into()),
-                ("class_defs_offset", header.class_defs_off.get(LE).into()),
-                ("data_size", header.data_size.get(LE).into()),
-                ("data_offset", header.data_off.get(LE).into()),
-            ]),
-        )]
+        [
+            (
+                "header",
+                Value::object([
+                    ("magic", Value::bytes(header.magic)),
+                    ("checksum", header.checksum.get(LE).into()),
+                    ("signature", Value::bytes(header.signature)),
+                    ("file_size", header.filesize.get(LE).into()),
+                    ("header_size", header.header_size.get(LE).into()),
+                    ("endian_tag", header.endian_tag.get(LE).into()),
+                    ("link_size", header.link_size.get(LE).into()),
+                    ("link_offset", header.link_off.get(LE).into()),
+                    ("map_offset", header.map_off.get(LE).into()),
+                    ("string_ids_size", string_ids_size.into()),
+                    ("string_ids_offset", string_ids_off.into()),
+                    ("type_ids_size", header.type_ids_size.get(LE).into()),
+                    ("type_ids_offset", header.type_ids_off.get(LE).into()),
+                    ("proto_ids_size", header.proto_ids_size.get(LE).into()),
+                    ("proto_ids_offset", header.proto_ids_off.get(LE).into()),
+                    ("field_ids_size", header.field_ids_size.get(LE).into()),
+                    ("field_ids_offset", header.field_ids_off.get(LE).into()),
+                    ("method_ids_size", header.method_ids_size.get(LE).into()),
+                    ("method_ids_offset", header.method_ids_off.get(LE).into()),
+                    ("class_defs_size", header.class_defs_size.get(LE).into()),
+                    ("class_defs_offset", header.class_defs_off.get(LE).into()),
+                    ("data_size", header.data_size.get(LE).into()),
+                    ("data_offset", header.data_off.get(LE).into()),
+                ]),
+            ),
+            ("string_ids", string_ids.into()),
+        ]
         .into(),
     )
 }
 
-fn parse_dex_header<'a>(mem: &mut Bytes<'a>) -> Option<&'a Header> {
+fn parse_dex_header(mem: &[u8]) -> Option<&Header> {
     // Do a quick check on the magic first
     if mem.len() < 8 {
         return None;
     }
-    let magic = &mem.0[0..8];
+    let magic = &mem[0..8];
     if magic != DEX_FILE_MAGIC_035
         && magic != DEX_FILE_MAGIC_036
         && magic != DEX_FILE_MAGIC_037
@@ -344,7 +349,43 @@ fn parse_dex_header<'a>(mem: &mut Bytes<'a>) -> Option<&'a Header> {
         return None;
     }
 
-    mem.read::<Header>().ok()
+    Bytes(mem).read::<Header>().ok()
+}
+
+fn parse_string_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+    let count = usize::try_from(count).ok()?;
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#string-item>
+    let string_data_offsets: &[U32<LE>] = Bytes(mem).read_slice_at(offset, count).ok()?;
+
+    let values = string_data_offsets
+        .iter()
+        .map(|string_offset| {
+            let string_offset = string_offset.get(LE) as usize;
+
+            let mut data = Bytes(mem);
+            let (string_size, string_data) = match data.skip(string_offset) {
+                Ok(()) => {
+                    // data is a "string_data_item"
+                    let string_size = data.read_uleb128().ok();
+                    let string_data = string_size
+                        .and_then(|size| usize::try_from(size).ok())
+                        .and_then(|size| data.read_slice(size).ok());
+                    (string_size, string_data)
+                }
+                Err(()) => (None, None),
+            };
+
+            Value::object([
+                ("offset", string_offset.into()),
+                ("size", string_size.into()),
+                ("value", string_data.map(Value::bytes).into()),
+            ])
+        })
+        .collect();
+
+    Some(Value::Array(values))
 }
 
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
