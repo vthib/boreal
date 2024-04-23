@@ -316,53 +316,51 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
 
     let class_defs_size = header.class_defs_size.get(LE);
     let class_defs_off = header.class_defs_off.get(LE);
-    let (class_defs, class_data_items) =
-        parse_class_defs(mem, class_defs_size, class_defs_off).unzip();
 
     let map_off = header.map_off.get(LE);
     let map_list = parse_map_list(mem, map_off);
 
-    Some(
-        [
-            (
-                "header",
-                Value::object([
-                    ("magic", Value::bytes(header.magic)),
-                    ("checksum", header.checksum.get(LE).into()),
-                    ("signature", Value::bytes(header.signature)),
-                    ("file_size", header.filesize.get(LE).into()),
-                    ("header_size", header.header_size.get(LE).into()),
-                    ("endian_tag", header.endian_tag.get(LE).into()),
-                    ("link_size", header.link_size.get(LE).into()),
-                    ("link_offset", header.link_off.get(LE).into()),
-                    ("map_offset", map_off.into()),
-                    ("string_ids_size", string_ids_size.into()),
-                    ("string_ids_offset", string_ids_off.into()),
-                    ("type_ids_size", type_ids_size.into()),
-                    ("type_ids_offset", type_ids_off.into()),
-                    ("proto_ids_size", proto_ids_size.into()),
-                    ("proto_ids_offset", proto_ids_off.into()),
-                    ("field_ids_size", field_ids_size.into()),
-                    ("field_ids_offset", field_ids_off.into()),
-                    ("method_ids_size", method_ids_size.into()),
-                    ("method_ids_offset", method_ids_off.into()),
-                    ("class_defs_size", class_defs_size.into()),
-                    ("class_defs_offset", class_defs_off.into()),
-                    ("data_size", header.data_size.get(LE).into()),
-                    ("data_offset", header.data_off.get(LE).into()),
-                ]),
-            ),
-            ("string_ids", string_ids.into()),
-            ("type_ids", type_ids.into()),
-            ("proto_ids", proto_ids.into()),
-            ("field_ids", field_ids.into()),
-            ("method_ids", method_ids.into()),
-            ("class_defs", class_defs.into()),
-            ("class_data_items", class_data_items.into()),
-            ("map_list", map_list.into()),
-        ]
-        .into(),
-    )
+    let mut out = [
+        (
+            "header",
+            Value::object([
+                ("magic", Value::bytes(header.magic)),
+                ("checksum", header.checksum.get(LE).into()),
+                ("signature", Value::bytes(header.signature)),
+                ("file_size", header.filesize.get(LE).into()),
+                ("header_size", header.header_size.get(LE).into()),
+                ("endian_tag", header.endian_tag.get(LE).into()),
+                ("link_size", header.link_size.get(LE).into()),
+                ("link_offset", header.link_off.get(LE).into()),
+                ("map_offset", map_off.into()),
+                ("string_ids_size", string_ids_size.into()),
+                ("string_ids_offset", string_ids_off.into()),
+                ("type_ids_size", type_ids_size.into()),
+                ("type_ids_offset", type_ids_off.into()),
+                ("proto_ids_size", proto_ids_size.into()),
+                ("proto_ids_offset", proto_ids_off.into()),
+                ("field_ids_size", field_ids_size.into()),
+                ("field_ids_offset", field_ids_off.into()),
+                ("method_ids_size", method_ids_size.into()),
+                ("method_ids_offset", method_ids_off.into()),
+                ("class_defs_size", class_defs_size.into()),
+                ("class_defs_offset", class_defs_off.into()),
+                ("data_size", header.data_size.get(LE).into()),
+                ("data_offset", header.data_off.get(LE).into()),
+            ]),
+        ),
+        ("string_ids", string_ids.into()),
+        ("type_ids", type_ids.into()),
+        ("proto_ids", proto_ids.into()),
+        ("field_ids", field_ids.into()),
+        ("method_ids", method_ids.into()),
+        ("map_list", map_list.into()),
+    ]
+    .into();
+
+    parse_class_defs(mem, class_defs_size, class_defs_off, &mut out);
+
+    Some(out)
 }
 
 fn parse_dex_header(mem: &[u8]) -> Option<&Header> {
@@ -500,14 +498,22 @@ fn parse_method_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
-fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<(Value, Value)> {
-    let count = usize::try_from(count).ok()?;
-    let offset = usize::try_from(offset).ok()?;
+fn parse_class_defs(mem: &[u8], count: u32, offset: u32, out: &mut HashMap<&'static str, Value>) {
+    let Ok(count) = usize::try_from(count) else {
+        return;
+    };
+    let Ok(offset) = usize::try_from(offset) else {
+        return;
+    };
 
     // See <https://source.android.com/docs/core/runtime/dex-format#class-def-item>
-    let class_defs: &[ClassDefItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+    let Ok(class_defs) = Bytes(mem).read_slice_at::<ClassDefItem>(offset, count) else {
+        return;
+    };
 
     let mut class_data_items = Vec::new();
+    let mut fields = Vec::new();
+    let mut methods = Vec::new();
 
     let values = class_defs
         .iter()
@@ -515,9 +521,13 @@ fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<(Value, Value
             let data_offset = item.class_data_off.get(LE);
 
             if data_offset != 0 {
-                if let Some(v) = parse_class_data_item(mem, data_offset) {
-                    class_data_items.push(v);
-                }
+                let _r = parse_class_data_item(
+                    mem,
+                    data_offset,
+                    &mut class_data_items,
+                    &mut fields,
+                    &mut methods,
+                );
             }
 
             Value::object([
@@ -536,10 +546,23 @@ fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<(Value, Value
         })
         .collect();
 
-    Some((Value::Array(values), Value::Array(class_data_items)))
+    out.extend([
+        ("class_defs", Value::Array(values)),
+        ("class_data_item", Value::Array(class_data_items)),
+        ("number_of_fields", fields.len().into()),
+        ("field", Value::Array(fields)),
+        ("number_of_methods", methods.len().into()),
+        ("method", Value::Array(methods)),
+    ]);
 }
 
-fn parse_class_data_item(mem: &[u8], offset: u32) -> Option<Value> {
+fn parse_class_data_item(
+    mem: &[u8],
+    offset: u32,
+    class_data_items: &mut Vec<Value>,
+    fields: &mut Vec<Value>,
+    methods: &mut Vec<Value>,
+) -> Option<()> {
     let offset = usize::try_from(offset).ok()?;
 
     // See <https://source.android.com/docs/core/runtime/dex-format#class-data-item>
@@ -551,11 +574,50 @@ fn parse_class_data_item(mem: &[u8], offset: u32) -> Option<Value> {
     let direct_methods_size = mem.read_uleb128().ok()?;
     let virtual_methods_size = mem.read_uleb128().ok()?;
 
-    Some(Value::object([
+    class_data_items.push(Value::object([
         ("static_fields_size", static_fields_size.into()),
         ("instance_fields_size", instance_fields_size.into()),
         ("direct_methods_size", direct_methods_size.into()),
         ("virtual_methods_size", virtual_methods_size.into()),
+    ]));
+
+    for _ in 0..static_fields_size {
+        fields.push(parse_encoded_field(&mut mem)?);
+    }
+    for _ in 0..instance_fields_size {
+        fields.push(parse_encoded_field(&mut mem)?);
+    }
+    for _ in 0..direct_methods_size {
+        methods.push(parse_encoded_method(&mut mem)?);
+    }
+    for _ in 0..virtual_methods_size {
+        methods.push(parse_encoded_method(&mut mem)?);
+    }
+
+    Some(())
+}
+
+fn parse_encoded_field(mem: &mut Bytes) -> Option<Value> {
+    // See <https://source.android.com/docs/core/runtime/dex-format#encoded-field-format>
+    let field_idx_diff = mem.read_uleb128().ok()?;
+    let access_flags = mem.read_uleb128().ok()?;
+
+    Some(Value::object([
+        ("field_idx_diff", field_idx_diff.into()),
+        ("access_flags", access_flags.into()),
+    ]))
+}
+
+fn parse_encoded_method(mem: &mut Bytes) -> Option<Value> {
+    // See <https://source.android.com/docs/core/runtime/dex-format#encoded-method>
+    let method_idx_diff = mem.read_uleb128().ok()?;
+    let access_flags = mem.read_uleb128().ok()?;
+    let code_off = mem.read_uleb128().ok()?;
+
+    Some(Value::object([
+        ("method_idx_diff", method_idx_diff.into()),
+        ("access_flags", access_flags.into()),
+        ("code_off", code_off.into()),
     ]))
 }
 
