@@ -298,6 +298,10 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     let string_ids_off = header.string_ids_off.get(LE);
     let string_ids = parse_string_ids(mem, string_ids_size, string_ids_off);
 
+    let type_ids_size = header.type_ids_size.get(LE);
+    let type_ids_off = header.type_ids_off.get(LE);
+    let type_ids = parse_type_ids(mem, type_ids_size, type_ids_off);
+
     Some(
         [
             (
@@ -314,8 +318,8 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
                     ("map_offset", header.map_off.get(LE).into()),
                     ("string_ids_size", string_ids_size.into()),
                     ("string_ids_offset", string_ids_off.into()),
-                    ("type_ids_size", header.type_ids_size.get(LE).into()),
-                    ("type_ids_offset", header.type_ids_off.get(LE).into()),
+                    ("type_ids_size", type_ids_size.into()),
+                    ("type_ids_offset", type_ids_off.into()),
                     ("proto_ids_size", header.proto_ids_size.get(LE).into()),
                     ("proto_ids_offset", header.proto_ids_off.get(LE).into()),
                     ("field_ids_size", header.field_ids_size.get(LE).into()),
@@ -329,6 +333,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
                 ]),
             ),
             ("string_ids", string_ids.into()),
+            ("type_ids", type_ids.into()),
         ]
         .into(),
     )
@@ -382,6 +387,24 @@ fn parse_string_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
                 ("size", string_size.into()),
                 ("value", string_data.map(Value::bytes).into()),
             ])
+        })
+        .collect();
+
+    Some(Value::Array(values))
+}
+
+fn parse_type_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+    let count = usize::try_from(count).ok()?;
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#type-id-item>
+    let type_ids: &[U32<LE>] = Bytes(mem).read_slice_at(offset, count).ok()?;
+
+    let values = type_ids
+        .iter()
+        .map(|type_id| {
+            let descriptor_index = type_id.get(LE);
+            Value::object([("descriptor_idx", Value::Integer(descriptor_index.into()))])
         })
         .collect();
 
