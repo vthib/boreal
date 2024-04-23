@@ -316,7 +316,8 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
 
     let class_defs_size = header.class_defs_size.get(LE);
     let class_defs_off = header.class_defs_off.get(LE);
-    let class_defs = parse_class_defs(mem, class_defs_size, class_defs_off);
+    let (class_defs, class_data_items) =
+        parse_class_defs(mem, class_defs_size, class_defs_off).unzip();
 
     Some(
         [
@@ -354,6 +355,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
             ("field_ids", field_ids.into()),
             ("method_ids", method_ids.into()),
             ("class_defs", class_defs.into()),
+            ("class_data_items", class_data_items.into()),
         ]
         .into(),
     )
@@ -494,16 +496,26 @@ fn parse_method_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
-fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<(Value, Value)> {
     let count = usize::try_from(count).ok()?;
     let offset = usize::try_from(offset).ok()?;
 
     // See <https://source.android.com/docs/core/runtime/dex-format#class-def-item>
     let class_defs: &[ClassDefItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
 
+    let mut class_data_items = Vec::new();
+
     let values = class_defs
         .iter()
         .map(|item| {
+            let data_offset = item.class_data_off.get(LE);
+
+            if data_offset != 0 {
+                if let Some(v) = parse_class_data_item(mem, data_offset) {
+                    class_data_items.push(v);
+                }
+            }
+
             Value::object([
                 ("class_idx", item.class_idx.get(LE).into()),
                 ("access_flags", item.access_flags.get(LE).into()),
@@ -511,7 +523,7 @@ fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
                 ("interfaces_offset", item.interfaces_off.get(LE).into()),
                 ("source_file_idx", item.source_file_idx.get(LE).into()),
                 ("annotations_offset", item.annotations_off.get(LE).into()),
-                ("class_data_offset", item.class_data_off.get(LE).into()),
+                ("class_data_offset", data_offset.into()),
                 (
                     "static_values_offset",
                     item.static_values_off.get(LE).into(),
@@ -520,7 +532,27 @@ fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
         })
         .collect();
 
-    Some(Value::Array(values))
+    Some((Value::Array(values), Value::Array(class_data_items)))
+}
+
+fn parse_class_data_item(mem: &[u8], offset: u32) -> Option<Value> {
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#class-data-item>
+    let mut mem = Bytes(mem);
+    mem.skip(offset).ok()?;
+
+    let static_fields_size = mem.read_uleb128().ok()?;
+    let instance_fields_size = mem.read_uleb128().ok()?;
+    let direct_methods_size = mem.read_uleb128().ok()?;
+    let virtual_methods_size = mem.read_uleb128().ok()?;
+
+    Some(Value::object([
+        ("static_fields_size", static_fields_size.into()),
+        ("instance_fields_size", instance_fields_size.into()),
+        ("direct_methods_size", direct_methods_size.into()),
+        ("virtual_methods_size", virtual_methods_size.into()),
+    ]))
 }
 
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
