@@ -293,14 +293,15 @@ impl ModuleData for Dex {
 
 fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     let header = parse_dex_header(mem)?;
+    let mut parse_data = ParseData::default();
 
     let string_ids_size = header.string_ids_size.get(LE);
     let string_ids_off = header.string_ids_off.get(LE);
-    let string_ids = parse_string_ids(mem, string_ids_size, string_ids_off);
+    let string_ids = parse_string_ids(mem, string_ids_size, string_ids_off, &mut parse_data);
 
     let type_ids_size = header.type_ids_size.get(LE);
     let type_ids_off = header.type_ids_off.get(LE);
-    let type_ids = parse_type_ids(mem, type_ids_size, type_ids_off);
+    let type_ids = parse_type_ids(mem, type_ids_size, type_ids_off, &mut parse_data);
 
     let proto_ids_size = header.proto_ids_size.get(LE);
     let proto_ids_off = header.proto_ids_off.get(LE);
@@ -308,11 +309,11 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
 
     let field_ids_size = header.field_ids_size.get(LE);
     let field_ids_off = header.field_ids_off.get(LE);
-    let field_ids = parse_field_ids(mem, field_ids_size, field_ids_off);
+    let field_ids = parse_field_ids(mem, field_ids_size, field_ids_off, &mut parse_data);
 
     let method_ids_size = header.method_ids_size.get(LE);
     let method_ids_off = header.method_ids_off.get(LE);
-    let method_ids = parse_method_ids(mem, method_ids_size, method_ids_off);
+    let method_ids = parse_method_ids(mem, method_ids_size, method_ids_off, &mut parse_data);
 
     let class_defs_size = header.class_defs_size.get(LE);
     let class_defs_off = header.class_defs_off.get(LE);
@@ -358,7 +359,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     ]
     .into();
 
-    parse_class_defs(mem, class_defs_size, class_defs_off, &mut out);
+    parse_class_defs(mem, class_defs_size, class_defs_off, &parse_data, &mut out);
 
     Some(out)
 }
@@ -381,7 +382,12 @@ fn parse_dex_header(mem: &[u8]) -> Option<&Header> {
     Bytes(mem).read::<Header>().ok()
 }
 
-fn parse_string_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+fn parse_string_ids<'a>(
+    mem: &'a [u8],
+    count: u32,
+    offset: u32,
+    parse_data: &mut ParseData<'a>,
+) -> Option<Value> {
     let count = usize::try_from(count).ok()?;
     let offset = usize::try_from(offset).ok()?;
 
@@ -406,6 +412,8 @@ fn parse_string_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
                 Err(()) => (None, None),
             };
 
+            parse_data.strings.push(string_data);
+
             Value::object([
                 ("offset", string_offset.into()),
                 ("size", string_size.into()),
@@ -417,19 +425,22 @@ fn parse_string_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
-fn parse_type_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+fn parse_type_ids<'a>(
+    mem: &'a [u8],
+    count: u32,
+    offset: u32,
+    parse_data: &mut ParseData<'a>,
+) -> Option<Value> {
     let count = usize::try_from(count).ok()?;
     let offset = usize::try_from(offset).ok()?;
 
     // See <https://source.android.com/docs/core/runtime/dex-format#type-id-item>
-    let type_ids: &[U32<LE>] = Bytes(mem).read_slice_at(offset, count).ok()?;
+    let items: &[TypeIdItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+    parse_data.type_id_items = Some(items);
 
-    let values = type_ids
+    let values = items
         .iter()
-        .map(|type_id| {
-            let descriptor_index = type_id.get(LE);
-            Value::object([("descriptor_idx", Value::Integer(descriptor_index.into()))])
-        })
+        .map(|item| Value::object([("descriptor_idx", item.descriptor_idx.get(LE).into())]))
         .collect();
 
     Some(Value::Array(values))
@@ -456,12 +467,18 @@ fn parse_proto_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
-fn parse_field_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+fn parse_field_ids<'a>(
+    mem: &'a [u8],
+    count: u32,
+    offset: u32,
+    parse_data: &mut ParseData<'a>,
+) -> Option<Value> {
     let count = usize::try_from(count).ok()?;
     let offset = usize::try_from(offset).ok()?;
 
     // See <https://source.android.com/docs/core/runtime/dex-format#field-id-item>
     let field_ids: &[FieldIdItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+    parse_data.field_id_items = Some(field_ids);
 
     let values = field_ids
         .iter()
@@ -477,12 +494,18 @@ fn parse_field_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
-fn parse_method_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+fn parse_method_ids<'a>(
+    mem: &'a [u8],
+    count: u32,
+    offset: u32,
+    parse_data: &mut ParseData<'a>,
+) -> Option<Value> {
     let count = usize::try_from(count).ok()?;
     let offset = usize::try_from(offset).ok()?;
 
     // See <https://source.android.com/docs/core/runtime/dex-format#method-id-item>
     let method_ids: &[MethodIdItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+    parse_data.method_id_items = Some(method_ids);
 
     let values = method_ids
         .iter()
@@ -498,7 +521,13 @@ fn parse_method_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
-fn parse_class_defs(mem: &[u8], count: u32, offset: u32, out: &mut HashMap<&'static str, Value>) {
+fn parse_class_defs(
+    mem: &[u8],
+    count: u32,
+    offset: u32,
+    parse_data: &ParseData,
+    out: &mut HashMap<&'static str, Value>,
+) {
     let Ok(count) = usize::try_from(count) else {
         return;
     };
@@ -514,6 +543,7 @@ fn parse_class_defs(mem: &[u8], count: u32, offset: u32, out: &mut HashMap<&'sta
     let mut class_data_items = Vec::new();
     let mut fields = Vec::new();
     let mut methods = Vec::new();
+    let mut last_field_idx = 0;
 
     let values = class_defs
         .iter()
@@ -524,6 +554,8 @@ fn parse_class_defs(mem: &[u8], count: u32, offset: u32, out: &mut HashMap<&'sta
                 let _r = parse_class_data_item(
                     mem,
                     data_offset,
+                    parse_data,
+                    &mut last_field_idx,
                     &mut class_data_items,
                     &mut fields,
                     &mut methods,
@@ -559,6 +591,8 @@ fn parse_class_defs(mem: &[u8], count: u32, offset: u32, out: &mut HashMap<&'sta
 fn parse_class_data_item(
     mem: &[u8],
     offset: u32,
+    parse_data: &ParseData,
+    last_field_idx: &mut usize,
     class_data_items: &mut Vec<Value>,
     fields: &mut Vec<Value>,
     methods: &mut Vec<Value>,
@@ -582,10 +616,10 @@ fn parse_class_data_item(
     ]));
 
     for _ in 0..static_fields_size {
-        fields.push(parse_encoded_field(&mut mem)?);
+        fields.push(parse_encoded_field(parse_data, &mut mem, last_field_idx)?);
     }
     for _ in 0..instance_fields_size {
-        fields.push(parse_encoded_field(&mut mem)?);
+        fields.push(parse_encoded_field(parse_data, &mut mem, last_field_idx)?);
     }
     for _ in 0..direct_methods_size {
         methods.push(parse_encoded_method(&mut mem)?);
@@ -597,15 +631,48 @@ fn parse_class_data_item(
     Some(())
 }
 
-fn parse_encoded_field(mem: &mut Bytes) -> Option<Value> {
+fn parse_encoded_field(
+    parse_data: &ParseData,
+    mem: &mut Bytes,
+    last_field_idx: &mut usize,
+) -> Option<Value> {
     // See <https://source.android.com/docs/core/runtime/dex-format#encoded-field-format>
-    let field_idx_diff = mem.read_uleb128().ok()?;
+    let field_idx_diff: usize = mem.read_uleb128().ok()?.try_into().ok()?;
     let access_flags = mem.read_uleb128().ok()?;
 
-    Some(Value::object([
+    *last_field_idx = (*last_field_idx).wrapping_add(field_idx_diff);
+
+    let mut res: HashMap<&'static str, Value> = [
         ("field_idx_diff", field_idx_diff.into()),
         ("access_flags", access_flags.into()),
-    ]))
+    ]
+    .into();
+
+    if let Some(field_item) = parse_data
+        .field_id_items
+        .as_ref()
+        .and_then(|v| v.get(*last_field_idx))
+    {
+        // Add name
+        let name_idx = field_item.name_idx.get(LE);
+        let name = parse_data.strings.get(name_idx as usize).copied().flatten();
+
+        // Add class name from the type_ids list
+        let class_idx = field_item.class_idx.get(LE);
+        let class_name = parse_data.get_type_id_string(class_idx as usize);
+
+        // Add proto from the type_ids list
+        let type_idx = field_item.type_idx.get(LE);
+        let proto = parse_data.get_type_id_string(type_idx as usize);
+
+        res.extend([
+            ("name", name.map(Value::bytes).into()),
+            ("class_name", class_name.map(Value::bytes).into()),
+            ("proto", proto.map(Value::bytes).into()),
+        ]);
+    }
+
+    Some(Value::Object(res))
 }
 
 fn parse_encoded_method(mem: &mut Bytes) -> Option<Value> {
@@ -651,6 +718,24 @@ fn parse_map_list(mem: &[u8], offset: u32) -> Option<Value> {
     ]))
 }
 
+#[derive(Default)]
+struct ParseData<'mem> {
+    strings: Vec<Option<&'mem [u8]>>,
+    type_id_items: Option<&'mem [TypeIdItem]>,
+    field_id_items: Option<&'mem [FieldIdItem]>,
+    method_id_items: Option<&'mem [MethodIdItem]>,
+}
+
+impl ParseData<'_> {
+    fn get_type_id_string(&self, type_id_idx: usize) -> Option<&[u8]> {
+        let type_item = self.type_id_items.and_then(|v| v.get(type_id_idx))?;
+        let descriptor_idx = type_item.descriptor_idx.get(LE);
+        let res = self.strings.get(descriptor_idx as usize)?;
+
+        res.as_ref().map(|v| *v)
+    }
+}
+
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -685,6 +770,19 @@ struct Header {
 // - has no invalid byte values.
 // - has no padding
 unsafe impl Pod for Header {}
+
+/// Type id item, see <https://source.android.com/docs/core/runtime/dex-format#type-id-item>
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct TypeIdItem {
+    descriptor_idx: U32<LE>,
+}
+
+// Safety:
+// - TypeIdItem is `#[repr(C)]`
+// - has no invalid byte values.
+// - has no padding
+unsafe impl Pod for TypeIdItem {}
 
 /// Proto id item, see <https://source.android.com/docs/core/runtime/dex-format#proto-id-item>
 #[derive(Debug, Copy, Clone)]
