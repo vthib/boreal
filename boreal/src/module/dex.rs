@@ -302,6 +302,10 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     let type_ids_off = header.type_ids_off.get(LE);
     let type_ids = parse_type_ids(mem, type_ids_size, type_ids_off);
 
+    let proto_ids_size = header.proto_ids_size.get(LE);
+    let proto_ids_off = header.proto_ids_off.get(LE);
+    let proto_ids = parse_proto_ids(mem, proto_ids_size, proto_ids_off);
+
     Some(
         [
             (
@@ -320,8 +324,8 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
                     ("string_ids_offset", string_ids_off.into()),
                     ("type_ids_size", type_ids_size.into()),
                     ("type_ids_offset", type_ids_off.into()),
-                    ("proto_ids_size", header.proto_ids_size.get(LE).into()),
-                    ("proto_ids_offset", header.proto_ids_off.get(LE).into()),
+                    ("proto_ids_size", proto_ids_size.into()),
+                    ("proto_ids_offset", proto_ids_off.into()),
                     ("field_ids_size", header.field_ids_size.get(LE).into()),
                     ("field_ids_offset", header.field_ids_off.get(LE).into()),
                     ("method_ids_size", header.method_ids_size.get(LE).into()),
@@ -334,6 +338,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
             ),
             ("string_ids", string_ids.into()),
             ("type_ids", type_ids.into()),
+            ("proto_ids", proto_ids.into()),
         ]
         .into(),
     )
@@ -411,6 +416,27 @@ fn parse_type_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
+fn parse_proto_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+    let count = usize::try_from(count).ok()?;
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#proto-id-item>
+    let proto_ids: &[ProtoIdItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+
+    let values = proto_ids
+        .iter()
+        .map(|item| {
+            Value::object([
+                ("shorty_idx", item.shorty_idx.get(LE).into()),
+                ("return_type_idx", item.return_type_idx.get(LE).into()),
+                ("parameters_offset", item.parameters_off.get(LE).into()),
+            ])
+        })
+        .collect();
+
+    Some(Value::Array(values))
+}
+
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -445,3 +471,18 @@ struct Header {
 // - has no invalid byte values.
 // - has no padding
 unsafe impl Pod for Header {}
+
+/// Proto id item, see <https://source.android.com/docs/core/runtime/dex-format#proto-id-item>
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct ProtoIdItem {
+    shorty_idx: U32<LE>,
+    return_type_idx: U32<LE>,
+    parameters_off: U32<LE>,
+}
+
+// Safety:
+// - ProtoIdItem is `#[repr(C)]`
+// - has no invalid byte values.
+// - has no padding
+unsafe impl Pod for ProtoIdItem {}
