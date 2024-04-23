@@ -314,6 +314,10 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     let method_ids_off = header.method_ids_off.get(LE);
     let method_ids = parse_method_ids(mem, method_ids_size, method_ids_off);
 
+    let class_defs_size = header.class_defs_size.get(LE);
+    let class_defs_off = header.class_defs_off.get(LE);
+    let class_defs = parse_class_defs(mem, class_defs_size, class_defs_off);
+
     Some(
         [
             (
@@ -338,8 +342,8 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
                     ("field_ids_offset", field_ids_off.into()),
                     ("method_ids_size", method_ids_size.into()),
                     ("method_ids_offset", method_ids_off.into()),
-                    ("class_defs_size", header.class_defs_size.get(LE).into()),
-                    ("class_defs_offset", header.class_defs_off.get(LE).into()),
+                    ("class_defs_size", class_defs_size.into()),
+                    ("class_defs_offset", class_defs_off.into()),
                     ("data_size", header.data_size.get(LE).into()),
                     ("data_offset", header.data_off.get(LE).into()),
                 ]),
@@ -349,6 +353,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
             ("proto_ids", proto_ids.into()),
             ("field_ids", field_ids.into()),
             ("method_ids", method_ids.into()),
+            ("class_defs", class_defs.into()),
         ]
         .into(),
     )
@@ -489,6 +494,35 @@ fn parse_method_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
+fn parse_class_defs(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+    let count = usize::try_from(count).ok()?;
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#class-def-item>
+    let class_defs: &[ClassDefItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+
+    let values = class_defs
+        .iter()
+        .map(|item| {
+            Value::object([
+                ("class_idx", item.class_idx.get(LE).into()),
+                ("access_flags", item.access_flags.get(LE).into()),
+                ("super_class_idx", item.superclass_idx.get(LE).into()),
+                ("interfaces_offset", item.interfaces_off.get(LE).into()),
+                ("source_file_idx", item.source_file_idx.get(LE).into()),
+                ("annotations_offset", item.annotations_off.get(LE).into()),
+                ("class_data_offset", item.class_data_off.get(LE).into()),
+                (
+                    "static_values_offset",
+                    item.static_values_off.get(LE).into(),
+                ),
+            ])
+        })
+        .collect();
+
+    Some(Value::Array(values))
+}
+
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -568,3 +602,23 @@ struct MethodIdItem {
 // - has no invalid byte values.
 // - has no padding
 unsafe impl Pod for MethodIdItem {}
+
+/// Class def item, see <https://source.android.com/docs/core/runtime/dex-format#class-def-item>
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct ClassDefItem {
+    class_idx: U32<LE>,
+    access_flags: U32<LE>,
+    superclass_idx: U32<LE>,
+    interfaces_off: U32<LE>,
+    source_file_idx: U32<LE>,
+    annotations_off: U32<LE>,
+    class_data_off: U32<LE>,
+    static_values_off: U32<LE>,
+}
+
+// Safety:
+// - ClassDefItem is `#[repr(C)]`
+// - has no invalid byte values.
+// - has no padding
+unsafe impl Pod for ClassDefItem {}
