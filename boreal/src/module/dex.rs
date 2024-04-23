@@ -310,6 +310,10 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     let field_ids_off = header.field_ids_off.get(LE);
     let field_ids = parse_field_ids(mem, field_ids_size, field_ids_off);
 
+    let method_ids_size = header.method_ids_size.get(LE);
+    let method_ids_off = header.method_ids_off.get(LE);
+    let method_ids = parse_method_ids(mem, method_ids_size, method_ids_off);
+
     Some(
         [
             (
@@ -332,8 +336,8 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
                     ("proto_ids_offset", proto_ids_off.into()),
                     ("field_ids_size", field_ids_size.into()),
                     ("field_ids_offset", field_ids_off.into()),
-                    ("method_ids_size", header.method_ids_size.get(LE).into()),
-                    ("method_ids_offset", header.method_ids_off.get(LE).into()),
+                    ("method_ids_size", method_ids_size.into()),
+                    ("method_ids_offset", method_ids_off.into()),
                     ("class_defs_size", header.class_defs_size.get(LE).into()),
                     ("class_defs_offset", header.class_defs_off.get(LE).into()),
                     ("data_size", header.data_size.get(LE).into()),
@@ -344,6 +348,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
             ("type_ids", type_ids.into()),
             ("proto_ids", proto_ids.into()),
             ("field_ids", field_ids.into()),
+            ("method_ids", method_ids.into()),
         ]
         .into(),
     )
@@ -463,6 +468,27 @@ fn parse_field_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
+fn parse_method_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+    let count = usize::try_from(count).ok()?;
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#method-id-item>
+    let method_ids: &[MethodIdItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+
+    let values = method_ids
+        .iter()
+        .map(|item| {
+            Value::object([
+                ("class_idx", item.class_idx.get(LE).into()),
+                ("proto_idx", item.proto_idx.get(LE).into()),
+                ("name_idx", item.name_idx.get(LE).into()),
+            ])
+        })
+        .collect();
+
+    Some(Value::Array(values))
+}
+
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -527,3 +553,18 @@ struct FieldIdItem {
 // - has no invalid byte values.
 // - has no padding
 unsafe impl Pod for FieldIdItem {}
+
+/// Method id item, see <https://source.android.com/docs/core/runtime/dex-format#method-id-item>
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct MethodIdItem {
+    class_idx: U16<LE>,
+    proto_idx: U16<LE>,
+    name_idx: U32<LE>,
+}
+
+// Safety:
+// - MethodIdItem is `#[repr(C)]`
+// - has no invalid byte values.
+// - has no padding
+unsafe impl Pod for MethodIdItem {}
