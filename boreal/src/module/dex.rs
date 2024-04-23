@@ -319,6 +319,9 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     let (class_defs, class_data_items) =
         parse_class_defs(mem, class_defs_size, class_defs_off).unzip();
 
+    let map_off = header.map_off.get(LE);
+    let map_list = parse_map_list(mem, map_off);
+
     Some(
         [
             (
@@ -332,7 +335,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
                     ("endian_tag", header.endian_tag.get(LE).into()),
                     ("link_size", header.link_size.get(LE).into()),
                     ("link_offset", header.link_off.get(LE).into()),
-                    ("map_offset", header.map_off.get(LE).into()),
+                    ("map_offset", map_off.into()),
                     ("string_ids_size", string_ids_size.into()),
                     ("string_ids_offset", string_ids_off.into()),
                     ("type_ids_size", type_ids_size.into()),
@@ -356,6 +359,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
             ("method_ids", method_ids.into()),
             ("class_defs", class_defs.into()),
             ("class_data_items", class_data_items.into()),
+            ("map_list", map_list.into()),
         ]
         .into(),
     )
@@ -555,6 +559,36 @@ fn parse_class_data_item(mem: &[u8], offset: u32) -> Option<Value> {
     ]))
 }
 
+fn parse_map_list(mem: &[u8], offset: u32) -> Option<Value> {
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#map-list
+    let mut mem = Bytes(mem);
+    mem.skip(offset).ok()?;
+
+    let count = mem.read::<U32<LE>>().ok()?.get(LE);
+    let count_usize = usize::try_from(count).ok()?;
+
+    let list: &[MapItem] = mem.read_slice(count_usize).ok()?;
+
+    let values = list
+        .iter()
+        .map(|item| {
+            Value::object([
+                ("type", item.r#type.get(LE).into()),
+                ("unused", item.unused.get(LE).into()),
+                ("size", item.size.get(LE).into()),
+                ("offset", item.offset.get(LE).into()),
+            ])
+        })
+        .collect();
+
+    Some(Value::object([
+        ("size", count.into()),
+        ("map_item", Value::Array(values)),
+    ]))
+}
+
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -654,3 +688,19 @@ struct ClassDefItem {
 // - has no invalid byte values.
 // - has no padding
 unsafe impl Pod for ClassDefItem {}
+
+/// Map item, see <https://source.android.com/docs/core/runtime/dex-format#map-item>
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct MapItem {
+    r#type: U16<LE>,
+    unused: U16<LE>,
+    size: U32<LE>,
+    offset: U32<LE>,
+}
+
+// Safety:
+// - MapItem is `#[repr(C)]`
+// - has no invalid byte values.
+// - has no padding
+unsafe impl Pod for MapItem {}
