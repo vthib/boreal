@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use object::{Bytes, LittleEndian as LE, Pod, U32};
+use object::{Bytes, LittleEndian as LE, Pod, U16, U32};
 
 use super::{
     EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
@@ -306,6 +306,10 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
     let proto_ids_off = header.proto_ids_off.get(LE);
     let proto_ids = parse_proto_ids(mem, proto_ids_size, proto_ids_off);
 
+    let field_ids_size = header.field_ids_size.get(LE);
+    let field_ids_off = header.field_ids_off.get(LE);
+    let field_ids = parse_field_ids(mem, field_ids_size, field_ids_off);
+
     Some(
         [
             (
@@ -326,8 +330,8 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
                     ("type_ids_offset", type_ids_off.into()),
                     ("proto_ids_size", proto_ids_size.into()),
                     ("proto_ids_offset", proto_ids_off.into()),
-                    ("field_ids_size", header.field_ids_size.get(LE).into()),
-                    ("field_ids_offset", header.field_ids_off.get(LE).into()),
+                    ("field_ids_size", field_ids_size.into()),
+                    ("field_ids_offset", field_ids_off.into()),
                     ("method_ids_size", header.method_ids_size.get(LE).into()),
                     ("method_ids_offset", header.method_ids_off.get(LE).into()),
                     ("class_defs_size", header.class_defs_size.get(LE).into()),
@@ -339,6 +343,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
             ("string_ids", string_ids.into()),
             ("type_ids", type_ids.into()),
             ("proto_ids", proto_ids.into()),
+            ("field_ids", field_ids.into()),
         ]
         .into(),
     )
@@ -437,6 +442,27 @@ fn parse_proto_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
     Some(Value::Array(values))
 }
 
+fn parse_field_ids(mem: &[u8], count: u32, offset: u32) -> Option<Value> {
+    let count = usize::try_from(count).ok()?;
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#field-id-item>
+    let field_ids: &[FieldIdItem] = Bytes(mem).read_slice_at(offset, count).ok()?;
+
+    let values = field_ids
+        .iter()
+        .map(|item| {
+            Value::object([
+                ("class_idx", item.class_idx.get(LE).into()),
+                ("type_idx", item.type_idx.get(LE).into()),
+                ("name_idx", item.name_idx.get(LE).into()),
+            ])
+        })
+        .collect();
+
+    Some(Value::Array(values))
+}
+
 /// Dex header, see <https://source.android.com/docs/core/runtime/dex-format#header-item>
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -486,3 +512,18 @@ struct ProtoIdItem {
 // - has no invalid byte values.
 // - has no padding
 unsafe impl Pod for ProtoIdItem {}
+
+/// Field id item, see <https://source.android.com/docs/core/runtime/dex-format#field-id-item>
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct FieldIdItem {
+    class_idx: U16<LE>,
+    type_idx: U16<LE>,
+    name_idx: U32<LE>,
+}
+
+// Safety:
+// - FieldIdItem is `#[repr(C)]`
+// - has no invalid byte values.
+// - has no padding
+unsafe impl Pod for FieldIdItem {}
