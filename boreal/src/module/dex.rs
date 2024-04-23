@@ -610,13 +610,13 @@ fn parse_class_data_item(
     let offset = usize::try_from(offset).ok()?;
 
     // See <https://source.android.com/docs/core/runtime/dex-format#class-data-item>
-    let mut mem = Bytes(mem);
-    mem.skip(offset).ok()?;
+    let mut data = Bytes(mem);
+    data.skip(offset).ok()?;
 
-    let static_fields_size = mem.read_uleb128().ok()?;
-    let instance_fields_size = mem.read_uleb128().ok()?;
-    let direct_methods_size = mem.read_uleb128().ok()?;
-    let virtual_methods_size = mem.read_uleb128().ok()?;
+    let static_fields_size = data.read_uleb128().ok()?;
+    let instance_fields_size = data.read_uleb128().ok()?;
+    let direct_methods_size = data.read_uleb128().ok()?;
+    let virtual_methods_size = data.read_uleb128().ok()?;
 
     class_data_items.push(Value::object([
         ("static_fields_size", static_fields_size.into()),
@@ -626,25 +626,27 @@ fn parse_class_data_item(
     ]));
 
     for _ in 0..static_fields_size {
-        fields.push(parse_encoded_field(parse_data, &mut mem, last_field_idx)?);
+        fields.push(parse_encoded_field(parse_data, &mut data, last_field_idx)?);
     }
     for _ in 0..instance_fields_size {
-        fields.push(parse_encoded_field(parse_data, &mut mem, last_field_idx)?);
+        fields.push(parse_encoded_field(parse_data, &mut data, last_field_idx)?);
     }
     for _ in 0..direct_methods_size {
         methods.push(parse_encoded_method(
+            mem,
             parse_data,
-            &mut mem,
-            last_method_idx,
             true,
+            &mut data,
+            last_method_idx,
         )?);
     }
     for _ in 0..virtual_methods_size {
         methods.push(parse_encoded_method(
+            mem,
             parse_data,
-            &mut mem,
-            last_method_idx,
             false,
+            &mut data,
+            last_method_idx,
         )?);
     }
 
@@ -697,17 +699,24 @@ fn parse_encoded_field(
 }
 
 fn parse_encoded_method(
+    mem: &[u8],
     parse_data: &ParseData,
-    mem: &mut Bytes,
-    last_method_idx: &mut usize,
     direct: bool,
+    data: &mut Bytes,
+    last_method_idx: &mut usize,
 ) -> Option<Value> {
     // See <https://source.android.com/docs/core/runtime/dex-format#encoded-method>
-    let method_idx_diff: usize = mem.read_uleb128().ok()?.try_into().ok()?;
-    let access_flags = mem.read_uleb128().ok()?;
-    let code_off = mem.read_uleb128().ok()?;
+    let method_idx_diff: usize = data.read_uleb128().ok()?.try_into().ok()?;
+    let access_flags = data.read_uleb128().ok()?;
+    let code_off = data.read_uleb128().ok()?;
 
     *last_method_idx = (*last_method_idx).wrapping_add(method_idx_diff);
+
+    let code_item = if code_off == 0 {
+        None
+    } else {
+        parse_code_item(mem, code_off)
+    };
 
     let mut res: HashMap<&'static str, Value> = [
         ("method_idx_diff", method_idx_diff.into()),
@@ -715,6 +724,7 @@ fn parse_encoded_method(
         ("code_off", code_off.into()),
         ("direct", u32::from(direct).into()),
         ("virtual", u32::from(!direct).into()),
+        ("code_item", code_item.into()),
     ]
     .into();
 
@@ -745,10 +755,38 @@ fn parse_encoded_method(
     Some(Value::Object(res))
 }
 
+fn parse_code_item(mem: &[u8], offset: u64) -> Option<Value> {
+    let offset = usize::try_from(offset).ok()?;
+
+    // See <https://source.android.com/docs/core/runtime/dex-format#code-item>
+    let mut mem = Bytes(mem);
+    mem.skip(offset).ok()?;
+
+    let registers_size = mem.read::<U16<LE>>().ok()?.get(LE);
+    let ins_size = mem.read::<U16<LE>>().ok()?.get(LE);
+    let outs_size = mem.read::<U16<LE>>().ok()?.get(LE);
+    let tries_size = mem.read::<U16<LE>>().ok()?.get(LE);
+    let debug_info_off = mem.read::<U32<LE>>().ok()?.get(LE);
+    let insns_size = mem.read::<U32<LE>>().ok()?.get(LE);
+    let insns_size_usize: usize = insns_size.try_into().ok()?;
+    let insns = mem.read_bytes(insns_size_usize.checked_mul(2)?).ok()?;
+    // FIXME: yara declares some additional fields here but they are not filled.
+
+    Some(Value::object([
+        ("registers_size", registers_size.into()),
+        ("ins_size", ins_size.into()),
+        ("outs_size", outs_size.into()),
+        ("tries_size", tries_size.into()),
+        ("debug_info_off", debug_info_off.into()),
+        ("insns_size", insns_size.into()),
+        ("insns", Value::bytes(insns.0)),
+    ]))
+}
+
 fn parse_map_list(mem: &[u8], offset: u32) -> Option<Value> {
     let offset = usize::try_from(offset).ok()?;
 
-    // See <https://source.android.com/docs/core/runtime/dex-format#map-list
+    // See <https://source.android.com/docs/core/runtime/dex-format#map-list>
     let mut mem = Bytes(mem);
     mem.skip(offset).ok()?;
 
