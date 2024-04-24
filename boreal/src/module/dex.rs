@@ -216,6 +216,8 @@ impl Module for Dex {
                     ("class_name", Type::Bytes),
                     ("name", Type::Bytes),
                     ("proto", Type::Bytes),
+                    ("static", Type::Integer),
+                    ("instance", Type::Integer),
                     ("field_idx_diff", Type::Integer),
                     ("access_flags", Type::Integer),
                 ])),
@@ -242,9 +244,6 @@ impl Module for Dex {
                             ("debug_info_off", Type::Integer),
                             ("insns_size", Type::Integer),
                             ("insns", Type::Bytes),
-                            ("padding", Type::Integer),
-                            ("tries", Type::object([])),
-                            ("handlers", Type::array(Type::object([]))),
                         ]),
                     ),
                 ])),
@@ -713,11 +712,11 @@ impl<'a> ClassDefParser<'a> {
         ]));
 
         for _ in 0..static_fields_size {
-            let field = self.parse_encoded_field(parse_data, &mut data)?;
+            let field = self.parse_encoded_field(parse_data, false, &mut data)?;
             self.fields.push(field);
         }
         for _ in 0..instance_fields_size {
-            let field = self.parse_encoded_field(parse_data, &mut data)?;
+            let field = self.parse_encoded_field(parse_data, true, &mut data)?;
             self.fields.push(field);
         }
         for _ in 0..direct_methods_size {
@@ -732,7 +731,12 @@ impl<'a> ClassDefParser<'a> {
         Some(())
     }
 
-    fn parse_encoded_field(&mut self, parse_data: &ParseData, data: &mut Bytes) -> Option<Value> {
+    fn parse_encoded_field(
+        &mut self,
+        parse_data: &ParseData,
+        instance: bool,
+        data: &mut Bytes,
+    ) -> Option<Value> {
         // See <https://source.android.com/docs/core/runtime/dex-format#encoded-field-format>
         let field_idx_diff: usize = data.read_uleb128().ok()?.try_into().ok()?;
         let access_flags = data.read_uleb128().ok()?;
@@ -742,7 +746,8 @@ impl<'a> ClassDefParser<'a> {
         let mut res: HashMap<&'static str, Value> = [
             ("field_idx_diff", field_idx_diff.into()),
             ("access_flags", access_flags.into()),
-            // FIXME: yara sets static/instance field but this is not declared!
+            ("static", u32::from(!instance).into()),
+            ("instance", u32::from(instance).into()),
         ]
         .into();
 
@@ -845,7 +850,6 @@ fn parse_code_item(mem: &[u8], offset: u64) -> Option<Value> {
     let insns_size = mem.read::<U32<LE>>().ok()?.get(LE);
     let insns_size_usize: usize = insns_size.try_into().ok()?;
     let insns = mem.read_bytes(insns_size_usize.checked_mul(2)?).ok()?;
-    // FIXME: yara declares some additional fields here but they are not filled.
 
     Some(Value::object([
         ("registers_size", registers_size.into()),
