@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use object::{Bytes, LittleEndian as LE, Pod, U16, U32};
 
+use crate::regex::Regex;
+
 use super::{
     EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
 };
@@ -265,7 +267,7 @@ impl Module for Dex {
             return;
         }
 
-        if let Some(values) = parse_file(ctx.region.mem) {
+        if let Some(values) = parse_file(ctx.region.mem, data) {
             *out = values;
             data.found_dex = true;
         }
@@ -273,25 +275,100 @@ impl Module for Dex {
 }
 
 impl Dex {
-    fn has_method(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn has_method(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let first = args.next()?;
+        let second = args.next();
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        let res = match (first, second) {
+            (Value::Bytes(class_name), Some(Value::Bytes(method_name))) => {
+                data.find_method(&method_name, Some(&class_name))
+            }
+            (Value::Bytes(method_name), None) => data.find_method(&method_name, None),
+            (Value::Regex(class_name), Some(Value::Regex(method_name))) => {
+                data.find_method_regex(&method_name, Some(&class_name))
+            }
+            (Value::Regex(method_name), None) => data.find_method_regex(&method_name, None),
+            _ => return None,
+        };
+
+        Some(Value::Integer(i64::from(res)))
     }
 
-    fn has_class(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn has_class(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        let mut args = args.into_iter();
+        let first = args.next()?;
+
+        let data = ctx.module_data.get::<Self>()?;
+
+        let res = match first {
+            Value::Bytes(class_name) => data.find_class(&class_name),
+            Value::Regex(class_name) => data.find_class_regex(&class_name),
+            _ => return None,
+        };
+
+        Some(Value::Integer(i64::from(res)))
     }
 }
 
 #[derive(Default)]
 pub struct Data {
     found_dex: bool,
+    methods: Vec<Method>,
+}
+
+struct Method {
+    name: Vec<u8>,
+    class_name: Option<Vec<u8>>,
+}
+
+impl Data {
+    fn find_method(&self, expected_method_name: &[u8], expected_class_name: Option<&[u8]>) -> bool {
+        self.methods
+            .iter()
+            .filter(|method| expected_method_name == method.name)
+            .any(|method| {
+                expected_class_name.is_none() || expected_class_name == method.class_name.as_deref()
+            })
+    }
+
+    fn find_method_regex(
+        &self,
+        expected_method_name: &Regex,
+        expected_class_name: Option<&Regex>,
+    ) -> bool {
+        self.methods
+            .iter()
+            .filter(|method| expected_method_name.is_match(&method.name))
+            .any(|method| match (expected_class_name, &method.class_name) {
+                (Some(regex), Some(class_name)) => regex.is_match(class_name),
+                (Some(_), None) => false,
+                _ => true,
+            })
+    }
+
+    fn find_class(&self, expected_class_name: &[u8]) -> bool {
+        self.methods
+            .iter()
+            .filter_map(|method| method.class_name.as_deref())
+            .any(|class_name| expected_class_name == class_name)
+    }
+
+    fn find_class_regex(&self, expected_class_name: &Regex) -> bool {
+        self.methods
+            .iter()
+            .filter_map(|method| method.class_name.as_deref())
+            .any(|class_name| expected_class_name.is_match(class_name))
+    }
 }
 
 impl ModuleData for Dex {
     type Data = Data;
 }
 
-fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
+fn parse_file(mem: &[u8], data: &mut Data) -> Option<HashMap<&'static str, Value>> {
     let header = parse_dex_header(mem)?;
     let mut parse_data = ParseData::default();
 
@@ -313,7 +390,7 @@ fn parse_file(mem: &[u8]) -> Option<HashMap<&'static str, Value>> {
 
     let method_ids_size = header.method_ids_size.get(LE);
     let method_ids_off = header.method_ids_off.get(LE);
-    let method_ids = parse_method_ids(mem, method_ids_size, method_ids_off, &mut parse_data);
+    let method_ids = parse_method_ids(mem, method_ids_size, method_ids_off, &mut parse_data, data);
 
     let class_defs_size = header.class_defs_size.get(LE);
     let class_defs_off = header.class_defs_off.get(LE);
@@ -507,6 +584,7 @@ fn parse_method_ids<'a>(
     count: u32,
     offset: u32,
     parse_data: &mut ParseData<'a>,
+    data: &mut Data,
 ) -> Option<Value> {
     let count = usize::try_from(count).ok()?;
     let offset = usize::try_from(offset).ok()?;
@@ -518,10 +596,23 @@ fn parse_method_ids<'a>(
     let values = method_ids
         .iter()
         .map(|item| {
+            let name_idx = item.name_idx.get(LE);
+            let name = parse_data.get_string(name_idx as usize);
+
+            let class_idx = item.class_idx.get(LE);
+            let class_name = parse_data.get_type_id_string(class_idx as usize);
+
+            if let Some(name) = name {
+                data.methods.push(Method {
+                    name: name.to_vec(),
+                    class_name: class_name.map(<[u8]>::to_vec),
+                });
+            }
+
             Value::object([
-                ("class_idx", item.class_idx.get(LE).into()),
+                ("class_idx", class_idx.into()),
                 ("proto_idx", item.proto_idx.get(LE).into()),
-                ("name_idx", item.name_idx.get(LE).into()),
+                ("name_idx", name_idx.into()),
             ])
         })
         .collect();
@@ -662,7 +753,7 @@ impl<'a> ClassDefParser<'a> {
         {
             // Add name
             let name_idx = field_item.name_idx.get(LE);
-            let name = parse_data.strings.get(name_idx as usize).copied().flatten();
+            let name = parse_data.get_string(name_idx as usize);
 
             // Add class name from the type_ids list
             let class_idx = field_item.class_idx.get(LE);
@@ -718,7 +809,7 @@ impl<'a> ClassDefParser<'a> {
         {
             // Add name
             let name_idx = method_item.name_idx.get(LE);
-            let name = parse_data.strings.get(name_idx as usize).copied().flatten();
+            let name = parse_data.get_string(name_idx as usize);
 
             // Add class name from the type_ids list
             let class_idx = method_item.class_idx.get(LE);
@@ -807,6 +898,10 @@ struct ParseData<'mem> {
 }
 
 impl ParseData<'_> {
+    fn get_string(&self, string_idx: usize) -> Option<&[u8]> {
+        self.strings.get(string_idx).copied().flatten()
+    }
+
     fn get_proto_id_string(&self, proto_id_idx: usize) -> Option<&[u8]> {
         let proto_item = self.proto_id_items.and_then(|v| v.get(proto_id_idx))?;
         let shorty_idx = proto_item.shorty_idx.get(LE);
