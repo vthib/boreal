@@ -621,8 +621,6 @@ fn parse_method_ids<'a>(
 
 struct ClassDefParser<'a> {
     mem: &'a [u8],
-    last_field_idx: usize,
-    last_method_idx: usize,
     class_defs: Vec<Value>,
     class_data_items: Vec<Value>,
     fields: Vec<Value>,
@@ -633,8 +631,6 @@ impl<'a> ClassDefParser<'a> {
     fn new(mem: &'a [u8]) -> Self {
         Self {
             mem,
-            last_field_idx: 0,
-            last_method_idx: 0,
             class_defs: Vec::new(),
             class_data_items: Vec::new(),
             fields: Vec::new(),
@@ -711,128 +707,138 @@ impl<'a> ClassDefParser<'a> {
             ("virtual_methods_size", virtual_methods_size.into()),
         ]));
 
+        let mut last_field_idx = 0;
         for _ in 0..static_fields_size {
-            let field = self.parse_encoded_field(parse_data, false, &mut data)?;
+            let field = parse_encoded_field(parse_data, false, &mut last_field_idx, &mut data)?;
             self.fields.push(field);
         }
+
+        last_field_idx = 0;
         for _ in 0..instance_fields_size {
-            let field = self.parse_encoded_field(parse_data, true, &mut data)?;
+            let field = parse_encoded_field(parse_data, true, &mut last_field_idx, &mut data)?;
             self.fields.push(field);
         }
+
+        let mut last_method_idx = 0;
         for _ in 0..direct_methods_size {
-            let method = self.parse_encoded_method(parse_data, true, &mut data)?;
+            let method =
+                parse_encoded_method(self.mem, parse_data, true, &mut last_method_idx, &mut data)?;
             self.methods.push(method);
         }
+
+        let mut last_method_idx = 0;
         for _ in 0..virtual_methods_size {
-            let method = self.parse_encoded_method(parse_data, false, &mut data)?;
+            let method =
+                parse_encoded_method(self.mem, parse_data, false, &mut last_method_idx, &mut data)?;
             self.methods.push(method);
         }
 
         Some(())
     }
+}
 
-    fn parse_encoded_field(
-        &mut self,
-        parse_data: &ParseData,
-        instance: bool,
-        data: &mut Bytes,
-    ) -> Option<Value> {
-        // See <https://source.android.com/docs/core/runtime/dex-format#encoded-field-format>
-        let field_idx_diff: usize = data.read_uleb128().ok()?.try_into().ok()?;
-        let access_flags = data.read_uleb128().ok()?;
+fn parse_encoded_field(
+    parse_data: &ParseData,
+    instance: bool,
+    last_field_idx: &mut usize,
+    data: &mut Bytes,
+) -> Option<Value> {
+    // See <https://source.android.com/docs/core/runtime/dex-format#encoded-field-format>
+    let field_idx_diff: usize = data.read_uleb128().ok()?.try_into().ok()?;
+    let access_flags = data.read_uleb128().ok()?;
 
-        self.last_field_idx = self.last_field_idx.wrapping_add(field_idx_diff);
+    *last_field_idx = last_field_idx.wrapping_add(field_idx_diff);
 
-        let mut res: HashMap<&'static str, Value> = [
-            ("field_idx_diff", field_idx_diff.into()),
-            ("access_flags", access_flags.into()),
-            ("static", u32::from(!instance).into()),
-            ("instance", u32::from(instance).into()),
-        ]
-        .into();
+    let mut res: HashMap<&'static str, Value> = [
+        ("field_idx_diff", field_idx_diff.into()),
+        ("access_flags", access_flags.into()),
+        ("static", u32::from(!instance).into()),
+        ("instance", u32::from(instance).into()),
+    ]
+    .into();
 
-        if let Some(field_item) = parse_data
-            .field_id_items
-            .as_ref()
-            .and_then(|v| v.get(self.last_field_idx))
-        {
-            // Add name
-            let name_idx = field_item.name_idx.get(LE);
-            let name = parse_data.get_string(name_idx as usize);
+    if let Some(field_item) = parse_data
+        .field_id_items
+        .as_ref()
+        .and_then(|v| v.get(*last_field_idx))
+    {
+        // Add name
+        let name_idx = field_item.name_idx.get(LE);
+        let name = parse_data.get_string(name_idx as usize);
 
-            // Add class name from the type_ids list
-            let class_idx = field_item.class_idx.get(LE);
-            let class_name = parse_data.get_type_id_string(class_idx as usize);
+        // Add class name from the type_ids list
+        let class_idx = field_item.class_idx.get(LE);
+        let class_name = parse_data.get_type_id_string(class_idx as usize);
 
-            // Add proto from the type_ids list
-            let type_idx = field_item.type_idx.get(LE);
-            let proto = parse_data.get_type_id_string(type_idx as usize);
+        // Add proto from the type_ids list
+        let type_idx = field_item.type_idx.get(LE);
+        let proto = parse_data.get_type_id_string(type_idx as usize);
 
-            res.extend([
-                ("name", name.map(Value::bytes).into()),
-                ("class_name", class_name.map(Value::bytes).into()),
-                ("proto", proto.map(Value::bytes).into()),
-            ]);
-        }
-
-        Some(Value::Object(res))
+        res.extend([
+            ("name", name.map(Value::bytes).into()),
+            ("class_name", class_name.map(Value::bytes).into()),
+            ("proto", proto.map(Value::bytes).into()),
+        ]);
     }
 
-    fn parse_encoded_method(
-        &mut self,
-        parse_data: &ParseData,
-        direct: bool,
-        data: &mut Bytes,
-    ) -> Option<Value> {
-        // See <https://source.android.com/docs/core/runtime/dex-format#encoded-method>
-        let method_idx_diff: usize = data.read_uleb128().ok()?.try_into().ok()?;
-        let access_flags = data.read_uleb128().ok()?;
-        let code_off = data.read_uleb128().ok()?;
+    Some(Value::Object(res))
+}
 
-        self.last_method_idx = self.last_method_idx.wrapping_add(method_idx_diff);
+fn parse_encoded_method(
+    mem: &[u8],
+    parse_data: &ParseData,
+    direct: bool,
+    last_method_idx: &mut usize,
+    data: &mut Bytes,
+) -> Option<Value> {
+    // See <https://source.android.com/docs/core/runtime/dex-format#encoded-method>
+    let method_idx_diff: usize = data.read_uleb128().ok()?.try_into().ok()?;
+    let access_flags = data.read_uleb128().ok()?;
+    let code_off = data.read_uleb128().ok()?;
 
-        let code_item = if code_off == 0 {
-            None
-        } else {
-            parse_code_item(self.mem, code_off)
-        };
+    *last_method_idx = last_method_idx.wrapping_add(method_idx_diff);
 
-        let mut res: HashMap<&'static str, Value> = [
-            ("method_idx_diff", method_idx_diff.into()),
-            ("access_flags", access_flags.into()),
-            ("code_off", code_off.into()),
-            ("direct", u32::from(direct).into()),
-            ("virtual", u32::from(!direct).into()),
-            ("code_item", code_item.into()),
-        ]
-        .into();
+    let code_item = if code_off == 0 {
+        None
+    } else {
+        parse_code_item(mem, code_off)
+    };
 
-        if let Some(method_item) = parse_data
-            .method_id_items
-            .as_ref()
-            .and_then(|v| v.get(self.last_method_idx))
-        {
-            // Add name
-            let name_idx = method_item.name_idx.get(LE);
-            let name = parse_data.get_string(name_idx as usize);
+    let mut res: HashMap<&'static str, Value> = [
+        ("method_idx_diff", method_idx_diff.into()),
+        ("access_flags", access_flags.into()),
+        ("code_off", code_off.into()),
+        ("direct", u32::from(direct).into()),
+        ("virtual", u32::from(!direct).into()),
+        ("code_item", code_item.into()),
+    ]
+    .into();
 
-            // Add class name from the type_ids list
-            let class_idx = method_item.class_idx.get(LE);
-            let class_name = parse_data.get_type_id_string(class_idx as usize);
+    if let Some(method_item) = parse_data
+        .method_id_items
+        .as_ref()
+        .and_then(|v| v.get(*last_method_idx))
+    {
+        // Add name
+        let name_idx = method_item.name_idx.get(LE);
+        let name = parse_data.get_string(name_idx as usize);
 
-            // Add proto from the type_ids list
-            let proto_idx = method_item.proto_idx.get(LE);
-            let proto = parse_data.get_proto_id_string(proto_idx as usize);
+        // Add class name from the type_ids list
+        let class_idx = method_item.class_idx.get(LE);
+        let class_name = parse_data.get_type_id_string(class_idx as usize);
 
-            res.extend([
-                ("name", name.map(Value::bytes).into()),
-                ("class_name", class_name.map(Value::bytes).into()),
-                ("proto", proto.map(Value::bytes).into()),
-            ]);
-        }
+        // Add proto from the type_ids list
+        let proto_idx = method_item.proto_idx.get(LE);
+        let proto = parse_data.get_proto_id_string(proto_idx as usize);
 
-        Some(Value::Object(res))
+        res.extend([
+            ("name", name.map(Value::bytes).into()),
+            ("class_name", class_name.map(Value::bytes).into()),
+            ("proto", proto.map(Value::bytes).into()),
+        ]);
     }
+
+    Some(Value::Object(res))
 }
 
 fn parse_code_item(mem: &[u8], offset: u64) -> Option<Value> {
