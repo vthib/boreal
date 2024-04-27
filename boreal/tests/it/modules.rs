@@ -449,9 +449,9 @@ fn test_module_console() {
     let mut compiler = Compiler::new();
     let res = compiler
         .compiler
-        .add_module(boreal::module::Console::with_callback(Box::new(|log| {
+        .add_module(boreal::module::Console::with_callback(|log| {
             LOGS.lock().unwrap().push(log);
-        })));
+        }));
     assert!(res);
 
     compiler.add_rules(

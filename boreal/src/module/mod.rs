@@ -395,9 +395,8 @@ pub enum Value {
         ///     Value::Integer(x), // Number of matches of string $foo
         /// ]);
         /// ```
-        // TODO: find a way to simplify this
         #[allow(clippy::type_complexity)]
-        Arc<Box<dyn Fn(&mut EvalContext, Vec<Value>) -> Option<Value> + Send + Sync>>,
+        Arc<dyn Fn(&mut EvalContext, Vec<Value>) -> Option<Value> + Send + Sync>,
     ),
 
     /// An undefined value.
@@ -524,7 +523,7 @@ impl Value {
     where
         F: Fn(&mut EvalContext, Vec<Value>) -> Option<Value> + Send + Sync + 'static,
     {
-        Self::Function(Arc::new(Box::new(f)))
+        Self::Function(Arc::new(f))
     }
 }
 

@@ -5,7 +5,7 @@ use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, V
 
 /// `console` module.
 pub struct Console {
-    callback: Arc<Box<LogCallback>>,
+    callback: Arc<LogCallback>,
 }
 
 /// Type of callback called when a message is logged.
@@ -53,7 +53,7 @@ impl Module for Console {
 }
 
 pub struct Data {
-    callback: Arc<Box<LogCallback>>,
+    callback: Arc<LogCallback>,
 }
 
 impl ModuleData for Console {
@@ -66,7 +66,10 @@ impl Console {
     /// The callback will be called when expressions using this module
     /// are used.
     #[must_use]
-    pub fn with_callback(callback: Box<LogCallback>) -> Self {
+    pub fn with_callback<T>(callback: T) -> Self
+    where
+        T: Fn(String) + Send + Sync + 'static,
+    {
         Self {
             callback: Arc::new(callback),
         }

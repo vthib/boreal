@@ -262,13 +262,11 @@ fn main() -> ExitCode {
         let no_console_logs = args.get_flag("no_console_logs");
         // Even if the console logs are disabled, add the module so that rules that use it
         // can still compile properly.
-        let _r = compiler.add_module(boreal::module::Console::with_callback(Box::new(
-            move |log| {
-                if !no_console_logs {
-                    println!("{log}");
-                }
-            },
-        )));
+        let _r = compiler.add_module(boreal::module::Console::with_callback(move |log| {
+            if !no_console_logs {
+                println!("{log}");
+            }
+        }));
 
         compiler.set_params(
             boreal::compiler::CompilerParams::default()
