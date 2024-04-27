@@ -940,7 +940,7 @@ fn static_value_to_value(value: StaticValue) -> ModuleValue {
                 .map(|(k, v)| (k, static_value_to_value(v)))
                 .collect(),
         ),
-        StaticValue::Function { fun, .. } => ModuleValue::Function(Arc::new(Box::new(fun))),
+        StaticValue::Function { fun, .. } => ModuleValue::Function(Arc::new(fun)),
     }
 }
 
@@ -976,7 +976,7 @@ fn convert_yara_obj_to_module_value(obj: yara::YrObject) -> ModuleValue {
                 })
                 .collect(),
         ),
-        YrObjectValue::Function => ModuleValue::Function(Arc::new(Box::new(|_, _| None))),
+        YrObjectValue::Function => ModuleValue::Function(Arc::new(|_, _| None)),
         YrObjectValue::Undefined => ModuleValue::Undefined,
     }
 }
