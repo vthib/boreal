@@ -198,14 +198,14 @@ impl std::fmt::Debug for Box<dyn Module> {
 }
 
 /// Context provided to module methods during scanning.
-pub struct ScanContext<'a, 'b> {
+pub struct ScanContext<'a, 'b, 'c> {
     /// Memory region being scanned.
     pub region: &'a Region<'b>,
 
     /// Private data (per-scan) of each module.
     ///
     /// See [`ModuleData`] for an example on how this can be used.
-    pub module_data: &'a mut ModuleDataMap,
+    pub module_data: &'a mut ModuleDataMap<'c>,
 
     /// True if the region should be considered part of a process memory.
     ///
@@ -213,21 +213,21 @@ pub struct ScanContext<'a, 'b> {
     pub process_memory: bool,
 }
 
-impl std::fmt::Debug for ScanContext<'_, '_> {
+impl std::fmt::Debug for ScanContext<'_, '_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScanContext").finish()
     }
 }
 
 /// Context provided to module functions during evaluation.
-pub struct EvalContext<'a, 'b> {
+pub struct EvalContext<'a, 'b, 'c> {
     /// Input being scanned.
     pub mem: &'b mut Memory<'a>,
 
     /// Private data (per-scan) of each module.
     ///
     /// See [`ModuleData`] for an example on how this can be used.
-    pub module_data: &'b ModuleDataMap,
+    pub module_data: &'b ModuleDataMap<'c>,
 
     /// True if the scan is done on a process memory.
     ///
@@ -235,23 +235,34 @@ pub struct EvalContext<'a, 'b> {
     pub process_memory: bool,
 }
 
-impl std::fmt::Debug for EvalContext<'_, '_> {
+impl std::fmt::Debug for EvalContext<'_, '_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EvalContext").finish()
     }
 }
 
-/// Object holding the data of each module. See [`ModuleData`].
-#[derive(Default)]
-pub struct ModuleDataMap(HashMap<TypeId, Box<dyn Any + Send + Sync>>);
+pub(crate) type ModuleUserData = HashMap<TypeId, Arc<dyn Any + Send + Sync>>;
 
-impl std::fmt::Debug for ModuleDataMap {
+/// Object holding the data of each module. See [`ModuleData`].
+pub struct ModuleDataMap<'scanner> {
+    private_data: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    user_data: &'scanner ModuleUserData,
+}
+
+impl std::fmt::Debug for ModuleDataMap<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("ModuleDataMap").finish()
     }
 }
 
-/// Data used by module to share state with module functions.
+/// Data used by a module.
+///
+/// There are two types of data that can be associated with a module:
+///
+/// - private data, that a module can use to store values with exposed functions.
+/// - user data, that a user can provide to a module for use in rules.
+///
+/// # Private Data
 ///
 /// Functions exposed by a module may need to use values that are computed when
 /// [`Module::get_dynamic_values`] is called. In that case, this trait can be implemented on a
@@ -286,18 +297,12 @@ impl std::fmt::Debug for ModuleDataMap {
 ///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
 ///         [(
 ///             "get_data_value",
-///             StaticValue::function(
-///                 Self::get_data_value,
-///                 vec![],
-///                 Type::Integer
-///             )
+///             StaticValue::function(Self::get_data_value, vec![], Type::Integer)
 ///         )].into()
 ///     }
 ///
 ///     fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
-///         data_map.insert::<Self>(FooData {
-///             value: 5
-///         });
+///         data_map.insert::<Self>(FooData { value: 5 });
 ///     }
 /// }
 ///
@@ -308,6 +313,63 @@ impl std::fmt::Debug for ModuleDataMap {
 ///     }
 /// }
 /// ```
+///
+/// # User Data
+///
+/// A user can also provide data that the module can then use during a scan. The typical
+/// example is the cuckoo module, where the user can provide a cuckoo JSON report to the
+/// module, and then use the module functions to access this report in rules.
+///
+/// ```
+/// use std::collections::HashMap;
+/// use boreal::module::{EvalContext, Module, ModuleData, StaticValue, Value, Type};
+///
+/// struct Bar;
+///
+/// struct BarUserData {
+///     value: u32,
+/// }
+///
+/// impl ModuleData for Bar {
+///     type PrivateData = ();
+///     type UserData = BarUserData;
+/// }
+///
+/// impl Module for Bar {
+///     fn get_name(&self) -> &'static str {
+///         "bar"
+///     }
+///
+///     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+///         [(
+///             "get_data_value",
+///             StaticValue::function(Self::get_data_value, vec![], Type::Integer)
+///         )].into()
+///     }
+/// }
+///
+/// impl Bar {
+///     fn get_data_value(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
+///         let data = ctx.module_data.get_user_data::<Self>()?;
+///         Some(data.value.into())
+///     }
+/// }
+///
+/// let mut compiler = boreal::Compiler::new();
+/// compiler.add_module(Bar);
+/// compiler.add_rules_str(r#"
+/// import "bar"
+///
+/// rule a {
+///     condition: bar.get_data_value() == 3
+/// }"#).unwrap();
+///
+/// let mut scanner = compiler.into_scanner();
+/// scanner.set_module_data::<Bar>(BarUserData { value: 3 });
+///
+/// let result = scanner.scan_mem(b"").unwrap();
+/// assert_eq!(result.matched_rules.len(), 1);
+/// ```
 pub trait ModuleData: Module {
     /// Private Data to associate with the module.
     ///
@@ -316,20 +378,30 @@ pub trait ModuleData: Module {
 
     /// Data that the user can provide to the module.
     ///
-    /// The data can be provided by the user through the [`boreal::scanner::ScanParams`].
+    /// This data is provided by the user with calls to
+    /// [`Scanner::set_module_data`](crate::scanner::Scanner::set_module_data).
     type UserData: Any + Send + Sync;
 }
 
-impl ModuleDataMap {
+impl<'scanner> ModuleDataMap<'scanner> {
+    #[doc(hidden)]
+    #[must_use]
+    pub fn new(user_data: &'scanner ModuleUserData) -> Self {
+        Self {
+            private_data: HashMap::new(),
+            user_data,
+        }
+    }
+
     /// Insert the private data of a module in the map.
     pub fn insert<T: Module + ModuleData + 'static>(&mut self, data: T::PrivateData) {
-        let _r = self.0.insert(TypeId::of::<T>(), Box::new(data));
+        let _r = self.private_data.insert(TypeId::of::<T>(), Box::new(data));
     }
 
     /// Retrieve the private data of a module.
     #[must_use]
     pub fn get<T: Module + ModuleData + 'static>(&self) -> Option<&T::PrivateData> {
-        self.0
+        self.private_data
             .get(&TypeId::of::<T>())
             .and_then(|v| v.downcast_ref())
     }
@@ -337,9 +409,17 @@ impl ModuleDataMap {
     /// Retrieve a mutable borrow on the private data of a module.
     #[must_use]
     pub fn get_mut<T: Module + ModuleData + 'static>(&mut self) -> Option<&mut T::PrivateData> {
-        self.0
+        self.private_data
             .get_mut(&TypeId::of::<T>())
             .and_then(|v| v.downcast_mut())
+    }
+
+    /// Retrieve the user data of a module.
+    #[must_use]
+    pub fn get_user_data<T: Module + ModuleData + 'static>(&self) -> Option<&T::UserData> {
+        self.user_data
+            .get(&TypeId::of::<T>())
+            .and_then(|v| v.downcast_ref())
     }
 }
 
@@ -388,13 +468,15 @@ pub enum Value {
         /// `fun("a", 1 + 2, #foo)` would call the function `fun` with:
         ///
         /// ```
+        /// # use std::collections::HashMap;
         /// # use boreal::memory::Memory;
-        /// # use boreal::module::{EvalContext, Value};
+        /// # use boreal::module::{EvalContext, Value, ModuleDataMap};
         /// # let x = 3;
         /// # fn fun(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> { None }
+        /// # let user_data = HashMap::new();
         /// # let mut ctx = EvalContext {
         /// #     mem: &mut Memory::Direct(b""),
-        /// #     module_data: &Default::default(),
+        /// #     module_data: &ModuleDataMap::new(&user_data),
         /// #     process_memory: false,
         /// # };
         /// let result = fun(&mut ctx, vec![
@@ -767,12 +849,12 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(ScanContext {
             region: &Region { start: 0, mem: b"" },
-            module_data: &mut ModuleDataMap(HashMap::new()),
+            module_data: &mut ModuleDataMap::new(&HashMap::new()),
             process_memory: false,
         });
         test_type_traits_non_clonable(EvalContext {
             mem: &mut Memory::Direct(b""),
-            module_data: &ModuleDataMap(HashMap::new()),
+            module_data: &ModuleDataMap::new(&HashMap::new()),
             process_memory: false,
         });
 
