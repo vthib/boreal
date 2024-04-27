@@ -365,6 +365,7 @@ impl Data {
 
 impl ModuleData for Dex {
     type PrivateData = Data;
+    type UserData = ();
 }
 
 fn parse_file(mem: &[u8], data: &mut Data) -> Option<HashMap<&'static str, Value>> {

@@ -58,6 +58,7 @@ pub struct Data {
 
 impl ModuleData for Console {
     type PrivateData = Data;
+    type UserData = ();
 }
 
 impl Console {
