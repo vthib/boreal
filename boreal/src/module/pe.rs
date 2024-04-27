@@ -1141,6 +1141,7 @@ impl Module for Pe {
 
 impl ModuleData for Pe {
     type PrivateData = Data;
+    type UserData = ();
 }
 
 impl Pe {

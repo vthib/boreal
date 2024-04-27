@@ -275,6 +275,7 @@ impl std::fmt::Debug for ModuleDataMap {
 ///
 /// impl ModuleData for Foo {
 ///     type PrivateData = FooData;
+///     type UserData = ();
 /// }
 ///
 /// impl Module for Foo {
@@ -308,8 +309,15 @@ impl std::fmt::Debug for ModuleDataMap {
 /// }
 /// ```
 pub trait ModuleData: Module {
-    /// Data to associate with the module.
+    /// Private Data to associate with the module.
+    ///
+    /// This is the data that the module can store and retrieve during a scan.
     type PrivateData: Any + Send + Sync;
+
+    /// Data that the user can provide to the module.
+    ///
+    /// The data can be provided by the user through the [`boreal::scanner::ScanParams`].
+    type UserData: Any + Send + Sync;
 }
 
 impl ModuleDataMap {
