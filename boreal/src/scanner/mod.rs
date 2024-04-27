@@ -1,4 +1,5 @@
 //! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -7,7 +8,7 @@ use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
 use crate::evaluator::{self, evaluate_rule, EvalError};
 use crate::memory::{FragmentedMemory, Memory, Region};
-use crate::module::Module;
+use crate::module::{Module, ModuleData, ModuleUserData};
 use crate::statistics;
 use crate::timeout::TimeoutChecker;
 
@@ -91,6 +92,11 @@ pub struct Scanner {
     ///
     /// Compiled rules uses indexing into this vec to retrieve the symbols values.
     external_symbols_values: Vec<ExternalValue>,
+
+    /// User data associated to specific modules.
+    ///
+    /// See [`crate::module::ModuleData`] for more details on how this parameter is used.
+    module_user_data: ModuleUserData,
 }
 
 impl Scanner {
@@ -125,6 +131,7 @@ impl Scanner {
             }),
             scan_params: ScanParams::default(),
             external_symbols_values,
+            module_user_data: HashMap::new(),
         }
     }
 
@@ -144,6 +151,7 @@ impl Scanner {
             Memory::Direct(mem),
             &self.scan_params,
             &self.external_symbols_values,
+            &self.module_user_data,
         )
     }
 
@@ -227,6 +235,7 @@ impl Scanner {
                 Memory::new_fragmented(memory, self.scan_params.to_memory_params()),
                 &self.scan_params,
                 &self.external_symbols_values,
+                &self.module_user_data,
             ),
             Err(err) => Err((err, ScanResult::default())),
         }
@@ -261,6 +270,7 @@ impl Scanner {
             Memory::new_fragmented(Box::new(obj), self.scan_params.to_memory_params()),
             &self.scan_params,
             &self.external_symbols_values,
+            &self.module_user_data,
         )
     }
 
@@ -303,6 +313,19 @@ impl Scanner {
         }
 
         Ok(())
+    }
+
+    /// Set the data to be used by a module.
+    ///
+    /// Some module need external data to be provided. This is for example the case for the
+    /// cuckoo module, which needs to be given the cuckoo report.
+    pub fn set_module_data<Module>(&mut self, data: Module::UserData)
+    where
+        Module: ModuleData + 'static,
+    {
+        let _r = self
+            .module_user_data
+            .insert(TypeId::of::<Module>(), Arc::new(data));
     }
 
     /// Set scan parameters on this scanner.
@@ -356,12 +379,13 @@ impl Inner {
         mem: Memory,
         params: &'scanner ScanParams,
         external_symbols_values: &'scanner [ExternalValue],
+        module_user_data: &'scanner ModuleUserData,
     ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
         let mut scan_data = ScanData {
             mem,
             external_symbols_values,
             matched_rules: Vec::new(),
-            module_values: evaluator::module::EvalData::new(&self.modules),
+            module_values: evaluator::module::EvalData::new(&self.modules, module_user_data),
             statistics: if params.compute_statistics {
                 Some(statistics::Evaluation::default())
             } else {
@@ -627,7 +651,7 @@ pub(crate) struct ScanData<'scanner, 'mem> {
     /// On-scan values of all modules used in the scanner.
     ///
     /// First element is the module name, second one is the dynamic values produced by the module.
-    pub(crate) module_values: evaluator::module::EvalData,
+    pub(crate) module_values: evaluator::module::EvalData<'scanner>,
 
     /// Statistics related to the scanning.
     pub(crate) statistics: Option<statistics::Evaluation>,
@@ -856,7 +880,9 @@ mod tests {
         let _r = compiler.add_rules_str(rule_str).unwrap();
         let scanner = compiler.into_scanner();
 
-        let mut module_values = evaluator::module::EvalData::new(&scanner.inner.modules);
+        let user_data = HashMap::new();
+        let mut module_values =
+            evaluator::module::EvalData::new(&scanner.inner.modules, &user_data);
         module_values.scan_region(&Region { start: 0, mem }, &scanner.inner.modules, false);
 
         let mut scan_data = ScanData {
@@ -1408,7 +1434,7 @@ mod tests {
             matched_rules: Vec::new(),
             module_values: evaluator::module::EvalData {
                 values: Vec::new(),
-                data_map: crate::module::ModuleDataMap::default(),
+                data_map: crate::module::ModuleDataMap::new(&HashMap::new()),
             },
             statistics: None,
             timeout_checker: None,

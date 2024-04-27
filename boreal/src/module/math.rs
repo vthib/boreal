@@ -627,10 +627,10 @@ mod tests {
     use super::*;
 
     macro_rules! ctx {
-        () => {
+        ($v:expr) => {
             EvalContext {
                 mem: &mut Memory::Direct(b""),
-                module_data: &ModuleDataMap::default(),
+                module_data: &ModuleDataMap::new($v),
                 process_memory: false,
             }
         };
@@ -638,7 +638,8 @@ mod tests {
 
     #[test]
     fn test_in_range_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::in_range(&mut ctx, vec![]).is_none());
         assert!(Math::in_range(&mut ctx, vec![0.5.into()]).is_none());
@@ -650,7 +651,8 @@ mod tests {
 
     #[test]
     fn test_deviation_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::deviation(&mut ctx, vec![]).is_none());
         assert!(Math::deviation(&mut ctx, vec![0.5.into()]).is_none());
@@ -664,7 +666,8 @@ mod tests {
 
     #[test]
     fn test_mean_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::mean(&mut ctx, vec![]).is_none());
         assert!(Math::mean(&mut ctx, vec![0.5.into()]).is_none());
@@ -674,7 +677,8 @@ mod tests {
 
     #[test]
     fn test_serial_correlation_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::serial_correlation(&mut ctx, vec![]).is_none());
         assert!(Math::serial_correlation(&mut ctx, vec![0.5.into()]).is_none());
@@ -684,7 +688,8 @@ mod tests {
 
     #[test]
     fn test_monte_carlo_pi_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::monte_carlo_pi(&mut ctx, vec![]).is_none());
         assert!(Math::monte_carlo_pi(&mut ctx, vec![0.5.into()]).is_none());
@@ -694,7 +699,8 @@ mod tests {
 
     #[test]
     fn test_entropy_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::entropy(&mut ctx, vec![]).is_none());
         assert!(Math::entropy(&mut ctx, vec![0.5.into()]).is_none());
@@ -704,7 +710,8 @@ mod tests {
 
     #[test]
     fn test_min_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::min(&mut ctx, vec![]).is_none());
         assert!(Math::min(&mut ctx, vec![0.5.into()]).is_none());
@@ -714,7 +721,8 @@ mod tests {
 
     #[test]
     fn test_max_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::max(&mut ctx, vec![]).is_none());
         assert!(Math::max(&mut ctx, vec![0.5.into()]).is_none());
@@ -724,7 +732,8 @@ mod tests {
 
     #[test]
     fn test_to_number_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::to_number(&mut ctx, vec![]).is_none());
         assert!(Math::to_number(&mut ctx, vec![0.into()]).is_none());
@@ -732,7 +741,8 @@ mod tests {
 
     #[test]
     fn test_abs_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::abs(&mut ctx, vec![]).is_none());
         assert!(Math::abs(&mut ctx, vec![0.5.into()]).is_none());
@@ -740,7 +750,8 @@ mod tests {
 
     #[test]
     fn test_count_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::count(&mut ctx, vec![]).is_none());
         assert!(Math::count(&mut ctx, vec![0.5.into()]).is_none());
@@ -749,7 +760,8 @@ mod tests {
 
     #[test]
     fn test_percentage_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::percentage(&mut ctx, vec![]).is_none());
         assert!(Math::percentage(&mut ctx, vec![0.5.into()]).is_none());
@@ -758,7 +770,8 @@ mod tests {
 
     #[test]
     fn test_mode_invalid_args() {
-        let mut ctx = ctx!();
+        let user_data = HashMap::new();
+        let mut ctx = ctx!(&user_data);
 
         assert!(Math::mode(&mut ctx, vec![0.5.into()]).is_none());
     }

@@ -7,19 +7,21 @@ use crate::compiler::module::{
     BoundedValueIndex, ModuleExpression, ModuleExpressionKind, ModuleOperations, ValueOperation,
 };
 use crate::memory::Region;
-use crate::module::{EvalContext, Module, ModuleDataMap, ScanContext, Value as ModuleValue};
+use crate::module::{
+    EvalContext, Module, ModuleDataMap, ModuleUserData, ScanContext, Value as ModuleValue,
+};
 
 use super::{Evaluator, PoisonKind, Value};
 
 #[derive(Debug)]
-pub struct EvalData {
+pub struct EvalData<'scanner> {
     pub values: Vec<(&'static str, ModuleValue)>,
-    pub data_map: ModuleDataMap,
+    pub data_map: ModuleDataMap<'scanner>,
 }
 
-impl EvalData {
-    pub fn new(modules: &[Box<dyn Module>]) -> Self {
-        let mut data_map = ModuleDataMap::default();
+impl<'scanner> EvalData<'scanner> {
+    pub fn new(modules: &[Box<dyn Module>], user_data: &'scanner ModuleUserData) -> Self {
+        let mut data_map = ModuleDataMap::new(user_data);
 
         let values = modules
             .iter()
@@ -216,7 +218,7 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(EvalData {
             values: Vec::new(),
-            data_map: ModuleDataMap::default(),
+            data_map: ModuleDataMap::new(&HashMap::new()),
         });
     }
 }
