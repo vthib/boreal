@@ -164,16 +164,16 @@ impl Cuckoo {
         todo!()
     }
 
-    fn network_http_get(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_http_get(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        search_http_request(ctx, args, true, false)
     }
 
-    fn network_http_post(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_http_post(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        search_http_request(ctx, args, false, true)
     }
 
-    fn network_http_request(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_http_request(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        search_http_request(ctx, args, true, true)
     }
 
     fn network_http_user_agent(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
@@ -221,4 +221,33 @@ fn regex_matches_summary_string_array(
         .filter_map(|v| v.as_str())
         .any(|name| regex.is_match(name.as_bytes()));
     Some(Value::Integer(i64::from(found)))
+}
+
+fn search_http_request(
+    ctx: &mut EvalContext,
+    args: Vec<Value>,
+    method_get: bool,
+    method_post: bool,
+) -> Option<Value> {
+    let data = ctx.module_data.get::<Cuckoo>()?;
+    let http = data.network.as_ref()?.get("http")?.as_array()?;
+
+    let mut args = args.into_iter();
+    let regex: Regex = args.next()?.try_into().ok()?;
+
+    let found = http
+        .iter()
+        .filter_map(|req| parse_http_request(req))
+        .any(|(uri, method)| {
+            ((method_get && method.eq_ignore_ascii_case("get"))
+                || (method_post && method.eq_ignore_ascii_case("post")))
+                && regex.is_match(uri.as_bytes())
+        });
+    Some(Value::Integer(i64::from(found)))
+}
+
+fn parse_http_request(request: &serde_json::Value) -> Option<(&str, &str)> {
+    let uri = request.get("uri")?.as_str()?;
+    let method = request.get("method")?.as_str()?;
+    Some((uri, method))
 }
