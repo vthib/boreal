@@ -93,6 +93,11 @@ mod magic;
 #[cfg(feature = "magic")]
 pub use self::magic::Magic;
 
+#[cfg(feature = "cuckoo")]
+mod cuckoo;
+#[cfg(feature = "cuckoo")]
+pub use self::cuckoo::{Cuckoo, CuckooData};
+
 /// Module providing custom values and functions in rules.
 ///
 /// A module can provide values in two ways:
