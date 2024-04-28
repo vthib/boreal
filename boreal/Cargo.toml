@@ -27,6 +27,9 @@ object = ["dep:object"]
 # Enables the "magic" module.
 magic = ["dep:magic", "yara/module-magic"]
 
+# Enables the "cuckoo" module.
+cuckoo = ["dep:serde_json", "yara/module-cuckoo"]
+
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
 authenticode = ["dep:authenticode-parser", "dep:hex"]
@@ -73,6 +76,9 @@ memmap2 = { version = "0.9", optional = true }
 
 # "magic" feature
 magic = { version = "0.16", optional = true }
+
+# "cuckoo" feature
+serde_json = { version = "1.0", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { version = "0.2", optional = true }

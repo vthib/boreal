@@ -55,5 +55,8 @@ mod hash;
 #[cfg(feature = "magic")]
 mod magic;
 
+#[cfg(feature = "cuckoo")]
+mod cuckoo;
+
 // utils to run tests both with boreal and with yara
 mod utils;
