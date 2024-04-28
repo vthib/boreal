@@ -162,3 +162,179 @@ fn test_sync_mutex() {
         Some(r#"{ "invalid": true "#),
     );
 }
+
+#[test]
+fn test_network_http_get() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.http_get(/abc/)", None);
+
+    // valid cases
+    test(
+        "cuckoo.network.http_get(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde", "method": "post" },
+                { "uri": "abcde", "method": "get" },
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+    // unmatch case
+    test(
+        "cuckoo.network.http_get(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde", "method": "post" },
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+}
+
+#[test]
+fn test_network_http_post() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.http_post(/abc/)", None);
+
+    // valid cases
+    test(
+        "cuckoo.network.http_post(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde", "method": "post" },
+                { "uri": "abcde", "method": "get" },
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+    // unmatch case
+    test(
+        "cuckoo.network.http_post(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde", "method": "get" },
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+}
+
+#[test]
+fn test_network_http_request() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.http_request(/abc/)", None);
+
+    // valid cases
+    test(
+        "cuckoo.network.http_request(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde", "method": "post" },
+                { "uri": "abcde", "method": "get" },
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.http_request(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde", "method": "post" },
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.http_request(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde", "method": "get" },
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+    // unmatch case
+    test(
+        "cuckoo.network.http_request(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "defgh", "method": "get" },
+                { "uri": "defgh", "method": "post" }
+            ]}
+        }"#,
+        ),
+    );
+}
+
+#[test]
+fn test_network_http_request_bad_shapes() {
+    let false_cond = r#"
+        cuckoo.network.http_get(/^a/) == 0 and
+        cuckoo.network.http_post(/^a/) == 0 and
+        cuckoo.network.http_request(/^a/) == 0
+    "#;
+    let not_defined_cond = r#"
+        not defined cuckoo.network.http_get(/^a/) and
+        not defined cuckoo.network.http_post(/^a/) and
+        not defined cuckoo.network.http_request(/^a/)
+    "#;
+
+    // test bad json shape cases
+    test(
+        false_cond,
+        Some(r#"{ "network": { "http": [{ "ura": "abcdef", "method": "get" }] } }"#),
+    );
+    test(
+        false_cond,
+        Some(r#"{ "network": { "http": [{ "uri": "abcdef", "metho": "get" }] } }"#),
+    );
+    test(
+        false_cond,
+        Some(r#"{ "network": { "http": [{ "uri": "abcdef", "method": true }] } }"#),
+    );
+    test(
+        false_cond,
+        Some(r#"{ "network": { "http": [{ "uri": true, "method": "get" }] } }"#),
+    );
+    test(
+        not_defined_cond,
+        Some(r#"{ "network": { "http": { "uri": "abc", "method": "get" } } }"#),
+    );
+
+    test(
+        not_defined_cond,
+        Some(r#"{ "network": { "htt": [{ "uri": "abc", "method": "get" }] } }"#),
+    );
+    test(not_defined_cond, Some(r#"{ "network": true }"#));
+    test(
+        not_defined_cond,
+        Some(r#"{ "net": { "http": [{ "uri": "abc", "method": "get" }] } }"#),
+    );
+    test(
+        not_defined_cond,
+        Some(r#"[{ "uri": "abc", "method": "get" }]"#),
+    );
+    test(not_defined_cond, Some(r#"{ "invalid": true "#));
+}
