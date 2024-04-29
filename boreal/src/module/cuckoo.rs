@@ -70,7 +70,7 @@ impl Module for Cuckoo {
                         "tcp",
                         StaticValue::function(
                             Self::network_tcp,
-                            vec![vec![Type::Regex]],
+                            vec![vec![Type::Regex, Type::Integer]],
                             Type::Integer,
                         ),
                     ),
@@ -78,7 +78,7 @@ impl Module for Cuckoo {
                         "udp",
                         StaticValue::function(
                             Self::network_udp,
-                            vec![vec![Type::Regex]],
+                            vec![vec![Type::Regex, Type::Integer]],
                             Type::Integer,
                         ),
                     ),
@@ -176,20 +176,47 @@ impl Cuckoo {
         search_http_request(ctx, args, true, true)
     }
 
-    fn network_http_user_agent(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_http_user_agent(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Cuckoo>()?;
+        let http = data.network.as_ref()?.get("http")?.as_array()?;
+
+        let mut args = args.into_iter();
+        let regex: Regex = args.next()?.try_into().ok()?;
+
+        let found = http
+            .iter()
+            .filter_map(|req| req.get("user-agent"))
+            .filter_map(|user_agent| user_agent.as_str())
+            .any(|user_agent| regex.is_match(user_agent.as_bytes()));
+        Some(Value::Integer(i64::from(found)))
     }
 
-    fn network_host(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_host(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Cuckoo>()?;
+        let hosts = data.network.as_ref()?.get("hosts")?.as_array()?;
+
+        let mut args = args.into_iter();
+        let regex: Regex = args.next()?.try_into().ok()?;
+
+        let found = hosts
+            .iter()
+            .filter_map(|host| host.as_str())
+            .any(|host| regex.is_match(host.as_bytes()));
+        Some(Value::Integer(i64::from(found)))
     }
 
-    fn network_tcp(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_tcp(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Cuckoo>()?;
+        let tcp = data.network.as_ref()?.get("tcp")?.as_array()?;
+
+        search_tcp_udp(args, tcp)
     }
 
-    fn network_udp(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_udp(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Cuckoo>()?;
+        let udp = data.network.as_ref()?.get("udp")?.as_array()?;
+
+        search_tcp_udp(args, udp)
     }
 
     fn registry_key_access(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -250,4 +277,22 @@ fn parse_http_request(request: &serde_json::Value) -> Option<(&str, &str)> {
     let uri = request.get("uri")?.as_str()?;
     let method = request.get("method")?.as_str()?;
     Some((uri, method))
+}
+
+fn search_tcp_udp(args: Vec<Value>, values: &[serde_json::Value]) -> Option<Value> {
+    let mut args = args.into_iter();
+    let regex: Regex = args.next()?.try_into().ok()?;
+    let port: i64 = args.next()?.try_into().ok()?;
+
+    let found = values
+        .iter()
+        .filter_map(|req| parse_tcp_udp(req))
+        .any(|(dst, dport)| dport == port && regex.is_match(dst.as_bytes()));
+    Some(Value::Integer(i64::from(found)))
+}
+
+fn parse_tcp_udp(request: &serde_json::Value) -> Option<(&str, i64)> {
+    let dst = request.get("dst")?.as_str()?;
+    let dport = request.get("dport")?.as_number()?.as_i64()?;
+    Some((dst, dport))
 }

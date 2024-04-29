@@ -338,3 +338,276 @@ fn test_network_http_request_bad_shapes() {
     );
     test(not_defined_cond, Some(r#"{ "invalid": true "#));
 }
+
+#[test]
+fn test_network_http_user_agent() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.http_user_agent(/abc/)", None);
+
+    // valid cases
+    test(
+        "cuckoo.network.http_user_agent(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "user-agent": "gheif" },
+                { "user-agent": "abcde" }
+            ]}
+        }"#,
+        ),
+    );
+    // unmatched cases
+    test(
+        "cuckoo.network.http_user_agent(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "user-agent": "gheif" }
+            ]}
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.http_user_agent(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "http": [
+                { "uri": "abcde" }
+            ]}
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.http_user_agent(/^a/) == 0",
+        Some(r#"{ "network": { "http": [] } }"#),
+    );
+
+    // bad shapes
+    test(
+        "cuckoo.network.http_user_agent(/^a/) == 0",
+        Some(r#"{ "network": { "http": [ { "user-agent": false } ] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.http_user_agent(/^a/)",
+        Some(r#"{ "network": { "htt": [{ "user-agent": "abc" }] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.http_user_agent(/^a/)",
+        Some(r#"{ "network": { "http": "abc" } }"#),
+    );
+    test(
+        "not defined cuckoo.network.http_user_agent(/^a/)",
+        Some(r#"{ "net": { "http": [{ "user-agent": "abc" }] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.http_user_agent(/^a/)",
+        Some(r#"[{ "user-agent": "abc" }]"#),
+    );
+    test(
+        "not defined cuckoo.network.http_user_agent(/^a/)",
+        Some(r#"{ "invalid": true "#),
+    );
+}
+
+#[test]
+fn test_network_host() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.host(/abc/)", None);
+
+    // valid case
+    test(
+        "cuckoo.network.host(/^a/) == 1",
+        Some(r#"{ "network": { "hosts": ["host", "abcde"] } }"#),
+    );
+
+    // unmatched case
+    test(
+        "cuckoo.network.host(/^a/) == 0",
+        Some(r#"{ "network": { "hosts": ["host"] } }"#),
+    );
+
+    // Bad json shape cases
+    test(
+        "not defined cuckoo.network.host(/^a/)",
+        Some(r#"{ "network": { "hosts": "abcde" } }"#),
+    );
+    test(
+        "not defined cuckoo.network.host(/^a/)",
+        Some(r#"{ "network": { "host": ["abcde"] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.host(/^a/)",
+        Some(r#"{ "network": {} }"#),
+    );
+    test(
+        "not defined cuckoo.network.host(/^a/)",
+        Some(r#"{ "net": {} }"#),
+    );
+    test("not defined cuckoo.network.host(/^a/)", Some(r#"["net"]"#));
+    test(
+        "not defined cuckoo.network.host(/^a/)",
+        Some(r#"{ "invalid": true "#),
+    );
+}
+
+#[test]
+fn test_network_tcp() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.tcp(/abc/, 23)", None);
+
+    // valid cases
+    test(
+        "cuckoo.network.tcp(/^a/, 23) == 1",
+        Some(
+            r#"{
+            "network": { "tcp": [
+                { "dst": "abcde", "dport": "23" },
+                { "dst": false, "dport": 23 },
+                { "dst": "gheif", "dport": 23 },
+                { "dst": "abcde", "dport": 24 },
+                { "dst": "abcde", "dport": 23 },
+                { "dst": "gheif", "dport": 24 }
+            ]}
+        }"#,
+        ),
+    );
+    // unmatched cases
+    test(
+        "cuckoo.network.tcp(/^a/, 23) == 0",
+        Some(
+            r#"{
+            "network": { "tcp": [
+                { "dst": "abcde", "dport": "23" },
+                { "dst": false, "dport": 23 },
+                { "dst": "gheif", "dport": 23 },
+                { "dst": "abcde", "dport": 24 },
+                { "dst": "gheif", "dport": 24 }
+            ]}
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.tcp(/^a/, 23) == 0",
+        Some(
+            r#"{
+            "network": { "tcp": [
+                { "dst": "abcde" },
+                { "dport": 23 },
+                { "dst": "abcde", "dport": "23" }
+            ]}
+        }"#,
+        ),
+    );
+
+    // test bad json shape cases
+    test(
+        "cuckoo.network.tcp(/^a/, 23) == 0",
+        Some(r#"{ "network": { "tcp": ["abc"] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.tcp(/^a/, 23)",
+        Some(r#"{ "network": { "tc": [{ "dst": "abc", "dport": 23 }] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.tcp(/^a/, 23)",
+        Some(r#"{ "network": { "tcp": { "dst": "abc", "dport": 23 } } }"#),
+    );
+    test(
+        "not defined cuckoo.network.tcp(/^a/, 23)",
+        Some(r#"{ "network": { "tcp": "abc" } }"#),
+    );
+    test(
+        "not defined cuckoo.network.tcp(/^a/, 23)",
+        Some(r#"{ "net": [{ "tcp": { "dst": "abc", "dport": 23 } }] }"#),
+    );
+    test(
+        "not defined cuckoo.network.tcp(/^a/, 23)",
+        Some(r#"[{ "dst": "abc", "dport": 23 }]"#),
+    );
+    test(
+        "not defined cuckoo.network.tcp(/^a/, 23)",
+        Some(r#"{ "invalid": true "#),
+    );
+}
+
+#[test]
+fn test_network_udp() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.udp(/abc/, 23)", None);
+
+    // valid cases
+    test(
+        "cuckoo.network.udp(/^a/, 23) == 1",
+        Some(
+            r#"{
+            "network": { "udp": [
+                { "dst": "abcde", "dport": "23" },
+                { "dst": false, "dport": 23 },
+                { "dst": "gheif", "dport": 23 },
+                { "dst": "abcde", "dport": 24 },
+                { "dst": "abcde", "dport": 23 },
+                { "dst": "gheif", "dport": 24 }
+            ]}
+        }"#,
+        ),
+    );
+    // unmatched cases
+    test(
+        "cuckoo.network.udp(/^a/, 23) == 0",
+        Some(
+            r#"{
+            "network": { "udp": [
+                { "dst": "abcde", "dport": "23" },
+                { "dst": false, "dport": 23 },
+                { "dst": "abcde", "dport": -23 },
+                { "dst": "abcde", "dport": 23.0 },
+                { "dst": "gheif", "dport": 23 },
+                { "dst": "abcde", "dport": 24 },
+                { "dst": "gheif", "dport": 24 }
+            ]}
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.udp(/^a/, 23) == 0",
+        Some(
+            r#"{
+            "network": { "udp": [
+                { "dst": "abcde" },
+                { "dport": 23 },
+                { "dst": "abcde", "dport": "23" }
+            ]}
+        }"#,
+        ),
+    );
+
+    // test bad json shape cases
+    test(
+        "cuckoo.network.udp(/^a/, 23) == 0",
+        Some(r#"{ "network": { "udp": ["abc"] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.udp(/^a/, 23)",
+        Some(r#"{ "network": { "ud": [{ "dst": "abc", "dport": 23 }] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.udp(/^a/, 23)",
+        Some(r#"{ "network": { "udp": { "dst": "abc", "dport": 23 } }] }"#),
+    );
+    test(
+        "not defined cuckoo.network.udp(/^a/, 23)",
+        Some(r#"{ "network": { "udp": "abc" } }"#),
+    );
+    test(
+        "not defined cuckoo.network.udp(/^a/, 23)",
+        Some(r#"{ "net": [{ "udp": { "dst": "abc", "dport": 23 } }] }"#),
+    );
+    test(
+        "not defined cuckoo.network.udp(/^a/, 23)",
+        Some(r#"[{ "dst": "abc", "dport": 23 }]"#),
+    );
+    test(
+        "not defined cuckoo.network.udp(/^a/, 23)",
+        Some(r#"{ "invalid": true "#),
+    );
+}
