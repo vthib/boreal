@@ -160,8 +160,23 @@ impl ModuleData for Cuckoo {
 }
 
 impl Cuckoo {
-    fn network_dns_lookup(_ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        todo!()
+    fn network_dns_lookup(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
+        let data = ctx.module_data.get::<Cuckoo>()?;
+        let network = data.network.as_ref()?;
+        let (values, host_field_name) = match network.get("domains") {
+            Some(v) => (v.as_array()?, "domain"),
+            None => (network.get("dns")?.as_array()?, "hostname"),
+        };
+
+        let mut args = args.into_iter();
+        let regex: Regex = args.next()?.try_into().ok()?;
+
+        let found = values
+            .iter()
+            .filter_map(|value| value.get(host_field_name))
+            .filter_map(|host| host.as_str())
+            .any(|host| regex.is_match(host.as_bytes()));
+        Some(Value::Integer(i64::from(found)))
     }
 
     fn network_http_get(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {

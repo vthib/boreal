@@ -611,3 +611,101 @@ fn test_network_udp() {
         Some(r#"{ "invalid": true "#),
     );
 }
+
+#[test]
+fn test_network_dns_lookup() {
+    // undefined if no report is provided
+    test("not defined cuckoo.network.dns_lookup(/abc/)", None);
+
+    // valid cases
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "domains": [
+                { "domain": "gheif" },
+                { "domain": "abcde" }
+            ]}
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 1",
+        Some(
+            r#"{
+            "network": { "dns": [
+                { "hostname": "gheif" },
+                { "hostname": "abcde" }
+            ]}
+        }"#,
+        ),
+    );
+    // unmatched cases
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "domains": [
+                { "domain": "gheif" },
+                { "hostname": "abcde" }
+            ] }
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "dns": [
+                { "hostname": "gheif" },
+                { "domain": "abcde" }
+            ] }
+        }"#,
+        ),
+    );
+    test(
+        "not defined cuckoo.network.dns_lookup(/^a/)",
+        Some(
+            r#"{
+            "network": { "dom": [
+                { "hostname": "abcde" },
+                { "domain": "abcde" }
+            ] }
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 0",
+        Some(r#"{ "network": { "domains": [] } }"#),
+    );
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 0",
+        Some(r#"{ "network": { "dns": [] } }"#),
+    );
+
+    // bad shapes
+    test(
+        "not defined cuckoo.network.dns_lookup(/^a/)",
+        Some(r#"{ "network": { "domains": false } }"#),
+    );
+    test(
+        "not defined cuckoo.network.dns_lookup(/^a/)",
+        Some(r#"{ "network": { "dns": false } }"#),
+    );
+    test(
+        "not defined cuckoo.network.dns_lookup(/^a/)",
+        Some(r#"{ "network": true"#),
+    );
+    test(
+        "not defined cuckoo.network.dns_lookup(/^a/)",
+        Some(r#"{ "net": { "domains": [{ "domain": "abc" }] } }"#),
+    );
+    test(
+        "not defined cuckoo.network.dns_lookup(/^a/)",
+        Some(r#"[{ "domain": "abc" }]"#),
+    );
+    test(
+        "not defined cuckoo.network.dns_lookup(/^a/)",
+        Some(r#"{ "invalid": true "#),
+    );
+}
