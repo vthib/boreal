@@ -161,108 +161,95 @@ impl ModuleData for Cuckoo {
 
 impl Cuckoo {
     fn network_dns_lookup(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        let data = ctx.module_data.get::<Cuckoo>()?;
-        let network = data.network.as_ref()?;
-        let (values, host_field_name) = match network.get("domains") {
-            Some(v) => (v.as_array()?, "domain"),
-            None => (network.get("dns")?.as_array()?, "hostname"),
-        };
-
-        let mut args = args.into_iter();
-        let regex: Regex = args.next()?.try_into().ok()?;
-
-        let found = values
-            .iter()
-            .filter_map(|value| value.get(host_field_name))
-            .filter_map(|host| host.as_str())
-            .any(|host| regex.is_match(host.as_bytes()));
-        Some(Value::Integer(i64::from(found)))
+        opt_bool_to_value(search_dns(ctx, args))
     }
 
     fn network_http_get(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        search_http_request(ctx, args, true, false)
+        opt_bool_to_value(search_http_request(ctx, args, true, false))
     }
 
     fn network_http_post(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        search_http_request(ctx, args, false, true)
+        opt_bool_to_value(search_http_request(ctx, args, false, true))
     }
 
     fn network_http_request(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        search_http_request(ctx, args, true, true)
+        opt_bool_to_value(search_http_request(ctx, args, true, true))
     }
 
     fn network_http_user_agent(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        let data = ctx.module_data.get::<Cuckoo>()?;
-        let http = data.network.as_ref()?.get("http")?.as_array()?;
-
-        let mut args = args.into_iter();
-        let regex: Regex = args.next()?.try_into().ok()?;
-
-        let found = http
-            .iter()
-            .filter_map(|req| req.get("user-agent"))
-            .filter_map(|user_agent| user_agent.as_str())
-            .any(|user_agent| regex.is_match(user_agent.as_bytes()));
-        Some(Value::Integer(i64::from(found)))
+        opt_bool_to_value(search_http_user_agent(ctx, args))
     }
 
     fn network_host(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        let data = ctx.module_data.get::<Cuckoo>()?;
-        let hosts = data.network.as_ref()?.get("hosts")?.as_array()?;
-
-        let mut args = args.into_iter();
-        let regex: Regex = args.next()?.try_into().ok()?;
-
-        let found = hosts
-            .iter()
-            .filter_map(|host| host.as_str())
-            .any(|host| regex.is_match(host.as_bytes()));
-        Some(Value::Integer(i64::from(found)))
+        opt_bool_to_value(search_host(ctx, args))
     }
 
     fn network_tcp(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        let data = ctx.module_data.get::<Cuckoo>()?;
-        let tcp = data.network.as_ref()?.get("tcp")?.as_array()?;
-
-        search_tcp_udp(args, tcp)
+        opt_bool_to_value(search_tcp_udp(ctx, args, "tcp"))
     }
 
     fn network_udp(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        let data = ctx.module_data.get::<Cuckoo>()?;
-        let udp = data.network.as_ref()?.get("udp")?.as_array()?;
-
-        search_tcp_udp(args, udp)
+        opt_bool_to_value(search_tcp_udp(ctx, args, "udp"))
     }
 
     fn registry_key_access(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        regex_matches_summary_string_array(ctx, args, "keys")
+        opt_bool_to_value(regex_matches_summary_string_array(ctx, args, "keys"))
     }
 
     fn filesystem_file_access(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        regex_matches_summary_string_array(ctx, args, "files")
+        opt_bool_to_value(regex_matches_summary_string_array(ctx, args, "files"))
     }
 
     fn sync_mutex(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
-        regex_matches_summary_string_array(ctx, args, "mutexes")
+        opt_bool_to_value(regex_matches_summary_string_array(ctx, args, "mutexes"))
     }
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn opt_bool_to_value(v: Option<bool>) -> Option<Value> {
+    match v {
+        Some(true) => Some(Value::Integer(1)),
+        Some(false) | None => Some(Value::Integer(0)),
+    }
+}
+
+fn search_dns(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
+    let data = ctx.module_data.get::<Cuckoo>()?;
+    let network = data.network.as_ref()?;
+    let (values, host_field_name) = match network.get("domains") {
+        Some(v) => (v.as_array()?, "domain"),
+        None => (network.get("dns")?.as_array()?, "hostname"),
+    };
+
+    let mut args = args.into_iter();
+    let regex: Regex = args.next()?.try_into().ok()?;
+
+    Some(
+        values
+            .iter()
+            .filter_map(|value| value.get(host_field_name))
+            .filter_map(|host| host.as_str())
+            .any(|host| regex.is_match(host.as_bytes())),
+    )
 }
 
 fn regex_matches_summary_string_array(
     ctx: &mut EvalContext,
     args: Vec<Value>,
     key_name: &str,
-) -> Option<Value> {
+) -> Option<bool> {
     let data = ctx.module_data.get::<Cuckoo>()?;
     let values = data.summary.as_ref()?.get(key_name)?.as_array()?;
 
     let mut args = args.into_iter();
     let regex: Regex = args.next()?.try_into().ok()?;
 
-    let found = values
-        .iter()
-        .filter_map(|v| v.as_str())
-        .any(|name| regex.is_match(name.as_bytes()));
-    Some(Value::Integer(i64::from(found)))
+    Some(
+        values
+            .iter()
+            .filter_map(|v| v.as_str())
+            .any(|name| regex.is_match(name.as_bytes())),
+    )
 }
 
 fn search_http_request(
@@ -270,22 +257,22 @@ fn search_http_request(
     args: Vec<Value>,
     method_get: bool,
     method_post: bool,
-) -> Option<Value> {
+) -> Option<bool> {
     let data = ctx.module_data.get::<Cuckoo>()?;
     let http = data.network.as_ref()?.get("http")?.as_array()?;
 
     let mut args = args.into_iter();
     let regex: Regex = args.next()?.try_into().ok()?;
 
-    let found = http
-        .iter()
-        .filter_map(|req| parse_http_request(req))
-        .any(|(uri, method)| {
-            ((method_get && method.eq_ignore_ascii_case("get"))
-                || (method_post && method.eq_ignore_ascii_case("post")))
-                && regex.is_match(uri.as_bytes())
-        });
-    Some(Value::Integer(i64::from(found)))
+    Some(
+        http.iter()
+            .filter_map(|req| parse_http_request(req))
+            .any(|(uri, method)| {
+                ((method_get && method.eq_ignore_ascii_case("get"))
+                    || (method_post && method.eq_ignore_ascii_case("post")))
+                    && regex.is_match(uri.as_bytes())
+            }),
+    )
 }
 
 fn parse_http_request(request: &serde_json::Value) -> Option<(&str, &str)> {
@@ -294,16 +281,50 @@ fn parse_http_request(request: &serde_json::Value) -> Option<(&str, &str)> {
     Some((uri, method))
 }
 
-fn search_tcp_udp(args: Vec<Value>, values: &[serde_json::Value]) -> Option<Value> {
+fn search_http_user_agent(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
+    let data = ctx.module_data.get::<Cuckoo>()?;
+    let http = data.network.as_ref()?.get("http")?.as_array()?;
+
+    let mut args = args.into_iter();
+    let regex: Regex = args.next()?.try_into().ok()?;
+
+    Some(
+        http.iter()
+            .filter_map(|req| req.get("user-agent"))
+            .filter_map(|user_agent| user_agent.as_str())
+            .any(|user_agent| regex.is_match(user_agent.as_bytes())),
+    )
+}
+
+fn search_host(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
+    let data = ctx.module_data.get::<Cuckoo>()?;
+    let hosts = data.network.as_ref()?.get("hosts")?.as_array()?;
+
+    let mut args = args.into_iter();
+    let regex: Regex = args.next()?.try_into().ok()?;
+
+    Some(
+        hosts
+            .iter()
+            .filter_map(|host| host.as_str())
+            .any(|host| regex.is_match(host.as_bytes())),
+    )
+}
+
+fn search_tcp_udp(ctx: &mut EvalContext, args: Vec<Value>, key: &str) -> Option<bool> {
+    let data = ctx.module_data.get::<Cuckoo>()?;
+    let values = data.network.as_ref()?.get(key)?.as_array()?;
+
     let mut args = args.into_iter();
     let regex: Regex = args.next()?.try_into().ok()?;
     let port: i64 = args.next()?.try_into().ok()?;
 
-    let found = values
-        .iter()
-        .filter_map(|req| parse_tcp_udp(req))
-        .any(|(dst, dport)| dport == port && regex.is_match(dst.as_bytes()));
-    Some(Value::Integer(i64::from(found)))
+    Some(
+        values
+            .iter()
+            .filter_map(|req| parse_tcp_udp(req))
+            .any(|(dst, dport)| dport == port && regex.is_match(dst.as_bytes())),
+    )
 }
 
 fn parse_tcp_udp(request: &serde_json::Value) -> Option<(&str, i64)> {
