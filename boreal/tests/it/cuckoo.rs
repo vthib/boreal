@@ -11,21 +11,48 @@ rule test {{
     condition: {cond}
 }}"#,
     ));
-    let mut scanner = checker.scanner().scanner;
+    let mut scanner = checker.scanner();
     if let Some(report) = report {
-        scanner.set_module_data::<Cuckoo>(CuckooData {
+        scanner.scanner.set_module_data::<Cuckoo>(CuckooData {
             json_report: report.to_owned(),
         });
     }
 
-    let res = scanner.scan_mem(b"").unwrap();
-    assert!(!res.matched_rules.is_empty());
+    scanner.check_boreal(b"", true);
+
+    let mut report = report.map(ToOwned::to_owned);
+
+    // Also check for yara
+    if let Some(yara_scanner) = scanner.yara_scanner.as_mut() {
+        let mut results = Vec::new();
+        yara_scanner
+            .scan_mem_callback(b"", |msg| {
+                match msg {
+                    yara::CallbackMsg::ImportModule(mut module) => {
+                        if module.name() == Some(b"cuckoo") {
+                            if let Some(report) = &mut report {
+                                // Safety: report is alive for longer than the scan.
+                                unsafe {
+                                    module
+                                        .set_module_data(report.as_mut_ptr().cast(), report.len());
+                                }
+                            }
+                        }
+                    }
+                    yara::CallbackMsg::RuleMatching(rule) => results.push(rule),
+                    _ => (),
+                };
+                yara::CallbackReturn::Continue
+            })
+            .unwrap();
+        assert!(!results.is_empty(), "comformity test failed for libyara");
+    }
 }
 
 #[test]
 fn test_registry_key_access() {
     // undefined if no report is provided
-    test("not defined cuckoo.registry.key_access(/abc/)", None);
+    test("cuckoo.registry.key_access(/abc/) == 0", None);
 
     // valid cases
     test(
@@ -41,39 +68,32 @@ fn test_registry_key_access() {
 
     // Bad json shape cases
     test(
-        "not defined cuckoo.registry.key_access(/^a/)",
+        "cuckoo.registry.key_access(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": { "keys": "abcde" } } }"#),
     );
     test(
-        "not defined cuckoo.registry.key_access(/^a/)",
+        "cuckoo.registry.key_access(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": { "key": ["abcde"] } } }"#),
     );
     test(
-        "not defined cuckoo.registry.key_access(/^a/)",
+        "cuckoo.registry.key_access(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": {} } }"#),
     );
     test(
-        "not defined cuckoo.registry.key_access(/^a/)",
+        "cuckoo.registry.key_access(/^a/) == 0",
         Some(r#"{ "behavior": {} }"#),
     );
     test(
-        "not defined cuckoo.registry.key_access(/^a/)",
+        "cuckoo.registry.key_access(/^a/) == 0",
         Some(r#"{ "beh": {} }"#),
     );
-    test(
-        "not defined cuckoo.registry.key_access(/^a/)",
-        Some(r#"["beh"]"#),
-    );
-    test(
-        "not defined cuckoo.registry.key_access(/^a/)",
-        Some(r#"{ "invalid": true "#),
-    );
+    test("cuckoo.registry.key_access(/^a/) == 0", Some(r#"["beh"]"#));
 }
 
 #[test]
 fn test_filesystem_file_access() {
     // undefined if no report is provided
-    test("not defined cuckoo.filesystem.file_access(/abc/)", None);
+    test("cuckoo.filesystem.file_access(/abc/) == 0", None);
 
     // valid cases
     test(
@@ -89,39 +109,35 @@ fn test_filesystem_file_access() {
 
     // Bad json shape cases
     test(
-        "not defined cuckoo.filesystem.file_access(/^a/)",
+        "cuckoo.filesystem.file_access(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": { "files": "abcde" } } }"#),
     );
     test(
-        "not defined cuckoo.filesystem.file_access(/^a/)",
+        "cuckoo.filesystem.file_access(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": { "file": ["abcde"] } } }"#),
     );
     test(
-        "not defined cuckoo.filesystem.file_access(/^a/)",
+        "cuckoo.filesystem.file_access(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": {} } }"#),
     );
     test(
-        "not defined cuckoo.filesystem.file_access(/^a/)",
+        "cuckoo.filesystem.file_access(/^a/) == 0",
         Some(r#"{ "behavior": {} }"#),
     );
     test(
-        "not defined cuckoo.filesystem.file_access(/^a/)",
+        "cuckoo.filesystem.file_access(/^a/) == 0",
         Some(r#"{ "beh": {} }"#),
     );
     test(
-        "not defined cuckoo.filesystem.file_access(/^a/)",
+        "cuckoo.filesystem.file_access(/^a/) == 0",
         Some(r#"["beh"]"#),
-    );
-    test(
-        "not defined cuckoo.filesystem.file_access(/^a/)",
-        Some(r#"{ "invalid": true "#),
     );
 }
 
 #[test]
 fn test_sync_mutex() {
     // undefined if no report is provided
-    test("not defined cuckoo.sync.mutex(/abc/)", None);
+    test("cuckoo.sync.mutex(/abc/) == 0", None);
 
     // valid case
     test(
@@ -137,36 +153,29 @@ fn test_sync_mutex() {
 
     // Bad json shape cases
     test(
-        "not defined cuckoo.sync.mutex(/^a/)",
+        "cuckoo.sync.mutex(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": { "mutexes": "abcde" } } }"#),
     );
     test(
-        "not defined cuckoo.sync.mutex(/^a/)",
+        "cuckoo.sync.mutex(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": { "mutex": ["abcde"] } } }"#),
     );
     test(
-        "not defined cuckoo.sync.mutex(/^a/)",
+        "cuckoo.sync.mutex(/^a/) == 0",
         Some(r#"{ "behavior": { "summary": {} } }"#),
     );
     test(
-        "not defined cuckoo.sync.mutex(/^a/)",
+        "cuckoo.sync.mutex(/^a/) == 0",
         Some(r#"{ "behavior": {} }"#),
     );
-    test(
-        "not defined cuckoo.sync.mutex(/^a/)",
-        Some(r#"{ "beh": {} }"#),
-    );
-    test("not defined cuckoo.sync.mutex(/^a/)", Some(r#"["beh"]"#));
-    test(
-        "not defined cuckoo.sync.mutex(/^a/)",
-        Some(r#"{ "invalid": true "#),
-    );
+    test("cuckoo.sync.mutex(/^a/) == 0", Some(r#"{ "beh": {} }"#));
+    test("cuckoo.sync.mutex(/^a/) == 0", Some(r#"["beh"]"#));
 }
 
 #[test]
 fn test_network_http_get() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.http_get(/abc/)", None);
+    test("cuckoo.network.http_get(/abc/) == 0", None);
 
     // valid cases
     test(
@@ -200,7 +209,7 @@ fn test_network_http_get() {
 #[test]
 fn test_network_http_post() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.http_post(/abc/)", None);
+    test("cuckoo.network.http_post(/abc/) == 0", None);
 
     // valid cases
     test(
@@ -234,7 +243,7 @@ fn test_network_http_post() {
 #[test]
 fn test_network_http_request() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.http_request(/abc/)", None);
+    test("cuckoo.network.http_request(/abc/) == 0", None);
 
     // valid cases
     test(
@@ -290,59 +299,50 @@ fn test_network_http_request() {
 
 #[test]
 fn test_network_http_request_bad_shapes() {
-    let false_cond = r#"
+    let cond = r#"
         cuckoo.network.http_get(/^a/) == 0 and
         cuckoo.network.http_post(/^a/) == 0 and
         cuckoo.network.http_request(/^a/) == 0
     "#;
-    let not_defined_cond = r#"
-        not defined cuckoo.network.http_get(/^a/) and
-        not defined cuckoo.network.http_post(/^a/) and
-        not defined cuckoo.network.http_request(/^a/)
-    "#;
 
     // test bad json shape cases
     test(
-        false_cond,
+        cond,
         Some(r#"{ "network": { "http": [{ "ura": "abcdef", "method": "get" }] } }"#),
     );
     test(
-        false_cond,
+        cond,
         Some(r#"{ "network": { "http": [{ "uri": "abcdef", "metho": "get" }] } }"#),
     );
     test(
-        false_cond,
+        cond,
         Some(r#"{ "network": { "http": [{ "uri": "abcdef", "method": true }] } }"#),
     );
     test(
-        false_cond,
+        cond,
         Some(r#"{ "network": { "http": [{ "uri": true, "method": "get" }] } }"#),
     );
     test(
-        not_defined_cond,
+        cond,
         Some(r#"{ "network": { "http": { "uri": "abc", "method": "get" } } }"#),
     );
 
     test(
-        not_defined_cond,
+        cond,
         Some(r#"{ "network": { "htt": [{ "uri": "abc", "method": "get" }] } }"#),
     );
-    test(not_defined_cond, Some(r#"{ "network": true }"#));
+    test(cond, Some(r#"{ "network": true }"#));
     test(
-        not_defined_cond,
+        cond,
         Some(r#"{ "net": { "http": [{ "uri": "abc", "method": "get" }] } }"#),
     );
-    test(
-        not_defined_cond,
-        Some(r#"[{ "uri": "abc", "method": "get" }]"#),
-    );
-    test(not_defined_cond, Some(r#"{ "invalid": true "#));
+    test(cond, Some(r#"[{ "uri": "abc", "method": "get" }]"#));
 }
 
 #[test]
 fn test_network_http_user_agent() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.http_user_agent(/abc/)", None);
+    test("cuckoo.network.http_user_agent(/abc/) == 0", None);
 
     // valid cases
     test(
@@ -388,31 +388,27 @@ fn test_network_http_user_agent() {
         Some(r#"{ "network": { "http": [ { "user-agent": false } ] } }"#),
     );
     test(
-        "not defined cuckoo.network.http_user_agent(/^a/)",
+        "cuckoo.network.http_user_agent(/^a/) == 0",
         Some(r#"{ "network": { "htt": [{ "user-agent": "abc" }] } }"#),
     );
     test(
-        "not defined cuckoo.network.http_user_agent(/^a/)",
+        "cuckoo.network.http_user_agent(/^a/) == 0",
         Some(r#"{ "network": { "http": "abc" } }"#),
     );
     test(
-        "not defined cuckoo.network.http_user_agent(/^a/)",
+        "cuckoo.network.http_user_agent(/^a/) == 0",
         Some(r#"{ "net": { "http": [{ "user-agent": "abc" }] } }"#),
     );
     test(
-        "not defined cuckoo.network.http_user_agent(/^a/)",
+        "cuckoo.network.http_user_agent(/^a/) == 0",
         Some(r#"[{ "user-agent": "abc" }]"#),
-    );
-    test(
-        "not defined cuckoo.network.http_user_agent(/^a/)",
-        Some(r#"{ "invalid": true "#),
     );
 }
 
 #[test]
 fn test_network_host() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.host(/abc/)", None);
+    test("cuckoo.network.host(/abc/) == 0", None);
 
     // valid case
     test(
@@ -428,32 +424,25 @@ fn test_network_host() {
 
     // Bad json shape cases
     test(
-        "not defined cuckoo.network.host(/^a/)",
+        "cuckoo.network.host(/^a/) == 0",
         Some(r#"{ "network": { "hosts": "abcde" } }"#),
     );
     test(
-        "not defined cuckoo.network.host(/^a/)",
+        "cuckoo.network.host(/^a/) == 0",
         Some(r#"{ "network": { "host": ["abcde"] } }"#),
     );
     test(
-        "not defined cuckoo.network.host(/^a/)",
+        "cuckoo.network.host(/^a/) == 0",
         Some(r#"{ "network": {} }"#),
     );
-    test(
-        "not defined cuckoo.network.host(/^a/)",
-        Some(r#"{ "net": {} }"#),
-    );
-    test("not defined cuckoo.network.host(/^a/)", Some(r#"["net"]"#));
-    test(
-        "not defined cuckoo.network.host(/^a/)",
-        Some(r#"{ "invalid": true "#),
-    );
+    test("cuckoo.network.host(/^a/) == 0", Some(r#"{ "net": {} }"#));
+    test("cuckoo.network.host(/^a/) == 0", Some(r#"["net"]"#));
 }
 
 #[test]
 fn test_network_tcp() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.tcp(/abc/, 23)", None);
+    test("cuckoo.network.tcp(/abc/, 23) == 0", None);
 
     // valid cases
     test(
@@ -505,35 +494,31 @@ fn test_network_tcp() {
         Some(r#"{ "network": { "tcp": ["abc"] } }"#),
     );
     test(
-        "not defined cuckoo.network.tcp(/^a/, 23)",
+        "cuckoo.network.tcp(/^a/, 23) == 0",
         Some(r#"{ "network": { "tc": [{ "dst": "abc", "dport": 23 }] } }"#),
     );
     test(
-        "not defined cuckoo.network.tcp(/^a/, 23)",
+        "cuckoo.network.tcp(/^a/, 23) == 0",
         Some(r#"{ "network": { "tcp": { "dst": "abc", "dport": 23 } } }"#),
     );
     test(
-        "not defined cuckoo.network.tcp(/^a/, 23)",
+        "cuckoo.network.tcp(/^a/, 23) == 0",
         Some(r#"{ "network": { "tcp": "abc" } }"#),
     );
     test(
-        "not defined cuckoo.network.tcp(/^a/, 23)",
+        "cuckoo.network.tcp(/^a/, 23) == 0",
         Some(r#"{ "net": [{ "tcp": { "dst": "abc", "dport": 23 } }] }"#),
     );
     test(
-        "not defined cuckoo.network.tcp(/^a/, 23)",
+        "cuckoo.network.tcp(/^a/, 23) == 0",
         Some(r#"[{ "dst": "abc", "dport": 23 }]"#),
-    );
-    test(
-        "not defined cuckoo.network.tcp(/^a/, 23)",
-        Some(r#"{ "invalid": true "#),
     );
 }
 
 #[test]
 fn test_network_udp() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.udp(/abc/, 23)", None);
+    test("cuckoo.network.udp(/abc/, 23) == 0", None);
 
     // valid cases
     test(
@@ -587,35 +572,31 @@ fn test_network_udp() {
         Some(r#"{ "network": { "udp": ["abc"] } }"#),
     );
     test(
-        "not defined cuckoo.network.udp(/^a/, 23)",
+        "cuckoo.network.udp(/^a/, 23) == 0",
         Some(r#"{ "network": { "ud": [{ "dst": "abc", "dport": 23 }] } }"#),
     );
     test(
-        "not defined cuckoo.network.udp(/^a/, 23)",
-        Some(r#"{ "network": { "udp": { "dst": "abc", "dport": 23 } }] }"#),
+        "cuckoo.network.udp(/^a/, 23) == 0",
+        Some(r#"{ "network": { "udp": { "dst": "abc", "dport": 23 } } }"#),
     );
     test(
-        "not defined cuckoo.network.udp(/^a/, 23)",
+        "cuckoo.network.udp(/^a/, 23) == 0",
         Some(r#"{ "network": { "udp": "abc" } }"#),
     );
     test(
-        "not defined cuckoo.network.udp(/^a/, 23)",
+        "cuckoo.network.udp(/^a/, 23) == 0",
         Some(r#"{ "net": [{ "udp": { "dst": "abc", "dport": 23 } }] }"#),
     );
     test(
-        "not defined cuckoo.network.udp(/^a/, 23)",
+        "cuckoo.network.udp(/^a/, 23) == 0",
         Some(r#"[{ "dst": "abc", "dport": 23 }]"#),
-    );
-    test(
-        "not defined cuckoo.network.udp(/^a/, 23)",
-        Some(r#"{ "invalid": true "#),
     );
 }
 
 #[test]
 fn test_network_dns_lookup() {
     // undefined if no report is provided
-    test("not defined cuckoo.network.dns_lookup(/abc/)", None);
+    test("cuckoo.network.dns_lookup(/abc/) == 0", None);
 
     // valid cases
     test(
@@ -664,7 +645,7 @@ fn test_network_dns_lookup() {
         ),
     );
     test(
-        "not defined cuckoo.network.dns_lookup(/^a/)",
+        "cuckoo.network.dns_lookup(/^a/) == 0",
         Some(
             r#"{
             "network": { "dom": [
@@ -685,27 +666,43 @@ fn test_network_dns_lookup() {
 
     // bad shapes
     test(
-        "not defined cuckoo.network.dns_lookup(/^a/)",
+        "cuckoo.network.dns_lookup(/^a/) == 0",
         Some(r#"{ "network": { "domains": false } }"#),
     );
     test(
-        "not defined cuckoo.network.dns_lookup(/^a/)",
+        "cuckoo.network.dns_lookup(/^a/) == 0",
         Some(r#"{ "network": { "dns": false } }"#),
     );
     test(
-        "not defined cuckoo.network.dns_lookup(/^a/)",
+        "cuckoo.network.dns_lookup(/^a/) == 0",
         Some(r#"{ "network": true"#),
     );
     test(
-        "not defined cuckoo.network.dns_lookup(/^a/)",
+        "cuckoo.network.dns_lookup(/^a/) == 0",
         Some(r#"{ "net": { "domains": [{ "domain": "abc" }] } }"#),
     );
     test(
-        "not defined cuckoo.network.dns_lookup(/^a/)",
+        "cuckoo.network.dns_lookup(/^a/) == 0",
         Some(r#"[{ "domain": "abc" }]"#),
     );
-    test(
-        "not defined cuckoo.network.dns_lookup(/^a/)",
-        Some(r#"{ "invalid": true "#),
+}
+
+#[test]
+fn test_invalid_data() {
+    // YARA makes the scan fail if the module data is not parsable.
+    // boreal currently does not do this, should we?
+    let checker = Checker::new(
+        r#"
+import "cuckoo"
+
+rule test {
+    condition: cuckoo.network.dns_lookup(/^a/) == 0
+}"#,
     );
+    let mut scanner = checker.scanner();
+    scanner.scanner.set_module_data::<Cuckoo>(CuckooData {
+        json_report: r#"{ "invalid": true "#.to_owned(),
+    });
+
+    scanner.check_boreal(b"", true);
 }

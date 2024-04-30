@@ -581,7 +581,7 @@ impl FragmentedMemory for FragmentedSlices<'_, '_> {
 
 pub struct Scanner<'a> {
     pub scanner: boreal::Scanner,
-    yara_scanner: Option<yara::Scanner<'a>>,
+    pub yara_scanner: Option<yara::Scanner<'a>>,
 }
 
 macro_rules! define_symbol_scanner_method {
