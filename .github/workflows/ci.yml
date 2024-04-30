@@ -60,7 +60,8 @@ jobs:
       - name: Run optional module tests
         if: ${{ matrix.build == 'linux' }}
         run: |
-          cargo test --features magic --target=${{matrix.target}}
+          sudo apt install libjansson-dev
+          cargo test --features magic,cuckoo --target=${{matrix.target}}
 
     strategy:
       fail-fast: false
@@ -180,6 +181,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - name: Install dependencies
+        run: sudo apt install libjansson-dev
       - run: cargo clippy --tests --all-features
 
   rustmt:
@@ -211,6 +214,9 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
+      - name: Install dependencies
+        run: sudo apt install libjansson-dev
+
       - name: Generate code coverage
         run: |
           # Export cargo llvm-cov env stuff so that we can run "cargo test"
@@ -218,10 +224,10 @@ jobs:
           source <(cargo llvm-cov show-env --export-prefix)
           cargo build -p boreal-test-helpers
           # Run the normal tests
-          cargo test --features magic,authenticode
+          cargo test --features magic,authenticode,cuckoo
           # And run the super user tests
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sudo -E" cargo \
-            test --features magic,authenticode -- --ignored
+            test --features magic,authenticode,cuckoo -- --ignored
           # Finally, generate the report
           cargo llvm-cov report --lcov --output-path lcov.info \
             --ignore-filename-regex boreal-test-helpers/src/main.rs
@@ -255,6 +261,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: sudo apt install libjansson-dev
       - name: Build test helpers
         run: |
           cd boreal-test-helpers
