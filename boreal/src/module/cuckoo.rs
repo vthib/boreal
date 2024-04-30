@@ -227,7 +227,15 @@ fn search_dns(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
     Some(
         values
             .iter()
-            .filter_map(|value| value.get(host_field_name))
+            .filter_map(|value| {
+                // For some reason, YARA parses the "ip" key even though it does not use it.
+                // This means it considers objects without this key as invalid and will not
+                // consider them.
+                // It's unclear if this is voluntary or not, but align with this behavior
+                // for now.
+                let _ip = value.get("ip")?;
+                value.get(host_field_name)
+            })
             .filter_map(|host| host.as_str())
             .any(|host| regex.is_match(host.as_bytes())),
     )

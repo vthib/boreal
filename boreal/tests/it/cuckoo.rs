@@ -604,8 +604,8 @@ fn test_network_dns_lookup() {
         Some(
             r#"{
             "network": { "domains": [
-                { "domain": "gheif" },
-                { "domain": "abcde" }
+                { "ip": "a", "domain": "gheif" },
+                { "ip": "a", "domain": "abcde" }
             ]}
         }"#,
         ),
@@ -615,8 +615,8 @@ fn test_network_dns_lookup() {
         Some(
             r#"{
             "network": { "dns": [
-                { "hostname": "gheif" },
-                { "hostname": "abcde" }
+                { "ip": "a", "hostname": "gheif" },
+                { "ip": "a", "hostname": "abcde" }
             ]}
         }"#,
         ),
@@ -627,8 +627,8 @@ fn test_network_dns_lookup() {
         Some(
             r#"{
             "network": { "domains": [
-                { "domain": "gheif" },
-                { "hostname": "abcde" }
+                { "ip": "a", "domain": "gheif" },
+                { "ip": "a", "hostname": "abcde" }
             ] }
         }"#,
         ),
@@ -638,8 +638,8 @@ fn test_network_dns_lookup() {
         Some(
             r#"{
             "network": { "dns": [
-                { "hostname": "gheif" },
-                { "domain": "abcde" }
+                { "ip": "a", "hostname": "gheif" },
+                { "ip": "a", "domain": "abcde" }
             ] }
         }"#,
         ),
@@ -649,8 +649,28 @@ fn test_network_dns_lookup() {
         Some(
             r#"{
             "network": { "dom": [
-                { "hostname": "abcde" },
+                { "ip": "a", "hostname": "abcde" },
+                { "ip": "a", "domain": "abcde" }
+            ] }
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "domains": [
                 { "domain": "abcde" }
+            ] }
+        }"#,
+        ),
+    );
+    test(
+        "cuckoo.network.dns_lookup(/^a/) == 0",
+        Some(
+            r#"{
+            "network": { "dns": [
+                { "hostname": "abcde" }
             ] }
         }"#,
         ),
@@ -675,7 +695,7 @@ fn test_network_dns_lookup() {
     );
     test(
         "cuckoo.network.dns_lookup(/^a/) == 0",
-        Some(r#"{ "network": true"#),
+        Some(r#"{ "network": true }"#),
     );
     test(
         "cuckoo.network.dns_lookup(/^a/) == 0",
