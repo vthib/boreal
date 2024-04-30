@@ -19,7 +19,7 @@ The main goals of the project are:
 
 ## Features
 
-* Full compatibility with YARA 4.5 and [most modules](#modules). Any existing rule can be used as is.
+* Full compatibility with YARA 4.5 and all [official modules](#modules). Any existing rule can be used as is.
 * Avoid scanning for strings when not required, greatly reducing execution time on carefully crafted
   rules. See [no scan optimization](#no-scan-optimization).
 * Protection against any untrusted inputs, be it rules or scanned bytes. Ill-crafted rules or inputs should never
@@ -122,10 +122,7 @@ free. If however someone can provide a valid use-case, this difference can be re
 - [x] console
 - [x] magic (with the _magic_ feature)
 - [x] dex (with the _object_ feature)
-
-Modules not yet supported:
-
-- [ ] cuckoo
+- [x] cuckoo (with the _cuckoo_ feature)
 
 ## Pay for what you use
 
@@ -164,13 +161,7 @@ not require scanning but does, please report it.
 A few features that are available in YARA are still missing. If you are looking into using
 boreal in place of YARA, some of those might be blockers for you:
 
-#### Missing modules
-
-See the module list [above](#modules). This will greatly depend on declared interest,
-as I'm unsure how often those are used. If you would like to use boreal but a module that you
-need is not implemented, please create an issue.
-
-#### Saving and loading compiled rules
+### Saving and loading compiled rules
 
 I am not quite sure what are the use-cases for this YARA feature, as the compilation of YARA rules
 is not that time consuming. Please create an issue with a use-case if this is a feature you would
@@ -192,6 +183,8 @@ of all signatures, imports, exports, resources, etc on every scan.
 - `process`: adds the process scanning API.
 - `memmap`: adds APIs to scan files using memory maps.
 - `profiling`: compute statistics during compilation and evaluation.
+- `magic`: enable the `magic` module.
+- `cuckoo`: enable the `cuckoo` module.
 
 By default, `hash`, `object`, `process` and `memmap` are enabled,
 `authenticode` and `profiling` are not.
