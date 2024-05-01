@@ -5,6 +5,29 @@ use crate::regex::Regex;
 use super::{EvalContext, Module, ModuleData, StaticValue, Type, Value};
 
 /// `cuckoo` module.
+///
+/// To use the module, the json report must be provided before the scan:
+///
+/// ```
+/// use boreal::module::{Cuckoo, CuckooData};
+///
+/// let mut compiler = boreal::Compiler::new();
+/// compiler.add_module(Cuckoo);
+/// compiler.add_rules_str(r#"
+/// import "cuckoo"
+///
+/// rule a {
+///     condition: cuckoo.network.host(/crates.io/)
+/// }"#).unwrap();
+/// let mut scanner = compiler.into_scanner();
+///
+/// let report = r#"{ "network": { "hosts": ["crates.io"] } }"#;
+/// let cuckoo_data = CuckooData::from_json_report(report).unwrap();
+/// scanner.set_module_data::<Cuckoo>(cuckoo_data);
+///
+/// let result = scanner.scan_mem(b"").unwrap();
+/// assert_eq!(result.matched_rules.len(), 1);
+/// ```
 #[derive(Debug)]
 pub struct Cuckoo;
 
