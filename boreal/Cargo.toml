@@ -107,4 +107,4 @@ tempfile = "3.10"
 yara = { version = "0.26", features = ["vendored"] }
 
 [package.metadata.docs.rs]
-features = ["authenticode", "memmap"]
+features = ["authenticode", "memmap", "magic", "cuckoo"]
