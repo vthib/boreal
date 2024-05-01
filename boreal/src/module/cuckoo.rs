@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::regex::Regex;
 
-use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value};
+use super::{EvalContext, Module, ModuleData, StaticValue, Type, Value};
 
 /// `cuckoo` module.
 #[derive(Debug)]
@@ -116,25 +116,6 @@ impl Module for Cuckoo {
         ]
         .into()
     }
-
-    fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
-        let Some(user_data) = data_map.get_user_data::<Self>() else {
-            return;
-        };
-
-        let Ok(mut report) = serde_json::from_str::<serde_json::Value>(&user_data.json_report)
-        else {
-            return;
-        };
-
-        let network = report.get_mut("network").map(serde_json::Value::take);
-        let summary = report
-            .get_mut("behavior")
-            .and_then(|v| v.get_mut("summary"))
-            .map(serde_json::Value::take);
-
-        data_map.insert::<Self>(Data { network, summary });
-    }
 }
 
 /// Data used by the cuckoo module.
@@ -142,11 +123,6 @@ impl Module for Cuckoo {
 /// This data must be provided by a call to
 /// [`Scanner::set_module_data`](crate::scanner::Scanner::set_module_data).
 pub struct CuckooData {
-    /// The Cuckoo report in JSON format.
-    pub json_report: String,
-}
-
-pub struct Data {
     /// The "network" key in the parsed json report.
     network: Option<serde_json::Value>,
 
@@ -154,8 +130,25 @@ pub struct Data {
     summary: Option<serde_json::Value>,
 }
 
+impl CuckooData {
+    /// Build the data needed by the cuckoo module from a json report.
+    ///
+    /// Returns None if the report could not be parsed.
+    pub fn from_json_report(report: &str) -> Option<Self> {
+        let mut report = serde_json::from_str::<serde_json::Value>(report).ok()?;
+
+        let network = report.get_mut("network").map(serde_json::Value::take);
+        let summary = report
+            .get_mut("behavior")
+            .and_then(|v| v.get_mut("summary"))
+            .map(serde_json::Value::take);
+
+        Some(Self { network, summary })
+    }
+}
+
 impl ModuleData for Cuckoo {
-    type PrivateData = Data;
+    type PrivateData = ();
     type UserData = CuckooData;
 }
 
@@ -214,7 +207,7 @@ fn opt_bool_to_value(v: Option<bool>) -> Option<Value> {
 }
 
 fn search_dns(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
-    let data = ctx.module_data.get::<Cuckoo>()?;
+    let data = ctx.module_data.get_user_data::<Cuckoo>()?;
     let network = data.network.as_ref()?;
     let (values, host_field_name) = match network.get("domains") {
         Some(v) => (v.as_array()?, "domain"),
@@ -246,7 +239,7 @@ fn regex_matches_summary_string_array(
     args: Vec<Value>,
     key_name: &str,
 ) -> Option<bool> {
-    let data = ctx.module_data.get::<Cuckoo>()?;
+    let data = ctx.module_data.get_user_data::<Cuckoo>()?;
     let values = data.summary.as_ref()?.get(key_name)?.as_array()?;
 
     let mut args = args.into_iter();
@@ -266,7 +259,7 @@ fn search_http_request(
     method_get: bool,
     method_post: bool,
 ) -> Option<bool> {
-    let data = ctx.module_data.get::<Cuckoo>()?;
+    let data = ctx.module_data.get_user_data::<Cuckoo>()?;
     let http = data.network.as_ref()?.get("http")?.as_array()?;
 
     let mut args = args.into_iter();
@@ -290,7 +283,7 @@ fn parse_http_request(request: &serde_json::Value) -> Option<(&str, &str)> {
 }
 
 fn search_http_user_agent(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
-    let data = ctx.module_data.get::<Cuckoo>()?;
+    let data = ctx.module_data.get_user_data::<Cuckoo>()?;
     let http = data.network.as_ref()?.get("http")?.as_array()?;
 
     let mut args = args.into_iter();
@@ -305,7 +298,7 @@ fn search_http_user_agent(ctx: &mut EvalContext, args: Vec<Value>) -> Option<boo
 }
 
 fn search_host(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
-    let data = ctx.module_data.get::<Cuckoo>()?;
+    let data = ctx.module_data.get_user_data::<Cuckoo>()?;
     let hosts = data.network.as_ref()?.get("hosts")?.as_array()?;
 
     let mut args = args.into_iter();
@@ -320,7 +313,7 @@ fn search_host(ctx: &mut EvalContext, args: Vec<Value>) -> Option<bool> {
 }
 
 fn search_tcp_udp(ctx: &mut EvalContext, args: Vec<Value>, key: &str) -> Option<bool> {
-    let data = ctx.module_data.get::<Cuckoo>()?;
+    let data = ctx.module_data.get_user_data::<Cuckoo>()?;
     let values = data.network.as_ref()?.get(key)?.as_array()?;
 
     let mut args = args.into_iter();

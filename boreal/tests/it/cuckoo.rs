@@ -13,9 +13,9 @@ rule test {{
     ));
     let mut scanner = checker.scanner();
     if let Some(report) = report {
-        scanner.scanner.set_module_data::<Cuckoo>(CuckooData {
-            json_report: report.to_owned(),
-        });
+        scanner
+            .scanner
+            .set_module_data::<Cuckoo>(CuckooData::from_json_report(report).unwrap());
     }
 
     scanner.check_boreal(b"", true);
@@ -710,19 +710,6 @@ fn test_network_dns_lookup() {
 #[test]
 fn test_invalid_data() {
     // YARA makes the scan fail if the module data is not parsable.
-    // boreal currently does not do this, should we?
-    let checker = Checker::new(
-        r#"
-import "cuckoo"
-
-rule test {
-    condition: cuckoo.network.dns_lookup(/^a/) == 0
-}"#,
-    );
-    let mut scanner = checker.scanner();
-    scanner.scanner.set_module_data::<Cuckoo>(CuckooData {
-        json_report: r#"{ "invalid": true "#.to_owned(),
-    });
-
-    scanner.check_boreal(b"", true);
+    // This is also guaranteed in boreal by the fact a CuckooData object cannot be built.
+    assert!(CuckooData::from_json_report(r#"{ "invalid": true "#).is_none());
 }
