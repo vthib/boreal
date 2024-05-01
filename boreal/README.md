@@ -109,14 +109,14 @@ free. If however someone can provide a valid use-case, this difference can be re
 
 #### Modules
 
-- [x] elf
+- [x] elf (with the _object_ feature)
 - [x] hash (with the _hash_ feature)
 - [x] math
 - [x] macho (with the _object_ feature)
 - [x] pe (with the _object_ feature)
   - `pe.signatures` is behind the _authenticode_ feature
   - `pe.imphash()` is behind the _hash_ feature
-- [x] dotnet
+- [x] dotnet (with the _object_ feature)
 - [x] string
 - [x] time
 - [x] console
@@ -156,26 +156,15 @@ There are still some work to do on this. For example, the common "$a at X" rule 
 properly handle and will require a scan for the string. If you think you have a rule that should
 not require scanning but does, please report it.
 
-## Missing Features
+## Save and load compiled rules
 
-A few features that are available in YARA are still missing. If you are looking into using
-boreal in place of YARA, some of those might be blockers for you:
-
-### Saving and loading compiled rules
-
-I am not quite sure what are the use-cases for this YARA feature, as the compilation of YARA rules
-is not that time consuming. Please create an issue with a use-case if this is a feature you would
-need.
-
-## Other optimizations
-
-Another optimization that is planned but not ready yet include slimmed down modules, where for
-example depending on the `pe` module to only use `pe.is_dll()` should not trigger the computation
-of all signatures, imports, exports, resources, etc on every scan.
+The only YARA feature that have not been implemented is the ability to save and load compiled
+rules, as I am not quite sure what are the use-cases for this feature.
+Please create an issue with a use-case if this is a feature you would need.
 
 ## crate feature flags
 
-- `object`: enables the `elf`, `macho`, `pe` and `object` module.
+- `object`: enables the `elf`, `macho`, `pe`, `dotnet` and `dex` modules.
 - `hash`: enables the `hash` module, as well as the `pe.imphash()` function if the `object`
   feature is also enabled.
 - `authenticode`: this enables the `signatures` part of the `pe` module. This adds
