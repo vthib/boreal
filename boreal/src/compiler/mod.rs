@@ -35,6 +35,9 @@ pub struct Compiler {
     /// List of compiled variables.
     variables: Vec<variable::Variable>,
 
+    /// Number of variables used by global rules.
+    nb_global_rules_variables: usize,
+
     /// Default namespace, see [`Namespace`]
     default_namespace: Namespace,
 
@@ -462,13 +465,23 @@ impl Compiler {
                 if is_global {
                     let _r = namespace.rules_indexes.insert(rule_name, None);
                     self.global_rules.push(rule);
+
+                    // Insert the variables at the right place in the vector: after the already
+                    // compiled global rules, but before the normal rules.
+                    // This is ok to do since there is no reference to variable indexes anywhere in
+                    // compiled rules.
+                    let nb_vars = variables.len();
+                    let index = self.nb_global_rules_variables;
+
+                    let _r = self.variables.splice(index..index, variables);
+                    self.nb_global_rules_variables += nb_vars;
                 } else {
                     let _r = namespace
                         .rules_indexes
                         .insert(rule_name, Some(self.rules.len()));
                     self.rules.push(rule);
+                    self.variables.extend(variables);
                 }
-                self.variables.extend(variables);
             }
         }
 

@@ -1199,16 +1199,17 @@ global rule g1 {
     condition: all of them
 }
 
-private global rule g2 {
-    strings:
-        $ = "g2"
-    condition: all of them
-}
-
 rule foo {
     strings:
         $ = "foo"
     condition: all of them
+}
+
+private global rule g2 {
+    strings:
+        $ = "g2"
+        $ = "g3"
+    condition: any of them
 }
 
 rule bar {
@@ -1229,7 +1230,7 @@ rule bar {
 
     // Matching both globals work
     checker.check_rule_matches(b"g1 foo g2", &["default:g1", "default:foo", "default:bar"]);
-    checker.check_rule_matches(b"g1 g2", &["default:g1", "default:bar"]);
+    checker.check_rule_matches(b"g1 g3", &["default:g1", "default:bar"]);
 }
 
 #[test]
