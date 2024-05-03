@@ -588,7 +588,7 @@ rule a {
 
     checker.check_fragmented(&[(1000, None)], false);
 
-    let mut checker = Checker::new_without_yara(
+    let mut checker = Checker::new(
         r#"
 import "math"
 rule a {
@@ -599,7 +599,6 @@ rule a {
     checker.check_fragmented(&[(0, None), (1000, Some(b"\x12\x20"))], true);
     checker.check_fragmented(&[(1000, None)], false);
     checker.check_fragmented(&[(1000, Some(b"\x12")), (1001, None)], false);
-    // FIXME: yara fails this test, this is a bug.
     checker.check_fragmented(
         &[(1000, Some(b"\x12")), (1001, Some(b"\x20")), (1002, None)],
         true,
