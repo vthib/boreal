@@ -30,9 +30,10 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
     assert!(compiler.define_symbol("sym_bool", true));
     assert!(compiler.define_symbol("sym_bytes", "keyboard"));
 
+    let ns = Namespace::default();
     let mut rule_compiler = RuleCompiler::new(
         &rule.variables,
-        &compiler.default_namespace,
+        &ns,
         &compiler.external_symbols,
         &compiler.params,
     )

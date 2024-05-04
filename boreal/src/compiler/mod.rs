@@ -24,7 +24,7 @@ pub(crate) mod variable;
 use crate::{statistics, Scanner};
 
 /// Object used to compile rules.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Compiler {
     /// List of compiled rules.
     rules: Vec<rule::Rule>,
@@ -38,11 +38,15 @@ pub struct Compiler {
     /// Number of variables used by global rules.
     nb_global_rules_variables: usize,
 
-    /// Default namespace, see [`Namespace`]
-    default_namespace: Namespace,
+    /// List of namespaces, see [`Namespace`].
+    ///
+    /// This list always contains at least one namespace: the default one,
+    /// at index 0. Other namespaces are added when rules are added in the
+    /// non default namespace.
+    namespaces: Vec<Namespace>,
 
-    /// Other namespaces, accessible by their names.
-    namespaces: HashMap<String, Namespace>,
+    /// Map from the namespace name to its index in the `namespaces` list.
+    namespaces_indexes: HashMap<String, usize>,
 
     /// Modules declared in the compiler, added with [`Compiler::add_module`].
     ///
@@ -84,6 +88,24 @@ struct ImportedModule {
     /// Index of the module in the imported vec, used to access the module dynamic values during
     /// scanning.
     module_index: usize,
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self {
+            namespaces: vec![Namespace::default()],
+
+            rules: Vec::new(),
+            global_rules: Vec::new(),
+            variables: Vec::new(),
+            nb_global_rules_variables: 0,
+            namespaces_indexes: HashMap::new(),
+            available_modules: HashMap::new(),
+            imported_modules: Vec::new(),
+            external_symbols: Vec::new(),
+            params: CompilerParams::default(),
+        }
+    }
 }
 
 impl Compiler {
@@ -319,16 +341,24 @@ impl Compiler {
         parsed_contents: &str,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
-        let namespace = match namespace_name {
-            Some(name) => self
-                .namespaces
-                .entry(name.to_string())
-                .or_insert_with(|| Namespace {
-                    name: Some(name.to_string()),
-                    ..Namespace::default()
-                }),
-            None => &mut self.default_namespace,
+        let ns_index = match namespace_name {
+            Some(name) => match self.namespaces_indexes.entry(name.to_string()) {
+                Entry::Occupied(o) => *o.get(),
+                Entry::Vacant(v) => {
+                    // New namespace: insert it and save its index in the namespaces_indexes
+                    // map.
+                    let idx = self.namespaces.len();
+                    let _r = v.insert(idx);
+                    self.namespaces.push(Namespace {
+                        name: Some(name.to_string()),
+                        ..Namespace::default()
+                    });
+                    idx
+                }
+            },
+            None => 0,
         };
+        let namespace = &mut self.namespaces[ns_index];
 
         match component {
             YaraFileComponent::Include(include) => {
