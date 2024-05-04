@@ -18,10 +18,11 @@ pub(crate) struct Rule {
     /// Name of the rule.
     pub(crate) name: String,
 
-    /// Namespace containing the rule.
+    /// Index of the namespace containing the rule.
     ///
-    /// [`None`] if in the default namespace.
-    pub(crate) namespace: Option<String>,
+    /// This refers to the [`super::Compiler::namespaces`] or
+    /// [`crate::Scanner::namespaces`] list.
+    pub(crate) namespace_index: usize,
 
     /// Tags associated with the rule.
     pub(crate) tags: Vec<String>,
@@ -203,6 +204,7 @@ impl<'a> RuleCompiler<'a> {
 pub(super) fn compile_rule(
     rule: boreal_parser::rule::Rule,
     namespace: &Namespace,
+    namespace_index: usize,
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
     parsed_contents: &str,
@@ -243,7 +245,7 @@ pub(super) fn compile_rule(
     Ok(CompiledRule {
         rule: Rule {
             name: rule.name,
-            namespace: namespace.name.clone(),
+            namespace_index,
             tags: rule.tags.into_iter().map(|v| v.tag).collect(),
             metadatas: rule.metadatas,
             nb_variables: variables.len(),
@@ -286,7 +288,7 @@ mod tests {
         });
         let build_rule = || Rule {
             name: "a".to_owned(),
-            namespace: None,
+            namespace_index: 0,
             tags: Vec::new(),
             metadatas: Vec::new(),
             nb_variables: 0,

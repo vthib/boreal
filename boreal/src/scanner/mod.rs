@@ -106,6 +106,7 @@ impl Scanner {
         variables: Vec<Variable>,
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
+        namespaces: Vec<Option<String>>,
     ) -> Self {
         let ac_scan = ac_scan::AcScan::new(&variables);
 
@@ -128,6 +129,7 @@ impl Scanner {
                 ac_scan,
                 modules,
                 external_symbols_map,
+                namespaces,
             }),
             scan_params: ScanParams::default(),
             external_symbols_values,
@@ -371,6 +373,11 @@ struct Inner {
 
     /// Mapping from names to index for external symbols.
     external_symbols_map: HashMap<String, usize>,
+
+    /// Namespaces names.
+    ///
+    /// None is used for the default namespace.
+    namespaces: Vec<Option<String>>,
 }
 
 impl Inner {
@@ -488,6 +495,7 @@ impl Inner {
                 scan_data.matched_rules.push(build_matched_rule(
                     rule,
                     &self.variables[var_index..(var_index + rule.nb_variables)],
+                    &self.namespaces,
                     var_matches,
                 ));
             }
@@ -521,9 +529,12 @@ impl Inner {
             match evaluate_rule(rule, None, &previous_results, scan_data) {
                 Ok(true) => {
                     if !rule.is_private {
-                        scan_data
-                            .matched_rules
-                            .push(build_matched_rule(rule, &[], Vec::new()));
+                        scan_data.matched_rules.push(build_matched_rule(
+                            rule,
+                            &[],
+                            &self.namespaces,
+                            Vec::new(),
+                        ));
                     }
                 }
                 Ok(false) => return Ok(()),
@@ -542,9 +553,12 @@ impl Inner {
             let matched = evaluate_rule(rule, None, &previous_results, scan_data)?;
 
             if matched && !rule.is_private {
-                scan_data
-                    .matched_rules
-                    .push(build_matched_rule(rule, &[], Vec::new()));
+                scan_data.matched_rules.push(build_matched_rule(
+                    rule,
+                    &[],
+                    &self.namespaces,
+                    Vec::new(),
+                ));
             }
             previous_results.push(matched);
         }
@@ -697,11 +711,14 @@ fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T>
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     variables: &'a [Variable],
+    namespaces_names: &'a [Option<String>],
     var_matches: Vec<Vec<StringMatch>>,
 ) -> MatchedRule<'a> {
     MatchedRule {
         name: &rule.name,
-        namespace: rule.namespace.as_deref(),
+        namespace: namespaces_names
+            .get(rule.namespace_index)
+            .and_then(|v| v.as_deref()),
         tags: &rule.tags,
         metadatas: &rule.metadatas,
         matches: var_matches
@@ -1405,6 +1422,7 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits(Scanner::new(
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
