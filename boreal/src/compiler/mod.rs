@@ -450,6 +450,7 @@ impl Compiler {
                 } = rule::compile_rule(
                     *rule,
                     namespace,
+                    ns_index,
                     &self.external_symbols,
                     &self.params,
                     parsed_contents,
@@ -475,7 +476,7 @@ impl Compiler {
                 if self.params.compute_statistics {
                     status.statistics.push(statistics::CompiledRule {
                         filepath: current_filepath.map(ToOwned::to_owned),
-                        namespace: rule.namespace.clone(),
+                        namespace: namespace.name.clone(),
                         name: rule.name.clone(),
                         strings: variables_statistics,
                     });
@@ -566,12 +567,15 @@ impl Compiler {
     /// Can fail if generating a set of all rules variables is not possible.
     #[must_use]
     pub fn into_scanner(self) -> Scanner {
+        let namespaces = self.namespaces.into_iter().map(|v| v.name).collect();
+
         Scanner::new(
             self.rules,
             self.global_rules,
             self.variables,
             self.imported_modules,
             self.external_symbols,
+            namespaces,
         )
     }
 }
