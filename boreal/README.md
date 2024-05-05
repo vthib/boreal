@@ -176,4 +176,4 @@ Please create an issue with a use-case if this is a feature you would need.
 - `cuckoo`: enable the `cuckoo` module.
 
 By default, `hash`, `object`, `process` and `memmap` are enabled,
-`authenticode` and `profiling` are not.
+`authenticode`, `profiling`, `magic` and `cuckoo` are not.
