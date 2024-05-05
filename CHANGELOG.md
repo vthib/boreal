@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2024-05-05
+
+This release adds the last missing modules from YARA: `magic`, `dex` and `cuckoo`.
+It also fixes some bugs related to the use of global rules.
+
+### boreal
+
+#### Added:
+
+* The `magic` module is now available behind the `magic` feature (not enabled by default).
+  [#139](https://github.com/vthib/boreal/pull/139).
+* The `dex` module is now available behind the `object` feature (enabled by default).
+  [#141](https://github.com/vthib/boreal/pull/141).
+* The `cuckoo` module is now available behind the `cuckoo` feature (not enabled by default).
+  [#143](https://github.com/vthib/boreal/pull/143), [#144](https://github.com/vthib/boreal/pull/144).
+
+#### Fixed:
+
+- Fix evaluation bug when global rules were declared after non-global rules.
+  [#146](https://github.com/vthib/boreal/pull/146).
+  If the global rules had any strings, it would make the evaluation of the
+  rules that followed it invalid.
+- Fix application of global rules to namespaces.
+  [#147](https://github.com/vthib/boreal/pull/147), [#149](https://github.com/vthib/boreal/pull/149).
+  Global rules were applied to all namespaces instead of only their own namespaces.
+
+#### Changed:
+
+* The type of `boreal::module::StaticValue::Function` and of the callback
+  declared in the `console` module has changed from `Arc<Box<...>>` to `Arc<...>`.
+  [#142](https://github.com/vthib/boreal/pull/142).
+* Error reporting has been improved on IO error on the rules file.
+  [#140](https://github.com/vthib/boreal/pull/140).
+
 ## [0.6.0] - 2024-04-14
 
 This release mainly adds the `dotnet` module and simplifies a few dependencies.
@@ -329,7 +363,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v0.6.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/vthib/boreal/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vthib/boreal/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vthib/boreal/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vthib/boreal/compare/v0.3.1...v0.4.0
