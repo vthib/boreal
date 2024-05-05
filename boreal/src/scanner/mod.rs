@@ -453,10 +453,10 @@ impl Inner {
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let ac_matches = self.do_memory_scan(scan_data)?;
+        let var_matches = self.do_memory_scan(scan_data)?;
 
         let mut eval_ctx =
-            EvalContext::new(Some(ac_matches), self.rules.len(), self.namespaces.len());
+            EvalContext::new(Some(var_matches), self.rules.len(), self.namespaces.len());
 
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
@@ -615,7 +615,7 @@ impl Inner {
 /// on every rule evaluation.
 struct EvalContext {
     /// Variable matches. None if evaluation is done previous the scan is done.
-    ac_matches: Option<std::vec::IntoIter<Vec<StringMatch>>>,
+    var_matches: Option<std::vec::IntoIter<Vec<StringMatch>>>,
 
     /// Current index into the variables list.
     var_index: usize,
@@ -634,12 +634,12 @@ struct EvalContext {
 
 impl EvalContext {
     fn new(
-        ac_matches: Option<Vec<Vec<StringMatch>>>,
+        var_matches: Option<Vec<Vec<StringMatch>>>,
         nb_rules: usize,
         nb_namespaces: usize,
     ) -> Self {
         Self {
-            ac_matches: ac_matches.map(Vec::into_iter),
+            var_matches: var_matches.map(Vec::into_iter),
             var_index: 0,
             previous_results: Vec::with_capacity(nb_rules),
             namespace_disabled: vec![false; nb_namespaces],
@@ -676,10 +676,10 @@ impl EvalContext {
         rule: &'scanner Rule,
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<bool, EvalError> {
-        let var_matches = self
-            .ac_matches
+        let var_matches: Option<Vec<_>> = self
+            .var_matches
             .as_mut()
-            .map(|v| collect_nb_elems(v, rule.nb_variables));
+            .map(|matches| matches.take(rule.nb_variables).collect());
         let vars = &scanner.variables[self.var_index..(self.var_index + rule.nb_variables)];
         self.var_index += rule.nb_variables;
 
@@ -760,17 +760,6 @@ impl ScanData<'_, '_> {
         self.timeout_checker
             .as_mut()
             .map_or(false, TimeoutChecker::check_timeout)
-    }
-}
-
-fn collect_nb_elems<I: Iterator<Item = T>, T>(iter: &mut I, nb: usize) -> Vec<T> {
-    let mut res = Vec::with_capacity(nb);
-    loop {
-        if res.len() >= nb {
-            return res;
-        }
-        // TODO: do not unwrap, bubble up inconsistency error
-        res.push(iter.next().unwrap());
     }
 }
 
