@@ -108,14 +108,14 @@ impl From<ExternalValue> for Value {
 ///
 /// Returns true if the expression (with the associated variables) matches on the given
 /// byte slice, false otherwise.
-pub(crate) fn evaluate_rule<'scan, 'rule>(
-    rule: &'rule Rule,
-    var_matches: Option<variable::VarMatches<'rule>>,
+pub(crate) fn evaluate_rule<'scan>(
+    rule: &Rule,
+    var_matches: Option<&'scan [Vec<variable::StringMatch>]>,
     previous_rules_results: &'scan [bool],
     scan_data: &'scan mut ScanData,
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
-        var_matches,
+        var_matches: var_matches.map(variable::VarMatches::new),
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
