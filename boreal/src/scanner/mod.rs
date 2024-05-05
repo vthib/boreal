@@ -454,75 +454,38 @@ impl Inner {
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
         let ac_matches = self.do_memory_scan(scan_data)?;
-        let mut ac_matches_iter = ac_matches.into_iter();
 
-        // Results of "previous" rules". This is filled while iterating on rules
-        // and used when rules refer to the result of previous rules.
-        let mut previous_results = Vec::with_capacity(self.rules.len());
-        // Is a namespace "disabled" or not. A namespace is disabled when it
-        // contains a global rule that is false.
-        let mut namespace_disabled = vec![false; self.namespaces.len()];
-        // Number of disabled namespaces. Used to stop evaluating rules if
-        // equal to the number of namespaces.
-        let mut nb_namespaces_disabled = 0;
+        let mut eval_ctx =
+            EvalContext::new(Some(ac_matches), self.rules.len(), self.namespaces.len());
 
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
 
-        let mut var_index = 0;
-        for (rule, is_global) in self
-            .global_rules
-            .iter()
-            .map(|v| (v, true))
-            .chain(self.rules.iter().map(|v| (v, false)))
-        {
-            let var_matches = collect_nb_elems(&mut ac_matches_iter, rule.nb_variables);
-            let vars = &self.variables[var_index..(var_index + rule.nb_variables)];
-            var_index += rule.nb_variables;
-
-            if namespace_disabled[rule.namespace_index] {
-                if !is_global {
-                    previous_results.push(false);
-                }
-                continue;
-            }
-
-            let res = match evaluate_rule(
-                rule,
-                Some(evaluator::variable::VarMatches::new(&var_matches)),
-                &previous_results,
-                scan_data,
-            ) {
-                Ok(res) => res,
+        // First, evaluate global rules.
+        for rule in &self.global_rules {
+            match eval_ctx.eval_global_rule(self, rule, scan_data) {
+                Ok(()) => (),
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => return Err(ScanError::Timeout),
-            };
-
-            if is_global && !res {
-                namespace_disabled[rule.namespace_index] = true;
-                nb_namespaces_disabled += 1;
-                if nb_namespaces_disabled == self.namespaces.len() {
-                    // All namespaces are disabled, clean results and return: there is no
-                    // need to evaluate rules any more.
-                    scan_data.matched_rules.clear();
-                    #[cfg(feature = "profiling")]
-                    if let Some(stats) = scan_data.statistics.as_mut() {
-                        stats.rules_eval_duration = start.elapsed();
-                    }
-                    return Ok(());
-                }
             }
-            if res && !rule.is_private {
-                scan_data.matched_rules.push(build_matched_rule(
-                    rule,
-                    vars,
-                    &self.namespaces,
-                    var_matches,
-                ));
-            }
+        }
 
-            if !is_global {
-                previous_results.push(res);
+        // If all namespaces are disabled, there is no need to do any further work.
+        if eval_ctx.namespace_disabled.iter().all(|v| *v) {
+            scan_data.matched_rules.clear();
+            #[cfg(feature = "profiling")]
+            if let Some(stats) = scan_data.statistics.as_mut() {
+                stats.rules_eval_duration = start.elapsed();
+            }
+            return Ok(());
+        }
+
+        // Evaluate all non global rules.
+        for rule in &self.rules {
+            match eval_ctx.eval_non_global_rule(self, rule, scan_data) {
+                Ok(()) => (),
+                Err(EvalError::Undecidable) => unreachable!(),
+                Err(EvalError::Timeout) => return Err(ScanError::Timeout),
             }
         }
 
@@ -541,33 +504,20 @@ impl Inner {
         &'scanner self,
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
-        let mut previous_results = Vec::with_capacity(self.rules.len());
-        let mut namespace_disabled = vec![false; self.namespaces.len()];
+        let mut eval_ctx = EvalContext::new(None, self.rules.len(), self.namespaces.len());
 
         // First, check global rules
         let mut has_unknown_globals = false;
         for rule in &self.global_rules {
-            match evaluate_rule(rule, None, &previous_results, scan_data) {
-                Ok(true) => {
-                    if !rule.is_private {
-                        scan_data.matched_rules.push(build_matched_rule(
-                            rule,
-                            &[],
-                            &self.namespaces,
-                            Vec::new(),
-                        ));
-                    }
-                }
-                Ok(false) => {
-                    namespace_disabled[rule.namespace_index] = true;
-                }
+            match eval_ctx.eval_global_rule(self, rule, scan_data) {
+                Ok(()) => (),
                 // Do not rethrow immediately, so that if one of the globals is false, it is
                 // detected.
                 Err(EvalError::Undecidable) => has_unknown_globals = true,
                 Err(EvalError::Timeout) => return Err(EvalError::Timeout),
             }
         }
-        if namespace_disabled.iter().all(|v| *v) {
+        if eval_ctx.namespace_disabled.iter().all(|v| *v) {
             // Reset the rules that might have matched already.
             scan_data.matched_rules.clear();
             return Ok(());
@@ -578,22 +528,7 @@ impl Inner {
 
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
-            if namespace_disabled[rule.namespace_index] {
-                previous_results.push(false);
-                continue;
-            }
-
-            let matched = evaluate_rule(rule, None, &previous_results, scan_data)?;
-
-            if matched && !rule.is_private {
-                scan_data.matched_rules.push(build_matched_rule(
-                    rule,
-                    &[],
-                    &self.namespaces,
-                    Vec::new(),
-                ));
-            }
-            previous_results.push(matched);
+            eval_ctx.eval_non_global_rule(self, rule, scan_data)?;
         }
 
         Ok(())
@@ -671,6 +606,104 @@ impl Inner {
         }
 
         Ok(matches)
+    }
+}
+
+/// Context used when evaluating all the rules.
+///
+/// This struct is used to hold all the data that needs to be updated
+/// on every rule evaluation.
+struct EvalContext {
+    /// Variable matches. None if evaluation is done previous the scan is done.
+    ac_matches: Option<std::vec::IntoIter<Vec<StringMatch>>>,
+
+    /// Current index into the variables list.
+    var_index: usize,
+
+    /// Results of "previous" rules.
+    ///
+    /// This is filled while iterating on rules and used when rules refer to the
+    /// result of previous rules.
+    previous_results: Vec<bool>,
+
+    /// Is a namespace "disabled" or not.
+    ///
+    /// A namespace is disabled when it contains a global rule that is false.
+    namespace_disabled: Vec<bool>,
+}
+
+impl EvalContext {
+    fn new(
+        ac_matches: Option<Vec<Vec<StringMatch>>>,
+        nb_rules: usize,
+        nb_namespaces: usize,
+    ) -> Self {
+        Self {
+            ac_matches: ac_matches.map(Vec::into_iter),
+            var_index: 0,
+            previous_results: Vec::with_capacity(nb_rules),
+            namespace_disabled: vec![false; nb_namespaces],
+        }
+    }
+
+    fn eval_global_rule<'scanner>(
+        &mut self,
+        scanner: &'scanner Inner,
+        rule: &'scanner Rule,
+        scan_data: &mut ScanData<'scanner, '_>,
+    ) -> Result<(), EvalError> {
+        let res = self.eval_rule_inner(scanner, rule, scan_data)?;
+        if !res {
+            self.namespace_disabled[rule.namespace_index] = true;
+        }
+        Ok(())
+    }
+
+    fn eval_non_global_rule<'scanner>(
+        &mut self,
+        scanner: &'scanner Inner,
+        rule: &'scanner Rule,
+        scan_data: &mut ScanData<'scanner, '_>,
+    ) -> Result<(), EvalError> {
+        let res = self.eval_rule_inner(scanner, rule, scan_data)?;
+        self.previous_results.push(res);
+        Ok(())
+    }
+
+    fn eval_rule_inner<'scanner>(
+        &mut self,
+        scanner: &'scanner Inner,
+        rule: &'scanner Rule,
+        scan_data: &mut ScanData<'scanner, '_>,
+    ) -> Result<bool, EvalError> {
+        let var_matches = self
+            .ac_matches
+            .as_mut()
+            .map(|v| collect_nb_elems(v, rule.nb_variables));
+        let vars = &scanner.variables[self.var_index..(self.var_index + rule.nb_variables)];
+        self.var_index += rule.nb_variables;
+
+        if self.namespace_disabled[rule.namespace_index] {
+            return Ok(false);
+        }
+
+        let res = evaluate_rule(
+            rule,
+            var_matches.as_deref(),
+            &self.previous_results,
+            scan_data,
+        )?;
+
+        if res && !rule.is_private {
+            scan_data.matched_rules.push(build_matched_rule(
+                rule,
+                vars,
+                &scanner.namespaces,
+                var_matches.unwrap_or_default(),
+            ));
+        }
+
+        Ok(res)
     }
 }
 
