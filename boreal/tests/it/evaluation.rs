@@ -1296,41 +1296,161 @@ rule bar {
 #[test]
 fn test_global_rules_no_scan_optim() {
     let mut compiler = Compiler::new();
+    // Add some rules in the default namespace
     compiler.add_rules(
         r#"
 global rule g1 {
-    condition: filesize >= 8
-}
-
-rule foo {
     condition: filesize >= 5
 }"#,
     );
 
+    // Add in another namespace
     compiler.add_rules_in_namespace(
         r#"
-private global rule g2 {
+private global rule g1 {
+    condition: uint8(0) >= 0x90
+}
+
+rule a {
     condition: uint8(0) >= 0xA0
 }
 
-rule bar {
-    condition: uint8(0) >= 0x80
+rule b {
+    condition: a
 }
 "#,
         "ns2",
     );
+
+    // Add more rules in default namespace
+    compiler.add_rules(
+        r#"
+rule a {
+    strings:
+        $a = "<foo>"
+    condition: filesize >= 8 or $a
+}
+
+global rule g2 {
+    strings:
+        $a = "abc"
+    condition: filesize >= 7 or $a
+}
+
+rule b {
+    condition: a
+}
+
+rule c {
+    condition: not a
+}
+
+global rule g3 {
+    condition: filesize >= 6
+}
+"#,
+    );
+
+    // Add more rules in ns2
+    compiler.add_rules_in_namespace(
+        r#"
+private global rule g2 {
+    condition: uint8(0) >= 0x80
+}
+
+rule c {
+    condition: not b
+}
+"#,
+        "ns2",
+    );
+
     let mut checker = compiler.into_checker();
 
     // Nothing matches
     checker.check_rule_matches(b"", &[]);
 
-    // Matching a rule without the namespace global does not work
-    checker.check_rule_matches(b"123456", &[]);
-    checker.check_rule_matches(b"\x85", &[]);
+    // Checks on default namespace
+    // filesize 5: g1 matches but g2 is undecidable and g3 is false: no match
+    checker.check_rule_matches(b"abcde", &[]);
+    // filesize 6: g1 and g3 matches but g2 is undecidable => will scan and find that g2 is false
+    checker.check_rule_matches(b"defdef", &[]);
+    // filesize 6: g1 and g3 matches but g2 is undecidable => will scan and find that g2 is true
+    checker.check_rule_matches(
+        b"abcdef",
+        &["default:g1", "default:g2", "default:g3", "default:c"],
+    );
+    // filesize 7: all globals are true, a is undecidable, then found false
+    checker.check_rule_matches(
+        b"abcdefg",
+        &["default:g1", "default:g2", "default:g3", "default:c"],
+    );
+    // filesize 7: all globals are true, a is undecidable, then found true
+    checker.check_rule_matches(
+        b"ab<foo>",
+        &[
+            "default:g1",
+            "default:g2",
+            "default:g3",
+            "default:a",
+            "default:b",
+        ],
+    );
+    // filesize 8: all globals are true, a is true
+    checker.check_rule_matches(
+        b"abcdefgh",
+        &[
+            "default:g1",
+            "default:g2",
+            "default:g3",
+            "default:a",
+            "default:b",
+        ],
+    );
 
-    // Matching only one of the global rules work for this namespace
-    checker.check_rule_matches(b"123456789", &["default:g1", "default:foo"]);
-    checker.check_rule_matches(b"\xFF", &["ns2:bar"]);
+    // Checks on namespace ns2
+    checker.check_rule_matches(b"\x7F", &[]);
+    // g2 matches but not g1
+    checker.check_rule_matches(b"\x85", &[]);
+    // g1 and g2 matches
+    checker.check_rule_matches(b"\x95", &["ns2:c"]);
+    // g1, g2 and a matches
+    checker.check_rule_matches(b"\xA5", &["ns2:a", "ns2:b"]);
+
+    // Checks combination of the two
+    checker.check_rule_matches(
+        b"\x95bcdefg",
+        &[
+            "default:g1",
+            "default:g2",
+            "default:g3",
+            "default:c",
+            "ns2:c",
+        ],
+    );
+    checker.check_rule_matches(
+        b"\x95b<foo>",
+        &[
+            "default:g1",
+            "default:g2",
+            "default:g3",
+            "default:a",
+            "default:b",
+            "ns2:c",
+        ],
+    );
+    checker.check_rule_matches(
+        b"\xA5b<foo>",
+        &[
+            "default:g1",
+            "default:g2",
+            "default:g3",
+            "default:a",
+            "default:b",
+            "ns2:a",
+            "ns2:b",
+        ],
+    );
 }
 
 #[test]

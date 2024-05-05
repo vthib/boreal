@@ -481,6 +481,9 @@ impl Inner {
             var_index += rule.nb_variables;
 
             if namespace_disabled[rule.namespace_index] {
+                if !is_global {
+                    previous_results.push(false);
+                }
                 continue;
             }
 
@@ -565,6 +568,8 @@ impl Inner {
             }
         }
         if namespace_disabled.iter().all(|v| *v) {
+            // Reset the rules that might have matched already.
+            scan_data.matched_rules.clear();
             return Ok(());
         }
         if has_unknown_globals {
@@ -573,6 +578,11 @@ impl Inner {
 
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
+            if namespace_disabled[rule.namespace_index] {
+                previous_results.push(false);
+                continue;
+            }
+
             let matched = evaluate_rule(rule, None, &previous_results, scan_data)?;
 
             if matched && !rule.is_private {
