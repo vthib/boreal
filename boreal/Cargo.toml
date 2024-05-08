@@ -13,7 +13,7 @@ rust-version = "1.65"
 exclude = ["/tests"]
 
 [features]
-default = ["hash", "object", "memmap", "process"]
+default = ["hash", "object", "memmap", "process", "authenticode"]
 
 # Enables the "hash" module.
 hash = ["dep:md-5", "dep:sha1", "dep:sha2", "dep:crc32fast", "dep:tlsh2"]
@@ -32,7 +32,7 @@ cuckoo = ["dep:serde_json", "yara/module-cuckoo"]
 
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
-authenticode = ["dep:authenticode-parser"]
+authenticode = ["dep:authenticode-parser", "dep:const-oid", "dep:der"]
 
 # Adds an API to scan files using memory maps.
 memmap = ["dep:memmap2"]
@@ -69,6 +69,8 @@ object = { version = "0.35", optional = true, default-features = false, features
 
 # "authenticode" feature
 authenticode-parser = { version = "0.5", optional = true }
+const-oid = { version = "0.9", optional = true, features = ["db"] }
+der = { version = "0.7", optional = true, features = ["derive", "oid", "std"] }
 
 # "memmap" feature
 memmap2 = { version = "0.9", optional = true }
