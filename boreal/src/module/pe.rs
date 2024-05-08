@@ -1339,17 +1339,13 @@ impl Pe {
         }
 
         #[cfg(feature = "authenticode")]
-        if let Some(token) = self.token {
-            if let Some((signatures, is_signed)) =
-                signatures::get_signatures(&data_dirs, region.mem, token)
-            {
-                let _r = map.insert("number_of_signatures", signatures.len().into());
-                let _r = map.insert("is_signed", Value::Integer(is_signed.into()));
-                let _r = map.insert("signatures", Value::Array(signatures));
-            } else {
-                let _r = map.insert("number_of_signatures", Value::Integer(0));
-                let _r = map.insert("is_signed", Value::Integer(0));
-            }
+        if let Some(signatures) = signatures::get_signatures(&data_dirs, region.mem) {
+            let _r = map.insert("number_of_signatures", signatures.len().into());
+            let _r = map.insert("is_signed", Value::Undefined);
+            let _r = map.insert("signatures", Value::Array(signatures));
+        } else {
+            let _r = map.insert("number_of_signatures", Value::Integer(0));
+            let _r = map.insert("is_signed", Value::Integer(0));
         }
 
         Some(map)
