@@ -123,71 +123,10 @@ impl Compiler {
     /// Modules disabled by default:
     /// - `console`
     ///
-    /// However, the pe module does not include signatures handling. To include it, you should have
-    /// the `authenticode` feature enabled, and use [`Compiler::new_with_pe_signatures`]
-    ///
     /// To create a compiler without some or all of those modules, use [`Compiler::default`] to
     /// create a [`Compiler`] without any modules, then add back only the desired modules.
     #[must_use]
     pub fn new() -> Self {
-        #[allow(unused_mut)]
-        let mut this = Self::new_without_pe_module();
-
-        #[cfg(feature = "object")]
-        let _r = this.add_module(crate::module::Pe::default());
-
-        this
-    }
-
-    /// Create a new object to compile YARA rules, including the pe module with signatures.
-    ///
-    /// # Safety
-    ///
-    /// The authenticode parsing requires creating OpenSSL objects, which is not thread-safe and
-    /// should be done while no other calls into OpenSSL can race with this call. Therefore,
-    /// this function should for example be called before setting up any multithreaded environment.
-    ///
-    /// You can also directly create the Pe module early, and add it to a compiler later on.
-    ///
-    /// ```
-    /// // Safety: called before setting up multithreading context.
-    /// let mut compiler = unsafe { boreal::Compiler::new_with_pe_signatures() };
-    ///
-    /// // Setup multithreading runtime
-    ///
-    /// // Later on, in any thread:
-    /// compiler.add_rules_str("...");
-    ///
-    /// // Or
-    ///
-    /// // Safety: called before setting up multithreading context.
-    /// let pe_module = unsafe { boreal::module::Pe::new_with_signatures() };
-    ///
-    /// // Setup multithreading runtime
-    ///
-    /// // Later on, in any thread:
-    /// let mut compiler = boreal::Compiler::new_without_pe_module();
-    /// compiler.add_module(pe_module);
-    /// ```
-    #[cfg(all(feature = "object", feature = "authenticode"))]
-    #[must_use]
-    pub unsafe fn new_with_pe_signatures() -> Self {
-        let mut this = Self::new_without_pe_module();
-
-        let _r = this.add_module(
-            // Safety: guaranteed by the safety contract of this function
-            unsafe { crate::module::Pe::new_with_signatures() },
-        );
-
-        this
-    }
-
-    /// Create a new object to compile YARA rules, without the pe module.
-    ///
-    /// This is useful when needing to add the Pe module with signatures parsing enabled, see
-    /// [`crate::module::Pe::new_with_signatures`]
-    #[must_use]
-    pub fn new_without_pe_module() -> Self {
         let mut this = Self::default();
 
         let _r = this.add_module(crate::module::Time);
@@ -197,6 +136,8 @@ impl Compiler {
         #[cfg(feature = "hash")]
         let _r = this.add_module(crate::module::Hash);
 
+        #[cfg(feature = "object")]
+        let _r = this.add_module(crate::module::Pe);
         #[cfg(feature = "object")]
         let _r = this.add_module(crate::module::Elf);
         #[cfg(feature = "object")]

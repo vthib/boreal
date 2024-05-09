@@ -252,11 +252,6 @@ fn main() -> ExitCode {
     let mut scanner = {
         let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
 
-        #[cfg(feature = "authenticode")]
-        // Safety: this is done before any multithreading context, so there is no risk of racing
-        // other calls into OpenSSL.
-        let mut compiler = unsafe { Compiler::new_with_pe_signatures() };
-        #[cfg(not(feature = "authenticode"))]
         let mut compiler = Compiler::new();
 
         let no_console_logs = args.get_flag("no_console_logs");

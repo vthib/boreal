@@ -32,7 +32,7 @@ cuckoo = ["dep:serde_json", "yara/module-cuckoo"]
 
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
-authenticode = ["dep:authenticode-parser", "dep:const-oid", "dep:der"]
+authenticode = ["dep:const-oid", "dep:der"]
 
 # Adds an API to scan files using memory maps.
 memmap = ["dep:memmap2"]
@@ -68,7 +68,6 @@ tlsh2 = { version = "0.3", optional = true }
 object = { version = "0.35", optional = true, default-features = false, features = ["read"] }
 
 # "authenticode" feature
-authenticode-parser = { version = "0.5", optional = true }
 const-oid = { version = "0.9", optional = true, features = ["db"] }
 der = { version = "0.7", optional = true, features = ["derive", "oid", "std"] }
 
