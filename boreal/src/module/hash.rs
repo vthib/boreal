@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value};
+use super::{hex_encode, EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value};
 use md5::{Digest, Md5};
 use sha1::Sha1;
 use sha2::Sha256;
@@ -84,7 +84,7 @@ impl ModuleData for Hash {
 }
 
 fn compute_hash_from_bytes<D: Digest>(bytes: &[u8]) -> Value {
-    Value::bytes(hex::encode(D::digest(bytes)))
+    Value::Bytes(hex_encode(&D::digest(bytes)))
 }
 
 fn compute_hash_from_mem<D: Digest>(
@@ -95,7 +95,7 @@ fn compute_hash_from_mem<D: Digest>(
     let mut digest = D::new();
 
     ctx.mem.on_range(offset, end, |data| digest.update(data))?;
-    Some(Value::bytes(hex::encode(digest.finalize())))
+    Some(Value::Bytes(hex_encode(&digest.finalize())))
 }
 
 impl Hash {

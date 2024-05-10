@@ -144,7 +144,6 @@ dependencies = [
  "codespan-reporting",
  "crc32fast",
  "glob",
- "hex",
  "libc",
  "mach2",
  "magic",

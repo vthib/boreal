@@ -839,6 +839,26 @@ where
     }
 }
 
+fn hex_encode<T: AsRef<[u8]>>(v: T) -> Vec<u8> {
+    hex_encode_inner(v.as_ref())
+}
+
+fn hex_encode_inner(v: &[u8]) -> Vec<u8> {
+    const DICT: &[u8] = b"0123456789abcdef";
+
+    // This code is actually the one i found generates the best codegen, with:
+    // - a single allocation for the vector with the right size
+    // - no bounds checking
+    v.iter()
+        .flat_map(|b| {
+            [
+                DICT[usize::from((*b & 0xF0) >> 4)],
+                DICT[usize::from(*b & 0x0F)],
+            ]
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

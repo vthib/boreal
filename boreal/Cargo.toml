@@ -16,7 +16,7 @@ exclude = ["/tests"]
 default = ["hash", "object", "memmap", "process"]
 
 # Enables the "hash" module.
-hash = ["dep:md-5", "dep:sha1", "dep:sha2", "dep:hex", "dep:crc32fast", "dep:tlsh2"]
+hash = ["dep:md-5", "dep:sha1", "dep:sha2", "dep:crc32fast", "dep:tlsh2"]
 
 # Enables the "pe", "elf" and "macho" modules.
 #
@@ -32,7 +32,7 @@ cuckoo = ["dep:serde_json", "yara/module-cuckoo"]
 
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
-authenticode = ["dep:authenticode-parser", "dep:hex"]
+authenticode = ["dep:authenticode-parser"]
 
 # Adds an API to scan files using memory maps.
 memmap = ["dep:memmap2"]
@@ -59,7 +59,6 @@ regex-syntax = { version = "0.8", default-features = false }
 
 # "hash" feature
 crc32fast = { version = "1.4", optional = true }
-hex = { version = "0.4", optional = true }
 md-5 = { version = "0.10", optional = true }
 sha1 = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
