@@ -2390,7 +2390,7 @@ impl Pe {
             }
         }
 
-        Some(Value::Bytes(hex::encode(hasher.finalize()).into_bytes()))
+        Some(Value::Bytes(super::hex_encode(hasher.finalize())))
     }
 
     fn rva_to_offset(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {

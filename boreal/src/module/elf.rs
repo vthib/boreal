@@ -580,7 +580,7 @@ impl Elf {
 
         let hash = Md5::digest(import_string);
 
-        Some(Value::Bytes(hex::encode(hash).into_bytes()))
+        Some(Value::Bytes(super::hex_encode(hash)))
     }
 
     #[cfg(feature = "hash")]

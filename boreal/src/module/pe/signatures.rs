@@ -7,6 +7,7 @@ use authenticode_parser::{
 use object::{pe, read::pe::DataDirectories};
 
 use super::Value;
+use crate::module::hex_encode;
 
 pub fn get_signatures(
     data_dirs: &DataDirectories,
@@ -37,9 +38,9 @@ fn process_authenticode(auth: &AuthenticodeArray) -> (Vec<Value>, bool) {
         let verified = sig.verify_flags() == Some(AuthenticodeVerify::Valid);
         is_signed = is_signed || verified;
 
-        let digest = sig.digest().map(hex::encode).map(Value::bytes);
+        let digest = sig.digest().map(hex_encode).map(Value::bytes);
         let digest_alg = sig.digest_alg().map(Value::bytes);
-        let file_digest = sig.file_digest().map(hex::encode).map(Value::bytes);
+        let file_digest = sig.file_digest().map(hex_encode).map(Value::bytes);
 
         // TODO on length_of_chain or other lengths, behavior is not aligned:
         // yara does not save the length if the pointer is 0.
@@ -79,7 +80,7 @@ fn process_certs(certs: &[Certificate]) -> Vec<Value> {
 
 fn signer_to_value(signer: &Signer) -> Value {
     let program_name = signer.program_name().map(Value::bytes);
-    let digest = signer.digest().map(hex::encode).map(Value::bytes);
+    let digest = signer.digest().map(hex_encode).map(Value::bytes);
     let digest_alg = signer.digest_alg().map(Value::bytes);
     let chain = process_certs(signer.certificate_chain());
 
@@ -96,7 +97,7 @@ fn countersig_to_value(countersig: &Countersignature) -> Value {
     let verified =
         Value::Integer((countersig.verify_flags() == Some(CounterSignatureVerify::Valid)).into());
     let sign_time = countersig.sign_time().into();
-    let digest = countersig.digest().map(hex::encode).map(Value::bytes);
+    let digest = countersig.digest().map(hex_encode).map(Value::bytes);
     let digest_alg = countersig.digest_alg().map(Value::bytes);
     let chain = process_certs(countersig.certificate_chain());
 
@@ -119,7 +120,7 @@ fn get_legacy_signer_data(sig: &Authenticode) -> HashMap<&'static str, Value> {
 }
 
 fn cert_to_map(cert: &Certificate, with_valid_on: bool) -> HashMap<&'static str, Value> {
-    let thumbprint_ascii = cert.sha1().map(hex::encode).map(Value::bytes);
+    let thumbprint_ascii = cert.sha1().map(hex_encode).map(Value::bytes);
     let not_before = cert.not_before();
     let not_after = cert.not_after();
 
