@@ -311,7 +311,7 @@ fn test_pe() {
         true
     ) ;
 
-    #[cfg(feature = "authenticode")]
+    #[cfg(feature = "authenticode-verify")]
     check_file(
         "import \"pe\"
         rule test {
@@ -413,7 +413,7 @@ fn test_pe() {
         true
     );
 
-    #[cfg(feature = "authenticode")]
+    #[cfg(feature = "authenticode-verify")]
     check_file(
         "import \"pe\"
       rule test {
@@ -424,7 +424,7 @@ fn test_pe() {
         true,
     );
 
-    #[cfg(feature = "authenticode")]
+    #[cfg(feature = "authenticode-verify")]
     check_file(
         "import \"pe\"
       rule test {
