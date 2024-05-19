@@ -464,8 +464,12 @@ fn test_coverage_pe_libyara_079a472d() {
         "pe.number_of_signatures",
         #[cfg(not(feature = "authenticode"))]
         "pe.signatures",
-        #[cfg(not(feature = "authenticode"))]
+        #[cfg(not(feature = "authenticode-verify"))]
         "pe.is_signed",
+        #[cfg(all(feature = "authenticode", not(feature = "authenticode-verify")))]
+        "pe.signatures[0].verified",
+        #[cfg(all(feature = "authenticode", not(feature = "authenticode-verify")))]
+        "pe.signatures[0].countersignatures[0].verified",
     ];
     let path = "tests/assets/libyara/data/\
         079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885";
@@ -527,8 +531,16 @@ fn test_coverage_pe_libyara_3b8b9015() {
         "pe.number_of_signatures",
         #[cfg(not(feature = "authenticode"))]
         "pe.signatures",
-        #[cfg(not(feature = "authenticode"))]
+        #[cfg(not(feature = "authenticode-verify"))]
         "pe.is_signed",
+        #[cfg(all(feature = "authenticode", not(feature = "authenticode-verify")))]
+        "pe.signatures[0].verified",
+        #[cfg(all(feature = "authenticode", not(feature = "authenticode-verify")))]
+        "pe.signatures[1].verified",
+        #[cfg(all(feature = "authenticode", not(feature = "authenticode-verify")))]
+        "pe.signatures[0].countersignatures[0].verified",
+        #[cfg(all(feature = "authenticode", not(feature = "authenticode-verify")))]
+        "pe.signatures[1].countersignatures[0].verified",
     ];
     let path = "tests/assets/libyara/data/\
         3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c";
