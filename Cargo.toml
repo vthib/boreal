@@ -20,7 +20,3 @@ members = [
 # - Handle VirtualSize=0 when searching through sections
 #   - f7e5d82c5f6fa4ca9d6ef5a39e83b6109fe2c18c
 object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.35" }
-
-# - Add API to be able to set module data:
-#   <https://github.com/Hugal31/yara-rust/pull/147>
-yara = { git = 'https://github.com/vthib/yara-rust', branch = "version-0.26" }
