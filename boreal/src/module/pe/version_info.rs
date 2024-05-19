@@ -175,8 +175,8 @@ fn read_string(mem: &[u8], offset: usize, out: &mut Vec<VersionInfo>) -> Option<
     // - convert it back to a String and thus a utf8 slice.
     // But yara simply strips the second byte of every pair (expecting it to always be 0). We could
     // differ here, but for the moment keep this broken behavior
-    let key = unwide(&mem[key_start..key_end]);
-    let value = unwide(&mem[value_start..value_end]);
+    let key = unwide(&mem[key_start..key_end], 63);
+    let value = unwide(&mem[value_start..value_end], 255);
 
     out.push(VersionInfo { key, value });
 
@@ -194,11 +194,11 @@ fn find_wide_nul(mem: &[u8]) -> usize {
     mem.len()
 }
 
-fn unwide(mem: &[u8]) -> Vec<u8> {
+fn unwide(mem: &[u8], max_size: usize) -> Vec<u8> {
     let mut res = Vec::new();
 
     let mut i = 0;
-    while i < mem.len() {
+    while i < mem.len() && res.len() < max_size {
         res.push(mem[i]);
         i += 2;
     }
