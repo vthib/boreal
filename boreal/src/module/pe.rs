@@ -1836,6 +1836,8 @@ fn add_resources(
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
+    let mut infos = Vec::new();
+
     let dir = data_dirs.resource_directory(mem, sections).ok().flatten();
     let root = dir.as_ref().and_then(|dir| dir.root().ok());
     if let (Some(dir), Some(root)) = (dir, root) {
@@ -1876,7 +1878,7 @@ fn add_resources(
                         let offset = va_to_file_offset(mem, sections, rva);
                         if ty == u32::from(pe::RT_VERSION) {
                             if let Some(offset) = offset {
-                                add_version_infos(mem, offset, out);
+                                version_info::read_version_info(mem, offset as usize, &mut infos);
                             }
                         }
 
@@ -1937,12 +1939,6 @@ fn add_resources(
     } else {
         let _r = out.insert("number_of_resources", Value::Integer(0));
     }
-}
-
-pub fn add_version_infos(mem: &[u8], offset: u32, out: &mut HashMap<&'static str, Value>) {
-    let Some(infos) = version_info::read_version_info(mem, offset as usize) else {
-        return;
-    };
 
     out.extend([
         ("number_of_version_infos", infos.len().into()),
