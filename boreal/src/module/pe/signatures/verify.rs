@@ -5,11 +5,15 @@
 //! Official microsoft doc:
 //! <https://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/authenticode_pe.docx>
 use const_oid::db::rfc5912;
+use md5::digest::Digest;
+use rsa::signature::hazmat::PrehashVerifier;
 use rsa::traits::SignatureScheme;
 use rsa::RsaPublicKey;
-use sha1::Digest;
 
 use super::asn1;
+
+const ECDSA_WITH_SHA_1: const_oid::ObjectIdentifier =
+    const_oid::ObjectIdentifier::new_unwrap("1.2.840.10045.4.1");
 
 pub fn verify_signer_info(
     info: &asn1::SignerInfo,
@@ -74,26 +78,58 @@ fn verify_signature(
         return Some(false);
     };
 
-    match (digest_algo.map(|v| &v.oid), &signature_algo.oid) {
-        (Some(&rfc5912::ID_MD_5), &rfc5912::RSA_ENCRYPTION)
+    let digest_algo = digest_algo.map(|v| v.oid);
+
+    match (digest_algo, &signature_algo.oid) {
+        // RSA
+        (Some(rfc5912::ID_MD_5), &rfc5912::RSA_ENCRYPTION)
         | (_, &rfc5912::MD_5_WITH_RSA_ENCRYPTION) => {
             Some(verify_rsa_key::<md5::Md5>(spki, signature, data))
         }
-        (Some(&rfc5912::ID_SHA_1), &rfc5912::RSA_ENCRYPTION)
+        (Some(rfc5912::ID_SHA_1), &rfc5912::RSA_ENCRYPTION)
         | (_, &rfc5912::SHA_1_WITH_RSA_ENCRYPTION) => {
             Some(verify_rsa_key::<sha1::Sha1>(spki, signature, data))
         }
-        (Some(&rfc5912::ID_SHA_256), &rfc5912::RSA_ENCRYPTION)
+        (Some(rfc5912::ID_SHA_256), &rfc5912::RSA_ENCRYPTION)
         | (_, &rfc5912::SHA_256_WITH_RSA_ENCRYPTION) => {
             Some(verify_rsa_key::<sha2::Sha256>(spki, signature, data))
         }
-        (Some(&rfc5912::ID_SHA_384), &rfc5912::RSA_ENCRYPTION)
+        (Some(rfc5912::ID_SHA_384), &rfc5912::RSA_ENCRYPTION)
         | (_, &rfc5912::SHA_384_WITH_RSA_ENCRYPTION) => {
             Some(verify_rsa_key::<sha2::Sha384>(spki, signature, data))
         }
-        (Some(&rfc5912::ID_SHA_512), &rfc5912::RSA_ENCRYPTION)
-        | (None, &rfc5912::SHA_512_WITH_RSA_ENCRYPTION) => {
+        (Some(rfc5912::ID_SHA_512), &rfc5912::RSA_ENCRYPTION)
+        | (_, &rfc5912::SHA_512_WITH_RSA_ENCRYPTION) => {
             Some(verify_rsa_key::<sha2::Sha512>(spki, signature, data))
+        }
+        // EC
+        (Some(rfc5912::ID_SHA_1), &rfc5912::ID_EC_PUBLIC_KEY) | (_, &ECDSA_WITH_SHA_1) => {
+            let data = sha1::Sha1::digest(data);
+            verify_ecdsa_key(spki, signature, &data)
+        }
+        (Some(rfc5912::ID_SHA_256), &rfc5912::ID_EC_PUBLIC_KEY)
+        | (_, &rfc5912::ECDSA_WITH_SHA_256) => {
+            let data = sha2::Sha256::digest(data);
+            verify_ecdsa_key(spki, signature, &data)
+        }
+        (Some(rfc5912::ID_SHA_384), &rfc5912::ID_EC_PUBLIC_KEY)
+        | (_, &rfc5912::ECDSA_WITH_SHA_384) => {
+            let data = sha2::Sha384::digest(data);
+            verify_ecdsa_key(spki, signature, &data)
+        }
+        (Some(rfc5912::ID_SHA_512), &rfc5912::ID_EC_PUBLIC_KEY)
+        | (_, &rfc5912::ECDSA_WITH_SHA_512) => {
+            let data = sha2::Sha512::digest(data);
+            verify_ecdsa_key(spki, signature, &data)
+        }
+        // DSA
+        (Some(rfc5912::ID_SHA_1), &rfc5912::ID_DSA) | (_, &rfc5912::DSA_WITH_SHA_1) => {
+            let data = sha1::Sha1::digest(data);
+            Some(verify_dsa_key(spki, signature, &data))
+        }
+        (Some(rfc5912::ID_SHA_256), &rfc5912::ID_DSA) | (_, &rfc5912::DSA_WITH_SHA_256) => {
+            let data = sha2::Sha256::digest(data);
+            Some(verify_dsa_key(spki, signature, &data))
         }
         _ => None,
     }
@@ -122,6 +158,54 @@ fn verify_rsa_key<D: Digest + const_oid::AssociatedOid>(
     rsa::pkcs1v15::Pkcs1v15Sign::new_unprefixed()
         .verify(&pubkey, &data, signature)
         .is_ok()
+}
+
+fn verify_dsa_key(spki: spki::SubjectPublicKeyInfoRef, signature: &[u8], data: &[u8]) -> bool {
+    let Ok(key) = dsa::VerifyingKey::try_from(spki) else {
+        return false;
+    };
+    let Ok(signature) = dsa::Signature::try_from(signature) else {
+        return false;
+    };
+
+    key.verify_prehash(data, &signature).is_ok()
+}
+
+fn verify_ecdsa_key(
+    spki: spki::SubjectPublicKeyInfoRef,
+    signature: &[u8],
+    data: &[u8],
+) -> Option<bool> {
+    let Some(param) = spki.algorithm.parameters else {
+        return Some(false);
+    };
+    let Ok(curve) = param.decode_as::<asn1::ObjectIdentifier>() else {
+        return Some(false);
+    };
+
+    match curve {
+        rfc5912::SECP_256_R_1 => {
+            let Ok(key) = p256::ecdsa::VerifyingKey::try_from(spki) else {
+                return Some(false);
+            };
+            let Ok(signature) = p256::ecdsa::DerSignature::from_bytes(signature) else {
+                return Some(false);
+            };
+
+            Some(key.verify_prehash(data, &signature).is_ok())
+        }
+        rfc5912::SECP_384_R_1 => {
+            let Ok(key) = p384::ecdsa::VerifyingKey::try_from(spki) else {
+                return Some(false);
+            };
+            let Ok(signature) = p384::ecdsa::DerSignature::from_bytes(signature) else {
+                return Some(false);
+            };
+
+            Some(key.verify_prehash(data, &signature).is_ok())
+        }
+        _ => None,
+    }
 }
 
 /// Check the digest of a given data against an expected value
