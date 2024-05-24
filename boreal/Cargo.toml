@@ -33,7 +33,7 @@ cuckoo = ["dep:serde_json", "yara/module-cuckoo"]
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
 authenticode = ["dep:const-oid", "dep:der", "dep:md-5", "dep:sha1", "dep:sha2"]
-authenticode-verify = ["dep:rsa", "dep:spki", "md-5?/oid", "sha1?/oid", "sha2?/oid"]
+authenticode-verify = ["dep:rsa", "dep:dsa", "dep:p256", "dep:p384", "dep:spki", "md-5?/oid", "sha1?/oid", "sha2?/oid"]
 
 # Adds an API to scan files using memory maps.
 memmap = ["dep:memmap2"]
@@ -71,7 +71,12 @@ object = { version = "0.35", optional = true, default-features = false, features
 # "authenticode" feature
 const-oid = { version = "0.9", optional = true, features = ["db"] }
 der = { version = "0.7", optional = true, features = ["derive", "oid", "std"] }
+
+# "authenticode-verify" feature
+dsa = { version = "0.6", optional = true, default-features = false }
 rsa = { version = "0.9", optional = true, default-features = false }
+p256 = { version = "0.13", optional = true, default-features = false, features = ["ecdsa", "pem"] }
+p384 = { version = "0.13", optional = true, default-features = false, features = ["ecdsa", "pem"] }
 spki = { version = "0.7", optional = true, default-features = false  }
 
 # "memmap" feature

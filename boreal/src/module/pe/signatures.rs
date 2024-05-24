@@ -197,7 +197,7 @@ fn add_signatures_from_content_info(
             };
         verified = verified
             && signer_info.map_or(false, |info| {
-                verify::verify_signer_info(info, &certificate_chain)
+                verify::verify_signer_info(info, &certificate_chain).unwrap_or(false)
             });
 
         if verified {
@@ -403,7 +403,7 @@ where
                 !chain.0.is_empty() &&
                 // message digest matches
                 digest.map_or(false, check_digest) &&
-                verify::verify_signer_info(info, certs)
+                verify::verify_signer_info(info, certs).unwrap_or(false)
         )
         .into(),
     );
