@@ -18,6 +18,8 @@ default = ["authenticode", "memmap", "profiling"]
 
 # Enable authenticode parsing in boreal, requires OpenSSL
 authenticode = ["boreal/authenticode"]
+authenticode-verify = ["boreal/authenticode-verify"]
+
 # Enable use of memory maps to load files to scan.
 memmap = ["boreal/memmap"]
 # Enables scan statistics. Should not impact performances
