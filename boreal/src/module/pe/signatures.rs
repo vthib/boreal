@@ -18,10 +18,18 @@ use super::Value;
 use crate::module::hex_encode;
 
 mod asn1;
+#[cfg(feature = "authenticode-verify")]
+mod verify;
 
 const MAX_PE_CERTS: usize = 16;
 
-pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Value>> {
+#[derive(Debug, Default)]
+struct Signatures {
+    sigs: Vec<Value>,
+    signed: Option<bool>,
+}
+
+pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<(Vec<Value>, Value)> {
     let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_SECURITY)?;
     let (va, size) = dir.address_range();
     let va = va as usize;
@@ -33,7 +41,11 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Val
     }
 
     let mut data = Bytes(mem.get(va..end)?);
-    let mut signatures = Vec::new();
+    let mut signatures = Signatures::default();
+    #[cfg(feature = "authenticode-verify")]
+    {
+        signatures.signed = Some(false);
+    }
 
     // Data contains a list of WIN_CERTIFICATE objects:
     // <https://learn.microsoft.com/en-us/windows/win32/api/wintrust/ns-wintrust-win_certificate>
@@ -60,10 +72,15 @@ pub fn get_signatures(data_dirs: &DataDirectories, mem: &[u8]) -> Option<Vec<Val
         data.skip(new_offset - offset).ok()?;
     }
 
-    Some(signatures)
+    let is_signed = match signatures.signed {
+        Some(is_signed) => Value::Integer(is_signed.into()),
+        None => Value::Undefined,
+    };
+
+    Some((signatures.sigs, is_signed))
 }
 
-fn add_signatures(mem: &[u8], cert_data: &[u8], signatures: &mut Vec<Value>) {
+fn add_signatures(mem: &[u8], cert_data: &[u8], signatures: &mut Signatures) {
     // Do not use `ContentInfo::from_der` but use a SliceReader: this allows
     // ignoring a few trailing bytes from the cert_data which happens very frequently.
     let Ok(mut reader) = der::SliceReader::new(cert_data) else {
@@ -81,9 +98,9 @@ fn add_signatures(mem: &[u8], cert_data: &[u8], signatures: &mut Vec<Value>) {
 fn add_signatures_from_content_info(
     mem: &[u8],
     content_info: &asn1::ContentInfo,
-    signatures: &mut Vec<Value>,
+    signatures: &mut Signatures,
 ) {
-    if signatures.len() >= MAX_PE_CERTS {
+    if signatures.sigs.len() >= MAX_PE_CERTS {
         return;
     }
     if content_info.content_type != asn1::ID_SIGNED_DATA {
@@ -155,6 +172,42 @@ fn add_signatures_from_content_info(
         .map(Value::Object)
         .collect();
 
+    #[cfg(feature = "authenticode-verify")]
+    let verified = {
+        let message_digest = signer_info.and_then(asn1::SignerInfo::get_message_digest);
+
+        let mut verified = true;
+        // file digest matches
+        verified = verified
+            && match (digest, &file_digest) {
+                (Some(a), Some(b)) => a == b,
+                _ => false,
+            };
+        // message digest matches
+        verified = verified
+            && match (
+                digest_alg_oid,
+                message_digest,
+                signed_data.encap_content_info.econtent,
+            ) {
+                (Some(alg), Some(dig), Some(content)) => {
+                    verify::check_digest(alg, content.value(), dig)
+                }
+                _ => false,
+            };
+        verified = verified
+            && signer_info.map_or(false, |info| {
+                verify::verify_signer_info(info, &certificate_chain)
+            });
+
+        if verified {
+            signatures.signed = Some(true);
+        }
+        Value::Integer(verified.into())
+    };
+    #[cfg(not(feature = "authenticode-verify"))]
+    let verified = Value::Undefined;
+
     map.extend([
         ("number_of_certificates", certificates.len().into()),
         ("certificates", Value::Array(certificates)),
@@ -173,10 +226,9 @@ fn add_signatures_from_content_info(
             "file_digest",
             file_digest.map(hex_encode).map(Value::Bytes).into(),
         ),
-        // TODO
-        ("verified", Value::Undefined),
+        ("verified", verified),
     ]);
-    signatures.push(Value::Object(map));
+    signatures.sigs.push(Value::Object(map));
 
     // Signatures can be nested, with for example one containing a sha1 authenticode digest and
     // another containing a sha256 authenticode digest.
@@ -185,7 +237,7 @@ fn add_signatures_from_content_info(
     }
 }
 
-fn add_nested_signatures(mem: &[u8], signer_info: &asn1::SignerInfo, signatures: &mut Vec<Value>) {
+fn add_nested_signatures(mem: &[u8], signer_info: &asn1::SignerInfo, signatures: &mut Signatures) {
     for attrs in &signer_info.unsigned_attrs {
         for attr in attrs.iter() {
             if attr.oid == asn1::ID_SPC_NESTED_SIGNATURE {
@@ -218,7 +270,21 @@ fn add_countersigs(
                     continue;
                 };
 
-                countersigs.push(Value::Object(countersig_to_map(&signer_info, certs, None)));
+                countersigs.push(Value::Object(countersig_to_map(
+                    &signer_info,
+                    certs,
+                    None,
+                    #[cfg(feature = "authenticode-verify")]
+                    |digest| {
+                        verify::check_digest(
+                            &signer_info.digest_alg.oid,
+                            info.signature.as_bytes(),
+                            digest,
+                        )
+                    },
+                    #[cfg(not(feature = "authenticode-verify"))]
+                    |_| false,
+                )));
             }
         }
     }
@@ -238,7 +304,7 @@ fn add_ms_countersigs<'a>(
             for value in attr.values.iter() {
                 if let Ok(content_info) = value.decode_as::<asn1::ContentInfo>() {
                     // TODO: handle countersig in CMS format
-                    parse_ms_countersig(&content_info, certs, countersigs);
+                    parse_ms_countersig(info, &content_info, certs, countersigs);
                 }
             }
         }
@@ -246,6 +312,7 @@ fn add_ms_countersigs<'a>(
 }
 
 fn parse_ms_countersig<'a>(
+    #[allow(unused_variables)] parent_signer_info: &asn1::SignerInfo<'a>,
     content_info: &asn1::ContentInfo<'a>,
     certs: &mut Vec<asn1::CertificateWithThumbprint<'a>>,
     countersigs: &mut Vec<Value>,
@@ -283,7 +350,23 @@ fn parse_ms_countersig<'a>(
 
     let sign_time = tst_info.gen_time.0.to_unix_duration().as_secs();
 
-    let mut countersig = countersig_to_map(signer_info, &counter_certificates, Some(sign_time));
+    let mut countersig = countersig_to_map(
+        signer_info,
+        &counter_certificates,
+        Some(sign_time),
+        #[cfg(feature = "authenticode-verify")]
+        |digest| {
+            let Some(content) = &signed_data.encap_content_info.econtent else {
+                return false;
+            };
+            // Check the digest of the countersignature
+            verify::check_digest(&signer_info.digest_alg.oid, content.value(), digest) &&
+            // Check the digest from the TstInfo object as well, it must match the original signature
+            verify::check_digest(tst_info_digest_alg, parent_signer_info.signature.as_bytes(), tst_info_digest.as_bytes())
+        },
+        #[cfg(not(feature = "authenticode-verify"))]
+        |_| false,
+    );
 
     certs.append(&mut counter_certificates);
     countersig.extend([
@@ -297,19 +380,41 @@ fn parse_ms_countersig<'a>(
     countersigs.push(Value::Object(countersig));
 }
 
-fn countersig_to_map(
+fn countersig_to_map<F>(
     info: &asn1::SignerInfo,
     certs: &[asn1::CertificateWithThumbprint],
     sign_time: Option<u64>,
-) -> HashMap<&'static str, Value> {
+    check_digest: F,
+) -> HashMap<&'static str, Value>
+where
+    F: FnOnce(&[u8]) -> bool,
+{
     let sign_time = sign_time.or_else(|| info.get_signing_time().map(time_to_ts));
     let digest = info.get_message_digest();
 
     let chain = CertificateChain::new(certs, &info.sid);
 
+    #[cfg(feature = "authenticode-verify")]
+    let verified = Value::Integer(
+        (
+            // Has signing time
+            sign_time.is_some() &&
+                // Has a signer cert
+                !chain.0.is_empty() &&
+                // message digest matches
+                digest.map_or(false, check_digest) &&
+                verify::verify_signer_info(info, certs)
+        )
+        .into(),
+    );
+    #[cfg(not(feature = "authenticode-verify"))]
+    let verified = {
+        let _ = check_digest;
+        Value::Undefined
+    };
+
     [
-        // TODO
-        ("verified", Value::Undefined),
+        ("verified", verified),
         ("sign_time", sign_time.into()),
         ("digest", digest.map(hex_encode).map(Value::Bytes).into()),
         (
@@ -450,7 +555,7 @@ impl<'a, 'b> CertificateChain<'a, 'b> {
 }
 
 /// Compute the authenticode hash of the given file.
-pub fn compute_authenticode_hash<D: Digest>(mem: &[u8]) -> Option<Vec<u8>> {
+fn compute_authenticode_hash<D: Digest>(mem: &[u8]) -> Option<Vec<u8>> {
     let dos_header = pe::ImageDosHeader::parse(mem).ok()?;
 
     // Get the magic to find if this is a PE32 or PE64

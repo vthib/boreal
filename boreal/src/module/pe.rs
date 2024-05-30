@@ -1311,9 +1311,9 @@ fn parse_file<HEADERS: ImageNtHeaders>(
     }
 
     #[cfg(feature = "authenticode")]
-    if let Some(signatures) = signatures::get_signatures(&data_dirs, region.mem) {
+    if let Some((signatures, is_signed)) = signatures::get_signatures(&data_dirs, region.mem) {
         let _r = map.insert("number_of_signatures", signatures.len().into());
-        let _r = map.insert("is_signed", Value::Undefined);
+        let _r = map.insert("is_signed", is_signed);
         let _r = map.insert("signatures", Value::Array(signatures));
     } else {
         let _r = map.insert("number_of_signatures", Value::Integer(0));

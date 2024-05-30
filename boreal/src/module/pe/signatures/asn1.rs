@@ -94,7 +94,7 @@ pub struct SignerInfo<'a> {
         constructed = "true",
         optional = "true"
     )]
-    pub signed_attrs: Option<AttributesRef<'a>>,
+    pub signed_attrs: Option<SignedAttrs<'a>>,
     pub signature_algorithm: AlgorithmIdentifierRef<'a>,
     pub signature: OctetStringRef<'a>,
     #[asn1(
@@ -109,7 +109,7 @@ pub struct SignerInfo<'a> {
 impl<'a> SignerInfo<'a> {
     pub fn get_signed_attr(&self, oid: &ObjectIdentifier) -> Option<AnyRef<'a>> {
         let attrs = self.signed_attrs.as_ref()?;
-        let attr = attrs.iter().find(|attr| &attr.oid == oid)?;
+        let attr = attrs.attrs.iter().find(|attr| &attr.oid == oid)?;
 
         attr.values.iter().next().copied()
     }
@@ -129,6 +129,65 @@ impl<'a> SignerInfo<'a> {
             None
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SignedAttrs<'a> {
+    pub attrs: Vec<AttributeRef<'a>>,
+    pub value: &'a [u8],
+}
+
+impl<'a> der::DecodeValue<'a> for SignedAttrs<'a> {
+    fn decode_value<R: Reader<'a>>(decoder: &mut R, header: der::Header) -> der::Result<Self> {
+        let mut attrs = Vec::new();
+        decoder.read_nested(header.length, |decoder| {
+            let value = decoder.read_slice(decoder.remaining_len())?;
+            let mut decoder = der::SliceReader::new(value)?;
+
+            while !decoder.is_finished() {
+                attrs.push(decoder.decode()?);
+            }
+
+            Ok(Self { attrs, value })
+        })
+    }
+}
+
+impl der::EncodeValue for SignedAttrs<'_> {
+    fn value_len(&self) -> der::Result<der::Length> {
+        self.attrs
+            .iter()
+            .try_fold(der::Length::ZERO, |len, elem| len + elem.encoded_len()?)
+    }
+
+    fn encode_value(&self, writer: &mut impl der::Writer) -> der::Result<()> {
+        for elem in &self.attrs {
+            elem.encode(writer)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl ValueOrd for SignedAttrs<'_> {
+    fn value_cmp(&self, other: &Self) -> der::Result<std::cmp::Ordering> {
+        use der::DerOrd;
+
+        let length_ord = self.attrs.len().cmp(&other.attrs.len());
+
+        for (value1, value2) in self.attrs.iter().zip(other.attrs.iter()) {
+            match value1.der_cmp(value2)? {
+                std::cmp::Ordering::Equal => (),
+                other => return Ok(other),
+            }
+        }
+
+        Ok(length_ord)
+    }
+}
+
+impl der::FixedTag for SignedAttrs<'_> {
+    const TAG: der::Tag = der::Tag::Set;
 }
 
 /// The `SignerIdentifier` type is defined in [RFC 5652 Section 5.3].
@@ -647,11 +706,50 @@ pub struct TbsCertificate<'a> {
 /// ```
 ///
 /// [RFC 5280 Section 4.1]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
-#[derive(Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Certificate<'a> {
     pub tbs_certificate: TbsCertificate<'a>,
+    pub cert_raw: &'a [u8],
     pub signature_algorithm: AlgorithmIdentifierRef<'a>,
     pub signature: BitStringRef<'a>,
+}
+
+impl<'a> der::DecodeValue<'a> for Certificate<'a> {
+    fn decode_value<R: Reader<'a>>(decoder: &mut R, header: der::Header) -> der::Result<Self> {
+        decoder.read_nested(header.length, |decoder| {
+            let cert_raw = decoder.tlv_bytes()?;
+            let tbs_certificate = TbsCertificate::from_der(cert_raw)?;
+            let signature_algorithm = decoder.decode()?;
+            let signature = decoder.decode()?;
+
+            Ok(Self {
+                tbs_certificate,
+                cert_raw,
+                signature_algorithm,
+                signature,
+            })
+        })
+    }
+}
+
+impl der::EncodeValue for Certificate<'_> {
+    fn value_len(&self) -> der::Result<der::Length> {
+        self.tbs_certificate.encoded_len()?
+            + self.signature_algorithm.encoded_len()?
+            + self.signature.encoded_len()?
+    }
+
+    fn encode_value(&self, writer: &mut impl der::Writer) -> der::Result<()> {
+        self.tbs_certificate.encode(writer)?;
+        self.signature_algorithm.encode(writer)?;
+        self.signature.encode(writer)?;
+
+        Ok(())
+    }
+}
+
+impl der::FixedTag for Certificate<'_> {
+    const TAG: der::Tag = der::Tag::Sequence;
 }
 
 /// X.501 `Validity` as defined in [RFC 5280 Section 4.1.2.5]
