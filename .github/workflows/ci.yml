@@ -46,7 +46,7 @@ jobs:
       - name: Run tests with Openssl
         env:
           YARA_CRYPTO_LIB: openssl
-        run: cargo test --features authenticode --target=${{matrix.target}}
+        run: cargo test --features authenticode-verify --target=${{matrix.target}}
 
       # Some tests need to be super user
       - name: Run super user tests
@@ -55,7 +55,7 @@ jobs:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: "sudo -E"
           CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_RUNNER: "sudo -E"
         run: |
-          cargo test --features authenticode --target=${{matrix.target}} -- --test-threads=1 --ignored
+          cargo test --target=${{matrix.target}} -- --test-threads=1 --ignored
 
       - name: Run optional module tests
         if: ${{ matrix.build == 'linux' }}
@@ -120,7 +120,7 @@ jobs:
       - name: Run tests with Openssl
         env:
           YARA_CRYPTO_LIB: openssl
-        run: cargo test --features authenticode --target=${{matrix.target}}
+        run: cargo test --features authenticode-verify --target=${{matrix.target}}
 
     strategy:
       fail-fast: false
@@ -159,7 +159,7 @@ jobs:
       - name: Run tests with Openssl
         env:
           YARA_CRYPTO_LIB: openssl
-        run: cargo test --features authenticode
+        run: cargo test --features authenticode-verify
 
       # Some tests on macos need to be super user
       - name: Run super user tests
@@ -169,7 +169,7 @@ jobs:
         # fail when multiple tests scanning processes are running in parallel.
         # This is very suspect, and should be investigated and reported.
         run: |
-          sudo cargo test --features authenticode -- --test-threads=1 --ignored
+          sudo cargo test -- --test-threads=1 --ignored
 
   clippy:
     name: Clippy
@@ -224,10 +224,10 @@ jobs:
           source <(cargo llvm-cov show-env --export-prefix)
           cargo build -p boreal-test-helpers
           # Run the normal tests
-          cargo test --features magic,authenticode,cuckoo
+          cargo test --features magic,authenticode-verify,cuckoo
           # And run the super user tests
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sudo -E" cargo \
-            test --features magic,authenticode,cuckoo -- --ignored
+            test --features magic,authenticode-verify,cuckoo -- --ignored
           # Finally, generate the report
           cargo llvm-cov report --lcov --output-path lcov.info \
             --ignore-filename-regex boreal-test-helpers/src/main.rs
@@ -283,5 +283,6 @@ jobs:
           "--no-default-features --features=process",
           "--no-default-features --features=hash,object",
           "--no-default-features --features=object,authenticode",
+          "--no-default-features --features=object,authenticode,authenticode-verify",
           "--all-features"
         ]
