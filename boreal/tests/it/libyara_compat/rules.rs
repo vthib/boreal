@@ -3046,6 +3046,12 @@ fn test_re() {
     check_regex_match("a.b{2,3}cccc", b"aabbbcccc", b"aabbbcccc");
     check_regex_match("ab{2,3}c", b"abbbc", b"abbbc");
     check_regex_match("ab{2,3}?c", b"abbbc", b"abbbc");
+
+    // New parsing added for yara 4.5.1.
+    check_regex_match("ab{2, 3}c", b"abbbc", b"abbbc");
+    check_regex_match("ab{2 ,3}c", b"abbbc", b"abbbc");
+    check_regex_match("ab{2  ,  3}c", b"abbbc", b"abbbc");
+
     check_regex_match("ab{0,1}?c", b"abc", b"abc");
     check_regex_match("a{0,1}?bc", b"abc", b"abc");
     check_regex_match("a{0,1}bc", b"bbc", b"bc");
