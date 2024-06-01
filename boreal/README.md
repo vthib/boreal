@@ -28,6 +28,8 @@ The main goals of the project are:
   See the [benchmarks](/benches/README.md) for details.
 * Process scanning on Windows, Linux and macOS, with different scanning modes available. See the
   [FragmentedScanMode documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.FragmentedScanMode.html).
+* Pure Rust implementation without any C dependency such as OpenSSL, making it very easy to build and use
+  on any target. The only exception is the magic module which requires libmagic.
 
 ## Installation & use
 
@@ -114,15 +116,17 @@ free. If however someone can provide a valid use-case, this difference can be re
 - [x] math
 - [x] macho (with the _object_ feature)
 - [x] pe (with the _object_ feature)
-  - `pe.signatures` is behind the _authenticode_ feature
   - `pe.imphash()` is behind the _hash_ feature
+  - `pe.signatures` is behind the _authenticode_ feature
+  - `pe.is_signed` and the signatures `verified` value is behind the _authenticode-verify_ feature,
+    disabled by default. See the [authenticode-verify](#authenticode-verify) section for more details.
 - [x] dotnet (with the _object_ feature)
 - [x] string
 - [x] time
 - [x] console
-- [x] magic (with the _magic_ feature)
 - [x] dex (with the _object_ feature)
-- [x] cuckoo (with the _cuckoo_ feature)
+- [x] magic (with the _magic_ feature, disabled by default)
+- [x] cuckoo (with the _cuckoo_ feature, disabled by default)
 
 ## Pay for what you use
 
@@ -164,16 +168,45 @@ Please create an issue with a use-case if this is a feature you would need.
 
 ## crate feature flags
 
+### Enabled by default
+
 - `object`: enables the `elf`, `macho`, `pe`, `dotnet` and `dex` modules.
 - `hash`: enables the `hash` module, as well as the `pe.imphash()` function if the `object`
   feature is also enabled.
-- `authenticode`: this enables the `signatures` part of the `pe` module. This adds
-  a dependency on OpenSSL.
+- `authenticode`: enables the `signatures` part of the `pe` module.
 - `process`: adds the process scanning API.
 - `memmap`: adds APIs to scan files using memory maps.
-- `profiling`: compute statistics during compilation and evaluation.
-- `magic`: enable the `magic` module.
-- `cuckoo`: enable the `cuckoo` module.
 
-By default, `hash`, `object`, `process` and `memmap` are enabled,
-`authenticode`, `profiling`, `magic` and `cuckoo` are not.
+### Disabled by default
+
+- `profiling`: adds computations of statistics during compilation and evaluation.
+- `magic`: enables the `magic` module. Adds a dependency on libmagic.
+- `cuckoo`: enables the `cuckoo` module.
+- `authenticode-verify`: enables the `pe.signed`, `pe.signatures[*].verified` and
+  `pe.signatures[*].countersignatures[*].verified` part of the `pe` module.
+
+### `authenticode-verify`
+
+YARA 4.3 introduced new parsing for the `pe.signatures` object, and notably the
+fields `pe.is_signed`, `pe.signatures[*].verified` and `pe.countersignatures[*].verified`.
+Those fields however causes a few issues:
+
+- They can be confusing, as they do not indicate whether Windows would actually
+  consider the file as signed, as their is no trust anchor verification.
+- They bring a dependency to OpenSSL to do the signature verification, and any
+  equivalent implementation would imply bringing a lot of dependencies to handle
+  all the different algorithms that can be used in signatures.
+
+I'm unsure what the use-case for those fields are, so they are not implemented by
+default. To be able to use them, there are two possibilities:
+
+- the `authenticode-verify` feature can be enabled to get them back, but the implementation
+  is best effort. It does not depend on OpenSSL but uses rust cryptos crates, so not
+  all algorithms are implemented, and some checks might be missing.
+- on Windows, `WinVerifyTrust` can be called and the result provided as an external symbol.
+  A feature can be implemented to make this available as `pe.is_signed` instead of an
+  external symbol, but I would like to judge interest in this before implementing it.
+  The benefit here, is that the value truly reflects whether the file is considered as
+  signed or not by Windows.
+
+If you need to use those fields and those solutions are not sufficient, please open an issue.
