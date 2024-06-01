@@ -230,6 +230,16 @@ fn test_math() {
         "import \"math\"
       rule test {
         condition:
+          math.entropy(\"\") == 0.0
+      }",
+        b"",
+        true,
+    );
+
+    check(
+        "import \"math\"
+      rule test {
+        condition:
           math.entropy(\"AABB\") == 1.0
       }",
         b"",

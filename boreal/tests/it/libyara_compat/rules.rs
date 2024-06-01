@@ -1904,6 +1904,21 @@ fn test_hex_strings() {
         false,
     );
 
+    // Test case for https://github.com/VirusTotal/yara/issues/2065
+    const ISSUE_2065: &[u8] = &[
+        0x81, 0xEC, 0x38, 0x01, 0x00, 0x00, 0x00, 0x00, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xB8,
+        0x00, 0x00, 0x00, 0x00, 0x44, 0x55, 0x66, 0x77,
+    ];
+
+    check(
+        "rule test { \
+        strings: $a = { 81 EC 38 01 [4-25] B8 ?? ?? ?? ?? [20-21] 44 55 66 77  } \
+        condition: $a }",
+        ISSUE_2065,
+        true,
+    );
+
     // ERROR_INVALID_HEX_STRING
     check_err(
         "rule test {
@@ -3119,6 +3134,8 @@ fn test_re() {
     check_regex_match("a[b-]", b"a-", b"a-");
     check_regex_match("a[b-]", b"ab", b"ab");
     check_regex_match("[a-c-e]", b"b", b"b");
+    check_regex_match("[a-c-e]+", b"abc", b"abc");
+    check_regex_match("[*-_]+", b"ABC", b"ABC");
     check_regex_match("[a-c-e]", b"-", b"-");
     check(&build_regex_rule("[a-c-e]"), b"d", false);
 
@@ -3394,6 +3411,18 @@ fn test_re() {
         true,
     );
 
+    check(
+        "rule test { strings: $a = /[*-_]+/ nocase condition: !a == 3 }",
+        b"abc",
+        true,
+    );
+
+    check(
+        "rule test { strings: $a = /([$&#*-_!().])+/ nocase condition: !a == 6 }",
+        b"ABCabc",
+        true,
+    );
+
     // Test case for issue #1006
     check(
         "rule test { strings: $a = \" cmd.exe \" nocase wide condition: $a }",
@@ -3590,6 +3619,11 @@ fn test_matches_operator() {
         b"",
         false,
     );
+
+    check("rule test { condition: \"\" matches /foo|/ }", b"", true);
+    check("rule test { condition: \"\" matches /a||b/ }", b"", true);
+
+    check("rule test { condition: \"\" matches /foobar/ }", b"", false);
 }
 
 #[test]
