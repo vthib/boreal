@@ -4,7 +4,7 @@ use std::ops::Range;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take},
-    character::complete::{anychar, char, digit0, digit1, none_of},
+    character::complete::{anychar, char, digit0, digit1, multispace0, none_of},
     combinator::{cut, map, opt},
     multi::many0,
     sequence::{delimited, separated_pair, terminated, tuple},
@@ -621,7 +621,11 @@ fn range_multi(input: Input) -> ParseResult<RepetitionRange> {
     let start = input.pos();
     let (input, (from, to)) = delimited(
         char('{'),
-        separated_pair(parse_opt_u32, char(','), parse_opt_u32),
+        separated_pair(
+            parse_opt_u32,
+            delimited(multispace0, char(','), multispace0),
+            parse_opt_u32,
+        ),
         char('}'),
     )(input)?;
 
@@ -1431,12 +1435,20 @@ mod tests {
         parse(range_multi, "{5,10}a", "a", RepetitionRange::Bounded(5, 10));
         parse(range_multi, "{0,0} a", " a", RepetitionRange::Bounded(0, 0));
         parse(range_multi, "{,}", "", RepetitionRange::AtLeast(0));
+        parse(range_multi, "{, }", "", RepetitionRange::AtLeast(0));
+        parse(range_multi, "{ ,}", "", RepetitionRange::AtLeast(0));
+        parse(range_multi, "{ , }", "", RepetitionRange::AtLeast(0));
+        parse(range_multi, "{2 , }", "", RepetitionRange::AtLeast(2));
+        parse(range_multi, "{ , 2}", "", RepetitionRange::Bounded(0, 2));
+        parse(range_multi, "{1 , 2}", "", RepetitionRange::Bounded(1, 2));
 
         parse_err(range_multi, "{");
         parse_err(range_multi, "{,5");
         parse_err(range_multi, "{,-5}");
         parse_err(range_multi, "{-5,}");
         parse_err(range_multi, "{10,5}");
+        parse_err(range_multi, "{ 1,5}");
+        parse_err(range_multi, "{1,5 }");
     }
 
     #[test]
