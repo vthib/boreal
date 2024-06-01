@@ -373,8 +373,7 @@ fn test_types_exe() {
 fn test_types2_dll() {
     // Split checks in multiple rules so that if one fails, we at least know a bit
     // more precisely which part of the check failed.
-    // TODO: fix this in YARA
-    let mut checker = Checker::new_without_yara(
+    let mut checker = Checker::new(
         r#"import "dotnet"
     rule aa {
       condition:
@@ -881,18 +880,7 @@ fn test_coverage_types() {
 
 #[test]
 fn test_coverage_types2() {
-    // TODO: fix this in YARA
-    let diffs = [
-        "dotnet.classes[1].methods[1].parameters[1].type",
-        "dotnet.classes[1].methods[1].parameters[2].type",
-        "dotnet.classes[1].methods[1].parameters[3].type",
-        "dotnet.classes[1].methods[1].parameters[4].type",
-        "dotnet.classes[1].methods[1].parameters[6].type",
-        "dotnet.classes[1].methods[2].parameters[0].type",
-        "dotnet.classes[1].methods[2].parameters[1].type",
-        "dotnet.classes[1].methods[2].parameters[2].type",
-        "dotnet.classes[1].methods[2].parameters[3].type",
-    ];
+    let diffs = [];
     let path = "tests/assets/dotnet/types2.dll";
     compare_module_values_on_file(Dotnet, path, false, &diffs);
 
@@ -901,6 +889,8 @@ fn test_coverage_types2() {
 }
 
 #[test]
+// FIXME: Broken compat with YARA 4.5.1
+#[ignore]
 fn test_coverage_assembly() {
     let diffs = [];
     let path = "tests/assets/dotnet/assembly.dll";

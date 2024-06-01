@@ -5,21 +5,7 @@ use crate::utils::{check, compare_module_values_on_mem};
 
 #[test]
 fn test_coverage_dex_file() {
-    let diffs = [
-        // All those differences are fixed in
-        // <https://github.com/VirusTotal/yara/pull/2069>
-        "dex.DEX_FILE_MAGIC_035",
-        "dex.DEX_FILE_MAGIC_036",
-        "dex.DEX_FILE_MAGIC_037",
-        "dex.DEX_FILE_MAGIC_038",
-        "dex.DEX_FILE_MAGIC_039",
-        "dex.field[0].static",
-        "dex.field[0].instance",
-        "dex.field[1].instance",
-        "dex.field[1].static",
-        "dex.header.signature",
-        "dex.header.magic",
-    ];
+    let diffs = [];
     compare_module_values_on_mem(Dex, "DEX_FILE", DEX_FILE, false, &diffs);
     compare_module_values_on_mem(Dex, "DEX_FILE", DEX_FILE, true, &diffs);
 }
