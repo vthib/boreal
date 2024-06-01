@@ -42,6 +42,9 @@ pub const ID_CT_TSTINFO: ObjectIdentifier =
 // Obsolete oid used in some files in place of rfc5912::SHA_1_WITH_RSA_ENCRYPTION
 pub const SHA1_WITH_RSA: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.14.3.2.29");
 
+// Does not exist in const_oid
+pub const ECDSA_WITH_SHA_1: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.4.1");
+
 // Some object identifiers often used in certificates issuer/subject fields.
 pub const JURISDICTION_L: ObjectIdentifier =
     ObjectIdentifier::new_unwrap("1.3.6.1.4.1.311.60.2.1.1");
