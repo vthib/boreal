@@ -661,6 +661,7 @@ fn get_oid_name(oid: &asn1::ObjectIdentifier) -> Option<&[u8]> {
         rfc5912::SHA_256_WITH_RSA_ENCRYPTION => Some(b"sha256WithRSAEncryption"),
         rfc5912::SHA_384_WITH_RSA_ENCRYPTION => Some(b"sha384WithRSAEncryption"),
         rfc5912::SHA_512_WITH_RSA_ENCRYPTION => Some(b"sha512WithRSAEncryption"),
+        asn1::ECDSA_WITH_SHA_1 => Some(b"ecdsa-with-SHA1"),
         rfc5912::ECDSA_WITH_SHA_256 => Some(b"ecdsa-with-SHA256"),
         rfc5912::ECDSA_WITH_SHA_384 => Some(b"ecdsa-with-SHA384"),
         rfc5912::ECDSA_WITH_SHA_512 => Some(b"ecdsa-with-SHA512"),
@@ -669,6 +670,8 @@ fn get_oid_name(oid: &asn1::ObjectIdentifier) -> Option<&[u8]> {
         rfc5912::ID_SHA_256 => Some(b"sha256"),
         rfc5912::ID_SHA_384 => Some(b"sha384"),
         rfc5912::ID_SHA_512 => Some(b"sha512"),
+        rfc5912::DSA_WITH_SHA_1 => Some(b"dsaWithSHA1"),
+        rfc5912::DSA_WITH_SHA_256 => Some(b"dsa_with_SHA256"),
         _ => DB.by_oid(oid).map(str::as_bytes),
     }
 }
@@ -682,6 +685,7 @@ fn get_rdn_name(oid: &asn1::ObjectIdentifier) -> Option<&str> {
         rfc4519::OU => Some("OU"),
         rfc4519::ST => Some("ST"),
         rfc4519::STREET => Some("street"),
+        rfc4519::UID => Some("UID"),
         rfc3280::EMAIL => Some("emailAddress"),
         asn1::JURISDICTION_L => Some("jurisdictionL"),
         asn1::JURISDICTION_ST => Some("jurisdictionST"),

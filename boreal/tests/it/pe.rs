@@ -844,3 +844,54 @@ rule test {{
         "1720bf764274b7a4052bbef0a71adc0d",
     );
 }
+
+#[test]
+#[cfg(feature = "authenticode-verify")]
+fn test_signatures_verify() {
+    let mut checker = crate::utils::Checker::new(
+        "import \"pe\"
+      rule test {
+        condition: pe.is_signed
+      }",
+    );
+
+    let diffs = [];
+
+    for name in [
+        // DSA
+        "dsa_sha1",
+        "dsa_sha256",
+        // elliptic curves
+        "ec_p256_sha1",
+        "ec_p256_sha256",
+        "ec_p256_sha384",
+        "ec_p256_sha512",
+        // TODO: this one does not verify, investigate why
+        // "ec_p384_sha1",
+        "ec_p384_sha256",
+        "ec_p384_sha384",
+        "ec_p384_sha512",
+        // Not supported by the p521 crate yet, next release probably
+        // "ec_p521_sha1",
+        // "ec_p521_sha256",
+        // "ec_p521_sha384",
+        // "ec_p521_sha512",
+        // RSA
+        "rsa_md5",
+        "rsa_sha1",
+        "rsa_sha256",
+        "rsa_sha384",
+        "rsa_sha512",
+    ] {
+        let path = format!("tests/assets/pe/signed/{name}.exe");
+
+        let mem = std::fs::read(&path).unwrap();
+
+        println!("checking {}...", &path);
+        // File should be considered signed
+        checker.check(&mem, true);
+
+        // Check full coverage
+        compare_module_values_on_file(Pe, &path, false, &diffs);
+    }
+}
