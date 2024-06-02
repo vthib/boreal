@@ -1459,6 +1459,7 @@ where
             thunk,
             dll_name,
             rva,
+            is_32,
             &hint_name,
             &mut functions,
             data_functions,
@@ -1474,6 +1475,7 @@ fn add_thunk<Pe: ImageNtHeaders, F>(
     thunk: Pe::ImageThunkData,
     dll_name: &[u8],
     rva: u32,
+    is_32: bool,
     hint_name: F,
     functions: &mut Vec<Value>,
     data_functions: &mut Vec<DataFunction>,
@@ -1482,7 +1484,16 @@ where
     F: Fn(u32) -> object::Result<Vec<u8>>,
 {
     if thunk.is_ordinal() {
-        let ordinal = thunk.ordinal();
+        let raw = if is_32 {
+            thunk.raw() & 0x7FFF_FFFF
+        } else {
+            thunk.raw() & 0x7FFF_FFFF_FFFF_FFFF
+        };
+
+        let Ok(ordinal) = u16::try_from(raw) else {
+            // Corrupted ordinal value, ignore
+            return false;
+        };
         let name = ord::ord_lookup(dll_name, ordinal);
 
         data_functions.push(DataFunction {
@@ -1811,6 +1822,11 @@ fn add_resources(
         let mut resources = Vec::new();
 
         'outer: for entry in root.entries {
+            // Copied from 1242223b04f2 in libyara
+            if entry.offset_to_data_or_directory.get(LE) == 0 {
+                continue;
+            }
+
             // First level is type
             let ty = entry.name_or_id.get(LE);
             let ty_name = match entry.name_or_id() {
@@ -1841,6 +1857,12 @@ fn add_resources(
                     };
 
                     if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
+                        // Copied from 620963092c4 in libyara
+                        let size = entry_data.size.get(LE);
+                        if size == 0 || usize::try_from(size).map_or(false, |v| v >= mem.len()) {
+                            continue;
+                        }
+
                         let rva = entry_data.offset_to_data.get(LE);
                         let offset = va_to_file_offset(mem, sections, rva);
                         if ty == u32::from(pe::RT_VERSION) {
