@@ -1616,6 +1616,7 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
 fn dll_name_is_valid(dll_name: &[u8]) -> bool {
     dll_name.iter().all(|c| {
         *c >= b' '
+            && *c <= 0x7e
             && *c != b'\"'
             && *c != b'*'
             && *c != b'<'
