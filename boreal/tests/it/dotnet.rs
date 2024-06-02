@@ -130,7 +130,16 @@ rule ar4 {
         dotnet.assembly_refs[4].version.minor == 35720 and
         dotnet.assembly_refs[4].version.build_number == 283 and
         dotnet.assembly_refs[4].version.revision_number == 212
-}"##,
+}
+
+rule resources {
+    condition:
+        dotnet.number_of_resources == 1 and
+        dotnet.resources[0].name == "_my.Resource.Public?" and
+        not defined dotnet.resources[0].length and
+        not defined dotnet.resources[0].offset
+}
+"##,
     );
 
     let mem = std::fs::read("tests/assets/dotnet/assembly.dll").unwrap();
@@ -143,6 +152,7 @@ rule ar4 {
             "default:ar2",
             "default:ar3",
             "default:ar4",
+            "default:resources",
         ],
     );
 }
@@ -889,8 +899,6 @@ fn test_coverage_types2() {
 }
 
 #[test]
-// FIXME: Broken compat with YARA 4.5.1
-#[ignore]
 fn test_coverage_assembly() {
     let diffs = [];
     let path = "tests/assets/dotnet/assembly.dll";
