@@ -3,8 +3,6 @@ use boreal::module::Pe;
 use crate::utils::{check_file, compare_module_values_on_file};
 
 #[test]
-// FIXME: Broken compat with YARA 4.5.1
-#[ignore]
 fn test_rva_to_offset() {
     check_file(
         "import \"pe\"
@@ -15,18 +13,18 @@ fn test_rva_to_offset() {
           pe.rva_to_offset(0) == 0 and
           pe.rva_to_offset(0xFFF) == 0xFFF and
 
-          // .text, starting at 0x1000, virtual size is 0x1774, section raw data is at 0x1000 too
+          // .text, starting at 0x1000, virtual size is 0x1774, section raw data is at 0x1000 too.
+          // raw size is 0x2000 so this is the value taken for the size of the section
           pe.rva_to_offset(0x1000) == 0x1000 and
           pe.rva_to_offset(0x12f3) == 0x12f3 and
           pe.rva_to_offset(0x2773) == 0x2773 and
-          not defined pe.rva_to_offset(0x2774) and
+          pe.rva_to_offset(0x2FFF) == 0x2FFF and
 
-          // .data, starting at 0x3000, virtual size is 0x30
+          // .data, starting at 0x3000, virtual size is 0x30, raw size is 0x1000
           pe.rva_to_offset(0x301f) == 0x301f and
-          not defined pe.rva_to_offset(0x3100) and
+          pe.rva_to_offset(0x3fff) == 0x3fff and
 
-          // .bss, starting at 0x5000, but empty
-          not defined pe.rva_to_offset(0x4fff) and
+          // .bss, starting at 0x5000, virtual size is 0x400
           not defined pe.rva_to_offset(0x5000) and
           not defined pe.rva_to_offset(0x5001) and
 
@@ -34,10 +32,11 @@ fn test_rva_to_offset() {
           pe.rva_to_offset(0x6000) == 0x5000 and
           pe.rva_to_offset(0x6500) == 0x5500 and
 
-          // .tls starting at 0x8000, virtual size 0x20
+          // .tls starting at 0x8000, virtual size 0x20, raw size is 0x1000
           pe.rva_to_offset(0x8012) == 0x7012 and
           pe.rva_to_offset(0x801f) == 0x701f and
-          not defined pe.rva_to_offset(0x8020) and
+          pe.rva_to_offset(0x8020) == 0x7020 and
+          pe.rva_to_offset(0x8fff) == 0x7fff and
 
           not defined pe.rva_to_offset(0x7FFFFFFFFFFFFFFF) and
           not defined pe.rva_to_offset(-1) and
