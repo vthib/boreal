@@ -1429,30 +1429,32 @@ impl<'data> TablesData<'data> {
             self.data.skip(4)?;
             let name = self.read_string()?;
             let implementation = read_index(&mut self.data, self.implementation_index_size)?;
-            if implementation != 0 {
-                // Resource is not in this file, so ignore
-                continue;
-            }
 
-            // Offset is relative to the resource entry in this file.
-            let Some(real_offset) = self
-                .resource_base
-                .and_then(|base| base.checked_add(u64::from(offset)))
-            else {
-                continue;
-            };
+            let (real_offset, length) = if implementation == 0 {
+                // Resource is in this file, retrieve offset and length
 
-            // We can get the length from reading into the entry
-            // XXX: this comes from the yara logic, I haven't really understood where
-            // this length comes from
-            let Ok(length) = self.mem.read_at::<U32<LE>>(real_offset) else {
-                continue;
+                // Offset is relative to the resource entry in this file.
+                let real_offset = self
+                    .resource_base
+                    .and_then(|base| base.checked_add(u64::from(offset)));
+
+                // We can get the length from reading into the entry
+                // XXX: this comes from the yara logic, I haven't really understood where
+                // this length comes from
+                let length = real_offset
+                    .and_then(|offset| self.mem.read_at::<U32<LE>>(offset).ok())
+                    .map(|v| v.get(LE));
+
+                // Add 4 to skip the length we just read
+                (real_offset.and_then(|v| v.checked_add(4)), length)
+            } else {
+                (None, None)
             };
 
             resources.push(Value::object([
                 // Add 4 to skip the size we just read
-                ("offset", real_offset.checked_add(4).into()),
-                ("length", length.get(LE).into()),
+                ("offset", real_offset.into()),
+                ("length", length.into()),
                 ("name", name.map(Value::bytes).into()),
             ]));
         }
