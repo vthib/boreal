@@ -1735,7 +1735,7 @@ fn sections_to_value(
             .iter()
             .take(MAX_PE_SECTIONS)
             .map(|section| {
-                let mut name = section.raw_name();
+                let mut name = section.name.as_slice();
                 if let Some(last_non_zero_pos) = name
                     .iter()
                     .enumerate()
