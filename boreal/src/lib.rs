@@ -40,7 +40,6 @@
 #![deny(macro_use_extern_crate)]
 #![deny(non_ascii_idents)]
 #![deny(noop_method_call)]
-#![deny(pointer_structural_match)]
 #![deny(rust_2021_compatibility)]
 #![deny(single_use_lifetimes)]
 #![deny(trivial_casts)]
