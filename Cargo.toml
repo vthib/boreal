@@ -6,17 +6,3 @@ members = [
     "boreal-parser",
     "boreal-test-helpers",
 ]
-
-[patch.crates-io]
-# Fork of object crate, for additional features, but also hacks that probably cannot
-# be pushed upstreamed, but are required to align with yara's behavior
-#
-# - Handling of FileAlignment on section's offset to raw data:
-#   - 7c3d0d2dc82d0ad6df4ec3a62551c4bcc1aa1a34
-#   - 26eaacff46232a6316e0de9f4bd1628628ac0858
-#   - f7e5d82c5f6fa4ca9d6ef5a39e83b6109fe2c18c
-# - Retrieval of raw name for sections
-#   - c980aa38c595cd6b91c29e41cbb0b7b11ad1511d
-# - Handle VirtualSize=0 when searching through sections
-#   - f7e5d82c5f6fa4ca9d6ef5a39e83b6109fe2c18c
-object = { git = 'https://github.com/vthib/boreal-object', branch = "version-0.35" }
