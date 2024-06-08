@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use crate::memory::Region;
 use crate::regex::Regex;
 use object::{
-    coff::{CoffHeader, SectionTable, SymbolTable},
+    coff::{CoffHeader, SymbolTable},
     pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64},
     read::pe::{
-        DataDirectories, ImageNtHeaders, ImageOptionalHeader, ImageThunkData, ImportThunkList,
+        DataDirectories, DelayLoadImportTable, ExportTable, ImageNtHeaders, ImageOptionalHeader,
+        ImageThunkData, ImportTable, ImportThunkList, ResourceDirectory,
         ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
     FileKind, LittleEndian as LE, StringTable,
@@ -20,6 +21,7 @@ mod debug;
 mod ord;
 #[cfg(feature = "authenticode")]
 mod signatures;
+pub mod utils;
 mod version_info;
 
 const MAX_PE_SECTIONS: usize = 96;
@@ -1150,7 +1152,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(
     let mut offset = dos_header.nt_headers_offset().into();
     let (nt_headers, data_dirs) = HEADERS::parse(region.mem, &mut offset).ok()?;
 
-    let sections = nt_headers.sections(region.mem, offset).ok();
+    let sections = utils::SectionTable::new(nt_headers, region.mem, offset);
 
     let hdr = nt_headers.file_header();
     let characteristics = hdr.characteristics.get(LE);
@@ -1172,7 +1174,8 @@ fn parse_file<HEADERS: ImageNtHeaders>(
         ep.and_then(|ep| ep.checked_add(region.start)).into()
     } else {
         sections
-            .and_then(|sections| va_to_file_offset(region.mem, &sections, ep))
+            .as_ref()
+            .and_then(|sections| utils::va_to_file_offset(region.mem, sections, ep))
             .map_or(-1, i64::from)
             .into()
     };
@@ -1369,14 +1372,20 @@ fn rich_signature(info: RichHeaderInfo, region: &Region, data: &mut Data) -> Val
 fn add_imports<Pe: ImageNtHeaders>(
     data_dirs: &DataDirectories,
     mem: &[u8],
-    sections: &SectionTable,
+    sections: &utils::SectionTable,
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
     let mut imports = Vec::new();
     let mut nb_functions_total = 0;
 
-    let table = data_dirs.import_table(mem, sections).ok().flatten();
+    let table = data_dirs
+        .get(pe::IMAGE_DIRECTORY_ENTRY_IMPORT)
+        .and_then(|dir| {
+            let import_va = dir.virtual_address.get(LE);
+            let (section_data, section_va) = sections.get_section_containing(mem, import_va)?;
+            Some(ImportTable::new(section_data, section_va, import_va))
+        });
     let descriptors = table.as_ref().and_then(|table| table.descriptors().ok());
     if let (Some(table), Some(mut descriptors)) = (table, descriptors) {
         while let Ok(Some(import_desc)) = descriptors.next() {
@@ -1543,7 +1552,7 @@ fn is_import_name_valid(name: &[u8]) -> bool {
 fn add_delay_load_imports<Pe: ImageNtHeaders>(
     data_dirs: &DataDirectories,
     mem: &[u8],
-    sections: &SectionTable,
+    sections: &utils::SectionTable,
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
@@ -1551,9 +1560,16 @@ fn add_delay_load_imports<Pe: ImageNtHeaders>(
     let mut nb_functions_total = 0;
 
     let table = data_dirs
-        .delay_load_import_table(mem, sections)
-        .ok()
-        .flatten();
+        .get(pe::IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT)
+        .and_then(|dir| {
+            let import_va = dir.virtual_address.get(LE);
+            let (section_data, section_va) = sections.get_section_containing(mem, import_va)?;
+            Some(DelayLoadImportTable::new(
+                section_data,
+                section_va,
+                import_va,
+            ))
+        });
     let descriptors = table.as_ref().and_then(|table| table.descriptors().ok());
     if let (Some(table), Some(mut descriptors)) = (table, descriptors) {
         while let Ok(Some(import_desc)) = descriptors.next() {
@@ -1629,11 +1645,19 @@ fn dll_name_is_valid(dll_name: &[u8]) -> bool {
 fn add_exports(
     data_dirs: &DataDirectories,
     mem: &[u8],
-    sections: &SectionTable,
+    sections: &utils::SectionTable,
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
-    if let Ok(Some(table)) = data_dirs.export_table(mem, sections) {
+    let export_table = data_dirs
+        .get(pe::IMAGE_DIRECTORY_ENTRY_EXPORT)
+        .and_then(|dir| {
+            let export_va = dir.virtual_address.get(LE);
+            let export_data = sections.get_dir_data(mem, *dir)?;
+            ExportTable::parse(export_data, export_va).ok()
+        });
+
+    if let Some(table) = export_table {
         let ordinal_base = table.ordinal_base() as usize;
         let addresses = table.addresses();
         let mut details: Vec<_> = addresses
@@ -1662,7 +1686,7 @@ fn add_exports(
                         match forward_name {
                             Some(_) => Value::Undefined,
                             // -1 is set by libyara to indicate an invalid offset.
-                            None => match va_to_file_offset(mem, sections, address) {
+                            None => match utils::va_to_file_offset(mem, sections, address) {
                                 Some(v) => v.into(),
                                 None => Value::Undefined,
                             },
@@ -1726,7 +1750,7 @@ fn data_directories(dirs: DataDirectories) -> Value {
 }
 
 fn sections_to_value(
-    sections: &SectionTable,
+    sections: &utils::SectionTable,
     strings: Option<StringTable>,
     data: &mut Data,
 ) -> Value {
@@ -1795,7 +1819,7 @@ fn sections_to_value(
     )
 }
 
-fn overlay(sections: &SectionTable, mem: &[u8]) -> Value {
+fn overlay(sections: &utils::SectionTable, mem: &[u8]) -> Value {
     let offset = sections.max_section_file_offset();
 
     if offset < mem.len() as u64 {
@@ -1811,15 +1835,21 @@ fn overlay(sections: &SectionTable, mem: &[u8]) -> Value {
 fn add_resources(
     data_dirs: &DataDirectories,
     mem: &[u8],
-    sections: &SectionTable,
+    sections: &utils::SectionTable,
     data: &mut Data,
     out: &mut HashMap<&'static str, Value>,
 ) {
     let mut infos = Vec::new();
 
-    let dir = data_dirs.resource_directory(mem, sections).ok().flatten();
-    let root = dir.as_ref().and_then(|dir| dir.root().ok());
-    if let (Some(dir), Some(root)) = (dir, root) {
+    let resource_dir = data_dirs
+        .get(pe::IMAGE_DIRECTORY_ENTRY_RESOURCE)
+        .and_then(|dir| {
+            let rsrc_data = sections.get_dir_data(mem, *dir)?;
+            Some(ResourceDirectory::new(rsrc_data))
+        });
+
+    let root = resource_dir.as_ref().and_then(|dir| dir.root().ok());
+    if let (Some(dir), Some(root)) = (resource_dir, root) {
         let mut resources = Vec::new();
 
         'outer: for entry in root.entries {
@@ -1865,7 +1895,7 @@ fn add_resources(
                         }
 
                         let rva = entry_data.offset_to_data.get(LE);
-                        let offset = va_to_file_offset(mem, sections, rva);
+                        let offset = utils::va_to_file_offset(mem, sections, rva);
                         if ty == u32::from(pe::RT_VERSION) {
                             if let Some(offset) = offset {
                                 version_info::read_version_info(mem, offset as usize, &mut infos);
@@ -1953,32 +1983,6 @@ fn add_resources(
             ),
         ),
     ]);
-}
-
-pub fn va_to_file_offset(mem: &[u8], sections: &SectionTable, va: u32) -> Option<u32> {
-    va_to_file_offset_inner(sections, va).and_then(|v| {
-        let len: u32 = mem.len().try_into().ok()?;
-        if v < len {
-            Some(v)
-        } else {
-            None
-        }
-    })
-}
-
-fn va_to_file_offset_inner(sections: &SectionTable, va: u32) -> Option<u32> {
-    if let Some((offset, _)) = sections.pe_file_range_at(va) {
-        return Some(offset);
-    }
-
-    // Special behavior from libyara: if va is before the first section, it is returned as is.
-    if let Some(first_section_va) = sections.iter().map(|s| s.virtual_address.get(LE)).min() {
-        if va < first_section_va {
-            return Some(va);
-        }
-    }
-
-    None
 }
 
 fn bool_to_int_value(b: bool) -> Value {
@@ -2394,16 +2398,16 @@ impl Pe {
         let section_table = match FileKind::parse(mem) {
             Ok(FileKind::Pe32) => {
                 let (nt_headers, _) = ImageNtHeaders32::parse(mem, &mut offset).ok()?;
-                nt_headers.sections(mem, offset).ok()?
+                utils::SectionTable::new(nt_headers, mem, offset)?
             }
             Ok(FileKind::Pe64) => {
                 let (nt_headers, _) = ImageNtHeaders64::parse(mem, &mut offset).ok()?;
-                nt_headers.sections(mem, offset).ok()?
+                utils::SectionTable::new(nt_headers, mem, offset)?
             }
             _ => return None,
         };
 
-        va_to_file_offset(mem, &section_table, rva).map(Into::into)
+        utils::va_to_file_offset(mem, &section_table, rva).map(Into::into)
     }
 }
 

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use object::coff::SectionTable;
 use object::pe::{
     ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64, IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
     IMAGE_FILE_DLL,
@@ -8,7 +7,7 @@ use object::pe::{
 use object::read::pe::{DataDirectories, ImageNtHeaders};
 use object::{Bytes, FileKind, LittleEndian as LE, Pod, ReadRef, U16, U32, U64};
 
-use super::pe::va_to_file_offset;
+use super::pe::utils as pe_utils;
 use super::{Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value};
 
 const MAX_PARAM_COUNT: u32 = 2000;
@@ -199,7 +198,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(
 
     // Once we passed those checks, we always at least set is_dotnet, but not before.
     // This is annoying, would be nice to change this behavior in YARA.
-    let sections = nt_headers.sections(mem, offset).ok()?;
+    let sections = pe_utils::SectionTable::new(nt_headers, mem, offset)?;
     Some(
         parse_file_inner(mem, data_dirs, sections)
             .unwrap_or_else(|| [("is_dotnet", 0.into())].into()),
@@ -209,16 +208,16 @@ fn parse_file<HEADERS: ImageNtHeaders>(
 fn parse_file_inner(
     mem: &[u8],
     data_dirs: DataDirectories,
-    sections: SectionTable,
+    sections: pe_utils::SectionTable,
 ) -> Option<HashMap<&'static str, Value>> {
     // II.25.3.3 : the PE contains a data directory named "CLI header"
     let dir = data_dirs.get(IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR)?;
-    let cli_data = dir.data(mem, &sections).ok()?;
+    let cli_data = sections.get_dir_data(mem, *dir)?;
     let cli_data = Bytes(cli_data);
     let cli_header = cli_data.read_at::<CliHeader>(0).ok()?;
 
     let metadata_root_offset: u64 = sections
-        .pe_file_range_at(cli_header.metadata_rva.get(LE))?
+        .get_file_range_at(cli_header.metadata_rva.get(LE))?
         .0
         .into();
     let metadata = cli_header.metadata(mem, &sections).ok()?;
@@ -240,7 +239,7 @@ fn parse_file_inner(
     add_user_strings(&metadata, &mut res);
 
     let resource_base = sections
-        .pe_file_range_at(cli_header.resources_metadata.get(LE))
+        .get_file_range_at(cli_header.resources_metadata.get(LE))
         .map(|v| u64::from(v.0));
 
     add_metadata_tables(mem, &metadata, resource_base, sections, &mut res);
@@ -312,7 +311,7 @@ fn add_metadata_tables<'data>(
     mem: &'data [u8],
     metadata: &MetadataRoot<'data>,
     resource_base: Option<u64>,
-    sections: SectionTable<'data>,
+    sections: pe_utils::SectionTable<'data>,
     res: &mut HashMap<&'static str, Value>,
 ) {
     let Some(stream_data) = metadata
@@ -486,7 +485,7 @@ struct TablesData<'data> {
     data: Bytes<'data>,
 
     resource_base: Option<u64>,
-    sections: SectionTable<'data>,
+    sections: pe_utils::SectionTable<'data>,
 
     // Contents of the string stream
     strings_stream: Option<&'data [u8]>,
@@ -554,7 +553,7 @@ impl<'data> TablesData<'data> {
     fn new(
         mem: &'data [u8],
         mut data: Bytes<'data>,
-        sections: SectionTable<'data>,
+        sections: pe_utils::SectionTable<'data>,
         resource_base: Option<u64>,
         strings_stream: Option<&'data [u8]>,
         blobs_stream: Option<&'data [u8]>,
@@ -1321,7 +1320,7 @@ impl<'data> TablesData<'data> {
                 let rva = read_u32(&mut self.data)?;
                 self.data.skip(usize::from(self.field_index_size))?;
 
-                Ok(va_to_file_offset(self.mem, &self.sections, rva).into())
+                Ok(pe_utils::va_to_file_offset(self.mem, &self.sections, rva).into())
             })
             .collect::<Result<Vec<Value>, ()>>()?;
 
@@ -2239,11 +2238,15 @@ impl CliHeader {
     fn metadata<'data, R: ReadRef<'data>>(
         &self,
         data: R,
-        sections: &SectionTable<'data>,
+        sections: &pe_utils::SectionTable<'data>,
     ) -> Result<MetadataRoot<'data>, &'static str> {
-        let data = sections
-            .pe_data_at(data, self.metadata_rva.get(LE))
-            .ok_or("Invalid CLI metadata virtual address")?
+        let (offset, size) = sections
+            .get_file_range_at(self.metadata_rva.get(LE))
+            .ok_or("Invalid CLI metadata virtual address")?;
+
+        let data = data
+            .read_bytes_at(offset.into(), size.into())
+            .map_err(|()| "Invalid section file range")?
             .get(..self.metadata_size.get(LE) as usize)
             .ok_or("Invalid CLI metadata size")?;
 
