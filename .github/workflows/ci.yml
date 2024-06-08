@@ -233,12 +233,11 @@ jobs:
             --ignore-filename-regex boreal-test-helpers/src/main.rs
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
-          files: lcov.info
+          file: lcov.info
           fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   msrv:
     name: Rust 1.65.0
