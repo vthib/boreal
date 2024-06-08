@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use object::{Bytes, LittleEndian as LE, U16};
 
 use super::MAX_NB_VERSION_INFOS;
@@ -224,7 +226,7 @@ struct Header {
     typ: u16,
 }
 
-const HEADER_SIZE: usize = std::mem::size_of::<Header>();
+const HEADER_SIZE: usize = size_of::<Header>();
 
 fn read_header(data: &mut Bytes) -> Option<Header> {
     Some(Header {

@@ -1,6 +1,9 @@
-use object::{
-    coff::SectionTable, pe, read::pe::DataDirectories, Bytes, LittleEndian as LE, ReadRef,
-};
+use std::mem::size_of;
+
+use object::coff::SectionTable;
+use object::read::pe::DataDirectories;
+use object::read::{Bytes, ReadRef};
+use object::{pe, LittleEndian as LE};
 
 use super::Value;
 
