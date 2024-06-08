@@ -8,7 +8,7 @@ pub fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable
     let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_DEBUG)?;
     let mut debug_data = Bytes(dir.data(mem, sections).ok()?);
 
-    let nb_directories = debug_data.len() / std::mem::size_of::<pe::ImageDebugDirectory>();
+    let nb_directories = debug_data.len() / size_of::<pe::ImageDebugDirectory>();
     for debug_dir in debug_data
         .read_slice::<pe::ImageDebugDirectory>(nb_directories)
         .ok()?

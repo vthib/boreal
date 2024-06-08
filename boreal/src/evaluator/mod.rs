@@ -13,11 +13,11 @@
 //! operators, except for a few:
 //!
 //! - `and` returns false if one of the operands returned false, regardless of whether some of
-//! those were poisoned.
+//!   those were poisoned.
 //! - `or` returns true if one of the operands returned true, regardless of whether some of
-//! those were poisoned.
+//!   those were poisoned.
 //! - the for operands may return `true` or `false` if the result does not depend on any poison
-//! value.
+//!   value.
 //!
 //! The second evaluation pass is used to fully evaluate the rules. During this pass, the poisong
 //! kind used is the `undefined` value as described by YARA: it is used for all operations that
@@ -200,7 +200,9 @@ macro_rules! apply_cmp_op {
         match ($left, $right) {
             (Value::Integer(n), Value::Integer(m)) => n $op m,
             (Value::Float(a), Value::Float(b)) => a $op b,
+            #[allow(clippy::cast_precision_loss)]
             (Value::Integer(n), Value::Float(b)) => (n as f64) $op b,
+            #[allow(clippy::cast_precision_loss)]
             (Value::Float(a), Value::Integer(m)) => a $op (m as f64),
             (Value::Bytes(a), Value::Bytes(b)) => a $op b,
             _ => return Err(PoisonKind::Undefined),

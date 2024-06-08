@@ -84,7 +84,7 @@ impl ModuleData for Hash {
 }
 
 fn compute_hash_from_bytes<D: Digest>(bytes: &[u8]) -> Value {
-    Value::Bytes(hex_encode(&D::digest(bytes)))
+    Value::Bytes(hex_encode(D::digest(bytes)))
 }
 
 fn compute_hash_from_mem<D: Digest>(
@@ -95,7 +95,7 @@ fn compute_hash_from_mem<D: Digest>(
     let mut digest = D::new();
 
     ctx.mem.on_range(offset, end, |data| digest.update(data))?;
-    Some(Value::Bytes(hex_encode(&digest.finalize())))
+    Some(Value::Bytes(hex_encode(digest.finalize())))
 }
 
 impl Hash {
