@@ -1,5 +1,5 @@
 use std::ffi::c_void;
-use std::mem::MaybeUninit;
+use std::mem::{size_of, MaybeUninit};
 use std::os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
 
 use windows_sys::Win32::Foundation::{ERROR_INVALID_PARAMETER, HANDLE, LUID};
@@ -168,7 +168,7 @@ fn query_next_region(handle: BorrowedHandle, mut next_addr: usize) -> Option<Reg
                 handle_to_windows_handle(handle.as_handle()),
                 next_addr as *const c_void,
                 info.as_mut_ptr(),
-                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                size_of::<MEMORY_BASIC_INFORMATION>(),
             )
         };
 
