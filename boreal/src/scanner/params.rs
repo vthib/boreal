@@ -188,10 +188,12 @@ impl ScanParams {
     /// Compute full matches on matching rules.
     ///
     /// By default, matching rules may not report all of the string matches:
+    ///
     /// - a rule may match when a variable is found, without needing to find all its matches
     /// - finding out if a regex matches is cheaper than computing the offset and length of its
     ///   matches
     /// - etc
+    ///
     /// Therefore, the [`crate::scanner::ScanResult`] object may not contain what a user would
     /// expect.
     ///

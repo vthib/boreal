@@ -644,7 +644,6 @@ pub type AttributesRef<'a> = SetOfVec<AttributeRef<'a>>;
 /// ```
 ///
 /// [RFC 5280 Appendix A.1]: https://datatracker.ietf.org/doc/html/rfc5280#appendix-A.1
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Sequence, ValueOrd)]
 pub struct AttributeTypeAndValueRef<'a> {
     pub oid: AttributeType,
@@ -764,7 +763,6 @@ impl der::FixedTag for Certificate<'_> {
 /// }
 /// ```
 /// [RFC 5280 Section 4.1.2.5]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.5
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Sequence, ValueOrd)]
 pub struct Validity {
     /// notBefore value

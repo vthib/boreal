@@ -238,7 +238,7 @@ fn add_signatures_from_content_info(
 }
 
 fn add_nested_signatures(mem: &[u8], signer_info: &asn1::SignerInfo, signatures: &mut Signatures) {
-    for attrs in &signer_info.unsigned_attrs {
+    if let Some(attrs) = signer_info.unsigned_attrs.as_ref() {
         for attr in attrs.iter() {
             if attr.oid == asn1::ID_SPC_NESTED_SIGNATURE {
                 for value in attr.values.iter() {
@@ -257,7 +257,7 @@ fn add_countersigs(
     countersigs: &mut Vec<Value>,
 ) {
     // See §Authenticode timestamp in the docx doc
-    for attrs in &info.unsigned_attrs {
+    if let Some(attrs) = info.unsigned_attrs.as_ref() {
         for attr in attrs.iter() {
             if attr.oid != asn1::ID_COUNTERSIGNATURE {
                 continue;
@@ -295,7 +295,7 @@ fn add_ms_countersigs<'a>(
     certs: &mut Vec<asn1::CertificateWithThumbprint<'a>>,
     countersigs: &mut Vec<Value>,
 ) {
-    for attrs in &info.unsigned_attrs {
+    if let Some(attrs) = info.unsigned_attrs.as_ref() {
         for attr in attrs.iter() {
             if attr.oid != asn1::ID_COUNTERSIGN {
                 continue;
