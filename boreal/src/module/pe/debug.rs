@@ -1,15 +1,18 @@
 use std::mem::size_of;
 
-use object::coff::SectionTable;
 use object::read::pe::DataDirectories;
 use object::read::{Bytes, ReadRef};
 use object::{pe, LittleEndian as LE};
 
-use super::Value;
+use super::{utils, Value};
 
-pub fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable) -> Option<Value> {
+pub fn pdb_path(
+    data_dirs: &DataDirectories,
+    mem: &[u8],
+    sections: &utils::SectionTable,
+) -> Option<Value> {
     let dir = data_dirs.get(pe::IMAGE_DIRECTORY_ENTRY_DEBUG)?;
-    let mut debug_data = Bytes(dir.data(mem, sections).ok()?);
+    let mut debug_data = Bytes(sections.get_dir_data(mem, *dir)?);
 
     let nb_directories = debug_data.len() / size_of::<pe::ImageDebugDirectory>();
     for debug_dir in debug_data
@@ -26,7 +29,7 @@ pub fn pdb_path(data_dirs: &DataDirectories, mem: &[u8], sections: &SectionTable
         let raw_data_addr = debug_dir.address_of_raw_data.get(LE);
         let raw_data_ptr = debug_dir.pointer_to_raw_data.get(LE);
         if raw_data_addr != 0 {
-            if let Some(v) = super::va_to_file_offset(mem, sections, raw_data_addr) {
+            if let Some(v) = utils::va_to_file_offset(mem, sections, raw_data_addr) {
                 offset = v;
             }
         }
