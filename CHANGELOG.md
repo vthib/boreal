@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2024-06-09
+
+This release consists of several changes to make the library easier to use in any context
+or target:
+
+- The dependency on OpenSSL (through the `authenticode` feature) is removed and replaced
+  by pure-Rust dependencies, through the use of two features:
+
+  - The `authenticode` feature is retained but is now enabled by default. It uses two
+    new dependencies to parse the authenticode signatures.
+  - A new `authenticode-verify` feature is added to handle the `pe.is_signed`,
+    `pe.signatures[*].verified` and `pe.signatures[*].countersignatures[*].verified` fields.
+    See the [dedicated documentation](/boreal/README.md#authenticode-verify) for details.
+
+- The patched version of `object` has been removed, making the use of the library much
+  easier.
+
+Those changes make `boreal` depend only on Rust libraries (except for the `magic` feature),
+which means the library can be used with any targets and is much easier to integrate.
+
+In addition, this release brings full compatibility with YARA 4.5.1.
+
+### boreal
+
+#### ⚠  Breaking changes
+
+- The `authenticode` feature has been revamped. It is now split into two features:
+
+  - The `authenticode` feature, which implements all the `pe.signatures` field except the
+    ones related to signature verification. This feature is now enabled by default.
+  - The `authenticode-verify` feature, which implements the `pe.is_signed` and `*.verified` fields.
+    This feature is disabled by default. See the [dedicated documentation](/boreal/README.md#authenticode-verify) for details.
+
+- The `Compiler` API has been reworked to remove all the ugly workarounds that were needed due to
+  the unsafety brought by the OpenSSL dependency. The `Compiler::new_with_pe_signatures` and
+  `Compiler::new_without_pe_module` functions has been removed.
+
+#### Added
+
+- add authenticode-verify feature for signature verification [9ced02bf](https://github.com/vthib/boreal/commit/9ced02bf5ca04747cf741efb9ce6fb56e341814d).
+
+#### Changed
+
+- Remove `hex` dependency [bb46e49e](https://github.com/vthib/boreal/commit/bb46e49e5d23c0862b500e0da6fc26977786de11)
+- Remove `object` patched version [#159](https://github.com/vthib/boreal/pull/159).
+- Replace authenticode-parser dependency with a custom impl [f9521c5c](https://github.com/vthib/boreal/commit/f9521c5c001c43ed3b9b01cbd7d7085a96df2eda)
+- Remove authenticode-parser dependency and clean API [21c5cd74](https://github.com/vthib/boreal/commit/21c5cd74ef2f586dfd8d115d20fb5647e4746f21)
+- Enable hash dependencies when authenticode feature is enabled [b88fedb6](https://github.com/vthib/boreal/commit/b88fedb627d68ef349f22b2ce0022031b1ef2446)
+
+YARA 4.5.1 compatibility:
+
+- only consider valid ascii bytes for pe dll names [c219245e](https://github.com/vthib/boreal/commit/c219245e03fe79bebfe5dde6c5f0846a1a16dc6d).
+- add some safety checks in pe module for corrupted values [00235005](https://github.com/vthib/boreal/commit/002350059c105152105e6398d2505f35136f1da5)
+- update rva resolution in pe module [66c2d5f4](https://github.com/vthib/boreal/commit/66c2d5f4795e5b336e01942b8fa48cbbfe79d6cc)
+- list dotnet resources that are not located in the file [b2fa436d](https://github.com/vthib/boreal/commit/b2fa436d7460cd7bfe7a68aa2561e5c11bdf3a10)
+
+#### Fixed
+
+- limit size of version info key and value in pe module [4a20f5c4](https://github.com/vthib/boreal/commit/4a20f5c417ee5b8ac165863fdec4cd4014650912)
+- fix parsing issues in version_info of pe module [8c00218a](https://github.com/vthib/boreal/commit/8c00218a4e370761e6f8c20cb9189478afcbf268)
+
+## boreal-parser 0.6.0 - 2024-06-09
+
+#### Added
+
+- Allow spaces in regex repetitions, eg `a{2 , 3}` [449c5fc4](https://github.com/vthib/boreal/commit/449c5fc4d95a30a05ea5b3dc62512de112d3e00a).
+  This is a new feature introduced in YARA 4.5.1
+
 ## [0.7.0] - 2024-05-05
 
 This release adds the last missing modules from YARA: `magic`, `dex` and `cuckoo`.
@@ -363,7 +431,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v0.7.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/vthib/boreal/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/vthib/boreal/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vthib/boreal/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vthib/boreal/compare/v0.4.0...v0.5.0
