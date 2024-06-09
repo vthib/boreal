@@ -33,6 +33,9 @@ cuckoo = ["dep:serde_json", "yara/module-cuckoo"]
 # Enables the "pe.signatures" module field.
 # The `object` feature must also be enabled to get access to the "pe" module.
 authenticode = ["dep:const-oid", "dep:der", "dep:md-5", "dep:sha1", "dep:sha2"]
+
+# Enables the "pe.is_signed", "pe.signatures[*].verified" and
+# "pe.signatures[*].countersignatures[*].verified" module fields.
 authenticode-verify = ["dep:rsa", "dep:dsa", "dep:p256", "dep:p384", "dep:spki", "md-5?/oid", "sha1?/oid", "sha2?/oid"]
 
 # Adds an API to scan files using memory maps.
