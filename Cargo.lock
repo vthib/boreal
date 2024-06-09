@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "boreal"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aho-corasick",
  "base64",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "boreal-cli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "assert_cmd",
  "boreal",
@@ -185,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "boreal-parser"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "codespan-reporting",
  "nom",
