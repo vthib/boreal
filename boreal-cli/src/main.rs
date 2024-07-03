@@ -5,8 +5,8 @@ use std::process::ExitCode;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use boreal::compiler::ExternalValue;
-use boreal::module::Value as ModuleValue;
+use boreal::compiler::{CompilerBuilder, ExternalValue};
+use boreal::module::{Console, Value as ModuleValue};
 use boreal::scanner::{FragmentedScanMode, ScanError, ScanParams, ScanResult};
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
 
@@ -252,16 +252,15 @@ fn main() -> ExitCode {
     let mut scanner = {
         let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
 
-        let mut compiler = Compiler::new();
-
         let no_console_logs = args.get_flag("no_console_logs");
         // Even if the console logs are disabled, add the module so that rules that use it
         // can still compile properly.
-        let _r = compiler.add_module(boreal::module::Console::with_callback(move |log| {
+        let builder = CompilerBuilder::new().add_module(Console::with_callback(move |log| {
             if !no_console_logs {
                 println!("{log}");
             }
         }));
+        let mut compiler = builder.build();
 
         compiler.set_params(
             boreal::compiler::CompilerParams::default()

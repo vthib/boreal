@@ -10,6 +10,8 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term;
 
+mod builder;
+pub use builder::CompilerBuilder;
 mod error;
 pub use error::CompilationError;
 pub(crate) mod expression;
@@ -134,51 +136,17 @@ impl Compiler {
     /// create a [`Compiler`] without any modules, then add back only the desired modules.
     #[must_use]
     pub fn new() -> Self {
-        let mut this = Self::default();
-
-        let _r = this.add_module(crate::module::Time);
-        let _r = this.add_module(crate::module::Math);
-        let _r = this.add_module(crate::module::String_);
-
-        #[cfg(feature = "hash")]
-        let _r = this.add_module(crate::module::Hash);
-
-        #[cfg(feature = "object")]
-        let _r = this.add_module(crate::module::Pe);
-        #[cfg(feature = "object")]
-        let _r = this.add_module(crate::module::Elf);
-        #[cfg(feature = "object")]
-        let _r = this.add_module(crate::module::MachO);
-        #[cfg(feature = "object")]
-        let _r = this.add_module(crate::module::Dotnet);
-        #[cfg(feature = "object")]
-        let _r = this.add_module(crate::module::Dex);
-
-        #[cfg(feature = "magic")]
-        let _r = this.add_module(crate::module::Magic);
-
-        #[cfg(feature = "cuckoo")]
-        let _r = this.add_module(crate::module::Cuckoo);
-
-        this
+        CompilerBuilder::new().build()
     }
 
     /// Add a module.
     ///
     /// Returns false if a module with the same name is already registered, and the module
     /// was not added.
-    pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) -> bool {
-        let m = module::compile_module(&module);
-
-        match self.available_modules.entry(m.name) {
-            Entry::Occupied(_) => false,
-            Entry::Vacant(v) => {
-                let _r = v.insert(AvailableModule {
-                    compiled_module: Arc::new(m),
-                    location: ModuleLocation::Module(Box::new(module)),
-                });
-                true
-            }
+    fn build(available_modules: HashMap<&'static str, AvailableModule>) -> Self {
+        Self {
+            available_modules,
+            ..Default::default()
         }
     }
 

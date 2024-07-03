@@ -881,11 +881,11 @@ impl std::fmt::Display for DefineSymbolError {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::CompilerBuilder;
     use crate::module::{EvalContext, ScanContext, StaticValue, Type, Value as ModuleValue};
     use crate::test_helpers::{
         test_type_traits, test_type_traits_non_clonable, test_type_unwind_safe,
     };
-    use crate::Compiler;
 
     use super::*;
 
@@ -970,8 +970,7 @@ mod tests {
 
     #[track_caller]
     fn test_eval_with_poison(rule_str: &str, mem: &[u8], expected: Option<bool>) {
-        let mut compiler = Compiler::default();
-        _ = compiler.add_module(Test);
+        let mut compiler = CompilerBuilder::default().add_module(Test).build();
         let _r = compiler.add_rules_str(rule_str).unwrap();
         let scanner = compiler.into_scanner();
 

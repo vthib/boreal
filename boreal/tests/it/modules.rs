@@ -1,5 +1,7 @@
 use std::sync::Mutex;
 
+use boreal::compiler::CompilerBuilder;
+
 use crate::utils::{check, check_boreal, check_err, Compiler};
 
 #[track_caller]
@@ -446,13 +448,14 @@ fn test_module_hash() {
 #[test]
 fn test_module_console() {
     static LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
     let mut compiler = Compiler::new();
-    let res = compiler
-        .compiler
+    // Replace boreal compiler with a new one to add the console module
+    compiler.compiler = CompilerBuilder::new()
         .add_module(boreal::module::Console::with_callback(|log| {
             LOGS.lock().unwrap().push(log);
-        }));
-    assert!(res);
+        }))
+        .build();
 
     compiler.add_rules(
         r#"import "console"

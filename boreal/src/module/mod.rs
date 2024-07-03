@@ -6,7 +6,7 @@
 //!
 //! ```
 //! use boreal::module::{Module, StaticValue};
-//! use boreal::Compiler;
+//! use boreal::compiler::CompilerBuilder;
 //! use std::collections::HashMap;
 //!
 //! struct Pi;
@@ -32,8 +32,7 @@
 //! "#;
 //!
 //! fn main() {
-//!     let mut compiler = Compiler::new();
-//!     compiler.add_module(Pi);
+//!     let mut compiler = CompilerBuilder::new().add_module(Pi).build();
 //!     assert!(compiler.add_rules_str(RULE).is_ok());
 //! }
 //! ```
@@ -339,6 +338,7 @@ impl std::fmt::Debug for ModuleDataMap<'_> {
 /// ```
 /// use std::collections::HashMap;
 /// use boreal::module::{EvalContext, Module, ModuleData, StaticValue, Value, Type};
+/// use boreal::compiler::CompilerBuilder;
 ///
 /// struct Bar;
 ///
@@ -371,8 +371,7 @@ impl std::fmt::Debug for ModuleDataMap<'_> {
 ///     }
 /// }
 ///
-/// let mut compiler = boreal::Compiler::new();
-/// compiler.add_module(Bar);
+/// let mut compiler = CompilerBuilder::new().add_module(Bar).build();
 /// compiler.add_rules_str(r#"
 /// import "bar"
 ///
