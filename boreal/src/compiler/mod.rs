@@ -51,7 +51,7 @@ pub struct Compiler {
     /// Modules declared in the compiler, added with [`Compiler::add_module`].
     ///
     /// These are modules that can be imported and used in the namespaces.
-    available_modules: HashMap<String, AvailableModule>,
+    available_modules: HashMap<&'static str, AvailableModule>,
 
     /// List of imported modules, passed to the scanner.
     imported_modules: Vec<Box<dyn crate::module::Module>>,
@@ -163,7 +163,7 @@ impl Compiler {
     pub fn add_module<M: crate::module::Module + 'static>(&mut self, module: M) -> bool {
         let m = module::compile_module(&module);
 
-        match self.available_modules.entry(m.name.to_owned()) {
+        match self.available_modules.entry(m.name) {
             Entry::Occupied(_) => false,
             Entry::Vacant(v) => {
                 let _r = v.insert(AvailableModule {
@@ -322,7 +322,7 @@ impl Compiler {
                 self.add_rules_file_inner(&path, namespace_name, status)?;
             }
             YaraFileComponent::Import(import) => {
-                match self.available_modules.get_mut(&import.name) {
+                match self.available_modules.get_mut(&*import.name) {
                     Some(module) => {
                         // XXX: this is a bit ugly, but i haven't found a better way to get
                         // ownership of the module.
