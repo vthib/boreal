@@ -43,8 +43,7 @@ impl Compiler {
     }
 
     fn new_inner(with_yara: bool) -> Self {
-        let mut compiler = build_compiler();
-        compiler.add_module(super::module_tests::Tests);
+        let compiler = build_compiler(true);
 
         let mut this = Self {
             compiler,
@@ -214,8 +213,14 @@ impl Compiler {
     }
 }
 
-fn build_compiler() -> boreal::Compiler {
-    boreal::Compiler::new()
+fn build_compiler(with_test_module: bool) -> boreal::Compiler {
+    if with_test_module {
+        boreal::compiler::CompilerBuilder::new()
+            .add_module(super::module_tests::Tests)
+            .build()
+    } else {
+        boreal::Compiler::new()
+    }
 }
 
 impl Checker {
@@ -800,7 +805,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     ignored_diffs: &[&str],
 ) {
     // Setup boreal scanner
-    let mut compiler = build_compiler();
+    let mut compiler = build_compiler(false);
     compiler
         .add_rules_str(format!(
             "import \"{}\" rule a {{ condition: true }}",

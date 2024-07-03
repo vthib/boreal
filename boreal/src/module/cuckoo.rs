@@ -10,9 +10,9 @@ use super::{EvalContext, Module, ModuleData, StaticValue, Type, Value};
 ///
 /// ```
 /// use boreal::module::{Cuckoo, CuckooData};
+/// use boreal::compiler::CompilerBuilder;
 ///
-/// let mut compiler = boreal::Compiler::new();
-/// compiler.add_module(Cuckoo);
+/// let mut compiler = CompilerBuilder::new().add_module(Cuckoo).build();
 /// compiler.add_rules_str(r#"
 /// import "cuckoo"
 ///

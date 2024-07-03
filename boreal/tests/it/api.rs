@@ -1,6 +1,9 @@
 //! Tests for the scanner API.
 
 use std::io::{Seek, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use boreal::compiler::CompilerBuilder;
 
 // An import is reused in the same namespace
 #[test]
@@ -58,8 +61,35 @@ fn test_add_rules_str_err() {
 }
 
 #[test]
-fn test_compiler_api() {
-    let mut compiler = boreal::Compiler::default();
-    assert!(compiler.add_module(boreal::module::Time));
-    assert!(!compiler.add_module(boreal::module::Time));
+fn test_compiler_builder_replace_module() {
+    static FIRST: AtomicBool = AtomicBool::new(false);
+    static SECOND: AtomicBool = AtomicBool::new(false);
+
+    let builder = CompilerBuilder::default();
+
+    // Add the console module twice, to check the second one is used in place of the
+    // first one.
+    let builder = builder.add_module(boreal::module::Console::with_callback(|_| {
+        FIRST.store(true, Ordering::SeqCst)
+    }));
+    let builder = builder.add_module(boreal::module::Console::with_callback(|_| {
+        SECOND.store(true, Ordering::SeqCst)
+    }));
+
+    let mut compiler = builder.build();
+    compiler
+        .add_rules_str(
+            r#"import "console"
+rule a {
+    condition:
+        console.log("a")
+
+}"#,
+        )
+        .unwrap();
+    let scanner = compiler.into_scanner();
+    scanner.scan_mem(b"").unwrap();
+
+    assert!(!FIRST.load(Ordering::SeqCst));
+    assert!(SECOND.load(Ordering::SeqCst));
 }
