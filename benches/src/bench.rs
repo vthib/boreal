@@ -113,7 +113,9 @@ fn bench_scan_process(c: &mut Criterion) {
 }
 
 fn build_boreal_compiler() -> boreal::Compiler {
-    let mut boreal_compiler = boreal::Compiler::new();
+    let mut boreal_compiler = boreal::compiler::CompilerBuilder::new()
+        .profile(boreal::compiler::CompilerProfile::Speed)
+        .build();
     let _ = boreal_compiler.define_symbol("owner", "owner");
     let _ = boreal_compiler.define_symbol("filename", "filename");
     let _ = boreal_compiler.define_symbol("filepath", "filepath");

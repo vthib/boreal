@@ -69,6 +69,9 @@ pub struct Compiler {
 
     /// Compilation parameters
     params: CompilerParams,
+
+    /// Profile to use when compiling rules.
+    pub(crate) profile: CompilerProfile,
 }
 
 #[derive(Debug)]
@@ -98,6 +101,27 @@ struct ImportedModule {
     module_index: usize,
 }
 
+/// Profile to use when compiling rules.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CompilerProfile {
+    /// Prioritize scan speed.
+    ///
+    /// This profile will strive to get the best possible scan speed by using more memory
+    /// when possible.
+    Speed,
+    /// Prioritize memory usage
+    ///
+    /// This profile will strive to reduce memory usage as much as possible, even if it means
+    /// a slower scan speed overall.
+    Memory,
+}
+
+impl Default for CompilerProfile {
+    fn default() -> Self {
+        Self::Speed
+    }
+}
+
 impl Default for Compiler {
     fn default() -> Self {
         Self {
@@ -113,6 +137,7 @@ impl Default for Compiler {
             external_symbols: Vec::new(),
             bytes_pool: BytesPoolBuilder::default(),
             params: CompilerParams::default(),
+            profile: CompilerProfile::default(),
         }
     }
 }
@@ -143,9 +168,13 @@ impl Compiler {
     ///
     /// Returns false if a module with the same name is already registered, and the module
     /// was not added.
-    fn build(available_modules: HashMap<&'static str, AvailableModule>) -> Self {
+    fn build(
+        available_modules: HashMap<&'static str, AvailableModule>,
+        profile: CompilerProfile,
+    ) -> Self {
         Self {
             available_modules,
+            profile,
             ..Default::default()
         }
     }

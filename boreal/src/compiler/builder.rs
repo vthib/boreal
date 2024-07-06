@@ -7,6 +7,9 @@ use super::{AvailableModule, ModuleLocation};
 pub struct CompilerBuilder {
     /// Modules that can be imported when compiling rules.
     modules: HashMap<&'static str, AvailableModule>,
+
+    /// Profile to use when compiling rules.
+    profile: super::CompilerProfile,
 }
 
 impl CompilerBuilder {
@@ -75,20 +78,44 @@ impl CompilerBuilder {
         self
     }
 
+    /// Set the profile to use when compiling rules.
+    ///
+    /// By default, [`CompilerProfile::Speed`] is used.
+    #[must_use]
+    pub fn profile(mut self, profile: super::CompilerProfile) -> Self {
+        self.profile = profile;
+        self
+    }
+
     /// Build a [`Compiler`] object with the configuration set on this builder.
     #[must_use]
     pub fn build(self) -> super::Compiler {
-        super::Compiler::build(self.modules)
+        super::Compiler::build(self.modules, self.profile)
+    }
+
+    /// Get the profile to use when compiling rules.
+    #[must_use]
+    pub fn get_profile(&self) -> super::CompilerProfile {
+        self.profile
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler::CompilerProfile;
     use crate::test_helpers::test_type_traits_non_clonable;
 
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(CompilerBuilder::default());
+    }
+
+    #[test]
+    fn test_getters() {
+        let builder = CompilerBuilder::default();
+
+        let builder = builder.profile(CompilerProfile::Memory);
+        assert_eq!(builder.get_profile(), CompilerProfile::Memory);
     }
 }
