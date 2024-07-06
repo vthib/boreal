@@ -7,6 +7,7 @@ use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 use super::{ScanError, ScanParams, StringMatch};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
+use crate::compiler::CompilerProfile;
 use crate::matcher::{AcMatchStatus, Matcher};
 use crate::memory::Region;
 
@@ -79,7 +80,7 @@ impl ScanData<'_> {
 }
 
 impl AcScan {
-    pub(crate) fn new(variables: &[Variable]) -> Self {
+    pub(crate) fn new(variables: &[Variable], profile: CompilerProfile) -> Self {
         let mut lits = Vec::new();
         let mut known_lits = HashMap::new();
         let mut aho_index_to_literal_info = Vec::new();
@@ -128,9 +129,11 @@ impl AcScan {
         // optimizations are done.
 
         let mut builder = AhoCorasickBuilder::new();
-        let builder = builder
-            .ascii_case_insensitive(true)
-            .kind(Some(AhoCorasickKind::DFA));
+        let builder = builder.ascii_case_insensitive(true);
+        let builder = builder.kind(Some(match profile {
+            CompilerProfile::Speed => AhoCorasickKind::DFA,
+            CompilerProfile::Memory => AhoCorasickKind::ContiguousNFA,
+        }));
 
         // First try with a smaller size to reduce memory use and improve performances, otherwise
         // use the default version.
@@ -312,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(AcScan::new(&[]));
+        test_type_traits_non_clonable(AcScan::new(&[], CompilerProfile::Speed));
         test_type_traits_non_clonable(LiteralInfo {
             variable_index: 0,
             literal_index: 0,

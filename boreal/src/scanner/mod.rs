@@ -110,11 +110,12 @@ impl Scanner {
             imported_modules,
             external_symbols,
             bytes_pool,
+            profile,
             ..
         } = compiler;
         let namespaces = namespaces.into_iter().map(|v| v.name).collect();
 
-        let ac_scan = ac_scan::AcScan::new(&variables);
+        let ac_scan = ac_scan::AcScan::new(&variables, profile);
 
         let mut external_symbols_values = Vec::new();
         let mut external_symbols_map = HashMap::new();

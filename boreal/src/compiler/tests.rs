@@ -5,7 +5,7 @@ use super::module::compile_module;
 use super::rule::RuleCompiler;
 use super::{
     AddRuleError, AddRuleErrorKind, AddRuleStatus, AvailableModule, CompilationError, Compiler,
-    CompilerParams, ImportedModule, ModuleLocation, Namespace,
+    CompilerParams, CompilerProfile, ImportedModule, ModuleLocation, Namespace,
 };
 use crate::bytes_pool::BytesPoolBuilder;
 use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
@@ -289,6 +289,7 @@ fn test_types_traits() {
         }),
     });
     test_type_traits(CompilerParams::default());
+    test_type_traits(CompilerProfile::default());
     test_type_traits_non_clonable(AddRuleStatus {
         warnings: Vec::new(),
         statistics: Vec::new(),
