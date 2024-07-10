@@ -92,6 +92,8 @@ use tlsh2 as _;
 
 pub(crate) mod atoms;
 mod bitmaps;
+mod bytes_pool;
+pub use bytes_pool::{BytesSymbol, StringSymbol};
 pub mod compiler;
 pub use compiler::rule::{Metadata, MetadataValue};
 pub use compiler::Compiler;

@@ -21,6 +21,7 @@ pub use params::CompilerParams;
 pub(crate) mod rule;
 pub(crate) mod variable;
 
+use crate::bytes_pool::BytesPool;
 use crate::{statistics, Scanner};
 
 /// Object used to compile rules.
@@ -58,6 +59,11 @@ pub struct Compiler {
 
     /// Externally defined symbols.
     external_symbols: Vec<external_symbol::ExternalSymbol>,
+
+    /// Bytes intern pool.
+    ///
+    /// This is used to reduce memory footprint and share byte strings.
+    bytes_pool: BytesPool,
 
     /// Compilation parameters
     params: CompilerParams,
@@ -103,6 +109,7 @@ impl Default for Compiler {
             available_modules: HashMap::new(),
             imported_modules: Vec::new(),
             external_symbols: Vec::new(),
+            bytes_pool: BytesPool::default(),
             params: CompilerParams::default(),
         }
     }
@@ -395,6 +402,7 @@ impl Compiler {
                     &self.external_symbols,
                     &self.params,
                     parsed_contents,
+                    &mut self.bytes_pool,
                 )
                 .map_err(|error| AddRuleError {
                     path: current_filepath.map(Path::to_path_buf),
@@ -517,6 +525,7 @@ impl Compiler {
             self.imported_modules,
             self.external_symbols,
             namespaces,
+            self.bytes_pool,
         )
     }
 }

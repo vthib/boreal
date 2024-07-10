@@ -8,6 +8,9 @@ use boreal_parser::rule;
 use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
 use super::{variable, CompilationError, CompilerParams, Namespace};
+use crate::bytes_pool::BytesPool;
+use crate::bytes_pool::BytesSymbol;
+use crate::bytes_pool::StringSymbol;
 use crate::module::Type as ModuleType;
 use crate::statistics;
 
@@ -42,18 +45,22 @@ pub(crate) struct Rule {
 /// A metadata associated with a rule.
 #[derive(Debug)]
 pub struct Metadata {
-    /// Index of the name of the metadata in the metadata string table.
-    pub name: String,
+    /// Name of the metadata.
+    ///
+    /// Use [`boreal::Scanner::get_string_symbol`] to retrieve the string.
+    pub name: StringSymbol,
 
     /// The value of the metadata.
     pub value: MetadataValue,
 }
 
 /// Value of a rule metadata.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug)]
 pub enum MetadataValue {
     /// Bytestring variant.
-    Bytes(Vec<u8>),
+    ///
+    /// Use [`boreal::Scanner::get_bytes_symbol`] to retrieve the string.
+    Bytes(BytesSymbol),
     /// Integer variant.
     Integer(i64),
     /// Boolean variant.
@@ -228,6 +235,7 @@ pub(super) fn compile_rule(
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
     parsed_contents: &str,
+    bytes_pool: &mut BytesPool,
 ) -> Result<CompiledRule, CompilationError> {
     // Check duplication of tags
     let mut tags_spans = HashMap::with_capacity(rule.tags.len());
@@ -271,9 +279,11 @@ pub(super) fn compile_rule(
                 .metadatas
                 .into_iter()
                 .map(|rule::Metadata { name, value }| Metadata {
-                    name,
+                    name: bytes_pool.insert_str(&name),
                     value: match value {
-                        rule::MetadataValue::Bytes(v) => MetadataValue::Bytes(v),
+                        rule::MetadataValue::Bytes(v) => {
+                            MetadataValue::Bytes(bytes_pool.insert(&v))
+                        }
                         rule::MetadataValue::Integer(v) => MetadataValue::Integer(v),
                         rule::MetadataValue::Boolean(v) => MetadataValue::Boolean(v),
                     },
@@ -338,8 +348,9 @@ mod tests {
             name: "a".to_owned(),
             used: false,
         });
+        let mut pool = BytesPool::default();
         test_type_traits_non_clonable(Metadata {
-            name: String::new(),
+            name: pool.insert_str(""),
             value: MetadataValue::Boolean(true),
         });
         test_type_traits(MetadataValue::Boolean(true));

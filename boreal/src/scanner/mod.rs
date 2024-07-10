@@ -3,6 +3,7 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::bytes_pool::{BytesPool, BytesSymbol, StringSymbol};
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
@@ -107,6 +108,7 @@ impl Scanner {
         modules: Vec<Box<dyn Module>>,
         external_symbols: Vec<ExternalSymbol>,
         namespaces: Vec<Option<String>>,
+        bytes_pool: BytesPool,
     ) -> Self {
         let ac_scan = ac_scan::AcScan::new(&variables);
 
@@ -130,6 +132,7 @@ impl Scanner {
                 modules,
                 external_symbols_map,
                 namespaces,
+                bytes_pool,
             }),
             scan_params: ScanParams::default(),
             external_symbols_values,
@@ -340,6 +343,18 @@ impl Scanner {
     pub fn scan_params(&self) -> &ScanParams {
         &self.scan_params
     }
+
+    /// Get the value of a bytes symbol.
+    #[must_use]
+    pub fn get_bytes_symbol(&self, symbol: BytesSymbol) -> &[u8] {
+        self.inner.bytes_pool.get(symbol)
+    }
+
+    /// Get the value of a string symbol.
+    #[must_use]
+    pub fn get_string_symbol(&self, symbol: StringSymbol) -> &str {
+        self.inner.bytes_pool.get_str(symbol)
+    }
 }
 
 #[derive(Debug)]
@@ -378,6 +393,9 @@ struct Inner {
     ///
     /// None is used for the default namespace.
     namespaces: Vec<Option<String>>,
+
+    /// Bytes intern pool.
+    bytes_pool: BytesPool,
 }
 
 impl Inner {
@@ -1483,6 +1501,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            BytesPool::default(),
         ));
         test_type_traits_non_clonable(ScanResult {
             matched_rules: Vec::new(),
