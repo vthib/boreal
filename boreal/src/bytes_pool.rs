@@ -1,5 +1,32 @@
+/// Bytes intern pool
+///
+/// This module defines the [`BytesPool`] and its builder type [`BytesPoolBuilder`].
+///
+/// This object is used to reduce the memory consumption of compiled rules, by
+/// storing all bytes & strings literals used in rules (excluding those from variables,
+/// or "strings" in YARA terms, but that is just confusing). This is mainly used
+/// for metadata keys and values, but also for literals used in conditions.
+///
+/// Memory consumption is reduced thanks to two simple points.
+///
+/// - A single allocation is used, reduce memory fragmentation and allocation overheads.
+/// - Added bytes are deduplicated. This is especially useful for metadata key names for
+///   example, which tends to always be the same ones in a set of rules.
+use std::collections::HashMap;
+
 /// Bytes intern pool.
-#[derive(Default, Debug)]
+///
+/// This object is used to store bytes in a single place to reduce memory consumption.
+///
+/// The implementation is extremely naive:
+///
+/// - A single Vec is used to stored the bytes, every added bytes are appended to the vec.
+/// - Handles (or symbols as named here) are simply the offsets into the vec.
+///
+/// Some other implementations could be attempted to improve memory consumption further.
+/// For example, by adding a second vec to map an index to the (from, to) pair, so that the
+/// symbol can be a single usize.
+#[derive(Debug, Default)]
 pub(crate) struct BytesPool {
     buffer: Vec<u8>,
 }
@@ -22,7 +49,7 @@ impl BytesPool {
     /// Insert bytes into the bytes pool.
     ///
     /// The returned symbol can then be used to retrieve those bytes from the pool.
-    pub(crate) fn insert(&mut self, v: &[u8]) -> BytesSymbol {
+    fn insert(&mut self, v: &[u8]) -> BytesSymbol {
         let from = self.buffer.len();
         self.buffer.extend(v);
 
@@ -35,7 +62,7 @@ impl BytesPool {
     /// Insert a string into the bytes pool.
     ///
     /// The returned symbol can then be used to retrieve the string from the pool.
-    pub(crate) fn insert_str(&mut self, v: &str) -> StringSymbol {
+    fn insert_str(&mut self, v: &str) -> StringSymbol {
         let from = self.buffer.len();
         self.buffer.extend(v.as_bytes());
 
@@ -61,6 +88,56 @@ impl BytesPool {
     }
 }
 
+/// A builder for the [`BytesPool`] object.
+///
+/// This builder will deduplicate bytes added in the pool to reduce
+/// the memory usage of the final pool.
+#[derive(Default, Debug)]
+pub(crate) struct BytesPoolBuilder {
+    /// The pool being constructed.
+    pool: BytesPool,
+    /// Map of bytes symbols already added in the pool.
+    bytes_map: HashMap<Vec<u8>, BytesSymbol>,
+    /// Map of string symbols already added in the pool.
+    str_map: HashMap<String, StringSymbol>,
+}
+
+impl BytesPoolBuilder {
+    /// Insert bytes into the bytes pool.
+    ///
+    /// If the byte string was already added, the existing symbol will be returned.
+    pub(crate) fn insert(&mut self, v: &[u8]) -> BytesSymbol {
+        match self.bytes_map.get(v) {
+            Some(v) => *v,
+            None => {
+                let symbol = self.pool.insert(v);
+                let _r = self.bytes_map.insert(v.to_vec(), symbol);
+                symbol
+            }
+        }
+    }
+
+    /// Insert a string into the bytes pool.
+    ///
+    /// If the string was already added, the existing symbol will be returned.
+    pub(crate) fn insert_str(&mut self, v: &str) -> StringSymbol {
+        match self.str_map.get(v) {
+            Some(v) => *v,
+            None => {
+                let symbol = self.pool.insert_str(v);
+                let _r = self.str_map.insert(v.to_owned(), symbol);
+                symbol
+            }
+        }
+    }
+
+    /// Build the final bytes pool object.
+    pub(crate) fn into_pool(mut self) -> BytesPool {
+        self.pool.buffer.shrink_to_fit();
+        self.pool
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
@@ -69,7 +146,8 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(BytesPool::default());
+        test_type_traits_non_clonable(BytesPoolBuilder::default());
+        test_type_traits_non_clonable(BytesPoolBuilder::default().into_pool());
         test_type_traits(BytesSymbol { from: 0, to: 0 });
         test_type_traits(StringSymbol { from: 0, to: 0 });
     }

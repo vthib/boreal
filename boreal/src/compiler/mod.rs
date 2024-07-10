@@ -21,7 +21,7 @@ pub use params::CompilerParams;
 pub(crate) mod rule;
 pub(crate) mod variable;
 
-use crate::bytes_pool::BytesPool;
+use crate::bytes_pool::BytesPoolBuilder;
 use crate::{statistics, Scanner};
 
 /// Object used to compile rules.
@@ -63,7 +63,7 @@ pub struct Compiler {
     /// Bytes intern pool.
     ///
     /// This is used to reduce memory footprint and share byte strings.
-    bytes_pool: BytesPool,
+    bytes_pool: BytesPoolBuilder,
 
     /// Compilation parameters
     params: CompilerParams,
@@ -109,7 +109,7 @@ impl Default for Compiler {
             available_modules: HashMap::new(),
             imported_modules: Vec::new(),
             external_symbols: Vec::new(),
-            bytes_pool: BytesPool::default(),
+            bytes_pool: BytesPoolBuilder::default(),
             params: CompilerParams::default(),
         }
     }
@@ -525,7 +525,7 @@ impl Compiler {
             self.imported_modules,
             self.external_symbols,
             namespaces,
-            self.bytes_pool,
+            self.bytes_pool.into_pool(),
         )
     }
 }

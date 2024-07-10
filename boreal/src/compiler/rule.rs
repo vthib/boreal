@@ -8,7 +8,7 @@ use boreal_parser::rule;
 use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
 use super::{variable, CompilationError, CompilerParams, Namespace};
-use crate::bytes_pool::BytesPool;
+use crate::bytes_pool::BytesPoolBuilder;
 use crate::bytes_pool::BytesSymbol;
 use crate::bytes_pool::StringSymbol;
 use crate::module::Type as ModuleType;
@@ -235,7 +235,7 @@ pub(super) fn compile_rule(
     external_symbols: &Vec<ExternalSymbol>,
     params: &CompilerParams,
     parsed_contents: &str,
-    bytes_pool: &mut BytesPool,
+    bytes_pool: &mut BytesPoolBuilder,
 ) -> Result<CompiledRule, CompilationError> {
     // Check duplication of tags
     let mut tags_spans = HashMap::with_capacity(rule.tags.len());
@@ -348,7 +348,7 @@ mod tests {
             name: "a".to_owned(),
             used: false,
         });
-        let mut pool = BytesPool::default();
+        let mut pool = BytesPoolBuilder::default();
         test_type_traits_non_clonable(Metadata {
             name: pool.insert_str(""),
             value: MetadataValue::Boolean(true),
