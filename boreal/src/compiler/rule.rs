@@ -3,8 +3,7 @@ use std::collections::HashSet;
 use std::ops::Range;
 use std::sync::Arc;
 
-use boreal_parser::rule::Metadata;
-use boreal_parser::rule::VariableDeclaration;
+use boreal_parser::rule;
 
 use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
@@ -38,6 +37,27 @@ pub(crate) struct Rule {
 
     /// Is the rule marked as private.
     pub(crate) is_private: bool,
+}
+
+/// A metadata associated with a rule.
+#[derive(Debug)]
+pub struct Metadata {
+    /// Index of the name of the metadata in the metadata string table.
+    pub name: String,
+
+    /// The value of the metadata.
+    pub value: MetadataValue,
+}
+
+/// Value of a rule metadata.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MetadataValue {
+    /// Bytestring variant.
+    Bytes(Vec<u8>),
+    /// Integer variant.
+    Integer(i64),
+    /// Boolean variant.
+    Boolean(bool),
 }
 
 /// Object used to compile a rule.
@@ -95,7 +115,7 @@ pub(super) struct RuleCompilerVariable {
 
 impl<'a> RuleCompiler<'a> {
     pub(super) fn new(
-        rule_variables: &[VariableDeclaration],
+        rule_variables: &[rule::VariableDeclaration],
         namespace: &'a Namespace,
         external_symbols: &'a Vec<ExternalSymbol>,
         params: &'a CompilerParams,
@@ -202,7 +222,7 @@ impl<'a> RuleCompiler<'a> {
 }
 
 pub(super) fn compile_rule(
-    rule: boreal_parser::rule::Rule,
+    rule: rule::Rule,
     namespace: &Namespace,
     namespace_index: usize,
     external_symbols: &Vec<ExternalSymbol>,
@@ -247,7 +267,18 @@ pub(super) fn compile_rule(
             name: rule.name,
             namespace_index,
             tags: rule.tags.into_iter().map(|v| v.tag).collect(),
-            metadatas: rule.metadatas,
+            metadatas: rule
+                .metadatas
+                .into_iter()
+                .map(|rule::Metadata { name, value }| Metadata {
+                    name,
+                    value: match value {
+                        rule::MetadataValue::Bytes(v) => MetadataValue::Bytes(v),
+                        rule::MetadataValue::Integer(v) => MetadataValue::Integer(v),
+                        rule::MetadataValue::Boolean(v) => MetadataValue::Boolean(v),
+                    },
+                })
+                .collect(),
             nb_variables: variables.len(),
             condition,
             is_private: rule.is_private,
@@ -270,7 +301,7 @@ pub(super) struct CompiledRule {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::test_type_traits_non_clonable;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 
     use super::*;
 
@@ -307,5 +338,10 @@ mod tests {
             name: "a".to_owned(),
             used: false,
         });
+        test_type_traits_non_clonable(Metadata {
+            name: String::new(),
+            value: MetadataValue::Boolean(true),
+        });
+        test_type_traits(MetadataValue::Boolean(true));
     }
 }
