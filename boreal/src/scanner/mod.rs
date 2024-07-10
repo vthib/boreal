@@ -9,8 +9,8 @@ use crate::compiler::variable::Variable;
 use crate::evaluator::{self, evaluate_rule, EvalError};
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::{Module, ModuleData, ModuleUserData};
-use crate::statistics;
 use crate::timeout::TimeoutChecker;
+use crate::{statistics, Metadata};
 
 pub use crate::evaluator::variable::StringMatch;
 
@@ -817,7 +817,7 @@ pub struct MatchedRule<'scanner> {
     pub tags: &'scanner [String],
 
     /// Metadata associated with the rule.
-    pub metadatas: &'scanner [boreal_parser::rule::Metadata],
+    pub metadatas: &'scanner [Metadata],
 
     /// List of matched strings, with details on their matches.
     pub matches: Vec<StringMatches<'scanner>>,
