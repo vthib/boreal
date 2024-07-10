@@ -531,11 +531,11 @@ fn scan_file(scanner: &Scanner, path: &Path, options: &ScanOptions) -> Result<()
     let what = path.display().to_string();
     match res {
         Ok(res) => {
-            display_scan_results(res, &what, options);
+            display_scan_results(scanner, res, &what, options);
             Ok(())
         }
         Err((err, res)) => {
-            display_scan_results(res, &what, options);
+            display_scan_results(scanner, res, &what, options);
             Err(err)
         }
     }
@@ -545,17 +545,17 @@ fn scan_process(scanner: &Scanner, pid: u32, options: &ScanOptions) -> Result<()
     let what = pid.to_string();
     match scanner.scan_process(pid) {
         Ok(res) => {
-            display_scan_results(res, &what, options);
+            display_scan_results(scanner, res, &what, options);
             Ok(())
         }
         Err((err, res)) => {
-            display_scan_results(res, &what, options);
+            display_scan_results(scanner, res, &what, options);
             Err(err)
         }
     }
 }
 
-fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
+fn display_scan_results(scanner: &Scanner, res: ScanResult, what: &str, options: &ScanOptions) {
     // Print module data first
     if options.print_module_data {
         for (module_name, module_value) in res.module_values {
@@ -595,7 +595,7 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
             write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
         }
         if options.print_metadata {
-            print_metadata(&mut stdout, rule.metadatas);
+            print_metadata(&mut stdout, scanner, rule.metadatas);
         }
         writeln!(stdout, " {}", what).unwrap();
 
@@ -624,17 +624,17 @@ fn display_scan_results(res: ScanResult, what: &str, options: &ScanOptions) {
     }
 }
 
-fn print_metadata(stdout: &mut StdoutLock, metadatas: &[Metadata]) {
+fn print_metadata(stdout: &mut StdoutLock, scanner: &Scanner, metadatas: &[Metadata]) {
     write!(stdout, " [").unwrap();
     for (i, meta) in metadatas.iter().enumerate() {
         if i != 0 {
             write!(stdout, ",").unwrap();
         }
-        write!(stdout, "{}=", meta.name).unwrap();
-        match &meta.value {
+        write!(stdout, "{}=", scanner.get_string_symbol(meta.name)).unwrap();
+        match meta.value {
             MetadataValue::Bytes(b) => {
                 write!(stdout, "\"").unwrap();
-                print_bytes(stdout, b);
+                print_bytes(stdout, scanner.get_bytes_symbol(b));
                 write!(stdout, "\"").unwrap();
             }
             MetadataValue::Integer(i) => {
