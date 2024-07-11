@@ -8,9 +8,7 @@ use boreal_parser::rule;
 use super::expression::{compile_bool_expression, Expression, VariableIndex};
 use super::external_symbol::ExternalSymbol;
 use super::{variable, CompilationError, CompilerParams, Namespace};
-use crate::bytes_pool::BytesPoolBuilder;
-use crate::bytes_pool::BytesSymbol;
-use crate::bytes_pool::StringSymbol;
+use crate::bytes_pool::{BytesPoolBuilder, BytesSymbol, StringSymbol};
 use crate::module::Type as ModuleType;
 use crate::statistics;
 
@@ -105,6 +103,9 @@ pub(super) struct RuleCompiler<'a> {
 
     /// Warnings emitted while compiling the rule.
     pub warnings: Vec<CompilationError>,
+
+    /// Bytes intern pool.
+    pub bytes_pool: &'a mut BytesPoolBuilder,
 }
 
 /// Helper struct used to track variables being compiled in a rule.
@@ -126,6 +127,7 @@ impl<'a> RuleCompiler<'a> {
         namespace: &'a Namespace,
         external_symbols: &'a Vec<ExternalSymbol>,
         params: &'a CompilerParams,
+        bytes_pool: &'a mut BytesPoolBuilder,
     ) -> Result<Self, CompilationError> {
         let mut names_set = HashSet::new();
         let mut variables = Vec::with_capacity(rule_variables.len());
@@ -153,6 +155,7 @@ impl<'a> RuleCompiler<'a> {
             params,
             condition_depth: 0,
             warnings: Vec::new(),
+            bytes_pool,
         })
     }
 
@@ -249,7 +252,26 @@ pub(super) fn compile_rule(
         }
     }
 
-    let mut compiler = RuleCompiler::new(&rule.variables, namespace, external_symbols, params)?;
+    let metadatas: Vec<_> = rule
+        .metadatas
+        .into_iter()
+        .map(|rule::Metadata { name, value }| Metadata {
+            name: bytes_pool.insert_str(&name),
+            value: match value {
+                rule::MetadataValue::Bytes(v) => MetadataValue::Bytes(bytes_pool.insert(&v)),
+                rule::MetadataValue::Integer(v) => MetadataValue::Integer(v),
+                rule::MetadataValue::Boolean(v) => MetadataValue::Boolean(v),
+            },
+        })
+        .collect();
+
+    let mut compiler = RuleCompiler::new(
+        &rule.variables,
+        namespace,
+        external_symbols,
+        params,
+        bytes_pool,
+    )?;
     let condition = compile_bool_expression(&mut compiler, rule.condition)?;
 
     let mut variables = Vec::with_capacity(rule.variables.len());
@@ -275,20 +297,7 @@ pub(super) fn compile_rule(
             name: rule.name,
             namespace_index,
             tags: rule.tags.into_iter().map(|v| v.tag).collect(),
-            metadatas: rule
-                .metadatas
-                .into_iter()
-                .map(|rule::Metadata { name, value }| Metadata {
-                    name: bytes_pool.insert_str(&name),
-                    value: match value {
-                        rule::MetadataValue::Bytes(v) => {
-                            MetadataValue::Bytes(bytes_pool.insert(&v))
-                        }
-                        rule::MetadataValue::Integer(v) => MetadataValue::Integer(v),
-                        rule::MetadataValue::Boolean(v) => MetadataValue::Boolean(v),
-                    },
-                })
-                .collect(),
+            metadatas,
             nb_variables: variables.len(),
             condition,
             is_private: rule.is_private,
@@ -326,6 +335,7 @@ mod tests {
             params: &CompilerParams::default(),
             condition_depth: 0,
             warnings: Vec::new(),
+            bytes_pool: &mut BytesPoolBuilder::default(),
         });
         let build_rule = || Rule {
             name: "a".to_owned(),

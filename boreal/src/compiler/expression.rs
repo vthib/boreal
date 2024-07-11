@@ -10,6 +10,7 @@ use super::rule::RuleCompiler;
 use super::{module, CompilationError};
 use crate::module::Type as ModuleType;
 use crate::regex::{regex_ast_to_hir, regex_hir_to_string, Regex};
+use crate::BytesSymbol;
 
 /// Type of a parsed expression
 ///
@@ -351,8 +352,8 @@ pub enum Expression {
     /// The value is the index into the external symbols vector stored in the compiled rules.
     ExternalSymbol(usize),
 
-    /// A byte string.
-    Bytes(Vec<u8>),
+    /// An interned byte string.
+    Bytes(BytesSymbol),
 
     /// A regex.
     Regex(Regex),
@@ -876,7 +877,7 @@ pub(super) fn compile_expression(
             Ok(Expr { expr, ty, span })
         }
         parser::ExpressionKind::Bytes(s) => Ok(Expr {
-            expr: Expression::Bytes(s),
+            expr: Expression::Bytes(compiler.bytes_pool.insert(&s)),
             ty: Type::Bytes,
             span,
         }),

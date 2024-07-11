@@ -709,6 +709,7 @@ impl EvalContext {
             rule,
             var_matches.as_deref(),
             &self.previous_results,
+            &scanner.bytes_pool,
             scan_data,
         )?;
 
@@ -989,13 +990,22 @@ mod tests {
         let mut previous_results = Vec::new();
         let rules = &scanner.inner.rules;
         for rule in &rules[..(rules.len() - 1)] {
-            previous_results
-                .push(evaluate_rule(rule, None, &previous_results, &mut scan_data).unwrap());
+            previous_results.push(
+                evaluate_rule(
+                    rule,
+                    None,
+                    &previous_results,
+                    &scanner.inner.bytes_pool,
+                    &mut scan_data,
+                )
+                .unwrap(),
+            );
         }
         let last_res = evaluate_rule(
             &rules[rules.len() - 1],
             None,
             &previous_results,
+            &scanner.inner.bytes_pool,
             &mut scan_data,
         );
 
