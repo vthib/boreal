@@ -35,6 +35,7 @@
 //! - `defined`
 //!
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
+use crate::bytes_pool::BytesPool;
 use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
 use crate::compiler::rule::Rule;
 #[cfg(feature = "object")]
@@ -112,6 +113,7 @@ pub(crate) fn evaluate_rule<'scan>(
     rule: &Rule,
     var_matches: Option<&'scan [Vec<variable::StringMatch>]>,
     previous_rules_results: &'scan [bool],
+    bytes_pool: &'scan BytesPool,
     scan_data: &'scan mut ScanData,
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
@@ -119,6 +121,7 @@ pub(crate) fn evaluate_rule<'scan>(
         previous_rules_results,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
+        bytes_pool,
         scan_data,
     };
     match evaluator.evaluate_expr(&rule.condition) {
@@ -144,6 +147,9 @@ struct Evaluator<'scan, 'rule, 'mem> {
 
     // Stack of bounded identifiers to their integer values.
     bounded_identifiers_stack: Vec<ModuleValue>,
+
+    // Bytes intern pool, used to resolve expressions that stored bytes in the pool.
+    bytes_pool: &'rule BytesPool,
 
     // Data related only to the scan, independent of the rule.
     scan_data: &'rule mut ScanData<'scan, 'mem>,
@@ -679,7 +685,7 @@ impl Evaluator<'_, '_, '_> {
 
             Expression::Integer(v) => Ok(Value::Integer(*v)),
             Expression::Double(v) => Ok(Value::Float(*v)),
-            Expression::Bytes(v) => Ok(Value::Bytes(v.clone())),
+            Expression::Bytes(v) => Ok(Value::Bytes(self.bytes_pool.get(*v).to_vec())),
             Expression::Regex(v) => Ok(Value::Regex(v.clone())),
             Expression::Boolean(v) => Ok(Value::Boolean(*v)),
         }

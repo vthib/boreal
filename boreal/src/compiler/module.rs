@@ -347,7 +347,7 @@ impl ModuleUse<'_, '_> {
                     // we can directly generate a primitive expression.
                     StaticValue::Integer(v) => Expression::Integer(*v),
                     StaticValue::Float(v) => Expression::Double(*v),
-                    StaticValue::Bytes(v) => Expression::Bytes(v.clone()),
+                    StaticValue::Bytes(v) => Expression::Bytes(self.compiler.bytes_pool.insert(v)),
                     StaticValue::Boolean(v) => Expression::Boolean(*v),
 
                     StaticValue::Object(_) => return None,

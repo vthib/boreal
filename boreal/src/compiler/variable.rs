@@ -154,6 +154,7 @@ mod tests {
     use boreal_parser::rule::VariableModifiers;
 
     use super::*;
+    use crate::bytes_pool::BytesPoolBuilder;
     use crate::compiler::{CompilerParams, Namespace};
     use crate::regex::Regex;
     use crate::test_helpers::test_type_traits_non_clonable;
@@ -169,6 +170,7 @@ mod tests {
             params: &CompilerParams::default(),
             condition_depth: 0,
             warnings: Vec::new(),
+            bytes_pool: &mut BytesPoolBuilder::default(),
         };
         test_type_traits_non_clonable(
             compile_variable(

@@ -7,6 +7,7 @@ use super::{
     AddRuleError, AddRuleErrorKind, AddRuleStatus, AvailableModule, CompilationError, Compiler,
     CompilerParams, ImportedModule, ModuleLocation, Namespace,
 };
+use crate::bytes_pool::BytesPoolBuilder;
 use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
 use boreal_parser::parse;
 
@@ -30,12 +31,14 @@ fn compile_expr(expression_str: &str, expected_type: Type) {
     assert!(compiler.define_symbol("sym_bool", true));
     assert!(compiler.define_symbol("sym_bytes", "keyboard"));
 
+    let mut bytes_pool = BytesPoolBuilder::default();
     let ns = Namespace::default();
     let mut rule_compiler = RuleCompiler::new(
         &rule.variables,
         &ns,
         &compiler.external_symbols,
         &compiler.params,
+        &mut bytes_pool,
     )
     .unwrap();
     let res = compile_expression(&mut rule_compiler, rule.condition).unwrap();
