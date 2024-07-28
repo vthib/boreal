@@ -751,10 +751,14 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
 /// Print a module value.
 ///
 /// This is a recursive function.
+///
 /// The invariants are:
+///
 ///   - on entry, the previous line is unfinished (no newline written yet)
 ///   - on exit, the line has been ended (last written char is a newline)
+///
 /// This is so that the caller can either:
+///
 /// - print " = ..." for primitive values
 /// - print "\n..." for compound values
 fn print_module_value(value: &ModuleValue, indent: usize) {
