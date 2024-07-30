@@ -64,15 +64,20 @@ A few observations:
 
 ## Memory usage:
 
-| rules set      | boreal  | yara   |
-| -------------- | ----    | ----   |
-| orion          | 12.8 MB | 12.3MB |
-| atr            | 12.6 MB | 14.0MB |
-| reversinglabs  | 14.9 MB | 15.8MB |
-| panopticon     | 10.9 MB | 13.4MB |
-| c0ffee         | 22.9 MB | 200MB  |
-| icewater       | 77.9 MB | 55.1MB |
-| signature-base | 78.9 MB | 27.8MB |
+In `boreal`, different compiler profiles can be used, with one prioritizing scanning speed,
+and the other one prioritzing memory usage. Those two profiles are presented separately to
+show the memory consumption impact.
+
+| rules set      | boreal (speed) | boreal (memory) | yara    |
+| -------------- | -------------- | --------------- | ------- |
+| orion          | 10.9 MB        | 9.71 MB         | 14.8 MB |
+| atr            | 10.7 MB        | 8.53 MB         | 15.7 MB |
+| reversinglabs  | 13.6 MB        | 12.2 MB         | 17.7 MB |
+| panopticon     | 9.07 MB        | 7.71 MB         | 15.3 MB |
+| c0ffee         | 16.7 MB        | 13.4 MB         | 198 MB  |
+| icewater       | 61.6 MB        | 55.6 MB         | 56.3 MB |
+| signature-base | 70.3 MB        | 44.2 MB         | 35.5 MB |
+| yara-rules     | 99.3 MB        | 74.0 MB         | 45.4 MB |
 
 Note that optimizing memory usage has not been a priority for the moment, as the focus was
 on optimizing performances. However, the next release will provide a way to proritize
