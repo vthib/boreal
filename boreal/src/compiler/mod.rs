@@ -30,13 +30,13 @@ use crate::{statistics, Scanner};
 #[derive(Debug)]
 pub struct Compiler {
     /// List of compiled rules.
-    rules: Vec<rule::Rule>,
+    pub(crate) rules: Vec<rule::Rule>,
 
     /// List of compiled, global rules.
-    global_rules: Vec<rule::Rule>,
+    pub(crate) global_rules: Vec<rule::Rule>,
 
     /// List of compiled variables.
-    variables: Vec<variable::Variable>,
+    pub(crate) variables: Vec<variable::Variable>,
 
     /// Number of variables used by global rules.
     nb_global_rules_variables: usize,
@@ -46,7 +46,7 @@ pub struct Compiler {
     /// This list always contains at least one namespace: the default one,
     /// at index 0. Other namespaces are added when rules are added in the
     /// non default namespace.
-    namespaces: Vec<Namespace>,
+    pub(crate) namespaces: Vec<Namespace>,
 
     /// Map from the namespace name to its index in the `namespaces` list.
     namespaces_indexes: HashMap<String, usize>,
@@ -57,15 +57,15 @@ pub struct Compiler {
     available_modules: HashMap<&'static str, AvailableModule>,
 
     /// List of imported modules, passed to the scanner.
-    imported_modules: Vec<Box<dyn crate::module::Module>>,
+    pub(crate) imported_modules: Vec<Box<dyn crate::module::Module>>,
 
     /// Externally defined symbols.
-    external_symbols: Vec<external_symbol::ExternalSymbol>,
+    pub(crate) external_symbols: Vec<external_symbol::ExternalSymbol>,
 
     /// Bytes intern pool.
     ///
     /// This is used to reduce memory footprint and share byte strings.
-    bytes_pool: BytesPoolBuilder,
+    pub(crate) bytes_pool: BytesPoolBuilder,
 
     /// Compilation parameters
     params: CompilerParams,
@@ -496,17 +496,7 @@ impl Compiler {
     /// Can fail if generating a set of all rules variables is not possible.
     #[must_use]
     pub fn into_scanner(self) -> Scanner {
-        let namespaces = self.namespaces.into_iter().map(|v| v.name).collect();
-
-        Scanner::new(
-            self.rules,
-            self.global_rules,
-            self.variables,
-            self.imported_modules,
-            self.external_symbols,
-            namespaces,
-            self.bytes_pool.into_pool(),
-        )
+        Scanner::new(self)
     }
 }
 
@@ -517,9 +507,9 @@ impl Compiler {
 /// - new rules can reference already existing rules
 /// - new rules can either import new modules, or directly use already imported modules
 #[derive(Debug, Default)]
-struct Namespace {
+pub(crate) struct Namespace {
     /// Name of the namespace, `None` if default.
-    name: Option<String>,
+    pub(crate) name: Option<String>,
 
     /// Map of a rule name to its index in the `rules` vector in [`Compiler`].
     ///

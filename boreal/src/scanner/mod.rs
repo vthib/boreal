@@ -11,7 +11,7 @@ use crate::evaluator::{self, evaluate_rule, EvalError};
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::{Module, ModuleData, ModuleUserData};
 use crate::timeout::TimeoutChecker;
-use crate::{statistics, Metadata};
+use crate::{statistics, Compiler, Metadata};
 
 pub use crate::evaluator::variable::StringMatch;
 
@@ -101,15 +101,19 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    pub(crate) fn new(
-        rules: Vec<Rule>,
-        global_rules: Vec<Rule>,
-        variables: Vec<Variable>,
-        modules: Vec<Box<dyn Module>>,
-        external_symbols: Vec<ExternalSymbol>,
-        namespaces: Vec<Option<String>>,
-        bytes_pool: BytesPool,
-    ) -> Self {
+    pub(crate) fn new(compiler: Compiler) -> Self {
+        let Compiler {
+            rules,
+            global_rules,
+            variables,
+            namespaces,
+            imported_modules,
+            external_symbols,
+            bytes_pool,
+            ..
+        } = compiler;
+        let namespaces = namespaces.into_iter().map(|v| v.name).collect();
+
         let ac_scan = ac_scan::AcScan::new(&variables);
 
         let mut external_symbols_values = Vec::new();
@@ -129,10 +133,10 @@ impl Scanner {
                 global_rules,
                 variables,
                 ac_scan,
-                modules,
+                modules: imported_modules,
                 external_symbols_map,
                 namespaces,
-                bytes_pool,
+                bytes_pool: bytes_pool.into_pool(),
             }),
             scan_params: ScanParams::default(),
             external_symbols_values,
@@ -1507,15 +1511,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits(Scanner::new(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            BytesPool::default(),
-        ));
+        test_type_traits(Scanner::new(Compiler::default()));
         test_type_unwind_safe::<Scanner>();
 
         test_type_traits_non_clonable(ScanResult {
