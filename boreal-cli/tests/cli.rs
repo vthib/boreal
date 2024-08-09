@@ -814,6 +814,22 @@ fn test_invalid_fragmented_scan_mode() {
 }
 
 #[test]
+fn test_invalid_compiler_profile() {
+    cmd()
+        .arg("--profile")
+        .arg("bad_value")
+        .arg("rules.yar")
+        .arg("input")
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid value 'bad_value' for \
+            '--profile <speed|memory>\': invalid value",
+        ))
+        .failure();
+}
+
+#[test]
 fn test_tags() {
     let rule_file = test_file(
         br#"
