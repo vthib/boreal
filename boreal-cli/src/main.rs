@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use boreal::compiler::{CompilerBuilder, ExternalValue};
+use boreal::compiler::{CompilerBuilder, CompilerProfile, ExternalValue};
 use boreal::module::{Console, Value as ModuleValue};
 use boreal::scanner::{FragmentedScanMode, ScanError, ScanParams, ScanResult};
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
@@ -57,6 +57,13 @@ fn build_command() -> Command {
                 .value_name("NUMBER")
                 .value_parser(value_parser!(usize))
                 .help("Number of threads to use when scanning directories"),
+        )
+        .arg(
+            Arg::new("profile")
+                .long("profile")
+                .value_name("speed|memory")
+                .value_parser(parse_compiler_profile)
+                .help("Profile to use when compiling rules"),
         )
         .arg(
             Arg::new("rules_file")
@@ -252,14 +259,21 @@ fn main() -> ExitCode {
     let mut scanner = {
         let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
 
-        let no_console_logs = args.get_flag("no_console_logs");
+        let mut builder = CompilerBuilder::new();
+
         // Even if the console logs are disabled, add the module so that rules that use it
         // can still compile properly.
-        let builder = CompilerBuilder::new().add_module(Console::with_callback(move |log| {
+        let no_console_logs = args.get_flag("no_console_logs");
+        builder = builder.add_module(Console::with_callback(move |log| {
             if !no_console_logs {
                 println!("{log}");
             }
         }));
+
+        if let Some(profile) = args.get_one::<CompilerProfile>("profile") {
+            builder = builder.profile(*profile);
+        }
+
         let mut compiler = builder.build();
 
         compiler.set_params(
@@ -477,6 +491,14 @@ fn parse_fragmented_scan_mode(scan_mode: &str) -> Result<FragmentedScanMode, Str
         "legacy" => Ok(FragmentedScanMode::legacy()),
         "fast" => Ok(FragmentedScanMode::fast()),
         "singlepass" => Ok(FragmentedScanMode::single_pass()),
+        _ => Err("invalid value".to_string()),
+    }
+}
+
+fn parse_compiler_profile(profile: &str) -> Result<CompilerProfile, String> {
+    match profile {
+        "speed" => Ok(CompilerProfile::Speed),
+        "memory" => Ok(CompilerProfile::Memory),
         _ => Err("invalid value".to_string()),
     }
 }
