@@ -9,7 +9,6 @@ use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
 use crate::memory::Region;
-use crate::{statistics, timeout};
 
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
@@ -55,10 +54,11 @@ struct LiteralInfo {
 #[derive(Debug)]
 pub struct ScanData<'a> {
     /// Object used to check if the scan times out.
-    pub timeout_checker: Option<&'a mut timeout::TimeoutChecker>,
+    pub timeout_checker: Option<&'a mut crate::timeout::TimeoutChecker>,
 
+    #[cfg(feature = "profiling")]
     /// Statistics related to the scan.
-    pub statistics: Option<&'a mut statistics::Evaluation>,
+    pub statistics: Option<&'a mut crate::statistics::Evaluation>,
 
     /// List of variables to scan.
     ///
@@ -320,6 +320,7 @@ mod tests {
         });
         test_type_traits_non_clonable(ScanData {
             variables: &[],
+            #[cfg(feature = "profiling")]
             statistics: None,
             timeout_checker: None,
             params: &ScanParams::default(),
