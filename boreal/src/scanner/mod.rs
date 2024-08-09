@@ -560,6 +560,7 @@ impl Inner {
 
         let mut ac_scan_data = ac_scan::ScanData {
             timeout_checker: scan_data.timeout_checker.as_mut(),
+            #[cfg(feature = "profiling")]
             statistics: scan_data.statistics.as_mut(),
             variables: &self.variables,
             params: scan_data.params,
