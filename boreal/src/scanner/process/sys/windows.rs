@@ -38,7 +38,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
         )
     };
 
-    if res == 0 {
+    if res.is_null() {
         let err = std::io::Error::last_os_error();
         return Err(
             #[allow(clippy::cast_possible_wrap)]
@@ -63,7 +63,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
 }
 
 fn enable_se_debug_privilege() -> Result<(), std::io::Error> {
-    let mut self_token = HANDLE::default();
+    let mut self_token = std::ptr::null_mut();
 
     // Safety: this is always safe to call.
     let self_handle = unsafe { GetCurrentProcess() };
