@@ -769,7 +769,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     // Setup boreal scanner
     let mut compiler = build_compiler();
     compiler
-        .add_rules_str(&format!(
+        .add_rules_str(format!(
             "import \"{}\" rule a {{ condition: true }}",
             module.get_name()
         ))
