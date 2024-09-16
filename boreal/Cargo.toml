@@ -99,7 +99,7 @@ libc = { version = "0.2", optional = true }
 mach2 = { version = "0.4", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", optional = true, features = [
+windows-sys = { version = "0.59", optional = true, features = [
     "Win32_Foundation",
     # LookupPrivilegeValue, AdjustTokenPrivileges
     "Win32_Security",
@@ -114,7 +114,7 @@ windows-sys = { version = "0.52", optional = true, features = [
 [dev-dependencies]
 base64 = "0.22"
 glob = "0.3.1"
-tempfile = "3.10"
+tempfile = "3.12"
 yara = { version = "0.28", features = ["vendored"] }
 
 [package.metadata.docs.rs]
