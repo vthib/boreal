@@ -1871,10 +1871,7 @@ fn add_resources(
             for entry in table.entries {
                 // Second level is id
                 let id = entry.name_or_id.get(LE);
-                let id_name = match entry.name_or_id() {
-                    ResourceNameOrId::Name(name) => name.raw_data(dir).ok(),
-                    ResourceNameOrId::Id(_) => None,
-                };
+                let id_name = resource_entry_name(*entry, dir);
 
                 let Ok(ResourceDirectoryEntryData::Table(table)) = entry.data(dir) else {
                     continue;
@@ -1983,6 +1980,19 @@ fn add_resources(
             ),
         ),
     ]);
+}
+
+fn resource_entry_name(
+    entry: pe::ImageResourceDirectoryEntry,
+    dir: ResourceDirectory,
+) -> Option<&[u8]> {
+    match entry.name_or_id() {
+        ResourceNameOrId::Name(resource_name) => match resource_name.raw_data(dir) {
+            Ok(name) if name.len() <= 1000 => Some(name),
+            _ => None,
+        },
+        ResourceNameOrId::Id(_) => None,
+    }
 }
 
 fn bool_to_int_value(b: bool) -> Value {
