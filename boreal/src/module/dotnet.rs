@@ -355,6 +355,11 @@ fn add_metadata_tables<'data>(
             rows[rows_index + 3],
         ]);
         rows_index += 4;
+
+        // Apply the same sanity check as done in YARA.
+        if *count > 15_000 {
+            return;
+        }
     }
 
     // Build our parsing helper: this will hold the current cursor on
