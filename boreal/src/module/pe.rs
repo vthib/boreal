@@ -1885,9 +1885,12 @@ fn add_resources(
                     };
 
                     if let Ok(ResourceDirectoryEntryData::Data(entry_data)) = entry.data(dir) {
-                        // Copied from 620963092c4 in libyara
+                        // Copied from 620963092c4 and 44fd0945446665 in libyara
+                        // The goal is to reject corrupted/random values while accepting
+                        // truncated files (where the size/offset may get out of bound compared
+                        // to the scanned memory.
                         let size = entry_data.size.get(LE);
-                        if size == 0 || usize::try_from(size).map_or(false, |v| v >= mem.len()) {
+                        if size == 0 || size > 0x3FFF_FFFF {
                             continue;
                         }
 
