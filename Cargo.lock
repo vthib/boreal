@@ -1291,9 +1291,9 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "yara"
-version = "0.28.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "694bf8660ab8f38b432f114e34f0b2eb0f945da0afc93cb1e985fe63b96d1ea9"
+checksum = "cd05a7a0913206818192765226ccc89557941c4700c6666047d415ea4db22dc2"
 dependencies = [
  "bitflags",
  "thiserror",
@@ -1302,9 +1302,9 @@ dependencies = [
 
 [[package]]
 name = "yara-sys"
-version = "0.28.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "694e232eb98af91a4a9575698dc7a54aa60fc4f69dddade6d18251413bf38ee5"
+checksum = "bbeb5b2ed726cb3786945423539732a681ce2eb9911ee5e7548fad7ca96b0731"
 dependencies = [
  "bindgen",
  "cc",

@@ -3056,6 +3056,8 @@ fn test_re() {
     check_regex_match("a{0,1}?bc", b"abc", b"abc");
     check_regex_match("a{0,1}bc", b"bbc", b"bc");
     check_regex_match("a{0,1}?bc", b"abc", b"bc");
+    check_regex_match("a{,0}", b"a", b"");
+    check_regex_match("a{,0}", b"x", b"");
     check_regex_match("aa{0,1}?bc", b"abc", b"abc");
     check_regex_match("aa{0,1}?bc", b"abc", b"abc");
     check_regex_match("aa{0,1}bc", b"abc", b"abc");
