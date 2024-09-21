@@ -310,6 +310,12 @@ impl Compiler {
 
         match component {
             YaraFileComponent::Include(include) => {
+                if self.params.disable_includes {
+                    return Err(AddRuleError {
+                        path: current_filepath.map(Path::to_path_buf),
+                        kind: AddRuleErrorKind::UnauthorizedInclude { span: include.span },
+                    });
+                }
                 // Resolve the given path relative to the current one
                 let path = match current_filepath {
                     None => PathBuf::from(include.path),
@@ -620,6 +626,7 @@ enum AddRuleErrorKind {
         error: std::io::Error,
     },
 
+    /// An include directive could not be resolved.
     InvalidInclude {
         /// Path in the include clause that is invalid.
         path: PathBuf,
@@ -629,6 +636,12 @@ enum AddRuleErrorKind {
 
         /// IO error on this path.
         error: std::io::Error,
+    },
+
+    /// An include directive was found, but includes are disabled.
+    UnauthorizedInclude {
+        /// Span of the include.
+        span: Range<usize>,
     },
 
     /// Error while parsing a rule.
@@ -680,6 +693,9 @@ impl AddRuleErrorKind {
             )),
             Self::InvalidInclude { path, span, error } => Diagnostic::error()
                 .with_message(format!("cannot include `{}`: {error}", path.display()))
+                .with_labels(vec![Label::primary((), span.clone())]),
+            Self::UnauthorizedInclude { span } => Diagnostic::error()
+                .with_message("includes are not allowed")
                 .with_labels(vec![Label::primary((), span.clone())]),
             Self::Parse(err) => err.to_diagnostic(),
             Self::Compilation(err) => err.to_diagnostic(),

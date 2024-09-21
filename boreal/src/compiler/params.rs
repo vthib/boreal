@@ -11,6 +11,9 @@ pub struct CompilerParams {
 
     /// Compute statistics when compiling rules.
     pub(crate) compute_statistics: bool,
+
+    /// Disable includes in YARA documents.
+    pub(crate) disable_includes: bool,
 }
 
 impl Default for CompilerParams {
@@ -19,6 +22,7 @@ impl Default for CompilerParams {
             max_condition_depth: 40,
             fail_on_warnings: false,
             compute_statistics: false,
+            disable_includes: false,
         }
     }
 }
@@ -65,6 +69,18 @@ impl CompilerParams {
     #[must_use]
     pub fn compute_statistics(mut self, compute_statistics: bool) -> Self {
         self.compute_statistics = compute_statistics;
+        self
+    }
+
+    /// Disable the possibility to include yara files.
+    ///
+    /// If true, an error is returned if the `include` keyword is used in a YARA document.
+    /// Compute statistics during compilation.
+    ///
+    /// Default value is false.
+    #[must_use]
+    pub fn disable_includes(mut self, disable_includes: bool) -> Self {
+        self.disable_includes = disable_includes;
         self
     }
 }
