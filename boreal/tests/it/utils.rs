@@ -17,7 +17,7 @@ pub struct Checker {
 
 pub struct Compiler {
     pub compiler: boreal::Compiler,
-    yara_compiler: Option<yara::Compiler>,
+    pub yara_compiler: Option<yara::Compiler>,
 }
 
 macro_rules! define_symbol_compiler_method {
@@ -133,6 +133,29 @@ impl Compiler {
     pub fn check_add_rules_err_boreal(&mut self, rules: &str, expected_prefix: &str) {
         let err = self.compiler.add_rules_str(rules).unwrap_err();
         let desc = add_rule_error_get_desc(&err, rules);
+        assert!(
+            desc.starts_with(expected_prefix),
+            "error: {desc}\nexpected prefix: {expected_prefix}"
+        );
+    }
+
+    #[track_caller]
+    pub fn check_add_file_err(mut self, file: &Path, expected_prefix: &str) {
+        self.check_add_file_err_boreal(file, expected_prefix);
+
+        // Check libyara also rejects it
+        if let Some(compiler) = self.yara_compiler.take() {
+            assert!(
+                compiler.add_rules_file(file).is_err(),
+                "conformity test failed for libyara"
+            );
+        }
+    }
+
+    #[track_caller]
+    pub fn check_add_file_err_boreal(&mut self, file: &Path, expected_prefix: &str) {
+        let err = self.compiler.add_rules_file(file).unwrap_err();
+        let desc = add_rule_error_get_desc(&err, &std::fs::read_to_string(file).unwrap());
         assert!(
             desc.starts_with(expected_prefix),
             "error: {desc}\nexpected prefix: {expected_prefix}"
