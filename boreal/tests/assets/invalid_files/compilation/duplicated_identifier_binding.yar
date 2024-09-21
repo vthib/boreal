@@ -1,3 +1,4 @@
+// [error: duplicated loop identifier i]
 rule duplicated_binding {
     condition:
         for any i in (1..5): (

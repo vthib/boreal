@@ -1,3 +1,4 @@
+// [error: invalid arguments types: [integer]]
 import "pe"
 
 rule a {

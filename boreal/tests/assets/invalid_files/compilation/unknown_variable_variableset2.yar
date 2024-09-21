@@ -1,3 +1,4 @@
+// [error: unknown variable $b]
 rule a {
     strings:
         $a0 = "a0"

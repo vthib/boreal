@@ -1,3 +1,4 @@
+// [error: variable $m is declared more than once]
 rule a {
     strings:
         $m = /alg/

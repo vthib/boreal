@@ -1,3 +1,4 @@
+// [error: expected an expression of type integer]
 import "pe"
 
 rule a {

@@ -1,3 +1,4 @@
+// [error: variable $a is unused]
 import "pe"
 
 rule a {

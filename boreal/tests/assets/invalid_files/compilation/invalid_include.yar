@@ -1,3 +1,4 @@
+// [error: cannot include]
 import "pe"
 
 rule a {

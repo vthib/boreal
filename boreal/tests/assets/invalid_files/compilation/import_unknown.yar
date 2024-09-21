@@ -1,3 +1,4 @@
+// [error: unknown import mohg]
 import "time"
 import "mohg"
 
