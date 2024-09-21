@@ -1,3 +1,4 @@
+// [error: syntax error]
 rule a {
     strings:
         $a = //

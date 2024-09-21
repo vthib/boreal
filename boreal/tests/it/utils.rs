@@ -153,9 +153,14 @@ impl Compiler {
     }
 
     #[track_caller]
-    pub fn check_add_file_err_boreal(&mut self, file: &Path, expected_prefix: &str) {
-        let err = self.compiler.add_rules_file(file).unwrap_err();
-        let desc = add_rule_error_get_desc(&err, &std::fs::read_to_string(file).unwrap());
+    pub fn check_add_file_err_boreal(&mut self, path: &Path, expected_prefix: &str) {
+        let err = self.compiler.add_rules_file(path).unwrap_err();
+        let desc = err.to_short_description(
+            &path.file_name().unwrap().to_string_lossy(),
+            &std::fs::read_to_string(path).unwrap(),
+        );
+        // Remove the prefix up to the "error: " string
+        let desc = desc.split("error: ").nth(1).unwrap();
         assert!(
             desc.starts_with(expected_prefix),
             "error: {desc}\nexpected prefix: {expected_prefix}"

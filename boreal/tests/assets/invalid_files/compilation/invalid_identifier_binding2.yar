@@ -1,3 +1,4 @@
+// [error: expected 1 identifiers to bind, got 2]
 import "pe"
 
 rule a {

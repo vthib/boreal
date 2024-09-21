@@ -1,3 +1,4 @@
+// [error: rule "a125" matches a previous rule set "a*"]
 rule a0 {
     condition:
         true

@@ -1,3 +1,4 @@
+// [error: unknown identifier "b*"]
 rule a1 {
     condition: true
 }

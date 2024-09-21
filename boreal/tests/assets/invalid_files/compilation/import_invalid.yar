@@ -1,3 +1,4 @@
+// [error: syntax error]
 import "time"
 import ""
 

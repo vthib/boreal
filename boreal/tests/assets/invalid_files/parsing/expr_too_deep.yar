@@ -1,3 +1,4 @@
+// [error: too many imbricated expressions]
 // [no libyara conformance]
 // Disabled on libyara as there isn't a depth limit afaict
 rule a {

@@ -1,3 +1,4 @@
+// [error: rule `a` is already declared in this namespace]
 rule a {
     condition: true
 }

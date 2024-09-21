@@ -1,3 +1,4 @@
+// [error: unknown field "myn"]
 import "pe"
 
 rule a {

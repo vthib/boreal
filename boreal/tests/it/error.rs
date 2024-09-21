@@ -16,10 +16,14 @@ fn test_invalid_files() {
         let directives = extract_directives(&contents);
 
         if directives.skip {
-            println!("skipping file {file:?}");
+            println!("skipping file {}", file.display());
             continue;
         } else {
-            println!("checking file {file:?}");
+            println!("checking file {}", file.display());
+        }
+
+        if directives.error.is_empty() {
+            panic!("missing error directive for {}", file.display());
         }
 
         let mut compiler = if directives.without_yara {
@@ -43,14 +47,15 @@ fn test_invalid_files() {
             }
         }
 
-        compiler.check_add_file_err(&file, "");
+        compiler.check_add_file_err(&file, directives.error);
     }
 }
 
 #[derive(Default)]
-struct Directives {
+struct Directives<'a> {
     without_yara: bool,
     disable_includes: bool,
+    error: &'a str,
     skip: bool,
 }
 
@@ -64,6 +69,10 @@ fn extract_directives(contents: &str) -> Directives {
         let Some(dir) = dir.strip_suffix("]") else {
             break;
         };
+        if let Some(error) = dir.strip_prefix("error: ") {
+            directives.error = error;
+            continue;
+        }
         match dir {
             "no libyara conformance" => directives.without_yara = true,
             "disable includes" => directives.disable_includes = true,
