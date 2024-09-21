@@ -504,6 +504,12 @@ impl Compiler {
         self.params = params;
     }
 
+    /// Get compilation parameters.
+    #[must_use]
+    pub fn params(&self) -> &CompilerParams {
+        &self.params
+    }
+
     /// Names of modules that are available for use in rules.
     pub fn available_modules(&self) -> impl Iterator<Item = &str> {
         self.available_modules.keys().map(|v| &**v)
