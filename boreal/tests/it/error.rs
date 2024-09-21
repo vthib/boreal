@@ -1,3 +1,5 @@
+use boreal::compiler::CompilerParams;
+
 use crate::utils::Compiler;
 
 #[test]
@@ -71,4 +73,16 @@ fn extract_directives(contents: &str) -> Directives {
     }
 
     directives
+}
+
+#[test]
+fn test_disable_include() {
+    let mut compiler = Compiler::new();
+    compiler.set_params(CompilerParams::default().disable_includes(true));
+    if let Some(yara_compiler) = compiler.yara_compiler.as_mut() {
+        yara_compiler.disable_include_directive();
+    }
+
+    let rules = r#"include "toto.yar""#;
+    compiler.check_add_rules_err(rules, "mem:1:1: error: includes are not allowed");
 }
