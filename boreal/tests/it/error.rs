@@ -36,9 +36,12 @@ fn test_invalid_files() {
         if directives.disable_includes {
             let params = compiler.params().clone();
             compiler.set_params(params.disable_includes(true));
+            if let Some(yara_compiler) = compiler.yara_compiler.as_mut() {
+                yara_compiler.disable_include_directive();
+            }
         }
 
-        compiler.check_add_rules_err(&contents, "");
+        compiler.check_add_file_err(&file, "");
     }
 }
 
