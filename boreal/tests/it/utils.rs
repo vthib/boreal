@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use boreal::compiler::CompilerParams;
 use boreal::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use boreal::module::{Module, StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanError, ScanParams, ScanResult};
@@ -167,8 +168,12 @@ impl Compiler {
     define_symbol_compiler_method!(define_symbol_str, &str);
     define_symbol_compiler_method!(define_symbol_bool, bool);
 
-    pub fn set_params(&mut self, params: boreal::compiler::CompilerParams) {
+    pub fn set_params(&mut self, params: CompilerParams) {
         self.compiler.set_params(params);
+    }
+
+    pub fn params(&self) -> &CompilerParams {
+        self.compiler.params()
     }
 
     pub fn into_checker(self) -> Checker {
