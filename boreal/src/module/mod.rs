@@ -261,7 +261,7 @@ impl std::fmt::Debug for ModuleUserData {
 
 /// Object holding the data of each module. See [`ModuleData`].
 pub struct ModuleDataMap<'scanner> {
-    private_data: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    private_data: HashMap<TypeId, Box<dyn Any + Send + Sync + UnwindSafe + RefUnwindSafe>>,
     user_data: &'scanner ModuleUserData,
 }
 
@@ -390,7 +390,7 @@ pub trait ModuleData: Module {
     /// Private Data to associate with the module.
     ///
     /// This is the data that the module can store and retrieve during a scan.
-    type PrivateData: Any + Send + Sync;
+    type PrivateData: Any + Send + Sync + UnwindSafe + RefUnwindSafe;
 
     /// Data that the user can provide to the module.
     ///
@@ -417,17 +417,23 @@ impl<'scanner> ModuleDataMap<'scanner> {
     /// Retrieve the private data of a module.
     #[must_use]
     pub fn get<T: Module + ModuleData + 'static>(&self) -> Option<&T::PrivateData> {
-        self.private_data
-            .get(&TypeId::of::<T>())
-            .and_then(|v| v.downcast_ref())
+        self.private_data.get(&TypeId::of::<T>()).and_then(|v| {
+            // For some reason, having "dyn Any + Send + Sync + UnwindSafe + RefUnwindSafe"
+            // causes the rust compiler to fail to resolve `v.downcast_ref()`, so we need to
+            // explicit where this method comes from.
+            <dyn Any>::downcast_ref(&**v)
+        })
     }
 
     /// Retrieve a mutable borrow on the private data of a module.
     #[must_use]
     pub fn get_mut<T: Module + ModuleData + 'static>(&mut self) -> Option<&mut T::PrivateData> {
-        self.private_data
-            .get_mut(&TypeId::of::<T>())
-            .and_then(|v| v.downcast_mut())
+        self.private_data.get_mut(&TypeId::of::<T>()).and_then(|v| {
+            // For some reason, having "dyn Any + Send + Sync + UnwindSafe + RefUnwindSafe"
+            // causes the rust compiler to fail to resolve `v.downcast_mut()`, so we need to
+            // explicit where this method comes from.
+            <dyn Any>::downcast_mut(&mut **v)
+        })
     }
 
     /// Retrieve the user data of a module.

@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::{collections::HashMap, sync::Arc};
 
 use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value};
@@ -9,7 +10,7 @@ pub struct Console {
 }
 
 /// Type of callback called when a message is logged.
-pub type LogCallback = dyn Fn(String) + Send + Sync;
+pub type LogCallback = dyn Fn(String) + Send + Sync + UnwindSafe + RefUnwindSafe;
 
 impl Module for Console {
     fn get_name(&self) -> &'static str {
@@ -69,7 +70,7 @@ impl Console {
     #[must_use]
     pub fn with_callback<T>(callback: T) -> Self
     where
-        T: Fn(String) + Send + Sync + 'static,
+        T: Fn(String) + Send + Sync + UnwindSafe + RefUnwindSafe + 'static,
     {
         Self {
             callback: Arc::new(callback),
