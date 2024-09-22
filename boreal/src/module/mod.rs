@@ -246,7 +246,9 @@ impl std::fmt::Debug for EvalContext<'_, '_, '_> {
     }
 }
 
-pub(crate) type ModuleUserData = HashMap<TypeId, Arc<dyn Any + Send + Sync>>;
+#[doc(hidden)]
+#[derive(Default, Debug, Clone)]
+pub struct ModuleUserData(pub HashMap<TypeId, Arc<dyn Any + Send + Sync>>);
 
 /// Object holding the data of each module. See [`ModuleData`].
 pub struct ModuleDataMap<'scanner> {
@@ -423,6 +425,7 @@ impl<'scanner> ModuleDataMap<'scanner> {
     #[must_use]
     pub fn get_user_data<T: Module + ModuleData + 'static>(&self) -> Option<&T::UserData> {
         self.user_data
+            .0
             .get(&TypeId::of::<T>())
             .and_then(|v| v.downcast_ref())
     }
@@ -475,10 +478,10 @@ pub enum Value {
         /// ```
         /// # use std::collections::HashMap;
         /// # use boreal::memory::Memory;
-        /// # use boreal::module::{EvalContext, Value, ModuleDataMap};
+        /// # use boreal::module::{EvalContext, Value, ModuleDataMap, ModuleUserData};
         /// # let x = 3;
         /// # fn fun(_: &mut EvalContext, _: Vec<Value>) -> Option<Value> { None }
-        /// # let user_data = HashMap::new();
+        /// # let user_data = ModuleUserData::default();
         /// # let mut ctx = EvalContext {
         /// #     mem: &mut Memory::Direct(b""),
         /// #     module_data: &ModuleDataMap::new(&user_data),
@@ -872,14 +875,15 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
+        test_type_traits(ModuleUserData::default());
         test_type_traits_non_clonable(ScanContext {
             region: &Region { start: 0, mem: b"" },
-            module_data: &mut ModuleDataMap::new(&HashMap::new()),
+            module_data: &mut ModuleDataMap::new(&ModuleUserData::default()),
             process_memory: false,
         });
         test_type_traits_non_clonable(EvalContext {
             mem: &mut Memory::Direct(b""),
-            module_data: &ModuleDataMap::new(&HashMap::new()),
+            module_data: &ModuleDataMap::new(&ModuleUserData::default()),
             process_memory: false,
         });
 

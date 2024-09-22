@@ -218,7 +218,7 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(EvalData {
             values: Vec::new(),
-            data_map: ModuleDataMap::new(&HashMap::new()),
+            data_map: ModuleDataMap::new(&ModuleUserData::default()),
         });
     }
 }
