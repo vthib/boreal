@@ -136,7 +136,7 @@ impl Scanner {
             }),
             scan_params: ScanParams::default(),
             external_symbols_values,
-            module_user_data: HashMap::new(),
+            module_user_data: ModuleUserData::default(),
         }
     }
 
@@ -330,6 +330,7 @@ impl Scanner {
     {
         let _r = self
             .module_user_data
+            .0
             .insert(TypeId::of::<Module>(), Arc::new(data));
     }
 
@@ -972,7 +973,7 @@ mod tests {
         let _r = compiler.add_rules_str(rule_str).unwrap();
         let scanner = compiler.into_scanner();
 
-        let user_data = HashMap::new();
+        let user_data = ModuleUserData::default();
         let mut module_values =
             evaluator::module::EvalData::new(&scanner.inner.modules, &user_data);
         module_values.scan_region(&Region { start: 0, mem }, &scanner.inner.modules, false);
@@ -1537,7 +1538,7 @@ mod tests {
             matched_rules: Vec::new(),
             module_values: evaluator::module::EvalData {
                 values: Vec::new(),
-                data_map: crate::module::ModuleDataMap::new(&HashMap::new()),
+                data_map: crate::module::ModuleDataMap::new(&ModuleUserData::default()),
             },
             statistics: None,
             timeout_checker: None,
