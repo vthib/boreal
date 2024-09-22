@@ -39,6 +39,7 @@
 //! ```
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::sync::Arc;
 
 use crate::memory::{Memory, Region};
@@ -247,8 +248,16 @@ impl std::fmt::Debug for EvalContext<'_, '_, '_> {
 }
 
 #[doc(hidden)]
-#[derive(Default, Debug, Clone)]
-pub struct ModuleUserData(pub HashMap<TypeId, Arc<dyn Any + Send + Sync>>);
+#[derive(Default, Clone)]
+pub struct ModuleUserData(
+    pub HashMap<TypeId, Arc<dyn Any + Send + Sync + UnwindSafe + RefUnwindSafe>>,
+);
+
+impl std::fmt::Debug for ModuleUserData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ModuleUserData").finish()
+    }
+}
 
 /// Object holding the data of each module. See [`ModuleData`].
 pub struct ModuleDataMap<'scanner> {
@@ -387,7 +396,7 @@ pub trait ModuleData: Module {
     ///
     /// This data is provided by the user with calls to
     /// [`Scanner::set_module_data`](crate::scanner::Scanner::set_module_data).
-    type UserData: Any + Send + Sync;
+    type UserData: Any + Send + Sync + UnwindSafe + RefUnwindSafe;
 }
 
 impl<'scanner> ModuleDataMap<'scanner> {
@@ -424,10 +433,12 @@ impl<'scanner> ModuleDataMap<'scanner> {
     /// Retrieve the user data of a module.
     #[must_use]
     pub fn get_user_data<T: Module + ModuleData + 'static>(&self) -> Option<&T::UserData> {
-        self.user_data
-            .0
-            .get(&TypeId::of::<T>())
-            .and_then(|v| v.downcast_ref())
+        self.user_data.0.get(&TypeId::of::<T>()).and_then(|v| {
+            // For some reason, having "dyn Any + Send + Sync + UnwindSafe + RefUnwindSafe"
+            // causes the rust compiler to fail to resolve `v.downcast_ref()`, so we need to
+            // explicit where this method comes from.
+            <dyn Any>::downcast_ref(&**v)
+        })
     }
 }
 
