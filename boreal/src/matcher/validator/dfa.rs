@@ -1,3 +1,4 @@
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::sync::Arc;
 
 use regex_automata::hybrid::dfa::{Builder, Cache, DFA};
@@ -11,7 +12,7 @@ use crate::matcher::widener::widen_hir;
 use crate::matcher::{MatchType, Modifiers};
 use crate::regex::{regex_hir_to_string, Hir};
 
-type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync>;
+type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync + UnwindSafe + RefUnwindSafe>;
 
 #[derive(Debug)]
 pub(crate) struct DfaValidator {
