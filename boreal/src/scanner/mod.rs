@@ -882,7 +882,9 @@ impl std::fmt::Display for DefineSymbolError {
 #[cfg(test)]
 mod tests {
     use crate::module::{EvalContext, ScanContext, StaticValue, Type, Value as ModuleValue};
-    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+    use crate::test_helpers::{
+        test_type_traits, test_type_traits_non_clonable, test_type_unwind_safe,
+    };
     use crate::Compiler;
 
     use super::*;
@@ -1515,6 +1517,8 @@ mod tests {
             Vec::new(),
             BytesPool::default(),
         ));
+        test_type_unwind_safe::<Scanner>();
+
         test_type_traits_non_clonable(ScanResult {
             matched_rules: Vec::new(),
             module_values: Vec::new(),

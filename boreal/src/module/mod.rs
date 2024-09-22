@@ -109,7 +109,7 @@ pub use self::cuckoo::{Cuckoo, CuckooData};
 ///
 /// - As dynamic values, whose shape depend on the memory being scanned. This often includes
 ///   arrays such as `elf.sections`, or raw values such as `pe.machine`.
-pub trait Module: Send + Sync {
+pub trait Module: Send + Sync + UnwindSafe + RefUnwindSafe {
     /// Name of the module, used in `import` clauses.
     fn get_name(&self) -> &'static str;
 

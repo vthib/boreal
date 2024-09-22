@@ -1,3 +1,5 @@
+use std::panic::{RefUnwindSafe, UnwindSafe};
+
 use boreal_parser::hex_string::parse_hex_string;
 use boreal_parser::regex::parse_regex;
 
@@ -19,9 +21,11 @@ pub fn expr_to_hir(expr: &str) -> Hir {
 pub fn test_type_traits<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
     #[allow(clippy::redundant_clone)]
     let _r = t.clone();
-    let _r = format!("{:?}", &t);
+    test_type_traits_non_clonable(t);
 }
 
 pub fn test_type_traits_non_clonable<T: std::fmt::Debug + Send + Sync>(t: T) {
     let _r = format!("{:?}", &t);
 }
+
+pub fn test_type_unwind_safe<T: UnwindSafe + RefUnwindSafe>() {}
