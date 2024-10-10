@@ -28,6 +28,7 @@ The main goals of the project are:
   See the [benchmarks](/benches/README.md) for details.
 * Process scanning on Windows, Linux and macOS, with different scanning modes available. See the
   [FragmentedScanMode documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.FragmentedScanMode.html).
+* Rules can be optimized for different situations, by prioritizing either scanning speed or memory consumption.
 * Pure Rust implementation without any C dependency such as OpenSSL, making it very easy to build and use
   on any target. The only exception is the magic module which requires libmagic.
 
