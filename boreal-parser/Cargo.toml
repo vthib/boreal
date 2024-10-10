@@ -9,7 +9,7 @@ keywords = ["boreal", "yara", "parser"]
 categories = ["parser-implementations"]
 edition = "2021"
 # MSRV
-rust-version = "1.65"
+rust-version = "1.66"
 
 [dependencies]
 # Parsing library
