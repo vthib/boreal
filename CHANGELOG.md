@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2024-10-11
+
+This release brings several memory optimizations and small API improvements.
+
+Memory optimizations comes in two forms:
+
+- Generic optimizations to reduce the memory footprint of compiled rules, useful in all
+  cases when the `Scanner` object is kept for a long time.
+- The introduction of a new profile that can be set in the compiler, which will compile
+  rules to optimize for memory usage rather than scanning speed.
+
+### boreal
+
+Breaking changes:
+
+- A memory pool was introduced to greatly reduce the memory footprint of compiled rules,
+  notably when the same meta strings are used in all rules. This introduces two breaking
+  changes:
+
+  - The `Metadata` and `MetadataValue` objects are no longer re-exported from `boreal-parser`
+    but are new types.
+  - To retrieve strings and byte-strings from those objects, the new `Scanner::get_bytes_symbol`
+    and `Scanner::get_string_symbol` must be used.
+
+- A new `CompilerBuilder` object is introduced, to be able to configure a `Compiler` before
+  any rule is added.
+
+- Added `UnwindSafe` and `RefUnwindSafe` trait bounds on module datas:
+
+  - add UnwindSafe traits to module private datas [43502307](https://github.com/vthib/boreal/commit/435023079dd260622a2ed82424b1d2dc3830487d)
+  - add UnwindSafe traits for module user datas [56111d77](https://github.com/vthib/boreal/commit/56111d772bd3b754f2371a46c01523fb601e96fe)
+
+- MSRV is bumped from 1.65 to 1.66 [825aaab](https://github.com/vthib/boreal/commit/825aaab4f46afbe46d218d7bc92ae970ab15746e)
+
+#### Added
+
+- Add CompilerBuilder object to add modules and configure compiler profile: [261b11c2](https://github.com/vthib/boreal/commit/261b11c2228d1b28401ee5b3c3ce323a08c41e35)
+- Add compiler profile to pick between memory usage or scanning speed: [#167](https://github.com/vthib/boreal/pull/167).
+- Add compiler param to disable includes: [#170](https://github.com/vthib/boreal/pull/170).
+- Update compatibility with YARA 4.5.2: [#172](https://github.com/vthib/boreal/pull/172).
+
+#### Changed
+
+- Add bytes intern pool to reduce memory consumption: [#165](https://github.com/vthib/boreal/pull/165).
+- Guarantee `Scanner` is `UnwindSafe` and `RefUnwindSafe`: [#171](https://github.com/vthib/boreal/pull/171).
+* Update memory benchmarks [68a1e046](https://github.com/vthib/boreal/commit/68a1e046018ef3232dcf6f3cc4c04f5c5fac8898)
+- Update windows-sys dependency to version 0.59 [ff996f77](https://github.com/vthib/boreal/commit/ff996f7707abd65ac6d3f86066872c18c5ee4db7)
+- Update tlsh2 dependency to version 0.4.0 [29097dc8](https://github.com/vthib/boreal/commit/29097dc85eb5122dea9a6876c03edf350c6fc1fd)
+
+#### Fixed
+
+- Fix unused warning on statistics in default features config: [#168](https://github.com/vthib/boreal/pull/168).
+
+### boreal-cli
+
+#### Added
+
+- Added option `--profile` to select memory or speed profile: [c3a89c29](https://github.com/vthib/boreal/commit/c3a89c29dca947e455e597dfc0798506bc2943ab).
+
 ## [0.8.0] - 2024-06-09
 
 This release consists of several changes to make the library easier to use in any context
@@ -431,7 +490,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v0.8.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/vthib/boreal/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vthib/boreal/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/vthib/boreal/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vthib/boreal/compare/v0.5.0...v0.6.0
