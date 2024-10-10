@@ -1,6 +1,6 @@
 [package]
 name = "boreal"
-version = "0.8.0"
+version = "0.9.0"
 description = "A library to evaluate YARA rules, used to scan bytes for textual and binary pattern"
 repository = "https://github.com/vthib/boreal"
 readme = "README.md"
