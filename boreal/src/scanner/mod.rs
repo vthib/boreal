@@ -432,7 +432,7 @@ impl Inner {
         let results = ScanResult {
             matched_rules: scan_data.matched_rules,
             module_values: scan_data.module_values.values,
-            statistics: scan_data.statistics,
+            statistics: scan_data.statistics.map(Box::new),
         };
 
         match res {
@@ -827,7 +827,9 @@ pub struct ScanResult<'scanner> {
     pub module_values: Vec<(&'static str, crate::module::Value)>,
 
     /// Statistics related to the scan.
-    pub statistics: Option<statistics::Evaluation>,
+    // This is boxed to reduce the size of the struct, especially as this field
+    // is pratically never set outside of test/debug runs.
+    pub statistics: Option<Box<statistics::Evaluation>>,
 }
 
 /// Description of a rule that matched during a scan.
