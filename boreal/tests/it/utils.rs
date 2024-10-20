@@ -859,53 +859,10 @@ pub fn compare_module_values_on_mem<M: Module>(
     // Enrich value using the static values, so that it can be compared with yara's
     enrich_with_static_values(&mut boreal_value, module.get_static_values());
 
+    let mut yara_value = None;
     let yara_cb = |msg| {
         if let yara::CallbackMsg::ModuleImported(obj) = msg {
-            let mut yara_value = convert_yara_obj_to_module_value(obj);
-
-            // This is a hack to remove the "rich_signature" field from the pe module
-            // when the file is not a PE. The PE module on yara has a lot of idiosyncracies,
-            // but two of them conflates here: it is the only module that has values when it
-            // does not parse anything (the is_pe field is set, either to 1 or 0), and it
-            // always sets the rich_signature field even if it does not contain anything
-            // (because it contains two functions).
-            // This is very annoying to handle when comparing module values, so just remove
-            // this dummy value when the file is not a pe, it serves no purpose.
-            if let ModuleValue::Object(map) = &mut yara_value {
-                if matches!(map.get("is_pe"), Some(ModuleValue::Integer(0))) {
-                    map.remove("rich_signature");
-                }
-            }
-
-            let mut diffs = Vec::new();
-            compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
-
-            // Remove ignored diffs from the reported ones.
-            for path in ignored_diffs {
-                match diffs.iter().position(|d| &d.path == path) {
-                    Some(pos) => {
-                        diffs.remove(pos);
-                    }
-                    None => {
-                        panic!("ignored diff on path {path} but there is no diff on this path",);
-                    }
-                }
-            }
-
-            if !diffs.is_empty() {
-                panic!(
-                    "found {} differences for module {} on {}{}: {:#?}",
-                    diffs.len(),
-                    module.get_name(),
-                    mem_name,
-                    if process_memory {
-                        " with process memory flag"
-                    } else {
-                        ""
-                    },
-                    diffs
-                );
-            }
+            yara_value = Some(convert_yara_obj_to_module_value(obj));
         }
         yara::CallbackReturn::Continue
     };
@@ -922,6 +879,53 @@ pub fn compare_module_values_on_mem<M: Module>(
             .unwrap();
     } else {
         yara_scanner.scan_mem_callback(mem, yara_cb).unwrap();
+    }
+
+    let Some(mut yara_value) = yara_value else {
+        panic!("Missed module imported yara callback");
+    };
+    // This is a hack to remove the "rich_signature" field from the pe module
+    // when the file is not a PE. The PE module on yara has a lot of idiosyncracies,
+    // but two of them conflates here: it is the only module that has values when it
+    // does not parse anything (the is_pe field is set, either to 1 or 0), and it
+    // always sets the rich_signature field even if it does not contain anything
+    // (because it contains two functions).
+    // This is very annoying to handle when comparing module values, so just remove
+    // this dummy value when the file is not a pe, it serves no purpose.
+    if let ModuleValue::Object(map) = &mut yara_value {
+        if matches!(map.get("is_pe"), Some(ModuleValue::Integer(0))) {
+            map.remove("rich_signature");
+        }
+    }
+
+    let mut diffs = Vec::new();
+    compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
+
+    // Remove ignored diffs from the reported ones.
+    for path in ignored_diffs {
+        match diffs.iter().position(|d| &d.path == path) {
+            Some(pos) => {
+                diffs.remove(pos);
+            }
+            None => {
+                panic!("ignored diff on path {path} but there is no diff on this path",);
+            }
+        }
+    }
+
+    if !diffs.is_empty() {
+        panic!(
+            "found {} differences for module {} on {}{}: {:#?}",
+            diffs.len(),
+            module.get_name(),
+            mem_name,
+            if process_memory {
+                " with process memory flag"
+            } else {
+                ""
+            },
+            diffs
+        );
     }
 }
 
