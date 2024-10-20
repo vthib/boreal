@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### boreal
+
+Breaking changes:
+
+- The `ScanResult::statistics` field is now boxed. This reduces the size of the
+  object greatly.
+
 ## [0.9.0] - 2024-10-11
 
 This release brings several memory optimizations and small API improvements.
