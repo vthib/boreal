@@ -4,5 +4,6 @@ members = [
     "boreal",
     "boreal-cli",
     "boreal-parser",
+    "boreal-py",
     "boreal-test-helpers",
 ]
