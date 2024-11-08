@@ -1,0 +1,23 @@
+[package]
+name = "boreal-py"
+version = "0.1.0"
+description = "Python bindings to the boreal API"
+repository = "https://github.com/vthib/boreal"
+license = "MIT OR Apache-2.0"
+keywords = ["boreal", "yara", "string-matching", "scan", "python"]
+categories = ["api-bindings", "text-processing"]
+edition = "2021"
+# MSRV
+rust-version = "1.66"
+
+[lib]
+name = "boreal"
+crate-type = ["cdylib"]
+
+[dependencies]
+boreal = { path = "../boreal", version = "0.9.0" }
+
+pyo3 = { version = "0.23", features = ["abi3", "abi3-py311", "extension-module", "macros"] }
+
+[lints]
+workspace = true
