@@ -1,9 +1,12 @@
-use ::boreal::MetadataValue;
-use ::boreal::{scanner::MatchedRule, Compiler, Scanner};
+use std::collections::HashMap;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyString};
-use std::collections::HashMap;
+use pyo3::types::{PyBytes, PyList, PyString};
+
+use ::boreal::scanner::{StringMatch, StringMatches};
+use ::boreal::MetadataValue;
+use ::boreal::{scanner::MatchedRule, Compiler, Scanner};
 
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -17,7 +20,7 @@ fn compile(filepath: Option<&str>, source: Option<&str>) -> PyResult<PyScanner> 
     match (filepath, source) {
         (Some(v), None) => compiler.add_rules_file(v),
         (None, Some(v)) => compiler.add_rules_str(v),
-        _ => panic!("bad"),
+        _ => todo!(),
     }
     .unwrap();
 
@@ -33,13 +36,31 @@ struct PyScanner {
 
 #[pymethods]
 impl PyScanner {
-    #[pyo3(signature = (filepath=None))]
-    fn r#match(&self, filepath: Option<&str>) -> PyResult<Vec<PyMatch>> {
-        match self.scanner.scan_file(filepath.unwrap()) {
+    #[pyo3(signature = (filepath=None, data=None))]
+    fn r#match(
+        &self,
+        filepath: Option<&str>,
+        data: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<PyMatch>> {
+        let res = match (filepath, data) {
+            (Some(filepath), None) => self.scanner.scan_file(filepath),
+            (None, Some(data)) => {
+                if let Ok(s) = data.downcast::<PyString>() {
+                    self.scanner.scan_mem(s.to_str()?.as_bytes())
+                } else if let Ok(s) = data.downcast::<PyBytes>() {
+                    self.scanner.scan_mem(s.as_bytes())
+                } else {
+                    todo!()
+                }
+            }
+            _ => todo!(),
+        };
+
+        match res {
             Ok(v) => {
                 let res = Python::with_gil(|py| {
                     v.matched_rules
-                        .iter()
+                        .into_iter()
                         .map(|v| PyMatch::new(py, &self.scanner, v))
                         .collect()
                 });
@@ -70,11 +91,11 @@ struct PyMatch {
 
     /// Tuple with offsets and strings that matched the file
     #[pyo3(get)]
-    strings: Vec<String>,
+    strings: Vec<PyStringMatches>,
 }
 
 impl PyMatch {
-    fn new(py: Python, scanner: &Scanner, rule: &MatchedRule) -> Self {
+    fn new(py: Python, scanner: &Scanner, rule: MatchedRule) -> Self {
         Self {
             rule: PyString::new_bound(py, rule.name).unbind(),
             namespace: PyString::new_bound(py, rule.namespace.unwrap_or_default()).unbind(),
@@ -92,7 +113,63 @@ impl PyMatch {
                 .collect(),
             tags: PyList::new_bound(py, rule.tags.iter().map(|v| PyString::new_bound(py, v)))
                 .unbind(),
-            strings: todo!(),
+            strings: rule.matches.into_iter().map(PyStringMatches::new).collect(),
         }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+struct PyStringMatches {
+    /// Name of the matching string.
+    #[pyo3(get)]
+    identifier: String,
+
+    /// List of matches for the string.
+    #[pyo3(get)]
+    instances: Vec<PyStringMatch>,
+    // TODO: missing flags
+}
+
+impl PyStringMatches {
+    fn new(s: StringMatches) -> Self {
+        Self {
+            identifier: s.name.to_owned(),
+            instances: s.matches.into_iter().map(PyStringMatch::new).collect(),
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+struct PyStringMatch {
+    /// Offset of the match.
+    #[pyo3(get)]
+    offset: usize,
+
+    /// Matched data, might have been truncated if too long.
+    matched_data: Vec<u8>,
+
+    /// Length of the entire match.
+    #[pyo3(get)]
+    matched_len: usize,
+    // TODO: missing xor_key
+}
+
+impl PyStringMatch {
+    fn new(s: StringMatch) -> Self {
+        Self {
+            offset: s.offset,
+            matched_data: s.data,
+            matched_len: s.length,
+        }
+    }
+}
+
+#[pymethods]
+impl PyStringMatch {
+    #[getter]
+    fn matched_data(self_: PyRef<'_, Self>) -> PyResult<Bound<'_, PyBytes>> {
+        Ok(PyBytes::new_bound(self_.py(), &self_.matched_data))
     }
 }
