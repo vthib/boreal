@@ -135,8 +135,8 @@ jobs:
             target: i686-pc-windows-msvc
 
   test-macos:
-    name: Test Macos 12
-    runs-on: macos-12
+    name: Test Macos 13
+    runs-on: macos-13
 
     env:
       RUSTFLAGS: -Dwarnings
