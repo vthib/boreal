@@ -49,8 +49,8 @@ impl<'a> Memory<'a> {
     pub(crate) fn new_fragmented(
         obj: Box<dyn FragmentedMemory + 'a>,
         params: MemoryParams,
-    ) -> Memory {
-        Memory::Fragmented(Fragmented { obj, params })
+    ) -> Self {
+        Self::Fragmented(Fragmented { obj, params })
     }
 }
 

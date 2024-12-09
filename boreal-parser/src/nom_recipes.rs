@@ -136,7 +136,7 @@ fn singleline_comment(input: Input) -> ParseResult<()> {
 pub(crate) fn map_res<'a, O1, O2, F, G>(
     mut parser: F,
     mut f: G,
-) -> impl FnMut(Input<'a>) -> ParseResult<O2>
+) -> impl FnMut(Input<'a>) -> ParseResult<'a, O2>
 where
     F: Parser<Input<'a>, O1, Error>,
     G: FnMut(O1) -> Result<O2, ErrorKind>,
