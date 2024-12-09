@@ -134,7 +134,7 @@ struct PyStringMatches {
 impl PyStringMatches {
     fn new(s: StringMatches) -> Self {
         Self {
-            identifier: s.name.to_owned(),
+            identifier: format!("${}", &s.name),
             instances: s.matches.into_iter().map(PyStringMatch::new).collect(),
         }
     }
@@ -152,7 +152,7 @@ struct PyStringMatch {
 
     /// Length of the entire match.
     #[pyo3(get)]
-    matched_len: usize,
+    matched_length: usize,
     // TODO: missing xor_key
 }
 
@@ -161,7 +161,7 @@ impl PyStringMatch {
         Self {
             offset: s.offset,
             matched_data: s.data,
-            matched_len: s.length,
+            matched_length: s.length,
         }
     }
 }
