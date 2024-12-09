@@ -135,13 +135,24 @@ jobs:
             target: i686-pc-windows-msvc
 
   test-macos:
-    name: Test Macos 13
-    runs-on: macos-13
+    name: Test ${{matrix.runner}}
+    runs-on: ${{matrix.runner}}
 
     env:
       RUSTFLAGS: -Dwarnings
 
     steps:
+      # On macos 14, yara does not find the openssl include dir, so retrieve
+      # them and set them properly.
+      - name: Setup openssl
+        run: |
+          pkg-config --cflags libcrypto
+          pkg-config --libs-only-L libcrypto
+          OPENSSL_INCLUDE_DIR=$(pkg-config --cflags libcrypto | cut -dI -f2-)
+          OPENSSL_LIB_DIR=$(pkg-config --libs-only-L libcrypto | cut -dL -f2-)
+          echo "YARA_OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR" >> $GITHUB_ENV
+          echo "YARA_OPENSSL_LIB_DIR=$OPENSSL_LIB_DIR" >> $GITHUB_ENV
+
       - uses: actions/checkout@v4.1.1
 
       - uses: dtolnay/rust-toolchain@stable
@@ -170,6 +181,16 @@ jobs:
         # This is very suspect, and should be investigated and reported.
         run: |
           sudo cargo test -- --test-threads=1 --ignored
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [macos-x64, macos-arm64]
+        include:
+          - build: macos-x64
+            runner: macos-13
+          - build: macos-arm64
+            runner: macos-14
 
   clippy:
     name: Clippy
