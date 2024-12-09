@@ -93,7 +93,7 @@ allow = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
-    "Unicode-DFS-2016",
+    "Unicode-3.0",
     "ISC",
 ]
 # The confidence threshold for detecting a license from license text.
@@ -201,8 +201,7 @@ deny = [
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
-    { crate = "windows-sys@0.52.0", reason = "blocked by anstyle-query, anstyle-wincon and errno" }
-    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
+    # { crate = "windows-sys@0.52.0", reason = "blocked by anstyle-query, anstyle-wincon and errno" }
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
