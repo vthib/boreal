@@ -618,7 +618,7 @@ macro_rules! define_symbol_scanner_method {
     };
 }
 
-impl<'a> Scanner<'a> {
+impl Scanner<'_> {
     #[track_caller]
     pub fn check(&mut self, mem: &[u8], expected_res: bool) {
         self.check_boreal(mem, expected_res);
@@ -1115,7 +1115,7 @@ struct YaraBlocks<'a> {
     regions: &'a [(usize, Option<&'a [u8]>)],
 }
 
-impl<'a> yara::MemoryBlockIterator for YaraBlocks<'a> {
+impl yara::MemoryBlockIterator for YaraBlocks<'_> {
     fn first(&mut self) -> Option<yara::MemoryBlock> {
         self.current = 0;
         self.next()

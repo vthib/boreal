@@ -20,8 +20,8 @@ const DEFAULT_ALPHABET: &[u8; 64] =
 ///
 /// How this work is that every byte from the resulting base64 string that is involved with
 /// padding is removed from the returned value.
-pub fn encode_base64(s: &[u8], alphabet: &Option<[u8; 64]>, offset: usize) -> Option<Vec<u8>> {
-    let alphabet = alphabet.as_ref().unwrap_or(DEFAULT_ALPHABET);
+pub fn encode_base64(s: &[u8], alphabet: Option<&[u8; 64]>, offset: usize) -> Option<Vec<u8>> {
+    let alphabet = alphabet.unwrap_or(DEFAULT_ALPHABET);
 
     let mut res = Vec::with_capacity(s.len() * 4 / 3);
 

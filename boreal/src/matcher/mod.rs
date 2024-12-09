@@ -220,7 +220,9 @@ impl Matcher {
             if base64.ascii {
                 for lit in &old_literals {
                     for offset in 0..=2 {
-                        if let Some(lit) = base64::encode_base64(lit, &base64.alphabet, offset) {
+                        if let Some(lit) =
+                            base64::encode_base64(lit, base64.alphabet.as_ref(), offset)
+                        {
                             // Fullword is not compatible with base64 modifiers, hence ordering of
                             // literals is not required.
                             if base64.wide {
@@ -233,7 +235,9 @@ impl Matcher {
             } else {
                 for lit in &old_literals {
                     for offset in 0..=2 {
-                        if let Some(lit) = base64::encode_base64(lit, &base64.alphabet, offset) {
+                        if let Some(lit) =
+                            base64::encode_base64(lit, base64.alphabet.as_ref(), offset)
+                        {
                             literals.push(string_to_wide(&lit));
                         }
                     }
