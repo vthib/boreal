@@ -50,7 +50,8 @@ impl Module for Pe {
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
         #[allow(clippy::cast_possible_wrap)]
-        [
+        #[allow(clippy::large_stack_arrays)]
+        HashMap::from([
             (
                 "MACHINE_UNKNOWN",
                 StaticValue::Integer(pe::IMAGE_FILE_MACHINE_UNKNOWN.into()),
@@ -823,8 +824,7 @@ impl Module for Pe {
                     Type::Integer,
                 ),
             ),
-        ]
-        .into()
+        ])
     }
 
     fn get_dynamic_types(&self) -> HashMap<&'static str, Type> {

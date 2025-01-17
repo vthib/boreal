@@ -53,7 +53,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
     // Safety:
     // - The handle is valid since the call to OpenProcess succeeded
     // - The handle must be closed with `CloseHandle`.
-    let handle = unsafe { OwnedHandle::from_raw_handle(res as _) };
+    let handle = unsafe { OwnedHandle::from_raw_handle(res.cast()) };
 
     Ok(Box::new(WindowsProcessMemory {
         handle,
