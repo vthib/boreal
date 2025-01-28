@@ -1,5 +1,6 @@
 //! Python bindings for the boreal library.
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -139,7 +140,7 @@ struct PyStringMatches {
 
     /// List of matches for the string.
     #[pyo3(get)]
-    instances: Vec<PyStringMatch>,
+    instances: Vec<StringMatchInstance>,
     // TODO: missing flags
 }
 
@@ -147,14 +148,19 @@ impl PyStringMatches {
     fn new(s: StringMatches) -> Self {
         Self {
             identifier: format!("${}", &s.name),
-            instances: s.matches.into_iter().map(PyStringMatch::new).collect(),
+            instances: s
+                .matches
+                .into_iter()
+                .map(StringMatchInstance::new)
+                .collect(),
         }
     }
 }
 
-#[pyclass]
+/// Match instance of a YARA string
+#[pyclass(frozen)]
 #[derive(Clone)]
-struct PyStringMatch {
+struct StringMatchInstance {
     /// Offset of the match.
     #[pyo3(get)]
     offset: usize,
@@ -168,7 +174,7 @@ struct PyStringMatch {
     // TODO: missing xor_key
 }
 
-impl PyStringMatch {
+impl StringMatchInstance {
     fn new(s: StringMatch) -> Self {
         Self {
             offset: s.offset,
@@ -179,9 +185,19 @@ impl PyStringMatch {
 }
 
 #[pymethods]
-impl PyStringMatch {
+impl StringMatchInstance {
     #[getter]
     fn matched_data(self_: PyRef<'_, Self>) -> PyResult<Bound<'_, PyBytes>> {
         Ok(PyBytes::new(self_.py(), &self_.matched_data))
+    }
+
+    fn __repr__(&self) -> String {
+        String::from_utf8_lossy(&self.matched_data).to_string()
+    }
+
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.matched_data.hash(&mut hasher);
+        hasher.finish()
     }
 }
