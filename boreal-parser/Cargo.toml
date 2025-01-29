@@ -17,3 +17,6 @@ nom = "7.1"
 
 # Proper error reporting on parsing
 codespan-reporting = "0.11"
+
+[lints]
+workspace = true

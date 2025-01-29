@@ -409,7 +409,7 @@ where
     );
     #[cfg(not(feature = "authenticode-verify"))]
     let verified = {
-        let _ = check_digest;
+        let _f = check_digest;
         Value::Undefined
     };
 

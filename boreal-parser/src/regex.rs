@@ -599,6 +599,7 @@ struct Escaped {
     escaped: bool,
 }
 
+#[allow(variant_size_differences)]
 enum EscapedKind {
     Byte(u8),
     Char(char),

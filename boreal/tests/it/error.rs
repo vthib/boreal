@@ -29,7 +29,7 @@ fn test_invalid_files() {
         let mut compiler = if directives.without_yara {
             if cfg!(debug_assertions) {
                 let mut compiler = Compiler::new_without_yara();
-                let params = boreal::compiler::CompilerParams::default().max_condition_depth(15);
+                let params = CompilerParams::default().max_condition_depth(15);
                 compiler.set_params(params);
                 compiler
             } else {

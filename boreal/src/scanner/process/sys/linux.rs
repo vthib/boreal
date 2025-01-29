@@ -159,7 +159,7 @@ impl LinuxProcessMemory {
 
 impl FragmentedMemory for LinuxProcessMemory {
     fn reset(&mut self) {
-        let _ = self.maps_file.rewind();
+        let _r = self.maps_file.rewind();
     }
 
     fn next(&mut self, params: &MemoryParams) -> Option<RegionDescription> {

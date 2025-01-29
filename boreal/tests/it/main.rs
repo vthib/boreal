@@ -1,3 +1,8 @@
+#![allow(missing_docs)]
+#![allow(unused_results)]
+#![allow(unused_crate_dependencies)]
+#![allow(unsafe_code)]
+
 // contains tests imported from libyara
 mod libyara_compat;
 
