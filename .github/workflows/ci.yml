@@ -33,6 +33,16 @@ jobs:
         with:
           target: ${{matrix.target}}
 
+      - name: Install uv for the python bindings tests
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.25"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "boreal-py/pyproject.toml"
+
       - name: Build test helpers
         run: |
           cd boreal-test-helpers
@@ -62,6 +72,12 @@ jobs:
         run: |
           sudo apt install libjansson-dev
           cargo test --features magic,cuckoo --target=${{matrix.target}}
+
+      - name: Run python tests
+        run: |
+          cd boreal-py
+          uv sync --dev
+          uv run pytest
 
     strategy:
       fail-fast: false
@@ -103,6 +119,16 @@ jobs:
           echo "YARA_OPENSSL_DIR=${{ runner.workspace }}\\vcpkg\\installed\\${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
           echo "YARA_CRYPTO_LIB=openssl" >> $GITHUB_ENV
 
+      - name: Install uv for the python bindings tests
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.25"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "boreal-py/pyproject.toml"
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
@@ -121,6 +147,12 @@ jobs:
         env:
           YARA_CRYPTO_LIB: openssl
         run: cargo test --features authenticode-verify --target=${{matrix.target}}
+
+      - name: Run python tests
+        run: |
+          cd boreal-py
+          uv sync --dev
+          uv run pytest
 
     strategy:
       fail-fast: false
@@ -157,6 +189,17 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Install uv for the python bindings tests
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.25"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "boreal-py/pyproject.toml"
+
+
       - name: Build test helpers
         run: |
           cd boreal-test-helpers
@@ -181,6 +224,12 @@ jobs:
         # This is very suspect, and should be investigated and reported.
         run: |
           sudo cargo test -- --test-threads=1 --ignored
+
+      - name: Run python tests
+        run: |
+          cd boreal-py
+          uv sync --dev
+          sudo uv run pytest
 
     strategy:
       fail-fast: false
@@ -238,17 +287,35 @@ jobs:
       - name: Install dependencies
         run: sudo apt install libjansson-dev
 
+      - name: Install uv for the python bindings tests
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.25"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "boreal-py/pyproject.toml"
+
       - name: Generate code coverage
         run: |
           # Export cargo llvm-cov env stuff so that we can run "cargo test"
           # and have coverage
           source <(cargo llvm-cov show-env --export-prefix)
           cargo build -p boreal-test-helpers
+
           # Run the normal tests
           cargo test --features magic,authenticode-verify,cuckoo
+
           # And run the super user tests
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sudo -E" cargo \
             test --features magic,authenticode-verify,cuckoo -- --ignored
+
+          # And run the python bindings tests
+          cd boreal-py
+          uv run --config-setting 'build-args=--profile=dev' pytest
+          cd ..
+
           # Finally, generate the report
           cargo llvm-cov report --lcov --output-path lcov.info \
             --ignore-filename-regex boreal-test-helpers/src/main.rs
