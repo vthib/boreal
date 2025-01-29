@@ -6,9 +6,11 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PyString};
 
-use ::boreal::scanner::{StringMatch, StringMatches};
+use ::boreal::scanner;
 use ::boreal::{scanner::MatchedRule, Compiler, Scanner};
 use ::boreal::{Metadata, MetadataValue};
+
+// TODO: all clone impls should be efficient...
 
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -91,7 +93,7 @@ struct PyMatch {
 
     /// Tuple with offsets and strings that matched the file
     #[pyo3(get)]
-    strings: Vec<PyStringMatches>,
+    strings: Vec<StringMatches>,
 }
 
 impl PyMatch {
@@ -109,7 +111,7 @@ impl PyMatch {
                 .map(|m| convert_metadata(py, scanner, m))
                 .collect::<Result<_, _>>()?,
             tags: PyList::new(py, rule.tags)?.unbind(),
-            strings: rule.matches.into_iter().map(PyStringMatches::new).collect(),
+            strings: rule.matches.into_iter().map(StringMatches::new).collect(),
         })
     }
 }
@@ -131,9 +133,10 @@ fn convert_metadata(
     Ok((name, value.unbind()))
 }
 
-#[pyclass]
+/// List of match instances of a YARA string
+#[pyclass(frozen)]
 #[derive(Clone)]
-struct PyStringMatches {
+struct StringMatches {
     /// Name of the matching string.
     #[pyo3(get)]
     identifier: String,
@@ -141,11 +144,10 @@ struct PyStringMatches {
     /// List of matches for the string.
     #[pyo3(get)]
     instances: Vec<StringMatchInstance>,
-    // TODO: missing flags
 }
 
-impl PyStringMatches {
-    fn new(s: StringMatches) -> Self {
+impl StringMatches {
+    fn new(s: scanner::StringMatches) -> Self {
         Self {
             identifier: format!("${}", &s.name),
             instances: s
@@ -154,6 +156,23 @@ impl PyStringMatches {
                 .map(StringMatchInstance::new)
                 .collect(),
         }
+    }
+}
+
+#[pymethods]
+impl StringMatches {
+    // TODO: missing is_xor
+
+    fn __repr__(&self) -> &str {
+        &self.identifier
+    }
+
+    // XXX: the yara impl is to hash on the identifier only.
+    // TODO: when not in yara compat mode, we should probably avoid this...
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.identifier.hash(&mut hasher);
+        hasher.finish()
     }
 }
 
@@ -175,7 +194,7 @@ struct StringMatchInstance {
 }
 
 impl StringMatchInstance {
-    fn new(s: StringMatch) -> Self {
+    fn new(s: scanner::StringMatch) -> Self {
         Self {
             offset: s.offset,
             matched_data: s.data,
@@ -195,6 +214,8 @@ impl StringMatchInstance {
         String::from_utf8_lossy(&self.matched_data).to_string()
     }
 
+    // XXX: the yara impl is to hash on the data only.
+    // TODO: when not in yara compat mode, we should probably avoid this...
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.matched_data.hash(&mut hasher);
