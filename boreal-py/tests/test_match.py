@@ -24,7 +24,7 @@ rule foo: bar baz {
 """
 
 @pytest.mark.parametrize("module,is_yara", MODULES)
-def test_match(module, is_yara):
+def test_overall(module, is_yara):
     rule = module.compile(source=RULE)
     matches = rule.match(data='abcdefgjiklmnoprstuvwxyzlmmn')
     assert len(matches) == 1
@@ -55,6 +55,53 @@ def test_match(module, is_yara):
     assert m.strings[1].instances[1].offset == 24
     assert m.strings[1].instances[1].matched_length == 4
     assert m.strings[1].instances[1].matched_data == b'lmmn'
+
+
+@pytest.mark.parametrize("module,is_yara", MODULES)
+def test_match(module, is_yara):
+    """Test all properties related to the Match object"""
+    rule = module.compile(source="""
+rule r1: bar baz {
+    meta:
+        s = "a\\nz"
+        b = true
+        v = -11
+    condition:
+        true
+}
+
+rule r2: quux { condition: false }
+rule r3 { condition: true }
+""")
+    matches = rule.match(data='abcdefgjiklmnoprstuvwxyzlmmn')
+    assert len(matches) == 2
+    m0 = matches[0]
+    m1 = matches[1]
+
+    assert m0.rule == 'r1'
+
+    # FIXME: difference between yara and boreal
+    # assert matches[0].namespace == ''
+    # TODO: add non default namespace
+
+    assert m0.tags == ['bar', 'baz']
+    assert m0.meta == {
+        # XXX yara forces a string type, losing information.
+        's': 'a\nz' if is_yara else b'a\nz',
+        'b': True,
+        'v': -11
+    }
+
+    assert m1.rule == 'r3'
+    assert m1.tags == []
+    assert m1.meta == {}
+
+    # check special method __repr__
+    assert m0.__repr__() == 'r1'
+    assert m1.__repr__() == 'r3'
+
+    # TODO: Check that the hash depends on the rule + namespace
+    # TODO: Check richcmp
 
 
 @pytest.mark.parametrize("module,is_yara", MODULES)
