@@ -2,15 +2,17 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyList, PyString};
 
 use ::boreal::scanner;
-use ::boreal::{scanner::MatchedRule, Compiler, Scanner};
+use ::boreal::{Compiler, Scanner};
 use ::boreal::{Metadata, MetadataValue};
 
 // TODO: all clone impls should be efficient...
+// TODO: should all pyclasses have names and be exposed in the module?
 
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -45,7 +47,7 @@ impl PyScanner {
         &self,
         filepath: Option<&str>,
         data: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Vec<PyMatch>> {
+    ) -> PyResult<Vec<Match>> {
         let res = match (filepath, data) {
             (Some(filepath), None) => self.scanner.scan_file(filepath),
             (None, Some(data)) => {
@@ -64,7 +66,7 @@ impl PyScanner {
             Ok(v) => Python::with_gil(|py| {
                 v.matched_rules
                     .into_iter()
-                    .map(|v| PyMatch::new(py, &self.scanner, v))
+                    .map(|v| Match::new(py, &self.scanner, v))
                     .collect::<Result<_, _>>()
             }),
             // TODO: fix difference
@@ -73,15 +75,16 @@ impl PyScanner {
     }
 }
 
-#[pyclass]
-struct PyMatch {
+/// A matching rule
+#[pyclass(frozen)]
+struct Match {
     /// Name of the matching rule
     #[pyo3(get)]
-    rule: Py<PyString>,
+    rule: String,
 
     /// Namespace of the matching rule
     #[pyo3(get)]
-    namespace: Py<PyString>,
+    namespace: String,
 
     /// List of tags associated to the rule
     #[pyo3(get)]
@@ -96,15 +99,38 @@ struct PyMatch {
     strings: Vec<StringMatches>,
 }
 
-impl PyMatch {
-    fn new(py: Python, scanner: &Scanner, rule: MatchedRule) -> Result<Self, PyErr> {
+#[pymethods]
+impl Match {
+    fn __repr__(&self) -> &str {
+        &self.rule
+    }
+
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        let a = (&self.rule, &self.namespace);
+        let b = (&other.rule, &other.namespace);
+        match op {
+            CompareOp::Eq => a == b,
+            CompareOp::Ne => a != b,
+            CompareOp::Le => a <= b,
+            CompareOp::Lt => a < b,
+            CompareOp::Gt => a > b,
+            CompareOp::Ge => a >= b,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.rule.hash(&mut hasher);
+        self.namespace.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl Match {
+    fn new(py: Python, scanner: &Scanner, rule: scanner::MatchedRule) -> Result<Self, PyErr> {
         Ok(Self {
-            rule: rule.name.into_pyobject(py)?.unbind(),
-            namespace: rule
-                .namespace
-                .unwrap_or_default()
-                .into_pyobject(py)?
-                .unbind(),
+            rule: rule.name.to_string(),
+            namespace: rule.namespace.unwrap_or_default().to_string(),
             meta: rule
                 .metadatas
                 .iter()
@@ -206,8 +232,8 @@ impl StringMatchInstance {
 #[pymethods]
 impl StringMatchInstance {
     #[getter]
-    fn matched_data(self_: PyRef<'_, Self>) -> PyResult<Bound<'_, PyBytes>> {
-        Ok(PyBytes::new(self_.py(), &self_.matched_data))
+    fn matched_data(&self) -> &[u8] {
+        &self.matched_data
     }
 
     fn __repr__(&self) -> String {
