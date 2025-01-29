@@ -196,7 +196,7 @@ fn add_signatures_from_content_info(
                 _ => false,
             };
         verified = verified
-            && signer_info.map_or(false, |info| {
+            && signer_info.is_some_and(|info| {
                 verify::verify_signer_info(info, &certificate_chain).unwrap_or(false)
             });
 
@@ -402,14 +402,14 @@ where
                 // Has a signer cert
                 !chain.0.is_empty() &&
                 // message digest matches
-                digest.map_or(false, check_digest) &&
+                digest.is_some_and(check_digest) &&
                 verify::verify_signer_info(info, certs).unwrap_or(false)
         )
         .into(),
     );
     #[cfg(not(feature = "authenticode-verify"))]
     let verified = {
-        let _f = check_digest;
+        drop(check_digest);
         Value::Undefined
     };
 

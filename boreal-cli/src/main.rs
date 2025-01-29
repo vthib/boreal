@@ -348,7 +348,7 @@ fn main() -> ExitCode {
         Ok(Input::Process(pid)) => match scan_process(&scanner, pid, &scan_options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(err) => {
-                eprintln!("Cannot scan {}: {}", pid, err);
+                eprintln!("Cannot scan {pid}: {err}");
                 ExitCode::FAILURE
             }
         },
@@ -368,7 +368,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(err) => {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             ExitCode::FAILURE
         }
     }
@@ -630,7 +630,7 @@ fn display_scan_results(scanner: &Scanner, res: ScanResult, what: &str, options:
         if options.print_metadata {
             print_metadata(&mut stdout, scanner, rule.metadatas);
         }
-        writeln!(stdout, " {}", what).unwrap();
+        writeln!(stdout, " {what}").unwrap();
 
         if options.print_strings_matches() {
             for string in &rule.matches {
@@ -653,7 +653,7 @@ fn display_scan_results(scanner: &Scanner, res: ScanResult, what: &str, options:
 
     // Finally, print the statistics
     if let Some(stats) = res.statistics {
-        writeln!(stdout, "{}: {:#?}", what, stats).unwrap();
+        writeln!(stdout, "{what}: {stats:#?}").unwrap();
     }
 }
 
@@ -671,10 +671,10 @@ fn print_metadata(stdout: &mut StdoutLock, scanner: &Scanner, metadatas: &[Metad
                 write!(stdout, "\"").unwrap();
             }
             MetadataValue::Integer(i) => {
-                write!(stdout, "{}", i).unwrap();
+                write!(stdout, "{i}").unwrap();
             }
             MetadataValue::Boolean(b) => {
-                write!(stdout, "{}", b).unwrap();
+                write!(stdout, "{b}").unwrap();
             }
         }
     }
@@ -703,7 +703,7 @@ impl ThreadPool {
             std::cmp::min(1, *nb)
         } else {
             std::thread::available_parallelism()
-                .map(|v| v.get())
+                .map(std::num::NonZero::get)
                 .unwrap_or(32)
         };
 

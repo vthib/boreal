@@ -56,3 +56,24 @@ rust_2024_prelude_collisions = "deny"
 # must_not_suspend = "deny"
 # non_exhaustive_omitted_patterns = "deny"
 # unqualified_local_imports = "deny"
+
+[workspace.lints.clippy]
+# groups
+all = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
+# extras
+undocumented_unsafe_blocks = "deny"
+
+# exclusions, mostly from the pedantic group
+inline_always = "allow"
+match_same_arms = "allow"
+module_name_repetitions = "allow"
+# Handled by cargo-allow
+multiple_crate_versions = "allow"
+struct_excessive_bools = "allow"
+struct_field_names = "allow"
+single_match_else = "allow"
+too_many_lines = "allow"
+unnested_or_patterns = "allow"

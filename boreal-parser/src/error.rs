@@ -147,7 +147,10 @@ impl Error {
 
     fn from_nom_error_kind(position: usize, kind: NomErrorKind) -> Self {
         Self {
-            span: position..(position + 1),
+            span: Range {
+                start: position,
+                end: position + 1,
+            },
             kind: ErrorKind::NomError(kind),
         }
     }

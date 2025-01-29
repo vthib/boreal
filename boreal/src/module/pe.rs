@@ -2095,7 +2095,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| name.eq_ignore_ascii_case(&function_name))
+                    .is_some_and(|name| name.eq_ignore_ascii_case(&function_name))
             }),
             Value::Integer(ordinal) => match usize::try_from(ordinal) {
                 Ok(ord) => data.exports.iter().any(|export| export.ordinal == ord),
@@ -2105,7 +2105,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| function_name_regex.is_match(name))
+                    .is_some_and(|name| function_name_regex.is_match(name))
             }),
             _ => return None,
         };
@@ -2128,7 +2128,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| name.eq_ignore_ascii_case(&function_name))
+                    .is_some_and(|name| name.eq_ignore_ascii_case(&function_name))
             })?,
             Value::Integer(ordinal) => {
                 let ordinal = usize::try_from(ordinal).ok()?;
@@ -2144,7 +2144,7 @@ impl Pe {
                 export
                     .name
                     .as_ref()
-                    .map_or(false, |name| function_name_regex.is_match(name))
+                    .is_some_and(|name| function_name_regex.is_match(name))
             })?,
             _ => return None,
         };

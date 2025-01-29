@@ -34,24 +34,7 @@
 //! # Ok::<(), boreal::compiler::AddRuleError>(())
 //! ```
 
-// Deny most of allowed by default lints from rustc.
-// Do the same for clippy
 #![allow(unsafe_code)]
-#![deny(clippy::all)]
-#![deny(clippy::pedantic)]
-#![deny(clippy::undocumented_unsafe_blocks)]
-// Allow some useless pedantic lints
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::unnested_or_patterns)]
-#![allow(clippy::match_same_arms)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::single_match_else)]
-#![allow(clippy::inline_always)]
-#![allow(clippy::struct_field_names)]
-#![allow(clippy::struct_excessive_bools)]
-#![deny(clippy::cargo)]
-// Handled by cargo-deny
-#![allow(clippy::multiple_crate_versions)]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 // Used in integration tests, not in the library.

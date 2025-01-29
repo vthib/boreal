@@ -93,14 +93,6 @@
 //! # Ok::<(), boreal_parser::error::Error>(())
 //! ```
 
-// Do the same for clippy
-// Allow some useless pedantic lints
-// #![allow(clippy::module_name_repetitions)]
-// #![allow(clippy::range_plus_one)]
-// #![allow(clippy::too_many_lines)]
-// #![allow(clippy::single_match_else)]
-// #![allow(clippy::struct_field_names)]
-
 // Parsing uses the [`nom`] crate, adapted for textual parsing.
 //
 // All of the parsing functions, unless otherwise indicated, depends on the
