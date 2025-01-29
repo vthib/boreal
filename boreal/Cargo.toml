@@ -9,7 +9,7 @@ keywords = ["boreal", "yara", "string-matching", "scan"]
 categories = ["text-processing"]
 edition = "2021"
 # MSRV
-rust-version = "1.66"
+rust-version = "1.74"
 exclude = ["/tests"]
 
 [features]
