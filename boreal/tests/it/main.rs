@@ -2,6 +2,7 @@
 #![allow(unused_results)]
 #![allow(unused_crate_dependencies)]
 #![allow(unsafe_code)]
+#![allow(clippy::pedantic)]
 
 // contains tests imported from libyara
 mod libyara_compat;

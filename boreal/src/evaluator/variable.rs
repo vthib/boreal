@@ -88,7 +88,7 @@ impl<'a> VarMatches<'a> {
             Err(idx) => idx,
         };
 
-        self.matches[var_index].get(start_idx).map_or(false, |mat| {
+        self.matches[var_index].get(start_idx).is_some_and(|mat| {
             let mat_offset = mat.offset.saturating_add(mat.base);
             mat_offset <= to
         })

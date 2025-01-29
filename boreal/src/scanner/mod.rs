@@ -785,7 +785,7 @@ impl ScanData<'_, '_> {
     pub(crate) fn check_timeout(&mut self) -> bool {
         self.timeout_checker
             .as_mut()
-            .map_or(false, TimeoutChecker::check_timeout)
+            .is_some_and(TimeoutChecker::check_timeout)
     }
 }
 

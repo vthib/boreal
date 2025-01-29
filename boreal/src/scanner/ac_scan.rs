@@ -75,7 +75,7 @@ impl ScanData<'_> {
     fn check_timeout(&mut self) -> bool {
         self.timeout_checker
             .as_mut()
-            .map_or(false, |checker| checker.check_timeout())
+            .is_some_and(|checker| checker.check_timeout())
     }
 }
 

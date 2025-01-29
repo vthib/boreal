@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 #![allow(unused_results)]
 #![allow(unused_crate_dependencies)]
+#![allow(clippy::pedantic)]
 
 use std::io::{BufRead, Write};
 use std::path::Path;

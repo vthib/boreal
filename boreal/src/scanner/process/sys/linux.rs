@@ -135,7 +135,7 @@ impl LinuxProcessMemory {
         if self
             .current_region
             .as_mut()
-            .map_or(false, |line| line.update_to_next_chunk(params))
+            .is_some_and(|line| line.update_to_next_chunk(params))
         {
             return;
         }
