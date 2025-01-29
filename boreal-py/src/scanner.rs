@@ -9,6 +9,8 @@ use crate::rule_match::Match;
 #[pyclass]
 pub struct PyScanner {
     pub scanner: Scanner,
+    #[pyo3(get)]
+    pub warnings: Vec<String>,
 }
 
 #[pymethods]
