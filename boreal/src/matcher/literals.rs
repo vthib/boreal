@@ -81,6 +81,7 @@ struct Extractor {
     dot_all: bool,
 }
 
+#[allow(variant_size_differences)]
 #[derive(Debug)]
 enum HirPartKind {
     Literal(u8),

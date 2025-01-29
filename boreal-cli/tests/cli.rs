@@ -1,3 +1,7 @@
+#![allow(missing_docs)]
+#![allow(unused_results)]
+#![allow(unused_crate_dependencies)]
+
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::{fs, io::BufReader};
@@ -1377,7 +1381,7 @@ impl BinHelper {
 
 impl Drop for BinHelper {
     fn drop(&mut self) {
-        let _ = self.proc.kill();
-        let _ = self.proc.wait();
+        drop(self.proc.kill());
+        drop(self.proc.wait());
     }
 }

@@ -406,7 +406,7 @@ impl BinHelper {
 
 impl Drop for BinHelper {
     fn drop(&mut self) {
-        let _ = self.proc.kill();
-        let _ = self.proc.wait();
+        drop(self.proc.kill());
+        drop(self.proc.wait());
     }
 }

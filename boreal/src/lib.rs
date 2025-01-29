@@ -35,23 +35,8 @@
 //! ```
 
 // Deny most of allowed by default lints from rustc.
-#![deny(explicit_outlives_requirements)]
-#![deny(keyword_idents)]
-#![deny(macro_use_extern_crate)]
-#![deny(non_ascii_idents)]
-#![deny(noop_method_call)]
-#![deny(rust_2021_compatibility)]
-#![deny(single_use_lifetimes)]
-#![deny(trivial_casts)]
-#![deny(trivial_numeric_casts)]
-#![deny(unused_crate_dependencies)]
-#![deny(unused_extern_crates)]
-#![deny(unused_import_braces)]
-#![deny(unused_lifetimes)]
-#![deny(unused_qualifications)]
-#![deny(unused_results)]
-#![deny(unsafe_op_in_unsafe_fn)]
 // Do the same for clippy
+#![allow(unsafe_code)]
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::undocumented_unsafe_blocks)]
@@ -64,8 +49,6 @@
 #![allow(clippy::inline_always)]
 #![allow(clippy::struct_field_names)]
 #![allow(clippy::struct_excessive_bools)]
-#![allow(unsafe_code)]
-#![deny(missing_docs)]
 #![deny(clippy::cargo)]
 // Handled by cargo-deny
 #![allow(clippy::multiple_crate_versions)]

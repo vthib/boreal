@@ -120,5 +120,5 @@ yara = { version = "0.29", features = ["vendored"] }
 [package.metadata.docs.rs]
 features = ["authenticode", "memmap", "magic", "cuckoo"]
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

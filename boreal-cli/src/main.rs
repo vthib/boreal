@@ -1,3 +1,15 @@
+//! CLI tool to scan files and processes using boreal.
+//!
+//! This tool attempts to expose the same interface as the yara CLI tool if possible,
+//! with some additional options added.
+#![allow(unsafe_code)]
+
+// Used in integration tests, not in the library.
+// This is to remove the "unused_crate_dependencies" warning, maybe a better solution
+// could be found.
+#[cfg(test)]
+use {assert_cmd as _, predicates as _, tempfile as _};
+
 use std::fs::File;
 use std::io::{BufRead, BufReader, StdoutLock, Write};
 use std::path::{Path, PathBuf};
@@ -284,7 +296,7 @@ fn main() -> ExitCode {
 
         if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
             for (name, value) in defines {
-                compiler.define_symbol(name, value);
+                let _r = compiler.define_symbol(name, value);
             }
         }
 

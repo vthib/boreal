@@ -93,34 +93,13 @@
 //! # Ok::<(), boreal_parser::error::Error>(())
 //! ```
 
-// Deny most of allowed by default lints from rustc.
-#![deny(explicit_outlives_requirements)]
-#![deny(keyword_idents)]
-#![deny(macro_use_extern_crate)]
-#![deny(missing_docs)]
-#![deny(non_ascii_idents)]
-#![deny(noop_method_call)]
-#![deny(rust_2021_compatibility)]
-#![deny(single_use_lifetimes)]
-#![deny(trivial_casts)]
-#![deny(trivial_numeric_casts)]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
-#![deny(unused_extern_crates)]
-#![deny(unused_import_braces)]
-#![deny(unused_lifetimes)]
-#![deny(unused_qualifications)]
-#![deny(unused_results)]
 // Do the same for clippy
-#![deny(clippy::all)]
-#![deny(clippy::pedantic)]
 // Allow some useless pedantic lints
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::range_plus_one)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::single_match_else)]
-#![allow(clippy::struct_field_names)]
-#![deny(clippy::cargo)]
+// #![allow(clippy::module_name_repetitions)]
+// #![allow(clippy::range_plus_one)]
+// #![allow(clippy::too_many_lines)]
+// #![allow(clippy::single_match_else)]
+// #![allow(clippy::struct_field_names)]
 
 // Parsing uses the [`nom`] crate, adapted for textual parsing.
 //
