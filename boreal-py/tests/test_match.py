@@ -58,6 +58,43 @@ def test_match(module, is_yara):
 
 
 @pytest.mark.parametrize("module,is_yara", MODULES)
+def test_string_matches(module, is_yara):
+    """Test all properties related to the StringMatches object"""
+    rule = module.compile(source="""
+rule foo {
+    strings:
+        $ = "a"
+        $ = "b"
+        $c = "c"
+    condition:
+        any of them
+}""")
+    matches = rule.match(data=b'abca')
+    assert len(matches) == 1
+    m = matches[0]
+    assert len(m.strings) == 3
+    s0 = m.strings[0]
+    s1 = m.strings[1]
+    s2 = m.strings[2]
+
+    # check standard getters: identifier, instances
+    assert s0.identifier == '$'
+    assert len(s0.instances) == 2
+    assert s1.identifier == '$'
+    assert len(s1.instances) == 1
+    assert s2.identifier == '$c'
+    assert len(s2.instances) == 1
+
+    # check special method __repr__
+    assert s0.__repr__() == '$'
+    assert s1.__repr__() == '$'
+    assert s2.__repr__() == '$c'
+
+    # Check that the hash depends only on the identifier
+    assert hash(s0) == hash(s1)
+
+
+@pytest.mark.parametrize("module,is_yara", MODULES)
 def test_string_match(module, is_yara):
     """Test all properties related to the StringMatch object"""
     rule = module.compile(source="""
