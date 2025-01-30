@@ -12,7 +12,16 @@ MODULES = [
 @pytest.mark.parametrize("module,is_yara", MODULES)
 def test_match(module, is_yara):
     """Test all properties related to the Match object"""
-    rule = module.compile(source="""
+
+    # Check default namespace
+    rule = module.compile(source="rule a { condition: true }")
+    matches = rule.match(data='')
+    assert len(matches) == 1
+    # FIXME
+    assert matches[0].namespace == ('default' if is_yara else '')
+
+    # Check with multiple namespaces
+    source = """
 rule r1: bar baz {
     meta:
         s = "a\\nz"
@@ -24,18 +33,30 @@ rule r1: bar baz {
 
 rule r2: quux { condition: false }
 rule r3 { condition: true }
-""")
-    matches = rule.match(data='abcdefgjiklmnoprstuvwxyzlmmn')
-    assert len(matches) == 2
+"""
+
+    rules = module.compile(sources={
+        'ns1': source,
+        'ns2': source,
+    })
+    rules2 = module.compile(sources={
+        'ns1': 'rule r1 { condition: true }',
+        'ns2': 'rule r1 { condition: true }',
+    })
+    matches = rules.match(data='')
+    assert len(matches) == 4
     m0 = matches[0]
     m1 = matches[1]
+    m2 = matches[2]
+    m3 = matches[3]
+
+    matches2 = rules2.match(data='')
+    assert len(matches2) == 2
+    r2_m0 = matches2[0]
+    r2_m1 = matches2[1]
 
     assert m0.rule == 'r1'
-
-    # FIXME: difference between yara and boreal
-    # assert matches[0].namespace == ''
-    # TODO: add non default namespace
-
+    assert m0.namespace == 'ns1'
     assert m0.tags == ['bar', 'baz']
     assert m0.meta == {
         # XXX yara forces a string type, losing information.
@@ -45,15 +66,56 @@ rule r3 { condition: true }
     }
 
     assert m1.rule == 'r3'
-    assert m1.tags == []
-    assert m1.meta == {}
+    assert m1.namespace == 'ns1'
+
+    assert m2.rule == 'r1'
+    assert m2.namespace == 'ns2'
+
+    assert m3.rule == 'r3'
+    assert m3.namespace == 'ns2'
 
     # check special method __repr__
     assert m0.__repr__() == 'r1'
     assert m1.__repr__() == 'r3'
+    assert m2.__repr__() == 'r1'
+    assert m3.__repr__() == 'r3'
+    assert r2_m0.__repr__() == 'r1'
+    assert r2_m1.__repr__() == 'r1'
 
-    # TODO: Check that the hash depends on the rule + namespace
-    # TODO: Check richcmp
+    assert hash(m0) != hash(m1) # rule name differs
+    assert hash(m0) != hash(m2) # namespace name differs
+    assert hash(m0) == hash(r2_m0) # same name and namespace
+    assert hash(m0) != hash(r2_m1)
+
+    # check richcmp impl
+    # eq
+    assert not (m0 == m1)
+    assert not (m0 == m2)
+    assert m0 == r2_m0
+    # ne
+    assert (m0 != m1)
+    assert (m0 != m2)
+    assert not (m0 != r2_m0)
+    # <=
+    assert m0 <= m1
+    assert not (m1 <= m2)
+    assert m0 <= m2
+    assert m0 <= r2_m0
+    # <
+    assert m0 < m1
+    assert not (m1 < m2)
+    assert m0 < m2
+    assert not (m0 < r2_m0)
+    # >=
+    assert m1 >= m0
+    assert not (m2 >= m1)
+    assert m2 >= m0
+    assert r2_m0 >= m0
+    # >
+    assert m1 > m0
+    assert not (m2 > m1)
+    assert m2 > m0
+    assert not (r2_m0 > m0)
 
 
 @pytest.mark.parametrize("module,is_yara", MODULES)
