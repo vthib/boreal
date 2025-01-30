@@ -3,6 +3,7 @@ name = "boreal-py"
 version = "0.1.0"
 description = "Python bindings to the boreal API"
 repository = "https://github.com/vthib/boreal"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
 keywords = ["boreal", "yara", "string-matching", "scan", "python"]
 categories = ["api-bindings", "text-processing"]
