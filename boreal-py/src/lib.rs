@@ -21,6 +21,8 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile, m)?)?;
 
     m.add("AddRuleError", m.py().get_type::<AddRuleError>())?;
+    m.add("ScanError", m.py().get_type::<scanner::ScanError>())?;
+    m.add("TimeoutError", m.py().get_type::<scanner::TimeoutError>())?;
 
     Ok(())
 }
@@ -38,7 +40,7 @@ fn compile(
     externals: Option<&Bound<'_, PyDict>>,
     includes: bool,
     error_on_warning: bool,
-) -> PyResult<scanner::PyScanner> {
+) -> PyResult<scanner::Scanner> {
     let mut compiler = compiler::Compiler::new();
     compiler.set_params(
         compiler::CompilerParams::default()
@@ -127,7 +129,7 @@ fn compile(
         _ => return Err(PyTypeError::new_err("invalid arguments passed")),
     }
 
-    Ok(scanner::PyScanner {
+    Ok(scanner::Scanner {
         scanner: compiler.into_scanner(),
         warnings,
     })

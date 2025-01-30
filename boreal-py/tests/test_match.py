@@ -1,5 +1,10 @@
 import boreal
+import glob
+import platform
+import os
 import pytest
+import subprocess
+import tempfile
 import yara
 
 
@@ -9,191 +14,212 @@ MODULES = [
 ]
 
 
-@pytest.mark.parametrize("module,is_yara", MODULES)
-def test_match(module, is_yara):
-    """Test all properties related to the Match object"""
-
-    # Check default namespace
-    rule = module.compile(source="rule a { condition: true }")
-    matches = rule.match(data='')
-    assert len(matches) == 1
-    # FIXME
-    assert matches[0].namespace == ('default' if is_yara else '')
-
-    # Check with multiple namespaces
-    source = """
-rule r1: bar baz {
-    meta:
-        s = "a\\nz"
-        b = true
-        v = -11
+def get_rules(module):
+    return module.compile(source="""
+rule a {
+    strings:
+        $ = "abc"
+        $ = /<\\d>/
     condition:
-        true
-}
+        all of them
+}""")
 
-rule r2: quux { condition: false }
-rule r3 { condition: true }
-"""
 
-    rules = module.compile(sources={
-        'ns1': source,
-        'ns2': source,
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_filepath(module, is_yara):
+    rules = get_rules(module)
+
+    with tempfile.NamedTemporaryFile() as fp:
+        fp.write(b'dcabc <3>')
+        fp.flush()
+
+        # By default, it uses filepath
+        matches = rules.match(fp.name)
+        assert len(matches) == 1
+
+        # Can also be specified
+        matches = rules.match(filepath=fp.name)
+        assert len(matches) == 1
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_data(module, is_yara):
+    rules = get_rules(module)
+
+    matches = rules.match(data='dcabc <3>')
+    assert len(matches) == 1
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_pid(module, is_yara):
+    def discover_test_helper():
+        # This is `<root>/boreal-py/tests`. We want to find `<root>/target/.../boreal-test-helpers(.exe)`.
+        # We just do a glob to find it: we don't really care about the target or debug/release possibilities,
+        # we just want a binary that runs.
+        tests_dir = os.path.abspath(os.path.dirname(__file__))
+        extension = '.exe' if platform.system() == 'Windows' else ''
+        bin_name = f'boreal-test-helpers{extension}'
+        bins = glob.glob(f"{tests_dir}/../../target/**/{bin_name}", recursive=True)
+        if len(bins) == 0:
+            raise Exception("you must compile the `boreal-test-helpers` crate to run this test")
+        else:
+            return bins[0]
+
+    rules = module.compile(source="""
+rule a {
+    strings:
+        $a = "PAYLOAD_ON_STACK"
+    condition:
+        all of them
+}""")
+
+    path_to_test_helper = discover_test_helper()
+    child = subprocess.Popen([path_to_test_helper, "stack"], stdout=subprocess.PIPE)
+
+    try:
+        # Wait for the child to be ready
+        while True:
+            line = child.stdout.readline()
+            if not line or line == b"ready\n":
+                break
+
+        matches = rules.match(pid=child.pid)
+        assert len(matches) == 1
+    finally:
+        child.kill()
+        child.wait()
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_externals(module, is_yara):
+    rules = module.compile(source="""
+rule a {
+    condition:
+        s == "foo" and b and i == -12 and f == 35.2
+}""", externals={
+        's': '',
+        'b': False,
+        'i': 0,
+        'f': 1.1,
     })
-    rules2 = module.compile(sources={
-        'ns1': 'rule r1 { condition: true }',
-        'ns2': 'rule r1 { condition: true }',
-    })
+
     matches = rules.match(data='')
-    assert len(matches) == 4
-    m0 = matches[0]
-    m1 = matches[1]
-    m2 = matches[2]
-    m3 = matches[3]
+    assert len(matches) == 0
 
-    matches2 = rules2.match(data='')
-    assert len(matches2) == 2
-    r2_m0 = matches2[0]
-    r2_m1 = matches2[1]
-
-    assert m0.rule == 'r1'
-    assert m0.namespace == 'ns1'
-    assert m0.tags == ['bar', 'baz']
-    assert m0.meta == {
-        # XXX yara forces a string type, losing information.
-        's': 'a\nz' if is_yara else b'a\nz',
+    matches = rules.match(data='', externals={
+        's': 'foo',
         'b': True,
-        'v': -11
-    }
-
-    assert m1.rule == 'r3'
-    assert m1.namespace == 'ns1'
-
-    assert m2.rule == 'r1'
-    assert m2.namespace == 'ns2'
-
-    assert m3.rule == 'r3'
-    assert m3.namespace == 'ns2'
-
-    # check special method __repr__
-    assert m0.__repr__() == 'r1'
-    assert m1.__repr__() == 'r3'
-    assert m2.__repr__() == 'r1'
-    assert m3.__repr__() == 'r3'
-    assert r2_m0.__repr__() == 'r1'
-    assert r2_m1.__repr__() == 'r1'
-
-    assert hash(m0) != hash(m1) # rule name differs
-    assert hash(m0) != hash(m2) # namespace name differs
-    assert hash(m0) == hash(r2_m0) # same name and namespace
-    assert hash(m0) != hash(r2_m1)
-
-    # check richcmp impl
-    # eq
-    assert not (m0 == m1)
-    assert not (m0 == m2)
-    assert m0 == r2_m0
-    # ne
-    assert (m0 != m1)
-    assert (m0 != m2)
-    assert not (m0 != r2_m0)
-    # <=
-    assert m0 <= m1
-    assert not (m1 <= m2)
-    assert m0 <= m2
-    assert m0 <= r2_m0
-    # <
-    assert m0 < m1
-    assert not (m1 < m2)
-    assert m0 < m2
-    assert not (m0 < r2_m0)
-    # >=
-    assert m1 >= m0
-    assert not (m2 >= m1)
-    assert m2 >= m0
-    assert r2_m0 >= m0
-    # >
-    assert m1 > m0
-    assert not (m2 > m1)
-    assert m2 > m0
-    assert not (r2_m0 > m0)
-
-
-@pytest.mark.parametrize("module,is_yara", MODULES)
-def test_string_matches(module, is_yara):
-    """Test all properties related to the StringMatches object"""
-    rule = module.compile(source="""
-rule foo {
-    strings:
-        $ = "a"
-        $ = "b"
-        $c = "c"
-    condition:
-        any of them
-}""")
-    matches = rule.match(data=b'abca')
+        'i': -12,
+        'f': 35.2,
+    })
     assert len(matches) == 1
-    m = matches[0]
-    assert len(m.strings) == 3
-    s0 = m.strings[0]
-    s1 = m.strings[1]
-    s2 = m.strings[2]
 
-    # check standard getters: identifier, instances
-    assert s0.identifier == '$'
-    assert len(s0.instances) == 2
-    assert s1.identifier == '$'
-    assert len(s1.instances) == 1
-    assert s2.identifier == '$c'
-    assert len(s2.instances) == 1
+    matches = rules.match(data='')
+    assert len(matches) == 0
 
-    # check special method __repr__
-    assert s0.__repr__() == '$'
-    assert s1.__repr__() == '$'
-    assert s2.__repr__() == '$c'
-
-    # Check that the hash depends only on the identifier
-    assert hash(s0) == hash(s1)
+    matches = rules.match(data='', externals={
+        's': 'foo',
+        'b': True,
+        'i': -13,
+        'f': 35.2,
+    })
+    assert len(matches) == 0
 
 
-@pytest.mark.parametrize("module,is_yara", MODULES)
-def test_string_match(module, is_yara):
-    """Test all properties related to the StringMatch object"""
-    rule = module.compile(source="""
-rule foo {
-    strings:
-        $ = /<.{1,3}>/
+def test_match_externals_bytestring():
+    # Boreal supports byte strings as externals, but not yara
+    rules = boreal.compile(source="""
+rule a {
     condition:
-        any of them
-}""")
-    matches = rule.match(data=b'<a> <\td> <\x00\xFF\xFB> <a>')
+        bs == "x\\xFFy"
+}""", externals={
+        'bs': '',
+    })
+
+    matches = rules.match(data='')
+    assert len(matches) == 0
+
+    matches = rules.match(data='', externals={
+        'bs': b'x\xFFy',
+    })
     assert len(matches) == 1
-    m = matches[0]
-    assert len(m.strings) == 1
-    s = m.strings[0]
-    assert len(s.instances) == 4
-    i0 = s.instances[0]
-    i1 = s.instances[1]
-    i2 = s.instances[2]
-    i3 = s.instances[3]
 
-    # check standard getters: offset, matched_data, matched_length
-    assert i0.offset == 0
-    assert i0.matched_length == 3
-    assert i0.matched_data == b'<a>'
-    assert i1.offset == 4
-    assert i1.matched_length == 4
-    assert i1.matched_data == b'<\td>'
-    assert i2.offset == 9
-    assert i2.matched_length == 5
-    assert i2.matched_data == b'<\x00\xFF\xFB>'
+    matches = rules.match(data='')
+    assert len(matches) == 0
 
-    # TODO: missing xor_key and plaintext
+    matches = rules.match(data='', externals={
+        'bs': b'x\xFFb',
+    })
+    assert len(matches) == 0
 
-    # check special method __repr__
-    assert i0.__repr__() == '<a>'
-    assert i1.__repr__() == '<\td>'
-    # TODO: difference here, should we care about it?
-    assert i2.__repr__() == '<\x00\\xff\\xfb>' if is_yara else '<\x00\uFFFD\uFFFD>'
 
-    # Check that the hash depends only on the matched_data
-    assert hash(i0) == hash(i3)
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_invalid_types(module, is_yara):
+    rules = get_rules(module)
+
+    with pytest.raises(TypeError):
+        rules.match(filepath=1)
+    with pytest.raises(TypeError):
+        rules.match(data=1)
+    with pytest.raises(TypeError):
+        rules.match(pid='a')
+    with pytest.raises(TypeError):
+        rules.match()
+
+    # FIXME: this makes yara segfault...
+    if not is_yara:
+        with pytest.raises(TypeError):
+            rules.match(data='', externals={ 1: 'a' })
+
+    with pytest.raises(TypeError):
+        rules.match(data='', externals={ 'a': [1] })
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_externals_unknown(module, is_yara):
+    rules = get_rules(module)
+
+    # Specifying externals not specified during compilation is not an error
+    # and is ignored.
+    matches = rules.match(data='dcabc <5>', externals={ 'b': 1 })
+    assert len(matches) == 1
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_scan_failed(module, is_yara):
+    rules = get_rules(module)
+
+    if is_yara:
+        exctype = yara.Error
+    else:
+        exctype = boreal.ScanError
+
+    with pytest.raises(exctype):
+        rules.match(pid=99999999)
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_timeout(module, is_yara):
+    rules = module.compile(source="""
+rule a {
+    condition:
+        for all i in (0..9223372036854775807) : (
+            for all j in (0..9223372036854775807) : (
+                for all k in (0..9223372036854775807) : (
+                    for all l in (0..9223372036854775807) : (
+                        i + j + k + l >= 0
+                    )
+                )
+            )
+        )
+}""")
+
+    if is_yara:
+        exctype = yara.TimeoutError
+    else:
+        exctype = boreal.TimeoutError
+
+    with pytest.raises(exctype):
+        # Unfortunately, we cannot go below 1 second as this is the smallest timeout value
+        # in the yara api
+        rules.match(data='', timeout=1)
