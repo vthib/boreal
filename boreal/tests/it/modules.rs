@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 
 use boreal::compiler::CompilerBuilder;
+use boreal::module::{Console, ConsoleData};
 
 use crate::utils::{check, check_boreal, check_err, Compiler};
 
@@ -452,7 +453,7 @@ fn test_module_console() {
     let mut compiler = Compiler::new();
     // Replace boreal compiler with a new one to add the console module
     compiler.compiler = CompilerBuilder::new()
-        .add_module(boreal::module::Console::with_callback(|log| {
+        .add_module(Console::with_callback(|log| {
             LOGS.lock().unwrap().push(log);
         }))
         .build();
@@ -509,6 +510,53 @@ rule a {
             "val: 0xffffffffffffcdb8",
         ]
     );
+}
+
+// Check the ConsoleData object can be used to override the callback.
+#[test]
+fn test_module_console_data() {
+    static LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+    // Replace boreal compiler with a new one to add the console module
+    let mut compiler = CompilerBuilder::new()
+        .add_module(Console::with_callback(|_log| {}))
+        .build();
+
+    compiler
+        .add_rules_str(
+            r#"import "console"
+rule a {
+    condition:
+        console.log("value") and console.hex(12872)
+}"#,
+        )
+        .unwrap();
+
+    let scanner = compiler.into_scanner();
+
+    // Nothing emitted by default
+    scanner.scan_mem(b"").unwrap();
+    assert_eq!(LOGS.lock().unwrap().len(), 0);
+
+    // But overriding works
+    {
+        let mut scanner2 = scanner.clone();
+        scanner2.set_module_data::<Console>(ConsoleData::new(|log| {
+            LOGS.lock().unwrap().push(log);
+        }));
+        scanner2.scan_mem(b"").unwrap();
+        assert_eq!(&*LOGS.lock().unwrap(), &["value", "0x3248",]);
+        LOGS.lock().unwrap().clear();
+
+        // This data stays for the whole scanner lifetime
+        scanner2.scan_mem(b"").unwrap();
+        assert_eq!(&*LOGS.lock().unwrap(), &["value", "0x3248",]);
+        LOGS.lock().unwrap().clear();
+    }
+
+    // The original scanner was not modified
+    scanner.scan_mem(b"").unwrap();
+    assert_eq!(LOGS.lock().unwrap().len(), 0);
 }
 
 #[test]
