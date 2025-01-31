@@ -245,3 +245,19 @@ rule a {
     captured = capsys.readouterr()
     assert captured.out == "override <i am a log>\n"
     assert captured.err == ""
+
+
+# TODO: find a way to compile yara python with cuckoo?
+def test_match_modules_data():
+    rules = boreal.compile(source="""
+import "cuckoo"
+
+rule a {
+    condition:
+        cuckoo.network.host(/bcd/) == 1
+}""")
+
+    matches = rules.match(data='', modules_data={
+        'cuckoo': '{ "network": { "hosts": ["abcde"] } }'
+    })
+    assert len(matches) == 1

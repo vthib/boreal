@@ -58,6 +58,9 @@ impl Scanner {
         if let Some(externals) = externals {
             set_externals(&mut scanner, externals)?;
         }
+        if let Some(modules_data) = modules_data {
+            set_modules_data(&mut scanner, modules_data)?;
+        }
 
         if let Some(timeout) = timeout {
             scanner.set_scan_params(
@@ -85,7 +88,6 @@ impl Scanner {
         {
             let _ = callback;
             let _ = fast;
-            let _ = modules_data;
             let _ = modules_callback;
             let _ = warnings_callback;
             let _ = which_callbacks;
@@ -151,5 +153,45 @@ fn set_externals(scanner: &mut scanner::Scanner, externals: &Bound<'_, PyDict>) 
         // overfit dictionary.
         drop(res);
     }
+    Ok(())
+}
+
+fn set_modules_data(
+    scanner: &mut scanner::Scanner,
+    modules_data: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    for (key, value) in modules_data {
+        let name: &str = key.extract()?;
+
+        #[cfg(feature = "cuckoo")]
+        {
+            use ::boreal::module::{Cuckoo, CuckooData};
+
+            if name == "cuckoo" {
+                match value.extract::<&str>() {
+                    Ok(value) => match CuckooData::from_json_report(value) {
+                        Some(data) => scanner.set_module_data::<Cuckoo>(data),
+                        None => {
+                            return Err(PyTypeError::new_err(
+                                "the data for the cuckoo module is invalid",
+                            ))
+                        }
+                    },
+
+                    Err(_) => {
+                        return Err(PyTypeError::new_err(
+                            "the data for the cuckoo module must be a string",
+                        ))
+                    }
+                }
+                continue;
+            }
+        }
+
+        return Err(PyTypeError::new_err(
+            "cannot set data for unknown module `{name}`",
+        ));
+    }
+
     Ok(())
 }
