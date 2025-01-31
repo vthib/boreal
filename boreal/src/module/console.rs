@@ -5,6 +5,37 @@ use std::{collections::HashMap, sync::Arc};
 use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value};
 
 /// `console` module.
+///
+/// To use the module, you must provide a callback which will be called when
+/// `console.log` is called.
+///
+/// The callback can also be overridden on every scan by specifying a `ConsoleData`
+/// in the scanner.
+///
+/// ```
+/// use boreal::module::{Console, ConsoleData};
+/// use boreal::compiler::CompilerBuilder;
+///
+/// let mut compiler = CompilerBuilder::new()
+///     // Do not log anything by default
+///     .add_module(Console::with_callback(|_log| {}))
+///     .build();
+/// compiler.add_rules_str(r#"
+/// import "console"
+///
+/// rule a {
+///     condition: console.log("one")
+/// }"#).unwrap();
+/// let mut scanner = compiler.into_scanner();
+///
+/// scanner.scan_mem(b""); // Will not log anything
+///
+/// let console_data = ConsoleData::new(|log| {
+///     println!("yara console log: {log}");
+/// });
+/// scanner.set_module_data::<Console>(console_data);
+/// scanner.scan_mem(b""); // Will log "yara console log: one"
+/// ```
 pub struct Console {
     callback: Arc<LogCallback>,
 }
@@ -47,19 +78,40 @@ impl Module for Console {
     }
 
     fn setup_new_scan(&self, data_map: &mut ModuleDataMap) {
-        data_map.insert::<Self>(Data {
+        data_map.insert::<Self>(PrivateData {
             callback: Arc::clone(&self.callback),
         });
     }
 }
 
-pub struct Data {
+pub struct PrivateData {
     callback: Arc<LogCallback>,
 }
 
 impl ModuleData for Console {
-    type PrivateData = Data;
-    type UserData = ();
+    type PrivateData = PrivateData;
+    type UserData = ConsoleData;
+}
+
+/// Data used by the console module.
+///
+/// This data can be provided by a call to
+/// [`Scanner::set_module_data`](crate::scanner::Scanner::set_module_data) to override
+/// the default callback that was specified when compiling rules.
+pub struct ConsoleData {
+    callback: Box<LogCallback>,
+}
+
+impl ConsoleData {
+    /// Provide a callback called when console.log is evaluted in rules.
+    pub fn new<T>(callback: T) -> Self
+    where
+        T: Fn(String) + Send + Sync + UnwindSafe + RefUnwindSafe + 'static,
+    {
+        Self {
+            callback: Box::new(callback),
+        }
+    }
 }
 
 impl Console {
@@ -85,8 +137,7 @@ impl Console {
             add_value(arg, &mut res)?;
         }
 
-        let data = ctx.module_data.get::<Console>()?;
-        (data.callback)(res);
+        call_callback(ctx, res)?;
 
         Some(Value::Integer(1))
     }
@@ -104,11 +155,22 @@ impl Console {
             }
         };
 
-        let data = ctx.module_data.get::<Console>()?;
-        (data.callback)(res);
+        call_callback(ctx, res)?;
 
         Some(Value::Integer(1))
     }
+}
+
+fn call_callback(ctx: &EvalContext, log: String) -> Option<()> {
+    // First, check if there is a callback specified for this scan.
+    if let Some(data) = ctx.module_data.get_user_data::<Console>() {
+        (data.callback)(log);
+    } else {
+        // Otherwise, use the callback specified when building the module.
+        let data = ctx.module_data.get::<Console>()?;
+        (data.callback)(log);
+    }
+    Some(())
 }
 
 fn add_value(value: Value, out: &mut String) -> Option<()> {
