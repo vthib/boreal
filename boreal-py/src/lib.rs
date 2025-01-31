@@ -1,13 +1,18 @@
 //! Python bindings for the boreal library.
+#![allow(unsafe_code)]
+
+use std::ffi::CString;
+
 use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use pyo3::{create_exception, intern};
+use pyo3::{create_exception, ffi, intern};
 
 use ::boreal::compiler;
 
 // TODO: all clone impls should be efficient...
 // TODO: should all pyclasses have names and be exposed in the module?
+// TODO: check GIL handling in all functions (especially match)
 
 mod rule_match;
 mod scanner;
@@ -29,7 +34,16 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 // TODO: add strict_escape?
 #[pyfunction]
-#[pyo3(signature = (filepath=None, source=None, file=None, filepaths=None, sources=None, externals=None, includes=true, error_on_warning=false))]
+#[pyo3(signature = (
+    filepath=None,
+    source=None,
+    file=None,
+    filepaths=None,
+    sources=None,
+    externals=None,
+    includes=true,
+    error_on_warning=false
+))]
 #[allow(clippy::too_many_arguments)]
 fn compile(
     filepath: Option<&str>,
@@ -41,12 +55,24 @@ fn compile(
     includes: bool,
     error_on_warning: bool,
 ) -> PyResult<scanner::Scanner> {
-    let mut compiler = compiler::Compiler::new();
+    let mut compiler = compiler::CompilerBuilder::new()
+        .add_module(::boreal::module::Console::with_callback(|log| {
+            // XXX: when targetting python 3.12 or above, this could be simplified
+            // by using the "%.*s" format, avoiding the CString conversion.
+            if let Ok(cstr) = CString::new(log) {
+                // Safety: see <https://docs.python.org/3/c-api/unicode.html#c.PyUnicode_FromFormat>
+                // for the format. A '%s" expects a c-string pointer, which has just been built.
+                unsafe { ffi::PySys_FormatStdout(c"%s\n".as_ptr(), cstr.as_ptr()) }
+            }
+        }))
+        .build();
+
     compiler.set_params(
         compiler::CompilerParams::default()
             .disable_includes(!includes)
             .fail_on_warnings(error_on_warning),
     );
+
     if let Some(externals) = externals {
         add_externals(&mut compiler, externals)?;
     }

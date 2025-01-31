@@ -1,10 +1,12 @@
+use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyString};
 
+use ::boreal::module::{Console, ConsoleData};
 use ::boreal::scanner;
 
 use crate::rule_match::Match;
@@ -63,6 +65,22 @@ impl Scanner {
             );
         }
 
+        if let Some(cb) = console_callback {
+            if !cb.is_callable() {
+                return Err(PyTypeError::new_err("console_callback is not callable"));
+            }
+
+            // Not sure how to avoid the AssertUnwindSafe
+            let cb = AssertUnwindSafe(cb.clone().unbind());
+            scanner.set_module_data::<Console>(ConsoleData::new(move |log| {
+                Python::with_gil(|py| {
+                    let pylog = PyString::new(py, &log);
+                    // Ignore result
+                    let _r = cb.call1(py, (pylog,));
+                });
+            }));
+        }
+
         // TODO
         {
             let _ = callback;
@@ -71,7 +89,6 @@ impl Scanner {
             let _ = modules_callback;
             let _ = warnings_callback;
             let _ = which_callbacks;
-            let _ = console_callback;
         }
 
         let res = match (filepath, data, pid) {

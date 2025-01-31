@@ -223,3 +223,25 @@ rule a {
         # Unfortunately, we cannot go below 1 second as this is the smallest timeout value
         # in the yara api
         rules.match(data='', timeout=1)
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_console_log(module, is_yara, capsys):
+    rules = module.compile(source="""
+import "console"
+
+rule a {
+    condition:
+        console.log("i am a log") and true
+}""")
+
+    rules.match(data='')
+    captured = capsys.readouterr()
+    assert captured.out == "i am a log\n"
+    assert captured.err == ""
+
+    # Can override the callback
+    rules.match(data='', console_callback=lambda log: print(f"override <{log}>"))
+    captured = capsys.readouterr()
+    assert captured.out == "override <i am a log>\n"
+    assert captured.err == ""
