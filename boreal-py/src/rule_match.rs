@@ -3,11 +3,11 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use pyo3::basic::CompareOp;
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyList};
+use pyo3::types::PyList;
 
 use ::boreal::scanner;
-use ::boreal::{Metadata, MetadataValue};
 
+use crate::rule::convert_metadata;
 use crate::string_matches::StringMatches;
 
 /// A matching rule
@@ -79,21 +79,4 @@ impl Match {
             strings: rule.matches.into_iter().map(StringMatches::new).collect(),
         })
     }
-}
-
-fn convert_metadata(
-    py: Python,
-    scanner: &scanner::Scanner,
-    metadata: &Metadata,
-) -> Result<(String, Py<PyAny>), PyErr> {
-    let name = scanner.get_string_symbol(metadata.name).to_string();
-    let value = match metadata.value {
-        // XXX: Yara forces a string conversion here, losing data in the
-        // process. Prefer using the right type here.
-        // TODO: add a yara compat mode?
-        MetadataValue::Bytes(v) => scanner.get_bytes_symbol(v).to_vec().into_pyobject(py)?,
-        MetadataValue::Integer(v) => v.into_pyobject(py)?.into_any(),
-        MetadataValue::Boolean(v) => PyBool::new(py, v).to_owned().into_any(),
-    };
-    Ok((name, value.unbind()))
 }

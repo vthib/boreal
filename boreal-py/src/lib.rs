@@ -14,6 +14,7 @@ use ::boreal::compiler;
 // TODO: should all pyclasses have names and be exposed in the module?
 // TODO: check GIL handling in all functions (especially match)
 
+mod rule;
 mod rule_match;
 mod scanner;
 mod string_match_instance;
@@ -155,10 +156,7 @@ fn compile(
         _ => return Err(PyTypeError::new_err("invalid arguments passed")),
     }
 
-    Ok(scanner::Scanner {
-        scanner: compiler.into_scanner(),
-        warnings,
-    })
+    Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
 }
 
 fn convert_compiler_error(err: &compiler::AddRuleError, input_name: &str, input: &str) -> String {
