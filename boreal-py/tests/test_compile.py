@@ -19,18 +19,21 @@ def compile_exc_type(is_yara):
 
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_compile_filepath(module, is_yara):
-    with tempfile.NamedTemporaryFile() as fp:
-        fp.write(b'rule a { condition: true }')
-        fp.flush()
+    # Do not use NamedTemporaryFile, yara seems to get permission denied
+    # issues on those type of files.
+    with tempfile.TemporaryDirectory() as fd:
+        path = f"{fd}/file"
+        with open(path, "w") as f:
+            f.write('rule a { condition: true }')
 
         # By default, it uses filepath
-        rules = module.compile(fp.name)
+        rules = module.compile(path)
         matches = rules.match(data='')
         assert len(matches) == 1
         assert matches[0].rule == 'a'
 
         # Can also be specified
-        rules = module.compile(filepath=fp.name)
+        rules = module.compile(filepath=path)
         matches = rules.match(data='')
         assert len(matches) == 1
         assert matches[0].rule == 'a'
@@ -47,12 +50,13 @@ def test_compile_source(module, is_yara):
 
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_compile_file(module, is_yara):
-    with tempfile.TemporaryFile() as fp:
-        fp.write(b'rule a { condition: true }')
-        fp.flush()
-        fp.seek(0)
+    with tempfile.TemporaryDirectory() as fd:
+        path = f"{fd}/file"
+        with open(path, "w") as f:
+            f.write('rule a { condition: true }')
 
-        rules = module.compile(file=fp)
+        with open(path, "r") as f:
+            rules = module.compile(file=f)
         matches = rules.match(data='')
         assert len(matches) == 1
         assert matches[0].rule == 'a'
@@ -61,15 +65,17 @@ def test_compile_file(module, is_yara):
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_compile_filepaths(module, is_yara):
     # filepaths allows specifying namespaces
-    with tempfile.NamedTemporaryFile() as fp1, tempfile.NamedTemporaryFile() as fp2:
-        fp1.write(b'rule a { condition: true }')
-        fp1.flush()
-        fp2.write(b'rule b { condition: true }')
-        fp2.flush()
+    with tempfile.TemporaryDirectory() as fd:
+        path1 = f"{fd}/file1"
+        with open(path1, "w") as f:
+            f.write('rule a { condition: true }')
+        path2 = f"{fd}/file2"
+        with open(path2, "w") as f:
+            f.write('rule b { condition: true }')
 
         rules = module.compile(filepaths={
-            'ns1': fp1.name,
-            'ns2': fp2.name
+            'ns1': path1,
+            'ns2': path2,
         })
         matches = rules.match(data='')
         assert len(matches) == 2
@@ -126,15 +132,16 @@ rule a {
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_compile_includes(module, is_yara):
     # By default, includes are allowed
-    with tempfile.NamedTemporaryFile() as fp1:
-        fp1.write(b"rule a { condition: true }")
-        fp1.flush()
+    with tempfile.TemporaryDirectory() as fd:
+        path = f"{fd}/file"
+        with open(path, "w") as f:
+            f.write('rule a { condition: true }')
 
         source = """
 include "{path}"
 
 rule b {{ condition: true }}
-        """.format(path=fp1.name)
+        """.format(path=path)
         rules = module.compile(source=source)
         matches = rules.match(data='')
         assert len(matches) == 2
@@ -183,23 +190,24 @@ def test_compile_warnings_contexts(module, is_yara):
     assert "boolean" in rules.warnings[0]
     assert "boolean" in rules.warnings[1]
 
-    with tempfile.NamedTemporaryFile() as fp1, tempfile.NamedTemporaryFile() as fp2:
-        fp1.write(source1.encode())
-        fp1.flush()
-        fp1.seek(0)
-        fp2.write(source2.encode())
-        fp2.flush()
-        fp2.seek(0)
+    with tempfile.TemporaryDirectory() as fd:
+        path1 = f"{fd}/file1"
+        with open(path1, "w") as f:
+            f.write(source1)
+        path2 = f"{fd}/file2"
+        with open(path2, "w") as f:
+            f.write(source2)
 
-        rules = module.compile(filepath=fp1.name)
+        rules = module.compile(filepath=path1)
         assert len(rules.warnings) == 1
         assert "boolean" in rules.warnings[0]
 
-        rules = module.compile(file=fp1)
+        with open(path1, "r") as f:
+            rules = module.compile(file=f)
         assert len(rules.warnings) == 1
         assert "boolean" in rules.warnings[0]
 
-        rules = module.compile(filepaths={ 'ns1': fp1.name, 'ns2': fp2.name })
+        rules = module.compile(filepaths={ 'ns1': path1, 'ns2': path2 })
         assert len(rules.warnings) == 2
         assert "boolean" in rules.warnings[0]
         assert "boolean" in rules.warnings[1]
@@ -214,9 +222,13 @@ def test_compile_errors_invalid_arguments(module, is_yara):
         module.compile(filepath="", sources={})
     with pytest.raises(TypeError):
         module.compile(filepaths={}, sources={})
-    with tempfile.NamedTemporaryFile() as fp:
-        with pytest.raises(TypeError):
-            module.compile(file=fp, sources={})
+    with tempfile.TemporaryDirectory() as fd:
+        path = f"{fd}/file"
+        with open(path, "w") as f:
+            f.write("rule")
+        with open(path, "r") as f:
+            with pytest.raises(TypeError):
+                module.compile(file=f, sources={})
     with pytest.raises(TypeError):
         module.compile(source={}, filepaths={})
 
@@ -261,17 +273,18 @@ def test_compile_errors_invalid_types(module, is_yara):
 def test_compile_errors_compilation(module, is_yara):
     exctype = compile_exc_type(is_yara)
 
-    with tempfile.NamedTemporaryFile() as fp:
-        fp.write(b'rule')
-        fp.flush()
-        fp.seek(0)
+    with tempfile.TemporaryDirectory() as fd:
+        path = f"{fd}/file"
+        with open(path, "w") as f:
+            f.write("rule")
 
         with pytest.raises(exctype):
-            module.compile(filepath=fp.name)
+            module.compile(filepath=path)
         with pytest.raises(exctype):
-            module.compile(filepaths={ 'ns': fp.name })
-        with pytest.raises(exctype):
-            module.compile(file=fp)
+            module.compile(filepaths={ 'ns': path })
+        with open(path, "r") as f:
+            with pytest.raises(exctype):
+                module.compile(file=f)
 
     with pytest.raises(exctype):
         module.compile(source='rule')
