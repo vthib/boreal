@@ -261,3 +261,85 @@ rule a {
         'cuckoo': '{ "network": { "hosts": ["abcde"] } }'
     })
     assert len(matches) == 1
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_rules(module, is_yara):
+    scanner = module.compile(sources={
+        'ns1': """
+global rule g {
+    condition: true
+}
+private rule p: tag {
+    meta:
+        b = true
+    condition: true
+}
+""",
+        'ns2': """
+private global rule pg: tag1 tag2 {
+    meta:
+        s = "str"
+        i = -23
+    condition: true
+}
+
+rule r: tag {
+    condition: true
+}
+"""
+    })
+
+    rules = [r for r in scanner]
+    # boreal and yara do not return rules in the same order
+    rules.sort(key=lambda r: r.identifier)
+    assert len(rules) == 4
+    r0 = rules[0]
+    r1 = rules[1]
+    r2 = rules[2]
+    r3 = rules[3]
+
+    assert r0.identifier == "g"
+    # boreal also provides the namespace
+    if not is_yara:
+        assert r0.namespace == "ns1"
+    assert r0.tags == []
+    assert r0.is_global
+    assert not r0.is_private
+    assert r0.meta == {}
+
+    assert r1.identifier == "p"
+    if not is_yara:
+        assert r1.namespace == "ns1"
+    assert r1.tags == ["tag"]
+    assert not r1.is_global
+    assert r1.is_private
+    assert r1.meta == {
+        'b': True
+    }
+
+    assert r2.identifier == "pg"
+    if not is_yara:
+        assert r2.namespace == "ns2"
+    assert r2.tags == ["tag1", "tag2"]
+    assert r2.is_global
+    assert r2.is_private
+    assert r2.meta == {
+        # XXX yara forces a string type, losing information.
+        's': 'str' if is_yara else b'str',
+        'i': -23
+    }
+
+    assert r3.identifier == "r"
+    if not is_yara:
+        assert r3.namespace == "ns2"
+    assert r3.tags == ["tag"]
+    assert not r3.is_global
+    assert not r3.is_private
+    assert r3.meta == {}
+
+    # Test the namespace value for the default one
+    if not is_yara:
+        scanner = module.compile(source="rule a { condition: true }")
+        rules = [r for r in scanner]
+        assert rules[0].namespace == ""

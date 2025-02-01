@@ -16,9 +16,21 @@ create_exception!(boreal, TimeoutError, PyException, "scan timed out");
 
 #[pyclass]
 pub struct Scanner {
-    pub scanner: scanner::Scanner,
+    scanner: scanner::Scanner,
     #[pyo3(get)]
-    pub warnings: Vec<String>,
+    warnings: Vec<String>,
+
+    rules_iter: Option<std::vec::IntoIter<crate::rule::Rule>>,
+}
+
+impl Scanner {
+    pub fn new(scanner: scanner::Scanner, warnings: Vec<String>) -> Self {
+        Self {
+            scanner,
+            warnings,
+            rules_iter: None,
+        }
+    }
 }
 
 #[pymethods]
@@ -126,6 +138,24 @@ impl Scanner {
                 _ => Err(ScanError::new_err(format!("{err}"))),
             },
         }
+    }
+
+    fn __iter__(mut slf: PyRefMut<Self>) -> PyResult<PyRefMut<Self>> {
+        // Unfortunately, we cannot return an object with a lifetime, so
+        // we need to collect all rules into a vec of owned elements before
+        // generating an iterator...
+        slf.rules_iter = Some(
+            slf.scanner
+                .rules()
+                .map(|rule| crate::rule::Rule::new(slf.py(), &slf.scanner, &rule))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter(),
+        );
+        Ok(slf)
+    }
+
+    fn __next__(mut slf: PyRefMut<Self>) -> Option<crate::rule::Rule> {
+        slf.rules_iter.as_mut().and_then(Iterator::next)
     }
 }
 
