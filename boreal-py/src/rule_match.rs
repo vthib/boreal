@@ -1,9 +1,8 @@
-use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use pyo3::basic::CompareOp;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{IntoPyDict, PyDict, PyList};
 
 use ::boreal::scanner;
 
@@ -27,7 +26,7 @@ pub struct Match {
 
     /// Dictionary with metadata associated to the rule
     #[pyo3(get)]
-    meta: HashMap<String, Py<PyAny>>,
+    meta: Py<PyDict>,
 
     /// Tuple with offsets and strings that matched the file
     #[pyo3(get)]
@@ -74,7 +73,9 @@ impl Match {
                 .metadatas
                 .iter()
                 .map(|m| convert_metadata(py, scanner, m))
-                .collect::<Result<_, _>>()?,
+                .collect::<Result<Vec<_>, _>>()?
+                .into_py_dict(py)?
+                .unbind(),
             tags: PyList::new(py, rule.tags)?.unbind(),
             strings: rule.matches.into_iter().map(StringMatches::new).collect(),
         })
