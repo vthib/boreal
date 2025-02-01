@@ -4,6 +4,7 @@ use std::io::{Seek, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use boreal::compiler::CompilerBuilder;
+use boreal::MetadataValue;
 
 // An import is reused in the same namespace
 #[test]
@@ -92,4 +93,93 @@ rule a {
 
     assert!(!FIRST.load(Ordering::SeqCst));
     assert!(SECOND.load(Ordering::SeqCst));
+}
+
+#[test]
+fn test_scanner_list_rules() {
+    let mut compiler = boreal::Compiler::new();
+
+    compiler
+        .add_rules_str(
+            r#"
+global rule g {
+    condition: true
+}
+private rule p: tag {
+    meta:
+        b = true
+    condition: true
+}
+"#,
+        )
+        .unwrap();
+    compiler
+        .add_rules_str_in_namespace(
+            r#"
+private global rule pg: tag1 tag2 {
+    meta:
+        s = "str"
+        i = -23
+    condition: true
+}
+
+rule r: tag {
+    condition: true
+}
+"#,
+            "namespace",
+        )
+        .unwrap();
+
+    let scanner = compiler.into_scanner();
+    let rules: Vec<_> = scanner.rules().collect();
+
+    assert_eq!(rules.len(), 4);
+
+    let r0 = &rules[0];
+    assert_eq!(r0.name, "g");
+    assert_eq!(r0.namespace, None);
+    assert_eq!(r0.tags.len(), 0);
+    assert!(r0.is_global);
+    assert!(!r0.is_private);
+    assert_eq!(r0.metadatas.len(), 0);
+
+    let r1 = &rules[1];
+    assert_eq!(r1.name, "pg");
+    assert_eq!(r1.namespace, Some("namespace"));
+    assert_eq!(r1.tags, &["tag1", "tag2"]);
+    assert!(r1.is_global);
+    assert!(r1.is_private);
+    assert_eq!(r1.metadatas.len(), 2);
+    assert_eq!(scanner.get_string_symbol(r1.metadatas[0].name), "s");
+    match r1.metadatas[0].value {
+        MetadataValue::Bytes(b) => assert_eq!(scanner.get_bytes_symbol(b), b"str"),
+        _ => panic!("invalid metadata {:?}", r1.metadatas[0]),
+    };
+    assert_eq!(scanner.get_string_symbol(r1.metadatas[1].name), "i");
+    match r1.metadatas[1].value {
+        MetadataValue::Integer(i) => assert_eq!(i, -23),
+        _ => panic!("invalid metadata {:?}", r1.metadatas[1]),
+    };
+
+    let r2 = &rules[2];
+    assert_eq!(r2.name, "p");
+    assert_eq!(r2.namespace, None);
+    assert_eq!(r2.tags, &["tag"]);
+    assert!(!r2.is_global);
+    assert!(r2.is_private);
+    assert_eq!(r2.metadatas.len(), 1);
+    assert_eq!(scanner.get_string_symbol(r2.metadatas[0].name), "b");
+    match r2.metadatas[0].value {
+        MetadataValue::Boolean(b) => assert!(b),
+        _ => panic!("invalid metadata {:?}", r1.metadatas[0]),
+    };
+
+    let r3 = &rules[3];
+    assert_eq!(r3.name, "r");
+    assert_eq!(r3.namespace, Some("namespace"));
+    assert_eq!(r3.tags, &["tag"]);
+    assert!(!r3.is_global);
+    assert!(!r3.is_private);
+    assert_eq!(r3.metadatas.len(), 0);
 }
