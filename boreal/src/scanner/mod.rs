@@ -361,6 +361,70 @@ impl Scanner {
     pub fn get_string_symbol(&self, symbol: StringSymbol) -> &str {
         self.inner.bytes_pool.get_str(symbol)
     }
+
+    /// List rules contained in this scanner.
+    #[must_use]
+    pub fn rules(&self) -> RulesIter {
+        RulesIter {
+            global_rules: self.inner.global_rules.iter(),
+            rules: self.inner.rules.iter(),
+            namespaces: &self.inner.namespaces,
+        }
+    }
+}
+
+/// Iterator on the rules of a scanner.
+#[derive(Debug)]
+pub struct RulesIter<'scanner> {
+    global_rules: std::slice::Iter<'scanner, Rule>,
+    rules: std::slice::Iter<'scanner, Rule>,
+    namespaces: &'scanner [Option<String>],
+}
+
+impl<'scanner> Iterator for RulesIter<'scanner> {
+    type Item = RuleDetails<'scanner>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (rule, is_global) = match self.global_rules.next() {
+            Some(rule) => (rule, true),
+            None => (self.rules.next()?, false),
+        };
+
+        Some(RuleDetails {
+            name: &rule.name,
+            namespace: self
+                .namespaces
+                .get(rule.namespace_index)
+                .and_then(|v| v.as_deref()),
+            tags: &rule.tags,
+            metadatas: &rule.metadatas,
+            is_global,
+            is_private: rule.is_private,
+        })
+    }
+}
+
+/// Details on a rule contained in a scanner
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct RuleDetails<'scanner> {
+    /// Name of the rule.
+    pub name: &'scanner str,
+
+    /// Namespace containing the rule. None if in the default namespace.
+    pub namespace: Option<&'scanner str>,
+
+    /// Tags associated with the rule.
+    pub tags: &'scanner [String],
+
+    /// Metadata associated with the rule.
+    pub metadatas: &'scanner [Metadata],
+
+    /// Is the rule global
+    pub is_global: bool,
+
+    /// Is the rule private
+    pub is_private: bool,
 }
 
 #[derive(Debug)]
@@ -1547,6 +1611,19 @@ mod tests {
             #[cfg(feature = "object")]
             entrypoint: None,
             params: &ScanParams::default(),
+        });
+        test_type_traits_non_clonable(RulesIter {
+            global_rules: [].iter(),
+            rules: [].iter(),
+            namespaces: &[],
+        });
+        test_type_traits_non_clonable(RuleDetails {
+            name: "",
+            namespace: None,
+            tags: &[],
+            metadatas: &[],
+            is_global: false,
+            is_private: false,
         });
     }
 }
