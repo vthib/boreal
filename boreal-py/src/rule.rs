@@ -5,7 +5,7 @@ use ::boreal::scanner;
 use ::boreal::{Metadata, MetadataValue};
 
 /// A matching rule
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "boreal")]
 pub struct Rule {
     /// Name of the rule
     #[pyo3(get)]

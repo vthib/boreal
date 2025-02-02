@@ -7,7 +7,7 @@ use ::boreal::scanner;
 use crate::string_match_instance::StringMatchInstance;
 
 /// List of match instances of a YARA string
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "boreal")]
 #[derive(Clone)]
 pub struct StringMatches {
     /// Name of the matching string.

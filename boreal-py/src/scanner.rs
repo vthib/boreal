@@ -14,7 +14,7 @@ use crate::rule_match::Match;
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "boreal")]
 pub struct Scanner {
     scanner: scanner::Scanner,
 
@@ -151,7 +151,7 @@ impl Scanner {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "boreal")]
 pub struct RulesIter {
     rules_iter: std::vec::IntoIter<crate::rule::Rule>,
 }

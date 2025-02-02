@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use ::boreal::scanner;
 
 /// Match instance of a YARA string
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "boreal")]
 #[derive(Clone)]
 pub struct StringMatchInstance {
     /// Offset of the match.

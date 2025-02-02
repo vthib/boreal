@@ -10,7 +10,7 @@ use crate::rule::convert_metadata;
 use crate::string_matches::StringMatches;
 
 /// A matching rule
-#[pyclass(frozen)]
+#[pyclass(frozen, module = "boreal")]
 pub struct Match {
     /// Name of the matching rule
     #[pyo3(get)]
