@@ -35,11 +35,14 @@ jobs:
 
       - name: Install uv for the python bindings tests
         uses: astral-sh/setup-uv@v5
+        # There is no available python x86 for linux, so only run those on 64 bits.
+        if: ${{ matrix.build == 'linux' }}
         with:
           version: "0.5.25"
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        if: ${{ matrix.build == 'linux' }}
         with:
           python-version-file: "boreal-py/pyproject.toml"
 
@@ -74,10 +77,11 @@ jobs:
           cargo test --features magic,cuckoo --target=${{matrix.target}}
 
       - name: Run python tests
+        if: ${{ matrix.build == 'linux' }}
         run: |
           cd boreal-py
           uv sync --dev
-          uv run --config-setting "build-args=--features=cuckoo" pytest
+          uv run --config-setting "build-args=--features=cuckoo --target=${{matrix.target}}" pytest
 
     strategy:
       fail-fast: false
@@ -127,6 +131,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
+          architecture: ${{matrix.architecture}}
           python-version-file: "boreal-py/pyproject.toml"
 
       - uses: dtolnay/rust-toolchain@stable
@@ -152,7 +157,7 @@ jobs:
         run: |
           cd boreal-py
           uv sync --dev
-          uv run pytest
+          uv run --config-setting "build-args=--target=${{matrix.target}}" pytest
 
     strategy:
       fail-fast: false
@@ -162,9 +167,11 @@ jobs:
           - build: windows
             vcpkg_triplet: x64-windows-static
             target: x86_64-pc-windows-msvc
+            architecture: x64
           - build: windows32
             vcpkg_triplet: x86-windows-static
             target: i686-pc-windows-msvc
+            architecture: x86
 
   test-macos:
     name: Test ${{matrix.runner}}
