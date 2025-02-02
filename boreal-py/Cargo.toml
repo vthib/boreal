@@ -16,7 +16,7 @@ name = "boreal"
 crate-type = ["cdylib"]
 
 [features]
-default = ["cuckoo"]
+default = []
 
 cuckoo = ["boreal/cuckoo"]
 

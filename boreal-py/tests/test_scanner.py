@@ -249,6 +249,10 @@ rule a {
 
 # TODO: find a way to compile yara python with cuckoo?
 def test_match_modules_data():
+    # Test only works if the cuckoo module is present
+    if 'cuckoo' not in boreal.available_modules():
+        return
+
     rules = boreal.compile(source="""
 import "cuckoo"
 
