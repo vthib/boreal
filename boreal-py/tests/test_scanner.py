@@ -174,6 +174,9 @@ def test_match_invalid_types(module, is_yara):
     with pytest.raises(TypeError):
         rules.match(data='', externals={ 'a': [1] })
 
+    with pytest.raises(TypeError):
+        rules.match(data='', console_callback=1)
+
 
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_match_externals_unknown(module, is_yara):
@@ -265,6 +268,20 @@ rule a {
         'cuckoo': '{ "network": { "hosts": ["abcde"] } }'
     })
     assert len(matches) == 1
+
+
+def test_match_modules_data_errors():
+    rules = get_rules(boreal)
+
+    # YARA does not reject this, as the list is not checked.
+    with pytest.raises(TypeError):
+        rules.match(data="", modules_data={ 'unknown': 1 })
+
+    if 'cuckoo' in boreal.available_modules():
+        with pytest.raises(TypeError):
+            rules.match(data="", modules_data={ 'cuckoo': 1 })
+        with pytest.raises(TypeError):
+            rules.match(data="", modules_data={ 'cuckoo': "invalid json" })
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES)
