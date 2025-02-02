@@ -77,7 +77,7 @@ jobs:
         run: |
           cd boreal-py
           uv sync --dev
-          uv run pytest
+          uv run --config-setting "build-args=--features=cuckoo" pytest
 
     strategy:
       fail-fast: false
@@ -313,7 +313,7 @@ jobs:
 
           # And run the python bindings tests
           cd boreal-py
-          uv run --config-setting 'build-args=--profile=dev' pytest
+          uv run --config-setting 'build-args=--profile=dev --features=cuckoo' pytest
           cd ..
 
           # Finally, generate the report

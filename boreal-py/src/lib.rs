@@ -5,7 +5,7 @@ use std::ffi::CString;
 
 use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyString};
 use pyo3::{create_exception, ffi, intern};
 
 use ::boreal::compiler;
@@ -25,6 +25,7 @@ create_exception!(boreal, AddRuleError, PyException, "error when adding rules");
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile, m)?)?;
+    m.add_function(wrap_pyfunction!(available_modules, m)?)?;
 
     m.add("AddRuleError", m.py().get_type::<AddRuleError>())?;
     m.add("ScanError", m.py().get_type::<scanner::ScanError>())?;
@@ -56,17 +57,7 @@ fn compile(
     includes: bool,
     error_on_warning: bool,
 ) -> PyResult<scanner::Scanner> {
-    let mut compiler = compiler::CompilerBuilder::new()
-        .add_module(::boreal::module::Console::with_callback(|log| {
-            // XXX: when targetting python 3.12 or above, this could be simplified
-            // by using the "%.*s" format, avoiding the CString conversion.
-            if let Ok(cstr) = CString::new(log) {
-                // Safety: see <https://docs.python.org/3/c-api/unicode.html#c.PyUnicode_FromFormat>
-                // for the format. A '%s" expects a c-string pointer, which has just been built.
-                unsafe { ffi::PySys_FormatStdout(c"%s\n".as_ptr(), cstr.as_ptr()) }
-            }
-        }))
-        .build();
+    let mut compiler = build_compiler();
 
     compiler.set_params(
         compiler::CompilerParams::default()
@@ -157,6 +148,28 @@ fn compile(
     }
 
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
+}
+
+#[pyfunction]
+fn available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
+    build_compiler()
+        .available_modules()
+        .map(|s| PyString::new(py, s))
+        .collect()
+}
+
+fn build_compiler() -> compiler::Compiler {
+    compiler::CompilerBuilder::new()
+        .add_module(::boreal::module::Console::with_callback(|log| {
+            // XXX: when targetting python 3.12 or above, this could be simplified
+            // by using the "%.*s" format, avoiding the CString conversion.
+            if let Ok(cstr) = CString::new(log) {
+                // Safety: see <https://docs.python.org/3/c-api/unicode.html#c.PyUnicode_FromFormat>
+                // for the format. A '%s" expects a c-string pointer, which has just been built.
+                unsafe { ffi::PySys_FormatStdout(c"%s\n".as_ptr(), cstr.as_ptr()) }
+            }
+        }))
+        .build()
 }
 
 fn convert_compiler_error(err: &compiler::AddRuleError, input_name: &str, input: &str) -> String {

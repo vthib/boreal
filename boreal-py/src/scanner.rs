@@ -190,6 +190,7 @@ fn set_modules_data(
     scanner: &mut scanner::Scanner,
     modules_data: &Bound<'_, PyDict>,
 ) -> PyResult<()> {
+    #[allow(clippy::never_loop)]
     for (key, value) in modules_data {
         let name: &str = key.extract()?;
 
@@ -217,10 +218,16 @@ fn set_modules_data(
                 continue;
             }
         }
+        #[cfg(not(feature = "cuckoo"))]
+        // Suppress unused var warnings
+        {
+            let _ = scanner;
+            let _v = value;
+        }
 
-        return Err(PyTypeError::new_err(
+        return Err(PyTypeError::new_err(format!(
             "cannot set data for unknown module `{name}`",
-        ));
+        )));
     }
 
     Ok(())
