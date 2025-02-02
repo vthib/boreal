@@ -2,12 +2,7 @@ import boreal
 import pytest
 import tempfile
 import yara
-
-
-MODULES = [
-    (boreal, False),
-    (yara, True),
-]
+from .utils import MODULES
 
 
 def compile_exc_type(is_yara):

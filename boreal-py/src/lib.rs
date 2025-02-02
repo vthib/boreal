@@ -25,7 +25,7 @@ create_exception!(boreal, AddRuleError, PyException, "error when adding rules");
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile, m)?)?;
-    m.add_function(wrap_pyfunction!(available_modules, m)?)?;
+    m.add("modules", get_available_modules(m.py()))?;
 
     m.add("AddRuleError", m.py().get_type::<AddRuleError>())?;
     m.add("ScanError", m.py().get_type::<scanner::ScanError>())?;
@@ -150,8 +150,7 @@ fn compile(
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
 }
 
-#[pyfunction]
-fn available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
+fn get_available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
     build_compiler()
         .available_modules()
         .map(|s| PyString::new(py, s))
