@@ -14,22 +14,18 @@ use crate::rule_match::Match;
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct Scanner {
     scanner: scanner::Scanner,
+
+    /// List of warnings generated when compiling rules.
     #[pyo3(get)]
     warnings: Vec<String>,
-
-    rules_iter: Option<std::vec::IntoIter<crate::rule::Rule>>,
 }
 
 impl Scanner {
     pub fn new(scanner: scanner::Scanner, warnings: Vec<String>) -> Self {
-        Self {
-            scanner,
-            warnings,
-            rules_iter: None,
-        }
+        Self { scanner, warnings }
     }
 }
 
@@ -140,22 +136,34 @@ impl Scanner {
         }
     }
 
-    fn __iter__(mut slf: PyRefMut<Self>) -> PyResult<PyRefMut<Self>> {
+    fn __iter__(&self, py: Python<'_>) -> PyResult<RulesIter> {
         // Unfortunately, we cannot return an object with a lifetime, so
         // we need to collect all rules into a vec of owned elements before
         // generating an iterator...
-        slf.rules_iter = Some(
-            slf.scanner
+        Ok(RulesIter {
+            rules_iter: self
+                .scanner
                 .rules()
-                .map(|rule| crate::rule::Rule::new(slf.py(), &slf.scanner, &rule))
+                .map(|rule| crate::rule::Rule::new(py, &self.scanner, &rule))
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter(),
-        );
-        Ok(slf)
+        })
+    }
+}
+
+#[pyclass]
+pub struct RulesIter {
+    rules_iter: std::vec::IntoIter<crate::rule::Rule>,
+}
+
+#[pymethods]
+impl RulesIter {
+    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(mut slf: PyRefMut<Self>) -> Option<crate::rule::Rule> {
-        slf.rules_iter.as_mut().and_then(Iterator::next)
+        slf.rules_iter.next()
     }
 }
 
