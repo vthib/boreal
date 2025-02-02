@@ -23,25 +23,28 @@ create_exception!(boreal, AddRuleError, PyException, "error when adding rules");
 
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    let py = m.py();
+
     m.add_function(wrap_pyfunction!(compile, m)?)?;
-    m.add("modules", get_available_modules(m.py()))?;
 
-    m.add("AddRuleError", m.py().get_type::<AddRuleError>())?;
-    m.add("ScanError", m.py().get_type::<scanner::ScanError>())?;
-    m.add("TimeoutError", m.py().get_type::<scanner::TimeoutError>())?;
+    m.add("modules", get_available_modules(py))?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
-    m.add("Rule", m.py().get_type::<rule::Rule>())?;
-    m.add("Match", m.py().get_type::<rule_match::Match>())?;
-    m.add("Scanner", m.py().get_type::<scanner::Scanner>())?;
-    m.add("RulesIter", m.py().get_type::<scanner::RulesIter>())?;
+    m.add("AddRuleError", py.get_type::<AddRuleError>())?;
+    m.add("ScanError", py.get_type::<scanner::ScanError>())?;
+    m.add("TimeoutError", py.get_type::<scanner::TimeoutError>())?;
+
+    m.add("Rule", py.get_type::<rule::Rule>())?;
+    m.add("Match", py.get_type::<rule_match::Match>())?;
+    m.add("Scanner", py.get_type::<scanner::Scanner>())?;
+    m.add("RulesIter", py.get_type::<scanner::RulesIter>())?;
     m.add(
         "StringMatchInstance",
-        m.py()
-            .get_type::<string_match_instance::StringMatchInstance>(),
+        py.get_type::<string_match_instance::StringMatchInstance>(),
     )?;
     m.add(
         "StringMatches",
-        m.py().get_type::<string_matches::StringMatches>(),
+        py.get_type::<string_matches::StringMatches>(),
     )?;
 
     Ok(())
