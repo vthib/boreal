@@ -1,12 +1,5 @@
-import boreal
 import pytest
-import yara
-
-
-MODULES = [
-    (boreal, False),
-    (yara, True),
-]
+from .utils import MODULES
 
 
 @pytest.mark.parametrize("module,is_yara", MODULES)

@@ -6,12 +6,7 @@ import pytest
 import subprocess
 import tempfile
 import yara
-
-
-MODULES = [
-    (boreal, False),
-    (yara, True),
-]
+from .utils import MODULES
 
 
 def get_rules(module):
@@ -250,10 +245,10 @@ rule a {
     assert captured.err == ""
 
 
-# TODO: find a way to compile yara python with cuckoo?
-def test_match_modules_data():
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_modules_data(module, is_yara):
     # Test only works if the cuckoo module is present
-    if 'cuckoo' not in boreal.available_modules():
+    if 'cuckoo' not in module.modules:
         return
 
     rules = boreal.compile(source="""
@@ -277,7 +272,7 @@ def test_match_modules_data_errors():
     with pytest.raises(TypeError):
         rules.match(data="", modules_data={ 'unknown': 1 })
 
-    if 'cuckoo' in boreal.available_modules():
+    if 'cuckoo' in boreal.modules:
         with pytest.raises(TypeError):
             rules.match(data="", modules_data={ 'cuckoo': 1 })
         with pytest.raises(TypeError):
