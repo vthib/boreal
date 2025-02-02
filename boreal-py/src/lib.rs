@@ -11,7 +11,6 @@ use pyo3::{create_exception, ffi, intern};
 use ::boreal::compiler;
 
 // TODO: all clone impls should be efficient...
-// TODO: should all pyclasses have names and be exposed in the module?
 // TODO: check GIL handling in all functions (especially match)
 
 mod rule;
@@ -30,6 +29,20 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("AddRuleError", m.py().get_type::<AddRuleError>())?;
     m.add("ScanError", m.py().get_type::<scanner::ScanError>())?;
     m.add("TimeoutError", m.py().get_type::<scanner::TimeoutError>())?;
+
+    m.add("Rule", m.py().get_type::<rule::Rule>())?;
+    m.add("Match", m.py().get_type::<rule_match::Match>())?;
+    m.add("Scanner", m.py().get_type::<scanner::Scanner>())?;
+    m.add("RulesIter", m.py().get_type::<scanner::RulesIter>())?;
+    m.add(
+        "StringMatchInstance",
+        m.py()
+            .get_type::<string_match_instance::StringMatchInstance>(),
+    )?;
+    m.add(
+        "StringMatches",
+        m.py().get_type::<string_matches::StringMatches>(),
+    )?;
 
     Ok(())
 }
