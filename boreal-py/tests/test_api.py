@@ -10,3 +10,8 @@ def test_modules(module, is_yara):
     assert 'pe' in modules
     assert 'time' in modules
     assert 'console' in modules
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_version(module, is_yara):
+    assert type(module.__version__) is str
