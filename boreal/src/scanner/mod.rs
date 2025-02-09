@@ -100,6 +100,20 @@ pub struct Scanner {
     module_user_data: ModuleUserData,
 }
 
+/// Events occurring during a scan that can be received in a callback.
+#[derive(Debug)]
+pub enum ScanEvent<'scanner> {
+    /// A rule has been matched.
+    RuleMatch(MatchedRule<'scanner>),
+}
+
+/// List of result statuses that a scan callback can return.
+#[derive(Debug)]
+pub enum ScanCallbackResult {
+    /// Continue with the scan.
+    Continue,
+}
+
 impl Scanner {
     pub(crate) fn new(compiler: Compiler) -> Self {
         let Compiler {
@@ -162,6 +176,39 @@ impl Scanner {
             &self.scan_params,
             &self.external_symbols_values,
             &self.module_user_data,
+        )
+    }
+
+    /// Scan a byte slice, getting results through a callback.
+    ///
+    /// Use a callback to be notified of events, for example when a rule is matched.
+    ///
+    /// This has several differences on the regular [`Scanner::scan_mem`] method:
+    ///
+    /// - Instead of accumulating all matched rules to be returned at the end of the
+    ///   scan, the callback is called when each rule matches, and can decide whether
+    ///   to accumulate those results or not.
+    /// - The callback can stop the scan on any event.
+    /// - The callback can be called on more events than only on rule match. See
+    ///   [`ScanEvent`] for a complete list.
+    ///
+    /// # Errors
+    ///
+    /// Can fail if a timeout has been configured and is reached during the scan.
+    pub fn scan_mem_with_callback<'scanner, 'cb, F>(
+        &'scanner self,
+        mem: &[u8],
+        callback: F,
+    ) -> Result<(), ScanError>
+    where
+        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+    {
+        self.inner.scan_with_callback(
+            Memory::Direct(mem),
+            &self.scan_params,
+            &self.external_symbols_values,
+            &self.module_user_data,
+            Box::new(callback),
         )
     }
 
@@ -490,6 +537,7 @@ impl Inner {
             params,
             #[cfg(feature = "object")]
             entrypoint: None,
+            callback: None,
         };
 
         let res = self.do_scan(&mut scan_data);
@@ -505,9 +553,37 @@ impl Inner {
         }
     }
 
+    fn scan_with_callback<'scanner>(
+        &'scanner self,
+        mem: Memory<'_>,
+        params: &'scanner ScanParams,
+        external_symbols_values: &'scanner [ExternalValue],
+        module_user_data: &'scanner ModuleUserData,
+        callback: ScanCallback<'scanner, '_>,
+    ) -> Result<(), ScanError> {
+        let mut scan_data = ScanData {
+            mem,
+            external_symbols_values,
+            matched_rules: Vec::new(),
+            module_values: evaluator::module::EvalData::new(&self.modules, module_user_data),
+            statistics: if params.compute_statistics {
+                Some(statistics::Evaluation::default())
+            } else {
+                None
+            },
+            timeout_checker: params.timeout_duration.map(TimeoutChecker::new),
+            params,
+            #[cfg(feature = "object")]
+            entrypoint: None,
+            callback: Some(callback),
+        };
+
+        self.do_scan(&mut scan_data)
+    }
+
     fn do_scan<'scanner>(
         &'scanner self,
-        scan_data: &mut ScanData<'scanner, '_>,
+        scan_data: &mut ScanData<'scanner, '_, '_>,
     ) -> Result<(), ScanError> {
         if let Some(mem) = scan_data.mem.get_direct() {
             // We can evaluate module values and then try to evaluate rules without matches.
@@ -530,10 +606,18 @@ impl Inner {
             }
 
             match res {
-                Ok(()) => return Ok(()),
-                Err(EvalError::Timeout) => return Err(ScanError::Timeout),
+                Ok(()) => {
+                    handle_already_matched_rules_and_callback(scan_data);
+                    return Ok(());
+                }
+                Err(EvalError::Timeout) => {
+                    handle_already_matched_rules_and_callback(scan_data);
+                    return Err(ScanError::Timeout);
+                }
                 Err(EvalError::Undecidable) => {
                     // Reset the rules that might have matched already.
+                    // FIXME: those should not be cleared, but kept: there is
+                    // no need to reevaluate them.
                     scan_data.matched_rules.clear();
                 }
             }
@@ -568,9 +652,14 @@ impl Inner {
             return Ok(());
         }
 
+        // If there is a callback, we need to call it for every global matched rule.
+        // This was delayed since a single global rule non matching would invalidate
+        // all the previous ones.
+        handle_already_matched_rules_and_callback(scan_data);
+
         // Evaluate all non global rules.
         for rule in &self.rules {
-            match eval_ctx.eval_non_global_rule(self, rule, scan_data) {
+            match eval_ctx.eval_non_global_rule(self, rule, scan_data, true) {
                 Ok(()) => (),
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => return Err(ScanError::Timeout),
@@ -590,7 +679,7 @@ impl Inner {
     /// final result of the scan.
     fn evaluate_without_matches<'scanner>(
         &'scanner self,
-        scan_data: &mut ScanData<'scanner, '_>,
+        scan_data: &mut ScanData<'scanner, '_, '_>,
     ) -> Result<(), EvalError> {
         let mut eval_ctx = EvalContext::new(None, self.rules.len(), self.namespaces.len());
 
@@ -616,7 +705,7 @@ impl Inner {
 
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
-            eval_ctx.eval_non_global_rule(self, rule, scan_data)?;
+            eval_ctx.eval_non_global_rule(self, rule, scan_data, false)?;
         }
 
         Ok(())
@@ -698,6 +787,25 @@ impl Inner {
     }
 }
 
+// Call the callback on all the already matched rules.
+//
+// Sometimes, it is necessary to evaluate rules while delaying their
+// statuses of "matched rules", because this status can become invalid.
+// For example, when evaluating global rules, or when evaluating without
+// the variable scan.
+//
+// When this happens, matched rules are accumulated as if no callbacks
+// was specified. Once those matched rules are validated, the callback,
+// if it exists, must be called.
+fn handle_already_matched_rules_and_callback(scan_data: &mut ScanData) {
+    if let Some(cb) = &mut scan_data.callback {
+        for matched_rule in scan_data.matched_rules.drain(..) {
+            // TODO: handle callback return value.
+            let _r = (cb)(ScanEvent::RuleMatch(matched_rule));
+        }
+    }
+}
+
 /// Context used when evaluating all the rules.
 ///
 /// This struct is used to hold all the data that needs to be updated
@@ -739,9 +847,15 @@ impl EvalContext {
         &mut self,
         scanner: &'scanner Inner,
         rule: &'scanner Rule,
-        scan_data: &mut ScanData<'scanner, '_>,
+        scan_data: &mut ScanData<'scanner, '_, '_>,
     ) -> Result<(), EvalError> {
-        let res = self.eval_rule_inner(scanner, rule, scan_data)?;
+        let res = self.eval_rule_inner(
+            scanner, rule, scan_data,
+            // XXX: evaluation of global rules always delay the match rule
+            // callback: this is because any non match will invalidate all
+            // the previous matches.
+            false,
+        )?;
         if !res {
             self.namespace_disabled[rule.namespace_index] = true;
         }
@@ -752,9 +866,10 @@ impl EvalContext {
         &mut self,
         scanner: &'scanner Inner,
         rule: &'scanner Rule,
-        scan_data: &mut ScanData<'scanner, '_>,
+        scan_data: &mut ScanData<'scanner, '_, '_>,
+        call_callback: bool,
     ) -> Result<(), EvalError> {
-        let res = self.eval_rule_inner(scanner, rule, scan_data)?;
+        let res = self.eval_rule_inner(scanner, rule, scan_data, call_callback)?;
         self.previous_results.push(res);
         Ok(())
     }
@@ -763,7 +878,8 @@ impl EvalContext {
         &mut self,
         scanner: &'scanner Inner,
         rule: &'scanner Rule,
-        scan_data: &mut ScanData<'scanner, '_>,
+        scan_data: &mut ScanData<'scanner, '_, '_>,
+        call_callback: bool,
     ) -> Result<bool, EvalError> {
         let var_matches: Option<Vec<_>> = self
             .var_matches
@@ -785,12 +901,19 @@ impl EvalContext {
         )?;
 
         if res && !rule.is_private {
-            scan_data.matched_rules.push(build_matched_rule(
+            let matched_rule = build_matched_rule(
                 rule,
                 vars,
                 &scanner.namespaces,
                 var_matches.unwrap_or_default(),
-            ));
+            );
+            match &mut scan_data.callback {
+                Some(cb) if call_callback => {
+                    // TODO: handle callback return value.
+                    let _r = (cb)(ScanEvent::RuleMatch(matched_rule));
+                }
+                Some(_) | None => scan_data.matched_rules.push(matched_rule),
+            }
         }
 
         Ok(res)
@@ -807,8 +930,10 @@ fn can_use_no_scan_optimization(scan_data: &ScanData) -> bool {
             && !scan_data.params.fragmented_scan_mode.can_refetch_regions)
 }
 
-#[derive(Debug)]
-pub(crate) struct ScanData<'scanner, 'mem> {
+type ScanCallback<'scanner, 'cb> =
+    Box<dyn FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb>;
+
+pub(crate) struct ScanData<'scanner, 'mem, 'cb> {
     /// Memory to scan,
     pub(crate) mem: Memory<'mem>,
 
@@ -843,9 +968,42 @@ pub(crate) struct ScanData<'scanner, 'mem> {
     /// cost of this computation on rules that do not use it.
     #[cfg(feature = "object")]
     pub(crate) entrypoint: Option<u64>,
+
+    /// Callback receiving scan events.
+    ///
+    /// Can be unset, in which case matched rules are accumulated into the
+    /// `matched_rules` field.
+    pub(crate) callback: Option<ScanCallback<'scanner, 'cb>>,
 }
 
-impl ScanData<'_, '_> {
+impl std::fmt::Debug for ScanData<'_, '_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = f.debug_struct("ScanData");
+
+        let _r = d
+            .field("mem", &self.mem)
+            .field("external_symbols_values", &self.external_symbols_values)
+            .field("matched_rules", &self.matched_rules)
+            .field("module_values", &self.module_values)
+            .field("statistics", &self.statistics)
+            .field("timeout_checker", &self.timeout_checker)
+            .field("params", &self.params)
+            .field(
+                "callback",
+                &self.callback.as_ref().map(|cb| {
+                    let ptr: *const _ = cb;
+                    ptr
+                }),
+            );
+
+        #[cfg(feature = "object")]
+        let _r = d.field("entrypoint", &self.entrypoint);
+
+        d.finish()
+    }
+}
+
+impl ScanData<'_, '_, '_> {
     pub(crate) fn check_timeout(&mut self) -> bool {
         self.timeout_checker
             .as_mut()
@@ -1060,6 +1218,7 @@ mod tests {
             params: &ScanParams::default(),
             #[cfg(feature = "object")]
             entrypoint: None,
+            callback: None,
         };
         let mut previous_results = Vec::new();
         let rules = &scanner.inner.rules;
@@ -1611,6 +1770,7 @@ mod tests {
             #[cfg(feature = "object")]
             entrypoint: None,
             params: &ScanParams::default(),
+            callback: Some(Box::new(|_evt| ScanCallbackResult::Continue)),
         });
         test_type_traits_non_clonable(RulesIter {
             global_rules: [].iter(),

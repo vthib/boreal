@@ -20,6 +20,9 @@ mod regex;
 // Tests for the public API
 mod api;
 
+// Tests for scans using callbacks
+mod callback;
+
 // Tests related to evaluation of rules
 mod evaluation;
 mod external_symbol;
