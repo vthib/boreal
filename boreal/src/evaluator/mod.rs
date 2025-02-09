@@ -132,7 +132,7 @@ pub(crate) fn evaluate_rule<'scan>(
     }
 }
 
-struct Evaluator<'scan, 'rule, 'mem> {
+struct Evaluator<'scan, 'rule, 'mem, 'cb> {
     var_matches: Option<variable::VarMatches<'rule>>,
 
     // Array of previous rules results.
@@ -152,7 +152,7 @@ struct Evaluator<'scan, 'rule, 'mem> {
     bytes_pool: &'rule BytesPool,
 
     // Data related only to the scan, independent of the rule.
-    scan_data: &'rule mut ScanData<'scan, 'mem>,
+    scan_data: &'rule mut ScanData<'scan, 'mem, 'cb>,
 }
 
 #[derive(Debug)]
@@ -216,7 +216,7 @@ macro_rules! apply_cmp_op {
     }
 }
 
-impl Evaluator<'_, '_, '_> {
+impl Evaluator<'_, '_, '_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, PoisonKind> {
         var_index
             .0
