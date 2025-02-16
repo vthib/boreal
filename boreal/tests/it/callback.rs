@@ -3,6 +3,18 @@ use std::time::Duration;
 use boreal::scanner::{ScanCallbackResult, ScanError, ScanEvent, ScanParams};
 use boreal::{Compiler, Scanner};
 
+const TIMEOUT_COND: &str = r#"
+    for all i in (0..9223372036854775807) : (
+        for all j in (0..9223372036854775807) : (
+            for all k in (0..9223372036854775807) : (
+                for all l in (0..9223372036854775807) : (
+                    i + j + k + l >= 0
+                )
+            )
+        )
+    )
+"#;
+
 #[track_caller]
 fn check_rule_match(event: &ScanEvent, rule_name: &str, namespace: Option<&str>) {
     let res = match event {
@@ -23,6 +35,25 @@ fn scan_mem<'scanner>(scanner: &'scanner Scanner, mem: &[u8]) -> Vec<ScanEvent<'
             ScanCallbackResult::Continue
         })
         .unwrap();
+    events
+}
+
+fn scan_mem_with_abort<'scanner>(
+    scanner: &'scanner Scanner,
+    mem: &[u8],
+    mut abort_on_event_number: u32,
+) -> Vec<ScanEvent<'scanner>> {
+    let mut events = Vec::new();
+    let res = scanner.scan_mem_with_callback(mem, |event| {
+        events.push(event);
+        if abort_on_event_number > 0 {
+            abort_on_event_number -= 1;
+            ScanCallbackResult::Continue
+        } else {
+            ScanCallbackResult::Abort
+        }
+    });
+    assert!(matches!(res, Err(ScanError::CallbackAbort)));
     events
 }
 
@@ -103,7 +134,7 @@ rule c {
 }
 
 #[test]
-fn test_scan_mem_with_callback_global_rule_no_eval() {
+fn test_scan_mem_with_callback_global_rule_no_ac() {
     let mut compiler = Compiler::new();
     compiler
         .add_rules_str(
@@ -133,26 +164,18 @@ rule c { condition: filesize > 7 }
 }
 
 #[test]
-fn test_scan_mem_with_callback_no_eval_timeout() {
+fn test_scan_mem_with_callback_no_ac_timeout() {
     let mut compiler = Compiler::new();
     compiler
         .add_rules_str(
-            r#"
+            r"
 global rule a { condition: true }
 rule b { condition: filesize >= 3 }
-rule c {
-    condition:
-        for all i in (0..9223372036854775807) : (
-            for all j in (0..9223372036854775807) : (
-                for all k in (0..9223372036854775807) : (
-                    for all l in (0..9223372036854775807) : (
-                        i + j + k + l >= 0
-                    )
-                )
-            )
+    ",
         )
-}"#,
-        )
+        .unwrap();
+    compiler
+        .add_rules_str(format!("rule c {{ condition: {} }}", TIMEOUT_COND))
         .unwrap();
     let mut scanner = compiler.into_scanner();
     scanner
@@ -167,4 +190,105 @@ rule c {
     assert_eq!(events.len(), 2);
     check_rule_match(&events[0], "a", None);
     check_rule_match(&events[1], "b", None);
+}
+
+#[test]
+fn test_scan_mem_with_callback_abort() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule a {
+    strings:
+        $ = "abc"
+    condition:
+        any of them
+}
+global rule b { condition: true }
+rule c { condition: true }
+rule d { condition: true }
+"#,
+        )
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let events = scan_mem_with_abort(&scanner, b"abc", 0);
+    assert_eq!(events.len(), 1);
+    check_rule_match(&events[0], "a", None);
+
+    let events = scan_mem_with_abort(&scanner, b"abc", 1);
+    assert_eq!(events.len(), 2);
+    check_rule_match(&events[0], "a", None);
+    check_rule_match(&events[1], "b", None);
+
+    let events = scan_mem_with_abort(&scanner, b"abc", 2);
+    assert_eq!(events.len(), 3);
+    check_rule_match(&events[0], "a", None);
+    check_rule_match(&events[1], "b", None);
+    check_rule_match(&events[2], "c", None);
+
+    let events = scan_mem_with_abort(&scanner, b"abc", 3);
+    assert_eq!(events.len(), 4);
+    check_rule_match(&events[0], "a", None);
+    check_rule_match(&events[1], "b", None);
+    check_rule_match(&events[2], "c", None);
+    check_rule_match(&events[3], "d", None);
+}
+
+#[test]
+fn test_scan_mem_with_callback_abort_no_ac() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule a { condition: true }
+global rule b { condition: true }
+rule c { condition: true }
+rule d { condition: true }
+"#,
+        )
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let events = scan_mem_with_abort(&scanner, b"", 0);
+    assert_eq!(events.len(), 1);
+    check_rule_match(&events[0], "a", None);
+
+    let events = scan_mem_with_abort(&scanner, b"", 1);
+    assert_eq!(events.len(), 2);
+    check_rule_match(&events[0], "a", None);
+    check_rule_match(&events[1], "b", None);
+
+    let events = scan_mem_with_abort(&scanner, b"", 2);
+    assert_eq!(events.len(), 3);
+    check_rule_match(&events[0], "a", None);
+    check_rule_match(&events[1], "b", None);
+    check_rule_match(&events[2], "c", None);
+
+    let events = scan_mem_with_abort(&scanner, b"", 3);
+    assert_eq!(events.len(), 4);
+    check_rule_match(&events[0], "a", None);
+    check_rule_match(&events[1], "b", None);
+    check_rule_match(&events[2], "c", None);
+    check_rule_match(&events[3], "d", None);
+}
+
+#[test]
+fn test_scan_mem_with_callback_abort_timeout() {
+    // If the scan timeouts but the callback aborts, the abort
+    // status is returned.
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str("rule a { condition: true }")
+        .unwrap();
+    compiler
+        .add_rules_str(format!("rule c {{ condition: {} }}", TIMEOUT_COND))
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+    scanner
+        .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
+
+    let events = scan_mem_with_abort(&scanner, b"", 0);
+    assert_eq!(events.len(), 1);
+    check_rule_match(&events[0], "a", None);
 }
