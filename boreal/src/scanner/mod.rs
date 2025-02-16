@@ -101,7 +101,14 @@ pub struct Scanner {
 }
 
 /// Events occurring during a scan that can be received in a callback.
+///
+/// Which events are used depend on the [`ScanParams::callback_events`] setting. By default,
+/// only [`ScanEvent::RuleMatch`] are reported.
+///
+/// This enum is on purpose non exhaustive to allow adding events to it without breaking
+/// compatibility. It is recommended to always return Continue on unknown events.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ScanEvent<'scanner> {
     /// A rule has been matched.
     RuleMatch(MatchedRule<'scanner>),
