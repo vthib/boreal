@@ -17,6 +17,11 @@ pub enum ScanError {
 
     /// Error when listing regions of a process before a scan.
     CannotListProcessRegions(std::io::Error),
+
+    /// The scan callback asked for the scan to be aborted.
+    ///
+    /// See [`crate::scanner::ScanCallbackResult::Abort`].
+    CallbackAbort,
 }
 
 impl std::fmt::Display for ScanError {
@@ -32,6 +37,9 @@ impl std::fmt::Display for ScanError {
             }
             Self::CannotListProcessRegions(error) => {
                 write!(f, "error listing memory regions of process: {error}")
+            }
+            Self::CallbackAbort => {
+                write!(f, "scan aborted in callback")
             }
         }
     }

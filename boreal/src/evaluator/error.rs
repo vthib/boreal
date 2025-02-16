@@ -11,6 +11,9 @@ pub enum EvalError {
 
     /// Timeout while scanning.
     Timeout,
+
+    /// The scan callback asked for the scan to be aborted.
+    CallbackAbort,
 }
 
 #[cfg(test)]

@@ -112,6 +112,10 @@ pub enum ScanEvent<'scanner> {
 pub enum ScanCallbackResult {
     /// Continue with the scan.
     Continue,
+    /// Abort the scan immediately.
+    ///
+    /// The scan will end with the [`ScanError::CallbackAbort`] error.
+    Abort,
 }
 
 impl Scanner {
@@ -607,12 +611,15 @@ impl Inner {
 
             match res {
                 Ok(()) => {
-                    handle_already_matched_rules_and_callback(scan_data);
+                    handle_already_matched_rules_and_callback(scan_data)?;
                     return Ok(());
                 }
                 Err(EvalError::Timeout) => {
-                    handle_already_matched_rules_and_callback(scan_data);
+                    handle_already_matched_rules_and_callback(scan_data)?;
                     return Err(ScanError::Timeout);
+                }
+                Err(EvalError::CallbackAbort) => {
+                    return Err(ScanError::CallbackAbort);
                 }
                 Err(EvalError::Undecidable) => {
                     // Reset the rules that might have matched already.
@@ -639,6 +646,7 @@ impl Inner {
                 Ok(()) => (),
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => return Err(ScanError::Timeout),
+                Err(EvalError::CallbackAbort) => return Err(ScanError::CallbackAbort),
             }
         }
 
@@ -655,7 +663,7 @@ impl Inner {
         // If there is a callback, we need to call it for every global matched rule.
         // This was delayed since a single global rule non matching would invalidate
         // all the previous ones.
-        handle_already_matched_rules_and_callback(scan_data);
+        handle_already_matched_rules_and_callback(scan_data)?;
 
         // Evaluate all non global rules.
         for rule in &self.rules {
@@ -663,6 +671,7 @@ impl Inner {
                 Ok(()) => (),
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => return Err(ScanError::Timeout),
+                Err(EvalError::CallbackAbort) => return Err(ScanError::CallbackAbort),
             }
         }
 
@@ -692,6 +701,7 @@ impl Inner {
                 // detected.
                 Err(EvalError::Undecidable) => has_unknown_globals = true,
                 Err(EvalError::Timeout) => return Err(EvalError::Timeout),
+                Err(EvalError::CallbackAbort) => return Err(EvalError::CallbackAbort),
             }
         }
         if eval_ctx.namespace_disabled.iter().all(|v| *v) {
@@ -797,13 +807,17 @@ impl Inner {
 // When this happens, matched rules are accumulated as if no callbacks
 // was specified. Once those matched rules are validated, the callback,
 // if it exists, must be called.
-fn handle_already_matched_rules_and_callback(scan_data: &mut ScanData) {
+fn handle_already_matched_rules_and_callback(scan_data: &mut ScanData) -> Result<(), ScanError> {
     if let Some(cb) = &mut scan_data.callback {
         for matched_rule in scan_data.matched_rules.drain(..) {
-            // TODO: handle callback return value.
-            let _r = (cb)(ScanEvent::RuleMatch(matched_rule));
+            match (cb)(ScanEvent::RuleMatch(matched_rule)) {
+                ScanCallbackResult::Continue => (),
+                ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
+            }
         }
     }
+
+    Ok(())
 }
 
 /// Context used when evaluating all the rules.
@@ -908,10 +922,10 @@ impl EvalContext {
                 var_matches.unwrap_or_default(),
             );
             match &mut scan_data.callback {
-                Some(cb) if call_callback => {
-                    // TODO: handle callback return value.
-                    let _r = (cb)(ScanEvent::RuleMatch(matched_rule));
-                }
+                Some(cb) if call_callback => match (cb)(ScanEvent::RuleMatch(matched_rule)) {
+                    ScanCallbackResult::Continue => (),
+                    ScanCallbackResult::Abort => return Err(EvalError::CallbackAbort),
+                },
                 Some(_) | None => scan_data.matched_rules.push(matched_rule),
             }
         }
