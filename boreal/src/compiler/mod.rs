@@ -122,26 +122,7 @@ impl Default for CompilerProfile {
     }
 }
 
-impl Default for Compiler {
-    fn default() -> Self {
-        Self {
-            namespaces: vec![Namespace::default()],
-
-            rules: Vec::new(),
-            global_rules: Vec::new(),
-            variables: Vec::new(),
-            nb_global_rules_variables: 0,
-            namespaces_indexes: HashMap::new(),
-            available_modules: HashMap::new(),
-            imported_modules: Vec::new(),
-            external_symbols: Vec::new(),
-            bytes_pool: BytesPoolBuilder::default(),
-            params: CompilerParams::default(),
-            profile: CompilerProfile::default(),
-        }
-    }
-}
-
+#[allow(clippy::new_without_default)]
 impl Compiler {
     /// Create a new object to compile YARA rules.
     ///
@@ -157,17 +138,15 @@ impl Compiler {
     /// Modules disabled by default:
     /// - `console`
     ///
-    /// To create a compiler without some or all of those modules, use [`Compiler::default`] to
+    /// To create a compiler without some or all of those modules, use the [`CompilerBuilder`]
+    /// object.
     /// create a [`Compiler`] without any modules, then add back only the desired modules.
     #[must_use]
     pub fn new() -> Self {
         CompilerBuilder::new().build()
     }
 
-    /// Add a module.
-    ///
-    /// Returns false if a module with the same name is already registered, and the module
-    /// was not added.
+    /// Build a compiler with the given parameters.
     fn build(
         available_modules: HashMap<&'static str, AvailableModule>,
         profile: CompilerProfile,
@@ -175,7 +154,17 @@ impl Compiler {
         Self {
             available_modules,
             profile,
-            ..Default::default()
+
+            namespaces: vec![Namespace::default()],
+            rules: Vec::new(),
+            global_rules: Vec::new(),
+            variables: Vec::new(),
+            nb_global_rules_variables: 0,
+            namespaces_indexes: HashMap::new(),
+            imported_modules: Vec::new(),
+            external_symbols: Vec::new(),
+            bytes_pool: BytesPoolBuilder::default(),
+            params: CompilerParams::default(),
         }
     }
 

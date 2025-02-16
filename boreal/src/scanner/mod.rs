@@ -1578,7 +1578,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits(Scanner::new(Compiler::default()));
+        test_type_traits(Scanner::new(Compiler::new()));
         test_type_unwind_safe::<Scanner>();
 
         test_type_traits_non_clonable(ScanResult {
