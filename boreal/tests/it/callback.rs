@@ -19,6 +19,7 @@ const TIMEOUT_COND: &str = r#"
 fn check_rule_match(event: &ScanEvent, rule_name: &str, namespace: Option<&str>) {
     let res = match event {
         ScanEvent::RuleMatch(m) => m.name == rule_name && m.namespace == namespace,
+        evt => panic!("unexpected event {:?}", evt),
     };
     assert!(
         res,
