@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use super::{AvailableModule, ModuleLocation};
 
-/// Configurable builder for the [`Compiler`] object.
+/// Configurable builder for the [`crate::Compiler`] object.
 #[derive(Debug, Default)]
 pub struct CompilerBuilder {
     /// Modules that can be imported when compiling rules.
@@ -80,14 +80,14 @@ impl CompilerBuilder {
 
     /// Set the profile to use when compiling rules.
     ///
-    /// By default, [`CompilerProfile::Speed`] is used.
+    /// By default, [`crate::compiler::CompilerProfile::Speed`] is used.
     #[must_use]
     pub fn profile(mut self, profile: super::CompilerProfile) -> Self {
         self.profile = profile;
         self
     }
 
-    /// Build a [`Compiler`] object with the configuration set on this builder.
+    /// Build a [`crate::Compiler`] object with the configuration set on this builder.
     #[must_use]
     pub fn build(self) -> super::Compiler {
         super::Compiler::build(self.modules, self.profile)

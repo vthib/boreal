@@ -1,8 +1,8 @@
 //! Modules that can be imported and used in rules.
 //!
 //! To implement a new module, the [`Module`] trait must be implemented. This module can then
-//! be added to the compiler by calling [`crate::Compiler::add_module`], making it available to
-//! all future rules added to this compiler.
+//! be added to the compiler by calling [`crate::compiler::CompilerBuilder::add_module`],
+//! making it available to all future rules added to this compiler.
 //!
 //! ```
 //! use boreal::module::{Module, StaticValue};

@@ -45,7 +45,7 @@ pub(crate) struct Rule {
 pub struct Metadata {
     /// Name of the metadata.
     ///
-    /// Use [`boreal::Scanner::get_string_symbol`] to retrieve the string.
+    /// Use [`crate::Scanner::get_string_symbol`] to retrieve the string.
     pub name: StringSymbol,
 
     /// The value of the metadata.
@@ -57,7 +57,7 @@ pub struct Metadata {
 pub enum MetadataValue {
     /// Bytestring variant.
     ///
-    /// Use [`boreal::Scanner::get_bytes_symbol`] to retrieve the string.
+    /// Use [`crate::Scanner::get_bytes_symbol`] to retrieve the string.
     Bytes(BytesSymbol),
     /// Integer variant.
     Integer(i64),
