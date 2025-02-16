@@ -205,7 +205,8 @@ impl Scanner {
     ///
     /// # Errors
     ///
-    /// Can fail if a timeout has been configured and is reached during the scan.
+    /// Can fail if a timeout has been configured and is reached during the scan,
+    /// or if the callback aborts the scan.
     pub fn scan_mem_with_callback<'scanner, 'cb, F>(
         &'scanner self,
         mem: &[u8],
@@ -242,6 +243,29 @@ impl Scanner {
         }
     }
 
+    /// Scan a file, getting results through a callback.
+    ///
+    /// See [`Scanner::scan_mem_with_callback`] for more details on the callback based
+    /// API.
+    ///
+    /// # Errors
+    ///
+    /// Can fail if a timeout has been configured and is reached during the scan.
+    pub fn scan_file_with_callback<'scanner, 'cb, P, F>(
+        &'scanner self,
+        path: P,
+        callback: F,
+    ) -> Result<(), ScanError>
+    where
+        P: AsRef<std::path::Path>,
+        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+    {
+        match std::fs::read(path.as_ref()) {
+            Ok(contents) => self.scan_mem_with_callback(&contents, callback),
+            Err(err) => Err(ScanError::CannotReadFile(err)),
+        }
+    }
+
     /// Scan a file using memmap to read from it.
     ///
     /// Returns a list of rules that matched the given file.
@@ -270,6 +294,38 @@ impl Scanner {
         }) {
             Ok(mmap) => self.scan_mem(&mmap),
             Err(err) => Err((ScanError::CannotReadFile(err), ScanResult::default())),
+        }
+    }
+
+    /// Scan a file using memmap to read from it, getting results through a callback.
+    ///
+    /// See [`Scanner::scan_mem_with_callback`] for more details on the callback based
+    /// API.
+    ///
+    /// # Errors
+    ///
+    /// See [`Scanner::scan_file_memmap`] for error documentation. The scan can also fail
+    /// if the callback aborts it.
+    ///
+    /// # Safety
+    ///
+    /// See the safety documentation of [`Scanner::scan_file_memmap`].
+    #[cfg(feature = "memmap")]
+    pub unsafe fn scan_file_memmap_with_callback<'scanner, 'cb, P, F>(
+        &'scanner self,
+        path: P,
+        callback: F,
+    ) -> Result<(), ScanError>
+    where
+        P: AsRef<std::path::Path>,
+        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+    {
+        match std::fs::File::open(path.as_ref()).and_then(|file| {
+            // Safety: guaranteed by the safety contract of this function
+            unsafe { memmap2::Mmap::map(&file) }
+        }) {
+            Ok(mmap) => self.scan_mem_with_callback(&mmap, callback),
+            Err(err) => Err(ScanError::CannotReadFile(err)),
         }
     }
 
@@ -309,6 +365,35 @@ impl Scanner {
         }
     }
 
+    /// Scan the memory of a running process, getting results through a callback.
+    ///
+    /// See [`Scanner::scan_mem_with_callback`] for more details on the callback based
+    /// API.
+    ///
+    /// # Errors
+    ///
+    /// See [`Scanner::scan_process`] for error documentation. The scan can also fail
+    /// if the callback aborts it.
+    #[cfg(feature = "process")]
+    pub fn scan_process_with_callback<'scanner, 'cb, F>(
+        &'scanner self,
+        pid: u32,
+        callback: F,
+    ) -> Result<(), ScanError>
+    where
+        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+    {
+        let memory = process::process_memory(pid)?;
+
+        self.inner.scan_with_callback(
+            Memory::new_fragmented(memory, self.scan_params.to_memory_params()),
+            &self.scan_params,
+            &self.external_symbols_values,
+            &self.module_user_data,
+            Box::new(callback),
+        )
+    }
+
     /// Scan fragmented memory, i.e. multiple byte slices, potentially disjointed.
     ///
     /// This API allows scanning a set of non-overlapping byte slices, instead
@@ -339,6 +424,33 @@ impl Scanner {
             &self.scan_params,
             &self.external_symbols_values,
             &self.module_user_data,
+        )
+    }
+
+    /// Scan fragmented memory, getting results through a callback.
+    ///
+    /// See [`Scanner::scan_mem_with_callback`] for more details on the callback based
+    /// API.
+    ///
+    /// # Errors
+    ///
+    /// See [`Scanner::scan_fragmented`] for error documentation. The scan can also fail
+    /// if the callback aborts it.
+    pub fn scan_fragmented_with_callback<'scanner, 'cb, T, F>(
+        &'scanner self,
+        obj: T,
+        callback: F,
+    ) -> Result<(), ScanError>
+    where
+        T: FragmentedMemory,
+        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+    {
+        self.inner.scan_with_callback(
+            Memory::new_fragmented(Box::new(obj), self.scan_params.to_memory_params()),
+            &self.scan_params,
+            &self.external_symbols_values,
+            &self.module_user_data,
+            Box::new(callback),
         )
     }
 

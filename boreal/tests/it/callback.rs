@@ -3,6 +3,8 @@ use std::time::Duration;
 use boreal::scanner::{ScanCallbackResult, ScanError, ScanEvent, ScanParams};
 use boreal::{Compiler, Scanner};
 
+use crate::utils::FragmentedSlices;
+
 const TIMEOUT_COND: &str = r#"
     for all i in (0..9223372036854775807) : (
         for all j in (0..9223372036854775807) : (
@@ -290,6 +292,135 @@ fn test_scan_mem_with_callback_abort_timeout() {
         .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
 
     let events = scan_mem_with_abort(&scanner, b"", 0);
+    assert_eq!(events.len(), 1);
+    check_rule_match(&events[0], "a", None);
+}
+
+#[test]
+fn test_scan_file_with_callback() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str("rule a { condition: true }")
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let mut events = Vec::new();
+    let res = scanner.scan_file_with_callback("not_existing", |event| {
+        events.push(event);
+        ScanCallbackResult::Continue
+    });
+    assert!(matches!(res, Err(ScanError::CannotReadFile(_))));
+    assert_eq!(events.len(), 0);
+
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut events = Vec::new();
+    scanner
+        .scan_file_with_callback(&file, |event| {
+            events.push(event);
+            ScanCallbackResult::Continue
+        })
+        .unwrap();
+    assert_eq!(events.len(), 1);
+    check_rule_match(&events[0], "a", None);
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+fn test_scan_file_memmap_with_callback() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str("rule a { condition: true }")
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let mut events = Vec::new();
+    // Safety: testing
+    let res = unsafe {
+        scanner.scan_file_memmap_with_callback("not_existing", |event| {
+            events.push(event);
+            ScanCallbackResult::Continue
+        })
+    };
+    assert!(matches!(res, Err(ScanError::CannotReadFile(_))));
+    assert_eq!(events.len(), 0);
+
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut events = Vec::new();
+    // Safety: testing
+    unsafe {
+        scanner.scan_file_memmap_with_callback(&file, |event| {
+            events.push(event);
+            ScanCallbackResult::Continue
+        })
+    }
+    .unwrap();
+    assert_eq!(events.len(), 1);
+    check_rule_match(&events[0], "a", None);
+}
+
+#[test]
+fn test_scan_fragmented_with_callback() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+rule a {
+    strings:
+        $a = "abc"
+        $b = "def"
+    condition:
+        $a and $b
+}"#,
+        )
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let regions = &[
+        (0, Some(b"zyx".as_slice())),
+        (0x1000, Some(b"<abc>")),
+        (0x2000, Some(b"def")),
+    ];
+    let mut events = Vec::new();
+    scanner
+        .scan_fragmented_with_callback(FragmentedSlices::new(regions), |event| {
+            events.push(event);
+            ScanCallbackResult::Continue
+        })
+        .unwrap();
+    assert_eq!(events.len(), 1);
+    check_rule_match(&events[0], "a", None);
+}
+
+#[test]
+#[cfg(feature = "process")]
+// Need super user to run on macos
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_scan_process_with_callback() {
+    // Scan for strings found in the bss and the stack of the test process.
+
+    use crate::utils::BinHelper;
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+rule a {
+    strings:
+        $a = "PAYLOAD_ON_STACK"
+    condition:
+        all of them
+}"#,
+        )
+        .unwrap();
+    let scanner = compiler.into_scanner();
+
+    let helper = BinHelper::run("stack");
+    let mut events = Vec::new();
+    scanner
+        .scan_process_with_callback(helper.pid(), |event| {
+            events.push(event);
+            ScanCallbackResult::Continue
+        })
+        .unwrap();
     assert_eq!(events.len(), 1);
     check_rule_match(&events[0], "a", None);
 }
