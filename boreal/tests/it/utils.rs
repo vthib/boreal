@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -398,10 +399,7 @@ impl Checker {
     pub fn check_fragmented(&mut self, regions: &[(usize, Option<&[u8]>)], expected_res: bool) {
         let res = self
             .scanner
-            .scan_fragmented(FragmentedSlices {
-                regions,
-                current: None,
-            })
+            .scan_fragmented(FragmentedSlices::new(regions))
             .unwrap();
         let res = !res.matched_rules.is_empty();
         assert_eq!(res, expected_res, "test failed for boreal");
@@ -520,12 +518,21 @@ impl Checker {
 }
 
 #[derive(Debug)]
-struct FragmentedSlices<'a, 'b> {
+pub struct FragmentedSlices<'a, 'b> {
     regions: &'b [(usize, Option<&'a [u8]>)],
     // Tuple of:
     // - Index to the current region
     // - offset into the region mem of the current chunk
     current: Option<(usize, usize)>,
+}
+
+impl<'a, 'b> FragmentedSlices<'a, 'b> {
+    pub fn new(regions: &'b [(usize, Option<&'a [u8]>)]) -> Self {
+        Self {
+            regions,
+            current: None,
+        }
+    }
 }
 
 impl FragmentedMemory for FragmentedSlices<'_, '_> {
@@ -835,10 +842,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     // Retrieve boreal module values.
     let res = if process_memory {
         scanner
-            .scan_fragmented(FragmentedSlices {
-                regions: &[(1000, Some(mem))],
-                current: None,
-            })
+            .scan_fragmented(FragmentedSlices::new(&[(1000, Some(mem))]))
             .unwrap()
     } else {
         scanner.scan_mem(mem).unwrap()
@@ -1125,5 +1129,67 @@ impl yara::MemoryBlockIterator for YaraBlocks<'_> {
         let (start, mem) = self.regions.get(self.current)?;
         self.current += 1;
         Some(yara::MemoryBlock::new(*start as u64, mem.unwrap_or(b"")))
+    }
+}
+
+pub struct BinHelper {
+    proc: std::process::Child,
+    pub output: Vec<String>,
+}
+
+impl BinHelper {
+    pub fn run(arg: &str) -> Self {
+        // Path to current exe
+        let path = std::env::current_exe().unwrap();
+        // Path to "deps" dir
+        let path = path.parent().unwrap();
+        // Path to parent of deps dir, ie destination of build artifacts
+        let path = path.parent().unwrap();
+        // Now select the bin helper
+        let path = path.join(if cfg!(windows) {
+            "boreal-test-helpers.exe"
+        } else {
+            "boreal-test-helpers"
+        });
+        if !path.exists() {
+            panic!(
+                "File {} not found. \
+                You need to compile the `boreal-test-helpers` crate to run this test",
+                path.display()
+            );
+        }
+        let mut child = std::process::Command::new(path)
+            .arg(arg)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        // Accumulate read inputs until the "ready" line is found
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut lines = Vec::new();
+        let mut buffer = String::new();
+        loop {
+            buffer.clear();
+            stdout.read_line(&mut buffer).unwrap();
+            if buffer.trim() == "ready" {
+                break;
+            }
+            lines.push(buffer.trim().to_owned());
+        }
+        Self {
+            proc: child,
+            output: lines,
+        }
+    }
+
+    pub fn pid(&self) -> u32 {
+        self.proc.id()
+    }
+}
+
+impl Drop for BinHelper {
+    fn drop(&mut self) {
+        drop(self.proc.kill());
+        drop(self.proc.wait());
     }
 }

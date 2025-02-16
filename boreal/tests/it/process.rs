@@ -1,6 +1,4 @@
-use std::io::{BufRead, BufReader};
-
-use crate::utils::Checker;
+use crate::utils::{BinHelper, Checker};
 use boreal::scanner::ScanError;
 
 const PAGE_SIZE: usize = 4 * 1024 * 1024;
@@ -314,6 +312,8 @@ rule a {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_process_rework_file() {
+    use crate::utils::BinHelper;
+
     let mut checker = Checker::new(
         r#"
 rule good {
@@ -347,66 +347,4 @@ rule bad {
         helper.pid(),
         vec![("default:good".to_owned(), vec![("good", expected)])],
     );
-}
-
-struct BinHelper {
-    proc: std::process::Child,
-    output: Vec<String>,
-}
-
-impl BinHelper {
-    fn run(arg: &str) -> Self {
-        // Path to current exe
-        let path = std::env::current_exe().unwrap();
-        // Path to "deps" dir
-        let path = path.parent().unwrap();
-        // Path to parent of deps dir, ie destination of build artifacts
-        let path = path.parent().unwrap();
-        // Now select the bin helper
-        let path = path.join(if cfg!(windows) {
-            "boreal-test-helpers.exe"
-        } else {
-            "boreal-test-helpers"
-        });
-        if !path.exists() {
-            panic!(
-                "File {} not found. \
-                You need to compile the `boreal-test-helpers` crate to run this test",
-                path.display()
-            );
-        }
-        let mut child = std::process::Command::new(path)
-            .arg(arg)
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-
-        // Accumulate read inputs until the "ready" line is found
-        let mut stdout = BufReader::new(child.stdout.take().unwrap());
-        let mut lines = Vec::new();
-        let mut buffer = String::new();
-        loop {
-            buffer.clear();
-            stdout.read_line(&mut buffer).unwrap();
-            if buffer.trim() == "ready" {
-                break;
-            }
-            lines.push(buffer.trim().to_owned());
-        }
-        Self {
-            proc: child,
-            output: lines,
-        }
-    }
-
-    fn pid(&self) -> u32 {
-        self.proc.id()
-    }
-}
-
-impl Drop for BinHelper {
-    fn drop(&mut self) {
-        drop(self.proc.kill());
-        drop(self.proc.wait());
-    }
 }
