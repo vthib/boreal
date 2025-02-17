@@ -35,6 +35,23 @@ pub struct ScanParams {
 
     /// Size of memory chunks to scan.
     pub(crate) memory_chunk_size: Option<usize>,
+
+    /// Bitflag of which events are enabled in the scan callback.
+    pub(crate) callback_events: u32,
+}
+
+/// Bitflag values of callback events.
+///
+/// See [`ScanParams::callback_events`] for more details.
+// TODO: impl bitflags operations on it?
+#[derive(Copy, Clone, Debug)]
+pub enum CallbackEvents {}
+
+impl CallbackEvents {
+    /// Enables the [`crate::scanner::ScanEvents::RuleMatch`] events.
+    pub const RULE_MATCH: u32 = 0b0001;
+    /// Enables  the [`crate::scanner::ScanEvents::ModuleImport`] events.
+    pub const MODULE_IMPORT: u32 = 0b0010;
 }
 
 /// Scan mode to use on fragmented memory, including process scanning.
@@ -180,6 +197,7 @@ impl Default for ScanParams {
             max_fetched_region_size: 1024 * 1024 * 1024,
             memory_chunk_size: None,
             fragmented_scan_mode: FragmentedScanMode::legacy(),
+            callback_events: CallbackEvents::RULE_MATCH,
         }
     }
 }
@@ -353,6 +371,25 @@ impl ScanParams {
         self
     }
 
+    /// Bitflag of which events are enabled in the scan callback.
+    ///
+    /// By default, only [`crate::scanner::ScanEvent::RuleMatch`] is enabled.
+    /// Use [`ScanParams::callback_events`] with a bitflag of valuesof this
+    /// enum to enable additional events.
+    ///
+    /// ```
+    /// ScanParams::default()
+    ///     .callback_events(
+    ///         CallbackEvents::RULE_MATCH
+    ///       | CallbackEvents::MODULE_IMPORT
+    ///     );
+    /// ```
+    #[must_use]
+    pub fn callback_events(mut self, callback_events: u32) -> Self {
+        self.callback_events = callback_events;
+        self
+    }
+
     /// Returns whether full matches are computed on matching rules.
     #[must_use]
     pub fn get_compute_full_matches(&self) -> bool {
@@ -405,6 +442,12 @@ impl ScanParams {
     #[must_use]
     pub fn get_fragmented_scan_mode(&self) -> FragmentedScanMode {
         self.fragmented_scan_mode
+    }
+
+    /// Returns the bitflag of which events are enabled in the scan callback.
+    #[must_use]
+    pub fn get_callback_events(&self) -> u32 {
+        self.callback_events
     }
 
     pub(crate) fn to_memory_params(&self) -> MemoryParams {

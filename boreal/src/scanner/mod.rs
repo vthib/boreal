@@ -19,7 +19,7 @@ mod ac_scan;
 mod error;
 pub use error::ScanError;
 mod params;
-pub use params::{FragmentedScanMode, ScanParams};
+pub use params::{CallbackEvents, FragmentedScanMode, ScanParams};
 
 #[cfg(feature = "process")]
 mod process;
@@ -740,11 +740,11 @@ impl Inner {
 
             match res {
                 Ok(()) => {
-                    handle_already_matched_rules_and_callback(scan_data)?;
+                    scan_data.handle_already_matched_rules_and_callback()?;
                     return Ok(());
                 }
                 Err(EvalError::Timeout) => {
-                    handle_already_matched_rules_and_callback(scan_data)?;
+                    scan_data.handle_already_matched_rules_and_callback()?;
                     return Err(ScanError::Timeout);
                 }
                 Err(EvalError::CallbackAbort) => {
@@ -792,7 +792,7 @@ impl Inner {
         // If there is a callback, we need to call it for every global matched rule.
         // This was delayed since a single global rule non matching would invalidate
         // all the previous ones.
-        handle_already_matched_rules_and_callback(scan_data)?;
+        scan_data.handle_already_matched_rules_and_callback()?;
 
         // Evaluate all non global rules.
         for rule in &self.rules {
@@ -928,29 +928,6 @@ impl Inner {
     }
 }
 
-// Call the callback on all the already matched rules.
-//
-// Sometimes, it is necessary to evaluate rules while delaying their
-// statuses of "matched rules", because this status can become invalid.
-// For example, when evaluating global rules, or when evaluating without
-// the variable scan.
-//
-// When this happens, matched rules are accumulated as if no callbacks
-// was specified. Once those matched rules are validated, the callback,
-// if it exists, must be called.
-fn handle_already_matched_rules_and_callback(scan_data: &mut ScanData) -> Result<(), ScanError> {
-    if let Some(cb) = &mut scan_data.callback {
-        for matched_rule in scan_data.matched_rules.drain(..) {
-            match (cb)(ScanEvent::RuleMatch(matched_rule)) {
-                ScanCallbackResult::Continue => (),
-                ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// Context used when evaluating all the rules.
 ///
 /// This struct is used to hold all the data that needs to be updated
@@ -1053,10 +1030,14 @@ impl EvalContext {
                 var_matches.unwrap_or_default(),
             );
             match &mut scan_data.callback {
-                Some(cb) if call_callback => match (cb)(ScanEvent::RuleMatch(matched_rule)) {
-                    ScanCallbackResult::Continue => (),
-                    ScanCallbackResult::Abort => return Err(EvalError::CallbackAbort),
-                },
+                Some(cb) if call_callback => {
+                    if (scan_data.params.callback_events & CallbackEvents::RULE_MATCH) != 0 {
+                        match (cb)(ScanEvent::RuleMatch(matched_rule)) {
+                            ScanCallbackResult::Continue => (),
+                            ScanCallbackResult::Abort => return Err(EvalError::CallbackAbort),
+                        }
+                    }
+                }
                 Some(_) | None => scan_data.matched_rules.push(matched_rule),
             }
         }
@@ -1155,16 +1136,50 @@ impl ScanData<'_, '_, '_> {
             .is_some_and(TimeoutChecker::check_timeout)
     }
 
+    // Call the callback on all the already matched rules.
+    //
+    // Sometimes, it is necessary to evaluate rules while delaying their
+    // statuses of "matched rules", because this status can become invalid.
+    // For example, when evaluating global rules, or when evaluating without
+    // the variable scan.
+    //
+    // When this happens, matched rules are accumulated as if no callbacks
+    // was specified. Once those matched rules are validated, the callback,
+    // if it exists, must be called.
+    fn handle_already_matched_rules_and_callback(&mut self) -> Result<(), ScanError> {
+        let Some(cb) = &mut self.callback else {
+            return Ok(());
+        };
+        if (self.params.callback_events & CallbackEvents::RULE_MATCH) == 0 {
+            self.matched_rules.clear();
+            return Ok(());
+        }
+
+        for matched_rule in self.matched_rules.drain(..) {
+            match (cb)(ScanEvent::RuleMatch(matched_rule)) {
+                ScanCallbackResult::Continue => (),
+                ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
+            }
+        }
+
+        Ok(())
+    }
+
     fn send_module_import_events_to_cb(&mut self) -> Result<(), ScanError> {
-        if let Some(cb) = &mut self.callback {
-            for (module_name, dynamic_values) in &self.module_values.values {
-                match (cb)(ScanEvent::ModuleImport {
-                    module_name,
-                    dynamic_values,
-                }) {
-                    ScanCallbackResult::Continue => (),
-                    ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
-                }
+        let Some(cb) = &mut self.callback else {
+            return Ok(());
+        };
+        if (self.params.callback_events & CallbackEvents::MODULE_IMPORT) == 0 {
+            return Ok(());
+        }
+
+        for (module_name, dynamic_values) in &self.module_values.values {
+            match (cb)(ScanEvent::ModuleImport {
+                module_name,
+                dynamic_values,
+            }) {
+                ScanCallbackResult::Continue => (),
+                ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
             }
         }
 
