@@ -18,8 +18,8 @@ const TIMEOUT_COND: &str = r#"
 "#;
 
 #[track_caller]
-fn check_rule_match(event: &ScanEvent, rule_name: &str, namespace: Option<&str>) {
-    let res = match event {
+fn check_rule_match(event: ScanEvent, rule_name: &str, namespace: Option<&str>) {
+    let res = match &event {
         ScanEvent::RuleMatch(m) => m.name == rule_name && m.namespace == namespace,
         evt => panic!("unexpected event {:?}", evt),
     };
@@ -30,34 +30,36 @@ fn check_rule_match(event: &ScanEvent, rule_name: &str, namespace: Option<&str>)
     );
 }
 
-fn scan_mem<'scanner>(scanner: &'scanner Scanner, mem: &[u8]) -> Vec<ScanEvent<'scanner>> {
-    let mut events = Vec::new();
+fn scan_mem<F>(scanner: &Scanner, mem: &[u8], expected_number: u32, checker: F)
+where
+    F: Fn(ScanEvent, u32) + Sync,
+{
+    let mut counter = 0;
     scanner
         .scan_mem_with_callback(mem, |event| {
-            events.push(event);
+            checker(event, counter);
+            counter += 1;
             ScanCallbackResult::Continue
         })
         .unwrap();
-    events
+    assert_eq!(counter, expected_number);
 }
 
-fn scan_mem_with_abort<'scanner>(
-    scanner: &'scanner Scanner,
-    mem: &[u8],
-    mut abort_on_event_number: u32,
-) -> Vec<ScanEvent<'scanner>> {
-    let mut events = Vec::new();
+fn scan_mem_with_abort<F>(scanner: &Scanner, mem: &[u8], abort_on_event_number: u32, checker: F)
+where
+    F: Fn(ScanEvent, u32) + Sync,
+{
+    let mut counter = 0;
     let res = scanner.scan_mem_with_callback(mem, |event| {
-        events.push(event);
-        if abort_on_event_number > 0 {
-            abort_on_event_number -= 1;
+        checker(event, counter);
+        if counter < abort_on_event_number {
+            counter += 1;
             ScanCallbackResult::Continue
         } else {
             ScanCallbackResult::Abort
         }
     });
     assert!(matches!(res, Err(ScanError::CallbackAbort)));
-    events
 }
 
 #[test]
@@ -79,14 +81,17 @@ rule c {
         .unwrap();
     let scanner = compiler.into_scanner();
 
-    let events = scan_mem(&scanner, b"<abcdef>");
-    assert_eq!(events.len(), 2);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "c", None);
+    scan_mem(&scanner, b"<abcdef>", 2, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "c", None);
+        }
+    });
 
-    let events = scan_mem(&scanner, b"<abef>");
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    scan_mem(&scanner, b"<abef>", 1, |event, _nb| {
+        check_rule_match(event, "a", None);
+    });
 }
 
 #[test]
@@ -118,22 +123,27 @@ rule c {
         .unwrap();
     let scanner = compiler.into_scanner();
 
-    let events = scan_mem(&scanner, b"<abc>");
-    assert_eq!(events.len(), 0);
+    scan_mem(&scanner, b"<abc>", 0, |_, _| panic!());
 
-    let events = scan_mem(&scanner, b"<abcdef>");
-    assert_eq!(events.len(), 2);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
+    scan_mem(&scanner, b"<abcdef>", 2, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        }
+    });
 
-    let events = scan_mem(&scanner, b"<abcdefghi>");
-    assert_eq!(events.len(), 3);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
-    check_rule_match(&events[2], "c", None);
+    scan_mem(&scanner, b"<abcdefghi>", 3, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_match(event, "c", None);
+        }
+    });
 
-    let events = scan_mem(&scanner, b"<defghi>");
-    assert_eq!(events.len(), 0);
+    scan_mem(&scanner, b"<defghi>", 0, |_, _| panic!());
 }
 
 #[test]
@@ -150,20 +160,26 @@ rule c { condition: filesize > 7 }
         .unwrap();
     let scanner = compiler.into_scanner();
 
-    let events = scan_mem(&scanner, b"12");
-    assert_eq!(events.len(), 0);
-    let events = scan_mem(&scanner, b"123");
-    assert_eq!(events.len(), 0);
-    let events = scan_mem(&scanner, b"12345");
-    assert_eq!(events.len(), 2);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
+    scan_mem(&scanner, b"12", 0, |_, _| panic!());
+    scan_mem(&scanner, b"123", 0, |_, _| panic!());
 
-    let events = scan_mem(&scanner, b"12345678");
-    assert_eq!(events.len(), 3);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
-    check_rule_match(&events[2], "c", None);
+    scan_mem(&scanner, b"12345", 2, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        }
+    });
+
+    scan_mem(&scanner, b"12345678", 3, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_match(event, "c", None);
+        }
+    });
 }
 
 #[test]
@@ -184,15 +200,18 @@ rule b { condition: filesize >= 3 }
     scanner
         .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
 
-    let mut events = Vec::new();
+    let mut counter = 0;
     let res = scanner.scan_mem_with_callback(b"123", |event| {
-        events.push(event);
+        if counter == 0 {
+            check_rule_match(event, "a", None);
+        } else if counter == 1 {
+            check_rule_match(event, "b", None);
+        }
+        counter += 1;
         ScanCallbackResult::Continue
     });
     assert!(matches!(res, Err(ScanError::Timeout)));
-    assert_eq!(events.len(), 2);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
+    assert_eq!(counter, 2);
 }
 
 #[test]
@@ -215,27 +234,39 @@ rule d { condition: true }
         .unwrap();
     let scanner = compiler.into_scanner();
 
-    let events = scan_mem_with_abort(&scanner, b"abc", 0);
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    scan_mem_with_abort(&scanner, b"abc", 0, |event, _nb| {
+        check_rule_match(event, "a", None);
+    });
 
-    let events = scan_mem_with_abort(&scanner, b"abc", 1);
-    assert_eq!(events.len(), 2);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
+    scan_mem_with_abort(&scanner, b"abc", 1, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        }
+    });
 
-    let events = scan_mem_with_abort(&scanner, b"abc", 2);
-    assert_eq!(events.len(), 3);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
-    check_rule_match(&events[2], "c", None);
+    scan_mem_with_abort(&scanner, b"abc", 2, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_match(event, "c", None);
+        }
+    });
 
-    let events = scan_mem_with_abort(&scanner, b"abc", 3);
-    assert_eq!(events.len(), 4);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
-    check_rule_match(&events[2], "c", None);
-    check_rule_match(&events[3], "d", None);
+    scan_mem_with_abort(&scanner, b"abc", 3, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_match(event, "c", None);
+        } else if nb == 3 {
+            check_rule_match(event, "d", None);
+        }
+    });
 }
 
 #[test]
@@ -253,27 +284,39 @@ rule d { condition: true }
         .unwrap();
     let scanner = compiler.into_scanner();
 
-    let events = scan_mem_with_abort(&scanner, b"", 0);
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    scan_mem_with_abort(&scanner, b"", 0, |event, _nb| {
+        check_rule_match(event, "a", None);
+    });
 
-    let events = scan_mem_with_abort(&scanner, b"", 1);
-    assert_eq!(events.len(), 2);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
+    scan_mem_with_abort(&scanner, b"", 1, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        }
+    });
 
-    let events = scan_mem_with_abort(&scanner, b"", 2);
-    assert_eq!(events.len(), 3);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
-    check_rule_match(&events[2], "c", None);
+    scan_mem_with_abort(&scanner, b"", 2, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_match(event, "c", None);
+        }
+    });
 
-    let events = scan_mem_with_abort(&scanner, b"", 3);
-    assert_eq!(events.len(), 4);
-    check_rule_match(&events[0], "a", None);
-    check_rule_match(&events[1], "b", None);
-    check_rule_match(&events[2], "c", None);
-    check_rule_match(&events[3], "d", None);
+    scan_mem_with_abort(&scanner, b"", 3, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_match(event, "c", None);
+        } else if nb == 3 {
+            check_rule_match(event, "d", None);
+        }
+    });
 }
 
 #[test]
@@ -291,9 +334,9 @@ fn test_scan_mem_with_callback_abort_timeout() {
     scanner
         .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
 
-    let events = scan_mem_with_abort(&scanner, b"", 0);
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    scan_mem_with_abort(&scanner, b"", 0, |event, _nb| {
+        check_rule_match(event, "a", None);
+    });
 }
 
 #[test]
@@ -304,24 +347,24 @@ fn test_scan_file_with_callback() {
         .unwrap();
     let scanner = compiler.into_scanner();
 
-    let mut events = Vec::new();
-    let res = scanner.scan_file_with_callback("not_existing", |event| {
-        events.push(event);
+    let mut counter = 0;
+    let res = scanner.scan_file_with_callback("not_existing", |_event| {
+        counter += 1;
         ScanCallbackResult::Continue
     });
     assert!(matches!(res, Err(ScanError::CannotReadFile(_))));
-    assert_eq!(events.len(), 0);
+    assert_eq!(counter, 0);
 
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut events = Vec::new();
+    let mut counter = 0;
     scanner
         .scan_file_with_callback(&file, |event| {
-            events.push(event);
+            check_rule_match(event, "a", None);
+            counter += 1;
             ScanCallbackResult::Continue
         })
         .unwrap();
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    assert_eq!(counter, 1);
 }
 
 #[test]
@@ -333,29 +376,29 @@ fn test_scan_file_memmap_with_callback() {
         .unwrap();
     let scanner = compiler.into_scanner();
 
-    let mut events = Vec::new();
+    let mut counter = 0;
     // Safety: testing
     let res = unsafe {
-        scanner.scan_file_memmap_with_callback("not_existing", |event| {
-            events.push(event);
+        scanner.scan_file_memmap_with_callback("not_existing", |_event| {
+            counter += 1;
             ScanCallbackResult::Continue
         })
     };
     assert!(matches!(res, Err(ScanError::CannotReadFile(_))));
-    assert_eq!(events.len(), 0);
+    assert_eq!(counter, 0);
 
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut events = Vec::new();
+    let mut counter = 0;
     // Safety: testing
     unsafe {
         scanner.scan_file_memmap_with_callback(&file, |event| {
-            events.push(event);
+            check_rule_match(event, "a", None);
+            counter += 1;
             ScanCallbackResult::Continue
         })
     }
     .unwrap();
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    assert_eq!(counter, 1);
 }
 
 #[test]
@@ -380,15 +423,15 @@ rule a {
         (0x1000, Some(b"<abc>")),
         (0x2000, Some(b"def")),
     ];
-    let mut events = Vec::new();
+    let mut counter = 0;
     scanner
         .scan_fragmented_with_callback(FragmentedSlices::new(regions), |event| {
-            events.push(event);
+            check_rule_match(event, "a", None);
+            counter += 1;
             ScanCallbackResult::Continue
         })
         .unwrap();
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    assert_eq!(counter, 1);
 }
 
 #[test]
@@ -414,13 +457,13 @@ rule a {
     let scanner = compiler.into_scanner();
 
     let helper = BinHelper::run("stack");
-    let mut events = Vec::new();
+    let mut counter = 0;
     scanner
         .scan_process_with_callback(helper.pid(), |event| {
-            events.push(event);
+            check_rule_match(event, "a", None);
+            counter += 1;
             ScanCallbackResult::Continue
         })
         .unwrap();
-    assert_eq!(events.len(), 1);
-    check_rule_match(&events[0], "a", None);
+    assert_eq!(counter, 1);
 }
