@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use boreal::compiler::CompilerBuilder;
 use boreal::module::Value;
-use boreal::scanner::{FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent, ScanParams};
+use boreal::scanner::{
+    CallbackEvents, FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent, ScanParams,
+};
 use boreal::{Compiler, Scanner};
 
 use crate::utils::FragmentedSlices;
@@ -517,7 +519,12 @@ rule a {
 "#,
         )
         .unwrap();
-    compiler.into_scanner()
+    let mut scanner = compiler.into_scanner();
+    scanner.set_scan_params(
+        ScanParams::default()
+            .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT),
+    );
+    scanner
 }
 
 #[test]
@@ -568,7 +575,13 @@ fn test_module_import_event_fragmented() {
 
     let mut scanner = get_module_import_scanner();
     check_fragmented(&scanner, false);
-    scanner.set_scan_params(ScanParams::default().fragmented_scan_mode(FragmentedScanMode::fast()));
+    // TODO: add an update scan params method?
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .fragmented_scan_mode(FragmentedScanMode::fast()),
+    );
     check_fragmented(&scanner, true);
 }
 
@@ -585,4 +598,50 @@ fn test_module_import_abort() {
         ScanCallbackResult::Abort
     });
     assert!(matches!(res, Err(ScanError::CallbackAbort)));
+}
+
+#[test]
+fn test_callback_events_param() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+import "time"
+
+global rule a {
+    strings:
+        $ = "abc"
+    condition:
+        any of them
+}
+rule b {
+    strings:
+        $ = "def"
+    condition:
+        any of them
+}
+"#,
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    // By default, we get rule match, but not module import
+    scan_mem(&scanner, b"abcdef", 2, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_match(event, "b", None);
+        }
+    });
+
+    // We can change this
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(CallbackEvents::MODULE_IMPORT),
+    );
+    scan_mem(&scanner, b"", 1, |event, _nb| {
+        check_module_import(event, "time", None);
+    });
 }
