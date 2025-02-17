@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use boreal::scanner::{ScanCallbackResult, ScanError, ScanEvent, ScanParams};
+use boreal::compiler::CompilerBuilder;
+use boreal::module::Value;
+use boreal::scanner::{FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent, ScanParams};
 use boreal::{Compiler, Scanner};
 
 use crate::utils::FragmentedSlices;
@@ -30,6 +32,30 @@ fn check_rule_match(event: ScanEvent, rule_name: &str, namespace: Option<&str>) 
     );
 }
 
+#[track_caller]
+fn check_module_import(
+    event: ScanEvent,
+    expected_module_name: &str,
+    dynamic_value_field: Option<&str>,
+) {
+    match &event {
+        ScanEvent::ModuleImport {
+            module_name,
+            dynamic_values,
+        } => {
+            assert_eq!(*module_name, expected_module_name);
+            match dynamic_values {
+                Value::Object(obj) => match dynamic_value_field {
+                    Some(field) => assert!(obj.contains_key(field)),
+                    None => assert_eq!(obj.len(), 0),
+                },
+                _ => panic!("invalid dynamic values {:?}", dynamic_values),
+            }
+        }
+        evt => panic!("unexpected event {:?}", evt),
+    }
+}
+
 fn scan_mem<F>(scanner: &Scanner, mem: &[u8], expected_number: u32, checker: F)
 where
     F: Fn(ScanEvent, u32) + Sync,
@@ -50,16 +76,19 @@ where
     F: Fn(ScanEvent, u32) + Sync,
 {
     let mut counter = 0;
-    let res = scanner.scan_mem_with_callback(mem, |event| {
-        checker(event, counter);
-        if counter < abort_on_event_number {
-            counter += 1;
-            ScanCallbackResult::Continue
-        } else {
-            ScanCallbackResult::Abort
-        }
-    });
-    assert!(matches!(res, Err(ScanError::CallbackAbort)));
+    let res = scanner
+        .scan_mem_with_callback(mem, |event| {
+            checker(event, counter);
+            if counter < abort_on_event_number {
+                counter += 1;
+                ScanCallbackResult::Continue
+            } else {
+                ScanCallbackResult::Abort
+            }
+        })
+        .unwrap_err();
+    assert!(matches!(res, ScanError::CallbackAbort));
+    assert_eq!(res.to_string(), "scan aborted in callback");
 }
 
 #[test]
@@ -466,4 +495,94 @@ rule a {
         })
         .unwrap();
     assert_eq!(counter, 1);
+}
+
+fn get_module_import_scanner() -> Scanner {
+    let mut compiler = CompilerBuilder::new()
+        .add_module(super::module_tests::Tests)
+        .build();
+
+    compiler
+        .add_rules_str(
+            r#"
+import "tests"
+import "time"
+
+rule a {
+    strings:
+        $ = "abc"
+    condition:
+        any of them
+}
+"#,
+        )
+        .unwrap();
+    compiler.into_scanner()
+}
+
+#[test]
+fn test_module_import_event() {
+    let scanner = get_module_import_scanner();
+
+    scan_mem(&scanner, b"abc", 3, |event, nb| {
+        if nb == 0 {
+            check_module_import(event, "tests", Some("length"));
+        } else if nb == 1 {
+            check_module_import(event, "time", None);
+        } else if nb == 2 {
+            check_rule_match(event, "a", None);
+        }
+    });
+}
+
+#[test]
+fn test_module_import_event_fragmented() {
+    fn check_fragmented(scanner: &Scanner, fast_mode: bool) {
+        let regions = &[
+            (0, Some(b"zyx".as_slice())),
+            (0x1000, Some(b"<abc>")),
+            (0x2000, Some(b"def")),
+        ];
+
+        let mut counter = 0;
+        scanner
+            .scan_fragmented_with_callback(FragmentedSlices::new(regions), |event| {
+                if counter == 0 {
+                    // In fast mode, there is no dynamic values
+                    check_module_import(
+                        event,
+                        "tests",
+                        if fast_mode { None } else { Some("length") },
+                    );
+                } else if counter == 1 {
+                    check_module_import(event, "time", None);
+                } else if counter == 2 {
+                    check_rule_match(event, "a", None);
+                }
+                counter += 1;
+                ScanCallbackResult::Continue
+            })
+            .unwrap();
+        assert_eq!(counter, 3);
+    }
+
+    let mut scanner = get_module_import_scanner();
+    check_fragmented(&scanner, false);
+    scanner.set_scan_params(ScanParams::default().fragmented_scan_mode(FragmentedScanMode::fast()));
+    check_fragmented(&scanner, true);
+}
+
+#[test]
+fn test_module_import_abort() {
+    let scanner = get_module_import_scanner();
+
+    scan_mem_with_abort(&scanner, b"", 0, |event, _nb| {
+        check_module_import(event, "tests", Some("length"));
+    });
+    let regions = &[(0, Some(b"zyx".as_slice())), (0x1000, Some(b"<abc>"))];
+    let res = scanner.scan_fragmented_with_callback(FragmentedSlices::new(regions), |event| {
+        check_module_import(event, "tests", Some("length"));
+        ScanCallbackResult::Abort
+    });
+    assert!(matches!(res, Err(ScanError::CallbackAbort)));
 }

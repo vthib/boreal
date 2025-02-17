@@ -109,9 +109,17 @@ pub struct Scanner {
 /// compatibility. It is recommended to always return Continue on unknown events.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum ScanEvent<'scanner> {
+pub enum ScanEvent<'scanner, 'a> {
     /// A rule has been matched.
     RuleMatch(MatchedRule<'scanner>),
+    /// A module has been imported.
+    ModuleImport {
+        /// Name of the module.
+        module_name: &'static str,
+
+        /// Dynamic values produced by this module.
+        dynamic_values: &'a crate::module::Value,
+    },
 }
 
 /// List of result statuses that a scan callback can return.
@@ -213,7 +221,7 @@ impl Scanner {
         callback: F,
     ) -> Result<(), ScanError>
     where
-        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+        F: for<'a> FnMut(ScanEvent<'scanner, 'a>) -> ScanCallbackResult + Send + Sync + 'cb,
     {
         self.inner.scan_with_callback(
             Memory::Direct(mem),
@@ -258,7 +266,7 @@ impl Scanner {
     ) -> Result<(), ScanError>
     where
         P: AsRef<std::path::Path>,
-        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+        F: for<'a> FnMut(ScanEvent<'scanner, 'a>) -> ScanCallbackResult + Send + Sync + 'cb,
     {
         match std::fs::read(path.as_ref()) {
             Ok(contents) => self.scan_mem_with_callback(&contents, callback),
@@ -318,7 +326,7 @@ impl Scanner {
     ) -> Result<(), ScanError>
     where
         P: AsRef<std::path::Path>,
-        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+        F: for<'a> FnMut(ScanEvent<'scanner, 'a>) -> ScanCallbackResult + Send + Sync + 'cb,
     {
         match std::fs::File::open(path.as_ref()).and_then(|file| {
             // Safety: guaranteed by the safety contract of this function
@@ -381,7 +389,7 @@ impl Scanner {
         callback: F,
     ) -> Result<(), ScanError>
     where
-        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+        F: for<'a> FnMut(ScanEvent<'scanner, 'a>) -> ScanCallbackResult + Send + Sync + 'cb,
     {
         let memory = process::process_memory(pid)?;
 
@@ -443,7 +451,7 @@ impl Scanner {
     ) -> Result<(), ScanError>
     where
         T: FragmentedMemory,
-        F: FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb,
+        F: for<'a> FnMut(ScanEvent<'scanner, 'a>) -> ScanCallbackResult + Send + Sync + 'cb,
     {
         self.inner.scan_with_callback(
             Memory::new_fragmented(Box::new(obj), self.scan_params.to_memory_params()),
@@ -715,6 +723,8 @@ impl Inner {
                 &self.modules,
                 scan_data.params.process_memory,
             );
+
+            scan_data.send_module_import_events_to_cb()?;
         }
 
         if can_use_no_scan_optimization(scan_data) {
@@ -904,6 +914,8 @@ impl Inner {
                         );
                     }
                 }
+
+                scan_data.send_module_import_events_to_cb()?;
             }
         }
 
@@ -1064,7 +1076,7 @@ fn can_use_no_scan_optimization(scan_data: &ScanData) -> bool {
 }
 
 type ScanCallback<'scanner, 'cb> =
-    Box<dyn FnMut(ScanEvent<'scanner>) -> ScanCallbackResult + Send + Sync + 'cb>;
+    Box<dyn for<'a> FnMut(ScanEvent<'scanner, 'a>) -> ScanCallbackResult + Send + Sync + 'cb>;
 
 pub(crate) struct ScanData<'scanner, 'mem, 'cb> {
     /// Memory to scan,
@@ -1141,6 +1153,22 @@ impl ScanData<'_, '_, '_> {
         self.timeout_checker
             .as_mut()
             .is_some_and(TimeoutChecker::check_timeout)
+    }
+
+    fn send_module_import_events_to_cb(&mut self) -> Result<(), ScanError> {
+        if let Some(cb) = &mut self.callback {
+            for (module_name, dynamic_values) in &self.module_values.values {
+                match (cb)(ScanEvent::ModuleImport {
+                    module_name,
+                    dynamic_values,
+                }) {
+                    ScanCallbackResult::Continue => (),
+                    ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
