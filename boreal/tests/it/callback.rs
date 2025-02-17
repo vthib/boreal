@@ -641,7 +641,7 @@ rule b {
             .clone()
             .callback_events(CallbackEvents::MODULE_IMPORT),
     );
-    scan_mem(&scanner, b"", 1, |event, _nb| {
+    scan_mem(&scanner, b"abcdef", 1, |event, _nb| {
         check_module_import(event, "time", None);
     });
 }

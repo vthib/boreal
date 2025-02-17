@@ -37,21 +37,7 @@ pub struct ScanParams {
     pub(crate) memory_chunk_size: Option<usize>,
 
     /// Bitflag of which events are enabled in the scan callback.
-    pub(crate) callback_events: u32,
-}
-
-/// Bitflag values of callback events.
-///
-/// See [`ScanParams::callback_events`] for more details.
-// TODO: impl bitflags operations on it?
-#[derive(Copy, Clone, Debug)]
-pub enum CallbackEvents {}
-
-impl CallbackEvents {
-    /// Enables the [`crate::scanner::ScanEvents::RuleMatch`] events.
-    pub const RULE_MATCH: u32 = 0b0001;
-    /// Enables  the [`crate::scanner::ScanEvents::ModuleImport`] events.
-    pub const MODULE_IMPORT: u32 = 0b0010;
+    pub(crate) callback_events: CallbackEvents,
 }
 
 /// Scan mode to use on fragmented memory, including process scanning.
@@ -378,14 +364,16 @@ impl ScanParams {
     /// enum to enable additional events.
     ///
     /// ```
-    /// ScanParams::default()
-    ///     .callback_events(
-    ///         CallbackEvents::RULE_MATCH
-    ///       | CallbackEvents::MODULE_IMPORT
-    ///     );
+    /// use boreal::scanner::{CallbackEvents, ScanParams};
+    /// # let mut scanner = boreal::Compiler::new().into_scanner();
+    ///
+    /// scanner.set_scan_params(
+    ///     ScanParams::default()
+    ///         .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT),
+    /// );
     /// ```
     #[must_use]
-    pub fn callback_events(mut self, callback_events: u32) -> Self {
+    pub fn callback_events(mut self, callback_events: CallbackEvents) -> Self {
         self.callback_events = callback_events;
         self
     }
@@ -446,7 +434,7 @@ impl ScanParams {
 
     /// Returns the bitflag of which events are enabled in the scan callback.
     #[must_use]
-    pub fn get_callback_events(&self) -> u32 {
+    pub fn get_callback_events(&self) -> CallbackEvents {
         self.callback_events
     }
 
@@ -456,6 +444,47 @@ impl ScanParams {
             memory_chunk_size: self.memory_chunk_size,
             can_refetch_regions: self.fragmented_scan_mode.can_refetch_regions,
         }
+    }
+}
+
+/// Bitflag values of callback events.
+///
+/// See [`ScanParams::callback_events`] for more details.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct CallbackEvents(pub(crate) u32);
+
+impl CallbackEvents {
+    /// Enables the [`crate::scanner::ScanEvent::RuleMatch`] events.
+    pub const RULE_MATCH: CallbackEvents = CallbackEvents(0b0001);
+    /// Enables  the [`crate::scanner::ScanEvent::ModuleImport`] events.
+    pub const MODULE_IMPORT: CallbackEvents = CallbackEvents(0b0010);
+}
+
+impl std::ops::BitOr for CallbackEvents {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+impl std::ops::BitAnd for CallbackEvents {
+    type Output = Self;
+
+    fn bitand(self, other: Self) -> Self {
+        Self(self.0 & other.0)
+    }
+}
+
+impl std::ops::BitOrAssign for CallbackEvents {
+    fn bitor_assign(&mut self, other: Self) {
+        self.0.bitor_assign(other.0);
+    }
+}
+
+impl std::ops::BitAndAssign for CallbackEvents {
+    fn bitand_assign(&mut self, other: Self) {
+        self.0.bitand_assign(other.0);
     }
 }
 
@@ -502,5 +531,28 @@ mod tests {
             params.get_fragmented_scan_mode(),
             FragmentedScanMode::fast()
         );
+
+        let params =
+            params.callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT);
+        assert_eq!(
+            params.get_callback_events(),
+            CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT
+        );
+    }
+
+    #[test]
+    fn test_callback_events_ops() {
+        let a = CallbackEvents::RULE_MATCH;
+        let b = CallbackEvents::MODULE_IMPORT;
+
+        assert_eq!(a | b, CallbackEvents(0b11));
+        assert_eq!(a & b, CallbackEvents(0b00));
+
+        let mut c = a;
+        c |= b;
+        assert_eq!(c, CallbackEvents(0b11));
+        assert_eq!(c & a, CallbackEvents(0b01));
+        c &= b;
+        assert_eq!(c, CallbackEvents(0b10));
     }
 }

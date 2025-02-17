@@ -1031,7 +1031,7 @@ impl EvalContext {
             );
             match &mut scan_data.callback {
                 Some(cb) if call_callback => {
-                    if (scan_data.params.callback_events & CallbackEvents::RULE_MATCH) != 0 {
+                    if (scan_data.params.callback_events & CallbackEvents::RULE_MATCH).0 != 0 {
                         match (cb)(ScanEvent::RuleMatch(matched_rule)) {
                             ScanCallbackResult::Continue => (),
                             ScanCallbackResult::Abort => return Err(EvalError::CallbackAbort),
@@ -1150,7 +1150,7 @@ impl ScanData<'_, '_, '_> {
         let Some(cb) = &mut self.callback else {
             return Ok(());
         };
-        if (self.params.callback_events & CallbackEvents::RULE_MATCH) == 0 {
+        if (self.params.callback_events & CallbackEvents::RULE_MATCH).0 == 0 {
             self.matched_rules.clear();
             return Ok(());
         }
@@ -1169,7 +1169,7 @@ impl ScanData<'_, '_, '_> {
         let Some(cb) = &mut self.callback else {
             return Ok(());
         };
-        if (self.params.callback_events & CallbackEvents::MODULE_IMPORT) == 0 {
+        if (self.params.callback_events & CallbackEvents::MODULE_IMPORT).0 == 0 {
             return Ok(());
         }
 
