@@ -19,7 +19,9 @@ use std::time::Duration;
 
 use boreal::compiler::{CompilerBuilder, CompilerProfile, ExternalValue};
 use boreal::module::{Console, Value as ModuleValue};
-use boreal::scanner::{FragmentedScanMode, ScanError, ScanParams, ScanResult};
+use boreal::scanner::{
+    CallbackEvents, FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent, ScanParams,
+};
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
 
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
@@ -455,13 +457,24 @@ fn send_directory(path: &Path, args: &ArgMatches, sender: &Sender<PathBuf>) {
 }
 
 fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
+    let enable_stats = args.get_flag("scan_statistics");
+
+    let mut callback_events = CallbackEvents::RULE_MATCH;
+    if args.get_flag("print_module_data") {
+        callback_events |= CallbackEvents::MODULE_IMPORT;
+    }
+    if enable_stats {
+        callback_events |= CallbackEvents::SCAN_STATISTICS;
+    }
+
     let mut scan_params = ScanParams::default()
-        .compute_statistics(args.get_flag("scan_statistics"))
+        .compute_statistics(enable_stats)
         .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied())
         .timeout_duration(
             args.get_one::<u64>("timeout")
                 .map(|s| Duration::from_secs(*s)),
-        );
+        )
+        .callback_events(callback_events);
 
     if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
         scan_params = scan_params.max_fetched_region_size(*size);
@@ -517,7 +530,6 @@ fn parse_compiler_profile(profile: &str) -> Result<CompilerProfile, String> {
 
 #[derive(Clone, Debug)]
 struct ScanOptions {
-    print_module_data: bool,
     print_strings_matches_data: bool,
     print_string_length: bool,
     print_metadata: bool,
@@ -531,7 +543,6 @@ struct ScanOptions {
 impl ScanOptions {
     fn new(args: &ArgMatches) -> Self {
         Self {
-            print_module_data: args.get_flag("print_module_data"),
             print_strings_matches_data: args.get_flag("print_strings"),
             print_string_length: args.get_flag("print_string_length"),
             print_metadata: args.get_flag("print_metadata"),
@@ -553,107 +564,98 @@ impl ScanOptions {
 }
 
 fn scan_file(scanner: &Scanner, path: &Path, options: &ScanOptions) -> Result<(), ScanError> {
-    let res = if cfg!(feature = "memmap") && !options.no_mmap {
+    let what = path.display().to_string();
+
+    if cfg!(feature = "memmap") && !options.no_mmap {
         // Safety: By default, we accept that this CLI tool can abort if the underlying
         // file is truncated while the scan is ongoing.
-        unsafe { scanner.scan_file_memmap(path) }
+        unsafe {
+            scanner.scan_file_memmap_with_callback(path, |event| {
+                display_event(scanner, event, &what, options);
+                ScanCallbackResult::Continue
+            })
+        }
     } else {
-        scanner.scan_file(path)
-    };
-
-    let what = path.display().to_string();
-    match res {
-        Ok(res) => {
-            display_scan_results(scanner, res, &what, options);
-            Ok(())
-        }
-        Err((err, res)) => {
-            display_scan_results(scanner, res, &what, options);
-            Err(err)
-        }
+        scanner.scan_file_with_callback(path, |event| {
+            display_event(scanner, event, &what, options);
+            ScanCallbackResult::Continue
+        })
     }
 }
 
 fn scan_process(scanner: &Scanner, pid: u32, options: &ScanOptions) -> Result<(), ScanError> {
     let what = pid.to_string();
-    match scanner.scan_process(pid) {
-        Ok(res) => {
-            display_scan_results(scanner, res, &what, options);
-            Ok(())
-        }
-        Err((err, res)) => {
-            display_scan_results(scanner, res, &what, options);
-            Err(err)
-        }
-    }
+    scanner.scan_process_with_callback(pid, |event| {
+        display_event(scanner, event, &what, options);
+        ScanCallbackResult::Continue
+    })
 }
 
-fn display_scan_results(scanner: &Scanner, res: ScanResult, what: &str, options: &ScanOptions) {
-    // Print module data first
-    if options.print_module_data {
-        for (module_name, module_value) in res.module_values {
-            // A module value must be an object. Filter out empty ones, it means the module has not
-            // generated any values.
-            if let ModuleValue::Object(map) = &module_value {
-                if !map.is_empty() {
-                    print!("{module_name}");
-                    print_module_value(&module_value, 4);
-                }
-            }
-        }
-    }
-
+fn display_event(scanner: &Scanner, event: ScanEvent, what: &str, options: &ScanOptions) {
     // Lock stdout to avoid having multiple threads interlap their writes
     let mut stdout = std::io::stdout().lock();
 
-    // Then, print matching rules.
-    for rule in res.matched_rules {
-        if let Some(id) = options.identifier.as_ref() {
-            if rule.name != id {
-                continue;
+    match event {
+        ScanEvent::RuleMatch(rule) => {
+            if let Some(id) = options.identifier.as_ref() {
+                if rule.name != id {
+                    return;
+                }
             }
-        }
-        if let Some(tag) = options.tag.as_ref() {
-            if rule.tags.iter().all(|t| t != tag) {
-                continue;
+            if let Some(tag) = options.tag.as_ref() {
+                if rule.tags.iter().all(|t| t != tag) {
+                    return;
+                }
             }
-        }
 
-        // <rule_namespace>:<rule_name> [<ruletags>] <matched object>
-        if options.print_namespace {
-            write!(stdout, "{}:", rule.namespace.unwrap_or("default")).unwrap();
-        }
-        write!(stdout, "{}", &rule.name).unwrap();
-        if options.print_tags {
-            write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
-        }
-        if options.print_metadata {
-            print_metadata(&mut stdout, scanner, rule.metadatas);
-        }
-        writeln!(stdout, " {what}").unwrap();
+            // <rule_namespace>:<rule_name> [<ruletags>] <matched object>
+            if options.print_namespace {
+                write!(stdout, "{}:", rule.namespace.unwrap_or("default")).unwrap();
+            }
+            write!(stdout, "{}", &rule.name).unwrap();
+            if options.print_tags {
+                write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
+            }
+            if options.print_metadata {
+                print_metadata(&mut stdout, scanner, rule.metadatas);
+            }
+            writeln!(stdout, " {what}").unwrap();
 
-        if options.print_strings_matches() {
-            for string in &rule.matches {
-                for m in &string.matches {
-                    // <offset>:<length>:<name>: <match>
-                    write!(stdout, "0x{:x}:", m.base + m.offset).unwrap();
-                    if options.print_string_length {
-                        write!(stdout, "{}:", m.length).unwrap();
+            if options.print_strings_matches() {
+                for string in &rule.matches {
+                    for m in &string.matches {
+                        // <offset>:<length>:<name>: <match>
+                        write!(stdout, "0x{:x}:", m.base + m.offset).unwrap();
+                        if options.print_string_length {
+                            write!(stdout, "{}:", m.length).unwrap();
+                        }
+                        write!(stdout, "${}", string.name).unwrap();
+                        if options.print_strings_matches_data {
+                            write!(stdout, ": ").unwrap();
+                            print_bytes(&mut stdout, &m.data);
+                        }
+                        writeln!(stdout).unwrap();
                     }
-                    write!(stdout, "${}", string.name).unwrap();
-                    if options.print_strings_matches_data {
-                        write!(stdout, ": ").unwrap();
-                        print_bytes(&mut stdout, &m.data);
-                    }
-                    writeln!(stdout).unwrap();
                 }
             }
         }
-    }
-
-    // Finally, print the statistics
-    if let Some(stats) = res.statistics {
-        writeln!(stdout, "{what}: {stats:#?}").unwrap();
+        ScanEvent::ModuleImport {
+            module_name,
+            dynamic_values,
+        } => {
+            // A module value must be an object. Filter out empty ones, it means the module has not
+            // generated any values.
+            if let ModuleValue::Object(map) = &dynamic_values {
+                if !map.is_empty() {
+                    write!(stdout, "{module_name}").unwrap();
+                    print_module_value(&mut stdout, dynamic_values, 4);
+                }
+            }
+        }
+        ScanEvent::ScanStatistics(stats) => {
+            writeln!(stdout, "{what}: {stats:#?}").unwrap();
+        }
+        _ => (),
     }
 }
 
@@ -794,63 +796,63 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
 ///
 /// - print " = ..." for primitive values
 /// - print "\n..." for compound values
-fn print_module_value(value: &ModuleValue, indent: usize) {
+fn print_module_value(stdout: &mut StdoutLock, value: &ModuleValue, indent: usize) {
     match value {
-        ModuleValue::Integer(i) => println!(" = {i} (0x{i:x})"),
-        ModuleValue::Float(v) => println!(" = {v}"),
+        ModuleValue::Integer(i) => writeln!(stdout, " = {i} (0x{i:x})").unwrap(),
+        ModuleValue::Float(v) => writeln!(stdout, " = {v}").unwrap(),
         ModuleValue::Bytes(bytes) => {
-            println!(" = {:?}", ByteString(bytes));
+            writeln!(stdout, " = {:?}", ByteString(bytes)).unwrap();
         }
-        ModuleValue::Regex(regex) => println!(" = /{}/", regex.as_str()),
-        ModuleValue::Boolean(b) => println!(" = {b:?}"),
+        ModuleValue::Regex(regex) => writeln!(stdout, " = /{}/", regex.as_str()).unwrap(),
+        ModuleValue::Boolean(b) => writeln!(stdout, " = {b:?}").unwrap(),
         ModuleValue::Object(obj) => {
             if obj.is_empty() {
-                println!(" = {{}}");
+                writeln!(stdout, " = {{}}").unwrap();
                 return;
             }
 
-            println!();
+            writeln!(stdout).unwrap();
 
             // For improved readability, we sort the keys before printing. Cost is of no concern,
             // this is only for CLI debugging.
             let mut keys: Vec<_> = obj.keys().collect();
             keys.sort_unstable();
             for key in keys {
-                print!("{:indent$}{}", "", key);
-                print_module_value(&obj[key], indent + 4);
+                write!(stdout, "{:indent$}{}", "", key).unwrap();
+                print_module_value(stdout, &obj[key], indent + 4);
             }
         }
         ModuleValue::Array(array) => {
             if array.is_empty() {
-                println!(" = []");
+                writeln!(stdout, " = []").unwrap();
                 return;
             }
 
-            println!();
+            writeln!(stdout,).unwrap();
             for (index, subval) in array.iter().enumerate() {
-                print!("{:indent$}[{}]", "", index);
-                print_module_value(subval, indent + 4);
+                write!(stdout, "{:indent$}[{}]", "", index).unwrap();
+                print_module_value(stdout, subval, indent + 4);
             }
         }
         ModuleValue::Dictionary(dict) => {
             if dict.is_empty() {
-                println!(" = {{}}");
+                writeln!(stdout, " = {{}}").unwrap();
                 return;
             }
 
-            println!();
+            writeln!(stdout).unwrap();
 
             // For improved readability, we sort the keys before printing. Cost is of no concern,
             // this is only for CLI debugging.
             let mut keys: Vec<_> = dict.keys().collect();
             keys.sort_unstable();
             for key in keys {
-                print!("{:indent$}[{:?}]", "", ByteString(key));
-                print_module_value(&dict[key], indent + 4);
+                write!(stdout, "{:indent$}[{:?}]", "", ByteString(key)).unwrap();
+                print_module_value(stdout, &dict[key], indent + 4);
             }
         }
-        ModuleValue::Function(_) => println!("[function]"),
-        ModuleValue::Undefined => println!("[undef]"),
+        ModuleValue::Function(_) => writeln!(stdout, "[function]").unwrap(),
+        ModuleValue::Undefined => writeln!(stdout, "[undef]").unwrap(),
     }
 }
 
@@ -886,7 +888,6 @@ mod tests {
         }
 
         test(ScanOptions {
-            print_module_data: false,
             print_strings_matches_data: false,
             print_string_length: false,
             print_metadata: false,
