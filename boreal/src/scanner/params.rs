@@ -248,7 +248,8 @@ impl ScanParams {
     /// Compute statistics during scanning.
     ///
     /// This option allows retrieve statistics related to the scanning of bytes.
-    /// See `AddRuleStatus::statistics`.
+    ///
+    /// This requires the `profiling` feature.
     ///
     /// Default value is false.
     #[must_use]
@@ -456,8 +457,15 @@ pub struct CallbackEvents(pub(crate) u32);
 impl CallbackEvents {
     /// Enables the [`crate::scanner::ScanEvent::RuleMatch`] events.
     pub const RULE_MATCH: CallbackEvents = CallbackEvents(0b0001);
-    /// Enables  the [`crate::scanner::ScanEvent::ModuleImport`] events.
+
+    /// Enables the [`crate::scanner::ScanEvent::ModuleImport`] events.
     pub const MODULE_IMPORT: CallbackEvents = CallbackEvents(0b0010);
+
+    /// Enables the [`crate::scanner::ScanEvent::ScanStatistics`] events.
+    ///
+    /// The [`ScanParams::compute_statistics`] parameter must be set to true, and
+    /// the `profiling` feature must have been enabled during compilation.
+    pub const SCAN_STATISTICS: CallbackEvents = CallbackEvents(0b0100);
 }
 
 impl std::ops::BitOr for CallbackEvents {

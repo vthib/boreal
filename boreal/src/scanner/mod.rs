@@ -111,8 +111,14 @@ pub struct Scanner {
 #[non_exhaustive]
 pub enum ScanEvent<'scanner, 'a> {
     /// A rule has been matched.
+    ///
+    /// The [`CallbackEvents::RULE_MATCH`] bitflag must be set to receive this event,
+    /// which it is by default.
     RuleMatch(MatchedRule<'scanner>),
+
     /// A module has been imported.
+    ///
+    /// The [`CallbackEvents::MODULE_IMPORT`] bitflag must be set to receive this event.
     ModuleImport {
         /// Name of the module.
         module_name: &'static str,
@@ -120,6 +126,19 @@ pub enum ScanEvent<'scanner, 'a> {
         /// Dynamic values produced by this module.
         dynamic_values: &'a crate::module::Value,
     },
+
+    /// List scan statistics once the scan is finished.
+    ///
+    /// The [`CallbackEvents::SCAN_STATISTICS`] bitflag must be set to receive this event.
+    /// The [`ScanParams::compute_statistics`] parameter must also have been set to true, and
+    /// the `profiling` feature must have been enabled during compilation.
+    ///
+    /// Note that this event, if enabled, will always be passed to the callback, even if
+    /// the scan is interrupted by an error or if a previous callback call has returned
+    /// [`ScanCallbackResult::Abort`].
+    ///
+    /// Additionally, the return value of the callback for this event is ignored.
+    ScanStatistics(statistics::Evaluation),
 }
 
 /// List of result statuses that a scan callback can return.
@@ -709,7 +728,19 @@ impl Inner {
             callback: Some(callback),
         };
 
-        self.do_scan(&mut scan_data)
+        let res = self.do_scan(&mut scan_data);
+
+        if (scan_data.params.callback_events & CallbackEvents::SCAN_STATISTICS).0 != 0 {
+            if let Some(cb) = &mut scan_data.callback {
+                if let Some(stats) = scan_data.statistics {
+                    // Ignore the return value for this event, there is no point in aborting
+                    // here.
+                    let _r = (cb)(ScanEvent::ScanStatistics(stats));
+                }
+            }
+        }
+
+        res
     }
 
     fn do_scan<'scanner>(

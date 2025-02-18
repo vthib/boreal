@@ -645,3 +645,33 @@ rule b {
         check_module_import(event, "time", None);
     });
 }
+
+#[test]
+fn test_scan_statistics() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+rule a {
+    strings:
+        $ = "abc"
+    condition:
+        any of them
+}
+"#,
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    // By default, we get rule match, but not module import
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(CallbackEvents::SCAN_STATISTICS)
+            .compute_statistics(true),
+    );
+    scan_mem(&scanner, b"", 1, |event, _nb| {
+        assert!(matches!(event, ScanEvent::ScanStatistics(_)));
+    });
+}
