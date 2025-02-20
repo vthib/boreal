@@ -22,6 +22,7 @@ pub struct StringMatches {
 impl StringMatches {
     pub fn new(s: scanner::StringMatches) -> Self {
         Self {
+            // FIXME
             identifier: format!("${}", &s.name),
             instances: s
                 .matches

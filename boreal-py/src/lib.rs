@@ -21,6 +21,9 @@ mod string_matches;
 
 create_exception!(boreal, AddRuleError, PyException, "error when adding rules");
 
+const CALLBACK_CONTINUE: u32 = 0;
+const CALLBACK_ABORT: u32 = 1;
+
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
@@ -28,7 +31,10 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile, m)?)?;
 
     m.add("modules", get_available_modules(py))?;
+
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add("CALLBACK_CONTINUE", CALLBACK_CONTINUE)?;
+    m.add("CALLBACK_ABORT", CALLBACK_ABORT)?;
 
     m.add("AddRuleError", py.get_type::<AddRuleError>())?;
     m.add("ScanError", py.get_type::<scanner::ScanError>())?;

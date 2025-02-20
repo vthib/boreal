@@ -14,23 +14,23 @@ use crate::string_matches::StringMatches;
 pub struct Match {
     /// Name of the matching rule
     #[pyo3(get)]
-    rule: String,
+    pub(crate) rule: String,
 
     /// Namespace of the matching rule
     #[pyo3(get)]
-    namespace: String,
+    pub(crate) namespace: String,
 
     /// List of tags associated to the rule
     #[pyo3(get)]
-    tags: Py<PyList>,
+    pub(crate) tags: Py<PyList>,
 
     /// Dictionary with metadata associated to the rule
     #[pyo3(get)]
-    meta: Py<PyDict>,
+    pub(crate) meta: Py<PyDict>,
 
     /// Tuple with offsets and strings that matched the file
     #[pyo3(get)]
-    strings: Vec<StringMatches>,
+    pub(crate) strings: Py<PyList>,
 }
 
 #[pymethods]
@@ -77,7 +77,7 @@ impl Match {
                 .into_py_dict(py)?
                 .unbind(),
             tags: PyList::new(py, rule.tags)?.unbind(),
-            strings: rule.matches.into_iter().map(StringMatches::new).collect(),
+            strings: PyList::new(py, rule.matches.into_iter().map(StringMatches::new))?.unbind(),
         })
     }
 }

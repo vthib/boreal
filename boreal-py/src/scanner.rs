@@ -1,15 +1,18 @@
 use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
+use boreal::scanner::{ScanCallbackResult, ScanEvent};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString};
+use pyo3::types::{IntoPyDict, PyDict, PyList, PyString};
 
 use ::boreal::module::{Console, ConsoleData};
 use ::boreal::scanner;
 
+use crate::rule::convert_metadata;
 use crate::rule_match::Match;
+use crate::string_matches::StringMatches;
 
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
@@ -86,35 +89,51 @@ impl Scanner {
             scanner.set_module_data::<Console>(ConsoleData::new(move |log| {
                 Python::with_gil(|py| {
                     let pylog = PyString::new(py, &log);
-                    // Ignore result
+                    // FIXME: Ignore result
                     let _r = cb.call1(py, (pylog,));
                 });
             }));
         }
 
+        let callback = match callback {
+            Some(cb) => {
+                if !cb.is_callable() {
+                    return Err(PyTypeError::new_err("callback is not callable"));
+                }
+                Some(cb.clone().unbind())
+            }
+            None => None,
+        };
+
         // TODO
         {
-            let _ = callback;
             let _ = fast;
             let _ = modules_callback;
             let _ = warnings_callback;
             let _ = which_callbacks;
         }
 
+        let mut cb_handler = CallbackHandler::new(&scanner, callback);
         let res = match (filepath, data, pid) {
-            (Some(filepath), None, None) => scanner.scan_file(filepath),
+            (Some(filepath), None, None) => {
+                scanner.scan_file_with_callback(filepath, |event| cb_handler.handle_event(event))
+            }
             (None, Some(data), None) => {
                 if let Ok(s) = data.extract::<&[u8]>() {
-                    scanner.scan_mem(s)
+                    scanner.scan_mem_with_callback(s, |event| cb_handler.handle_event(event))
                 } else if let Ok(s) = data.extract::<&str>() {
-                    scanner.scan_mem(s.as_bytes())
+                    scanner.scan_mem_with_callback(s.as_bytes(), |event| {
+                        cb_handler.handle_event(event)
+                    })
                 } else {
                     return Err(PyTypeError::new_err(
                         "data must be a string or a bytestring",
                     ));
                 }
             }
-            (None, None, Some(pid)) => scanner.scan_process(pid),
+            (None, None, Some(pid)) => {
+                scanner.scan_process_with_callback(pid, |event| cb_handler.handle_event(event))
+            }
             _ => {
                 return Err(PyTypeError::new_err(
                     "one of filepath, data or pid must be passed",
@@ -122,14 +141,17 @@ impl Scanner {
             }
         };
 
+        // If an error was generated inside the callback, rethrow it
+        if let Some(err) = cb_handler.error {
+            return Err(err);
+        }
+
         match res {
-            Ok(v) => Python::with_gil(|py| {
-                v.matched_rules
-                    .into_iter()
-                    .map(|v| Match::new(py, &scanner, v))
-                    .collect::<Result<_, _>>()
-            }),
-            Err((err, _)) => match err {
+            Ok(()) => Ok(cb_handler.matches),
+            Err(err) => match err {
+                // To be iso with yara, an explicit abort by a callback does not return
+                // any error.
+                scanner::ScanError::CallbackAbort => Ok(cb_handler.matches),
                 scanner::ScanError::Timeout => Err(TimeoutError::new_err("")),
                 _ => Err(ScanError::new_err(format!("{err}"))),
             },
@@ -149,6 +171,74 @@ impl Scanner {
                 .into_iter(),
         })
     }
+}
+
+struct CallbackHandler<'s> {
+    scanner: &'s scanner::Scanner,
+    matches: Vec<Match>,
+    callback: Option<Py<PyAny>>,
+    error: Option<PyErr>,
+}
+
+impl<'s> CallbackHandler<'s> {
+    fn new(scanner: &'s scanner::Scanner, callback: Option<Py<PyAny>>) -> Self {
+        Self {
+            scanner,
+            matches: Vec::new(),
+            callback,
+            error: None,
+        }
+    }
+
+    fn handle_event(&mut self, event: ScanEvent<'s, '_>) -> ScanCallbackResult {
+        match self.handle_event_inner(event) {
+            Ok(res) => res,
+            Err(err) => {
+                self.error = Some(err);
+                ScanCallbackResult::Abort
+            }
+        }
+    }
+
+    fn handle_event_inner(&mut self, event: ScanEvent<'s, '_>) -> PyResult<ScanCallbackResult> {
+        match event {
+            ScanEvent::RuleMatch(rule_match) => Python::with_gil(|py| {
+                let m = Match::new(py, self.scanner, rule_match)?;
+
+                let mut ret = ScanCallbackResult::Continue;
+                if let Some(cb) = &self.callback {
+                    let rule = match_to_callback_dict(py, &m)?;
+                    let result = cb.call1(py, (rule,))?;
+
+                    match result.extract::<u32>(py) {
+                        Ok(v) if v == super::CALLBACK_CONTINUE => {
+                            ret = ScanCallbackResult::Continue;
+                        }
+                        Ok(v) if v == super::CALLBACK_ABORT => ret = ScanCallbackResult::Abort,
+                        _ => (),
+                    }
+                }
+
+                // Always save the match: even if a callback is used, the matches
+                // are returned from the match function call.
+                self.matches.push(m);
+                Ok(ret)
+            }),
+            _ => Ok(ScanCallbackResult::Continue),
+        }
+    }
+}
+
+fn match_to_callback_dict<'py>(py: Python<'py>, m: &Match) -> Result<Bound<'py, PyDict>, PyErr> {
+    let d = PyDict::new(py);
+
+    d.set_item("rule", &m.rule)?;
+    d.set_item("namespace", &m.namespace)?;
+    d.set_item("meta", m.meta.clone_ref(py))?;
+    d.set_item("tags", m.tags.clone_ref(py))?;
+    d.set_item("strings", m.strings.clone_ref(py))?;
+
+    Ok(d)
 }
 
 #[pyclass(module = "boreal")]
