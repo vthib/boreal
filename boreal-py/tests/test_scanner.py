@@ -171,6 +171,8 @@ def test_match_invalid_types(module, is_yara):
 
     with pytest.raises(TypeError):
         rules.match(data='', console_callback=1)
+    with pytest.raises(TypeError):
+        rules.match(data='', callback=1)
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES)
@@ -359,3 +361,121 @@ rule r: tag {
         scanner = module.compile(source="rule a { condition: true }")
         rules = [r for r in scanner]
         assert rules[0].namespace == ""
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_callback(module, is_yara):
+    rules = module.compile(source="""
+global rule a: tag1 tag2 {
+    meta:
+        s = "str"
+        i = -23
+    strings:
+        $a = "abc"
+        $ = /<\\d>/
+    condition:
+        any of them
+}
+rule b { condition: false }
+""")
+
+    callback_rules = []
+    def my_callback(rule):
+        nonlocal callback_rules
+        callback_rules.append(rule)
+        return module.CALLBACK_CONTINUE
+
+    matches = rules.match(
+        data='dcabc <3>',
+        which_callbacks=yara.CALLBACK_MATCHES,
+        callback=my_callback
+    )
+    assert len(matches) == 1
+    assert len(callback_rules) == 1
+
+    def check_strings(strings):
+        assert len(strings) == 2
+        s0 = strings[0]
+        assert s0.identifier == "$a"
+        assert len(s0.instances) == 1
+        assert s0.instances[0].offset == 2
+        assert s0.instances[0].matched_length == 3
+        assert s0.instances[0].matched_data == b'abc'
+
+        s1 = strings[1]
+        assert s1.identifier == "$"
+        assert len(s1.instances) == 1
+        assert s1.instances[0].offset == 6
+        assert s1.instances[0].matched_length == 3
+        assert s1.instances[0].matched_data == b'<3>'
+
+    r = matches[0]
+    assert r.rule == "a"
+    assert r.namespace == ("default" if is_yara else "")
+    assert r.tags == ["tag1", "tag2"]
+    assert r.meta == {
+        's': 'str' if is_yara else b'str',
+        'i': -23,
+    }
+    check_strings(r.strings)
+
+    r = callback_rules[0]
+    assert r['rule'] == "a"
+    assert r['namespace'] == ("default" if is_yara else "")
+    assert r['tags'] == ["tag1", "tag2"]
+    assert r['meta'] == {
+        's': 'str' if is_yara else b'str',
+        'i': -23,
+    }
+    check_strings(r['strings'])
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_callback_return_value(module, is_yara):
+    rules = module.compile(source="""
+rule a { condition: true }
+rule b { condition: true }
+rule c { condition: true }
+""")
+
+    # Not returning anything is OK
+    callback_rules = []
+    def cb_no_return(rule):
+        nonlocal callback_rules
+        callback_rules.append(rule)
+    matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_no_return)
+    assert ['a', 'b', 'c'] == [r.rule for r in matches]
+    assert ['a', 'b', 'c'] == [r['rule'] for r in callback_rules]
+
+    # Returning a non long value is OK as well
+    callback_rules = []
+    def cb_bad_return(rule):
+        nonlocal callback_rules
+        callback_rules.append(rule)
+        return "str"
+    matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_bad_return)
+    assert ['a', 'b', 'c'] == [r.rule for r in matches]
+    assert ['a', 'b', 'c'] == [r['rule'] for r in callback_rules]
+
+    # Abort at some point
+    callback_rules = []
+    def cb_abort(rule):
+        nonlocal callback_rules
+        callback_rules.append(rule)
+        if rule['rule'] == 'b':
+            return module.CALLBACK_ABORT
+    matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_abort)
+    assert ['a', 'b'] == [r.rule for r in matches]
+    assert ['a', 'b'] == [r['rule'] for r in callback_rules]
+
+    # Throw inside the callback
+    callback_rules = []
+    def cb_throw(rule):
+        nonlocal callback_rules
+        callback_rules.append(rule)
+        if rule['rule'] == 'b':
+            raise Exception('dead')
+    with pytest.raises(Exception):
+        matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_throw)
+    assert ['a', 'b'] == [r.rule for r in matches]
+    assert ['a', 'b'] == [r['rule'] for r in callback_rules]
