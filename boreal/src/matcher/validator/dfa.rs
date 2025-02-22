@@ -50,7 +50,7 @@ impl DfaValidator {
             modifiers.wide = false;
         }
 
-        let dfa = Arc::new(build_dfa(hir, modifiers, reverse).map_err(crate::regex::Error::from)?);
+        let dfa = Arc::new(build_dfa(hir, modifiers, reverse)?);
         let pool = {
             let dfa = Arc::clone(&dfa);
             let create: PoolCreateFn = Box::new(move || dfa.create_cache());
