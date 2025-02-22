@@ -1,14 +1,13 @@
 use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
-use boreal::scanner::{ScanCallbackResult, ScanEvent};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 
-use ::boreal::module::{Console, ConsoleData};
-use ::boreal::scanner;
+use ::boreal::module::{Console, ConsoleData, Value};
+use ::boreal::scanner::{self, CallbackEvents, ScanCallbackResult, ScanEvent};
 
 use crate::rule_match::Match;
 use crate::{CALLBACK_ALL, CALLBACK_NON_MATCHES};
@@ -72,12 +71,6 @@ impl Scanner {
             set_modules_data(&mut scanner, modules_data)?;
         }
 
-        if let Some(timeout) = timeout {
-            scanner.set_scan_params(
-                scanner::ScanParams::default().timeout_duration(Some(Duration::from_secs(timeout))),
-            );
-        }
-
         if let Some(cb) = console_callback {
             if !cb.is_callable() {
                 return Err(PyTypeError::new_err("console_callback is not callable"));
@@ -103,6 +96,15 @@ impl Scanner {
             }
             None => None,
         };
+        let modules_callback = match modules_callback {
+            Some(cb) => {
+                if !cb.is_callable() {
+                    return Err(PyTypeError::new_err("modules_callback is not callable"));
+                }
+                Some(cb.clone().unbind())
+            }
+            None => None,
+        };
 
         let which = match which_callbacks {
             Some(v) => v
@@ -116,14 +118,25 @@ impl Scanner {
             ));
         }
 
+        if timeout.is_some() || modules_callback.is_some() {
+            let mut params = scanner.scan_params().clone();
+            if let Some(timeout) = timeout {
+                params = params.timeout_duration(Some(Duration::from_secs(timeout)));
+            }
+            if modules_callback.is_some() {
+                params = params
+                    .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT);
+            }
+            scanner.set_scan_params(params);
+        }
+
         // TODO
         {
             let _ = fast;
-            let _ = modules_callback;
             let _ = warnings_callback;
         }
 
-        let mut cb_handler = CallbackHandler::new(&scanner, callback);
+        let mut cb_handler = CallbackHandler::new(&scanner, callback, modules_callback);
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
                 scanner.scan_file_with_callback(filepath, |event| cb_handler.handle_event(event))
@@ -187,15 +200,21 @@ struct CallbackHandler<'s> {
     scanner: &'s scanner::Scanner,
     matches: Vec<Match>,
     callback: Option<Py<PyAny>>,
+    modules_callback: Option<Py<PyAny>>,
     error: Option<PyErr>,
 }
 
 impl<'s> CallbackHandler<'s> {
-    fn new(scanner: &'s scanner::Scanner, callback: Option<Py<PyAny>>) -> Self {
+    fn new(
+        scanner: &'s scanner::Scanner,
+        callback: Option<Py<PyAny>>,
+        modules_callback: Option<Py<PyAny>>,
+    ) -> Self {
         Self {
             scanner,
             matches: Vec::new(),
             callback,
+            modules_callback,
             error: None,
         }
     }
@@ -215,25 +234,39 @@ impl<'s> CallbackHandler<'s> {
             ScanEvent::RuleMatch(rule_match) => Python::with_gil(|py| {
                 let m = Match::new(py, self.scanner, rule_match)?;
 
-                let mut ret = ScanCallbackResult::Continue;
-                if let Some(cb) = &self.callback {
-                    let rule = match_to_callback_dict(py, &m)?;
-                    let result = cb.call1(py, (rule,))?;
-
-                    match result.extract::<u32>(py) {
-                        Ok(v) if v == super::CALLBACK_CONTINUE => {
-                            ret = ScanCallbackResult::Continue;
-                        }
-                        Ok(v) if v == super::CALLBACK_ABORT => ret = ScanCallbackResult::Abort,
-                        _ => (),
+                let ret = match &self.callback {
+                    Some(cb) => {
+                        let rule = match_to_callback_dict(py, &m)?;
+                        convert_callback_return_value(py, &cb.call1(py, (rule,))?)
                     }
-                }
+                    None => ScanCallbackResult::Continue,
+                };
 
                 // Always save the match: even if a callback is used, the matches
                 // are returned from the match function call.
                 self.matches.push(m);
                 Ok(ret)
             }),
+            ScanEvent::ModuleImport {
+                module_name,
+                dynamic_values,
+            } => match &self.modules_callback {
+                Some(cb) => Python::with_gil(|py| {
+                    // A module value must be an object. If empty,  means the module has not
+                    // generated any values.
+                    let dict = match dynamic_values {
+                        Value::Object(map) => crate::module::convert_object(py, map)?,
+                        _ => PyDict::new(py),
+                    };
+                    // TODO: add yara compat mode to avoid overwriting the value if not in
+                    // compat mode.
+                    dict.set_item("module", module_name)?;
+
+                    let result = cb.call1(py, (dict,))?;
+                    Ok(convert_callback_return_value(py, &result))
+                }),
+                None => Ok(ScanCallbackResult::Continue),
+            },
             _ => Ok(ScanCallbackResult::Continue),
         }
     }
@@ -250,6 +283,14 @@ fn match_to_callback_dict<'py>(py: Python<'py>, m: &Match) -> Result<Bound<'py, 
     d.set_item("matches", true)?;
 
     Ok(d)
+}
+
+fn convert_callback_return_value(py: Python, value: &PyObject) -> ScanCallbackResult {
+    match value.extract::<u32>(py) {
+        Ok(v) if v == super::CALLBACK_CONTINUE => ScanCallbackResult::Continue,
+        Ok(v) if v == super::CALLBACK_ABORT => ScanCallbackResult::Abort,
+        _ => ScanCallbackResult::Continue,
+    }
 }
 
 #[pyclass(module = "boreal")]
