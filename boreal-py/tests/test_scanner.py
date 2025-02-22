@@ -422,6 +422,7 @@ rule b { condition: false }
     check_strings(r.strings)
 
     r = callback_rules[0]
+    assert r['matches']
     assert r['rule'] == "a"
     assert r['namespace'] == ("default" if is_yara else "")
     assert r['tags'] == ["tag1", "tag2"]
