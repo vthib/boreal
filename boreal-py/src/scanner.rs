@@ -247,6 +247,7 @@ fn match_to_callback_dict<'py>(py: Python<'py>, m: &Match) -> Result<Bound<'py, 
     d.set_item("meta", m.meta.clone_ref(py))?;
     d.set_item("tags", m.tags.clone_ref(py))?;
     d.set_item("strings", m.strings.clone_ref(py))?;
+    d.set_item("matches", true)?;
 
     Ok(d)
 }
