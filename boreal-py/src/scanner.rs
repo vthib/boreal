@@ -3,16 +3,15 @@ use std::time::Duration;
 
 use boreal::scanner::{ScanCallbackResult, ScanEvent};
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyTypeError};
+use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyDict, PyList, PyString};
+use pyo3::types::{PyDict, PyString};
 
 use ::boreal::module::{Console, ConsoleData};
 use ::boreal::scanner;
 
-use crate::rule::convert_metadata;
 use crate::rule_match::Match;
-use crate::string_matches::StringMatches;
+use crate::{CALLBACK_ALL, CALLBACK_NON_MATCHES};
 
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
@@ -105,12 +104,23 @@ impl Scanner {
             None => None,
         };
 
+        let which = match which_callbacks {
+            Some(v) => v
+                .extract::<u32>()
+                .map_err(|_| PyTypeError::new_err("invalid `which_callbacks` parameter: {:?}"))?,
+            None => CALLBACK_ALL,
+        };
+        if callback.is_some() && (which & CALLBACK_NON_MATCHES) != 0 {
+            return Err(PyValueError::new_err(
+                "only CALLBACK_MATCHES is supported for the `which_callbacks` parameter",
+            ));
+        }
+
         // TODO
         {
             let _ = fast;
             let _ = modules_callback;
             let _ = warnings_callback;
-            let _ = which_callbacks;
         }
 
         let mut cb_handler = CallbackHandler::new(&scanner, callback);
