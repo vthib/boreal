@@ -174,6 +174,8 @@ def test_match_invalid_types(module, is_yara):
     with pytest.raises(TypeError):
         rules.match(data='', callback=1)
     with pytest.raises(TypeError):
+        rules.match(data='', modules_callback=1)
+    with pytest.raises(TypeError):
         rules.match(data='', which_callbacks="str")
 
 
@@ -499,16 +501,71 @@ def test_match_which_callbacks():
         rules.match(data='', callback=my_callback, which_callbacks=boreal.CALLBACK_ALL)
 
 
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_modules_callback(module, is_yara):
+    rules = module.compile(source="""
+import "pe"
+
+rule a { condition: true }
+""")
+
+    received_values = []
+    def modules_callback(v):
+        nonlocal received_values
+        received_values.append(v)
+        return boreal.CALLBACK_CONTINUE
+
+    rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
+
+    assert len(received_values) == 1
+    v = received_values[0]
+    # string
+    assert v['module'] == 'pe'
+    # integer
+    assert v['base_of_code'] == 4096
+    # missing value
+    assert 'base_of_data' not in v
+    # array
+    assert v['resources'] == [{
+        'id': 1,
+        'language': 1033,
+        'length': 888,
+        'offset': 8288,
+        'rva': 20576,
+        'type': 16,
+    }]
+    # empty array
+    assert v['delayed_import_details'] == []
+    # obj
+    assert v['os_version'] == { 'major': 10, 'minor': 0 }
+    # dict
+    assert v['version_info']['InternalName'] == b'MTXEX.DLL'
+    # non printable bytes
+    assert v['version_info']['ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
 
 
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_modules_callback_abort(module, is_yara):
+    rules = module.compile(source="""
+import "math"
+import "time"
 
+rule a { condition: true }
+""")
 
+    received_values = []
+    def modules_callback(v):
+        nonlocal received_values
+        received_values.append(v)
+        return boreal.CALLBACK_ABORT
 
+    rules.match(data='', modules_callback=modules_callback)
 
-
-
-
-
-
-
-
+    # FIXME: difference with yara here
+    if is_yara:
+        assert len(received_values) == 2
+        assert received_values[0]['module'] == 'math'
+        assert received_values[1]['module'] == 'time'
+    else:
+        assert len(received_values) == 1
+        assert received_values[0]['module'] == 'math'
