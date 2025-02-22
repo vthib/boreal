@@ -173,6 +173,8 @@ def test_match_invalid_types(module, is_yara):
         rules.match(data='', console_callback=1)
     with pytest.raises(TypeError):
         rules.match(data='', callback=1)
+    with pytest.raises(TypeError):
+        rules.match(data='', which_callbacks="str")
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES)
@@ -443,7 +445,7 @@ rule c { condition: true }
     def cb_no_return(rule):
         nonlocal callback_rules
         callback_rules.append(rule)
-    matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_no_return)
+    matches = rules.match(data='', which_callbacks=module.CALLBACK_MATCHES, callback=cb_no_return)
     assert ['a', 'b', 'c'] == [r.rule for r in matches]
     assert ['a', 'b', 'c'] == [r['rule'] for r in callback_rules]
 
@@ -453,7 +455,7 @@ rule c { condition: true }
         nonlocal callback_rules
         callback_rules.append(rule)
         return "str"
-    matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_bad_return)
+    matches = rules.match(data='', which_callbacks=module.CALLBACK_MATCHES, callback=cb_bad_return)
     assert ['a', 'b', 'c'] == [r.rule for r in matches]
     assert ['a', 'b', 'c'] == [r['rule'] for r in callback_rules]
 
@@ -464,7 +466,7 @@ rule c { condition: true }
         callback_rules.append(rule)
         if rule['rule'] == 'b':
             return module.CALLBACK_ABORT
-    matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_abort)
+    matches = rules.match(data='', which_callbacks=module.CALLBACK_MATCHES, callback=cb_abort)
     assert ['a', 'b'] == [r.rule for r in matches]
     assert ['a', 'b'] == [r['rule'] for r in callback_rules]
 
@@ -476,6 +478,36 @@ rule c { condition: true }
         if rule['rule'] == 'b':
             raise Exception('dead')
     with pytest.raises(Exception):
-        matches = rules.match(data='', which_callbacks=yara.CALLBACK_MATCHES, callback=cb_throw)
+        matches = rules.match(data='', which_callbacks=module.CALLBACK_MATCHES, callback=cb_throw)
     assert ['a', 'b'] == [r.rule for r in matches]
     assert ['a', 'b'] == [r['rule'] for r in callback_rules]
+
+
+def test_match_which_callbacks():
+    rules = boreal.compile(source="rule a { condition: true }")
+
+    def my_callback(_):
+        return boreal.CALLBACK_CONTINUE
+
+    # Anything other than CALLBACK_MATCHES is not supported
+    with pytest.raises(ValueError):
+        rules.match(data='', callback=my_callback)
+    with pytest.raises(ValueError):
+        rules.match(data='', callback=my_callback, which_callbacks=boreal.CALLBACK_NON_MATCHES)
+    with pytest.raises(ValueError):
+        rules.match(data='', callback=my_callback, which_callbacks=boreal.CALLBACK_ALL)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
