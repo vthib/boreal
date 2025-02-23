@@ -40,7 +40,7 @@ mod process;
 ///
 /// // Use the scanner to run the rules against byte strings or files.
 /// let scan_result = scanner.scan_mem(b"abc").unwrap();
-/// assert_eq!(scan_result.matched_rules.len(), 1);
+/// assert_eq!(scan_result.rules.len(), 1);
 /// # Ok::<(), boreal::compiler::AddRuleError>(())
 /// ```
 ///
@@ -59,7 +59,7 @@ mod process;
 ///     std::thread::spawn(move || {
 ///         scanner.define_symbol("extension", "exe");
 ///         let res = scanner.scan_mem(b"").unwrap();
-///         assert!(res.matched_rules.is_empty());
+///         assert!(res.rules.is_empty());
 ///     })
 /// };
 /// let thread2 = {
@@ -67,7 +67,7 @@ mod process;
 ///     std::thread::spawn(move || {
 ///          scanner.define_symbol("extension", "pdf");
 ///          let res = scanner.scan_mem(b"").unwrap();
-///          assert_eq!(res.matched_rules.len(), 1);
+///          assert_eq!(res.rules.len(), 1);
 ///     })
 /// };
 ///
@@ -114,7 +114,7 @@ pub enum ScanEvent<'scanner, 'a> {
     ///
     /// The [`CallbackEvents::RULE_MATCH`] bitflag must be set to receive this event,
     /// which it is by default.
-    RuleMatch(MatchedRule<'scanner>),
+    RuleMatch(EvaluatedRule<'scanner>),
 
     /// A module has been imported.
     ///
@@ -676,7 +676,7 @@ impl Inner {
         let mut scan_data = ScanData {
             mem,
             external_symbols_values,
-            matched_rules: Vec::new(),
+            rules: Vec::new(),
             module_values: evaluator::module::EvalData::new(&self.modules, module_user_data),
             statistics: if params.compute_statistics {
                 Some(statistics::Evaluation::default())
@@ -692,7 +692,7 @@ impl Inner {
 
         let res = self.do_scan(&mut scan_data);
         let results = ScanResult {
-            matched_rules: scan_data.matched_rules,
+            rules: scan_data.rules,
             module_values: scan_data.module_values.values,
             statistics: scan_data.statistics.map(Box::new),
         };
@@ -714,7 +714,7 @@ impl Inner {
         let mut scan_data = ScanData {
             mem,
             external_symbols_values,
-            matched_rules: Vec::new(),
+            rules: Vec::new(),
             module_values: evaluator::module::EvalData::new(&self.modules, module_user_data),
             statistics: if params.compute_statistics {
                 Some(statistics::Evaluation::default())
@@ -785,7 +785,7 @@ impl Inner {
                     // Reset the rules that might have matched already.
                     // FIXME: those should not be cleared, but kept: there is
                     // no need to reevaluate them.
-                    scan_data.matched_rules.clear();
+                    scan_data.rules.clear();
                 }
             }
         }
@@ -812,7 +812,7 @@ impl Inner {
 
         // If all namespaces are disabled, there is no need to do any further work.
         if eval_ctx.namespace_disabled.iter().all(|v| *v) {
-            scan_data.matched_rules.clear();
+            scan_data.rules.clear();
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
                 stats.rules_eval_duration = start.elapsed();
@@ -866,7 +866,7 @@ impl Inner {
         }
         if eval_ctx.namespace_disabled.iter().all(|v| *v) {
             // Reset the rules that might have matched already.
-            scan_data.matched_rules.clear();
+            scan_data.rules.clear();
             return Ok(());
         }
         if has_unknown_globals {
@@ -1069,7 +1069,7 @@ impl EvalContext {
                         }
                     }
                 }
-                Some(_) | None => scan_data.matched_rules.push(matched_rule),
+                Some(_) | None => scan_data.rules.push(matched_rule),
             }
         }
 
@@ -1097,8 +1097,8 @@ pub(crate) struct ScanData<'scanner, 'mem, 'cb> {
     /// Values of external symbols.
     pub(crate) external_symbols_values: &'scanner [ExternalValue],
 
-    /// List of rules that matched.
-    pub(crate) matched_rules: Vec<MatchedRule<'scanner>>,
+    /// List of rules evaluations.
+    pub(crate) rules: Vec<EvaluatedRule<'scanner>>,
 
     /// On-scan values of all modules used in the scanner.
     ///
@@ -1129,7 +1129,7 @@ pub(crate) struct ScanData<'scanner, 'mem, 'cb> {
     /// Callback receiving scan events.
     ///
     /// Can be unset, in which case matched rules are accumulated into the
-    /// `matched_rules` field.
+    /// `rules` field.
     pub(crate) callback: Option<ScanCallback<'scanner, 'cb>>,
 }
 
@@ -1140,7 +1140,7 @@ impl std::fmt::Debug for ScanData<'_, '_, '_> {
         let _r = d
             .field("mem", &self.mem)
             .field("external_symbols_values", &self.external_symbols_values)
-            .field("matched_rules", &self.matched_rules)
+            .field("rules", &self.rules)
             .field("module_values", &self.module_values)
             .field("statistics", &self.statistics)
             .field("timeout_checker", &self.timeout_checker)
@@ -1182,11 +1182,11 @@ impl ScanData<'_, '_, '_> {
             return Ok(());
         };
         if (self.params.callback_events & CallbackEvents::RULE_MATCH).0 == 0 {
-            self.matched_rules.clear();
+            self.rules.clear();
             return Ok(());
         }
 
-        for matched_rule in self.matched_rules.drain(..) {
+        for matched_rule in self.rules.drain(..) {
             match (cb)(ScanEvent::RuleMatch(matched_rule)) {
                 ScanCallbackResult::Continue => (),
                 ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
@@ -1223,8 +1223,8 @@ fn build_matched_rule<'a>(
     variables: &'a [Variable],
     namespaces_names: &'a [Option<String>],
     var_matches: Vec<Vec<StringMatch>>,
-) -> MatchedRule<'a> {
-    MatchedRule {
+) -> EvaluatedRule<'a> {
+    EvaluatedRule {
         name: &rule.name,
         namespace: namespaces_names
             .get(rule.namespace_index)
@@ -1247,8 +1247,10 @@ fn build_matched_rule<'a>(
 /// Result of a scan
 #[derive(Debug, Default)]
 pub struct ScanResult<'scanner> {
-    /// List of rules that matched.
-    pub matched_rules: Vec<MatchedRule<'scanner>>,
+    /// List of rules of interest for this scan.
+    ///
+    /// By default, this is a list of the rules that matched.
+    pub rules: Vec<EvaluatedRule<'scanner>>,
 
     /// On-scan values of all modules used in the scanner.
     ///
@@ -1261,9 +1263,9 @@ pub struct ScanResult<'scanner> {
     pub statistics: Option<Box<statistics::Evaluation>>,
 }
 
-/// Description of a rule that matched during a scan.
+/// Result of a rule evaluation during a scan.
 #[derive(Debug)]
-pub struct MatchedRule<'scanner> {
+pub struct EvaluatedRule<'scanner> {
     /// Name of the rule.
     pub name: &'scanner str,
 
@@ -1418,7 +1420,7 @@ mod tests {
         let mut scan_data = ScanData {
             mem: Memory::Direct(mem),
             external_symbols_values: &[],
-            matched_rules: Vec::new(),
+            rules: Vec::new(),
             module_values,
             statistics: None,
             timeout_checker: None,
@@ -1948,11 +1950,11 @@ mod tests {
         test_type_unwind_safe::<Scanner>();
 
         test_type_traits_non_clonable(ScanResult {
-            matched_rules: Vec::new(),
+            rules: Vec::new(),
             module_values: Vec::new(),
             statistics: None,
         });
-        test_type_traits_non_clonable(MatchedRule {
+        test_type_traits_non_clonable(EvaluatedRule {
             name: "a",
             namespace: None,
             tags: &[],
@@ -1967,7 +1969,7 @@ mod tests {
         test_type_traits_non_clonable(ScanData {
             mem: Memory::Direct(b""),
             external_symbols_values: &[],
-            matched_rules: Vec::new(),
+            rules: Vec::new(),
             module_values: evaluator::module::EvalData {
                 values: Vec::new(),
                 data_map: crate::module::ModuleDataMap::new(&ModuleUserData::default()),

@@ -64,7 +64,7 @@ impl Match {
     pub fn new(
         py: Python,
         scanner: &scanner::Scanner,
-        rule: scanner::MatchedRule,
+        rule: scanner::EvaluatedRule,
     ) -> Result<Self, PyErr> {
         Ok(Self {
             rule: rule.name.to_string(),
