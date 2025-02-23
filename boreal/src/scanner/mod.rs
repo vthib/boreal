@@ -116,6 +116,13 @@ pub enum ScanEvent<'scanner, 'a> {
     /// which it is by default.
     RuleMatch(EvaluatedRule<'scanner>),
 
+    /// A rule has not been matched.
+    ///
+    /// It is not recommended to set this flag as it can slow down the scan considerably.
+    ///
+    /// The [`CallbackEvents::RULE_NO_MATCH`] bitflag must be set to receive this event.
+    RuleNoMatch(EvaluatedRule<'scanner>),
+
     /// A module has been imported.
     ///
     /// The [`CallbackEvents::MODULE_IMPORT`] bitflag must be set to receive this event.
@@ -1080,13 +1087,19 @@ impl EvalContext {
             );
             match &mut scan_data.callback {
                 Some(cb) if call_callback => {
+                    let mut result = ScanCallbackResult::Continue;
                     if matched
                         && (scan_data.params.callback_events & CallbackEvents::RULE_MATCH).0 != 0
                     {
-                        match (cb)(ScanEvent::RuleMatch(matched_rule)) {
-                            ScanCallbackResult::Continue => (),
-                            ScanCallbackResult::Abort => return Err(EvalError::CallbackAbort),
-                        }
+                        result = (cb)(ScanEvent::RuleMatch(matched_rule));
+                    } else if !matched
+                        && (scan_data.params.callback_events & CallbackEvents::RULE_NO_MATCH).0 != 0
+                    {
+                        result = (cb)(ScanEvent::RuleNoMatch(matched_rule));
+                    }
+                    match result {
+                        ScanCallbackResult::Continue => (),
+                        ScanCallbackResult::Abort => return Err(EvalError::CallbackAbort),
                     }
                 }
                 Some(_) | None => scan_data.rules.push(matched_rule),
@@ -1208,13 +1221,17 @@ impl ScanData<'_, '_, '_> {
         let Some(cb) = &mut self.callback else {
             return Ok(());
         };
-        if (self.params.callback_events & CallbackEvents::RULE_MATCH).0 == 0 {
-            self.rules.clear();
-            return Ok(());
-        }
 
-        for matched_rule in self.rules.drain(..) {
-            match (cb)(ScanEvent::RuleMatch(matched_rule)) {
+        for rule in self.rules.drain(..) {
+            let mut result = ScanCallbackResult::Continue;
+            if rule.matched && (self.params.callback_events & CallbackEvents::RULE_MATCH).0 != 0 {
+                result = (cb)(ScanEvent::RuleMatch(rule));
+            } else if !rule.matched
+                && (self.params.callback_events & CallbackEvents::RULE_NO_MATCH).0 != 0
+            {
+                result = (cb)(ScanEvent::RuleNoMatch(rule));
+            }
+            match result {
                 ScanCallbackResult::Continue => (),
                 ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
             }
