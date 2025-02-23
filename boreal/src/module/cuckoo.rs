@@ -26,7 +26,7 @@ use super::{EvalContext, Module, ModuleData, StaticValue, Type, Value};
 /// scanner.set_module_data::<Cuckoo>(cuckoo_data);
 ///
 /// let result = scanner.scan_mem(b"").unwrap();
-/// assert_eq!(result.matched_rules.len(), 1);
+/// assert_eq!(result.rules.len(), 1);
 /// ```
 #[derive(Debug)]
 pub struct Cuckoo;

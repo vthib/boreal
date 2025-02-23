@@ -27,12 +27,12 @@ rule bar {
     let file = tempfile::NamedTempFile::new().unwrap();
     file.as_file().write_all(b"zyxabcxy").unwrap();
     let result = scanner.scan_file(file.path()).unwrap();
-    assert_eq!(result.matched_rules.len(), 1);
+    assert_eq!(result.rules.len(), 1);
 
     file.as_file().rewind().unwrap();
     file.as_file().write_all(b"zyxacxby").unwrap();
     let result = scanner.scan_file(file.path()).unwrap();
-    assert_eq!(result.matched_rules.len(), 0);
+    assert_eq!(result.rules.len(), 0);
 }
 
 // An import is reused in the same namespace

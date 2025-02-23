@@ -383,7 +383,7 @@ impl std::fmt::Debug for ModuleDataMap<'_> {
 /// scanner.set_module_data::<Bar>(BarUserData { value: 3 });
 ///
 /// let result = scanner.scan_mem(b"").unwrap();
-/// assert_eq!(result.matched_rules.len(), 1);
+/// assert_eq!(result.rules.len(), 1);
 /// ```
 pub trait ModuleData: Module {
     /// Private Data to associate with the module.
