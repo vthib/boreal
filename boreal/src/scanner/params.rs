@@ -38,6 +38,9 @@ pub struct ScanParams {
 
     /// Bitflag of which events are enabled in the scan callback.
     pub(crate) callback_events: CallbackEvents,
+
+    /// Include not matched rules into results.
+    pub(crate) include_not_matched_rules: bool,
 }
 
 /// Scan mode to use on fragmented memory, including process scanning.
@@ -184,6 +187,7 @@ impl Default for ScanParams {
             memory_chunk_size: None,
             fragmented_scan_mode: FragmentedScanMode::legacy(),
             callback_events: CallbackEvents::RULE_MATCH,
+            include_not_matched_rules: false,
         }
     }
 }
@@ -379,6 +383,23 @@ impl ScanParams {
         self
     }
 
+    /// Include rules that do not match in results.
+    ///
+    /// If set, scan results will include both rules that matched and rules that did not
+    /// match. The field [`crate::scanner::EvaluatedRule::matched`] can be used to
+    /// distinguish the two.
+    ///
+    /// If using the callback API, the [`CallbackEvents::RULE_NO_MATCH`] flag must
+    /// also be set.
+    ///
+    /// It is *not* recommended to set this field, as it may slow down the overall scan.
+    /// Notably, setting this parameter disables the no scan optimization.
+    #[must_use]
+    pub fn include_not_matched_rules(mut self, include_not_matched_rules: bool) -> Self {
+        self.include_not_matched_rules = include_not_matched_rules;
+        self
+    }
+
     /// Returns whether full matches are computed on matching rules.
     #[must_use]
     pub fn get_compute_full_matches(&self) -> bool {
@@ -437,6 +458,12 @@ impl ScanParams {
     #[must_use]
     pub fn get_callback_events(&self) -> CallbackEvents {
         self.callback_events
+    }
+
+    /// Returns whether rules that do not match are included in results.
+    #[must_use]
+    pub fn get_include_not_matched_rules(&self) -> bool {
+        self.include_not_matched_rules
     }
 
     pub(crate) fn to_memory_params(&self) -> MemoryParams {
@@ -546,6 +573,9 @@ mod tests {
             params.get_callback_events(),
             CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT
         );
+
+        let params = params.include_not_matched_rules(true);
+        assert!(params.get_include_not_matched_rules());
     }
 
     #[test]

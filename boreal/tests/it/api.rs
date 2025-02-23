@@ -183,3 +183,129 @@ rule r: tag {
     assert!(!r3.is_private);
     assert_eq!(r3.metadatas.len(), 0);
 }
+
+#[test]
+// TODO: check against yara as well
+fn test_include_not_matched_rules() {
+    let mut compiler = boreal::Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule ga {
+    strings:
+        $ = "a"
+    condition:
+        any of them
+}
+global rule gb {
+    strings:
+        $ = "b"
+    condition:
+        any of them
+}
+rule yes1 { condition: true }
+rule no { condition: false }
+"#,
+        )
+        .unwrap();
+    compiler
+        .add_rules_str_in_namespace(
+            r#"
+global rule gc {
+    strings:
+        $ = "c"
+    condition:
+        any of them
+}
+rule yes2 { condition: true }
+"#,
+            "ns2",
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .include_not_matched_rules(true),
+    );
+
+    #[track_caller]
+    fn check_scan(scanner: &boreal::Scanner, mem: &[u8], expected_matches: &[(&str, bool)]) {
+        let scan_res = scanner.scan_mem(mem).unwrap();
+        let res: Vec<(String, bool)> = scan_res
+            .rules
+            .iter()
+            .map(|v| {
+                let name = if let Some(ns) = &v.namespace {
+                    format!("{}:{}", ns, v.name)
+                } else {
+                    format!("default:{}", v.name)
+                };
+                (name, v.matched)
+            })
+            .collect();
+        let expected_matches: Vec<_> = expected_matches
+            .iter()
+            .map(|(a, b)| (a.to_string(), *b))
+            .collect();
+        assert_eq!(res, expected_matches);
+    }
+
+    // Nothing matches
+    check_scan(
+        &scanner,
+        b"",
+        &[
+            ("default:ga", false),
+            ("default:gb", false),
+            ("ns2:gc", false),
+            ("default:yes1", false),
+            ("default:no", false),
+            ("ns2:yes2", false),
+        ],
+    );
+
+    // Namespace ns2 matches
+    check_scan(
+        &scanner,
+        b"c",
+        &[
+            ("default:ga", false),
+            ("default:gb", false),
+            ("ns2:gc", true),
+            ("default:yes1", false),
+            ("default:no", false),
+            ("ns2:yes2", true),
+        ],
+    );
+
+    // gc1 matches in theory but is invalidated by the other global rule
+    check_scan(
+        &scanner,
+        b"a",
+        &[
+            ("default:ga", false),
+            ("default:gb", false),
+            ("ns2:gc", false),
+            ("default:yes1", false),
+            ("default:no", false),
+            ("ns2:yes2", false),
+        ],
+    );
+
+    // Both matches, this is now ok
+    check_scan(
+        &scanner,
+        b"ab",
+        &[
+            ("default:ga", true),
+            ("default:gb", true),
+            ("ns2:gc", false),
+            ("default:yes1", true),
+            ("default:no", false),
+            ("ns2:yes2", false),
+        ],
+    );
+}

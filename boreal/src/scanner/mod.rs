@@ -810,7 +810,20 @@ impl Inner {
             }
         }
 
-        // If all namespaces are disabled, there is no need to do any further work.
+        // If we include not matched rules, we need to fixup the results of
+        // some global rules. For example, if a namespace contains two global
+        // rules A and B, with A matching and B not matching, then A must be
+        // set to "not matching" since its results are invalidated by B not
+        // matching.
+        if scan_data.params.include_not_matched_rules {
+            for (rule, evaluated_rule) in self.global_rules.iter().zip(scan_data.rules.iter_mut()) {
+                if eval_ctx.namespace_disabled[rule.namespace_index] {
+                    evaluated_rule.matched = false;
+                }
+            }
+        } else
+        // If we only include matched rules and all namespaces are disabled,
+        // there is no need to do any further work.
         if eval_ctx.namespace_disabled.iter().all(|v| *v) {
             scan_data.rules.clear();
             #[cfg(feature = "profiling")]
@@ -1041,28 +1054,35 @@ impl EvalContext {
         let vars = &scanner.variables[self.var_index..(self.var_index + rule.nb_variables)];
         self.var_index += rule.nb_variables;
 
-        if self.namespace_disabled[rule.namespace_index] {
-            return Ok(false);
+        let matched = if self.namespace_disabled[rule.namespace_index] {
+            false
+        } else {
+            evaluate_rule(
+                rule,
+                var_matches.as_deref(),
+                &self.previous_results,
+                &scanner.bytes_pool,
+                scan_data,
+            )?
+        };
+
+        if rule.is_private {
+            return Ok(matched);
         }
 
-        let res = evaluate_rule(
-            rule,
-            var_matches.as_deref(),
-            &self.previous_results,
-            &scanner.bytes_pool,
-            scan_data,
-        )?;
-
-        if res && !rule.is_private {
+        if matched || scan_data.params.include_not_matched_rules {
             let matched_rule = build_matched_rule(
                 rule,
                 vars,
                 &scanner.namespaces,
                 var_matches.unwrap_or_default(),
+                matched,
             );
             match &mut scan_data.callback {
                 Some(cb) if call_callback => {
-                    if (scan_data.params.callback_events & CallbackEvents::RULE_MATCH).0 != 0 {
+                    if matched
+                        && (scan_data.params.callback_events & CallbackEvents::RULE_MATCH).0 != 0
+                    {
                         match (cb)(ScanEvent::RuleMatch(matched_rule)) {
                             ScanCallbackResult::Continue => (),
                             ScanCallbackResult::Abort => return Err(EvalError::CallbackAbort),
@@ -1073,12 +1093,19 @@ impl EvalContext {
             }
         }
 
-        Ok(res)
+        Ok(matched)
     }
 }
 
 fn can_use_no_scan_optimization(scan_data: &ScanData) -> bool {
     if scan_data.params.compute_full_matches {
+        return false;
+    }
+    // Mixing no scan optimization with this parameter is annoying and non
+    // trivial. Since this parameter is mainly here for compatibility purposes,
+    // lets just avoid making the code more complicated for this particular
+    // situation. If there is a real use case for this, it can be revisited.
+    if scan_data.params.include_not_matched_rules {
         return false;
     }
 
@@ -1223,6 +1250,7 @@ fn build_matched_rule<'a>(
     variables: &'a [Variable],
     namespaces_names: &'a [Option<String>],
     var_matches: Vec<Vec<StringMatch>>,
+    matched: bool,
 ) -> EvaluatedRule<'a> {
     EvaluatedRule {
         name: &rule.name,
@@ -1241,6 +1269,7 @@ fn build_matched_rule<'a>(
                 matches,
             })
             .collect(),
+        matched,
     }
 }
 
@@ -1250,6 +1279,9 @@ pub struct ScanResult<'scanner> {
     /// List of rules of interest for this scan.
     ///
     /// By default, this is a list of the rules that matched.
+    /// If [`ScanParams::include_not_matched_rules`] is set, this list will also include
+    /// rules that did not match.  Use the `EvaluatedRule::matched`] boolean to distinguish
+    /// between the two.
     pub rules: Vec<EvaluatedRule<'scanner>>,
 
     /// On-scan values of all modules used in the scanner.
@@ -1280,6 +1312,12 @@ pub struct EvaluatedRule<'scanner> {
 
     /// List of matched strings, with details on their matches.
     pub matches: Vec<StringMatches<'scanner>>,
+
+    /// Did the rule match.
+    ///
+    /// There is no need to check this flag unless the [`ScanParams::include_not_matched_rules`]
+    /// parameter is set, as only matching rules are listed by default.
+    pub matched: bool,
 }
 
 /// Details on matches for a string.
@@ -1960,6 +1998,7 @@ mod tests {
             tags: &[],
             metadatas: &[],
             matches: Vec::new(),
+            matched: false,
         });
         test_type_traits_non_clonable(StringMatches {
             name: "a",
