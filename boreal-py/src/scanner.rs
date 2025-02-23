@@ -2,7 +2,7 @@ use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 
@@ -10,7 +10,7 @@ use ::boreal::module::{Console, ConsoleData, Value};
 use ::boreal::scanner::{self, CallbackEvents, ScanCallbackResult, ScanEvent};
 
 use crate::rule_match::Match;
-use crate::{CALLBACK_ALL, CALLBACK_NON_MATCHES};
+use crate::{CALLBACK_ALL, CALLBACK_MATCHES, CALLBACK_NON_MATCHES};
 
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
@@ -112,23 +112,21 @@ impl Scanner {
                 .map_err(|_| PyTypeError::new_err("invalid `which_callbacks` parameter: {:?}"))?,
             None => CALLBACK_ALL,
         };
-        if callback.is_some() && (which & CALLBACK_NON_MATCHES) != 0 {
-            return Err(PyValueError::new_err(
-                "only CALLBACK_MATCHES is supported for the `which_callbacks` parameter",
-            ));
-        }
 
-        if timeout.is_some() || modules_callback.is_some() {
-            let mut params = scanner.scan_params().clone();
-            if let Some(timeout) = timeout {
-                params = params.timeout_duration(Some(Duration::from_secs(timeout)));
-            }
-            if modules_callback.is_some() {
-                params = params
-                    .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT);
-            }
-            scanner.set_scan_params(params);
+        let mut params = scanner.scan_params().clone();
+        if let Some(timeout) = timeout {
+            params = params.timeout_duration(Some(Duration::from_secs(timeout)));
         }
+        let mut events = CallbackEvents::RULE_MATCH;
+        if callback.is_some() && (which & CALLBACK_NON_MATCHES) != 0 {
+            params = params.include_not_matched_rules(true);
+            events |= CallbackEvents::RULE_NO_MATCH;
+        }
+        if modules_callback.is_some() {
+            events |= CallbackEvents::MODULE_IMPORT;
+        }
+        params = params.callback_events(events);
+        scanner.set_scan_params(params);
 
         // TODO
         {
@@ -136,7 +134,7 @@ impl Scanner {
             let _ = warnings_callback;
         }
 
-        let mut cb_handler = CallbackHandler::new(&scanner, callback, modules_callback);
+        let mut cb_handler = CallbackHandler::new(&scanner, callback, modules_callback, which);
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
                 scanner.scan_file_with_callback(filepath, |event| cb_handler.handle_event(event))
@@ -201,6 +199,7 @@ struct CallbackHandler<'s> {
     matches: Vec<Match>,
     callback: Option<Py<PyAny>>,
     modules_callback: Option<Py<PyAny>>,
+    which: u32,
     error: Option<PyErr>,
 }
 
@@ -209,12 +208,14 @@ impl<'s> CallbackHandler<'s> {
         scanner: &'s scanner::Scanner,
         callback: Option<Py<PyAny>>,
         modules_callback: Option<Py<PyAny>>,
+        which: u32,
     ) -> Self {
         Self {
             scanner,
             matches: Vec::new(),
             callback,
             modules_callback,
+            which,
             error: None,
         }
     }
@@ -231,22 +232,8 @@ impl<'s> CallbackHandler<'s> {
 
     fn handle_event_inner(&mut self, event: ScanEvent<'s, '_>) -> PyResult<ScanCallbackResult> {
         match event {
-            ScanEvent::RuleMatch(rule_match) => Python::with_gil(|py| {
-                let m = Match::new(py, self.scanner, rule_match)?;
-
-                let ret = match &self.callback {
-                    Some(cb) => {
-                        let rule = match_to_callback_dict(py, &m)?;
-                        convert_callback_return_value(py, &cb.call1(py, (rule,))?)
-                    }
-                    None => ScanCallbackResult::Continue,
-                };
-
-                // Always save the match: even if a callback is used, the matches
-                // are returned from the match function call.
-                self.matches.push(m);
-                Ok(ret)
-            }),
+            ScanEvent::RuleMatch(rule_match) => self.handle_rule_event(rule_match, true),
+            ScanEvent::RuleNoMatch(rule_match) => self.handle_rule_event(rule_match, false),
             ScanEvent::ModuleImport {
                 module_name,
                 dynamic_values,
@@ -270,9 +257,45 @@ impl<'s> CallbackHandler<'s> {
             _ => Ok(ScanCallbackResult::Continue),
         }
     }
+
+    fn handle_rule_event(
+        &mut self,
+        rule: scanner::EvaluatedRule,
+        matched: bool,
+    ) -> PyResult<ScanCallbackResult> {
+        Python::with_gil(|py| {
+            let m = Match::new(py, self.scanner, rule)?;
+
+            let ret = match &self.callback {
+                Some(cb) => {
+                    if (matched && (self.which & CALLBACK_MATCHES) != 0)
+                        || (!matched && (self.which & CALLBACK_NON_MATCHES) != 0)
+                    {
+                        let rule = match_to_callback_dict(py, &m, matched)?;
+                        convert_callback_return_value(py, &cb.call1(py, (rule,))?)
+                    } else {
+                        ScanCallbackResult::Continue
+                    }
+                }
+                None => ScanCallbackResult::Continue,
+            };
+
+            // Always save the match: even if a callback is used, the matches
+            // are returned from the match function call.
+            // But, only the real matches are saved, not the "non match"...
+            if matched {
+                self.matches.push(m);
+            }
+            Ok(ret)
+        })
+    }
 }
 
-fn match_to_callback_dict<'py>(py: Python<'py>, m: &Match) -> Result<Bound<'py, PyDict>, PyErr> {
+fn match_to_callback_dict<'py>(
+    py: Python<'py>,
+    m: &Match,
+    matched: bool,
+) -> Result<Bound<'py, PyDict>, PyErr> {
     let d = PyDict::new(py);
 
     d.set_item("rule", &m.rule)?;
@@ -280,7 +303,7 @@ fn match_to_callback_dict<'py>(py: Python<'py>, m: &Match) -> Result<Bound<'py, 
     d.set_item("meta", m.meta.clone_ref(py))?;
     d.set_item("tags", m.tags.clone_ref(py))?;
     d.set_item("strings", m.strings.clone_ref(py))?;
-    d.set_item("matches", true)?;
+    d.set_item("matches", matched)?;
 
     Ok(d)
 }

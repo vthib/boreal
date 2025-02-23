@@ -391,7 +391,7 @@ rule b { condition: false }
 
     matches = rules.match(
         data='dcabc <3>',
-        which_callbacks=yara.CALLBACK_MATCHES,
+        which_callbacks=module.CALLBACK_MATCHES,
         callback=my_callback
     )
     assert len(matches) == 1
@@ -486,21 +486,6 @@ rule c { condition: true }
     assert ['a', 'b'] == [r['rule'] for r in callback_rules]
 
 
-def test_match_which_callbacks():
-    rules = boreal.compile(source="rule a { condition: true }")
-
-    def my_callback(_):
-        return boreal.CALLBACK_CONTINUE
-
-    # Anything other than CALLBACK_MATCHES is not supported
-    with pytest.raises(ValueError):
-        rules.match(data='', callback=my_callback)
-    with pytest.raises(ValueError):
-        rules.match(data='', callback=my_callback, which_callbacks=boreal.CALLBACK_NON_MATCHES)
-    with pytest.raises(ValueError):
-        rules.match(data='', callback=my_callback, which_callbacks=boreal.CALLBACK_ALL)
-
-
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_match_modules_callback(module, is_yara):
     rules = module.compile(source="""
@@ -569,3 +554,117 @@ rule a { condition: true }
     else:
         assert len(received_values) == 1
         assert received_values[0]['module'] == 'math'
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_which_callbacks(module, is_yara):
+    rules = module.compile(source="""
+rule a { condition: true }
+rule b { condition: false }
+""")
+
+    received_values = []
+    def callback(v):
+        nonlocal received_values
+        received_values.append(v)
+        return module.CALLBACK_CONTINUE
+
+    def check_all(received_values, matches):
+        assert len(received_values) == 2
+        assert received_values[0]['rule'] == 'a'
+        assert received_values[0]['matches']
+        assert received_values[1]['rule'] == 'b'
+        assert not received_values[1]['matches']
+        assert len(matches) == 1
+        assert matches[0].rule == 'a'
+
+    # check CALLBACK_ALL
+    matches = rules.match(data='', which_callbacks=module.CALLBACK_ALL, callback=callback)
+    check_all(received_values, matches)
+
+    # Not specifying is equivalent to ALL
+    received_values = []
+    matches = rules.match(data='', callback=callback)
+    check_all(received_values, matches)
+
+    # only match
+    received_values = []
+    matches = rules.match(data='', which_callbacks=module.CALLBACK_MATCHES, callback=callback)
+    assert len(received_values) == 1
+    assert received_values[0]['rule'] == 'a'
+    assert received_values[0]['matches']
+    assert len(matches) == 1
+    assert matches[0].rule == 'a'
+
+    # only non match
+    received_values = []
+    matches = rules.match(data='', which_callbacks=module.CALLBACK_NON_MATCHES, callback=callback)
+    assert len(received_values) == 1
+    assert received_values[0]['rule'] == 'b'
+    assert not received_values[0]['matches']
+    # Returned results still include the matched rules
+    assert len(matches) == 1
+    assert matches[0].rule == 'a'
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_which_all_abort(module, is_yara):
+    rules = module.compile(source="""
+rule a { condition: true }
+rule b { condition: false }
+rule c { condition: true }
+rule d { condition: false }
+""")
+
+    received_values = []
+    def callback(abort_name, v):
+        nonlocal received_values
+        received_values.append(v)
+        if v['rule'] == abort_name:
+            return module.CALLBACK_ABORT
+        return module.CALLBACK_CONTINUE
+
+    # When aborting on a, we do not see c
+    matches = rules.match(
+        data='',
+        which_callbacks=module.CALLBACK_ALL,
+        callback=lambda v: callback('a', v)
+    )
+    assert len(received_values) == 1
+    assert received_values[0]['rule'] == 'a'
+    assert received_values[0]['matches']
+    assert len(matches) == 1
+    assert matches[0].rule == 'a'
+
+    # When aborting on b, we do not see c either
+    received_values = []
+    matches = rules.match(
+        data='',
+        which_callbacks=module.CALLBACK_ALL,
+        callback=lambda v: callback('b', v)
+    )
+    assert len(received_values) == 2
+    assert received_values[0]['rule'] == 'a'
+    assert received_values[0]['matches']
+    assert received_values[1]['rule'] == 'b'
+    assert not received_values[1]['matches']
+    assert len(matches) == 1
+    assert matches[0].rule == 'a'
+
+    # Abort on d
+    received_values = []
+    matches = rules.match(
+        data='',
+        which_callbacks=module.CALLBACK_ALL,
+        callback=lambda v: callback('c', v)
+    )
+    assert len(received_values) == 3
+    assert received_values[0]['rule'] == 'a'
+    assert received_values[0]['matches']
+    assert received_values[1]['rule'] == 'b'
+    assert not received_values[1]['matches']
+    assert received_values[2]['rule'] == 'c'
+    assert received_values[2]['matches']
+    assert len(matches) == 2
+    assert matches[0].rule == 'a'
+    assert matches[1].rule == 'c'
