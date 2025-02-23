@@ -9,6 +9,8 @@ use boreal::{Compiler, Scanner};
 
 use crate::utils::FragmentedSlices;
 
+// FIXME: checking callback behavior against YARA api as well would be nice.
+
 const TIMEOUT_COND: &str = r#"
     for all i in (0..9223372036854775807) : (
         for all j in (0..9223372036854775807) : (
@@ -23,15 +25,30 @@ const TIMEOUT_COND: &str = r#"
 
 #[track_caller]
 fn check_rule_match(event: ScanEvent, rule_name: &str, namespace: Option<&str>) {
-    let res = match &event {
-        ScanEvent::RuleMatch(m) => m.name == rule_name && m.namespace == namespace,
+    match &event {
+        ScanEvent::RuleMatch(m) => {
+            assert!(
+                m.name == rule_name && m.namespace == namespace,
+                "event {:?} is not a match for rule {:?}:{}",
+                event,
+                namespace,
+                rule_name
+            );
+        }
         evt => panic!("unexpected event {:?}", evt),
     };
-    assert!(
-        res,
-        "event {:?} is not a match for rule {:?}:{}",
-        event, namespace, rule_name
-    );
+}
+
+#[track_caller]
+fn check_rule_no_match(event: ScanEvent, rule_name: &str, namespace: Option<&str>) {
+    match &event {
+        ScanEvent::RuleNoMatch(m) => assert!(
+            m.name == rule_name && m.namespace == namespace,
+            "{:?}",
+            event
+        ),
+        evt => panic!("unexpected event {:?}", evt),
+    };
 }
 
 #[track_caller]
@@ -81,11 +98,15 @@ where
     let res = scanner
         .scan_mem_with_callback(mem, |event| {
             checker(event, counter);
-            if counter < abort_on_event_number {
-                counter += 1;
-                ScanCallbackResult::Continue
-            } else {
-                ScanCallbackResult::Abort
+            match counter.cmp(&abort_on_event_number) {
+                std::cmp::Ordering::Less => {
+                    counter += 1;
+                    ScanCallbackResult::Continue
+                }
+                std::cmp::Ordering::Equal => ScanCallbackResult::Abort,
+                std::cmp::Ordering::Greater => {
+                    panic!("unexpected event");
+                }
             }
         })
         .unwrap_err();
@@ -673,5 +694,224 @@ rule a {
     );
     scan_mem(&scanner, b"", 1, |event, _nb| {
         assert!(matches!(event, ScanEvent::ScanStatistics(_)));
+    });
+}
+
+#[test]
+fn test_callback_no_match() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+rule a { condition: true }
+rule b { condition: false }
+rule c {
+    strings:
+        $ = "abcde"
+    condition:
+        any of them
+}
+private rule d { condition: true }
+private rule e { condition: false }
+"#,
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::RULE_NO_MATCH)
+            .include_not_matched_rules(true),
+    );
+
+    scan_mem(&scanner, b"abcde", 3, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_no_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_match(event, "c", None);
+        }
+    });
+
+    scan_mem(&scanner, b"", 3, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_no_match(event, "b", None);
+        } else if nb == 2 {
+            check_rule_no_match(event, "c", None);
+        }
+    });
+}
+
+#[test]
+fn test_callback_global_no_match() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule ga {
+    strings:
+        $ = "a"
+    condition:
+        any of them
+}
+global rule gb {
+    strings:
+        $ = "b"
+    condition:
+        any of them
+}
+rule yes1 { condition: true }
+rule no { condition: false }
+"#,
+        )
+        .unwrap();
+    compiler
+        .add_rules_str_in_namespace(
+            r#"
+global rule gc {
+    strings:
+        $ = "c"
+    condition:
+        any of them
+}
+rule yes2 { condition: true }
+"#,
+            "ns2",
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::RULE_NO_MATCH)
+            .include_not_matched_rules(true),
+    );
+
+    // Nothing matches
+    scan_mem(&scanner, b"", 6, |event, nb| {
+        if nb == 0 {
+            check_rule_no_match(event, "ga", None);
+        } else if nb == 1 {
+            check_rule_no_match(event, "gb", None);
+        } else if nb == 2 {
+            check_rule_no_match(event, "gc", Some("ns2"));
+        } else if nb == 3 {
+            check_rule_no_match(event, "yes1", None);
+        } else if nb == 4 {
+            check_rule_no_match(event, "no", None);
+        } else if nb == 5 {
+            check_rule_no_match(event, "yes2", Some("ns2"));
+        }
+    });
+
+    // Namespace ns2 matches
+    scan_mem(&scanner, b"c", 6, |event, nb| {
+        if nb == 0 {
+            check_rule_no_match(event, "ga", None);
+        } else if nb == 1 {
+            check_rule_no_match(event, "gb", None);
+        } else if nb == 2 {
+            check_rule_match(event, "gc", Some("ns2"));
+        } else if nb == 3 {
+            check_rule_no_match(event, "yes1", None);
+        } else if nb == 4 {
+            check_rule_no_match(event, "no", None);
+        } else if nb == 5 {
+            check_rule_match(event, "yes2", Some("ns2"));
+        }
+    });
+
+    // gc1 matches in theory but is invalidated by the other global rule
+    scan_mem(&scanner, b"a", 6, |event, nb| {
+        if nb == 0 {
+            check_rule_no_match(event, "ga", None);
+        } else if nb == 1 {
+            check_rule_no_match(event, "gb", None);
+        } else if nb == 2 {
+            check_rule_no_match(event, "gc", Some("ns2"));
+        } else if nb == 3 {
+            check_rule_no_match(event, "yes1", None);
+        } else if nb == 4 {
+            check_rule_no_match(event, "no", None);
+        } else if nb == 5 {
+            check_rule_no_match(event, "yes2", Some("ns2"));
+        }
+    });
+
+    // Both matches, this is now ok
+    scan_mem(&scanner, b"ab", 6, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "ga", None);
+        } else if nb == 1 {
+            check_rule_match(event, "gb", None);
+        } else if nb == 2 {
+            check_rule_no_match(event, "gc", Some("ns2"));
+        } else if nb == 3 {
+            check_rule_match(event, "yes1", None);
+        } else if nb == 4 {
+            check_rule_no_match(event, "no", None);
+        } else if nb == 5 {
+            check_rule_no_match(event, "yes2", Some("ns2"));
+        }
+    });
+}
+
+#[test]
+fn test_callback_no_match_abort() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule a {
+    strings:
+        $ = "a"
+    condition:
+        any of them
+}
+rule b {
+    strings:
+        $ = "b"
+    condition:
+        any of them
+}
+rule c {
+    strings:
+        $ = "c"
+    condition:
+        any of them
+}
+"#,
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::RULE_NO_MATCH)
+            .include_not_matched_rules(true),
+    );
+
+    // Abort on global that fails
+    scan_mem_with_abort(&scanner, b"", 0, |event, nb| {
+        if nb == 0 {
+            check_rule_no_match(event, "a", None);
+        }
+    });
+
+    // Abort on rule that fails
+    scan_mem_with_abort(&scanner, b"a", 1, |event, nb| {
+        if nb == 0 {
+            check_rule_match(event, "a", None);
+        } else if nb == 1 {
+            check_rule_no_match(event, "b", None);
+        }
     });
 }

@@ -483,16 +483,22 @@ pub struct CallbackEvents(pub(crate) u32);
 
 impl CallbackEvents {
     /// Enables the [`crate::scanner::ScanEvent::RuleMatch`] events.
-    pub const RULE_MATCH: CallbackEvents = CallbackEvents(0b0001);
+    pub const RULE_MATCH: CallbackEvents = CallbackEvents(0b0000_0001);
+
+    /// Enables the [`crate::scanner::ScanEvent::RuleNoMatch`] events.
+    ///
+    /// The [`ScanParams::include_not_matched_rules`] parameter must also be set to true
+    /// to received those events.
+    pub const RULE_NO_MATCH: CallbackEvents = CallbackEvents(0b0000_0010);
 
     /// Enables the [`crate::scanner::ScanEvent::ModuleImport`] events.
-    pub const MODULE_IMPORT: CallbackEvents = CallbackEvents(0b0010);
+    pub const MODULE_IMPORT: CallbackEvents = CallbackEvents(0b0000_0100);
 
     /// Enables the [`crate::scanner::ScanEvent::ScanStatistics`] events.
     ///
     /// The [`ScanParams::compute_statistics`] parameter must be set to true, and
     /// the `profiling` feature must have been enabled during compilation.
-    pub const SCAN_STATISTICS: CallbackEvents = CallbackEvents(0b0100);
+    pub const SCAN_STATISTICS: CallbackEvents = CallbackEvents(0b0000_1000);
 }
 
 impl std::ops::BitOr for CallbackEvents {
@@ -583,14 +589,14 @@ mod tests {
         let a = CallbackEvents::RULE_MATCH;
         let b = CallbackEvents::MODULE_IMPORT;
 
-        assert_eq!(a | b, CallbackEvents(0b11));
-        assert_eq!(a & b, CallbackEvents(0b00));
+        assert_eq!(a | b, CallbackEvents(0b101));
+        assert_eq!(a & b, CallbackEvents(0b000));
 
         let mut c = a;
         c |= b;
-        assert_eq!(c, CallbackEvents(0b11));
+        assert_eq!(c, CallbackEvents(0b101));
         assert_eq!(c & a, CallbackEvents(0b01));
         c &= b;
-        assert_eq!(c, CallbackEvents(0b10));
+        assert_eq!(c, CallbackEvents(0b100));
     }
 }
