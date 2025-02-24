@@ -1356,6 +1356,95 @@ rule d { condition: false }
         .success();
 }
 
+#[test]
+fn test_count() {
+    let rule_file = test_file(
+        br#"
+rule a {
+    strings:
+        $ = "abc"
+    condition:
+        any of them
+}
+rule b {
+    strings:
+        $ = "def"
+    condition:
+        any of them
+}
+"#,
+    );
+
+    let temp = TempDir::new().unwrap();
+    let file_a = temp.path().join("a");
+    fs::write(&file_a, "abc").unwrap();
+    let file_b = temp.path().join("b");
+    fs::write(&file_b, "abcdef").unwrap();
+    let file_c = temp.path().join("c");
+    fs::write(&file_c, "").unwrap();
+
+    // Test against a single file
+    cmd()
+        .arg("-c")
+        .arg(rule_file.path())
+        .arg(&file_a)
+        .assert()
+        .stdout(format!("{}: 1\n", file_a.display()))
+        .stderr("")
+        .success();
+
+    // Test in combination with the negate flag
+    cmd()
+        .arg("-cn")
+        .arg(rule_file.path())
+        .arg(&file_c)
+        .assert()
+        .stdout(format!("{}: 2\n", file_c.display()))
+        .stderr("")
+        .success();
+
+    // Test against a directory
+    cmd()
+        .arg("-c")
+        .arg(rule_file.path())
+        .arg(temp.path())
+        .assert()
+        .stdout(
+            predicate::str::contains(format!("{}: 1", file_a.display()))
+                .and(predicate::str::contains(format!("{}: 2", file_b.display())))
+                .and(predicate::str::contains(format!("{}: 0", file_c.display()))),
+        )
+        .stderr("")
+        .success();
+}
+
+#[test]
+#[cfg_attr(unix, ignore)]
+fn test_count_process() {
+    let rule_file = test_file(
+        br#"
+rule process_scan {
+    strings:
+        $a = "PAYLOAD_ON_STACK"
+    condition:
+        $a
+}"#,
+    );
+
+    let proc = BinHelper::run("stack");
+    let pid = proc.pid();
+
+    // Not matching
+    cmd()
+        .arg("--count")
+        .arg(rule_file.path())
+        .arg(pid.to_string())
+        .assert()
+        .stdout(format!("{pid}: 1\n"))
+        .stderr("")
+        .success();
+}
+
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
 // modified too frequently.
 struct BinHelper {
