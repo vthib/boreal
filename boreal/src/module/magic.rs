@@ -94,7 +94,6 @@ fn get_magic_value(ctx: &EvalContext, flags: Flags) -> Option<Value> {
 
     let mem = ctx.mem.get_direct()?;
     let mime_type = cookie.buffer(mem).ok()?;
-    dbg!(&mime_type);
 
     Some(Value::Bytes(mime_type.into_bytes()))
 }
