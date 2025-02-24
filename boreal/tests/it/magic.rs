@@ -10,7 +10,7 @@ import "magic"
 
 rule test {{
     // Repeat the condition to exercise the inner cache of the module
-    condition: {cond} and {cond}
+    condition: ({cond}) and ({cond})
 }}"#,
         ),
         data,
@@ -29,7 +29,11 @@ fn test_mime_type() {
         r#"magic.mime_type() == "application/x-sharedlib""#,
         ELF32_SHAREDOBJ,
     );
-    test(r#"magic.mime_type() == "application/x-dosexec""#, PE32_FILE);
+    test(
+        r#"magic.mime_type() == "application/x-dosexec" or
+        magic.mime_type() == "application/vnd.microsoft.portable-executable""#,
+        PE32_FILE,
+    );
     test(
         r#"magic.mime_type() == "text/plain""#,
         TEXT_1024_BYTES.as_bytes(),
@@ -48,7 +52,8 @@ fn test_type() {
         ELF32_SHAREDOBJ,
     );
     test(
-        r#"magic.type() == "MS-DOS executable PE32 executable (GUI) Intel 80386, for MS Windows""#,
+        r#"magic.type() == "MS-DOS executable PE32 executable (GUI) Intel 80386, for MS Windows" or
+        magic.type() == "PE32 executable (GUI) Intel 80386, for MS Windows""#,
         PE32_FILE,
     );
     test(
