@@ -1329,6 +1329,33 @@ fn test_scan_list() {
     }
 }
 
+#[test]
+fn test_negate() {
+    let rule_file = test_file(
+        br#"
+rule a { condition: true }
+rule b { condition: false }
+rule c { condition: true }
+rule d { condition: false }
+"#,
+    );
+
+    let input = test_file(b"");
+    // Not matching
+    cmd()
+        .arg("-n")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!(
+            "b {}\nd {}\n",
+            input.path().display(),
+            input.path().display()
+        ))
+        .stderr("")
+        .success();
+}
+
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
 // modified too frequently.
 struct BinHelper {
