@@ -499,6 +499,12 @@ impl CallbackEvents {
     /// The [`ScanParams::compute_statistics`] parameter must be set to true, and
     /// the `profiling` feature must have been enabled during compilation.
     pub const SCAN_STATISTICS: CallbackEvents = CallbackEvents(0b0000_1000);
+
+    /// Return an empty bitflag
+    #[must_use]
+    pub fn empty() -> Self {
+        Self(0)
+    }
 }
 
 impl std::ops::BitOr for CallbackEvents {

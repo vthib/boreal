@@ -20,7 +20,8 @@ use std::time::Duration;
 use boreal::compiler::{CompilerBuilder, CompilerProfile, ExternalValue};
 use boreal::module::{Console, Value as ModuleValue};
 use boreal::scanner::{
-    CallbackEvents, FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent, ScanParams,
+    CallbackEvents, EvaluatedRule, FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent,
+    ScanParams,
 };
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
 
@@ -35,13 +36,6 @@ use walkdir::WalkDir;
 
 fn build_command() -> Command {
     let mut command = command!()
-        .arg(
-            Arg::new("no_follow_symlinks")
-                .short('N')
-                .long("no-follow-symlinks")
-                .action(ArgAction::SetTrue)
-                .help("Do not follow symlinks when scanning"),
-        )
         .arg(
             Arg::new("print_module_data")
                 .short('D')
@@ -221,6 +215,20 @@ fn build_command() -> Command {
                 .value_name("SECONDS")
                 .value_parser(value_parser!(u64))
                 .help("Set the timeout duration before scanning is aborted"),
+        )
+        .arg(
+            Arg::new("negate")
+                .short('n')
+                .long("negate")
+                .action(ArgAction::SetTrue)
+                .help("only print rules that *do not* match"),
+        )
+        .arg(
+            Arg::new("no_follow_symlinks")
+                .short('N')
+                .long("no-follow-symlinks")
+                .action(ArgAction::SetTrue)
+                .help("Do not follow symlinks when scanning"),
         )
         .arg(
             Arg::new("no_warnings")
@@ -458,13 +466,19 @@ fn send_directory(path: &Path, args: &ArgMatches, sender: &Sender<PathBuf>) {
 
 fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
     let enable_stats = args.get_flag("scan_statistics");
+    let negate = args.get_flag("negate");
 
-    let mut callback_events = CallbackEvents::RULE_MATCH;
+    let mut callback_events = CallbackEvents::empty();
     if args.get_flag("print_module_data") {
         callback_events |= CallbackEvents::MODULE_IMPORT;
     }
     if enable_stats {
         callback_events |= CallbackEvents::SCAN_STATISTICS;
+    }
+    if negate {
+        callback_events |= CallbackEvents::RULE_NO_MATCH;
+    } else {
+        callback_events |= CallbackEvents::RULE_MATCH;
     }
 
     let mut scan_params = ScanParams::default()
@@ -474,7 +488,8 @@ fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
             args.get_one::<u64>("timeout")
                 .map(|s| Duration::from_secs(*s)),
         )
-        .callback_events(callback_events);
+        .callback_events(callback_events)
+        .include_not_matched_rules(negate);
 
     if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
         scan_params = scan_params.max_fetched_region_size(*size);
@@ -597,47 +612,10 @@ fn display_event(scanner: &Scanner, event: ScanEvent, what: &str, options: &Scan
 
     match event {
         ScanEvent::RuleMatch(rule) => {
-            if let Some(id) = options.identifier.as_ref() {
-                if rule.name != id {
-                    return;
-                }
-            }
-            if let Some(tag) = options.tag.as_ref() {
-                if rule.tags.iter().all(|t| t != tag) {
-                    return;
-                }
-            }
-
-            // <rule_namespace>:<rule_name> [<ruletags>] <matched object>
-            if options.print_namespace {
-                write!(stdout, "{}:", rule.namespace.unwrap_or("default")).unwrap();
-            }
-            write!(stdout, "{}", &rule.name).unwrap();
-            if options.print_tags {
-                write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
-            }
-            if options.print_metadata {
-                print_metadata(&mut stdout, scanner, rule.metadatas);
-            }
-            writeln!(stdout, " {what}").unwrap();
-
-            if options.print_strings_matches() {
-                for string in &rule.matches {
-                    for m in &string.matches {
-                        // <offset>:<length>:<name>: <match>
-                        write!(stdout, "0x{:x}:", m.base + m.offset).unwrap();
-                        if options.print_string_length {
-                            write!(stdout, "{}:", m.length).unwrap();
-                        }
-                        write!(stdout, "${}", string.name).unwrap();
-                        if options.print_strings_matches_data {
-                            write!(stdout, ": ").unwrap();
-                            print_bytes(&mut stdout, &m.data);
-                        }
-                        writeln!(stdout).unwrap();
-                    }
-                }
-            }
+            display_rule(&mut stdout, &rule, scanner, what, options);
+        }
+        ScanEvent::RuleNoMatch(rule) => {
+            display_rule(&mut stdout, &rule, scanner, what, options);
         }
         ScanEvent::ModuleImport {
             module_name,
@@ -656,6 +634,56 @@ fn display_event(scanner: &Scanner, event: ScanEvent, what: &str, options: &Scan
             writeln!(stdout, "{what}: {stats:#?}").unwrap();
         }
         _ => (),
+    }
+}
+
+fn display_rule(
+    stdout: &mut StdoutLock,
+    rule: &EvaluatedRule,
+    scanner: &Scanner,
+    what: &str,
+    options: &ScanOptions,
+) {
+    if let Some(id) = options.identifier.as_ref() {
+        if rule.name != id {
+            return;
+        }
+    }
+    if let Some(tag) = options.tag.as_ref() {
+        if rule.tags.iter().all(|t| t != tag) {
+            return;
+        }
+    }
+
+    // <rule_namespace>:<rule_name> [<ruletags>] <matched object>
+    if options.print_namespace {
+        write!(stdout, "{}:", rule.namespace.unwrap_or("default")).unwrap();
+    }
+    write!(stdout, "{}", &rule.name).unwrap();
+    if options.print_tags {
+        write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
+    }
+    if options.print_metadata {
+        print_metadata(stdout, scanner, rule.metadatas);
+    }
+    writeln!(stdout, " {what}").unwrap();
+
+    if options.print_strings_matches() {
+        for string in &rule.matches {
+            for m in &string.matches {
+                // <offset>:<length>:<name>: <match>
+                write!(stdout, "0x{:x}:", m.base + m.offset).unwrap();
+                if options.print_string_length {
+                    write!(stdout, "{}:", m.length).unwrap();
+                }
+                write!(stdout, "${}", string.name).unwrap();
+                if options.print_strings_matches_data {
+                    write!(stdout, ": ").unwrap();
+                    print_bytes(stdout, &m.data);
+                }
+                writeln!(stdout).unwrap();
+            }
+        }
     }
 }
 
