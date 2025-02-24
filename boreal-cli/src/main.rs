@@ -217,6 +217,13 @@ fn build_command() -> Command {
                 .help("Set the timeout duration before scanning is aborted"),
         )
         .arg(
+            Arg::new("count")
+                .short('c')
+                .long("count")
+                .action(ArgAction::SetTrue)
+                .help("Print number of rules that matched (or did not match if negate is set)"),
+        )
+        .arg(
             Arg::new("negate")
                 .short('n')
                 .long("negate")
@@ -338,6 +345,7 @@ fn main() -> ExitCode {
     }
     scanner.set_scan_params(scan_params);
 
+    let mut nb_rules = 0;
     match Input::new(&args) {
         Ok(Input::Directory(path)) => {
             let (thread_pool, sender) = ThreadPool::new(&scanner, &scan_options, &args);
@@ -348,20 +356,32 @@ fn main() -> ExitCode {
 
             ExitCode::SUCCESS
         }
-        Ok(Input::File(path)) => match scan_file(&scanner, &path, &scan_options) {
-            Ok(()) => ExitCode::SUCCESS,
+        Ok(Input::File(path)) => match scan_file(&scanner, &path, &scan_options, &mut nb_rules) {
+            Ok(()) => {
+                if scan_options.print_count {
+                    println!("{}: {}", path.display(), nb_rules);
+                }
+                ExitCode::SUCCESS
+            }
             Err(err) => {
                 eprintln!("Cannot scan {}: {}", path.display(), err);
                 ExitCode::FAILURE
             }
         },
-        Ok(Input::Process(pid)) => match scan_process(&scanner, pid, &scan_options) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(err) => {
-                eprintln!("Cannot scan {pid}: {err}");
-                ExitCode::FAILURE
+        Ok(Input::Process(pid)) => {
+            match scan_process(&scanner, pid, &scan_options, &mut nb_rules) {
+                Ok(()) => {
+                    if scan_options.print_count {
+                        println!("{pid}: {nb_rules}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    eprintln!("Cannot scan {pid}: {err}");
+                    ExitCode::FAILURE
+                }
             }
-        },
+        }
         Ok(Input::Files(files)) => {
             let (thread_pool, sender) = ThreadPool::new(&scanner, &scan_options, &args);
 
@@ -550,6 +570,7 @@ struct ScanOptions {
     print_metadata: bool,
     print_namespace: bool,
     print_tags: bool,
+    print_count: bool,
     no_mmap: bool,
     identifier: Option<String>,
     tag: Option<String>,
@@ -563,6 +584,7 @@ impl ScanOptions {
             print_metadata: args.get_flag("print_metadata"),
             print_namespace: args.get_flag("print_namespace"),
             print_tags: args.get_flag("print_tags"),
+            print_count: args.get_flag("count"),
             no_mmap: if cfg!(feature = "memmap") {
                 args.get_flag("no_mmap")
             } else {
@@ -578,7 +600,12 @@ impl ScanOptions {
     }
 }
 
-fn scan_file(scanner: &Scanner, path: &Path, options: &ScanOptions) -> Result<(), ScanError> {
+fn scan_file(
+    scanner: &Scanner,
+    path: &Path,
+    options: &ScanOptions,
+    nb_rules: &mut u64,
+) -> Result<(), ScanError> {
     let what = path.display().to_string();
 
     if cfg!(feature = "memmap") && !options.no_mmap {
@@ -586,36 +613,52 @@ fn scan_file(scanner: &Scanner, path: &Path, options: &ScanOptions) -> Result<()
         // file is truncated while the scan is ongoing.
         unsafe {
             scanner.scan_file_memmap_with_callback(path, |event| {
-                display_event(scanner, event, &what, options);
+                display_event(scanner, event, &what, options, nb_rules);
                 ScanCallbackResult::Continue
             })
         }
     } else {
         scanner.scan_file_with_callback(path, |event| {
-            display_event(scanner, event, &what, options);
+            display_event(scanner, event, &what, options, nb_rules);
             ScanCallbackResult::Continue
         })
     }
 }
 
-fn scan_process(scanner: &Scanner, pid: u32, options: &ScanOptions) -> Result<(), ScanError> {
+fn scan_process(
+    scanner: &Scanner,
+    pid: u32,
+    options: &ScanOptions,
+    nb_rules: &mut u64,
+) -> Result<(), ScanError> {
     let what = pid.to_string();
     scanner.scan_process_with_callback(pid, |event| {
-        display_event(scanner, event, &what, options);
-        ScanCallbackResult::Continue
+        handle_event(scanner, event, &what, options, nb_rules);
     })
 }
 
-fn display_event(scanner: &Scanner, event: ScanEvent, what: &str, options: &ScanOptions) {
+fn handle_event(
+    scanner: &Scanner,
+    event: ScanEvent,
+    what: &str,
+    options: &ScanOptions,
+    nb_rules: &mut u64,
+) {
     // Lock stdout to avoid having multiple threads interlap their writes
     let mut stdout = std::io::stdout().lock();
 
     match event {
         ScanEvent::RuleMatch(rule) => {
-            display_rule(&mut stdout, &rule, scanner, what, options);
+            *nb_rules += 1;
+            if !options.print_count {
+                display_rule(&mut stdout, &rule, scanner, what, options);
+            }
         }
         ScanEvent::RuleNoMatch(rule) => {
-            display_rule(&mut stdout, &rule, scanner, what, options);
+            *nb_rules += 1;
+            if !options.print_count {
+                display_rule(&mut stdout, &rule, scanner, what, options);
+            }
         }
         ScanEvent::ModuleImport {
             module_name,
@@ -765,8 +808,12 @@ impl ThreadPool {
 
         std::thread::spawn(move || {
             while let Ok(path) = receiver.recv() {
-                if let Err(err) = scan_file(&scanner, &path, &scan_options) {
+                let mut nb_rules = 0;
+                if let Err(err) = scan_file(&scanner, &path, &scan_options, &mut nb_rules) {
                     eprintln!("Cannot scan file {}: {}", path.display(), err);
+                }
+                if scan_options.print_count {
+                    println!("{}: {}", path.display(), nb_rules);
                 }
             }
         })
@@ -921,6 +968,7 @@ mod tests {
             print_metadata: false,
             print_namespace: false,
             print_tags: false,
+            print_count: false,
             no_mmap: false,
             identifier: None,
             tag: None,
