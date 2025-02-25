@@ -1445,6 +1445,47 @@ rule process_scan {
         .success();
 }
 
+#[test]
+#[cfg_attr(unix, ignore)]
+fn test_count_limit() {
+    let rule_file = test_file(
+        br#"
+rule a { condition: true }
+rule b { condition: true }
+rule c { condition: true }
+"#,
+    );
+
+    let input = test_file(b"");
+    cmd()
+        .arg("-l")
+        .arg("2")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!(
+            "a {}\nb {}\n",
+            input.path().display(),
+            input.path().display(),
+        ))
+        .stderr("")
+        .success();
+
+    // Also works with a process
+    let proc = BinHelper::run("stack");
+    let pid = proc.pid();
+
+    // Not matching
+    cmd()
+        .arg("--max-rules=2")
+        .arg(rule_file.path())
+        .arg(pid.to_string())
+        .assert()
+        .stdout(format!("a {pid}\nb {pid}\n"))
+        .stderr("")
+        .success();
+}
+
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
 // modified too frequently.
 struct BinHelper {

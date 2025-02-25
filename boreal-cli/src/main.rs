@@ -224,6 +224,14 @@ fn build_command() -> Command {
                 .help("Print number of rules that matched (or did not match if negate is set)"),
         )
         .arg(
+            Arg::new("count_limit")
+                .short('l')
+                .long("max-rules")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(u64))
+                .help("Abort the scan once NUMBER rules have been matched (or not matched if negate is set)")
+        )
+        .arg(
             Arg::new("negate")
                 .short('n')
                 .long("negate")
@@ -571,6 +579,7 @@ struct ScanOptions {
     print_namespace: bool,
     print_tags: bool,
     print_count: bool,
+    count_limit: Option<u64>,
     no_mmap: bool,
     identifier: Option<String>,
     tag: Option<String>,
@@ -585,6 +594,7 @@ impl ScanOptions {
             print_namespace: args.get_flag("print_namespace"),
             print_tags: args.get_flag("print_tags"),
             print_count: args.get_flag("count"),
+            count_limit: args.get_one::<u64>("count_limit").copied(),
             no_mmap: if cfg!(feature = "memmap") {
                 args.get_flag("no_mmap")
             } else {
@@ -608,20 +618,23 @@ fn scan_file(
 ) -> Result<(), ScanError> {
     let what = path.display().to_string();
 
-    if cfg!(feature = "memmap") && !options.no_mmap {
+    let res = if cfg!(feature = "memmap") && !options.no_mmap {
         // Safety: By default, we accept that this CLI tool can abort if the underlying
         // file is truncated while the scan is ongoing.
         unsafe {
             scanner.scan_file_memmap_with_callback(path, |event| {
-                display_event(scanner, event, &what, options, nb_rules);
-                ScanCallbackResult::Continue
+                handle_event(scanner, event, &what, options, nb_rules)
             })
         }
     } else {
         scanner.scan_file_with_callback(path, |event| {
-            display_event(scanner, event, &what, options, nb_rules);
-            ScanCallbackResult::Continue
+            handle_event(scanner, event, &what, options, nb_rules)
         })
+    };
+
+    match res {
+        Ok(()) | Err(ScanError::CallbackAbort) => Ok(()),
+        Err(err) => Err(err),
     }
 }
 
@@ -632,9 +645,13 @@ fn scan_process(
     nb_rules: &mut u64,
 ) -> Result<(), ScanError> {
     let what = pid.to_string();
-    scanner.scan_process_with_callback(pid, |event| {
-        handle_event(scanner, event, &what, options, nb_rules);
-    })
+    let res = scanner.scan_process_with_callback(pid, |event| {
+        handle_event(scanner, event, &what, options, nb_rules)
+    });
+    match res {
+        Ok(()) | Err(ScanError::CallbackAbort) => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 fn handle_event(
@@ -643,7 +660,7 @@ fn handle_event(
     what: &str,
     options: &ScanOptions,
     nb_rules: &mut u64,
-) {
+) -> ScanCallbackResult {
     // Lock stdout to avoid having multiple threads interlap their writes
     let mut stdout = std::io::stdout().lock();
 
@@ -677,6 +694,12 @@ fn handle_event(
             writeln!(stdout, "{what}: {stats:#?}").unwrap();
         }
         _ => (),
+    }
+
+    if options.count_limit.is_some_and(|limit| *nb_rules >= limit) {
+        ScanCallbackResult::Abort
+    } else {
+        ScanCallbackResult::Continue
     }
 }
 
@@ -969,6 +992,7 @@ mod tests {
             print_namespace: false,
             print_tags: false,
             print_count: false,
+            count_limit: None,
             no_mmap: false,
             identifier: None,
             tag: None,
