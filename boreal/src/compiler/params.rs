@@ -14,6 +14,9 @@ pub struct CompilerParams {
 
     /// Disable includes in YARA documents.
     pub(crate) disable_includes: bool,
+
+    /// Maximum number of strings in a single rule.
+    pub(crate) max_strings_per_rule: usize,
 }
 
 impl Default for CompilerParams {
@@ -23,6 +26,7 @@ impl Default for CompilerParams {
             fail_on_warnings: false,
             compute_statistics: false,
             disable_includes: false,
+            max_strings_per_rule: 10_000,
         }
     }
 }
@@ -81,6 +85,17 @@ impl CompilerParams {
     #[must_use]
     pub fn disable_includes(mut self, disable_includes: bool) -> Self {
         self.disable_includes = disable_includes;
+        self
+    }
+
+    /// Set the maximum number of strings in a single rule.
+    ///
+    /// If a rule contains more strings than this limit, its compilation will fail.
+    ///
+    /// Default value is 10 000.
+    #[must_use]
+    pub fn max_strings_per_rule(mut self, max_strings_per_rule: usize) -> Self {
+        self.max_strings_per_rule = max_strings_per_rule;
         self
     }
 }

@@ -27,14 +27,18 @@ fn test_invalid_files() {
         }
 
         let mut compiler = if directives.without_yara {
-            if cfg!(debug_assertions) {
-                let mut compiler = Compiler::new_without_yara();
-                let params = CompilerParams::default().max_condition_depth(15);
-                compiler.set_params(params);
-                compiler
-            } else {
-                Compiler::new_without_yara()
+            let mut compiler = Compiler::new_without_yara();
+            let mut params = CompilerParams::default();
+            if let Some(limit) = directives.max_strings_per_rule {
+                // This is only done without yara because this is a global parameter
+                // for yara, and will impact other tests...
+                params = params.max_strings_per_rule(limit);
             }
+            if cfg!(debug_assertions) {
+                params = params.max_condition_depth(15);
+            }
+            compiler.set_params(params);
+            compiler
         } else {
             Compiler::new()
         };
@@ -57,6 +61,7 @@ struct Directives<'a> {
     disable_includes: bool,
     error: &'a str,
     skip: bool,
+    max_strings_per_rule: Option<usize>,
 }
 
 fn extract_directives(contents: &str) -> Directives {
@@ -71,13 +76,15 @@ fn extract_directives(contents: &str) -> Directives {
         };
         if let Some(error) = dir.strip_prefix("error: ") {
             directives.error = error;
-            continue;
-        }
-        match dir {
-            "no libyara conformance" => directives.without_yara = true,
-            "disable includes" => directives.disable_includes = true,
-            "skip" => directives.skip = true,
-            dir => panic!("unknown directive {}", dir),
+        } else if let Some(v) = dir.strip_prefix("max_strings_per_rule: ") {
+            directives.max_strings_per_rule = Some(v.parse().unwrap());
+        } else {
+            match dir {
+                "no libyara conformance" => directives.without_yara = true,
+                "disable includes" => directives.disable_includes = true,
+                "skip" => directives.skip = true,
+                dir => panic!("unknown directive {}", dir),
+            }
         }
     }
 

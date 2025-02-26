@@ -259,20 +259,36 @@ pub enum CompilationError {
         error: VariableCompilationError,
     },
 
-    // Errors classified as warnings
+    /// A rule contains too many strings.
+    ///
+    /// See the [`crate::compiler::CompilerParams::max_strings_per_rule`] limit.
+    TooManyStrings {
+        /// Span of the string reaching the limit.
+        span: Range<usize>,
+
+        /// The value of the limit.
+        limit: usize,
+    },
+
     /// A bytes value is used as a boolean expression.
+    ///
+    /// This is a warning and not an error.
     ImplicitBytesToBooleanCast {
         /// Span of the expression being casted.
         span: Range<usize>,
     },
 
     /// A non ascii character is present in a regex.
+    ///
+    /// This is a warning and not an error.
     RegexContainsNonAsciiChar {
         /// Span of the non the ascii byte in the input
         span: Range<usize>,
     },
 
     /// An unknown escape sequence is present in the regex.
+    ///
+    /// This is a warning and not an error.
     RegexUnknownEscape {
         /// Span of the escape sequence.
         span: Range<usize>,
@@ -444,6 +460,10 @@ impl CompilationError {
                 .with_message(format!(
                     "variable ${variable_name} cannot be compiled: {error}"
                 ))
+                .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::TooManyStrings { span, limit } => Diagnostic::error()
+                .with_message(format!("the rule contains more than {limit} strings"))
                 .with_labels(vec![Label::primary((), span.clone())]),
 
             Self::ImplicitBytesToBooleanCast { span } => Diagnostic::warning()
