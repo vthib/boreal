@@ -129,6 +129,13 @@ impl<'a> RuleCompiler<'a> {
         params: &'a CompilerParams,
         bytes_pool: &'a mut BytesPoolBuilder,
     ) -> Result<Self, CompilationError> {
+        if rule_variables.len() > params.max_strings_per_rule {
+            return Err(CompilationError::TooManyStrings {
+                span: rule_variables[params.max_strings_per_rule].span.clone(),
+                limit: params.max_strings_per_rule,
+            });
+        }
+
         let mut names_set = HashSet::new();
         let mut variables = Vec::with_capacity(rule_variables.len());
         for var in rule_variables {
