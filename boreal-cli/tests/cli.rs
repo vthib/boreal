@@ -1486,6 +1486,36 @@ rule c { condition: true }
         .success();
 }
 
+#[test]
+fn test_max_strings_per_rule() {
+    let rule_file = test_file(
+        br#"
+rule a {
+    strings:
+        $a = "aaa"
+        $b = "bbb"
+        $c = "ccc"
+    condition:
+        any of them
+}
+"#,
+    );
+
+    let input = test_file(b"");
+    cmd()
+        .arg("--max-strings-per-rule=2")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout("")
+        .stderr(
+            predicate::str::contains("error").and(predicate::str::contains(
+                "the rule contains more than 2 strings",
+            )),
+        )
+        .failure();
+}
+
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
 // modified too frequently.
 struct BinHelper {
