@@ -17,7 +17,7 @@ use std::process::ExitCode;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use boreal::compiler::{CompilerBuilder, CompilerProfile, ExternalValue};
+use boreal::compiler::{CompilerBuilder, CompilerParams, CompilerProfile, ExternalValue};
 use boreal::module::{Console, Value as ModuleValue};
 use boreal::scanner::{
     CallbackEvents, EvaluatedRule, FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent,
@@ -139,6 +139,13 @@ fn build_command() -> Command {
                 .value_name("legacy|fast|singlepass")
                 .value_parser(parse_fragmented_scan_mode)
                 .help("Specify scan mode for fragmented memory (e.g. process scanning)"),
+        )
+        .arg(
+            Arg::new("max_strings_per_rule")
+                .long("max-strings-per-rule")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(usize))
+                .help("Maximum number of strings in a single rule")
         )
         .arg(
             Arg::new("print_namespace")
@@ -313,11 +320,13 @@ fn main() -> ExitCode {
 
         let mut compiler = builder.build();
 
-        compiler.set_params(
-            boreal::compiler::CompilerParams::default()
-                .fail_on_warnings(args.get_flag("fail_on_warnings"))
-                .compute_statistics(args.get_flag("string_statistics")),
-        );
+        let mut params = CompilerParams::default()
+            .fail_on_warnings(args.get_flag("fail_on_warnings"))
+            .compute_statistics(args.get_flag("string_statistics"));
+        if let Some(limit) = args.get_one::<usize>("max_strings_per_rule") {
+            params = params.max_strings_per_rule(*limit);
+        }
+        compiler.set_params(params);
 
         if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
             for (name, value) in defines {
