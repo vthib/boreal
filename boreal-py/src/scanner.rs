@@ -10,7 +10,7 @@ use ::boreal::module::{Console, ConsoleData, Value};
 use ::boreal::scanner::{self, CallbackEvents, ScanCallbackResult, ScanEvent};
 
 use crate::rule_match::Match;
-use crate::{CALLBACK_ALL, CALLBACK_MATCHES, CALLBACK_NON_MATCHES};
+use crate::{CALLBACK_ALL, CALLBACK_MATCHES, CALLBACK_NON_MATCHES, MATCH_MAX_LENGTH};
 
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
@@ -126,6 +126,11 @@ impl Scanner {
             events |= CallbackEvents::MODULE_IMPORT;
         }
         params = params.callback_events(events);
+        if let Ok(lock) = MATCH_MAX_LENGTH.lock() {
+            if let Some(value) = *lock {
+                params = params.match_max_length(value);
+            }
+        }
         scanner.set_scan_params(params);
 
         // TODO
