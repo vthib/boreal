@@ -190,12 +190,15 @@ fn compile(
 }
 
 #[pyfunction]
-#[pyo3(signature = (max_strings_per_rule=None, max_match_data=None))]
+#[pyo3(signature = (
+    max_strings_per_rule=None,
+    max_match_data=None,
+    stack_size=None))]
 #[allow(clippy::too_many_arguments)]
 fn set_config(
-    // TODO: what to do for stack_size
     max_strings_per_rule: Option<usize>,
     max_match_data: Option<usize>,
+    stack_size: Option<u64>,
 ) {
     if let Some(value) = max_strings_per_rule {
         if let Ok(mut lock) = MAX_STRINGS_PER_RULE.lock() {
@@ -207,6 +210,8 @@ fn set_config(
             *lock = Some(value);
         }
     }
+    // Ignore stack size, this isn't used in boreal.
+    let _ = stack_size;
 }
 
 fn get_available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {

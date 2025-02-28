@@ -57,3 +57,9 @@ def test_run_last_set_config_max_match_data(module, is_yara):
     results = rules.match(data="<123456>")
     s = results[0].strings[0].instances[0]
     assert s.matched_data == b"123"
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_run_last_set_config_stack_size(module, is_yara):
+    # Just check isetting stack_size doesn't fail
+    module.set_config(stack_size=10_000)
