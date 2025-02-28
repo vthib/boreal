@@ -2,6 +2,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::CString;
+use std::sync::Mutex;
 
 use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::prelude::*;
@@ -22,6 +23,9 @@ mod string_matches;
 
 create_exception!(boreal, AddRuleError, PyException, "error when adding rules");
 
+static MAX_STRINGS_PER_RULE: Mutex<Option<usize>> = Mutex::new(None);
+static MATCH_MAX_LENGTH: Mutex<Option<usize>> = Mutex::new(None);
+
 const CALLBACK_CONTINUE: u32 = 0;
 const CALLBACK_ABORT: u32 = 1;
 
@@ -34,6 +38,7 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
 
     m.add_function(wrap_pyfunction!(compile, m)?)?;
+    m.add_function(wrap_pyfunction!(set_config, m)?)?;
 
     m.add("modules", get_available_modules(py))?;
 
@@ -89,11 +94,15 @@ fn compile(
 ) -> PyResult<scanner::Scanner> {
     let mut compiler = build_compiler();
 
-    compiler.set_params(
-        compiler::CompilerParams::default()
-            .disable_includes(!includes)
-            .fail_on_warnings(error_on_warning),
-    );
+    let mut params = compiler::CompilerParams::default()
+        .disable_includes(!includes)
+        .fail_on_warnings(error_on_warning);
+    if let Ok(lock) = MAX_STRINGS_PER_RULE.lock() {
+        if let Some(value) = *lock {
+            params = params.max_strings_per_rule(value);
+        }
+    }
+    compiler.set_params(params);
 
     if let Some(externals) = externals {
         add_externals(&mut compiler, externals)?;
@@ -178,6 +187,26 @@ fn compile(
     }
 
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
+}
+
+#[pyfunction]
+#[pyo3(signature = (max_strings_per_rule=None, max_match_data=None))]
+#[allow(clippy::too_many_arguments)]
+fn set_config(
+    // TODO: what to do for stack_size
+    max_strings_per_rule: Option<usize>,
+    max_match_data: Option<usize>,
+) {
+    if let Some(value) = max_strings_per_rule {
+        if let Ok(mut lock) = MAX_STRINGS_PER_RULE.lock() {
+            *lock = Some(value);
+        }
+    }
+    if let Some(value) = max_match_data {
+        if let Ok(mut lock) = MATCH_MAX_LENGTH.lock() {
+            *lock = Some(value);
+        }
+    }
 }
 
 fn get_available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
