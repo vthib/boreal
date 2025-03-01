@@ -1089,6 +1089,59 @@ rule my_rule {
 }
 
 #[test]
+fn test_print_string_xor_key() {
+    let rule_file = test_file(
+        br#"
+rule my_rule {
+    strings:
+        $a = "aaa" ascii wide xor
+    condition:
+        // The rule can be evaluated without scanning the strings.
+        // This ensures that printing xor keys forces the computation of the
+        // string matches.
+        true or any of them
+}"#,
+    );
+
+    let input = test_file(b"aaa\nbbb\nabcccba\nB#B#B#\n");
+    let path = input.path().display();
+
+    // Test xor only
+    cmd()
+        .arg("-X")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!(
+            r#"my_rule {path}
+0x0:$a:xor(0x00,aaa)
+0x4:$a:xor(0x03,aaa)
+0xa:$a:xor(0x02,aaa)
+0x10:$a:xor(0x23,a\x00a\x00a\x00)
+"#
+        ))
+        .stderr("")
+        .success();
+
+    // With match data
+    cmd()
+        .arg("-Xs")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!(
+            r#"my_rule {path}
+0x0:$a:xor(0x00,aaa): aaa
+0x4:$a:xor(0x03,aaa): bbb
+0xa:$a:xor(0x02,aaa): ccc
+0x10:$a:xor(0x23,a\x00a\x00a\x00): B#B#B#
+"#
+        ))
+        .stderr("")
+        .success();
+}
+
+#[test]
 fn test_timeout() {
     let rule_file = test_file(
         br#"
