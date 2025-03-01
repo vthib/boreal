@@ -40,6 +40,7 @@ pub(crate) struct Modifiers {
     pub ascii: bool,
     pub nocase: bool,
     pub dot_all: bool,
+    pub xor_start: Option<u8>,
 }
 
 /// State of an aho-corasick match on a [`Matcher`] literals.
@@ -187,9 +188,9 @@ impl Matcher {
             literals.push(value);
         }
 
-        if let Some(xor_range) = modifiers.xor {
+        if let Some(xor_details) = modifiers.xor {
             // For each literal, for each byte in the xor range, build a new literal
-            let xor_range = xor_range.0..=xor_range.1;
+            let xor_range = xor_details.0..=xor_details.1;
             let xor_range_len = xor_range.len(); // modifiers.xor_range.1.saturating_sub(modifiers.xor_range.0) + 1;
             let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
 
@@ -209,6 +210,7 @@ impl Matcher {
                     ascii: modifiers.ascii,
                     nocase: modifiers.nocase,
                     dot_all: false,
+                    xor_start: Some(xor_details.0),
                 },
             };
         }
@@ -254,6 +256,7 @@ impl Matcher {
                 ascii: modifiers.ascii,
                 nocase: modifiers.nocase,
                 dot_all: false,
+                xor_start: None,
             },
         }
     }
@@ -287,6 +290,23 @@ impl Matcher {
                 Some(MatchType::WideAlternate)
             }
             _ => Some(MatchType::Ascii),
+        }
+    }
+
+    pub fn get_xor_key(&self, literal_index: usize) -> u8 {
+        #[allow(clippy::cast_possible_truncation)]
+        match self.modifiers.xor_start {
+            Some(start) => {
+                if self.modifiers.wide {
+                    match literal_index.checked_sub(self.literals.len() / 2) {
+                        Some(index) => start + (index as u8),
+                        None => start + (literal_index as u8),
+                    }
+                } else {
+                    start + (literal_index as u8)
+                }
+            }
+            None => 0,
         }
     }
 
@@ -439,6 +459,7 @@ mod tests {
                 ascii: false,
                 wide: false,
                 nocase: false,
+                xor_start: None,
             },
             kind: MatcherKind::Literals,
         });
@@ -449,6 +470,7 @@ mod tests {
             wide: false,
             nocase: false,
             dot_all: false,
+            xor_start: None,
         });
         test_type_traits(MatchType::Ascii);
         test_type_traits_non_clonable(Matches::None);

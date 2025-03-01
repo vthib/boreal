@@ -1947,3 +1947,65 @@ rule a {
     checker.check(b"abccc", true);
     checker.check(b"aabbc", false);
 }
+
+#[test]
+fn test_string_match_xor_key() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = "aaa" xor
+        $b = "bbb"
+        $c = "ccc" xor(0x05-0x10)
+        $d = "ddd" wide xor
+        $e = /eee/
+        $f = { 61 61 ?? ?? ?? ?? 62 }
+    condition:
+        any of them
+}"#,
+    );
+
+    checker.check_xor_matches(
+        b"aaa bbb ccc ddd eee E!E!E!",
+        vec![
+            (
+                "a",
+                vec![
+                    (b"aaa", 0, 0),
+                    (b"bbb", 4, 3),
+                    (b"ccc", 8, 2),
+                    (b"ddd", 12, 5),
+                    (b"eee", 16, 4),
+                ],
+            ),
+            ("b", vec![(b"bbb", 4, 0)]),
+            ("c", vec![(b"ddd", 12, 7), (b"eee", 16, 6)]),
+            ("d", vec![(b"E!E!E!", 20, 33)]),
+            ("e", vec![(b"eee", 16, 0)]),
+            ("f", vec![(b"aaa bbb", 0, 0)]),
+        ],
+    );
+
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = "aaa" ascii wide xor(0x23-0x24)
+    condition:
+        any of them
+}"#,
+    );
+
+    checker.check_xor_matches(
+        b"BBB EEE DDD B#B#B# E$E$E$ D%D%D%",
+        vec![(
+            "a",
+            vec![
+                (b"BBB", 0, 0x23),
+                (b"EEE", 4, 0x24),
+                (b"B#B#B#", 12, 0x23),
+                (b"E$E$E$", 19, 0x24),
+            ],
+        )],
+    );
+}

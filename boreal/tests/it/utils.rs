@@ -333,6 +333,24 @@ impl Checker {
     }
 
     #[track_caller]
+    pub fn check_xor_matches(&mut self, mem: &[u8], expected: XorMatches) {
+        // We need to compute the full matches for this test
+        {
+            let mut scanner = self.scanner.clone();
+            scanner.set_scan_params(scanner.scan_params().clone().compute_full_matches(true));
+            let res = scanner.scan_mem(mem).unwrap();
+            let res = get_boreal_xor_matches(&res);
+            assert_eq!(res, expected, "test failed for boreal");
+        }
+
+        if let Some(rules) = &self.yara_rules {
+            let res = rules.scan_mem(mem, 1).unwrap();
+            let res = get_yara_xor_matches(&res);
+            assert_eq!(res, expected, "conformity test failed for libyara");
+        }
+    }
+
+    #[track_caller]
     #[cfg(feature = "process")]
     #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     pub fn check_process_full_matches(&mut self, pid: u32, expected: FullMatches) {
@@ -698,6 +716,7 @@ pub fn check_warnings(rule: &str, expected_warnings: &[&str]) {
 }
 
 pub type FullMatches<'a> = Vec<(String, Vec<(&'a str, Vec<(&'a [u8], usize, usize)>)>)>;
+pub type XorMatches<'a> = Vec<(&'a str, Vec<(&'a [u8], usize, u8)>)>;
 
 pub fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
     res.rules
@@ -761,6 +780,44 @@ fn check_yara_full_matches(res: &[yara::Rule], mut expected: FullMatches) {
         s.1.retain(|m| !m.1.is_empty());
     }
     assert_eq!(res, expected, "conformity test failed for libyara");
+}
+
+pub fn get_boreal_xor_matches<'a>(res: &'a ScanResult<'a>) -> XorMatches<'a> {
+    assert_eq!(res.rules.len(), 1);
+    res.rules[0]
+        .matches
+        .iter()
+        .map(|str_match| {
+            (
+                str_match.name,
+                str_match
+                    .matches
+                    .iter()
+                    .map(|m| (&*m.data, m.offset, m.xor_key))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn get_yara_xor_matches<'a>(res: &'a [yara::Rule]) -> XorMatches<'a> {
+    assert_eq!(res.len(), 1);
+    res[0]
+        .strings
+        .iter()
+        .map(|str_match| {
+            (
+                // The identifier from yara starts with '$', not us.
+                // TODO: should we normalize this?
+                &str_match.identifier[1..],
+                str_match
+                    .matches
+                    .iter()
+                    .map(|m| (&*m.data, m.offset, m.xor_key))
+                    .collect(),
+            )
+        })
+        .collect()
 }
 
 pub fn build_rule(condition: &str) -> String {

@@ -1392,9 +1392,9 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "yara"
-version = "0.29.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd05a7a0913206818192765226ccc89557941c4700c6666047d415ea4db22dc2"
+checksum = "2860d5b9e61e482a7bb3481ae4375e9c551dc07afaf15c2172dd81009f01686c"
 dependencies = [
  "bitflags",
  "thiserror",

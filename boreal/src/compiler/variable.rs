@@ -69,6 +69,7 @@ pub(super) fn compile_variable(
                     ascii: modifiers.ascii,
                     nocase: modifiers.nocase,
                     dot_all,
+                    xor_start: None,
                 },
             )
             .map_err(VariableCompilationError::Regex)
@@ -81,6 +82,7 @@ pub(super) fn compile_variable(
                 ascii: modifiers.ascii,
                 nocase: modifiers.nocase,
                 dot_all: true,
+                xor_start: None,
             },
         )
         .map_err(VariableCompilationError::Regex),
