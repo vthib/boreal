@@ -13,7 +13,7 @@ pub struct StringMatchInstance {
     offset: usize,
 
     /// Matched data, might have been truncated if too long.
-    matched_data: Vec<u8>,
+    matched_data: Box<[u8]>,
 
     /// Length of the entire match.
     #[pyo3(get)]

@@ -120,7 +120,7 @@ pub struct StringMatch {
     /// The matched data.
     ///
     /// The length of this field is capped.
-    pub data: Vec<u8>,
+    pub data: Box<[u8]>,
 }
 
 impl StringMatch {
@@ -158,7 +158,7 @@ mod tests {
             base: 0,
             offset: 0,
             length: 0,
-            data: Vec::new(),
+            data: Box::new([]),
         });
     }
 }
