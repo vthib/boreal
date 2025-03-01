@@ -179,6 +179,18 @@ fn build_command() -> Command {
                 ),
         )
         .arg(
+            Arg::new("print_xor_key")
+                .short('X')
+                .long("print-xor-key")
+                .action(ArgAction::SetTrue)
+                .help("Print the xor key and the plaintext of matched strings")
+                .long_help(
+                    "Note that enabling this parameter will force the \
+                     computation of all string matches,\ndisabling \
+                     the no scan optimization in the process.",
+                ),
+        )
+        .arg(
             Arg::new("print_metadata")
                 .short('m')
                 .long("print-meta")
@@ -584,6 +596,7 @@ fn parse_compiler_profile(profile: &str) -> Result<CompilerProfile, String> {
 struct ScanOptions {
     print_strings_matches_data: bool,
     print_string_length: bool,
+    print_xor_key: bool,
     print_metadata: bool,
     print_namespace: bool,
     print_tags: bool,
@@ -599,6 +612,7 @@ impl ScanOptions {
         Self {
             print_strings_matches_data: args.get_flag("print_strings"),
             print_string_length: args.get_flag("print_string_length"),
+            print_xor_key: args.get_flag("print_xor_key"),
             print_metadata: args.get_flag("print_metadata"),
             print_namespace: args.get_flag("print_namespace"),
             print_tags: args.get_flag("print_tags"),
@@ -615,7 +629,7 @@ impl ScanOptions {
     }
 
     fn print_strings_matches(&self) -> bool {
-        self.print_strings_matches_data || self.print_string_length
+        self.print_strings_matches_data || self.print_string_length || self.print_xor_key
     }
 }
 
@@ -752,9 +766,14 @@ fn display_rule(
                     write!(stdout, "{}:", m.length).unwrap();
                 }
                 write!(stdout, "${}", string.name).unwrap();
+                if options.print_xor_key {
+                    write!(stdout, ":xor(0x{:02x},", m.xor_key).unwrap();
+                    print_bytes(stdout, &m.data, m.xor_key);
+                    write!(stdout, ")").unwrap();
+                }
                 if options.print_strings_matches_data {
                     write!(stdout, ": ").unwrap();
-                    print_bytes(stdout, &m.data);
+                    print_bytes(stdout, &m.data, 0);
                 }
                 writeln!(stdout).unwrap();
             }
@@ -772,7 +791,7 @@ fn print_metadata(stdout: &mut StdoutLock, scanner: &Scanner, metadatas: &[Metad
         match meta.value {
             MetadataValue::Bytes(b) => {
                 write!(stdout, "\"").unwrap();
-                print_bytes(stdout, scanner.get_bytes_symbol(b));
+                print_bytes(stdout, scanner.get_bytes_symbol(b), 0);
                 write!(stdout, "\"").unwrap();
             }
             MetadataValue::Integer(i) => {
@@ -786,9 +805,10 @@ fn print_metadata(stdout: &mut StdoutLock, scanner: &Scanner, metadatas: &[Metad
     write!(stdout, "]").unwrap();
 }
 
-fn print_bytes(stdout: &mut StdoutLock, data: &[u8]) {
+fn print_bytes(stdout: &mut StdoutLock, data: &[u8], xor_key: u8) {
     for c in data {
-        for b in std::ascii::escape_default(*c) {
+        let c = *c ^ xor_key;
+        for b in std::ascii::escape_default(c) {
             write!(stdout, "{}", b as char).unwrap();
         }
     }
@@ -997,6 +1017,7 @@ mod tests {
         test(ScanOptions {
             print_strings_matches_data: false,
             print_string_length: false,
+            print_xor_key: false,
             print_metadata: false,
             print_namespace: false,
             print_tags: false,
