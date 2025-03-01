@@ -121,6 +121,12 @@ pub struct StringMatch {
     ///
     /// The length of this field is capped.
     pub data: Box<[u8]>,
+
+    /// The value of the xoring key that was used for the match.
+    ///
+    /// If the string had a xor modifier, this value indicates which value of the xory key
+    /// generated the match.
+    pub xor_key: u8,
 }
 
 impl StringMatch {
@@ -128,6 +134,7 @@ impl StringMatch {
         region: &Region,
         mat: std::ops::Range<usize>,
         match_max_length: usize,
+        xor_key: u8,
     ) -> Self {
         let length = mat.end - mat.start;
         let capped_length = std::cmp::min(length, match_max_length);
@@ -141,6 +148,7 @@ impl StringMatch {
                 .collect(),
             offset: mat.start,
             length,
+            xor_key,
         }
     }
 }
@@ -159,6 +167,7 @@ mod tests {
             offset: 0,
             length: 0,
             data: Box::new([]),
+            xor_key: 0,
         });
     }
 }

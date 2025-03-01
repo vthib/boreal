@@ -254,20 +254,22 @@ impl AcScan {
             }
 
             match res {
+                AcMatchStatus::None => (),
                 AcMatchStatus::Multiple(v) if v.is_empty() => (),
-                AcMatchStatus::Multiple(found_matches) => var_matches.extend(
-                    found_matches
-                        .into_iter()
-                        .map(|m| StringMatch::new(region, m, scan_data.params.match_max_length)),
-                ),
+                AcMatchStatus::Multiple(found_matches) => {
+                    var_matches.extend(found_matches.into_iter().map(|m| {
+                        StringMatch::new(region, m, scan_data.params.match_max_length, 0)
+                    }));
+                }
                 AcMatchStatus::Single(m) => {
+                    let xor_key = var.get_xor_key(literal_index);
                     var_matches.push(StringMatch::new(
                         region,
                         m,
                         scan_data.params.match_max_length,
+                        xor_key,
                     ));
                 }
-                AcMatchStatus::None => (),
             };
 
             if !var_matches.is_empty() {
@@ -295,9 +297,11 @@ fn scan_single_variable(
                     region,
                     mat,
                     scan_data.params.match_max_length,
+                    // No xor key, since this function is only used for regex variables
+                    0,
                 ));
 
-                // This is safe to allow because this is called on every iterator of self.matches, so once
+                // This is safe to allow because this is called on every iterator of self.matches, so
                 // it cannot overflow u32 before this condition is true.
                 #[allow(clippy::cast_possible_truncation)]
                 if (string_matches.len() as u32) >= scan_data.params.string_max_nb_matches {
