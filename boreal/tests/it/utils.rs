@@ -366,7 +366,7 @@ impl Checker {
         for r in res.rules {
             for var in r.matches {
                 for mat in var.matches {
-                    if mat.data == expected_match {
+                    if &*mat.data == expected_match {
                         found = true;
                     }
                 }
