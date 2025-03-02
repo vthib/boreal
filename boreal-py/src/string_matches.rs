@@ -17,6 +17,8 @@ pub struct StringMatches {
     /// List of matches for the string.
     #[pyo3(get)]
     instances: Vec<StringMatchInstance>,
+
+    has_xor_modifier: bool,
 }
 
 impl StringMatches {
@@ -29,12 +31,18 @@ impl StringMatches {
                 .into_iter()
                 .map(StringMatchInstance::new)
                 .collect(),
+            has_xor_modifier: s.has_xor_modifier,
         }
     }
 }
 
 #[pymethods]
 impl StringMatches {
+    /// Does the string have the xor modifier.
+    fn is_xor(&self) -> bool {
+        self.has_xor_modifier
+    }
+
     // TODO: missing is_xor
 
     fn __repr__(&self) -> &str {

@@ -208,10 +208,13 @@ rule my_rule {
     assert len(m.strings) == 2
     s0 = m.strings[0]
     s1 = m.strings[1]
+    assert s0.is_xor()
+    assert not s1.is_xor()
 
     assert len(s0.instances) == 2
     i0 = s0.instances[0]
     i1 = s0.instances[1]
+
     assert i0.xor_key == 0x02
     assert i0.matched_data == b"ccc"
     assert i0.plaintext() == b"aaa"
