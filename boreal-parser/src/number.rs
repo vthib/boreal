@@ -1,13 +1,12 @@
 //! Parsing related to numbers.
 //!
 //! This implements the _NUMBER_ and _DOUBLE_ lexical patterns from libyara.
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    character::complete::{char, digit1, hex_digit1, oct_digit1},
-    combinator::{cut, opt, recognize},
-    sequence::{pair, preceded, tuple},
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::character::complete::{char, digit1, hex_digit1, oct_digit1};
+use nom::combinator::{cut, opt, recognize};
+use nom::sequence::{pair, preceded};
+use nom::Parser;
 
 use super::error::{Error, ErrorKind};
 use super::nom_recipes::{rtrim, textual_tag as ttag};
@@ -18,7 +17,8 @@ use super::types::{Input, ParseResult};
 /// This function matches the pattern `/\d+(MB|KB)?`/.
 fn decimal_number(input: Input) -> ParseResult<i64> {
     let start = input.pos();
-    let (input, (n, suffix)) = rtrim(pair(digit1, opt(alt((ttag("MB"), ttag("KB"))))))(input)?;
+    let (input, (n, suffix)) =
+        rtrim(pair(digit1, opt(alt((ttag("MB"), ttag("KB")))))).parse(input)?;
 
     let n = match str::parse::<i64>(&n) {
         Ok(n) => n,
@@ -52,7 +52,7 @@ fn decimal_number(input: Input) -> ParseResult<i64> {
 /// This function matches the pattern `/0x\d+`/.
 fn hexadecimal_number(input: Input) -> ParseResult<i64> {
     let start = input.pos();
-    let (input, n) = preceded(tag("0x"), cut(rtrim(hex_digit1)))(input)?;
+    let (input, n) = preceded(tag("0x"), cut(rtrim(hex_digit1))).parse(input)?;
 
     let n = match i64::from_str_radix(&n, 16) {
         Ok(n) => n,
@@ -72,7 +72,7 @@ fn hexadecimal_number(input: Input) -> ParseResult<i64> {
 /// This function matches the pattern `/0o\d+`/.
 fn octal_number(input: Input) -> ParseResult<i64> {
     let start = input.pos();
-    let (input, n) = preceded(tag("0o"), cut(rtrim(oct_digit1)))(input)?;
+    let (input, n) = preceded(tag("0o"), cut(rtrim(oct_digit1))).parse(input)?;
 
     let n = match i64::from_str_radix(&n, 8) {
         Ok(n) => n,
@@ -97,7 +97,7 @@ fn octal_number(input: Input) -> ParseResult<i64> {
 pub(crate) fn number(input: Input) -> ParseResult<i64> {
     // XXX: decimal number must be last, otherwise, it would parse the '0'
     // in the '0x'/'0o' prefix.
-    alt((hexadecimal_number, octal_number, decimal_number))(input)
+    alt((hexadecimal_number, octal_number, decimal_number)).parse(input)
 }
 
 /// Parse a double.
@@ -105,7 +105,7 @@ pub(crate) fn number(input: Input) -> ParseResult<i64> {
 /// Equivalent to the _DOUBLE_ lexical pattern in libyara.
 /// This functions matches the pattern `/\d+\.\d+/`.
 pub(crate) fn double(input: Input) -> ParseResult<f64> {
-    let (input, payload) = rtrim(recognize(tuple((digit1, char('.'), digit1))))(input)?;
+    let (input, payload) = rtrim(recognize((digit1, char('.'), digit1))).parse(input)?;
 
     // Safety: this cannot fail, we are parsing `[0-9]+ '.' [0-9]+` which is guaranteed to
     // be valid, see <https://doc.rust-lang.org/std/primitive.f64.html#impl-FromStr>
@@ -167,7 +167,7 @@ mod tests {
         // Parse two numbers consecutively, to detect
         // invalid acceptance of non textual "tag".
         fn f(input: Input) -> ParseResult<(i64, i64)> {
-            pair(number, number)(input)
+            pair(number, number).parse(input)
         }
 
         parse_err(f, "1MB2");

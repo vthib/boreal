@@ -6,25 +6,23 @@
 //! - ...
 use std::ops::Range;
 
-use nom::{
-    branch::alt,
-    character::complete::char,
-    combinator::{cut, map, opt, success},
-    multi::separated_list1,
-    sequence::{delimited, preceded, terminated},
-};
+use nom::branch::alt;
+use nom::character::complete::char;
+use nom::combinator::{cut, map, opt, success};
+use nom::multi::separated_list1;
+use nom::sequence::{delimited, preceded, terminated};
+use nom::Parser;
 
-use crate::{
-    nom_recipes::{rtrim, textual_tag as ttag},
-    string::{self, string_identifier_with_wildcard},
-    types::{Input, ParseResult, Position},
+use crate::expression::boolean_expression::boolean_expression;
+use crate::expression::common::range;
+use crate::expression::identifier::identifier;
+use crate::expression::primary_expression::primary_expression;
+use crate::expression::{
+    Expression, ExpressionKind, ForIterator, ForSelection, RuleSet, SetElement, VariableSet,
 };
-
-use super::{
-    boolean_expression::boolean_expression, common::range, identifier::identifier,
-    primary_expression::primary_expression, Expression, ExpressionKind, ForIterator, ForSelection,
-    RuleSet, SetElement, VariableSet,
-};
+use crate::nom_recipes::{rtrim, textual_tag as ttag};
+use crate::string::{self, string_identifier_with_wildcard};
+use crate::types::{Input, ParseResult, Position};
 
 // There is a very ugly hack in this file.
 //
@@ -50,7 +48,7 @@ use super::{
 /// binds a primary expression as its first element, conflicting
 /// with the "just one primary expression" possibility.
 pub(super) fn for_expression_non_ambiguous(input: Input) -> ParseResult<Expression> {
-    alt((for_expression_full, for_expression_abbrev))(input)
+    alt((for_expression_full, for_expression_abbrev)).parse(input)
 }
 
 /// Parse for expressions without any for keyword or body content.
@@ -78,8 +76,8 @@ pub(super) fn for_expression_with_expr_selection<'a>(
     start: Position<'a>,
     input: Input<'a>,
 ) -> ParseResult<'a, Expression> {
-    let (input, percent) = opt(rtrim(char('%')))(input)?;
-    if ttag("of")(input).is_err() {
+    let (input, percent) = opt(rtrim(char('%'))).parse(input)?;
+    if ttag("of").parse(input).is_err() {
         return Ok((input, expr));
     }
 
@@ -95,12 +93,12 @@ fn for_expression_with_selection<'a>(
     start: Position<'a>,
     input: Input<'a>,
 ) -> ParseResult<'a, Expression> {
-    let (input, _) = rtrim(ttag("of"))(input)?;
+    let (input, _) = rtrim(ttag("of")).parse(input)?;
 
     let (input, expr) = match rule_set(input) {
         Ok((input, set)) => (input, ExpressionKind::ForRules { selection, set }),
         Err(_) => {
-            let (input, set) = cut(string_set)(input)?;
+            let (input, set) = cut(string_set).parse(input)?;
             let (input, kind) = for_expression_kind(input)?;
             (
                 input,
@@ -151,7 +149,8 @@ fn for_expression_kind(input: Input) -> ParseResult<ForExprKind> {
             |expr| ForExprKind::At(Box::new(expr)),
         ),
         map(success(()), |()| ForExprKind::None),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse a full fledge for expression:
@@ -161,16 +160,17 @@ fn for_expression_kind(input: Input) -> ParseResult<ForExprKind> {
 /// - 'for' selection identifier 'in' iterator ':' '(' body ')'
 fn for_expression_full(input: Input) -> ParseResult<Expression> {
     let start = input.pos();
-    let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection_full))(input)?;
-    let (i2, has_of) = opt(rtrim(ttag("of")))(input)?;
+    let (input, selection) = preceded(rtrim(ttag("for")), cut(for_selection_full)).parse(input)?;
+    let (i2, has_of) = opt(rtrim(ttag("of"))).parse(input)?;
 
     if has_of.is_some() {
-        let (input, set) = cut(terminated(string_set, rtrim(char(':'))))(i2)?;
+        let (input, set) = cut(terminated(string_set, rtrim(char(':')))).parse(i2)?;
         let (input, body) = cut(delimited(
             rtrim(char('(')),
             boolean_expression,
             rtrim(char(')')),
-        ))(input)?;
+        ))
+        .parse(input)?;
 
         Ok((
             input,
@@ -185,16 +185,17 @@ fn for_expression_full(input: Input) -> ParseResult<Expression> {
         ))
     } else {
         let (input, (identifiers, identifiers_span)) =
-            cut(terminated(for_variables, rtrim(ttag("in"))))(input)?;
+            cut(terminated(for_variables, rtrim(ttag("in")))).parse(input)?;
 
         let (input, (iterator, iterator_span)) =
-            cut(terminated(iterator, rtrim(char(':'))))(input)?;
+            cut(terminated(iterator, rtrim(char(':')))).parse(input)?;
 
         let (input, body) = cut(delimited(
             rtrim(char('(')),
             boolean_expression,
             rtrim(char(')')),
-        ))(input)?;
+        ))
+        .parse(input)?;
 
         Ok((
             input,
@@ -221,12 +222,13 @@ fn for_selection_simple(input: Input) -> ParseResult<ForSelection> {
         map(rtrim(ttag("any")), |_| ForSelection::Any),
         map(rtrim(ttag("all")), |_| ForSelection::All),
         map(rtrim(ttag("none")), |_| ForSelection::None),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn for_selection_expr(input: Input) -> ParseResult<ForSelection> {
     let (input, expr) = primary_expression(input)?;
-    let (input, percent) = opt(rtrim(char('%')))(input)?;
+    let (input, percent) = opt(rtrim(char('%'))).parse(input)?;
 
     Ok((
         input,
@@ -238,7 +240,7 @@ fn for_selection_expr(input: Input) -> ParseResult<ForSelection> {
 }
 
 fn for_selection_full(input: Input) -> ParseResult<ForSelection> {
-    alt((for_selection_simple, for_selection_expr))(input)
+    alt((for_selection_simple, for_selection_expr)).parse(input)
 }
 
 /// Parse a set of variables.
@@ -255,14 +257,15 @@ fn string_set(input: Input) -> ParseResult<VariableSet> {
             ),
             |elements| VariableSet { elements },
         ),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse an enumeration of variables.
 ///
 /// Equivalent to the `string_enumeration` pattern in grammar.y in libyara.
 fn string_enumeration(input: Input) -> ParseResult<Vec<SetElement>> {
-    separated_list1(rtrim(char(',')), string_enum_element)(input)
+    separated_list1(rtrim(char(',')), string_enum_element).parse(input)
 }
 
 fn string_enum_element(input: Input) -> ParseResult<SetElement> {
@@ -284,7 +287,8 @@ fn string_enum_element(input: Input) -> ParseResult<SetElement> {
 /// Equivalent to the `for_variables` pattern in grammar.y in libyara.
 fn for_variables(input: Input) -> ParseResult<(Vec<String>, Range<usize>)> {
     let start = input.pos();
-    let (input, identifiers) = separated_list1(rtrim(char(',')), string::identifier)(input)?;
+    let (input, identifiers) =
+        separated_list1(rtrim(char(',')), string::identifier).parse(input)?;
     Ok((input, (identifiers, input.get_span_from(start))))
 }
 
@@ -297,7 +301,8 @@ fn iterator(input: Input) -> ParseResult<(ForIterator, Range<usize>)> {
         map(identifier, ForIterator::Identifier),
         iterator_list,
         iterator_range,
-    ))(input)?;
+    ))
+    .parse(input)?;
     Ok((input, (iterator, input.get_span_from(start))))
 }
 
@@ -306,7 +311,8 @@ fn iterator_list(input: Input) -> ParseResult<ForIterator> {
         rtrim(char('(')),
         separated_list1(rtrim(char(',')), primary_expression),
         rtrim(char(')')),
-    )(input)?;
+    )
+    .parse(input)?;
 
     Ok((input, ForIterator::List(exprs)))
 }
@@ -323,20 +329,21 @@ fn rule_set(input: Input) -> ParseResult<RuleSet> {
     map(
         delimited(rtrim(char('(')), rule_enumeration, rtrim(char(')'))),
         |elements| RuleSet { elements },
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Parse an enumeration of rules.
 ///
 /// Equivalent to the `rule_enumeration` pattern in grammar.y in libyara.
 fn rule_enumeration(input: Input) -> ParseResult<Vec<SetElement>> {
-    separated_list1(rtrim(char(',')), rule_enum_element)(input)
+    separated_list1(rtrim(char(',')), rule_enum_element).parse(input)
 }
 
 fn rule_enum_element(input: Input) -> ParseResult<SetElement> {
     let start = input.pos();
     let (input, name) = string::identifier(input)?;
-    let (input, is_wildcard) = map(opt(rtrim(char('*'))), |v| v.is_some())(input)?;
+    let (input, is_wildcard) = map(opt(rtrim(char('*'))), |v| v.is_some()).parse(input)?;
 
     Ok((
         input,

@@ -1,13 +1,12 @@
 //! Parse yara rules.
 use std::ops::Range;
 
-use nom::{
-    branch::alt,
-    character::complete::char,
-    combinator::{cut, map, opt},
-    multi::many1,
-    sequence::{delimited, pair, preceded, separated_pair, tuple},
-};
+use nom::branch::alt;
+use nom::character::complete::char;
+use nom::combinator::{cut, map, opt};
+use nom::multi::many1;
+use nom::sequence::{delimited, pair, preceded, separated_pair};
+use nom::Parser;
 
 use super::{
     error::{Error, ErrorKind},
@@ -156,16 +155,16 @@ pub(crate) fn rule(mut input: Input) -> ParseResult<Rule> {
     let mut is_global = false;
 
     loop {
-        match rtrim(ttag("rule"))(input) {
+        match rtrim(ttag("rule")).parse(input) {
             Ok((i, _)) => {
                 input = i;
                 break;
             }
             Err(e) => {
-                if let Ok((i, _)) = rtrim(ttag("private"))(input) {
+                if let Ok((i, _)) = rtrim(ttag("private")).parse(input) {
                     input = i;
                     is_private = true;
-                } else if let Ok((i, _)) = rtrim(ttag("global"))(input) {
+                } else if let Ok((i, _)) = rtrim(ttag("global")).parse(input) {
                     input = i;
                     is_global = true;
                 } else {
@@ -176,15 +175,15 @@ pub(crate) fn rule(mut input: Input) -> ParseResult<Rule> {
     }
 
     map(
-        tuple((
+        (
             rule_name,
             opt(tags),
             delimited(
                 rtrim(char('{')),
-                tuple((opt(meta), opt(strings), condition)),
+                (opt(meta), opt(strings), condition),
                 rtrim(char('}')),
             ),
-        )),
+        ),
         move |((name, name_span), tags, (meta, strings, condition))| Rule {
             name,
             name_span,
@@ -195,7 +194,8 @@ pub(crate) fn rule(mut input: Input) -> ParseResult<Rule> {
             is_private,
             is_global,
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 fn rule_name(input: Input) -> ParseResult<(String, Range<usize>)> {
@@ -210,9 +210,9 @@ fn rule_name(input: Input) -> ParseResult<(String, Range<usize>)> {
 /// This roughly parses `: identifier1 identifier2 ...`
 /// and returns a list of the identifiers.
 fn tags(input: Input) -> ParseResult<Vec<RuleTag>> {
-    let (input, _) = rtrim(char(':'))(input)?;
+    let (input, _) = rtrim(char(':')).parse(input)?;
 
-    cut(many1(tag))(input)
+    cut(many1(tag)).parse(input)
 }
 
 fn tag(input: Input) -> ParseResult<RuleTag> {
@@ -236,7 +236,8 @@ fn meta(input: Input) -> ParseResult<Vec<Metadata>> {
     preceded(
         pair(rtrim(ttag("meta")), rtrim(char(':'))),
         cut(many1(meta_declaration)),
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Parse a single metadata declaration.
@@ -258,7 +259,8 @@ fn meta_declaration(input: Input) -> ParseResult<Metadata> {
             )),
         ),
         |(name, value)| Metadata { name, value },
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Parse the "strings:" section
@@ -266,8 +268,8 @@ fn meta_declaration(input: Input) -> ParseResult<Metadata> {
 /// Related to the `strings` and `strings_declarations` pattern
 /// in `grammar.y` in libyara.
 fn strings(input: Input) -> ParseResult<Vec<VariableDeclaration>> {
-    let (input, _) = pair(rtrim(ttag("strings")), rtrim(char(':')))(input)?;
-    cut(many1(string_declaration))(input)
+    let (input, _) = pair(rtrim(ttag("strings")), rtrim(char(':'))).parse(input)?;
+    cut(many1(string_declaration)).parse(input)
 }
 
 /// Parse a single string declaration.
@@ -293,7 +295,8 @@ fn string_declaration(input: Input) -> ParseResult<VariableDeclaration> {
                 hex_string_modifiers,
             ),
         ))),
-    )(input)?;
+    )
+    .parse(input)?;
     Ok((
         input,
         VariableDeclaration {
@@ -337,7 +340,7 @@ where
     let start = input.pos();
     let mut parser = opt(parser);
 
-    while let (i, Some(modifier)) = parser(input)? {
+    while let (i, Some(modifier)) = parser.parse(input)? {
         match modifier {
             Modifier::Wide => {
                 if modifiers.wide {
@@ -468,7 +471,8 @@ fn string_modifier(input: Input) -> ParseResult<Modifier> {
         map(rtrim(ttag("private")), |_| Modifier::Private),
         xor_modifier,
         base64_modifier,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn regex_modifier(input: Input) -> ParseResult<Modifier> {
@@ -478,11 +482,12 @@ fn regex_modifier(input: Input) -> ParseResult<Modifier> {
         map(ttag("nocase"), |_| Modifier::Nocase),
         map(ttag("fullword"), |_| Modifier::Fullword),
         map(ttag("private"), |_| Modifier::Private),
-    )))(input)
+    )))
+    .parse(input)
 }
 
 fn hex_string_modifier(input: Input) -> ParseResult<Modifier> {
-    map(rtrim(ttag("private")), |_| Modifier::Private)(input)
+    map(rtrim(ttag("private")), |_| Modifier::Private).parse(input)
 }
 
 /// Parse a XOR modifier, ie:
@@ -490,22 +495,22 @@ fn hex_string_modifier(input: Input) -> ParseResult<Modifier> {
 /// - `'xor' '(' number ')'`
 /// - `'xor' '(' number '-' number ')'`
 fn xor_modifier(input: Input) -> ParseResult<Modifier> {
-    let (input, _) = rtrim(ttag("xor"))(input)?;
+    let (input, _) = rtrim(ttag("xor")).parse(input)?;
 
     let start = input.pos();
-    let (input, open_paren) = opt(rtrim(char('(')))(input)?;
+    let (input, open_paren) = opt(rtrim(char('('))).parse(input)?;
     if open_paren.is_none() {
         return Ok((input, Modifier::Xor(0, 255)));
     }
 
-    let (input, from) = cut(map_res(number::number, number_to_u8))(input)?;
+    let (input, from) = cut(map_res(number::number, number_to_u8)).parse(input)?;
 
-    let (input, to) = match rtrim(char('-'))(input) {
-        Ok((input, _)) => cut(map_res(number::number, number_to_u8))(input)?,
+    let (input, to) = match rtrim(char('-')).parse(input) {
+        Ok((input, _)) => cut(map_res(number::number, number_to_u8)).parse(input)?,
         Err(_) => (input, from),
     };
 
-    let (input, _) = cut(rtrim(char(')')))(input)?;
+    let (input, _) = cut(rtrim(char(')'))).parse(input)?;
 
     if to < from {
         Err(nom::Err::Failure(Error::new(
@@ -524,14 +529,15 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
     let (input, wide) = rtrim(alt((
         map(ttag("base64"), |_| false),
         map(ttag("base64wide"), |_| true),
-    )))(input)?;
+    )))
+    .parse(input)?;
 
-    let (mut input, open_paren) = opt(rtrim(char('(')))(input)?;
+    let (mut input, open_paren) = opt(rtrim(char('('))).parse(input)?;
 
     let mut alphabet: Option<[u8; 64]> = None;
     if open_paren.is_some() {
         let start = input.pos();
-        let (input2, val) = cut(string::quoted)(input)?;
+        let (input2, val) = cut(string::quoted).parse(input)?;
         let length = val.len();
         match val.try_into() {
             Ok(v) => alphabet = Some(v),
@@ -542,7 +548,7 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
                 )));
             }
         };
-        let (input2, _) = cut(rtrim(char(')')))(input2)?;
+        let (input2, _) = cut(rtrim(char(')'))).parse(input2)?;
         input = input2;
     }
 
@@ -557,8 +563,8 @@ fn number_to_u8(value: i64) -> Result<u8, ErrorKind> {
 ///
 /// Related to the `condition` pattern in `grammar.y` in libyara.
 fn condition(input: Input) -> ParseResult<Expression> {
-    let (input, _) = rtrim(ttag("condition"))(input)?;
-    cut(preceded(rtrim(char(':')), expression::expression))(input)
+    let (input, _) = rtrim(ttag("condition")).parse(input)?;
+    cut(preceded(rtrim(char(':')), expression::expression)).parse(input)
 }
 
 #[cfg(test)]

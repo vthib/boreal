@@ -3,45 +3,46 @@
 //! This parses the [`crate::expression::Identifier`] object.
 //! See the `identifier` rule in `grammar.y` in libyara.
 use nom::branch::alt;
-use nom::combinator::{map, opt};
-use nom::{
-    character::complete::char, combinator::cut, multi::separated_list0, sequence::terminated,
-};
+use nom::character::complete::char;
+use nom::combinator::{cut, map, opt};
+use nom::multi::separated_list0;
+use nom::sequence::terminated;
+use nom::Parser;
 
-use super::{Expression, Identifier, IdentifierOperation};
+use crate::expression::boolean_expression::boolean_expression;
+use crate::expression::primary_expression::primary_expression;
 use crate::expression::IdentifierOperationType;
+use crate::expression::{Expression, Identifier, IdentifierOperation};
 use crate::nom_recipes::{not_followed, rtrim};
 use crate::string::identifier as raw_identifier;
 use crate::types::{Input, ParseResult};
-
-use super::boolean_expression::boolean_expression;
-use super::primary_expression::primary_expression;
 
 /// Parse a subfield, eg `.foo`.
 fn subfield(input: Input) -> ParseResult<String> {
     // Use not_followed to ensure we do not eat the first character of the
     // .. operator. This can happen for example when parsing:
     // `for all i in (tests.constants.one..5)`
-    let (input, _) = rtrim(not_followed(char('.'), char('.')))(input)?;
+    let (input, _) = rtrim(not_followed(char('.'), char('.'))).parse(input)?;
 
-    cut(raw_identifier)(input)
+    cut(raw_identifier).parse(input)
 }
 
 /// Parse a subscript, e.g. `[5]`.
 fn subscript(input: Input) -> ParseResult<Expression> {
-    let (input, _) = rtrim(char('['))(input)?;
+    let (input, _) = rtrim(char('[')).parse(input)?;
 
-    cut(terminated(primary_expression, rtrim(char(']'))))(input)
+    cut(terminated(primary_expression, rtrim(char(']')))).parse(input)
 }
 
 /// Parse a function call, e.g. `(foo, bar)`.
 fn function_call(input: Input) -> ParseResult<Vec<Expression>> {
-    let (input, _) = rtrim(char('('))(input)?;
+    let (input, _) = rtrim(char('(')).parse(input)?;
 
     cut(terminated(
         separated_list0(rtrim(char(',')), boolean_expression),
         rtrim(char(')')),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse an identifier operation, i.e. a subfield, subscript or function call.
@@ -52,7 +53,8 @@ fn operation(input: Input) -> ParseResult<IdentifierOperationType> {
             IdentifierOperationType::Subscript(Box::new(expr))
         }),
         map(function_call, IdentifierOperationType::FunctionCall),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse an identifier used in expressions.
@@ -64,7 +66,7 @@ pub(super) fn identifier(input: Input) -> ParseResult<Identifier> {
 
     loop {
         let start = input.pos();
-        let (i, op) = opt(operation)(input)?;
+        let (i, op) = opt(operation).parse(input)?;
         match op {
             Some(op) => {
                 input = i;

@@ -2,25 +2,24 @@
 //!
 //! This implements the `string_count/offset/length` elements in grammar.y
 //! in libyara.
-use nom::{
-    bytes::complete::tag,
-    character::complete::char,
-    combinator::{cut, opt},
-    sequence::{delimited, preceded},
-};
+use nom::bytes::complete::tag;
+use nom::character::complete::char;
+use nom::combinator::{cut, opt};
+use nom::sequence::{delimited, preceded};
+use nom::Parser;
 
-use super::{common::range, primary_expression::primary_expression, Expression, ExpressionKind};
-use crate::{
-    nom_recipes::rtrim,
-    string,
-    types::{Input, ParseResult},
-};
+use crate::expression::common::range;
+use crate::expression::primary_expression::primary_expression;
+use crate::expression::{Expression, ExpressionKind};
+use crate::nom_recipes::rtrim;
+use crate::string;
+use crate::types::{Input, ParseResult};
 
 /// Parse a `string_count ( 'in' range )` expression
 pub(super) fn string_count_expression(input: Input) -> ParseResult<Expression> {
     let start = input.pos();
     let (input_after_count, variable_name) = string::count(input)?;
-    let (input, range) = opt(preceded(rtrim(tag("in")), cut(range)))(input_after_count)?;
+    let (input, range) = opt(preceded(rtrim(tag("in")), cut(range))).parse(input_after_count)?;
 
     let expr = match range {
         // string_count
@@ -50,7 +49,8 @@ pub(super) fn string_offset_expression(input: Input) -> ParseResult<Expression> 
         rtrim(char('[')),
         cut(primary_expression),
         cut(rtrim(char(']'))),
-    ))(input)?;
+    ))
+    .parse(input)?;
 
     let span = input.get_span_from(start);
     let expr = ExpressionKind::Offset {
@@ -74,7 +74,8 @@ pub(super) fn string_length_expression(input: Input) -> ParseResult<Expression> 
         rtrim(char('[')),
         cut(primary_expression),
         cut(rtrim(char(']'))),
-    ))(input)?;
+    ))
+    .parse(input)?;
 
     let span = input.get_span_from(start);
     let expr = ExpressionKind::Length {

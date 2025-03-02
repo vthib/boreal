@@ -1,15 +1,12 @@
 //! Some common and useful nom recipes, shared by all other modules.
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_until},
-    character::complete::{char, multispace1},
-    combinator::{cut, opt, value},
-    error::{ErrorKind as NomErrorKind, ParseError},
-    multi::many0,
-    sequence::tuple,
-    Parser,
-};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, take_until};
+use nom::character::complete::{char, multispace1};
+use nom::combinator::{cut, opt, value};
+use nom::error::{ErrorKind as NomErrorKind, ParseError};
+use nom::multi::many0;
+use nom::Parser;
 
 use super::error::{Error, ErrorKind};
 use super::types::{Input, ParseResult};
@@ -17,7 +14,7 @@ use super::types::{Input, ParseResult};
 /// Right trim after the given parser.
 pub(crate) fn rtrim<'a, F, O>(mut inner: F) -> impl FnMut(Input<'a>) -> ParseResult<'a, O>
 where
-    F: Parser<Input<'a>, O, Error> + 'a,
+    F: Parser<Input<'a>, Output = O, Error = Error> + 'a,
 {
     move |input| {
         let (mut input, output) = inner.parse(input)?;
@@ -39,7 +36,8 @@ pub(crate) fn ltrim(mut input: Input) -> ParseResult<()> {
             multiline_comment,
             singleline_comment,
             value((), multispace1),
-        ))(input)
+        ))
+        .parse(input)
         {
             Ok((i, ())) => input = i,
             Err(nom::Err::Error(_)) => return Ok((input, ())),
@@ -54,8 +52,8 @@ pub(crate) fn not_followed<'a, F, G, OF, OG>(
     mut g: G,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, OF>
 where
-    F: Parser<Input<'a>, OF, Error> + 'a,
-    G: Parser<Input<'a>, OG, Error> + 'a,
+    F: Parser<Input<'a>, Output = OF, Error = Error> + 'a,
+    G: Parser<Input<'a>, Output = OG, Error = Error> + 'a,
 {
     move |input| {
         let (input, output) = f.parse(input)?;
@@ -114,18 +112,12 @@ pub(crate) fn textual_tag(
 ///
 /// Equivalent to the `comment` state in libyara.
 fn multiline_comment(input: Input) -> ParseResult<()> {
-    value(
-        (),
-        tuple((tag("/*"), cut(take_until("*/")), cut(tag("*/")))),
-    )(input)
+    value((), (tag("/*"), cut(take_until("*/")), cut(tag("*/")))).parse(input)
 }
 
 /// Parse single line // ... comments.
 fn singleline_comment(input: Input) -> ParseResult<()> {
-    value(
-        (),
-        tuple((tag("//"), cut(take_until("\n")), cut(char('\n')))),
-    )(input)
+    value((), (tag("//"), cut(take_until("\n")), cut(char('\n')))).parse(input)
 }
 
 /// Equivalent to [`nom::combinator::map_res`] but expects an
@@ -138,7 +130,7 @@ pub(crate) fn map_res<'a, O1, O2, F, G>(
     mut f: G,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, O2>
 where
-    F: Parser<Input<'a>, O1, Error>,
+    F: Parser<Input<'a>, Output = O1, Error = Error>,
     G: FnMut(O1) -> Result<O2, ErrorKind>,
 {
     move |input: Input| {
