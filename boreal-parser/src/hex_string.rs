@@ -582,6 +582,22 @@ mod tests {
             ],
         );
 
+        parse(
+            hex_string,
+            "{ 01 [1] 02 [2] 03 }  a",
+            "a",
+            vec![
+                Token::Byte(1),
+                Token::MaskedByte(0, Mask::All),
+                Token::Byte(2),
+                Token::Jump(Jump {
+                    from: 2,
+                    to: Some(2),
+                }),
+                Token::Byte(3),
+            ],
+        );
+
         parse_err(hex_string, "{ [-] }");
         parse_err(hex_string, "{ [-] AB }");
         parse_err(hex_string, "{ AB CD [-] }");
