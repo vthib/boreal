@@ -190,3 +190,37 @@ rule foo {
 
     # Check that the hash depends only on the matched_data
     assert hash(i0) == hash(i3)
+
+
+@pytest.mark.parametrize("module,is_yara", MODULES)
+def test_string_match_instance_xor_key(module, is_yara):
+    rule = module.compile(source="""
+rule my_rule {
+    strings:
+        $a = "aaa" ascii wide xor
+        $b = "ccc"
+    condition:
+        any of them
+}""")
+    matches = rule.match(data=b'abcccba B#B#B#')
+    assert len(matches) == 1
+    m = matches[0]
+    assert len(m.strings) == 2
+    s0 = m.strings[0]
+    s1 = m.strings[1]
+
+    assert len(s0.instances) == 2
+    i0 = s0.instances[0]
+    i1 = s0.instances[1]
+    assert i0.xor_key == 0x02
+    assert i0.matched_data == b"ccc"
+    assert i0.plaintext() == b"aaa"
+    assert i1.xor_key == 0x23
+    assert i1.matched_data == b"B#B#B#"
+    assert i1.plaintext() == b"a\0a\0a\0"
+
+    assert len(s1.instances) == 1
+    i1 = s1.instances[0]
+    assert i1.xor_key == 0
+    assert i1.matched_data == b"ccc"
+    assert i1.plaintext() == b"ccc"
