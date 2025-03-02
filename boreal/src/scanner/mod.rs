@@ -1284,6 +1284,7 @@ fn build_matched_rule<'a>(
             .map(|(matches, var)| StringMatches {
                 name: &var.name,
                 matches,
+                has_xor_modifier: var.matcher.modifiers.xor_start.is_some(),
             })
             .collect(),
         matched,
@@ -1350,6 +1351,9 @@ pub struct StringMatches<'scanner> {
     /// for this variable, some potential matches will not
     /// be reported.
     pub matches: Vec<StringMatch>,
+
+    /// Does the string have a xor modifier.
+    pub has_xor_modifier: bool,
 }
 
 /// Error when defining a symbol's value in a [`Scanner`].
@@ -2020,6 +2024,7 @@ mod tests {
         test_type_traits_non_clonable(StringMatches {
             name: "a",
             matches: Vec::new(),
+            has_xor_modifier: false,
         });
         test_type_traits_non_clonable(DefineSymbolError::UnknownName);
         test_type_traits_non_clonable(ScanData {

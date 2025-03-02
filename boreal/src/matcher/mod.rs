@@ -30,7 +30,7 @@ pub(crate) struct Matcher {
     kind: MatcherKind,
 
     /// Modifiers related to matching.
-    modifiers: Modifiers,
+    pub(crate) modifiers: Modifiers,
 }
 
 #[derive(Copy, Clone, Default, Debug)]
