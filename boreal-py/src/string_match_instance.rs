@@ -18,7 +18,10 @@ pub struct StringMatchInstance {
     /// Length of the entire match.
     #[pyo3(get)]
     matched_length: usize,
-    // TODO: missing xor_key
+
+    /// Xor key used in the match.
+    #[pyo3(get)]
+    xor_key: u8,
 }
 
 impl StringMatchInstance {
@@ -27,6 +30,7 @@ impl StringMatchInstance {
             offset: s.offset,
             matched_data: s.data,
             matched_length: s.length,
+            xor_key: s.xor_key,
         }
     }
 }
@@ -36,6 +40,10 @@ impl StringMatchInstance {
     #[getter]
     fn matched_data(&self) -> &[u8] {
         &self.matched_data
+    }
+
+    fn plaintext(&self) -> Vec<u8> {
+        self.matched_data.iter().map(|b| b ^ self.xor_key).collect()
     }
 
     fn __repr__(&self) -> String {
