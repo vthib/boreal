@@ -1,12 +1,11 @@
 //! Parsing related to strings and identifiers.
 
-use nom::{
-    bytes::complete::take_while,
-    character::complete::char,
-    combinator::{cut, map, opt, recognize},
-    error::{ErrorKind as NomErrorKind, ParseError},
-    sequence::{pair, preceded, tuple},
-};
+use nom::bytes::complete::take_while;
+use nom::character::complete::char;
+use nom::combinator::{cut, map, opt, recognize};
+use nom::error::{ErrorKind as NomErrorKind, ParseError};
+use nom::sequence::{pair, preceded};
+use nom::Parser;
 
 use super::error::Error;
 use super::nom_recipes::{rtrim, take_one};
@@ -27,12 +26,13 @@ fn is_identifier_digit(c: char) -> bool {
 fn identifier_contents(input: Input) -> ParseResult<String> {
     map(take_while(is_identifier_digit), |input: Input| {
         input.cursor().to_owned()
-    })(input)
+    })
+    .parse(input)
 }
 
 /// Helper for [`string_identifier`] and [`string_identifier_with_wildcard`].
 fn string_identifier_no_rtrim(input: Input) -> ParseResult<String> {
-    preceded(char('$'), cut(identifier_contents))(input)
+    preceded(char('$'), cut(identifier_contents)).parse(input)
 }
 
 /// Parse a string identifier.
@@ -41,7 +41,7 @@ fn string_identifier_no_rtrim(input: Input) -> ParseResult<String> {
 /// libyara.
 /// Roughly equivalent to `$[a-ZA-Z0-9_]*`.
 pub(crate) fn string_identifier(input: Input) -> ParseResult<String> {
-    rtrim(string_identifier_no_rtrim)(input)
+    rtrim(string_identifier_no_rtrim).parse(input)
 }
 
 /// Parse a string identifier with an optional trailing wildcard.
@@ -52,22 +52,23 @@ pub(crate) fn string_identifier_with_wildcard(input: Input) -> ParseResult<(Stri
     rtrim(pair(
         string_identifier_no_rtrim,
         map(opt(char('*')), |v| v.is_some()),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse a string count, roughly equivalent to `#[a-zA-Z0-9_]*`.
 pub(crate) fn count(input: Input) -> ParseResult<String> {
-    rtrim(preceded(char('#'), cut(identifier_contents)))(input)
+    rtrim(preceded(char('#'), cut(identifier_contents))).parse(input)
 }
 
 /// Parse a string offset, roughly equivalent to `@[a-zA-Z0-9_]*`.
 pub(crate) fn offset(input: Input) -> ParseResult<String> {
-    rtrim(preceded(char('@'), cut(identifier_contents)))(input)
+    rtrim(preceded(char('@'), cut(identifier_contents))).parse(input)
 }
 
 /// Parse a string length, roughly equivalent to `![a-zA-Z0-9_]*`.
 pub(crate) fn length(input: Input) -> ParseResult<String> {
-    rtrim(preceded(char('!'), cut(identifier_contents)))(input)
+    rtrim(preceded(char('!'), cut(identifier_contents))).parse(input)
 }
 
 /// Parse an identifier.
@@ -75,12 +76,13 @@ pub(crate) fn length(input: Input) -> ParseResult<String> {
 /// This is roughly equivalent to `[a-ZA-Z_][a-zA-Z0-9_]*`.
 pub(crate) fn identifier(input: Input) -> ParseResult<String> {
     rtrim(map(
-        recognize(tuple((
+        recognize((
             take_one(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_')),
             cut(take_while(is_identifier_digit)),
-        ))),
+        )),
         |input| input.cursor().to_owned(),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse a quoted string with escapable characters.
@@ -91,11 +93,11 @@ pub(crate) fn identifier(input: Input) -> ParseResult<String> {
 ///
 /// This parser allows non ascii bytes, hence returning a byte string.
 pub(crate) fn quoted(input: Input) -> ParseResult<Vec<u8>> {
-    rtrim(quoted_no_rtrim)(input)
+    rtrim(quoted_no_rtrim).parse(input)
 }
 
 fn quoted_no_rtrim(input: Input) -> ParseResult<Vec<u8>> {
-    let (mut input, _) = char('"')(input)?;
+    let (mut input, _) = char('"').parse(input)?;
 
     let mut index = 0;
     let mut res = Vec::new();

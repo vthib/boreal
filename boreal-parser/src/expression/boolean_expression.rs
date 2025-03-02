@@ -1,28 +1,23 @@
 //! Parsing related to expressions.
 //!
 //! This implements the `expression` element in grammar.y in libyara.
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    combinator::{cut, map},
-    sequence::preceded,
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::combinator::{cut, map};
+use nom::sequence::preceded;
+use nom::Parser;
 
 use crate::error::{Error, ErrorKind};
-use crate::regex::Regex;
-
-use super::{
-    super::{
-        nom_recipes::{rtrim, textual_tag as ttag},
-        regex::regex,
-        string::string_identifier,
-        types::{Input, ParseResult},
-    },
-    common::range,
-    for_expression::{for_expression_non_ambiguous, for_expression_with_expr_selection},
-    primary_expression::primary_expression,
-    Expression, ExpressionKind,
+use crate::expression::common::range;
+use crate::expression::for_expression::{
+    for_expression_non_ambiguous, for_expression_with_expr_selection,
 };
+use crate::expression::primary_expression::primary_expression;
+use crate::expression::{Expression, ExpressionKind};
+use crate::nom_recipes::{rtrim, textual_tag as ttag};
+use crate::regex::{regex, Regex};
+use crate::string::string_identifier;
+use crate::types::{Input, ParseResult};
 
 /// parse or operator
 pub(crate) fn boolean_expression(mut input: Input) -> ParseResult<Expression> {
@@ -49,11 +44,11 @@ pub(crate) fn boolean_expression(mut input: Input) -> ParseResult<Expression> {
     input.expr_recursion_counter += 1;
     let (mut input, res) = expression_and(input)?;
 
-    match rtrim(ttag("or"))(input) {
+    match rtrim(ttag("or")).parse(input) {
         Ok((mut input, _)) => {
             let mut ops = vec![res];
             loop {
-                let (mut i2, elem) = cut(expression_and)(input)?;
+                let (mut i2, elem) = cut(expression_and).parse(input)?;
                 ops.push(elem);
                 match rtrim(ttag("or"))(i2) {
                     Ok((i3, _)) => input = i3,
@@ -82,11 +77,11 @@ fn expression_and(input: Input) -> ParseResult<Expression> {
     let start = input.pos();
     let (input, res) = expression_not(input)?;
 
-    match rtrim(ttag("and"))(input) {
+    match rtrim(ttag("and")).parse(input) {
         Ok((mut input, _)) => {
             let mut ops = vec![res];
             loop {
-                let (i2, elem) = cut(expression_not)(input)?;
+                let (i2, elem) = cut(expression_not).parse(input)?;
                 ops.push(elem);
                 match rtrim(ttag("and"))(i2) {
                     Ok((i3, _)) => input = i3,
@@ -111,7 +106,7 @@ fn expression_not(mut input: Input) -> ParseResult<Expression> {
     let mut start = input.pos();
     let mut ops = Vec::new();
     // Push ops into a vec, to prevent a possible stack overflow if we used recursion.
-    while let Ok((i, op)) = rtrim(alt((ttag("not"), ttag("defined"))))(input) {
+    while let Ok((i, op)) = rtrim(alt((ttag("not"), ttag("defined")))).parse(input) {
         ops.push((
             if op == "not" {
                 ExpressionKind::Not
@@ -142,7 +137,8 @@ fn expression_item(input: Input) -> ParseResult<Expression> {
         for_expression_non_ambiguous,
         // string_identifier ...
         variable_expression,
-    ))(input)
+    ))
+    .parse(input)
     {
         Ok((input, expr)) => return Ok((input, expr)),
         Err(nom::Err::Failure(e)) => return Err(nom::Err::Failure(e)),
@@ -225,11 +221,12 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
         map(ttag("matches"), |_| {
             EqExprBuilder::Regex(|a, b| ExpressionKind::Matches(Box::new(a), b))
         }),
-    )))(input)
+    )))
+    .parse(input)
     {
         match op {
             EqExprBuilder::Expr(builder) => {
-                let (i2, new_expr) = cut(primary_expression_cmp)(i)?;
+                let (i2, new_expr) = cut(primary_expression_cmp).parse(i)?;
                 input = i2;
                 res = Expression {
                     expr: builder(res, new_expr),
@@ -237,7 +234,7 @@ fn primary_expression_eq_all(input: Input) -> ParseResult<Expression> {
                 }
             }
             EqExprBuilder::Regex(builder) => {
-                let (i2, regex) = cut(regex)(i)?;
+                let (i2, regex) = cut(regex).parse(i)?;
                 input = i2;
                 res = Expression {
                     expr: builder(res, regex),
@@ -254,8 +251,8 @@ fn primary_expression_cmp(input: Input) -> ParseResult<Expression> {
     let start = input.pos();
     let (mut input, mut res) = primary_expression(input)?;
 
-    while let Ok((i, op)) = rtrim(alt((tag("<="), tag(">="), tag("<"), tag(">"))))(input) {
-        let (i2, right_elem) = cut(primary_expression)(i)?;
+    while let Ok((i, op)) = rtrim(alt((tag("<="), tag(">="), tag("<"), tag(">")))).parse(input) {
+        let (i2, right_elem) = cut(primary_expression).parse(i)?;
         input = i2;
         let op = op.cursor();
         let less_than = op.bytes().next() == Some(b'<');
@@ -279,7 +276,7 @@ fn variable_expression(input: Input) -> ParseResult<Expression> {
     let (input, variable_name) = string_identifier(input)?;
 
     // string_identifier 'at' primary_expression
-    if let Ok((input2, expr)) = preceded(rtrim(ttag("at")), primary_expression)(input) {
+    if let Ok((input2, expr)) = preceded(rtrim(ttag("at")), primary_expression).parse(input) {
         Ok((
             input2,
             Expression {
@@ -292,7 +289,7 @@ fn variable_expression(input: Input) -> ParseResult<Expression> {
             },
         ))
     // string_identifier 'in' range
-    } else if let Ok((input2, (from, to))) = preceded(rtrim(tag("in")), range)(input) {
+    } else if let Ok((input2, (from, to))) = preceded(rtrim(tag("in")), range).parse(input) {
         Ok((
             input2,
             Expression {

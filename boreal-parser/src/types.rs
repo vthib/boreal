@@ -1,9 +1,9 @@
-use std::ops::{Range, RangeFrom, RangeTo};
+use std::ops::Range;
 
 use super::error::Error;
 use nom::{
     error::{ErrorKind, ParseError as NomParseError},
-    Compare, CompareResult, Err, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition,
+    Compare, CompareResult, Err, IResult,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -117,35 +117,25 @@ impl<'a> Input<'a> {
     }
 }
 
-impl<'a> InputIter for Input<'a> {
+impl<'a> nom::Input for Input<'a> {
     type Item = char;
-    type Iter = std::str::CharIndices<'a>;
-    type IterElem = std::str::Chars<'a>;
+    type Iter = std::str::Chars<'a>;
+    type IterIndices = std::str::CharIndices<'a>;
 
-    fn iter_indices(&self) -> Self::Iter {
-        self.cursor.iter_indices()
+    fn input_len(&self) -> usize {
+        self.cursor.input_len()
     }
 
-    fn iter_elements(&self) -> Self::IterElem {
-        self.cursor.iter_elements()
-    }
-
-    fn position<P>(&self, predicate: P) -> Option<usize>
-    where
-        P: Fn(Self::Item) -> bool,
-    {
-        self.cursor.position(predicate)
-    }
-
-    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
-        self.cursor.slice_index(count)
-    }
-}
-
-impl InputTake for Input<'_> {
     fn take(&self, count: usize) -> Self {
         Self {
             cursor: self.cursor.take(count),
+            ..*self
+        }
+    }
+
+    fn take_from(&self, count: usize) -> Self {
+        Self {
+            cursor: self.cursor.take_from(count),
             ..*self
         }
     }
@@ -163,10 +153,25 @@ impl InputTake for Input<'_> {
             },
         )
     }
-}
 
-impl InputTakeAtPosition for Input<'_> {
-    type Item = char;
+    fn position<P>(&self, predicate: P) -> Option<usize>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        self.cursor.position(predicate)
+    }
+
+    fn iter_elements(&self) -> Self::Iter {
+        self.cursor.iter_elements()
+    }
+
+    fn iter_indices(&self) -> Self::IterIndices {
+        self.cursor.iter_indices()
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
+        self.cursor.slice_index(count)
+    }
 
     fn split_at_position<P, E: NomParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
     where
@@ -244,30 +249,6 @@ impl<'a> Compare<&'a str> for Input<'_> {
     }
 }
 
-impl nom::Slice<RangeFrom<usize>> for Input<'_> {
-    fn slice(&self, range: RangeFrom<usize>) -> Self {
-        Self {
-            cursor: self.cursor.slice(range),
-            ..*self
-        }
-    }
-}
-
-impl nom::Slice<RangeTo<usize>> for Input<'_> {
-    fn slice(&self, range: RangeTo<usize>) -> Self {
-        Self {
-            cursor: self.cursor.slice(range),
-            ..*self
-        }
-    }
-}
-
-impl InputLength for Input<'_> {
-    fn input_len(&self) -> usize {
-        self.cursor.input_len()
-    }
-}
-
 impl nom::Offset for Input<'_> {
     fn offset(&self, second: &Self) -> usize {
         self.cursor.offset(second.cursor())
@@ -284,13 +265,17 @@ impl std::ops::Deref for Input<'_> {
 
 #[cfg(test)]
 mod tests {
+    use nom::error::ErrorKind;
+    use nom::{Compare, CompareResult, Input};
+
+    use crate::error::Error;
     use crate::test_helpers::test_public_type;
 
-    use super::*;
+    use super::Input as I;
 
     #[test]
     fn test_input_advance() {
-        let mut input = Input::new("rule a { condition: true }");
+        let mut input = I::new("rule a { condition: true }");
 
         input.advance(0);
         assert_eq!(input.cursor(), "rule a { condition: true }");
@@ -311,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_input_strip_prefix() {
-        let input = Input::new("rule a { condition: true }");
+        let input = I::new("rule a { condition: true }");
 
         let input = input.strip_prefix("rule").unwrap();
         assert_eq!(input.cursor(), " a { condition: true }");
@@ -326,11 +311,15 @@ mod tests {
 
     #[test]
     fn test_input_take_trait() {
-        let mut input = Input::new("rule a { condition: true }");
+        let mut input = I::new("rule a { condition: true }");
 
         let take = input.take(15);
         assert_eq!(take.cursor(), "rule a { condit");
-        assert_eq!(input.get_position_offset(), 0);
+        assert_eq!(take.get_position_offset(), 0);
+
+        let take = input.take_from(15);
+        assert_eq!(take.cursor(), "ion: true }");
+        assert_eq!(take.get_position_offset(), 15);
 
         input.advance(7);
         let (post, pre) = input.take_split(13);
@@ -342,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_input_take_at_position_trait() {
-        let mut input = Input::new("rule a { condition: true }");
+        let mut input = I::new("rule a { condition: true }");
         input.advance(5);
 
         // split_at_position
@@ -425,8 +414,32 @@ mod tests {
     }
 
     #[test]
+    fn test_input_iter() {
+        let input = I::new("condition: true");
+        let (post, pre) = input.take_split(7);
+
+        assert_eq!(
+            pre.iter_elements().collect::<Vec<_>>(),
+            ['c', 'o', 'n', 'd', 'i', 't', 'i']
+        );
+        assert_eq!(
+            post.iter_indices().collect::<Vec<_>>(),
+            [
+                (0, 'o'),
+                (1, 'n'),
+                (2, ':'),
+                (3, ' '),
+                (4, 't'),
+                (5, 'r'),
+                (6, 'u'),
+                (7, 'e'),
+            ]
+        );
+    }
+
+    #[test]
     fn test_compare_trait() {
-        let mut input = Input::new("rule a { condition: true }");
+        let mut input = I::new("rule a { condition: true }");
         input.advance(9);
 
         assert_eq!(input.compare("true"), CompareResult::Error);
@@ -453,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_public_types() {
-        test_public_type(Input::new(r"a"));
-        test_public_type(Input::new(r"a").pos());
+        test_public_type(I::new(r"a"));
+        test_public_type(I::new(r"a").pos());
     }
 }

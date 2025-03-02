@@ -1,14 +1,13 @@
 //! AST elements related to YARA regexes.
 use std::ops::Range;
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take},
-    character::complete::{anychar, char, digit0, digit1, multispace0, none_of},
-    combinator::{cut, map, opt},
-    multi::many0,
-    sequence::{delimited, separated_pair, terminated, tuple},
-};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, take};
+use nom::character::complete::{anychar, char, digit0, digit1, multispace0, none_of};
+use nom::combinator::{cut, map, opt};
+use nom::multi::many0;
+use nom::sequence::{delimited, separated_pair, terminated};
+use nom::Parser;
 
 use crate::error::ErrorKind;
 
@@ -223,12 +222,12 @@ pub fn parse_regex(input: &str) -> Result<Regex, Error> {
 /// as a C string). See [Issue #576 in Yara](https://github.com/VirusTotal/yara/issues/576).
 pub(crate) fn regex(input: Input) -> ParseResult<Regex> {
     let start = input.pos();
-    let (input, _) = char('/')(input)?;
+    let (input, _) = char('/').parse(input)?;
 
     // We cannot use escaped_transform, as it is not an error to use
     // the control character with any char other than `/`.
-    let (input, ast) = cut(terminated(alternative, char('/')))(input)?;
-    let (input, (no_case, dot_all)) = rtrim(tuple((opt(char('i')), opt(char('s')))))(input)?;
+    let (input, ast) = cut(terminated(alternative, char('/'))).parse(input)?;
+    let (input, (no_case, dot_all)) = rtrim((opt(char('i')), opt(char('s')))).parse(input)?;
 
     Ok((
         input,
@@ -290,7 +289,7 @@ fn eat_opt_char(c: char, mut input: Input) -> (Input, bool) {
 }
 
 fn concatenation(input: Input) -> ParseResult<Node> {
-    let (input, mut nodes) = many0(repeat)(input)?;
+    let (input, mut nodes) = many0(repeat).parse(input)?;
 
     let node = if nodes.is_empty() {
         Node::Empty
@@ -311,7 +310,7 @@ fn repeat(input: Input) -> ParseResult<Node> {
 
     // Otherwise, parse single node with optional repetition
     let (input, node) = single(input)?;
-    let (input, repetition) = opt(repetition)(input)?;
+    let (input, repetition) = opt(repetition).parse(input)?;
     match repetition {
         Some((kind, greedy)) => Ok((
             input,
@@ -334,7 +333,8 @@ fn assertion(input: Input) -> ParseResult<Node> {
         }),
         map(char('^'), |_| Node::Assertion(AssertionKind::StartLine)),
         map(char('$'), |_| Node::Assertion(AssertionKind::EndLine)),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn repetition(input: Input) -> ParseResult<(RepetitionKind, bool)> {
@@ -348,7 +348,8 @@ fn repetition(input: Input) -> ParseResult<(RepetitionKind, bool)> {
         map(range_repetition, |(kind, greedy)| {
             (RepetitionKind::Range(kind), greedy)
         }),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn single(input: Input) -> ParseResult<Node> {
@@ -361,7 +362,8 @@ fn single(input: Input) -> ParseResult<Node> {
         map(bracketed_class, |p| Node::Class(ClassKind::Bracketed(p))),
         escaped_char,
         literal,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn perl_class(input: Input) -> ParseResult<PerlClass> {
@@ -390,13 +392,14 @@ fn perl_class(input: Input) -> ParseResult<PerlClass> {
             kind: PerlClassKind::Digit,
             negated: true,
         }),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn bracketed_class(input: Input) -> ParseResult<BracketedClass> {
-    let (input, _) = char('[')(input)?;
+    let (input, _) = char('[').parse(input)?;
     // As soon as we parse a '[', we are in class mode, hence the cut if parsing fails.
-    cut(bracketed_class_inner)(input)
+    cut(bracketed_class_inner).parse(input)
 }
 
 fn bracketed_class_inner(input: Input) -> ParseResult<BracketedClass> {
@@ -404,8 +407,8 @@ fn bracketed_class_inner(input: Input) -> ParseResult<BracketedClass> {
     let start = input.pos();
     let (input2, contains_closing_bracket) = eat_opt_char(']', input);
 
-    let (input, mut items) = many0(bracketed_class_item)(input2)?;
-    let (input, _) = char(']')(input)?;
+    let (input, mut items) = many0(bracketed_class_item).parse(input2)?;
+    let (input, _) = char(']').parse(input)?;
 
     if contains_closing_bracket {
         items.push(BracketedClassItem::Literal(Literal {
@@ -421,7 +424,8 @@ fn bracketed_class_item(input: Input) -> ParseResult<BracketedClassItem> {
     alt((
         map(perl_class, BracketedClassItem::Perl),
         bracketed_class_range_or_literal,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassItem> {
@@ -430,7 +434,7 @@ fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassI
     let (input2, has_dash) = eat_opt_char('-', input);
 
     if has_dash {
-        let (input3, lit2) = opt(bracketed_class_literal)(input2)?;
+        let (input3, lit2) = opt(bracketed_class_literal).parse(input2)?;
         match lit2 {
             Some(lit2) if lit2 < lit => Err(nom::Err::Failure(Error::new(
                 input3.get_span_from_no_rtrim(start),
@@ -445,7 +449,7 @@ fn bracketed_class_range_or_literal(input: Input) -> ParseResult<BracketedClassI
 }
 
 fn bracketed_class_literal(input: Input) -> ParseResult<Literal> {
-    alt((escaped_char_only_ascii, bracketed_class_char))(input)
+    alt((escaped_char_only_ascii, bracketed_class_char)).parse(input)
 }
 
 fn bracketed_class_char(input: Input) -> ParseResult<Literal> {
@@ -454,7 +458,7 @@ fn bracketed_class_char(input: Input) -> ParseResult<Literal> {
     // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
     // and newlines are not allowed
     // ] is disallowed because it indicates the end of the class
-    let (input, b) = none_of("/\n]")(input)?;
+    let (input, b) = none_of("/\n]").parse(input)?;
     if b.is_ascii() {
         Ok((
             input,
@@ -478,7 +482,7 @@ fn literal(input: Input) -> ParseResult<Node> {
     // / and \n are disallowed because of the surrounding rule (we are parsing a /.../ variable,
     // and newlines are not allowed
     // rest is disallowed because they have specific meaning.
-    let (input, c) = none_of("/\n()[\\|.$^+*?")(input)?;
+    let (input, c) = none_of("/\n()[\\|.$^+*?").parse(input)?;
     let node = if c.is_ascii() {
         Node::Literal(Literal {
             byte: c as u8,
@@ -548,7 +552,7 @@ fn escaped_char_only_ascii(input: Input) -> ParseResult<Literal> {
 
 fn escaped_char_inner(input: Input) -> ParseResult<Escaped> {
     let start = input.pos();
-    let (input2, _) = char('\\')(input)?;
+    let (input2, _) = char('\\').parse(input)?;
     let (input, b) = anychar(input2)?;
 
     let span = input.get_span_from_no_rtrim(start);
@@ -559,7 +563,7 @@ fn escaped_char_inner(input: Input) -> ParseResult<Escaped> {
         'f' => (EscapedKind::Byte(b'\x0C'), false),
         'a' => (EscapedKind::Byte(b'\x07'), false),
         'x' => {
-            let (input, n) = cut(take(2_u32))(input)?;
+            let (input, n) = cut(take(2_u32)).parse(input)?;
 
             let n = match u8::from_str_radix(&n, 16) {
                 Ok(n) => n,
@@ -606,14 +610,14 @@ enum EscapedKind {
 }
 
 fn range_repetition(input: Input) -> ParseResult<(RepetitionRange, bool)> {
-    let (input, range) = alt((range_single, range_multi))(input)?;
+    let (input, range) = alt((range_single, range_multi)).parse(input)?;
     let (input, non_greedy) = eat_opt_char('?', input);
 
     Ok((input, (range, !non_greedy)))
 }
 
 fn range_single(input: Input) -> ParseResult<RepetitionRange> {
-    let (input, v) = delimited(char('{'), parse_u32, char('}'))(input)?;
+    let (input, v) = delimited(char('{'), parse_u32, char('}')).parse(input)?;
 
     Ok((input, RepetitionRange::Exactly(v)))
 }
@@ -628,7 +632,8 @@ fn range_multi(input: Input) -> ParseResult<RepetitionRange> {
             parse_opt_u32,
         ),
         char('}'),
-    )(input)?;
+    )
+    .parse(input)?;
 
     let range = match (from, to) {
         (None, None) => RepetitionRange::AtLeast(0),

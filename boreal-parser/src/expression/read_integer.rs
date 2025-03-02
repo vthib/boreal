@@ -1,18 +1,16 @@
 //! Parsing related to the expressions `(u)uintXX(value)`.
 //!
 //! This implements the `integer_function` element in grammar.y in libyara.
-use nom::{
-    branch::alt,
-    character::complete::char,
-    combinator::{cut, map},
-    sequence::{delimited, pair},
-};
+use nom::branch::alt;
+use nom::character::complete::char;
+use nom::combinator::{cut, map};
+use nom::sequence::{delimited, pair};
+use nom::Parser;
 
-use super::{primary_expression::primary_expression, Expression, ExpressionKind, ReadIntegerType};
-use crate::{
-    nom_recipes::{rtrim, textual_tag as ttag},
-    types::{Input, ParseResult},
-};
+use crate::expression::primary_expression::primary_expression;
+use crate::expression::{Expression, ExpressionKind, ReadIntegerType};
+use crate::nom_recipes::{rtrim, textual_tag as ttag};
+use crate::types::{Input, ParseResult};
 
 /// Parse a read of an integer.
 ///
@@ -37,7 +35,8 @@ fn read_integer_type(input: Input) -> ParseResult<ReadIntegerType> {
         map(ttag("uint8"), |_| ReadIntegerType::Uint8),
         map(ttag("int8be"), |_| ReadIntegerType::Int8),
         map(ttag("int8"), |_| ReadIntegerType::Int8),
-    )))(input)
+    )))
+    .parse(input)
 }
 
 pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
@@ -49,7 +48,8 @@ pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
             primary_expression,
             rtrim(char(')')),
         )),
-    )(input)?;
+    )
+    .parse(input)?;
 
     Ok((
         input,

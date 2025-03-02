@@ -1,10 +1,9 @@
 //! Parsing methods common to several expressions.
-use nom::{
-    bytes::complete::tag,
-    character::complete::char,
-    combinator::cut,
-    sequence::{separated_pair, terminated},
-};
+use nom::bytes::complete::tag;
+use nom::character::complete::char;
+use nom::combinator::cut;
+use nom::sequence::{separated_pair, terminated};
+use nom::Parser;
 
 use super::{primary_expression::primary_expression, Expression};
 use crate::nom_recipes::rtrim;
@@ -14,7 +13,7 @@ use crate::types::{Input, ParseResult};
 ///
 /// Equivalent to the range pattern in grammar.y in libyara.
 pub(super) fn range(input: Input) -> ParseResult<(Box<Expression>, Box<Expression>)> {
-    let (input, _) = rtrim(char('('))(input)?;
+    let (input, _) = rtrim(char('(')).parse(input)?;
 
     let (input, (a, b)) = terminated(
         separated_pair(
@@ -23,7 +22,8 @@ pub(super) fn range(input: Input) -> ParseResult<(Box<Expression>, Box<Expressio
             cut(primary_expression),
         ),
         cut(rtrim(char(')'))),
-    )(input)?;
+    )
+    .parse(input)?;
 
     Ok((input, (Box::new(a), Box::new(b))))
 }

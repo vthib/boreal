@@ -13,7 +13,7 @@ rust-version = "1.74"
 
 [dependencies]
 # Parsing library
-nom = "7.1"
+nom = "8.0"
 
 # Proper error reporting on parsing
 codespan-reporting = "0.12"

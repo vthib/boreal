@@ -1,13 +1,12 @@
 //! AST objects related to hex strings.
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    character::complete::{char, digit1},
-    combinator::{cut, map, opt, value},
-    error::{ErrorKind as NomErrorKind, ParseError},
-    multi::{many1, separated_list1},
-    sequence::{delimited, preceded, terminated},
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::character::complete::{char, digit1};
+use nom::combinator::{cut, map, opt, value};
+use nom::error::{ErrorKind as NomErrorKind, ParseError};
+use nom::multi::{many1, separated_list1};
+use nom::sequence::{delimited, preceded, terminated};
+use nom::Parser;
 
 use super::error::{Error, ErrorKind};
 use super::nom_recipes::{map_res, rtrim};
@@ -81,9 +80,9 @@ pub fn parse_hex_string(input: &str) -> Result<Vec<Token>, Error> {
 ///
 /// This is equivalent to the `hex_string` rule in `hex_grammar.y` in libyara.
 pub(crate) fn hex_string(input: Input) -> ParseResult<Vec<Token>> {
-    let (input, _) = rtrim(char('{'))(input)?;
+    let (input, _) = rtrim(char('{')).parse(input)?;
 
-    cut(terminated(|input| tokens(input, false), rtrim(char('}'))))(input)
+    cut(terminated(|input| tokens(input, false), rtrim(char('}')))).parse(input)
 }
 
 /// Parse an hex-digit, and return its value in [0-15].
@@ -110,18 +109,19 @@ fn hex_digit(mut input: Input) -> ParseResult<u8> {
 fn byte(input: Input) -> ParseResult<u8> {
     let (input, digit0) = hex_digit(input)?;
 
-    map(rtrim(hex_digit), move |digit1| (digit0 << 4) | digit1)(input)
+    map(rtrim(hex_digit), move |digit1| (digit0 << 4) | digit1).parse(input)
 }
 
 /// Parse the not tokens.
 fn not_token(input: Input) -> ParseResult<Token> {
     let start = input.pos();
 
-    let (input, _) = char('~')(input)?;
+    let (input, _) = char('~').parse(input)?;
     let (input, token) = cut(alt((
         map(byte, Token::NotByte),
         map(masked_byte, |(b, mask)| Token::NotMaskedByte(b, mask)),
-    )))(input)?;
+    )))
+    .parse(input)?;
 
     if let Token::NotMaskedByte(_, Mask::All) = &token {
         return Err(nom::Err::Failure(Error::new(
@@ -141,7 +141,8 @@ fn masked_byte(input: Input) -> ParseResult<(u8, Mask)> {
         map(tag("??"), |_| (0, Mask::All)),
         map(preceded(char('?'), hex_digit), |v| (v, Mask::Left)),
         map(terminated(hex_digit, char('?')), |v| (v, Mask::Right)),
-    )))(input)
+    )))
+    .parse(input)
 }
 
 /// Parse a jump range, which can be expressed in multiple ways:
@@ -155,12 +156,13 @@ fn masked_byte(input: Input) -> ParseResult<(u8, Mask)> {
 /// This is equivalent to the range state in libyara.
 fn range(input: Input) -> ParseResult<Jump> {
     let start = input.pos();
-    let (input, _) = rtrim(char('['))(input)?;
+    let (input, _) = rtrim(char('[')).parse(input)?;
 
     // Parse 'a'
     let (input, from) = opt(map_res(rtrim(digit1), |v| {
         str::parse::<u32>(v.cursor()).map_err(ErrorKind::StrToIntError)
-    }))(input)?;
+    }))
+    .parse(input)?;
 
     let (input, to) = match from {
         Some(from) => {
@@ -175,7 +177,8 @@ fn range(input: Input) -> ParseResult<Jump> {
                 ),
                 // Otherwise, this means '[a]'
                 value(Some(from), rtrim(char(']'))),
-            ))(input)?
+            ))
+            .parse(input)?
         }
         None => delimited(
             rtrim(char('-')),
@@ -183,7 +186,8 @@ fn range(input: Input) -> ParseResult<Jump> {
                 str::parse(v.cursor()).map_err(ErrorKind::StrToIntError)
             })),
             rtrim(char(']')),
-        )(input)?,
+        )
+        .parse(input)?,
     };
 
     let jump = Jump {
@@ -223,7 +227,7 @@ fn validate_jump(range: &Jump) -> Result<(), ErrorKind> {
 ///
 /// This is equivalent to the `alternatives` from `hex_grammar.y` in libyara.
 fn alternatives(input: Input) -> ParseResult<Token> {
-    let (input, _) = rtrim(char('('))(input)?;
+    let (input, _) = rtrim(char('(')).parse(input)?;
 
     cut(terminated(
         map(
@@ -231,7 +235,8 @@ fn alternatives(input: Input) -> ParseResult<Token> {
             Token::Alternatives,
         ),
         rtrim(char(')')),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn range_as_hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
@@ -286,7 +291,8 @@ fn hex_token(input: Input, in_alternatives: bool) -> ParseResult<Token> {
         map(masked_byte, |(v, mask)| Token::MaskedByte(v, mask)),
         |input| range_as_hex_token(input, in_alternatives),
         alternatives,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parse a list of token
@@ -310,7 +316,7 @@ fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     }
 
     input.inner_recursion_counter += 1;
-    let (mut input, tokens) = many1(|input| hex_token(input, in_alternatives))(input)?;
+    let (mut input, tokens) = many1(|input| hex_token(input, in_alternatives)).parse(input)?;
     input.inner_recursion_counter -= 1;
 
     if matches!(tokens[0], Token::Jump(_))

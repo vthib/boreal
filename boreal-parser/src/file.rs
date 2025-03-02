@@ -6,6 +6,7 @@ use nom::bytes::complete::take_till1;
 use nom::character::complete::char;
 use nom::combinator::map;
 use nom::sequence::delimited;
+use nom::Parser;
 use nom::{combinator::cut, sequence::preceded};
 
 use crate::rule::Rule;
@@ -74,7 +75,8 @@ pub(crate) fn parse_yara_file(input: Input) -> ParseResult<YaraFile> {
             map(include_file, YaraFileComponent::Include),
             map(import, YaraFileComponent::Import),
             map(rule, |r| YaraFileComponent::Rule(Box::new(r))),
-        ))(input)?;
+        ))
+        .parse(input)?;
         file.components.push(component);
         input = i;
     }

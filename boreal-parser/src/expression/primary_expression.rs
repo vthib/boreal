@@ -1,22 +1,20 @@
 //! Parsing related to primary expressions.
 //!
 //! This implements the `primary_expression` element in grammar.y in libyara.
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    character::complete::char,
-    combinator::{cut, map, opt, value},
-    sequence::delimited,
-    Parser,
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::character::complete::char;
+use nom::combinator::{cut, map, opt, value};
+use nom::sequence::delimited;
+use nom::Parser;
 
-use super::{expression, identifier, read_integer, string_expression, Expression, ExpressionKind};
-use crate::{
-    error::{Error, ErrorKind},
-    nom_recipes::{rtrim, textual_tag as ttag},
-    number, regex, string,
-    types::{Input, ParseResult},
+use crate::error::{Error, ErrorKind};
+use crate::expression::{
+    expression, identifier, read_integer, string_expression, Expression, ExpressionKind,
 };
+use crate::nom_recipes::{rtrim, textual_tag as ttag};
+use crate::types::{Input, ParseResult};
+use crate::{number, regex, string};
 
 /// parse | operator
 pub(crate) fn primary_expression(mut input: Input) -> ParseResult<Expression> {
@@ -32,8 +30,8 @@ pub(crate) fn primary_expression(mut input: Input) -> ParseResult<Expression> {
     input.expr_recursion_counter += 1;
     let (mut input, mut res) = primary_expression_bitwise_xor(input)?;
 
-    while let Ok((i, _)) = rtrim(char('|'))(input) {
-        let (i2, right_elem) = cut(primary_expression_bitwise_xor)(i)?;
+    while let Ok((i, _)) = rtrim(char('|')).parse(input) {
+        let (i2, right_elem) = cut(primary_expression_bitwise_xor).parse(i)?;
         input = i2;
 
         res = Expression {
@@ -51,8 +49,8 @@ fn primary_expression_bitwise_xor(input: Input) -> ParseResult<Expression> {
     let start = input.pos();
     let (mut input, mut res) = primary_expression_bitwise_and(input)?;
 
-    while let Ok((i, _)) = rtrim(char('^'))(input) {
-        let (i2, right_elem) = cut(primary_expression_bitwise_and)(i)?;
+    while let Ok((i, _)) = rtrim(char('^')).parse(input) {
+        let (i2, right_elem) = cut(primary_expression_bitwise_and).parse(i)?;
         input = i2;
 
         res = Expression {
@@ -68,8 +66,8 @@ fn primary_expression_bitwise_and(input: Input) -> ParseResult<Expression> {
     let start = input.pos();
     let (mut input, mut res) = primary_expression_shift(input)?;
 
-    while let Ok((i, _)) = rtrim(char('&'))(input) {
-        let (i2, right_elem) = cut(primary_expression_shift)(i)?;
+    while let Ok((i, _)) = rtrim(char('&')).parse(input) {
+        let (i2, right_elem) = cut(primary_expression_shift).parse(i)?;
         input = i2;
 
         res = Expression {
@@ -86,9 +84,9 @@ fn primary_expression_shift(input: Input) -> ParseResult<Expression> {
     let (mut input, mut res) = primary_expression_add(input)?;
 
     while let Ok((i, shift_right)) =
-        rtrim(alt((value(false, tag("<<")), value(true, tag(">>")))))(input)
+        rtrim(alt((value(false, tag("<<")), value(true, tag(">>"))))).parse(input)
     {
-        let (i2, right_elem) = cut(primary_expression_add)(i)?;
+        let (i2, right_elem) = cut(primary_expression_add).parse(i)?;
         input = i2;
 
         let left = Box::new(res);
@@ -110,8 +108,10 @@ fn primary_expression_add(input: Input) -> ParseResult<Expression> {
     let start = input.pos();
     let (mut input, mut res) = primary_expression_mul(input)?;
 
-    while let Ok((i, is_sub)) = rtrim(alt((value(false, tag("+")), value(true, tag("-")))))(input) {
-        let (i2, right_elem) = cut(primary_expression_mul)(i)?;
+    while let Ok((i, is_sub)) =
+        rtrim(alt((value(false, tag("+")), value(true, tag("-"))))).parse(input)
+    {
+        let (i2, right_elem) = cut(primary_expression_mul).parse(i)?;
         input = i2;
 
         res = Expression {
@@ -141,7 +141,8 @@ fn primary_expression_mul(input: Input) -> ParseResult<Expression> {
         map(char('*'), |_| MulExpr::Mul),
         map(char('\\'), |_| MulExpr::Div),
         map(char('%'), |_| MulExpr::Mod),
-    )))(input)
+    )))
+    .parse(input)
     {
         if matches!(op, MulExpr::Mod) {
             // XXX: workaround issue with parsing the for as_percent expression:
@@ -149,7 +150,7 @@ fn primary_expression_mul(input: Input) -> ParseResult<Expression> {
             //   => should parse the expression as '50', not as '50' mod 'of'
             // Not sure how yacc manages to properly handle those rules, but
             // I have no easy solution for this in nom.
-            if let Ok((_, Some(_))) = opt(ttag("of"))(i) {
+            if let Ok((_, Some(_))) = opt(ttag("of")).parse(i) {
                 return Ok((input, res));
             }
         }
@@ -174,7 +175,7 @@ fn primary_expression_neg(mut input: Input) -> ParseResult<Expression> {
     let mut start = input.pos();
     let mut ops = Vec::new();
     // Push ops into a vec, to prevent a possible stack overflow if we used recursion.
-    while let Ok((i, op)) = rtrim(alt((char('~'), char('-'))))(input) {
+    while let Ok((i, op)) = rtrim(alt((char('~'), char('-')))).parse(input) {
         ops.push((
             if op == '~' {
                 ExpressionKind::BitwiseNot
@@ -228,7 +229,8 @@ fn primary_expression_item(input: Input) -> ParseResult<Expression> {
         string_expression::string_length_expression,
         // identifier
         map_expr(identifier::identifier, ExpressionKind::Identifier),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn map_expr<'a, F, C, O>(
@@ -236,7 +238,7 @@ fn map_expr<'a, F, C, O>(
     constructor: C,
 ) -> impl FnMut(Input<'a>) -> ParseResult<'a, Expression>
 where
-    F: Parser<Input<'a>, O, Error>,
+    F: Parser<Input<'a>, Output = O, Error = Error>,
     C: Fn(O) -> ExpressionKind,
 {
     move |input| {
