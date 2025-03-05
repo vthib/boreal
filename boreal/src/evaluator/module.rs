@@ -94,7 +94,7 @@ pub(super) fn evaluate_expr(
             };
 
             let mut eval_ctx = EvalContext {
-                mem: &mut evaluator.scan_data.mem,
+                mem: evaluator.mem,
                 module_data: &evaluator.scan_data.module_values.data_map,
                 process_memory: evaluator.scan_data.params.process_memory,
             };
@@ -110,7 +110,7 @@ pub(super) fn evaluate_expr(
                 .map(expr_value_to_module_value)
                 .collect();
             let mut eval_ctx = EvalContext {
-                mem: &mut evaluator.scan_data.mem,
+                mem: evaluator.mem,
                 module_data: &evaluator.scan_data.module_values.data_map,
                 process_memory: evaluator.scan_data.params.process_memory,
             };
