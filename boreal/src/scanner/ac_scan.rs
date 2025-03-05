@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
-use super::{ScanError, ScanParams, StringMatch};
+use super::{ScanData, ScanError, StringMatch};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::compiler::CompilerProfile;
@@ -47,36 +47,6 @@ struct LiteralInfo {
 
     /// Left and right offset for the slice picked in the Aho-Corasick.
     slice_offset: (usize, usize),
-}
-
-/// Context related to a scan.
-///
-/// Mostly used simply to factorize variables used during the AC scan.
-#[derive(Debug)]
-pub struct ScanData<'a> {
-    /// Object used to check if the scan times out.
-    pub timeout_checker: Option<&'a mut crate::timeout::TimeoutChecker>,
-
-    #[cfg(feature = "profiling")]
-    /// Statistics related to the scan.
-    pub statistics: Option<&'a mut crate::statistics::Evaluation>,
-
-    /// List of variables to scan.
-    ///
-    /// This is the same variables, in the same order, as when building the
-    /// [`AcScan`] object.
-    pub variables: &'a [Variable],
-
-    /// Max number of matches for a given string.
-    pub params: &'a ScanParams,
-}
-
-impl ScanData<'_> {
-    fn check_timeout(&mut self) -> bool {
-        self.timeout_checker
-            .as_mut()
-            .is_some_and(|checker| checker.check_timeout())
-    }
 }
 
 impl AcScan {
@@ -149,6 +119,7 @@ impl AcScan {
     pub(super) fn scan_region(
         &self,
         region: &Region,
+        variables: &[Variable],
         scan_data: &mut ScanData,
         matches: &mut [Vec<StringMatch>],
     ) -> Result<(), ScanError> {
@@ -163,7 +134,7 @@ impl AcScan {
             if scan_data.check_timeout() {
                 return Err(ScanError::Timeout);
             }
-            self.handle_possible_match(region, &mat, scan_data, matches);
+            self.handle_possible_match(region, variables, &mat, scan_data, matches);
         }
 
         if !self.non_handled_var_indexes.is_empty() {
@@ -172,7 +143,7 @@ impl AcScan {
 
             // For every "raw" variable, scan the memory for this variable.
             for variable_index in &self.non_handled_var_indexes {
-                let var = &scan_data.variables[*variable_index].matcher;
+                let var = &variables[*variable_index].matcher;
 
                 scan_single_variable(region, var, scan_data, &mut matches[*variable_index]);
             }
@@ -189,6 +160,7 @@ impl AcScan {
     fn handle_possible_match(
         &self,
         region: &Region,
+        variables: &[Variable],
         mat: &aho_corasick::Match,
         scan_data: &mut ScanData,
         matches: &mut [Vec<StringMatch>],
@@ -199,7 +171,7 @@ impl AcScan {
                 literal_index,
                 slice_offset: (start_offset, end_offset),
             } = *literal_info;
-            let var = &scan_data.variables[variable_index].matcher;
+            let var = &variables[variable_index].matcher;
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -324,13 +296,6 @@ mod tests {
             variable_index: 0,
             literal_index: 0,
             slice_offset: (0, 0),
-        });
-        test_type_traits_non_clonable(ScanData {
-            variables: &[],
-            #[cfg(feature = "profiling")]
-            statistics: None,
-            timeout_checker: None,
-            params: &ScanParams::default(),
         });
     }
 }
