@@ -681,7 +681,6 @@ impl Inner {
         module_user_data: &'scanner ModuleUserData,
     ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
         let mut scan_data = ScanData {
-            mem,
             external_symbols_values,
             rules: Vec::new(),
             module_values: evaluator::module::EvalData::new(&self.modules, module_user_data),
@@ -697,7 +696,7 @@ impl Inner {
             callback: None,
         };
 
-        let res = self.do_scan(&mut scan_data);
+        let res = self.do_scan(mem, &mut scan_data);
         let results = ScanResult {
             rules: scan_data.rules,
             module_values: scan_data.module_values.values,
@@ -719,7 +718,6 @@ impl Inner {
         callback: ScanCallback<'scanner, '_>,
     ) -> Result<(), ScanError> {
         let mut scan_data = ScanData {
-            mem,
             external_symbols_values,
             rules: Vec::new(),
             module_values: evaluator::module::EvalData::new(&self.modules, module_user_data),
@@ -735,7 +733,7 @@ impl Inner {
             callback: Some(callback),
         };
 
-        let res = self.do_scan(&mut scan_data);
+        let res = self.do_scan(mem, &mut scan_data);
 
         if (scan_data.params.callback_events & CallbackEvents::SCAN_STATISTICS).0 != 0 {
             if let Some(cb) = &mut scan_data.callback {
@@ -752,9 +750,10 @@ impl Inner {
 
     fn do_scan<'scanner>(
         &'scanner self,
-        scan_data: &mut ScanData<'scanner, '_, '_>,
+        mut mem: Memory,
+        scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), ScanError> {
-        if let Some(mem) = scan_data.mem.get_direct() {
+        if let Some(mem) = mem.get_direct() {
             // We can evaluate module values and then try to evaluate rules without matches.
             scan_data.module_values.scan_region(
                 &Region { start: 0, mem },
@@ -765,11 +764,11 @@ impl Inner {
             scan_data.send_module_import_events_to_cb()?;
         }
 
-        if can_use_no_scan_optimization(scan_data) {
+        if can_use_no_scan_optimization(&mem, scan_data) {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
-            let res = self.evaluate_without_matches(scan_data);
+            let res = self.evaluate_without_matches(&mut mem, scan_data);
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -799,7 +798,7 @@ impl Inner {
 
         // First, run the regex set on the memory. This does a single pass on it, finding out
         // which variables have no miss at all.
-        let var_matches = self.do_memory_scan(scan_data)?;
+        let var_matches = self.do_memory_scan(&mut mem, scan_data)?;
 
         let mut eval_ctx =
             EvalContext::new(Some(var_matches), self.rules.len(), self.namespaces.len());
@@ -809,7 +808,7 @@ impl Inner {
 
         // First, evaluate global rules.
         for rule in &self.global_rules {
-            match eval_ctx.eval_global_rule(self, rule, scan_data) {
+            match eval_ctx.eval_global_rule(self, rule, &mut mem, scan_data) {
                 Ok(()) => (),
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => return Err(ScanError::Timeout),
@@ -847,7 +846,7 @@ impl Inner {
 
         // Evaluate all non global rules.
         for rule in &self.rules {
-            match eval_ctx.eval_non_global_rule(self, rule, scan_data, true) {
+            match eval_ctx.eval_non_global_rule(self, rule, &mut mem, scan_data, true) {
                 Ok(()) => (),
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => return Err(ScanError::Timeout),
@@ -868,14 +867,15 @@ impl Inner {
     /// final result of the scan.
     fn evaluate_without_matches<'scanner>(
         &'scanner self,
-        scan_data: &mut ScanData<'scanner, '_, '_>,
+        mem: &mut Memory,
+        scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
         let mut eval_ctx = EvalContext::new(None, self.rules.len(), self.namespaces.len());
 
         // First, check global rules
         let mut has_unknown_globals = false;
         for rule in &self.global_rules {
-            match eval_ctx.eval_global_rule(self, rule, scan_data) {
+            match eval_ctx.eval_global_rule(self, rule, mem, scan_data) {
                 Ok(()) => (),
                 // Do not rethrow immediately, so that if one of the globals is false, it is
                 // detected.
@@ -895,13 +895,17 @@ impl Inner {
 
         // Then, if all global rules matched, the normal rules
         for rule in &self.rules {
-            eval_ctx.eval_non_global_rule(self, rule, scan_data, false)?;
+            eval_ctx.eval_non_global_rule(self, rule, mem, scan_data, false)?;
         }
 
         Ok(())
     }
 
-    fn do_memory_scan(&self, scan_data: &mut ScanData) -> Result<Vec<Vec<StringMatch>>, ScanError> {
+    fn do_memory_scan(
+        &self,
+        mem: &mut Memory,
+        scan_data: &mut ScanData,
+    ) -> Result<Vec<Vec<StringMatch>>, ScanError> {
         let mut matches = vec![Vec::new(); self.variables.len()];
 
         #[cfg(feature = "profiling")]
@@ -914,7 +918,7 @@ impl Inner {
             variables: &self.variables,
             params: scan_data.params,
         };
-        match &mut scan_data.mem {
+        match mem {
             Memory::Direct(mem) => {
                 // Scan the memory for all variables occurences.
                 self.ac_scan.scan_region(
@@ -1020,10 +1024,11 @@ impl EvalContext {
         &mut self,
         scanner: &'scanner Inner,
         rule: &'scanner Rule,
-        scan_data: &mut ScanData<'scanner, '_, '_>,
+        mem: &mut Memory,
+        scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
         let res = self.eval_rule_inner(
-            scanner, rule, scan_data,
+            scanner, rule, mem, scan_data,
             // XXX: evaluation of global rules always delay the match rule
             // callback: this is because any non match will invalidate all
             // the previous matches.
@@ -1039,10 +1044,11 @@ impl EvalContext {
         &mut self,
         scanner: &'scanner Inner,
         rule: &'scanner Rule,
-        scan_data: &mut ScanData<'scanner, '_, '_>,
+        mem: &mut Memory,
+        scan_data: &mut ScanData<'scanner, '_>,
         call_callback: bool,
     ) -> Result<(), EvalError> {
-        let res = self.eval_rule_inner(scanner, rule, scan_data, call_callback)?;
+        let res = self.eval_rule_inner(scanner, rule, mem, scan_data, call_callback)?;
         self.previous_results.push(res);
         Ok(())
     }
@@ -1051,7 +1057,8 @@ impl EvalContext {
         &mut self,
         scanner: &'scanner Inner,
         rule: &'scanner Rule,
-        scan_data: &mut ScanData<'scanner, '_, '_>,
+        mem: &mut Memory,
+        scan_data: &mut ScanData<'scanner, '_>,
         call_callback: bool,
     ) -> Result<bool, EvalError> {
         let var_matches: Option<Vec<_>> = self
@@ -1069,6 +1076,7 @@ impl EvalContext {
                 var_matches.as_deref(),
                 &self.previous_results,
                 &scanner.bytes_pool,
+                mem,
                 scan_data,
             )?
         };
@@ -1110,7 +1118,7 @@ impl EvalContext {
     }
 }
 
-fn can_use_no_scan_optimization(scan_data: &ScanData) -> bool {
+fn can_use_no_scan_optimization(mem: &Memory, scan_data: &ScanData) -> bool {
     if scan_data.params.compute_full_matches {
         return false;
     }
@@ -1122,7 +1130,7 @@ fn can_use_no_scan_optimization(scan_data: &ScanData) -> bool {
         return false;
     }
 
-    scan_data.mem.get_direct().is_some()
+    mem.get_direct().is_some()
         || (!scan_data.params.fragmented_scan_mode.modules_dynamic_values
             && !scan_data.params.fragmented_scan_mode.can_refetch_regions)
 }
@@ -1130,10 +1138,7 @@ fn can_use_no_scan_optimization(scan_data: &ScanData) -> bool {
 type ScanCallback<'scanner, 'cb> =
     Box<dyn for<'a> FnMut(ScanEvent<'scanner, 'a>) -> ScanCallbackResult + Send + Sync + 'cb>;
 
-pub(crate) struct ScanData<'scanner, 'mem, 'cb> {
-    /// Memory to scan,
-    pub(crate) mem: Memory<'mem>,
-
+pub(crate) struct ScanData<'scanner, 'cb> {
     /// Values of external symbols.
     pub(crate) external_symbols_values: &'scanner [ExternalValue],
 
@@ -1173,12 +1178,11 @@ pub(crate) struct ScanData<'scanner, 'mem, 'cb> {
     pub(crate) callback: Option<ScanCallback<'scanner, 'cb>>,
 }
 
-impl std::fmt::Debug for ScanData<'_, '_, '_> {
+impl std::fmt::Debug for ScanData<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut d = f.debug_struct("ScanData");
 
         let _r = d
-            .field("mem", &self.mem)
             .field("external_symbols_values", &self.external_symbols_values)
             .field("rules", &self.rules)
             .field("module_values", &self.module_values)
@@ -1200,7 +1204,7 @@ impl std::fmt::Debug for ScanData<'_, '_, '_> {
     }
 }
 
-impl ScanData<'_, '_, '_> {
+impl ScanData<'_, '_> {
     pub(crate) fn check_timeout(&mut self) -> bool {
         self.timeout_checker
             .as_mut()
@@ -1476,8 +1480,8 @@ mod tests {
             evaluator::module::EvalData::new(&scanner.inner.modules, &user_data);
         module_values.scan_region(&Region { start: 0, mem }, &scanner.inner.modules, false);
 
+        let mut mem = Memory::Direct(mem);
         let mut scan_data = ScanData {
-            mem: Memory::Direct(mem),
             external_symbols_values: &[],
             rules: Vec::new(),
             module_values,
@@ -1497,6 +1501,7 @@ mod tests {
                     None,
                     &previous_results,
                     &scanner.inner.bytes_pool,
+                    &mut mem,
                     &mut scan_data,
                 )
                 .unwrap(),
@@ -1507,6 +1512,7 @@ mod tests {
             None,
             &previous_results,
             &scanner.inner.bytes_pool,
+            &mut mem,
             &mut scan_data,
         );
 
@@ -2028,7 +2034,6 @@ mod tests {
         });
         test_type_traits_non_clonable(DefineSymbolError::UnknownName);
         test_type_traits_non_clonable(ScanData {
-            mem: Memory::Direct(b""),
             external_symbols_values: &[],
             rules: Vec::new(),
             module_values: evaluator::module::EvalData {

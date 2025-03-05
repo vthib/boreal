@@ -114,6 +114,7 @@ pub(crate) fn evaluate_rule<'scan>(
     var_matches: Option<&'scan [Vec<variable::StringMatch>]>,
     previous_rules_results: &'scan [bool],
     bytes_pool: &'scan BytesPool,
+    mem: &'scan mut Memory,
     scan_data: &'scan mut ScanData,
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
@@ -122,6 +123,7 @@ pub(crate) fn evaluate_rule<'scan>(
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
         bytes_pool,
+        mem,
         scan_data,
     };
     match evaluator.evaluate_expr(&rule.condition) {
@@ -151,8 +153,10 @@ struct Evaluator<'scan, 'rule, 'mem, 'cb> {
     // Bytes intern pool, used to resolve expressions that stored bytes in the pool.
     bytes_pool: &'rule BytesPool,
 
+    mem: &'rule mut Memory<'mem>,
+
     // Data related only to the scan, independent of the rule.
-    scan_data: &'rule mut ScanData<'scan, 'mem, 'cb>,
+    scan_data: &'rule mut ScanData<'scan, 'cb>,
 }
 
 #[derive(Debug)]
@@ -258,14 +262,14 @@ impl Evaluator<'_, '_, '_, '_> {
         }
 
         match expr {
-            Expression::Filesize => match self.scan_data.mem.filesize() {
+            Expression::Filesize => match self.mem.filesize() {
                 Some(filesize) => Ok(Value::Integer(filesize.try_into().unwrap_or(i64::MAX))),
                 None => Err(PoisonKind::Undefined),
             },
 
             #[cfg(feature = "object")]
             Expression::Entrypoint => {
-                let res = match self.scan_data.mem {
+                let res = match self.mem {
                     Memory::Direct(mem) => entrypoint::get_pe_or_elf_entry_point(
                         mem,
                         self.scan_data.params.process_memory,
