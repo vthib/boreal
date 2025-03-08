@@ -500,6 +500,9 @@ impl CallbackEvents {
     /// the `profiling` feature must have been enabled during compilation.
     pub const SCAN_STATISTICS: CallbackEvents = CallbackEvents(0b0000_1000);
 
+    /// Enables the [`crate::scanner::ScanEvent::StringReachedMatchLimit`] events.
+    pub const STRING_REACHED_MATCH_LIMIT: CallbackEvents = CallbackEvents(0b0001_0000);
+
     /// Return an empty bitflag
     #[must_use]
     pub fn empty() -> Self {
