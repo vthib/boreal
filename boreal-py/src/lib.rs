@@ -17,6 +17,7 @@ use ::boreal::compiler;
 mod module;
 mod rule;
 mod rule_match;
+mod rule_string;
 mod scanner;
 mod string_match_instance;
 mod string_matches;
@@ -33,6 +34,9 @@ const CALLBACK_MATCHES: u32 = 0x01;
 const CALLBACK_NON_MATCHES: u32 = 0x02;
 const CALLBACK_ALL: u32 = CALLBACK_MATCHES | CALLBACK_NON_MATCHES;
 
+// Same value as declared in yara, for compatibility.
+const CALLBACK_TOO_MANY_MATCHES: u32 = 6;
+
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
@@ -48,6 +52,7 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("CALLBACK_MATCHES", CALLBACK_MATCHES)?;
     m.add("CALLBACK_NON_MATCHES", CALLBACK_NON_MATCHES)?;
     m.add("CALLBACK_ALL", CALLBACK_ALL)?;
+    m.add("CALLBACK_TOO_MANY_MATCHES", CALLBACK_TOO_MANY_MATCHES)?;
 
     m.add("AddRuleError", py.get_type::<AddRuleError>())?;
     m.add("ScanError", py.get_type::<scanner::ScanError>())?;

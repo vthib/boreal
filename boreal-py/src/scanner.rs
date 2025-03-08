@@ -10,7 +10,11 @@ use ::boreal::module::{Console, ConsoleData, Value};
 use ::boreal::scanner::{self, CallbackEvents, ScanCallbackResult, ScanEvent};
 
 use crate::rule_match::Match;
-use crate::{CALLBACK_ALL, CALLBACK_MATCHES, CALLBACK_NON_MATCHES, MATCH_MAX_LENGTH};
+use crate::rule_string::RuleString;
+use crate::{
+    CALLBACK_ALL, CALLBACK_MATCHES, CALLBACK_NON_MATCHES, CALLBACK_TOO_MANY_MATCHES,
+    MATCH_MAX_LENGTH,
+};
 
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
@@ -105,6 +109,15 @@ impl Scanner {
             }
             None => None,
         };
+        let warnings_callback = match warnings_callback {
+            Some(cb) => {
+                if !cb.is_callable() {
+                    return Err(PyTypeError::new_err("warnings_callback is not callable"));
+                }
+                Some(cb.clone().unbind())
+            }
+            None => None,
+        };
 
         let which = match which_callbacks {
             Some(v) => v
@@ -125,21 +138,32 @@ impl Scanner {
         if modules_callback.is_some() {
             events |= CallbackEvents::MODULE_IMPORT;
         }
+        if warnings_callback.is_some() {
+            events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
+        }
         params = params.callback_events(events);
         if let Ok(lock) = MATCH_MAX_LENGTH.lock() {
             if let Some(value) = *lock {
                 params = params.match_max_length(value);
             }
         }
+        // TODO: only do this in libyara compat mode.
+        // Default value in libyara
+        params = params.string_max_nb_matches(1_000_000);
         scanner.set_scan_params(params);
 
         // TODO
         {
             let _ = fast;
-            let _ = warnings_callback;
         }
 
-        let mut cb_handler = CallbackHandler::new(&scanner, callback, modules_callback, which);
+        let mut cb_handler = CallbackHandler::new(
+            &scanner,
+            callback,
+            modules_callback,
+            warnings_callback,
+            which,
+        );
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
                 scanner.scan_file_with_callback(filepath, |event| cb_handler.handle_event(event))
@@ -204,6 +228,7 @@ struct CallbackHandler<'s> {
     matches: Vec<Match>,
     callback: Option<Py<PyAny>>,
     modules_callback: Option<Py<PyAny>>,
+    warnings_callback: Option<Py<PyAny>>,
     which: u32,
     error: Option<PyErr>,
 }
@@ -213,6 +238,7 @@ impl<'s> CallbackHandler<'s> {
         scanner: &'s scanner::Scanner,
         callback: Option<Py<PyAny>>,
         modules_callback: Option<Py<PyAny>>,
+        warnings_callback: Option<Py<PyAny>>,
         which: u32,
     ) -> Self {
         Self {
@@ -220,6 +246,7 @@ impl<'s> CallbackHandler<'s> {
             matches: Vec::new(),
             callback,
             modules_callback,
+            warnings_callback,
             which,
             error: None,
         }
@@ -259,6 +286,17 @@ impl<'s> CallbackHandler<'s> {
                 }),
                 None => Ok(ScanCallbackResult::Continue),
             },
+            ScanEvent::StringReachedMatchLimit(string_identifier) => {
+                match &self.warnings_callback {
+                    Some(cb) => Python::with_gil(|py| {
+                        let rule_string = RuleString::new(py, &string_identifier);
+                        let msg_id = CALLBACK_TOO_MANY_MATCHES;
+                        let result = cb.call1(py, (msg_id, rule_string))?;
+                        Ok(convert_callback_return_value(py, &result))
+                    }),
+                    None => Ok(ScanCallbackResult::Continue),
+                }
+            }
             _ => Ok(ScanCallbackResult::Continue),
         }
     }

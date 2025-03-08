@@ -176,6 +176,8 @@ def test_match_invalid_types(module, is_yara):
     with pytest.raises(TypeError):
         rules.match(data='', modules_callback=1)
     with pytest.raises(TypeError):
+        rules.match(data='', warnings_callback=1)
+    with pytest.raises(TypeError):
         rules.match(data='', which_callbacks="str")
 
 
@@ -257,7 +259,7 @@ def test_match_modules_data(module, is_yara):
     if 'cuckoo' not in module.modules:
         return
 
-    rules = boreal.compile(source="""
+    rules = module.compile(source="""
 import "cuckoo"
 
 rule a {
@@ -668,3 +670,47 @@ rule d { condition: false }
     assert len(matches) == 2
     assert matches[0].rule == 'a'
     assert matches[1].rule == 'c'
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES)
+def test_match_warnings_callback(module, is_yara):
+    rules = module.compile(source="""
+rule my_rule {
+    strings:
+        $s = "a"
+    condition:
+        any of them
+}
+""")
+
+    # Limit is 1 000 000 in yara
+    data = "a" * 1_000_010
+    received_values = []
+    def warnings_callback(warning_type, message):
+        nonlocal received_values
+        received_values.append((warning_type, message))
+        return module.CALLBACK_CONTINUE
+
+    matches = rules.match(data=data, warnings_callback=warnings_callback)
+
+    assert len(received_values) == 1
+    (warning_type, message) = received_values[0]
+    assert warning_type == module.CALLBACK_TOO_MANY_MATCHES
+    assert message.namespace == "default"
+    assert message.rule == "my_rule"
+    assert message.string == "$s"
+
+    assert len(matches) == 1
+
+    # It is also possible to abort
+    # FIXME: this does not work well in yara
+    if not is_yara:
+        received_values = []
+        def warnings_callback(warning_type, message):
+            nonlocal received_values
+            received_values.append((warning_type, message))
+            return module.CALLBACK_ABORT
+
+        matches = rules.match(data=data, warnings_callback=warnings_callback)
+        assert len(received_values) == 1
+        assert len(matches) == 0
