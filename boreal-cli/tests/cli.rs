@@ -1569,6 +1569,55 @@ rule a {
         .failure();
 }
 
+#[test]
+fn test_string_max_nb_matches() {
+    let rule_file = test_file(
+        br#"
+rule a {
+    strings:
+        $a = "a"
+    condition:
+        any of them
+}
+"#,
+    );
+
+    let warning = "warning: string $a in rule default:a reached the maximum number of matches";
+
+    // Default behavior is to print the warning and continue
+    let input = test_file(b"aaaa");
+    cmd()
+        .arg("--string-max-nb-matches=2")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("a {}\n", input.path().display()))
+        .stderr(predicate::str::contains(warning))
+        .success();
+
+    // We can ignore warnings with a flag
+    cmd()
+        .arg("--string-max-nb-matches=2")
+        .arg("--no-warnings")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("a {}\n", input.path().display()))
+        .stderr("")
+        .success();
+
+    // Or we can abort on warnings
+    cmd()
+        .arg("--string-max-nb-matches=2")
+        .arg("--fail-on-warnings")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains(warning))
+        .success();
+}
+
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
 // modified too frequently.
 struct BinHelper {
