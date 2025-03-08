@@ -148,6 +148,13 @@ fn build_command() -> Command {
                 .help("Maximum number of strings in a single rule")
         )
         .arg(
+            Arg::new("string_max_nb_matches")
+                .long("string-max-nb-matches")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(u32))
+                .help("Maximum number of matches for a single string, default is 1000")
+        )
+        .arg(
             Arg::new("print_namespace")
                 .short('e')
                 .long("print-namespace")
@@ -372,6 +379,9 @@ fn main() -> ExitCode {
     if scan_options.print_strings_matches() {
         scan_params = scan_params.compute_full_matches(true);
     }
+    if let Some(limit) = args.get_one::<u32>("string_max_nb_matches") {
+        scan_params = scan_params.string_max_nb_matches(*limit);
+    }
     scanner.set_scan_params(scan_params);
 
     let mut nb_rules = 0;
@@ -521,6 +531,10 @@ fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
     if args.get_flag("print_module_data") {
         callback_events |= CallbackEvents::MODULE_IMPORT;
     }
+    if !args.get_flag("no_warnings") {
+        callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
+    }
+
     if enable_stats {
         callback_events |= CallbackEvents::SCAN_STATISTICS;
     }
@@ -605,6 +619,7 @@ struct ScanOptions {
     no_mmap: bool,
     identifier: Option<String>,
     tag: Option<String>,
+    fail_on_warnings: bool,
 }
 
 impl ScanOptions {
@@ -625,6 +640,7 @@ impl ScanOptions {
             },
             identifier: args.get_one("identifier").cloned(),
             tag: args.get_one("tag").cloned(),
+            fail_on_warnings: args.get_flag("fail_on_warnings"),
         }
     }
 
@@ -715,6 +731,18 @@ fn handle_event(
         }
         ScanEvent::ScanStatistics(stats) => {
             writeln!(stdout, "{what}: {stats:#?}").unwrap();
+        }
+        ScanEvent::StringReachedMatchLimit(string_identifier) => {
+            eprintln!(
+                "warning: string ${} in rule {}:{} reached the maximum number of matches",
+                string_identifier.string_name,
+                string_identifier.rule_namespace.unwrap_or("default"),
+                string_identifier.rule_name,
+            );
+
+            if options.fail_on_warnings {
+                return ScanCallbackResult::Abort;
+            }
         }
         _ => (),
     }
@@ -1026,6 +1054,7 @@ mod tests {
             no_mmap: false,
             identifier: None,
             tag: None,
+            fail_on_warnings: false,
         });
         test_non_clonable(Input::Process(32));
     }
