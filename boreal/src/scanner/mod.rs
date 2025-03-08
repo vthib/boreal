@@ -1,6 +1,6 @@
 //! Provides the [`Scanner`] object used to scan bytes against a set of compiled rules.
 use std::any::TypeId;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::bytes_pool::{BytesPool, BytesSymbol, StringSymbol};
@@ -146,6 +146,32 @@ pub enum ScanEvent<'scanner, 'a> {
     ///
     /// Additionally, the return value of the callback for this event is ignored.
     ScanStatistics(statistics::Evaluation),
+
+    /// A string has reached the match limit.
+    ///
+    /// The [`CallbackEvents::STRING_REACHED_MATCH_LIMIT`] bitflag must be set
+    /// to receive this event.
+    StringReachedMatchLimit(StringIdentifier<'scanner>),
+}
+
+/// Details of a string, which can be used to uniquely identify it.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct StringIdentifier<'scanner> {
+    /// Namespace of the rule containing the string.
+    pub rule_namespace: Option<&'scanner str>,
+
+    /// Name of the rule containing the string.
+    pub rule_name: &'scanner str,
+
+    /// Name of the string.
+    pub string_name: &'scanner str,
+
+    /// Declaration index of the string in the rule.
+    ///
+    /// Since strings can be anonymous, this can be used to find the
+    /// right string.
+    pub string_index: usize,
 }
 
 /// List of result statuses that a scan callback can return.
@@ -694,6 +720,7 @@ impl Inner {
             #[cfg(feature = "object")]
             entrypoint: None,
             callback: None,
+            string_reached_match_limit: HashSet::new(),
         };
 
         let res = self.do_scan(mem, &mut scan_data);
@@ -731,6 +758,7 @@ impl Inner {
             #[cfg(feature = "object")]
             entrypoint: None,
             callback: Some(callback),
+            string_reached_match_limit: HashSet::new(),
         };
 
         let res = self.do_scan(mem, &mut scan_data);
@@ -901,10 +929,10 @@ impl Inner {
         Ok(())
     }
 
-    fn do_memory_scan(
-        &self,
+    fn do_memory_scan<'scanner>(
+        &'scanner self,
         mem: &mut Memory,
-        scan_data: &mut ScanData,
+        scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<Vec<Vec<StringMatch>>, ScanError> {
         let mut matches = vec![Vec::new(); self.variables.len()];
 
@@ -916,7 +944,7 @@ impl Inner {
                 // Scan the memory for all variables occurences.
                 self.ac_scan.scan_region(
                     &Region { start: 0, mem },
-                    &self.variables,
+                    self,
                     scan_data,
                     &mut matches,
                 )?;
@@ -937,7 +965,7 @@ impl Inner {
                     }
 
                     self.ac_scan
-                        .scan_region(&region, &self.variables, scan_data, &mut matches)?;
+                        .scan_region(&region, self, scan_data, &mut matches)?;
 
                     // Also, compute the value for the entrypoint expression. Since
                     // we fetch each region here, this is much cheaper that refetching
@@ -1170,6 +1198,12 @@ pub(crate) struct ScanData<'scanner, 'cb> {
     /// Can be unset, in which case matched rules are accumulated into the
     /// `rules` field.
     pub(crate) callback: Option<ScanCallback<'scanner, 'cb>>,
+
+    /// Set indicating which variable reached the match limit.
+    ///
+    /// Only used if the callback is set and the relevant scan event is
+    /// enabled.
+    pub string_reached_match_limit: HashSet<usize>,
 }
 
 impl std::fmt::Debug for ScanData<'_, '_> {
@@ -1485,6 +1519,7 @@ mod tests {
             #[cfg(feature = "object")]
             entrypoint: None,
             callback: None,
+            string_reached_match_limit: HashSet::new(),
         };
         let mut previous_results = Vec::new();
         let rules = &scanner.inner.rules;
@@ -2040,6 +2075,7 @@ mod tests {
             entrypoint: None,
             params: &ScanParams::default(),
             callback: Some(Box::new(|_evt| ScanCallbackResult::Continue)),
+            string_reached_match_limit: HashSet::new(),
         });
         test_type_traits_non_clonable(RulesIter {
             global_rules: [].iter(),
@@ -2053,6 +2089,12 @@ mod tests {
             metadatas: &[],
             is_global: false,
             is_private: false,
+        });
+        test_type_traits_non_clonable(StringIdentifier {
+            rule_namespace: None,
+            rule_name: "",
+            string_name: "",
+            string_index: 0,
         });
     }
 }

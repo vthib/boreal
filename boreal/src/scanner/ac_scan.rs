@@ -4,7 +4,10 @@ use std::collections::HashMap;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
-use super::{ScanData, ScanError, StringMatch};
+use super::{
+    CallbackEvents, ScanCallbackResult, ScanData, ScanError, ScanEvent, StringIdentifier,
+    StringMatch,
+};
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::variable::Variable;
 use crate::compiler::CompilerProfile;
@@ -116,11 +119,11 @@ impl AcScan {
         }
     }
 
-    pub(super) fn scan_region(
+    pub(super) fn scan_region<'scanner>(
         &self,
         region: &Region,
-        variables: &[Variable],
-        scan_data: &mut ScanData,
+        scanner: &'scanner super::Inner,
+        scan_data: &mut ScanData<'scanner, '_>,
         matches: &mut [Vec<StringMatch>],
     ) -> Result<(), ScanError> {
         #[cfg(feature = "profiling")]
@@ -134,7 +137,7 @@ impl AcScan {
             if scan_data.check_timeout() {
                 return Err(ScanError::Timeout);
             }
-            self.handle_possible_match(region, variables, &mat, scan_data, matches);
+            self.handle_possible_match(region, scanner, &mat, scan_data, matches)?;
         }
 
         if !self.non_handled_var_indexes.is_empty() {
@@ -143,7 +146,7 @@ impl AcScan {
 
             // For every "raw" variable, scan the memory for this variable.
             for variable_index in &self.non_handled_var_indexes {
-                let var = &variables[*variable_index].matcher;
+                let var = &scanner.variables[*variable_index].matcher;
 
                 scan_single_variable(region, var, scan_data, &mut matches[*variable_index]);
             }
@@ -157,21 +160,21 @@ impl AcScan {
         Ok(())
     }
 
-    fn handle_possible_match(
+    fn handle_possible_match<'scanner>(
         &self,
         region: &Region,
-        variables: &[Variable],
+        scanner: &'scanner super::Inner,
         mat: &aho_corasick::Match,
-        scan_data: &mut ScanData,
+        scan_data: &mut ScanData<'scanner, '_>,
         matches: &mut [Vec<StringMatch>],
-    ) {
+    ) -> Result<(), ScanError> {
         for literal_info in &self.aho_index_to_literal_info[mat.pattern()] {
             let LiteralInfo {
                 variable_index,
                 literal_index,
                 slice_offset: (start_offset, end_offset),
             } = *literal_info;
-            let var = &variables[variable_index].matcher;
+            let var = &scanner.variables[variable_index].matcher;
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -244,10 +247,27 @@ impl AcScan {
                 }
             };
 
-            if !var_matches.is_empty() {
+            if var_matches.len() > (scan_data.params.string_max_nb_matches as usize) {
                 var_matches.truncate(scan_data.params.string_max_nb_matches as usize);
+                if (scan_data.params.callback_events & CallbackEvents::STRING_REACHED_MATCH_LIMIT).0
+                    != 0
+                    && scan_data.string_reached_match_limit.insert(variable_index)
+                {
+                    if let Some(cb) = &mut scan_data.callback {
+                        if let Some(string_identifier) =
+                            build_string_identifier(scanner, variable_index)
+                        {
+                            match (cb)(ScanEvent::StringReachedMatchLimit(string_identifier)) {
+                                ScanCallbackResult::Continue => (),
+                                ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        Ok(())
     }
 }
 
@@ -282,6 +302,44 @@ fn scan_single_variable(
             }
         }
     }
+}
+
+fn build_string_identifier(
+    scanner: &super::Inner,
+    variable_index: usize,
+) -> Option<StringIdentifier> {
+    let mut index = 0;
+    // Go through all the rules of the scanner to find the right one.
+    // This is O(n) on the rules, which isn't ideal. But this is only done
+    // iff:
+    // - the callback API is used
+    // - the "string reaches match limit" event is enabled
+    // - a string reaches the match limit
+    // This thus should not be called frequently, and a O(n) search through
+    // the rules should not take that long.
+    //
+    // A solution to improve this would be to store in each rule the index
+    // of its first variable, which would make a binary search through
+    // the rules possible. However, this means an additional word to store
+    // with each rule, only to alleviate this very specific event. For
+    // the moment, this is not considered to be worth the cost.
+    for rule in scanner.global_rules.iter().chain(scanner.rules.iter()) {
+        if index + rule.nb_variables > variable_index {
+            return Some(StringIdentifier {
+                rule_namespace: scanner
+                    .namespaces
+                    .get(rule.namespace_index)
+                    .and_then(|v| v.as_deref()),
+                rule_name: &rule.name,
+                string_name: &scanner.variables[variable_index].name,
+                string_index: variable_index - index,
+            });
+        }
+        index += rule.nb_variables;
+    }
+    // Should technically be impossible to reach.
+    debug_assert!(false);
+    None
 }
 
 #[cfg(test)]

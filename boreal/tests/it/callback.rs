@@ -4,6 +4,7 @@ use boreal::compiler::CompilerBuilder;
 use boreal::module::Value;
 use boreal::scanner::{
     CallbackEvents, FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent, ScanParams,
+    StringIdentifier,
 };
 use boreal::{Compiler, Scanner};
 
@@ -73,6 +74,37 @@ fn check_module_import(
         }
         evt => panic!("unexpected event {:?}", evt),
     }
+}
+
+#[track_caller]
+fn check_string_reached_match_limit(
+    event: ScanEvent,
+    expected_rule_namespace: Option<&str>,
+    expected_rule_name: &str,
+    expected_string_name: &str,
+    expected_string_index: usize,
+) {
+    match &event {
+        ScanEvent::StringReachedMatchLimit(v) => {
+            let StringIdentifier {
+                rule_namespace,
+                rule_name,
+                string_name,
+                string_index,
+                ..
+            } = *v;
+
+            assert!(
+                rule_namespace == expected_rule_namespace
+                    && rule_name == expected_rule_name
+                    && string_name == expected_string_name
+                    && string_index == expected_string_index,
+                "unexpected event {:?}",
+                event,
+            );
+        }
+        evt => panic!("unexpected event {:?}", evt),
+    };
 }
 
 fn scan_mem<F>(scanner: &Scanner, mem: &[u8], expected_number: u32, checker: F)
@@ -913,5 +945,233 @@ rule c {
         } else if nb == 1 {
             check_rule_no_match(event, "b", None);
         }
+    });
+}
+
+#[test]
+fn test_callback_match_limit() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule g1 {
+    strings:
+        $str1 = "a"
+        $str2 = "b"
+        $str3 = "c"
+    condition:
+        any of them
+}
+rule r1 {
+    strings:
+        $str1 = "d"
+        $str2 = "e"
+    condition:
+        any of them
+}"#,
+        )
+        .unwrap();
+    compiler
+        .add_rules_str_in_namespace(
+            r#"
+rule r2 {
+    strings:
+        $ = "f"
+    condition:
+        any of them
+}
+global rule g2 {
+    strings:
+        $ = "g"
+        $ = "h"
+        $ = "i"
+    condition:
+        any of them
+}"#,
+            "ns2",
+        )
+        .unwrap();
+    compiler
+        .add_rules_str_in_namespace(
+            r#"
+rule r3 {
+    condition:
+        true
+}
+global rule g3 {
+    strings:
+        $str1 = "j"
+        $ = "k"
+    condition:
+        any of them
+}
+rule r4 {
+    strings:
+        $str1 = "l"
+        $str2 = "m"
+        $str3 = "n"
+    condition:
+        any of them
+}
+"#,
+            "ns3",
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(
+                CallbackEvents::RULE_MATCH | CallbackEvents::STRING_REACHED_MATCH_LIMIT,
+            )
+            .string_max_nb_matches(2),
+    );
+
+    scan_mem(
+        &scanner,
+        b"aaaaa eeeeee fffff kkkkkk lllll nnnnn iiiii ddddd",
+        15,
+        |event, nb| match nb {
+            0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
+            1 => check_string_reached_match_limit(event, None, "r1", "str2", 1),
+            2 => check_string_reached_match_limit(event, Some("ns2"), "r2", "", 0),
+            3 => check_string_reached_match_limit(event, Some("ns3"), "g3", "", 1),
+            4 => check_string_reached_match_limit(event, Some("ns3"), "r4", "str1", 0),
+            5 => check_string_reached_match_limit(event, Some("ns3"), "r4", "str3", 2),
+            6 => check_string_reached_match_limit(event, Some("ns2"), "g2", "", 2),
+            7 => check_string_reached_match_limit(event, None, "r1", "str1", 0),
+            8 => check_rule_match(event, "g1", None),
+            9 => check_rule_match(event, "g2", Some("ns2")),
+            10 => check_rule_match(event, "g3", Some("ns3")),
+            11 => check_rule_match(event, "r1", None),
+            12 => check_rule_match(event, "r2", Some("ns2")),
+            13 => check_rule_match(event, "r3", Some("ns3")),
+            14 => check_rule_match(event, "r4", Some("ns3")),
+            _ => (),
+        },
+    );
+}
+
+#[test]
+fn test_callback_match_limit_only_global_rules() {
+    // Test to cover the case where there is only global rules, this is a corner case
+    // in the binary search through rules when a string has too many matches.
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule g1 {
+    strings:
+        $str1 = "a"
+        $str2 = "b"
+        $str3 = "c"
+    condition:
+        any of them
+}
+global rule g2 {
+    strings:
+        $ = "g"
+        $ = "h"
+        $ = "i"
+    condition:
+        any of them
+}
+global rule g3 {
+    strings:
+        $str1 = "j"
+        $ = "k"
+    condition:
+        any of them
+}"#,
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(
+                CallbackEvents::RULE_MATCH | CallbackEvents::STRING_REACHED_MATCH_LIMIT,
+            )
+            .string_max_nb_matches(2),
+    );
+
+    scan_mem(
+        &scanner,
+        b"aaaaa eeeeee fffff kkkkkk lllll nnnnn iiiii ddddd",
+        6,
+        |event, nb| match nb {
+            0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
+            1 => check_string_reached_match_limit(event, None, "g3", "", 1),
+            2 => check_string_reached_match_limit(event, None, "g2", "", 2),
+            3 => check_rule_match(event, "g1", None),
+            4 => check_rule_match(event, "g2", None),
+            5 => check_rule_match(event, "g3", None),
+            _ => (),
+        },
+    );
+
+    scan_mem(&scanner, b"aaaaa kkkkkk", 2, |event, nb| match nb {
+        0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
+        1 => check_string_reached_match_limit(event, None, "g3", "", 1),
+        _ => (),
+    });
+}
+
+#[test]
+fn test_callback_match_limit_abort() {
+    let mut compiler = Compiler::new();
+    compiler
+        .add_rules_str(
+            r#"
+global rule g1 {
+    strings:
+        $str1 = "a"
+        $str2 = "b"
+        $str3 = "c"
+    condition:
+        any of them
+}
+rule r1 {
+    strings:
+        $str1 = "d"
+        $str2 = "e"
+    condition:
+        any of them
+}"#,
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .callback_events(
+                CallbackEvents::RULE_MATCH | CallbackEvents::STRING_REACHED_MATCH_LIMIT,
+            )
+            .string_max_nb_matches(2),
+    );
+
+    scan_mem_with_abort(&scanner, b"aaaaa eeeeee", 0, |event, nb| {
+        if nb == 0 {
+            check_string_reached_match_limit(event, None, "g1", "str1", 0)
+        }
+    });
+
+    scan_mem_with_abort(&scanner, b"aaaaa eeeeee", 1, |event, nb| match nb {
+        0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
+        1 => check_string_reached_match_limit(event, None, "r1", "str2", 1),
+        _ => (),
+    });
+
+    scan_mem_with_abort(&scanner, b"aaaaa eeeeee", 2, |event, nb| match nb {
+        0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
+        1 => check_string_reached_match_limit(event, None, "r1", "str2", 1),
+        2 => check_rule_match(event, "g1", None),
+        _ => (),
     });
 }
