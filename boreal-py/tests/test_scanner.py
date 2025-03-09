@@ -161,7 +161,7 @@ def test_match_invalid_types(module, is_yara):
     with pytest.raises(TypeError):
         rules.match()
 
-    # FIXME: this makes yara segfault...
+    # Broken in yara: https://github.com/VirusTotal/yara-python/pull/270
     if not is_yara:
         with pytest.raises(TypeError):
             rules.match(data='', externals={ 1: 'a' })
@@ -220,12 +220,7 @@ rule a {
         )
 }""")
 
-    if is_yara:
-        exctype = yara.TimeoutError
-    else:
-        exctype = boreal.TimeoutError
-
-    with pytest.raises(exctype):
+    with pytest.raises(module.TimeoutError):
         # Unfortunately, we cannot go below 1 second as this is the smallest timeout value
         # in the yara api
         rules.match(data='', timeout=1)
@@ -500,7 +495,7 @@ rule a { condition: true }
     def modules_callback(v):
         nonlocal received_values
         received_values.append(v)
-        return boreal.CALLBACK_CONTINUE
+        return module.CALLBACK_CONTINUE
 
     rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
 
@@ -544,7 +539,7 @@ rule a { condition: true }
     def modules_callback(v):
         nonlocal received_values
         received_values.append(v)
-        return boreal.CALLBACK_ABORT
+        return module.CALLBACK_ABORT
 
     rules.match(data='', modules_callback=modules_callback)
 

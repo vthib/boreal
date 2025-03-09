@@ -241,7 +241,7 @@ def test_compile_errors_invalid_types(module, is_yara):
         module.compile(sources=1)
     with pytest.raises(TypeError):
         module.compile(filepaths=1)
-    # FIXME: yara segfaults on this on Windows
+    # segfaults in yaran on Windows: https://github.com/VirusTotal/yara-python/pull/269
     if not is_yara:
         with pytest.raises(AttributeError):
             module.compile(file='str')
@@ -257,9 +257,10 @@ def test_compile_errors_invalid_types(module, is_yara):
         module.compile(filepaths={ 'a': 1 })
 
     source = 'rule a { condition: true }'
-    # FIXME: difference here between boreal and yara
-    # with pytest.raises(TypeError):
-    #     module.compile(source=source, externals={ 1: 'a' })
+    # Broken in yara: https://github.com/VirusTotal/yara-python/pull/270
+    if not is_yara:
+        with pytest.raises(TypeError):
+            module.compile(source=source, externals={ 1: 'a' })
     with pytest.raises(TypeError):
         module.compile(source=source, externals={ 'a': [1] })
 
