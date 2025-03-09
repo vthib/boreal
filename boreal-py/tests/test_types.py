@@ -1,9 +1,9 @@
 import pytest
-from .utils import MODULES, MODULES_DISTINCT
+from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
 
 
-@pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
-def test_match(module, is_yara):
+@pytest.mark.parametrize("module", MODULES)
+def test_match(module):
     """Test all properties related to the Match object"""
 
     # Check default namespace
@@ -35,7 +35,10 @@ rule r3 { condition: true }
         'ns1': 'rule r1 { condition: true }',
         'ns2': 'rule r1 { condition: true }',
     })
-    matches = rules.match(data='')
+    # Enable compatibility mode to get a string in the meta object instead of
+    # a byte string, see the test_meta_bytes test.
+    with YaraCompatibilityMode():
+        matches = rules.match(data='')
     assert len(matches) == 4
     m0 = matches[0]
     m1 = matches[1]
@@ -51,8 +54,7 @@ rule r3 { condition: true }
     assert m0.namespace == 'ns1'
     assert m0.tags == ['bar', 'baz']
     assert m0.meta == {
-        # XXX yara forces a string type, losing information.
-        's': 'a\nz' if is_yara else b'a\nz',
+        's': 'a\nz',
         'b': True,
         'v': -11
     }
@@ -110,8 +112,8 @@ rule r3 { condition: true }
     assert not (r2_m0 > m0)
 
 
-@pytest.mark.parametrize("module", MODULES)
-def test_string_matches(module):
+@pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
+def test_string_matches(module, is_yara):
     """Test all properties related to the StringMatches object"""
     rule = module.compile(source="""
 rule foo {
@@ -143,8 +145,12 @@ rule foo {
     assert s1.__repr__() == '$'
     assert s2.__repr__() == '$c'
 
-    # Check that the hash depends only on the identifier
-    assert hash(s0) == hash(s1)
+    # In yara, the hash depends on the name only
+    with YaraCompatibilityMode():
+        assert hash(s0) == hash(s1)
+    # outside of compat mode, this is not true
+    if not is_yara:
+        assert hash(s0) != hash(s1)
 
 
 @pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
@@ -179,16 +185,18 @@ rule foo {
     assert i2.matched_length == 5
     assert i2.matched_data == b'<\x00\xFF\xFB>'
 
-    # TODO: missing xor_key and plaintext
-
     # check special method __repr__
     assert i0.__repr__() == '<a>'
     assert i1.__repr__() == '<\td>'
     # TODO: difference here, should we care about it?
     assert i2.__repr__() == '<\x00\\xff\\xfb>' if is_yara else '<\x00\uFFFD\uFFFD>'
 
-    # Check that the hash depends only on the matched_data
-    assert hash(i0) == hash(i3)
+    # In yara, the hash depends only on the matched_data
+    with YaraCompatibilityMode():
+        assert hash(i0) == hash(i3)
+    # outside of compat mode, this is not true
+    if not is_yara:
+        assert hash(i0) != hash(i3)
 
 
 @pytest.mark.parametrize("module", MODULES)
@@ -226,3 +234,31 @@ rule my_rule {
     assert i1.xor_key == 0
     assert i1.matched_data == b"ccc"
     assert i1.plaintext() == b"ccc"
+
+
+@pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
+def test_meta_bytes(module, is_yara):
+    rules = module.compile(source="""
+rule a {
+    meta:
+        s = "b\\xFFc"
+    condition: true
+}""")
+    # By default, boreal returns a proper byte string
+    if not is_yara:
+        matches = rules.match(data='')
+        assert matches[0].meta['s'] == b'b\xFFc'
+
+    # In compat mode, the same string conversion as done in libyara
+    # is done.
+    with YaraCompatibilityMode():
+        matches = rules.match(data='')
+        assert matches[0].meta['s'] == 'bc'
+
+    # Same is true when iterating on rules
+    if not is_yara:
+        r = list(rules)[0]
+        assert r.meta['s'] == b'b\xFFc'
+    with YaraCompatibilityMode():
+        r = list(rules)[0]
+        assert r.meta['s'] == 'bc'

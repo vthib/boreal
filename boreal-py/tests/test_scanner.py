@@ -6,7 +6,7 @@ import pytest
 import subprocess
 import tempfile
 import yara
-from .utils import MODULES, MODULES_DISTINCT
+from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
 
 
 def get_rules(module):
@@ -483,8 +483,8 @@ rule c { condition: true }
     assert ['a', 'b'] == [r['rule'] for r in callback_rules]
 
 
-@pytest.mark.parametrize('module', MODULES)
-def test_match_modules_callback(module):
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_match_modules_callback(module, is_yara):
     rules = module.compile(source="""
 import "pe"
 
@@ -497,7 +497,8 @@ rule a { condition: true }
         received_values.append(v)
         return module.CALLBACK_CONTINUE
 
-    rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
+    with YaraCompatibilityMode():
+        rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
 
     assert len(received_values) == 1
     v = received_values[0]
@@ -524,6 +525,17 @@ rule a { condition: true }
     assert v['version_info']['InternalName'] == b'MTXEX.DLL'
     # non printable bytes
     assert v['version_info']['ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
+
+    # Without compat mode, the keys of dictionary values are byte strings.
+    if not is_yara:
+        received_values = []
+        rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
+
+        assert len(received_values) == 1
+        v = received_values[0]
+        assert v['version_info'][b'InternalName'] == b'MTXEX.DLL'
+        assert v['version_info'][b'ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
+
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)

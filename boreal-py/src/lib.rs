@@ -2,6 +2,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::CString;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use pyo3::exceptions::{PyException, PyTypeError};
@@ -26,6 +27,7 @@ create_exception!(boreal, AddRuleError, PyException, "error when adding rules");
 
 static MAX_STRINGS_PER_RULE: Mutex<Option<usize>> = Mutex::new(None);
 static MATCH_MAX_LENGTH: Mutex<Option<usize>> = Mutex::new(None);
+static YARA_PYTHON_COMPATIBILITY: AtomicBool = AtomicBool::new(false);
 
 const CALLBACK_CONTINUE: u32 = 0;
 const CALLBACK_ABORT: u32 = 1;
@@ -202,12 +204,15 @@ fn compile(
 #[pyo3(signature = (
     max_strings_per_rule=None,
     max_match_data=None,
-    stack_size=None))]
+    stack_size=None,
+    yara_compatibility=None,
+))]
 #[allow(clippy::too_many_arguments)]
 fn set_config(
     max_strings_per_rule: Option<usize>,
     max_match_data: Option<usize>,
     stack_size: Option<u64>,
+    yara_compatibility: Option<bool>,
 ) {
     if let Some(value) = max_strings_per_rule {
         if let Ok(mut lock) = MAX_STRINGS_PER_RULE.lock() {
@@ -218,6 +223,9 @@ fn set_config(
         if let Ok(mut lock) = MATCH_MAX_LENGTH.lock() {
             *lock = Some(value);
         }
+    }
+    if let Some(value) = yara_compatibility {
+        YARA_PYTHON_COMPATIBILITY.store(value, Ordering::SeqCst);
     }
     // Ignore stack size, this isn't used in boreal.
     let _ = stack_size;

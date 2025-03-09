@@ -1,14 +1,15 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::atomic::Ordering;
 
 use pyo3::prelude::*;
 
 use ::boreal::scanner;
 
-use crate::string_match_instance::StringMatchInstance;
+use crate::{string_match_instance::StringMatchInstance, YARA_PYTHON_COMPATIBILITY};
 
 /// List of match instances of a YARA string
 #[pyclass(frozen, module = "boreal")]
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct StringMatches {
     /// Name of the matching string.
     #[pyo3(get)]
@@ -43,17 +44,19 @@ impl StringMatches {
         self.has_xor_modifier
     }
 
-    // TODO: missing is_xor
-
     fn __repr__(&self) -> &str {
         &self.identifier
     }
 
-    // XXX: the yara impl is to hash on the identifier only.
-    // TODO: when not in yara compat mode, we should probably avoid this...
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        self.identifier.hash(&mut hasher);
+        // XXX: the yara impl is to hash the string name only, which isn't very good to
+        // uniquely identify matches. Instead, hash on the whole object.
+        if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+            self.identifier.hash(&mut hasher);
+        } else {
+            self.hash(&mut hasher);
+        }
         hasher.finish()
     }
 }

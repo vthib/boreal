@@ -1,12 +1,15 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::atomic::Ordering;
 
 use pyo3::prelude::*;
 
 use ::boreal::scanner;
 
+use crate::YARA_PYTHON_COMPATIBILITY;
+
 /// Match instance of a YARA string
 #[pyclass(frozen, module = "boreal")]
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct StringMatchInstance {
     /// Offset of the match.
     #[pyo3(get)]
@@ -50,11 +53,15 @@ impl StringMatchInstance {
         String::from_utf8_lossy(&self.matched_data).to_string()
     }
 
-    // XXX: the yara impl is to hash on the data only.
-    // TODO: when not in yara compat mode, we should probably avoid this...
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        self.matched_data.hash(&mut hasher);
+        // XXX: the yara impl is to hash on the data only, which isn't very good to uniquely
+        // identify a match. Instead, hash on the whole object.
+        if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+            self.matched_data.hash(&mut hasher);
+        } else {
+            self.hash(&mut hasher);
+        }
         hasher.finish()
     }
 }
