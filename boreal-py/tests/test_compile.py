@@ -2,11 +2,11 @@ import boreal
 import pytest
 import tempfile
 import yara
-from .utils import MODULES
+from .utils import MODULES, MODULES_DISTINCT
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_filepath(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_filepath(module):
     # Do not use NamedTemporaryFile, yara seems to get permission denied
     # issues on those type of files.
     with tempfile.TemporaryDirectory() as fd:
@@ -27,8 +27,8 @@ def test_compile_filepath(module, is_yara):
         assert matches[0].rule == 'a'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_source(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_source(module):
     # Source specifies the string directly
     rules = module.compile(source='rule a { condition: true }')
     matches = rules.match(data='')
@@ -36,8 +36,8 @@ def test_compile_source(module, is_yara):
     assert matches[0].rule == 'a'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_file(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_file(module):
     with tempfile.TemporaryDirectory() as fd:
         path = f"{fd}/file"
         with open(path, "w") as f:
@@ -50,8 +50,8 @@ def test_compile_file(module, is_yara):
         assert matches[0].rule == 'a'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_filepaths(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_filepaths(module):
     # filepaths allows specifying namespaces
     with tempfile.TemporaryDirectory() as fd:
         path1 = f"{fd}/file1"
@@ -73,8 +73,8 @@ def test_compile_filepaths(module, is_yara):
         assert matches[1].namespace == 'ns2'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_sources(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_sources(module):
     # sources allows specifying namespaces
     rules = module.compile(sources={
         'ns1': 'rule a { condition: true }',
@@ -88,7 +88,7 @@ def test_compile_sources(module, is_yara):
     assert matches[1].namespace == 'ns2'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_compile_externals(module, is_yara):
     externals = {
         'b': True,
@@ -117,8 +117,8 @@ rule a {
         assert len(matches) == 1
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_includes(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_includes(module):
     # By default, includes are allowed
     with tempfile.TemporaryDirectory() as fd:
         path = f"{fd}/file"
@@ -139,7 +139,7 @@ rule b {{ condition: true }}
             module.compile(source=source, includes=False)
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_compile_warnings(module, is_yara):
     # By default, warnings do not make the compilation fail
     source = """rule a { condition: "foo" }"""
@@ -161,8 +161,8 @@ def test_compile_warnings(module, is_yara):
         module.compile(source=source, error_on_warning=True)
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_warnings_contexts(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_warnings_contexts(module):
     # Test warnings are correctly handled in all the different contexts
     source1 = """rule a { condition: "foo" }"""
     source2 = """rule b { condition: "b" }"""
@@ -200,8 +200,8 @@ def test_compile_warnings_contexts(module, is_yara):
         assert "boolean" in rules.warnings[1]
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_errors_invalid_arguments(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_errors_invalid_arguments(module):
     # Cannot specify multiple sources
     with pytest.raises(TypeError):
         module.compile(source="", sources={})
@@ -223,7 +223,7 @@ def test_compile_errors_invalid_arguments(module, is_yara):
         module.compile()
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_compile_errors_invalid_types(module, is_yara):
     with pytest.raises(TypeError):
         module.compile(filepath=1)
@@ -257,8 +257,8 @@ def test_compile_errors_invalid_types(module, is_yara):
         module.compile(source=source, externals={ 'a': [1] })
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_compile_errors_compilation(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_errors_compilation(module):
     with tempfile.TemporaryDirectory() as fd:
         path = f"{fd}/file"
         with open(path, "w") as f:

@@ -1,8 +1,8 @@
 import pytest
-from .utils import MODULES
+from .utils import MODULES, MODULES_DISTINCT
 
 
-@pytest.mark.parametrize("module,is_yara", MODULES)
+@pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
 def test_match(module, is_yara):
     """Test all properties related to the Match object"""
 
@@ -110,8 +110,8 @@ rule r3 { condition: true }
     assert not (r2_m0 > m0)
 
 
-@pytest.mark.parametrize("module,is_yara", MODULES)
-def test_string_matches(module, is_yara):
+@pytest.mark.parametrize("module", MODULES)
+def test_string_matches(module):
     """Test all properties related to the StringMatches object"""
     rule = module.compile(source="""
 rule foo {
@@ -147,7 +147,7 @@ rule foo {
     assert hash(s0) == hash(s1)
 
 
-@pytest.mark.parametrize("module,is_yara", MODULES)
+@pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
 def test_string_match(module, is_yara):
     """Test all properties related to the StringMatch object"""
     rule = module.compile(source="""
@@ -191,8 +191,8 @@ rule foo {
     assert hash(i0) == hash(i3)
 
 
-@pytest.mark.parametrize("module,is_yara", MODULES)
-def test_string_match_instance_xor_key(module, is_yara):
+@pytest.mark.parametrize("module", MODULES)
+def test_string_match_instance_xor_key(module):
     rule = module.compile(source="""
 rule my_rule {
     strings:

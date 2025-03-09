@@ -2,8 +2,8 @@ import pytest
 from .utils import MODULES
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_modules(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_modules(module):
     modules = module.modules
 
     assert type(modules) is list
@@ -12,15 +12,15 @@ def test_modules(module, is_yara):
     assert 'console' in modules
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_version(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_version(module):
     assert type(module.__version__) is str
 
 
 # Test is marked as to be run last because it modifies a global config
 # that impacts other tests.
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_run_last_set_config_max_strings_per_rule(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_run_last_set_config_max_strings_per_rule(module):
     module.set_config(max_strings_per_rule=2)
 
     with pytest.raises(module.SyntaxError):
@@ -38,8 +38,8 @@ def test_run_last_set_config_max_strings_per_rule(module, is_yara):
 
 # Test is marked as to be run last because it modifies a global config
 # that impacts other tests.
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_run_last_set_config_max_match_data(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_run_last_set_config_max_match_data(module):
     module.set_config(max_match_data=3)
 
     rules = module.compile(source="""
@@ -55,7 +55,7 @@ def test_run_last_set_config_max_match_data(module, is_yara):
     assert s.matched_data == b"123"
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_run_last_set_config_stack_size(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_run_last_set_config_stack_size(module):
     # Just check isetting stack_size doesn't fail
     module.set_config(stack_size=10_000)
