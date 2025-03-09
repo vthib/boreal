@@ -55,6 +55,10 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("CALLBACK_TOO_MANY_MATCHES", CALLBACK_TOO_MANY_MATCHES)?;
 
     m.add("AddRuleError", py.get_type::<AddRuleError>())?;
+    // Add an alias for SyntaxError: this provides compatibility
+    // with code using yara.
+    m.add("SyntaxError", py.get_type::<AddRuleError>())?;
+
     m.add("ScanError", py.get_type::<scanner::ScanError>())?;
     m.add("TimeoutError", py.get_type::<scanner::TimeoutError>())?;
 
