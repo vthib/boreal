@@ -10,8 +10,7 @@ def test_match(module, is_yara):
     rule = module.compile(source="rule a { condition: true }")
     matches = rule.match(data='')
     assert len(matches) == 1
-    # FIXME
-    assert matches[0].namespace == ('default' if is_yara else '')
+    assert matches[0].namespace == 'default'
 
     # Check with multiple namespaces
     source = """

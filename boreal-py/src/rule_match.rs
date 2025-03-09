@@ -68,7 +68,7 @@ impl Match {
     ) -> Result<Self, PyErr> {
         Ok(Self {
             rule: rule.name.to_string(),
-            namespace: rule.namespace.unwrap_or_default().to_string(),
+            namespace: rule.namespace.unwrap_or("default").to_string(),
             meta: rule
                 .metadatas
                 .iter()
