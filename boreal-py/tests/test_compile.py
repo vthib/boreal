@@ -5,13 +5,6 @@ import yara
 from .utils import MODULES
 
 
-def compile_exc_type(is_yara):
-    if is_yara:
-        return yara.SyntaxError
-    else:
-        return boreal.AddRuleError
-
-
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_compile_filepath(module, is_yara):
     # Do not use NamedTemporaryFile, yara seems to get permission denied
@@ -142,8 +135,7 @@ rule b {{ condition: true }}
         assert len(matches) == 2
 
         # But they can be disabled
-        exctype = compile_exc_type(is_yara)
-        with pytest.raises(exctype):
+        with pytest.raises(module.SyntaxError):
             module.compile(source=source, includes=False)
 
 
@@ -267,22 +259,20 @@ def test_compile_errors_invalid_types(module, is_yara):
 
 @pytest.mark.parametrize('module,is_yara', MODULES)
 def test_compile_errors_compilation(module, is_yara):
-    exctype = compile_exc_type(is_yara)
-
     with tempfile.TemporaryDirectory() as fd:
         path = f"{fd}/file"
         with open(path, "w") as f:
             f.write("rule")
 
-        with pytest.raises(exctype):
+        with pytest.raises(module.SyntaxError):
             module.compile(filepath=path)
-        with pytest.raises(exctype):
+        with pytest.raises(module.SyntaxError):
             module.compile(filepaths={ 'ns': path })
         with open(path, "r") as f:
-            with pytest.raises(exctype):
+            with pytest.raises(module.SyntaxError):
                 module.compile(file=f)
 
-    with pytest.raises(exctype):
+    with pytest.raises(module.SyntaxError):
         module.compile(source='rule')
-    with pytest.raises(exctype):
+    with pytest.raises(module.SyntaxError):
         module.compile(sources={ 'ns': 'rule' })

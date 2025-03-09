@@ -23,11 +23,7 @@ def test_version(module, is_yara):
 def test_run_last_set_config_max_strings_per_rule(module, is_yara):
     module.set_config(max_strings_per_rule=2)
 
-    if is_yara:
-        exctype = module.SyntaxError
-    else:
-        exctype = module.AddRuleError
-    with pytest.raises(exctype):
+    with pytest.raises(module.SyntaxError):
         module.compile(source="""
     rule a {
         strings:
