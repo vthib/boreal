@@ -721,3 +721,46 @@ rule my_rule {
         matches = rules.match(data=data, warnings_callback=warnings_callback)
         assert len(received_values) == 1
         assert len(matches) == 0
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_match_fast(module, is_yara):
+    # Compile with a rule that can be evaluated without scanning rules
+    rules = module.compile(source="""
+rule my_rule {
+    strings:
+        $s = "a"
+    condition:
+        uint8(0) == 0x00 or any of them
+}
+""")
+
+    with YaraCompatibilityMode():
+        # In yara compat mode, all string matches are computed in all cases
+        matches = rules.match(data=b"\x00 aa")
+        assert len(matches) == 1
+        m0 = matches[0]
+        assert len(m0.strings) == 1
+        s0 = m0.strings[0]
+        assert len(s0.instances) == 2
+        assert s0.instances[0].offset == 2
+        assert s0.instances[0].matched_length == 1
+        assert s0.instances[0].matched_data == b'a'
+        assert s0.instances[1].offset == 3
+        assert s0.instances[1].matched_length == 1
+        assert s0.instances[1].matched_data == b'a'
+
+        # When fast is enabled, matches are not always computed
+        # Only check on boreal, how yara handles this flag is not that clear
+        if not is_yara:
+            matches = rules.match(data=b"\x00 aa", fast=True)
+            assert len(matches) == 1
+            m0 = matches[0]
+            assert len(m0.strings) == 0
+
+    # outside of compat mode, fast mode is the default
+    if not is_yara:
+        matches = rules.match(data=b"\x00 aa")
+        assert len(matches) == 1
+        m0 = matches[0]
+        assert len(m0.strings) == 0

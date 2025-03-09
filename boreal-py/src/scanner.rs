@@ -44,7 +44,7 @@ impl Scanner {
         pid=None,
         externals=None,
         callback=None,
-        fast=false,
+        fast=None,
         timeout=None,
         modules_data=None,
         modules_callback=None,
@@ -59,7 +59,7 @@ impl Scanner {
         pid: Option<u32>,
         externals: Option<&Bound<'_, PyDict>>,
         callback: Option<&Bound<'_, PyAny>>,
-        fast: bool,
+        fast: Option<bool>,
         timeout: Option<u64>,
         modules_data: Option<&Bound<'_, PyDict>>,
         modules_callback: Option<&Bound<'_, PyAny>>,
@@ -148,16 +148,24 @@ impl Scanner {
                 params = params.match_max_length(value);
             }
         }
-        if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+        let fast = if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
             // Default value in libyara
             params = params.string_max_nb_matches(1_000_000);
-        }
-        scanner.set_scan_params(params);
+            // In compat mode, default to false for fast mode
+            fast.unwrap_or(false)
+        } else {
+            // And in regular mode, defaults to true for faster scanning.
+            fast.unwrap_or(true)
+        };
 
-        // TODO
-        {
-            let _ = fast;
+        // For the moment, simply disables computing the full matches when
+        // in fast mode: this allows all the fast optims to run.
+        if !fast {
+            eprintln!("NOT FAST MODE");
+            params = params.compute_full_matches(true);
         }
+
+        scanner.set_scan_params(params);
 
         let mut cb_handler = CallbackHandler::new(
             &scanner,
