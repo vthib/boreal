@@ -1,11 +1,12 @@
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
-use pyo3::{
-    prelude::*,
-    types::{PyDict, PyList},
-};
+use pyo3::prelude::*;
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 use ::boreal::module::Value;
+
+use crate::YARA_PYTHON_COMPATIBILITY;
 
 pub fn convert_object<'py>(
     py: Python<'py>,
@@ -40,15 +41,19 @@ fn convert_value<'py>(py: Python<'py>, value: &Value) -> PyResult<Option<Bound<'
         Value::Dictionary(map) => {
             let dict = PyDict::new(py);
             for (k, v) in map {
-                // FIXME: YARA pretends the key is utf-8, which is not guaranteed. This makes
-                // the whole match call fail if it is not the case. Would be nice to fix on
-                // YARA side, but in the meantime, we reproduce the same logic, except we
-                // do not abort the scan.
-                let Ok(s) = std::str::from_utf8(k) else {
-                    continue;
+                let key = if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+                    // FIXME: YARA pretends the key is utf-8, which is not guaranteed. This makes
+                    // the whole match call fail if it is not the case. Would be nice to fix on
+                    // YARA side, but in the meantime, we reproduce the same logic, except we
+                    // do not abort the scan.
+                    let Ok(s) = std::str::from_utf8(k) else {
+                        continue;
+                    };
+                    s.into_pyobject(py)?.into_any()
+                } else {
+                    PyBytes::new(py, k).into_any()
                 };
 
-                let key = s.into_pyobject(py)?;
                 if let Some(v) = convert_value(py, v)? {
                     dict.set_item(key, v)?;
                 }

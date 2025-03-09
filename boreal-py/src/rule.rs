@@ -1,8 +1,12 @@
+use std::sync::atomic::Ordering;
+
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyBool, PyDict, PyList, PyString};
 
 use ::boreal::scanner;
 use ::boreal::{Metadata, MetadataValue};
+
+use crate::YARA_PYTHON_COMPATIBILITY;
 
 /// A matching rule
 #[pyclass(frozen, module = "boreal")]
@@ -62,10 +66,17 @@ pub fn convert_metadata(
 ) -> Result<(Py<PyString>, Py<PyAny>), PyErr> {
     let name = PyString::new(py, scanner.get_string_symbol(metadata.name));
     let value = match metadata.value {
-        // XXX: Yara forces a string conversion here, losing data in the
-        // process. Prefer using the right type here.
-        // TODO: add a yara compat mode?
-        MetadataValue::Bytes(v) => scanner.get_bytes_symbol(v).to_vec().into_pyobject(py)?,
+        MetadataValue::Bytes(v) => {
+            let bytes = scanner.get_bytes_symbol(v).to_vec().into_pyobject(py)?;
+            // XXX: Yara forces a string conversion here, losing data in the
+            // process. Prefer using the right type here.
+            if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+                // FIXME: report this to pyo3, a c-string is expected here
+                PyString::from_object(&bytes, "utf-8\0", "ignore\0")?.into_any()
+            } else {
+                bytes
+            }
+        }
         MetadataValue::Integer(v) => v.into_pyobject(py)?.into_any(),
         MetadataValue::Boolean(v) => PyBool::new(py, v).to_owned().into_any(),
     };

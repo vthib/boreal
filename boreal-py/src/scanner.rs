@@ -1,4 +1,5 @@
 use std::panic::AssertUnwindSafe;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use pyo3::create_exception;
@@ -13,7 +14,7 @@ use crate::rule_match::Match;
 use crate::rule_string::RuleString;
 use crate::{
     CALLBACK_ALL, CALLBACK_MATCHES, CALLBACK_NON_MATCHES, CALLBACK_TOO_MANY_MATCHES,
-    MATCH_MAX_LENGTH,
+    MATCH_MAX_LENGTH, YARA_PYTHON_COMPATIBILITY,
 };
 
 create_exception!(boreal, ScanError, PyException, "error when scanning");
@@ -147,9 +148,10 @@ impl Scanner {
                 params = params.match_max_length(value);
             }
         }
-        // TODO: only do this in libyara compat mode.
-        // Default value in libyara
-        params = params.string_max_nb_matches(1_000_000);
+        if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+            // Default value in libyara
+            params = params.string_max_nb_matches(1_000_000);
+        }
         scanner.set_scan_params(params);
 
         // TODO
@@ -277,10 +279,10 @@ impl<'s> CallbackHandler<'s> {
                         Value::Object(map) => crate::module::convert_object(py, map)?,
                         _ => PyDict::new(py),
                     };
-                    // TODO: add yara compat mode to avoid overwriting the value if not in
-                    // compat mode.
+                    // XXX: Yara override the value, here, so reproduce it, we don't really
+                    // have the opportunity to do better here, not unless the callback takes
+                    // additional arguments.
                     dict.set_item("module", module_name)?;
-
                     let result = cb.call1(py, (dict,))?;
                     Ok(convert_callback_return_value(py, &result))
                 }),
