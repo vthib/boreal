@@ -412,7 +412,7 @@ rule b { condition: false }
 
     r = matches[0]
     assert r.rule == "a"
-    assert r.namespace == ("default" if is_yara else "")
+    assert r.namespace == "default"
     assert r.tags == ["tag1", "tag2"]
     assert r.meta == {
         's': 'str' if is_yara else b'str',
@@ -423,7 +423,7 @@ rule b { condition: false }
     r = callback_rules[0]
     assert r['matches']
     assert r['rule'] == "a"
-    assert r['namespace'] == ("default" if is_yara else "")
+    assert r['namespace'] == "default"
     assert r['tags'] == ["tag1", "tag2"]
     assert r['meta'] == {
         's': 'str' if is_yara else b'str',
