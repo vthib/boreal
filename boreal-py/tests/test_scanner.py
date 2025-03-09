@@ -6,7 +6,7 @@ import pytest
 import subprocess
 import tempfile
 import yara
-from .utils import MODULES
+from .utils import MODULES, MODULES_DISTINCT
 
 
 def get_rules(module):
@@ -20,8 +20,8 @@ rule a {
 }""")
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_filepath(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_filepath(module):
     rules = get_rules(module)
 
     with tempfile.NamedTemporaryFile() as fp:
@@ -37,16 +37,16 @@ def test_match_filepath(module, is_yara):
         assert len(matches) == 1
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_data(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_data(module):
     rules = get_rules(module)
 
     matches = rules.match(data='dcabc <3>')
     assert len(matches) == 1
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_pid(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_pid(module):
     def discover_test_helper():
         # This is `<root>/boreal-py/tests`. We want to find `<root>/target/.../boreal-test-helpers(.exe)`.
         # We just do a glob to find it: we don't really care about the target or debug/release possibilities,
@@ -85,8 +85,8 @@ rule a {
         child.wait()
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_externals(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_externals(module):
     rules = module.compile(source="""
 rule a {
     condition:
@@ -148,7 +148,7 @@ rule a {
     assert len(matches) == 0
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_match_invalid_types(module, is_yara):
     rules = get_rules(module)
 
@@ -181,8 +181,8 @@ def test_match_invalid_types(module, is_yara):
         rules.match(data='', which_callbacks="str")
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_externals_unknown(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_externals_unknown(module):
     rules = get_rules(module)
 
     # Specifying externals not specified during compilation is not an error
@@ -191,7 +191,7 @@ def test_match_externals_unknown(module, is_yara):
     assert len(matches) == 1
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_match_scan_failed(module, is_yara):
     rules = get_rules(module)
 
@@ -204,8 +204,8 @@ def test_match_scan_failed(module, is_yara):
         rules.match(pid=99999999)
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_timeout(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_timeout(module):
     rules = module.compile(source="""
 rule a {
     condition:
@@ -226,8 +226,8 @@ rule a {
         rules.match(data='', timeout=1)
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_console_log(module, is_yara, capsys):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_console_log(module, capsys):
     rules = module.compile(source="""
 import "console"
 
@@ -248,8 +248,8 @@ rule a {
     assert captured.err == ""
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_modules_data(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_modules_data(module):
     # Test only works if the cuckoo module is present
     if 'cuckoo' not in module.modules:
         return
@@ -282,7 +282,7 @@ def test_match_modules_data_errors():
             rules.match(data="", modules_data={ 'cuckoo': "invalid json" })
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_rules(module, is_yara):
     scanner = module.compile(sources={
         'ns1': """
@@ -364,7 +364,7 @@ rule r: tag {
         assert rules[0].namespace == ""
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_match_callback(module, is_yara):
     rules = module.compile(source="""
 global rule a: tag1 tag2 {
@@ -432,8 +432,8 @@ rule b { condition: false }
     check_strings(r['strings'])
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_callback_return_value(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_callback_return_value(module):
     rules = module.compile(source="""
 rule a { condition: true }
 rule b { condition: true }
@@ -483,8 +483,8 @@ rule c { condition: true }
     assert ['a', 'b'] == [r['rule'] for r in callback_rules]
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_modules_callback(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_modules_callback(module):
     rules = module.compile(source="""
 import "pe"
 
@@ -526,7 +526,7 @@ rule a { condition: true }
     assert v['version_info']['ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_match_modules_callback_abort(module, is_yara):
     rules = module.compile(source="""
 import "math"
@@ -553,8 +553,8 @@ rule a { condition: true }
         assert received_values[0]['module'] == 'math'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_which_callbacks(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_which_callbacks(module):
     rules = module.compile(source="""
 rule a { condition: true }
 rule b { condition: false }
@@ -604,8 +604,8 @@ rule b { condition: false }
     assert matches[0].rule == 'a'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
-def test_match_which_all_abort(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_which_all_abort(module):
     rules = module.compile(source="""
 rule a { condition: true }
 rule b { condition: false }
@@ -667,7 +667,7 @@ rule d { condition: false }
     assert matches[1].rule == 'c'
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES)
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_match_warnings_callback(module, is_yara):
     rules = module.compile(source="""
 rule my_rule {

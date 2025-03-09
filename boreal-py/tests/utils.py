@@ -2,7 +2,8 @@ import boreal
 import yara
 
 
-MODULES = [
+MODULES = [boreal, yara]
+MODULES_DISTINCT = [
     (boreal, False),
     (yara, True),
 ]
