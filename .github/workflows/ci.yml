@@ -380,3 +380,49 @@ jobs:
           "--no-default-features --features=object,authenticode,authenticode-verify",
           "--all-features"
         ]
+
+  other-archs:
+    name: Test other architectures
+    runs-on: ubuntu-22.04
+    env:
+      CROSS_VERSION: v0.2.5
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install and configure Cross
+        run: |
+          # Copied from rust-lang/regex CI:
+          # <https://github.com/rust-lang/regex/blob/329c6a32/.github/workflows/ci.yml>
+          dir="$RUNNER_TEMP/cross-download"
+          mkdir "$dir"
+          echo "$dir" >> $GITHUB_PATH
+          cd "$dir"
+          curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
+          tar xf cross-x86_64-unknown-linux-musl.tar.gz
+          echo "CARGO=cross" >> $GITHUB_ENV
+          echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
+
+      - name: Build test helpers
+        run: |
+          cd boreal-test-helpers
+          ${{ env.CARGO }} build $TARGET
+
+      - name: Run tests
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: ${{ env.CARGO }} test $TARGET
+
+      - name: Run tests with authenticode
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: ${{ env.CARGO }} test --features authenticode-verify $TARGET
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [s390x, aarch64]
+        include:
+          - build: s390x
+            target: s390x-unknown-linux-gnu
+          - build: aarch64
+            target: aarch64-unknown-linux-gnu
