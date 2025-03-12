@@ -1,5 +1,5 @@
 //! Benchmarks boreal against libyara
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Instant};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use walkdir::WalkDir;
@@ -48,8 +48,163 @@ fn bench_compilation(c: &mut Criterion) {
                 compiler.compile_rules().unwrap()
             })
         });
+        group.bench_with_input("yara_x", &rules, |b, rules| {
+            b.iter_with_large_drop(|| {
+                let mut compiler = build_yara_x_compiler();
+                for path in rules {
+                    compiler
+                        .add_source(&*std::fs::read_to_string(path).unwrap())
+                        .unwrap();
+                }
+                compiler.build()
+            })
+        });
 
         group.finish();
+    }
+}
+
+/// Bench serialization duration
+fn bench_serialization(c: &mut Criterion) {
+    for (name, rules_path) in &RULES_SETS {
+        let rules = get_yara_files_from_path(rules_path);
+        let boreal_scanner = {
+            let mut compiler = build_boreal_compiler();
+            for path in &rules {
+                compiler.add_rules_file(path).unwrap();
+            }
+            compiler.into_scanner()
+        };
+        let mut yara_scanner = {
+            let mut compiler = build_yara_compiler();
+            for path in &rules {
+                compiler = compiler.add_rules_file(path).unwrap();
+            }
+            compiler.compile_rules().unwrap()
+        };
+        let yara_x_scanner = {
+            let mut compiler = build_yara_x_compiler();
+            for path in &rules {
+                compiler
+                    .add_source(&*std::fs::read_to_string(path).unwrap())
+                    .unwrap();
+            }
+            compiler.build()
+        };
+
+        println!("\n{}\n", name);
+
+        let start = Instant::now();
+        let out = boreal_scanner.to_bytes().unwrap();
+        let end_ser = start.elapsed();
+        let start = Instant::now();
+        let _new = boreal::Scanner::from_bytes(&out).unwrap();
+        println!(
+            "boreal size: {}, serialized in {:?}, deserialized in {:?}",
+            datasize(out.len()),
+            end_ser,
+            start.elapsed()
+        );
+
+        let start = Instant::now();
+        let mut out = Vec::new();
+        yara_scanner.save_to_stream(&mut out).unwrap();
+        let end_ser = start.elapsed();
+        let start = Instant::now();
+        let _new = yara::Rules::load_from_stream(&*out).unwrap();
+        println!(
+            "yara size: {}, serialized in {:?}, deserialized in {:?}",
+            datasize(out.len()),
+            end_ser,
+            start.elapsed()
+        );
+
+        let start = Instant::now();
+        let out = yara_x_scanner.serialize().unwrap();
+        let end_ser = start.elapsed();
+        let start = Instant::now();
+        let _new = yara_x::Rules::deserialize(&*out).unwrap();
+        println!(
+            "yara_x size: {}, serialized in {:?}, deserialized in {:?}",
+            datasize(out.len()),
+            end_ser,
+            start.elapsed()
+        );
+    }
+
+    let mut boreal_compiler = build_boreal_compiler();
+    let mut yara_compiler = build_yara_compiler();
+    let mut yara_x_compiler = build_yara_x_compiler();
+    for (name, rules_path) in &RULES_SETS {
+        let rules = get_yara_files_from_path(rules_path);
+        for path in &rules {
+            boreal_compiler
+                .add_rules_file_in_namespace(path, name)
+                .unwrap();
+        }
+        for path in &rules {
+            yara_compiler = yara_compiler
+                .add_rules_file_with_namespace(path, name)
+                .unwrap();
+        }
+        yara_x_compiler.new_namespace(name);
+        for path in &rules {
+            yara_x_compiler
+                .add_source(&*std::fs::read_to_string(path).unwrap())
+                .unwrap();
+        }
+    }
+
+    println!("\nall\n");
+    let boreal_scanner = boreal_compiler.into_scanner();
+    let mut yara_scanner = yara_compiler.compile_rules().unwrap();
+    let yara_x_scanner = yara_x_compiler.build();
+
+    let start = Instant::now();
+    let out = boreal_scanner.to_bytes().unwrap();
+    let end_ser = start.elapsed();
+    let start = Instant::now();
+    let _new = boreal::Scanner::from_bytes(&out).unwrap();
+    println!(
+        "boreal size: {}, serialized in {:?}, deserialized in {:?}",
+        datasize(out.len()),
+        end_ser,
+        start.elapsed()
+    );
+
+    let start = Instant::now();
+    let mut out = Vec::new();
+    yara_scanner.save_to_stream(&mut out).unwrap();
+    let end_ser = start.elapsed();
+    let start = Instant::now();
+    let _new = yara::Rules::load_from_stream(&*out).unwrap();
+    println!(
+        "yara size: {}, serialized in {:?}, deserialized in {:?}",
+        datasize(out.len()),
+        end_ser,
+        start.elapsed()
+    );
+
+    let start = Instant::now();
+    let out = yara_x_scanner.serialize().unwrap();
+    let end_ser = start.elapsed();
+    let start = Instant::now();
+    let _new = yara_x::Rules::deserialize(&*out).unwrap();
+    println!(
+        "yara_x size: {}, serialized in {:?}, deserialized in {:?}",
+        datasize(out.len()),
+        end_ser,
+        start.elapsed()
+    );
+}
+
+fn datasize(v: usize) -> String {
+    if v > 1024 * 1024 {
+        format!("{:.2}MB", (v as f64) / 1024. / 1024.)
+    } else if v > 1024 {
+        format!("{:.2}KB", (v as f64) / 1024.)
+    } else {
+        format!("{}B", v)
     }
 }
 
@@ -63,12 +218,19 @@ fn bench_scan_pes(c: &mut Criterion) {
 
             let mut boreal_compiler = build_boreal_compiler();
             let yara_compiler = build_yara_compiler();
+            let mut yara_x_compiler = build_yara_x_compiler();
 
             let rules = get_yara_files_from_path(rules_path);
-            let yara_compiler = add_rules(&rules, &mut boreal_compiler, yara_compiler);
+            let yara_compiler = add_rules(
+                &rules,
+                &mut boreal_compiler,
+                &mut yara_x_compiler,
+                yara_compiler,
+            );
 
             let boreal_scanner = boreal_compiler.into_scanner();
             let yara_compiled_rules = yara_compiler.compile_rules().unwrap();
+            let yara_x_rules = yara_x_compiler.build();
 
             let mut group =
                 c.benchmark_group(format!("Scan {} using {} rules", pe_path.display(), name));
@@ -78,6 +240,12 @@ fn bench_scan_pes(c: &mut Criterion) {
             });
             group.bench_with_input("libyara", &(yara_compiled_rules, &mem), |b, (yara, mem)| {
                 b.iter(|| yara.scan_mem(mem, 30))
+            });
+            group.bench_with_input("yara_x", &(yara_x_rules, &mem), |b, (rules, mem)| {
+                b.iter(|| {
+                    let mut scanner = yara_x::Scanner::new(rules);
+                    let _r = std::hint::black_box(scanner.scan(mem));
+                })
             });
 
             group.finish();
@@ -92,9 +260,15 @@ fn bench_scan_process(c: &mut Criterion) {
     for (name, rules_path) in &RULES_SETS {
         let mut boreal_compiler = build_boreal_compiler();
         let yara_compiler = build_yara_compiler();
+        let mut yara_x_compiler = build_yara_x_compiler();
 
         let rules = get_yara_files_from_path(rules_path);
-        let yara_compiler = add_rules(&rules, &mut boreal_compiler, yara_compiler);
+        let yara_compiler = add_rules(
+            &rules,
+            &mut boreal_compiler,
+            &mut yara_x_compiler,
+            yara_compiler,
+        );
 
         let boreal_scanner = boreal_compiler.into_scanner();
         let yara_compiled_rules = yara_compiler.compile_rules().unwrap();
@@ -134,6 +308,17 @@ fn build_yara_compiler() -> yara::Compiler {
     yara_compiler
 }
 
+fn build_yara_x_compiler<'a>() -> yara_x::Compiler<'a> {
+    let mut compiler = yara_x::Compiler::new();
+    compiler.relaxed_re_syntax(true);
+    let _ = compiler.define_global("owner", "owner");
+    let _ = compiler.define_global("filename", "filename");
+    let _ = compiler.define_global("filepath", "filepath");
+    let _ = compiler.define_global("extension", "bin");
+    let _ = compiler.define_global("filetype", "bin");
+    compiler
+}
+
 fn get_yara_files_from_path(path: &str) -> Vec<PathBuf> {
     WalkDir::new(path)
         .into_iter()
@@ -163,6 +348,7 @@ fn get_yara_files_from_path(path: &str) -> Vec<PathBuf> {
 fn add_rules(
     rules: &[PathBuf],
     boreal_compiler: &mut boreal::Compiler,
+    yara_x_compiler: &mut yara_x::Compiler,
     mut yara_compiler: yara::Compiler,
 ) -> yara::Compiler {
     for path in rules {
@@ -180,6 +366,15 @@ fn add_rules(
                 err
             )
         });
+        yara_x_compiler
+            .add_source(&*std::fs::read_to_string(path).unwrap())
+            .unwrap_or_else(|err| {
+                panic!(
+                    "cannot parse rules from {} for yara_x: {:?}",
+                    path.display(),
+                    err
+                )
+            });
     }
 
     yara_compiler
@@ -188,6 +383,7 @@ fn add_rules(
 criterion_group!(
     benches,
     bench_compilation,
+    bench_serialization,
     bench_scan_pes,
     bench_scan_process
 );

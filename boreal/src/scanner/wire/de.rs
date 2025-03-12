@@ -709,6 +709,12 @@ fn deserialize_module_expression(cursor: &mut Cursor<&[u8]>) -> Result<ModuleExp
                 index: BoundedValueIndex::BoundedStack(v as usize),
             }
         }
+        2 => {
+            // placeholder
+            ModuleExpressionKind::BoundedModuleValueUse {
+                index: BoundedValueIndex::Module(0),
+            }
+        }
         _ => todo!(),
     };
 

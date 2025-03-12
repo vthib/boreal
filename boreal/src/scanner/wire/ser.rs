@@ -690,8 +690,10 @@ fn serialize_module_expression(module_expr: &ModuleExpression, buf: &mut Vec<u8>
                 (*v as u64).serialize(buf)?;
             }
         },
-        // FIXME: add a way to serialize this
-        ModuleExpressionKind::StaticFunction { fun: _ } => (),
+        // TODO
+        ModuleExpressionKind::StaticFunction { fun: _ } => {
+            2_u8.serialize(buf)?;
+        }
     }
     (expressions.len() as u64).serialize(buf)?;
     for expr in expressions {

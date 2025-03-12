@@ -13,6 +13,7 @@ criterion = "0.5"
 glob = "0.3.1"
 walkdir = "2.3"
 yara = { version = "0.19", features = ["vendored"] }
+yara-x = "0.13"
 
 [[bench]]
 name = "boreal"
