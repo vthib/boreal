@@ -6,9 +6,7 @@ use super::analysis::{analyze_hir, HirAnalysis};
 use super::{MatchType, Matches, Modifiers};
 
 mod dfa;
-use dfa::DfaValidator;
 mod simple;
-use simple::SimpleValidator;
 
 // Maximum length against which a regex validator of a AC literal match will be run.
 //
@@ -29,8 +27,8 @@ pub(super) enum Validator {
         reverse: Option<HalfValidator>,
     },
     Greedy {
-        reverse: DfaValidator,
-        full: DfaValidator,
+        reverse: dfa::DfaValidator,
+        full: dfa::DfaValidator,
     },
 }
 
@@ -53,10 +51,10 @@ impl Validator {
                 // but against the string `aafoobbaafoobb`, it will match on the entire string,
                 // while a (pre, post) matching would match twice.
                 if left_analysis.has_greedy_repetitions {
-                    let reverse = DfaValidator::new(pre, &left_analysis, modifiers, true)?;
+                    let reverse = dfa::DfaValidator::new(pre, &left_analysis, modifiers, true)?;
 
                     let full_analysis = analyze_hir(full, modifiers.dot_all);
-                    let full = DfaValidator::new(full, &full_analysis, modifiers, false)?;
+                    let full = dfa::DfaValidator::new(full, &full_analysis, modifiers, false)?;
 
                     return Ok(Self::Greedy { reverse, full });
                 }
@@ -75,6 +73,14 @@ impl Validator {
         };
 
         Ok(Self::NonGreedy { forward, reverse })
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(super) fn deserialize<R: std::io::Read>(
+        modifiers: Modifiers,
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        wire::deserialize_validator(modifiers, reader)
     }
 
     pub(super) fn validate_match(
@@ -176,9 +182,9 @@ impl std::fmt::Display for Validator {
 #[derive(Debug)]
 pub(super) enum HalfValidator {
     // Simplified validator for very simple regex expressions.
-    Simple(SimpleValidator),
+    Simple(simple::SimpleValidator),
     // Dfa validator, handling all the complex cases
-    Dfa(DfaValidator),
+    Dfa(dfa::DfaValidator),
 }
 
 impl HalfValidator {
@@ -188,9 +194,9 @@ impl HalfValidator {
         modifiers: Modifiers,
         reverse: bool,
     ) -> Result<Self, crate::regex::Error> {
-        match SimpleValidator::new(hir, analysis, modifiers, reverse) {
+        match simple::SimpleValidator::new(hir, analysis, modifiers, reverse) {
             Some(v) => Ok(Self::Simple(v)),
-            None => Ok(Self::Dfa(DfaValidator::new(
+            None => Ok(Self::Dfa(dfa::DfaValidator::new(
                 hir, analysis, modifiers, reverse,
             )?)),
         }
@@ -209,7 +215,7 @@ impl HalfValidator {
         }
     }
 
-    pub(crate) fn find_anchored_rev(
+    fn find_anchored_rev(
         &self,
         haystack: &[u8],
         start: usize,
@@ -228,6 +234,96 @@ impl std::fmt::Display for HalfValidator {
         match self {
             Self::Simple(_) => write!(f, "Simple"),
             Self::Dfa(_) => write!(f, "Dfa"),
+        }
+    }
+}
+
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use crate::matcher::Modifiers;
+
+    use super::{dfa, HalfValidator, Validator};
+
+    impl BorshSerialize for Validator {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Validator::NonGreedy { forward, reverse } => {
+                    0_u8.serialize(writer)?;
+                    serialize_half_validator(forward.as_ref(), writer)?;
+                    serialize_half_validator(reverse.as_ref(), writer)?;
+                }
+                Validator::Greedy { reverse, full } => {
+                    1_u8.serialize(writer)?;
+                    reverse.serialize(writer)?;
+                    full.serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    pub(super) fn deserialize_validator<R: io::Read>(
+        modifiers: Modifiers,
+        reader: &mut R,
+    ) -> io::Result<Validator> {
+        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        match discriminant {
+            0 => {
+                let forward = deserialize_half_validator(modifiers, false, reader)?;
+                let reverse = deserialize_half_validator(modifiers, true, reader)?;
+                Ok(Validator::NonGreedy { forward, reverse })
+            }
+            1 => {
+                let reverse = dfa::DfaValidator::deserialize(modifiers, true, reader)?;
+                let full = dfa::DfaValidator::deserialize(modifiers, true, reader)?;
+                Ok(Validator::Greedy { reverse, full })
+            }
+            v => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid discriminant when deserializing a validator: {v}"),
+            )),
+        }
+    }
+
+    fn serialize_half_validator<W: io::Write>(
+        half_validator: Option<&HalfValidator>,
+        writer: &mut W,
+    ) -> io::Result<()> {
+        match half_validator {
+            None => 0_u8.serialize(writer)?,
+            Some(HalfValidator::Simple(simple)) => {
+                1_u8.serialize(writer)?;
+                simple.serialize(writer)?;
+            }
+            Some(HalfValidator::Dfa(dfa)) => {
+                2_u8.serialize(writer)?;
+                dfa.serialize(writer)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn deserialize_half_validator<R: io::Read>(
+        modifiers: Modifiers,
+        reverse: bool,
+        reader: &mut R,
+    ) -> io::Result<Option<HalfValidator>> {
+        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        match discriminant {
+            0 => Ok(None),
+            1 => Ok(Some(HalfValidator::Simple(BD::deserialize_reader(reader)?))),
+            2 => {
+                let dfa = dfa::DfaValidator::deserialize(modifiers, reverse, reader)?;
+                Ok(Some(HalfValidator::Dfa(dfa)))
+            }
+            v => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid discriminant when deserializing a half validator: {v}"),
+            )),
         }
     }
 }

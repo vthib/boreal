@@ -138,6 +138,61 @@ impl BytesPoolBuilder {
     }
 }
 
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use super::{BytesPool, BytesSymbol, StringSymbol};
+
+    impl BorshSerialize for BytesPool {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.buffer.serialize(writer)
+        }
+    }
+
+    impl BD for BytesPool {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            Ok(Self {
+                buffer: BD::deserialize_reader(reader)?,
+            })
+        }
+    }
+
+    impl BorshSerialize for StringSymbol {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.from.serialize(writer)?;
+            self.to.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for StringSymbol {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let from = BD::deserialize_reader(reader)?;
+            let to = BD::deserialize_reader(reader)?;
+            Ok(Self { from, to })
+        }
+    }
+
+    impl BorshSerialize for BytesSymbol {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.from.serialize(writer)?;
+            self.to.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for BytesSymbol {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let from = BD::deserialize_reader(reader)?;
+            let to = BD::deserialize_reader(reader)?;
+            Ok(Self { from, to })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};

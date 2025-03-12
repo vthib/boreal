@@ -18,7 +18,13 @@ pub(super) struct RawMatcher {
     /// contains word boundaries.
     /// In this case, the regex expression cannot be "widened", and this regex is used to post
     /// check matches.
-    pub non_wide_regex: Option<Regex>,
+    non_wide_regex: Option<Regex>,
+
+    /// Saved expressions of the regex.
+    ///
+    /// Only used for serialization.
+    #[cfg(feature = "serialize")]
+    exprs: [Box<str>; 2],
 }
 
 impl RawMatcher {
@@ -40,24 +46,32 @@ impl RawMatcher {
 
         let builder = Regex::builder(modifiers.nocase, modifiers.dot_all);
 
-        let res = match (modifiers.ascii, modifiers.wide) {
+        let (expr1, expr2) = match (modifiers.ascii, modifiers.wide) {
             (true, true) => {
                 // Build a regex with 2 patterns: one for the ascii version,
                 // one for the wide version.
                 let expr = regex_hir_to_string(hir);
                 let wide_expr = regex_hir_to_string(&widen_hir(hir));
 
-                builder.build_many(&[expr, wide_expr])
+                (expr, wide_expr)
             }
             (false, true) => {
                 let wide_hir = widen_hir(hir);
-                builder.build(&regex_hir_to_string(&wide_hir))
+                (regex_hir_to_string(&wide_hir), String::new())
             }
-            _ => builder.build(&regex_hir_to_string(hir)),
+            _ => (regex_hir_to_string(hir), String::new()),
         };
+        let regex = if expr2.is_empty() {
+            builder.build(&expr1)
+        } else {
+            builder.build_many(&[&expr1, &expr2])
+        }
+        .map_err(crate::regex::Error::from)?;
 
         Ok(Self {
-            regex: res.map_err(crate::regex::Error::from)?,
+            regex,
+            #[cfg(feature = "serialize")]
+            exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
             non_wide_regex,
         })
     }
@@ -91,6 +105,14 @@ impl RawMatcher {
                 None => return Some((mat, match_type)),
             }
         }
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(super) fn deserialize<R: std::io::Read>(
+        modifiers: Modifiers,
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        wire::deserialize_raw_matcher(modifiers, reader)
     }
 }
 
@@ -148,6 +170,72 @@ fn unwide(mem: &[u8]) -> Vec<u8> {
 
     res
 }
+
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use crate::matcher::Modifiers;
+    use crate::regex::Regex;
+
+    use super::RawMatcher;
+
+    impl BorshSerialize for RawMatcher {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.exprs[0].serialize(writer)?;
+            self.exprs[1].serialize(writer)?;
+            self.non_wide_regex
+                .as_ref()
+                .map(Regex::as_str)
+                .serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    pub(super) fn deserialize_raw_matcher<R: io::Read>(
+        modifiers: Modifiers,
+        reader: &mut R,
+    ) -> io::Result<RawMatcher> {
+        let expr1: String = BD::deserialize_reader(reader)?;
+        let expr2: String = BD::deserialize_reader(reader)?;
+
+        let non_wide_expr: Option<String> = BD::deserialize_reader(reader)?;
+        let non_wide_regex = match non_wide_expr {
+            Some(expr) => Some(
+                Regex::from_string(expr.clone(), modifiers.nocase, modifiers.dot_all).map_err(
+                    |err| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("unable to compile regex with expression {expr}: {err:?}"),
+                        )
+                    },
+                )?,
+            ),
+            None => None,
+        };
+
+        let builder = Regex::builder(modifiers.nocase, modifiers.dot_all);
+        let res = if expr2.is_empty() {
+            builder.build_many(&[&expr1])
+        } else {
+            builder.build_many(&[&expr1, &expr2])
+        };
+        let regex = res.map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unable to compile regex with expression {expr1}, {expr2}: {err:?}",),
+            )
+        })?;
+        Ok(RawMatcher {
+            regex,
+            exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
+            non_wide_regex,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

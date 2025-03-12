@@ -23,6 +23,10 @@ pub(crate) use visitor::{visit, VisitAction, Visitor};
 pub struct Regex {
     meta: meta::Regex,
     expr: String,
+    #[cfg(feature = "serialize")]
+    case_insensitive: bool,
+    #[cfg(feature = "serialize")]
+    dot_all: bool,
 }
 
 impl Regex {
@@ -43,7 +47,14 @@ impl Regex {
             .build(&expr)
             .map_err(Error::from)?;
 
-        Ok(Regex { meta, expr })
+        Ok(Regex {
+            meta,
+            expr,
+            #[cfg(feature = "serialize")]
+            case_insensitive,
+            #[cfg(feature = "serialize")]
+            dot_all,
+        })
     }
 
     pub(crate) fn builder(case_insensitive: bool, dot_all: bool) -> meta::Builder {
@@ -305,6 +316,38 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use super::Regex;
+
+    impl BorshSerialize for Regex {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.case_insensitive.serialize(writer)?;
+            self.dot_all.serialize(writer)?;
+            self.expr.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for Regex {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let case_insensitive = BD::deserialize_reader(reader)?;
+            let dot_all = BD::deserialize_reader(reader)?;
+            let expr = BD::deserialize_reader(reader)?;
+            Regex::from_string(expr, case_insensitive, dot_all).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid regex expression: {err:?}"),
+                )
+            })
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

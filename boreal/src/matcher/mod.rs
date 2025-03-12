@@ -444,6 +444,113 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
     res
 }
 
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use crate::matcher::Modifiers;
+
+    use super::raw::RawMatcher;
+    use super::validator::Validator;
+    use super::{Matcher, MatcherKind};
+
+    impl BorshSerialize for Matcher {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.literals.serialize(writer)?;
+            self.modifiers.serialize(writer)?;
+            self.kind.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for Matcher {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let literals = BD::deserialize_reader(reader)?;
+            let modifiers = BD::deserialize_reader(reader)?;
+            let kind = deserialize_matcher_kind(modifiers, reader)?;
+            Ok(Self {
+                literals,
+                kind,
+                modifiers,
+            })
+        }
+    }
+
+    impl BorshSerialize for MatcherKind {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::Literals => {
+                    0_u8.serialize(writer)?;
+                }
+                Self::Atomized { validator } => {
+                    1_u8.serialize(writer)?;
+                    validator.serialize(writer)?;
+                }
+                Self::Raw(matcher) => {
+                    2_u8.serialize(writer)?;
+                    matcher.serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    pub(super) fn deserialize_matcher_kind<R: io::Read>(
+        modifiers: Modifiers,
+        reader: &mut R,
+    ) -> io::Result<MatcherKind> {
+        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        match discriminant {
+            0 => Ok(MatcherKind::Literals),
+            1 => {
+                let validator = Validator::deserialize(modifiers, reader)?;
+                Ok(MatcherKind::Atomized { validator })
+            }
+            2 => {
+                let matcher = RawMatcher::deserialize(modifiers, reader)?;
+                Ok(MatcherKind::Raw(matcher))
+            }
+            v => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid discriminant when deserializing a matcher kind: {v}"),
+            )),
+        }
+    }
+
+    impl BorshSerialize for Modifiers {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.fullword.serialize(writer)?;
+            self.wide.serialize(writer)?;
+            self.ascii.serialize(writer)?;
+            self.nocase.serialize(writer)?;
+            self.dot_all.serialize(writer)?;
+            self.xor_start.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for Modifiers {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let fullword = BD::deserialize_reader(reader)?;
+            let wide = BD::deserialize_reader(reader)?;
+            let ascii = BD::deserialize_reader(reader)?;
+            let nocase = BD::deserialize_reader(reader)?;
+            let dot_all = BD::deserialize_reader(reader)?;
+            let xor_start = BD::deserialize_reader(reader)?;
+            Ok(Self {
+                fullword,
+                wide,
+                ascii,
+                nocase,
+                dot_all,
+                xor_start,
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
