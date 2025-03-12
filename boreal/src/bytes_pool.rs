@@ -28,21 +28,21 @@ use std::collections::HashMap;
 /// symbol can be a single usize.
 #[derive(Debug, Default)]
 pub(crate) struct BytesPool {
-    buffer: Vec<u8>,
+    pub(crate) buffer: Vec<u8>,
 }
 
 /// Symbol for a bytes string stored in a bytes intern pool.
 #[derive(Copy, Clone, Debug)]
 pub struct BytesSymbol {
-    from: usize,
-    to: usize,
+    pub(crate) from: usize,
+    pub(crate) to: usize,
 }
 
 /// Symbol for a string stored in a bytes intern pool.
 #[derive(Copy, Clone, Debug)]
 pub struct StringSymbol {
-    from: usize,
-    to: usize,
+    pub(crate) from: usize,
+    pub(crate) to: usize,
 }
 
 impl BytesPool {

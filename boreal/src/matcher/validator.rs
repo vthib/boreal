@@ -6,9 +6,9 @@ use super::analysis::{analyze_hir, HirAnalysis};
 use super::{MatchType, Matches, Modifiers};
 
 mod dfa;
-use dfa::DfaValidator;
+pub(crate) use dfa::DfaValidator;
 mod simple;
-use simple::SimpleValidator;
+pub(crate) use simple::{SimpleNode, SimpleValidator};
 
 // Maximum length against which a regex validator of a AC literal match will be run.
 //
@@ -23,7 +23,7 @@ use simple::SimpleValidator;
 const MAX_SPLIT_MATCH_LENGTH: usize = 4096;
 
 #[derive(Debug)]
-pub(super) enum Validator {
+pub(crate) enum Validator {
     NonGreedy {
         forward: Option<HalfValidator>,
         reverse: Option<HalfValidator>,
@@ -174,7 +174,7 @@ impl std::fmt::Display for Validator {
 }
 
 #[derive(Debug)]
-pub(super) enum HalfValidator {
+pub(crate) enum HalfValidator {
     // Simplified validator for very simple regex expressions.
     Simple(SimpleValidator),
     // Dfa validator, handling all the complex cases

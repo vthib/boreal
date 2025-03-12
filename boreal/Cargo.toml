@@ -50,6 +50,8 @@ profiling = []
 [dependencies]
 boreal-parser = { path = "../boreal-parser", version = "0.6.0" }
 
+borsh = "1.5.5"
+
 # Proper error reporting on compilation
 codespan-reporting = "0.11"
 

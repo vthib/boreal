@@ -17,11 +17,11 @@ type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync + UnwindSafe + RefUnwind
 #[derive(Debug)]
 pub(crate) struct DfaValidator {
     /// Anchored lazy DFA, used to validate an AC match.
-    dfa: Arc<DFA>,
+    pub(crate) dfa: Arc<DFA>,
     // TODO: Taking the cache out of the pool when starting scanning (and putting them in the scan
     // data) would avoid the get/drop on every validation, and only do it once per scan.
     // Not sure how much improvements this would be, to test.
-    pool: Pool<Cache, PoolCreateFn>,
+    pub(crate) pool: Pool<Cache, PoolCreateFn>,
 
     /// Use the custom wide routine to validate wide matches.
     ///
@@ -30,7 +30,9 @@ pub(crate) struct DfaValidator {
     ///
     /// This is only used when the regex contains word boundaries, which cannot be translated into
     /// a corresponding "widened" HIR.
-    use_custom_wide_runner: bool,
+    pub(crate) use_custom_wide_runner: bool,
+
+    pub(crate) exprs: [String; 2],
 }
 
 impl DfaValidator {
@@ -50,7 +52,18 @@ impl DfaValidator {
             modifiers.wide = false;
         }
 
-        let dfa = Arc::new(build_dfa(hir, modifiers, reverse)?);
+        let exprs = if modifiers.wide {
+            let wide_hir = widen_hir(hir);
+
+            if modifiers.ascii {
+                [regex_hir_to_string(hir), regex_hir_to_string(&wide_hir)]
+            } else {
+                [regex_hir_to_string(&wide_hir), String::new()]
+            }
+        } else {
+            [regex_hir_to_string(hir), String::new()]
+        };
+        let dfa = Arc::new(build_dfa(&exprs, modifiers, reverse)?);
         let pool = {
             let dfa = Arc::clone(&dfa);
             let create: PoolCreateFn = Box::new(move || dfa.create_cache());
@@ -61,6 +74,28 @@ impl DfaValidator {
             dfa,
             pool,
             use_custom_wide_runner,
+            exprs,
+        })
+    }
+
+    pub(crate) fn build_from_exprs(
+        exprs: [String; 2],
+        modifiers: Modifiers,
+        reverse: bool,
+        use_custom_wide_runner: bool,
+    ) -> Result<Self, crate::regex::Error> {
+        let dfa = Arc::new(build_dfa(&exprs, modifiers, reverse)?);
+        let pool = {
+            let dfa = Arc::clone(&dfa);
+            let create: PoolCreateFn = Box::new(move || dfa.create_cache());
+            Pool::new(create)
+        };
+
+        Ok(Self {
+            dfa,
+            pool,
+            use_custom_wide_runner,
+            exprs,
         })
     }
 
@@ -249,7 +284,11 @@ fn match_type_to_pattern_index(match_type: MatchType) -> PatternID {
     })
 }
 
-fn build_dfa(hir: &Hir, modifiers: Modifiers, reverse: bool) -> Result<DFA, crate::regex::Error> {
+fn build_dfa(
+    exprs: &[String; 2],
+    modifiers: Modifiers,
+    reverse: bool,
+) -> Result<DFA, crate::regex::Error> {
     let mut builder = Builder::new();
     let _b = builder
         .configure(
@@ -278,16 +317,10 @@ fn build_dfa(hir: &Hir, modifiers: Modifiers, reverse: bool) -> Result<DFA, crat
                 .dot_matches_new_line(modifiers.dot_all),
         );
 
-    if modifiers.wide {
-        let wide_hir = widen_hir(hir);
-
-        if modifiers.ascii {
-            builder.build_many(&[regex_hir_to_string(hir), regex_hir_to_string(&wide_hir)])
-        } else {
-            builder.build(&regex_hir_to_string(&wide_hir))
-        }
+    if exprs[1].is_empty() {
+        builder.build(&exprs[0])
     } else {
-        builder.build(&regex_hir_to_string(hir))
+        builder.build_many(exprs)
     }
     .map_err(crate::regex::Error::from)
 }

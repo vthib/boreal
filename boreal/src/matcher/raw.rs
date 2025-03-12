@@ -9,8 +9,9 @@ use super::widener::widen_hir;
 use super::{MatchType, Modifiers};
 
 #[derive(Debug)]
-pub(super) struct RawMatcher {
-    regex: regex_automata::meta::Regex,
+pub(crate) struct RawMatcher {
+    pub(crate) regex: regex_automata::meta::Regex,
+    pub(crate) exprs: [String; 2],
 
     /// Regex of the non wide version of the regex.
     ///
@@ -40,24 +41,31 @@ impl RawMatcher {
 
         let builder = Regex::builder(modifiers.nocase, modifiers.dot_all);
 
-        let res = match (modifiers.ascii, modifiers.wide) {
+        let exprs = match (modifiers.ascii, modifiers.wide) {
             (true, true) => {
                 // Build a regex with 2 patterns: one for the ascii version,
                 // one for the wide version.
                 let expr = regex_hir_to_string(hir);
                 let wide_expr = regex_hir_to_string(&widen_hir(hir));
 
-                builder.build_many(&[expr, wide_expr])
+                [expr, wide_expr]
             }
             (false, true) => {
                 let wide_hir = widen_hir(hir);
-                builder.build(&regex_hir_to_string(&wide_hir))
+                [regex_hir_to_string(&wide_hir), String::new()]
             }
-            _ => builder.build(&regex_hir_to_string(hir)),
+            _ => [regex_hir_to_string(hir), String::new()],
         };
+        let regex = if exprs[1].is_empty() {
+            builder.build(&exprs[0])
+        } else {
+            builder.build_many(&exprs)
+        }
+        .map_err(crate::regex::Error::from)?;
 
         Ok(Self {
-            regex: res.map_err(crate::regex::Error::from)?,
+            regex,
+            exprs,
             non_wide_regex,
         })
     }

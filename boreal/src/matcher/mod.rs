@@ -9,7 +9,9 @@ mod base64;
 mod literals;
 mod only_literals;
 mod raw;
+pub(crate) use raw::RawMatcher;
 mod validator;
+pub(crate) use validator::{DfaValidator, HalfValidator, SimpleNode, SimpleValidator, Validator};
 mod widener;
 
 #[derive(Debug)]
@@ -27,7 +29,7 @@ pub(crate) struct Matcher {
     /// would be buggy.
     pub(crate) literals: Vec<Vec<u8>>,
 
-    kind: MatcherKind,
+    pub(crate) kind: MatcherKind,
 
     /// Modifiers related to matching.
     pub(crate) modifiers: Modifiers,
@@ -97,24 +99,24 @@ enum Matches {
 }
 
 #[derive(Debug)]
-enum MatcherKind {
+pub(crate) enum MatcherKind {
     /// The literals cover entirely the variable.
     Literals,
     /// The regex can confirm matches from AC literal matches.
-    Atomized { validator: validator::Validator },
+    Atomized { validator: Validator },
 
     /// The regex cannot confirm matches from AC literal matches.
-    Raw(raw::RawMatcher),
+    Raw(RawMatcher),
 }
 
 impl Matcher {
     pub fn new_regex(hir: &Hir, modifiers: Modifiers) -> Result<Matcher, crate::regex::Error> {
-        let analysis = analysis::analyze_hir(hir, modifiers.dot_all);
+        let analysis = analysis::analyze_hir(&hir, modifiers.dot_all);
 
         // Do not use an AC if anchors are present, it will be much efficient to just run
         // the regex directly.
         if analysis.has_start_or_end_line {
-            let kind = MatcherKind::Raw(raw::RawMatcher::new(hir, &analysis, modifiers)?);
+            let kind = MatcherKind::Raw(RawMatcher::new(&hir, &analysis, modifiers)?);
             return Ok(Self {
                 literals: Vec::new(),
                 kind,
@@ -126,7 +128,7 @@ impl Matcher {
             // The regex can be covered entirely by literals. This is optimal, so use this if possible.
             // TODO: handle more modifiers
             if count < 100 && !modifiers.nocase && !modifiers.wide {
-                if let Some(literals) = only_literals::hir_to_only_literals(hir) {
+                if let Some(literals) = only_literals::hir_to_only_literals(&hir) {
                     return Ok(Self {
                         literals,
                         kind: MatcherKind::Literals,
@@ -140,7 +142,7 @@ impl Matcher {
             mut literals,
             pre_hir,
             post_hir,
-        } = literals::get_literals_details(hir, modifiers.dot_all);
+        } = literals::get_literals_details(&hir, modifiers.dot_all);
 
         // Dedup literals
         let mut new_lits = Vec::with_capacity(literals.len());
@@ -155,15 +157,10 @@ impl Matcher {
         apply_ascii_wide_flags_on_literals(&mut literals, modifiers);
 
         let kind = if literals.is_empty() {
-            MatcherKind::Raw(raw::RawMatcher::new(hir, &analysis, modifiers)?)
+            MatcherKind::Raw(RawMatcher::new(&hir, &analysis, modifiers)?)
         } else {
             MatcherKind::Atomized {
-                validator: validator::Validator::new(
-                    pre_hir.as_ref(),
-                    post_hir.as_ref(),
-                    hir,
-                    modifiers,
-                )?,
+                validator: Validator::new(pre_hir.as_ref(), post_hir.as_ref(), &hir, modifiers)?,
             }
         };
 

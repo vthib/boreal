@@ -11,13 +11,13 @@ use crate::regex::Hir;
 #[derive(Debug)]
 pub(crate) struct SimpleValidator {
     /// List of nodes to match
-    nodes: Vec<SimpleNode>,
+    pub(crate) nodes: Vec<SimpleNode>,
     /// Total length of the expression
-    length: usize,
+    pub(crate) length: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum SimpleNode {
+pub(crate) enum SimpleNode {
     // Byte to match
     Byte(u8),
     // Masked byte
