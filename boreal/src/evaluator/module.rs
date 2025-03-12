@@ -100,7 +100,7 @@ pub(super) fn evaluate_expr(
             };
             evaluate_ops(&mut eval_ctx, value, ops, expressions)
         }
-        ModuleExpressionKind::StaticFunction { fun } => {
+        ModuleExpressionKind::StaticFunction { fun, .. } => {
             let Some(ValueOperation::FunctionCall(nb_arguments)) = ops.next() else {
                 return Err(PoisonKind::Undefined);
             };

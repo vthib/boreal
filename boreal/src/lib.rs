@@ -72,6 +72,8 @@ pub mod scanner;
 pub use scanner::Scanner;
 pub mod statistics;
 mod timeout;
+#[cfg(feature = "serialize")]
+mod wire;
 
 #[cfg(test)]
 mod test_helpers;

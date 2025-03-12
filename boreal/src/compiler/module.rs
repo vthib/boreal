@@ -40,6 +40,16 @@ pub struct ModuleExpression {
     pub operations: ModuleOperations,
 }
 
+impl ModuleExpression {
+    #[cfg(feature = "serialize")]
+    pub(super) fn deserialize<R: std::io::Read>(
+        ctx: &crate::wire::DeserializeContext,
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        wire::deserialize_module_expression(ctx, reader)
+    }
+}
+
 pub enum ModuleExpressionKind {
     /// Operations on a bounded module value.
     BoundedModuleValueUse {
@@ -51,6 +61,14 @@ pub enum ModuleExpressionKind {
     StaticFunction {
         /// The function to call.
         fun: StaticFunction,
+
+        /// Index of the module.
+        #[cfg(feature = "serialize")]
+        module_index: usize,
+
+        /// List of subfields to apply to access the function.
+        #[cfg(feature = "serialize")]
+        subfields: Vec<String>,
     },
 }
 
@@ -94,10 +112,24 @@ impl std::fmt::Debug for ModuleExpressionKind {
                 .debug_struct("BoundedModuleValueUse")
                 .field("index", index)
                 .finish(),
-            Self::StaticFunction { fun } => f
-                .debug_struct("Function")
-                .field("fun", &(*fun as usize))
-                .finish(),
+            Self::StaticFunction {
+                fun,
+                #[cfg(feature = "serialize")]
+                module_index,
+                #[cfg(feature = "serialize")]
+                subfields,
+            } => {
+                let mut d = f.debug_struct("Function");
+
+                let _r = d.field("fun", &(*fun as usize));
+                #[cfg(feature = "serialize")]
+                {
+                    let _r = d.field("module_index", module_index);
+                    let _r = d.field("subfields", subfields);
+                }
+
+                d.finish()
+            }
         }
     }
 }
@@ -173,12 +205,16 @@ pub(super) fn compile_identifier<'a, 'b>(
 
     // Extract first operation, it must be a subfielding.
     let mut ops = identifier.operations.into_iter();
-    let Some(first_op) = ops.next() else {
+    let Some(IdentifierOperation {
+        op: first_op,
+        span: first_op_span,
+    }) = ops.next()
+    else {
         return Err(CompilationError::InvalidIdentifierUse {
             span: identifier_span.clone(),
         });
     };
-    let subfield = match &first_op.op {
+    let subfield = match first_op {
         IdentifierOperationType::Subfield(subfield) => subfield,
         IdentifierOperationType::Subscript(_) => {
             return Err(CompilationError::InvalidIdentifierType {
@@ -197,7 +233,7 @@ pub(super) fn compile_identifier<'a, 'b>(
     };
 
     // First try to get from the static values
-    let mut module_use = match module.module.static_values.get(&**subfield) {
+    let mut module_use = match module.module.static_values.get(&*subfield) {
         Some(value) => ModuleUse {
             compiler,
             operations_expressions: Vec::new(),
@@ -205,6 +241,8 @@ pub(super) fn compile_identifier<'a, 'b>(
             current_span: identifier.name_span,
             kind: ModuleUseKind::Static {
                 current_value: value,
+                module_index: module.module_index,
+                applied_subfields: vec![subfield],
             },
         },
         None => {
@@ -220,7 +258,10 @@ pub(super) fn compile_identifier<'a, 'b>(
                     bounded_value_index: BoundedValueIndex::Module(module.module_index),
                 },
             };
-            module_use.add_operation(first_op)?;
+            module_use.add_operation(IdentifierOperation {
+                op: IdentifierOperationType::Subfield(subfield),
+                span: first_op_span,
+            })?;
             module_use
         }
     };
@@ -251,7 +292,11 @@ enum ModuleUseKind<'a> {
     ///
     /// This kind is kept for as long as possible, so that the compiled expression
     /// can be optimized if possible.
-    Static { current_value: &'a StaticValue },
+    Static {
+        current_value: &'a StaticValue,
+        module_index: usize,
+        applied_subfields: Vec<String>,
+    },
     /// A static function.
     ///
     /// Once we reach the function, we cannot keep the next values as static values,
@@ -260,6 +305,8 @@ enum ModuleUseKind<'a> {
     StaticFunction {
         fun: StaticFunction,
         current_type: &'a ValueType,
+        module_index: usize,
+        applied_subfields: Vec<String>,
     },
     /// A dynamic value, coming from the `get_dynamic_values` methods.
     ///
@@ -276,11 +323,12 @@ impl ModuleUse<'_, '_> {
         let res = match op.op {
             IdentifierOperationType::Subfield(subfield) => {
                 let res = self.kind.subfield(&subfield);
-                match &self.kind {
-                    ModuleUseKind::Static { .. } => (),
+                match &mut self.kind {
+                    ModuleUseKind::Static {
+                        applied_subfields, ..
+                    } => applied_subfields.push(subfield),
                     ModuleUseKind::StaticFunction { .. } | ModuleUseKind::Dynamic { .. } => {
-                        self.operations
-                            .push(ValueOperation::Subfield(subfield.to_string()));
+                        self.operations.push(ValueOperation::Subfield(subfield));
                     }
                 }
                 res
@@ -346,7 +394,7 @@ impl ModuleUse<'_, '_> {
 
     pub(super) fn into_expression(self) -> Option<(Expression, Type)> {
         let (expr, ty) = match self.kind {
-            ModuleUseKind::Static { current_value } => {
+            ModuleUseKind::Static { current_value, .. } => {
                 match current_value {
                     // Those are all primitive values. This means there are no operations applied, and
                     // we can directly generate a primitive expression.
@@ -361,9 +409,20 @@ impl ModuleUse<'_, '_> {
                     _ => return None,
                 }
             }
-            ModuleUseKind::StaticFunction { fun, current_type } => {
+            ModuleUseKind::StaticFunction {
+                fun,
+                current_type,
+                module_index,
+                applied_subfields,
+            } => {
                 let expr = Expression::Module(ModuleExpression {
-                    kind: ModuleExpressionKind::StaticFunction { fun },
+                    kind: ModuleExpressionKind::StaticFunction {
+                        fun,
+                        #[cfg(feature = "serialize")]
+                        module_index,
+                        #[cfg(feature = "serialize")]
+                        subfields: applied_subfields,
+                    },
                     operations: ModuleOperations {
                         expressions: self.operations_expressions,
                         operations: self.operations,
@@ -451,7 +510,7 @@ enum TypeError {
 impl ModuleUseKind<'_> {
     fn subfield(&mut self, subfield: &str) -> Result<(), TypeError> {
         match self {
-            Self::Static { current_value } => {
+            Self::Static { current_value, .. } => {
                 if let StaticValue::Object(map) = *current_value {
                     match map.get(subfield) {
                         Some(v) => {
@@ -525,7 +584,11 @@ impl ModuleUseKind<'_> {
 
     fn function_call(&mut self, actual_args_types: &[Type]) -> Result<(), TypeError> {
         match self {
-            Self::Static { current_value, .. } => {
+            Self::Static {
+                current_value,
+                module_index,
+                applied_subfields,
+            } => {
                 if let StaticValue::Function {
                     arguments_types,
                     return_type,
@@ -536,6 +599,8 @@ impl ModuleUseKind<'_> {
                     *self = Self::StaticFunction {
                         fun: *fun,
                         current_type: return_type,
+                        module_index: *module_index,
+                        applied_subfields: std::mem::take(applied_subfields),
                     };
                     return Ok(());
                 }
@@ -636,6 +701,206 @@ fn module_type_to_expr_type(v: &ValueType) -> Option<Type> {
     }
 }
 
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use crate::compiler::expression::Expression;
+    use crate::module::StaticValue;
+    use crate::wire::DeserializeContext;
+
+    use super::{
+        BoundedValueIndex, ModuleExpression, ModuleExpressionKind, ModuleOperations,
+        StaticFunction, ValueOperation,
+    };
+
+    impl BorshSerialize for ModuleExpression {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.kind.serialize(writer)?;
+            self.operations.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    pub(super) fn deserialize_module_expression<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ModuleExpression> {
+        let kind = deserialize_module_expression_kind(ctx, reader)?;
+        let operations = deserialize_module_operations(ctx, reader)?;
+        Ok(ModuleExpression { kind, operations })
+    }
+
+    impl BorshSerialize for ModuleOperations {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.expressions.serialize(writer)?;
+            self.operations.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    fn deserialize_module_operations<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ModuleOperations> {
+        let len: usize = BD::deserialize_reader(reader)?;
+        let mut expressions = Vec::with_capacity(len);
+        for _ in 0..len {
+            expressions.push(Expression::deserialize(ctx, reader)?);
+        }
+        let operations = BD::deserialize_reader(reader)?;
+        Ok(ModuleOperations {
+            expressions,
+            operations,
+        })
+    }
+
+    impl BorshSerialize for ModuleExpressionKind {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::BoundedModuleValueUse { index } => {
+                    0_u8.serialize(writer)?;
+                    index.serialize(writer)?;
+                }
+                Self::StaticFunction {
+                    fun: _,
+                    module_index,
+                    subfields,
+                } => {
+                    1_u8.serialize(writer)?;
+                    module_index.serialize(writer)?;
+                    subfields.serialize(writer)?;
+                }
+            }
+
+            Ok(())
+        }
+    }
+
+    fn deserialize_module_expression_kind<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ModuleExpressionKind> {
+        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        match discriminant {
+            0 => {
+                let index = BD::deserialize_reader(reader)?;
+                Ok(ModuleExpressionKind::BoundedModuleValueUse { index })
+            }
+            1 => {
+                let module_index: usize = BD::deserialize_reader(reader)?;
+                let subfields: Vec<String> = BD::deserialize_reader(reader)?;
+                let Some(value) = ctx.modules_static_values.get(module_index) else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Unknown module with index {module_index} used in expression"),
+                    ));
+                };
+                match get_function_from_subfield_ops(value, &subfields) {
+                    Some(fun) => Ok(ModuleExpressionKind::StaticFunction {
+                        fun,
+                        module_index,
+                        subfields,
+                    }),
+                    None => {
+                        Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("Invalid subfields {subfields:?} in expression using module with index {module_index}")
+                        ))
+                    }
+                }
+            }
+            v => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid discriminant when deserializing a module expression kind: {v}"),
+            )),
+        }
+    }
+
+    fn get_function_from_subfield_ops(
+        mut value: &StaticValue,
+        subfields: &[String],
+    ) -> Option<StaticFunction> {
+        for subfield in subfields {
+            match value {
+                StaticValue::Object(map) => value = map.get(&**subfield)?,
+                _ => return None,
+            }
+        }
+        match value {
+            StaticValue::Function { fun, .. } => Some(*fun),
+            _ => None,
+        }
+    }
+
+    impl BorshSerialize for BoundedValueIndex {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::Module(v) => {
+                    0_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::BoundedStack(v) => {
+                    1_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    impl BD for BoundedValueIndex {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            match discriminant {
+                0 => Ok(Self::Module(BD::deserialize_reader(reader)?)),
+                1 => Ok(Self::BoundedStack(BD::deserialize_reader(reader)?)),
+                v => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid discriminant when deserializing a bounded value index: {v}"),
+                )),
+            }
+        }
+    }
+
+    impl BorshSerialize for ValueOperation {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                ValueOperation::Subfield(v) => {
+                    0_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                ValueOperation::Subscript => 1_u8.serialize(writer)?,
+                ValueOperation::FunctionCall(v) => {
+                    2_u8.serialize(writer)?;
+                    (*v as u64).serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    impl BD for ValueOperation {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            match discriminant {
+                0 => Ok(Self::Subfield(BD::deserialize_reader(reader)?)),
+                1 => Ok(Self::Subscript),
+                2 => {
+                    let v = BD::deserialize_reader(reader)?;
+                    Ok(Self::FunctionCall(v))
+                }
+                v => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid discriminant when deserializing a value operation: {v}"),
+                )),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::module::{EvalContext, Value};
@@ -670,7 +935,13 @@ mod tests {
         test_type_traits_non_clonable(ModuleExpressionKind::BoundedModuleValueUse {
             index: BoundedValueIndex::Module(0),
         });
-        test_type_traits_non_clonable(ModuleExpressionKind::StaticFunction { fun: test_fun });
+        test_type_traits_non_clonable(ModuleExpressionKind::StaticFunction {
+            fun: test_fun,
+            #[cfg(feature = "serialize")]
+            module_index: 0,
+            #[cfg(feature = "serialize")]
+            subfields: Vec::new(),
+        });
         test_type_traits_non_clonable(IteratorType::Array(ValueType::Integer));
         test_type_traits_non_clonable(TypeError::UnknownSubfield("a".to_owned()));
     }

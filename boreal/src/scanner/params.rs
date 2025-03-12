@@ -538,6 +538,83 @@ impl std::ops::BitAndAssign for CallbackEvents {
     }
 }
 
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+    use std::time::Duration;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use super::{CallbackEvents, FragmentedScanMode, ScanParams};
+
+    impl BorshSerialize for ScanParams {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.compute_full_matches.serialize(writer)?;
+            self.match_max_length.serialize(writer)?;
+            self.string_max_nb_matches.serialize(writer)?;
+            self.timeout_duration
+                .map(|v| v.as_millis())
+                .serialize(writer)?;
+            self.compute_statistics.serialize(writer)?;
+            self.fragmented_scan_mode.serialize(writer)?;
+            self.process_memory.serialize(writer)?;
+            self.max_fetched_region_size.serialize(writer)?;
+            self.memory_chunk_size.serialize(writer)?;
+            self.callback_events.0.serialize(writer)?;
+            self.include_not_matched_rules.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for ScanParams {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let compute_full_matches = BD::deserialize_reader(reader)?;
+            let match_max_length = BD::deserialize_reader(reader)?;
+            let string_max_nb_matches = BD::deserialize_reader(reader)?;
+            let timeout_duration: Option<u64> = BD::deserialize_reader(reader)?;
+            let compute_statistics = BD::deserialize_reader(reader)?;
+            let fragmented_scan_mode = BD::deserialize_reader(reader)?;
+            let process_memory = BD::deserialize_reader(reader)?;
+            let max_fetched_region_size = BD::deserialize_reader(reader)?;
+            let memory_chunk_size = BD::deserialize_reader(reader)?;
+            let callback_events = BD::deserialize_reader(reader)?;
+            let include_not_matched_rules = BD::deserialize_reader(reader)?;
+            Ok(Self {
+                compute_full_matches,
+                match_max_length,
+                string_max_nb_matches,
+                timeout_duration: timeout_duration.map(Duration::from_millis),
+                compute_statistics,
+                fragmented_scan_mode,
+                process_memory,
+                max_fetched_region_size,
+                memory_chunk_size,
+                callback_events: CallbackEvents(callback_events),
+                include_not_matched_rules,
+            })
+        }
+    }
+
+    impl BorshSerialize for FragmentedScanMode {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.modules_dynamic_values.serialize(writer)?;
+            self.can_refetch_regions.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for FragmentedScanMode {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let modules_dynamic_values = BD::deserialize_reader(reader)?;
+            let can_refetch_regions = BD::deserialize_reader(reader)?;
+            Ok(Self {
+                modules_dynamic_values,
+                can_refetch_regions,
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

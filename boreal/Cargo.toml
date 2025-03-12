@@ -13,7 +13,7 @@ rust-version = "1.74"
 exclude = ["/tests"]
 
 [features]
-default = ["hash", "object", "memmap", "process", "authenticode"]
+default = ["hash", "object", "memmap", "process", "authenticode", "serialize"]
 
 # Enables the "hash" module.
 hash = ["dep:md-5", "dep:sha1", "dep:sha2", "dep:crc32fast", "dep:tlsh2"]
@@ -46,6 +46,9 @@ process = ["dep:libc", "dep:windows-sys", "dep:mach2"]
 
 # Enables computation of statistics during scanning.
 profiling = []
+
+# Enables serialization and deserialization of rules
+serialize = ["dep:borsh"]
 
 [dependencies]
 boreal-parser = { path = "../boreal-parser", version = "0.6.0" }
@@ -90,6 +93,9 @@ magic = { version = "0.16", optional = true }
 
 # "cuckoo" feature
 serde_json = { version = "1.0", optional = true }
+
+# "serialize" feature
+borsh = { version = "1.5.5", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { version = "0.2", optional = true }

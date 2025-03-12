@@ -601,6 +601,36 @@ impl Scanner {
             namespaces: &self.inner.namespaces,
         }
     }
+
+    /// DOC
+    ///
+    /// # Errors
+    ///
+    #[cfg(feature = "serialize")]
+    pub fn to_bytes(&self) -> std::io::Result<Vec<u8>> {
+        use borsh::BorshSerialize;
+
+        let mut buf = Vec::new();
+        crate::wire::serialize_header(*b"scnr", &mut buf)?;
+        self.serialize(&mut buf)?;
+
+        Ok(buf)
+    }
+
+    /// DOC
+    ///
+    /// # Errors
+    ///
+    #[cfg(feature = "serialize")]
+    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+        use borsh::BorshDeserialize;
+
+        let mut cursor = std::io::Cursor::new(bytes);
+        crate::wire::deserialize_header(*b"scnr", &mut cursor)?;
+        let this = BorshDeserialize::deserialize_reader(&mut cursor)?;
+
+        Ok(this)
+    }
 }
 
 /// Iterator on the rules of a scanner.
@@ -1405,6 +1435,172 @@ impl std::fmt::Display for DefineSymbolError {
             Self::UnknownName => write!(f, "unknown symbol name"),
             Self::InvalidType => write!(f, "invalid value type"),
         }
+    }
+}
+
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::collections::HashMap;
+    use std::io;
+    use std::sync::Arc;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use crate::compiler::variable::Variable;
+    use crate::compiler::CompilerProfile;
+    use crate::module::{Module, ModuleUserData, StaticValue};
+    use crate::wire::DeserializeContext;
+
+    use super::{ac_scan::AcScan, Inner, Rule, Scanner};
+
+    impl BorshSerialize for Scanner {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.scan_params.serialize(writer)?;
+            self.external_symbols_values.serialize(writer)?;
+            (*self.inner).serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for Scanner {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let scan_params = BD::deserialize_reader(reader)?;
+            let external_symbols_values = BD::deserialize_reader(reader)?;
+            let inner: Inner = BD::deserialize_reader(reader)?;
+            Ok(Self {
+                inner: Arc::new(inner),
+                scan_params,
+                external_symbols_values,
+                module_user_data: ModuleUserData::default(),
+            })
+        }
+    }
+
+    impl BorshSerialize for Inner {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.external_symbols_map.serialize(writer)?;
+            self.namespaces.serialize(writer)?;
+            self.bytes_pool.serialize(writer)?;
+            self.variables.serialize(writer)?;
+            serialize_modules(&self.modules, writer)?;
+            self.global_rules.serialize(writer)?;
+            self.rules.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    fn serialize_modules<W: io::Write>(
+        modules: &[Box<dyn Module>],
+        writer: &mut W,
+    ) -> io::Result<()> {
+        modules.len().serialize(writer)?;
+        for module in modules {
+            module.get_name().serialize(writer)?;
+        }
+        Ok(())
+    }
+
+    impl BD for Inner {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let external_symbols_map = BD::deserialize_reader(reader)?;
+            let namespaces = BD::deserialize_reader(reader)?;
+            let bytes_pool = BD::deserialize_reader(reader)?;
+            let variables: Vec<Variable> = BD::deserialize_reader(reader)?;
+            let modules = deserialize_modules(reader)?;
+
+            let ctx = DeserializeContext {
+                modules_static_values: modules
+                    .iter()
+                    .map(|module| StaticValue::Object(module.get_static_values()))
+                    .collect(),
+            };
+            let global_rules = deserialize_rules(&ctx, reader)?;
+            let rules = deserialize_rules(&ctx, reader)?;
+
+            // FIXME: profile
+            let ac_scan = AcScan::new(&variables, CompilerProfile::Speed);
+
+            Ok(Self {
+                rules,
+                global_rules,
+                variables,
+                ac_scan,
+                modules,
+                external_symbols_map,
+                namespaces,
+                bytes_pool,
+            })
+        }
+    }
+
+    fn deserialize_rules<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<Vec<Rule>> {
+        let len: usize = BD::deserialize_reader(reader)?;
+        let mut rules = Vec::with_capacity(len);
+        for _ in 0..len {
+            rules.push(Rule::deserialize(ctx, reader)?);
+        }
+        Ok(rules)
+    }
+
+    fn deserialize_modules<R: io::Read>(reader: &mut R) -> io::Result<Vec<Box<dyn Module>>> {
+        let mut available_modules = build_available_modules();
+
+        let modules_len: usize = BD::deserialize_reader(reader)?;
+        let mut modules = Vec::with_capacity(modules_len);
+        for _ in 0..modules_len {
+            let name: String = BD::deserialize_reader(reader)?;
+            match available_modules.remove(&*name) {
+                Some(module) => modules.push(module),
+                None => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unknown module to import: {name}"),
+                    ))
+                }
+            }
+        }
+        Ok(modules)
+    }
+
+    // FIXME: make this work with custom modules too
+    fn build_available_modules() -> HashMap<&'static str, Box<dyn Module>> {
+        fn add_module<M: Module + 'static>(
+            modules: &mut HashMap<&'static str, Box<dyn Module>>,
+            module: M,
+        ) {
+            let _r = modules.insert(module.get_name(), Box::new(module));
+        }
+
+        let mut modules = HashMap::new();
+
+        add_module(&mut modules, crate::module::Time);
+        add_module(&mut modules, crate::module::Math);
+        add_module(&mut modules, crate::module::String_);
+
+        #[cfg(feature = "hash")]
+        add_module(&mut modules, crate::module::Hash);
+
+        #[cfg(feature = "object")]
+        add_module(&mut modules, crate::module::Pe);
+        #[cfg(feature = "object")]
+        add_module(&mut modules, crate::module::Elf);
+        #[cfg(feature = "object")]
+        add_module(&mut modules, crate::module::MachO);
+        #[cfg(feature = "object")]
+        add_module(&mut modules, crate::module::Dotnet);
+        #[cfg(feature = "object")]
+        add_module(&mut modules, crate::module::Dex);
+
+        #[cfg(feature = "magic")]
+        add_module(&mut modules, crate::module::Magic);
+
+        #[cfg(feature = "cuckoo")]
+        add_module(&mut modules, crate::module::Cuckoo);
+
+        modules
     }
 }
 

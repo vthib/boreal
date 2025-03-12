@@ -194,6 +194,87 @@ fn add_hir_to_simple_nodes(
     }
 }
 
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use super::{SimpleNode, SimpleValidator};
+
+    impl BorshSerialize for SimpleValidator {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.nodes.serialize(writer)?;
+            self.length.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for SimpleValidator {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let nodes = BD::deserialize_reader(reader)?;
+            let length = BD::deserialize_reader(reader)?;
+
+            Ok(Self { nodes, length })
+        }
+    }
+
+    impl BorshSerialize for SimpleNode {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::Byte(b) => {
+                    0_u8.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::Mask { value, mask } => {
+                    1_u8.serialize(writer)?;
+                    value.serialize(writer)?;
+                    mask.serialize(writer)?;
+                }
+                Self::NegatedMask { value, mask } => {
+                    2_u8.serialize(writer)?;
+                    value.serialize(writer)?;
+                    mask.serialize(writer)?;
+                }
+                Self::Jump(v) => {
+                    3_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::Dot => {
+                    4_u8.serialize(writer)?;
+                }
+            }
+
+            Ok(())
+        }
+    }
+
+    impl BD for SimpleNode {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            match discriminant {
+                0 => Ok(Self::Byte(BD::deserialize_reader(reader)?)),
+                1 => {
+                    let value = BD::deserialize_reader(reader)?;
+                    let mask = BD::deserialize_reader(reader)?;
+                    Ok(Self::Mask { value, mask })
+                }
+                2 => {
+                    let value = BD::deserialize_reader(reader)?;
+                    let mask = BD::deserialize_reader(reader)?;
+                    Ok(Self::NegatedMask { value, mask })
+                }
+                3 => Ok(Self::Jump(BD::deserialize_reader(reader)?)),
+                4 => Ok(Self::Dot),
+                v => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid discriminant when deserializing a simple node: {v}"),
+                )),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use boreal_parser::regex::AssertionKind;
