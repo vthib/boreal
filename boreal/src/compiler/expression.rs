@@ -359,6 +359,16 @@ pub enum Expression {
     Regex(Regex),
 }
 
+impl Expression {
+    #[cfg(feature = "serialize")]
+    pub(super) fn deserialize<R: std::io::Read>(
+        ctx: &crate::wire::DeserializeContext,
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        wire::deserialize_expr(ctx, reader)
+    }
+}
+
 pub(super) fn compile_bool_expression(
     compiler: &mut RuleCompiler<'_>,
     expression: parser::Expression,
@@ -1108,6 +1118,7 @@ fn compile_rule_set(
 
 /// Iterator for a 'for' expression over an identifier.
 #[derive(Debug)]
+#[allow(variant_size_differences)]
 pub enum ForIterator {
     ModuleIterator(ModuleExpression),
     Range {
@@ -1325,6 +1336,693 @@ fn compile_identifier_as_iterator(
         .ok_or_else(|| CompilationError::NonIterableIdentifier {
             span: identifier_span.clone(),
         })
+}
+
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use boreal_parser::expression::ReadIntegerType;
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use crate::wire::DeserializeContext;
+
+    use super::module::ModuleExpression;
+    use super::{Expression, ForIterator, ForSelection, RuleSet, VariableIndex, VariableSet};
+
+    impl BorshSerialize for Expression {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::Filesize => {
+                    0_u8.serialize(writer)?;
+                }
+                Self::Entrypoint => {
+                    1_u8.serialize(writer)?;
+                }
+                Self::ReadInteger { ty, addr } => {
+                    2_u8.serialize(writer)?;
+                    let v = match ty {
+                        ReadIntegerType::Int8 => 0_u8,
+                        ReadIntegerType::Uint8 => 1,
+                        ReadIntegerType::Int16 => 2,
+                        ReadIntegerType::Int16BE => 3,
+                        ReadIntegerType::Uint16 => 4,
+                        ReadIntegerType::Uint16BE => 5,
+                        ReadIntegerType::Int32 => 6,
+                        ReadIntegerType::Int32BE => 7,
+                        ReadIntegerType::Uint32 => 8,
+                        ReadIntegerType::Uint32BE => 9,
+                    };
+                    v.serialize(writer)?;
+                    addr.serialize(writer)?;
+                }
+                Self::Integer(v) => {
+                    3_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::Double(v) => {
+                    4_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::Count(variable_index) => {
+                    5_u8.serialize(writer)?;
+                    variable_index.serialize(writer)?;
+                }
+                Self::CountInRange {
+                    variable_index,
+                    from,
+                    to,
+                } => {
+                    6_u8.serialize(writer)?;
+                    variable_index.serialize(writer)?;
+                    from.serialize(writer)?;
+                    to.serialize(writer)?;
+                }
+                Self::Offset {
+                    variable_index,
+                    occurence_number,
+                } => {
+                    7_u8.serialize(writer)?;
+                    variable_index.serialize(writer)?;
+                    occurence_number.serialize(writer)?;
+                }
+                Self::Length {
+                    variable_index,
+                    occurence_number,
+                } => {
+                    8_u8.serialize(writer)?;
+                    variable_index.serialize(writer)?;
+                    occurence_number.serialize(writer)?;
+                }
+                Self::Neg(expr) => {
+                    9_u8.serialize(writer)?;
+                    expr.serialize(writer)?;
+                }
+                Self::Add(a, b) => {
+                    10_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::Sub(a, b) => {
+                    11_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::Mul(a, b) => {
+                    12_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::Div(a, b) => {
+                    13_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::Mod(a, b) => {
+                    14_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::BitwiseXor(a, b) => {
+                    15_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::BitwiseAnd(a, b) => {
+                    16_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::BitwiseOr(a, b) => {
+                    17_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::BitwiseNot(v) => {
+                    18_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::ShiftLeft(a, b) => {
+                    19_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::ShiftRight(a, b) => {
+                    20_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::And(exprs) => {
+                    21_u8.serialize(writer)?;
+                    exprs.serialize(writer)?;
+                }
+                Self::Or(exprs) => {
+                    22_u8.serialize(writer)?;
+                    exprs.serialize(writer)?;
+                }
+                Self::Not(v) => {
+                    23_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::Cmp {
+                    left,
+                    right,
+                    less_than,
+                    can_be_equal,
+                } => {
+                    24_u8.serialize(writer)?;
+                    left.serialize(writer)?;
+                    right.serialize(writer)?;
+                    less_than.serialize(writer)?;
+                    can_be_equal.serialize(writer)?;
+                }
+                Self::Eq(a, b) => {
+                    25_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::NotEq(a, b) => {
+                    26_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::Contains {
+                    haystack,
+                    needle,
+                    case_insensitive,
+                } => {
+                    27_u8.serialize(writer)?;
+                    haystack.serialize(writer)?;
+                    needle.serialize(writer)?;
+                    case_insensitive.serialize(writer)?;
+                }
+                Self::StartsWith {
+                    expr,
+                    prefix,
+                    case_insensitive,
+                } => {
+                    28_u8.serialize(writer)?;
+                    expr.serialize(writer)?;
+                    prefix.serialize(writer)?;
+                    case_insensitive.serialize(writer)?;
+                }
+                Self::EndsWith {
+                    expr,
+                    suffix,
+                    case_insensitive,
+                } => {
+                    29_u8.serialize(writer)?;
+                    expr.serialize(writer)?;
+                    suffix.serialize(writer)?;
+                    case_insensitive.serialize(writer)?;
+                }
+                Self::IEquals(a, b) => {
+                    30_u8.serialize(writer)?;
+                    a.serialize(writer)?;
+                    b.serialize(writer)?;
+                }
+                Self::Matches(expr, regex) => {
+                    31_u8.serialize(writer)?;
+                    expr.serialize(writer)?;
+                    regex.serialize(writer)?;
+                }
+                Self::Defined(expr) => {
+                    32_u8.serialize(writer)?;
+                    expr.serialize(writer)?;
+                }
+                Self::Boolean(v) => {
+                    33_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::Variable(variable_index) => {
+                    34_u8.serialize(writer)?;
+                    variable_index.serialize(writer)?;
+                }
+                Self::VariableAt {
+                    variable_index,
+                    offset,
+                } => {
+                    35_u8.serialize(writer)?;
+                    variable_index.serialize(writer)?;
+                    offset.serialize(writer)?;
+                }
+                Self::VariableIn {
+                    variable_index,
+                    from,
+                    to,
+                } => {
+                    36_u8.serialize(writer)?;
+                    variable_index.serialize(writer)?;
+                    from.serialize(writer)?;
+                    to.serialize(writer)?;
+                }
+                Self::For {
+                    selection,
+                    set,
+                    body,
+                } => {
+                    37_u8.serialize(writer)?;
+                    selection.serialize(writer)?;
+                    set.serialize(writer)?;
+                    body.serialize(writer)?;
+                }
+                Self::ForIdentifiers {
+                    selection,
+                    iterator,
+                    body,
+                } => {
+                    38_u8.serialize(writer)?;
+                    selection.serialize(writer)?;
+                    iterator.serialize(writer)?;
+                    body.serialize(writer)?;
+                }
+                Self::ForRules { selection, set } => {
+                    39_u8.serialize(writer)?;
+                    selection.serialize(writer)?;
+                    set.serialize(writer)?;
+                }
+                Self::Module(module_expr) => {
+                    40_u8.serialize(writer)?;
+                    module_expr.serialize(writer)?;
+                }
+                Self::Rule(v) => {
+                    41_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::ExternalSymbol(v) => {
+                    42_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::Bytes(s) => {
+                    43_u8.serialize(writer)?;
+                    s.serialize(writer)?;
+                }
+                Self::Regex(regex) => {
+                    44_u8.serialize(writer)?;
+                    regex.serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    fn deserialize_exprs<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<Vec<Expression>> {
+        let len: usize = BD::deserialize_reader(reader)?;
+        let mut exprs = Vec::with_capacity(len);
+        for _ in 0..len {
+            exprs.push(deserialize_expr(ctx, reader)?);
+        }
+        Ok(exprs)
+    }
+
+    pub(super) fn deserialize_expr<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<Expression> {
+        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        Ok(match discriminant {
+            0 => Expression::Filesize,
+            1 => Expression::Entrypoint,
+            2 => {
+                let discriminant: u8 = BD::deserialize_reader(reader)?;
+                let ty = match discriminant {
+                    0 => ReadIntegerType::Int8,
+                    1 => ReadIntegerType::Uint8,
+                    2 => ReadIntegerType::Int16,
+                    3 => ReadIntegerType::Int16BE,
+                    4 => ReadIntegerType::Uint16,
+                    5 => ReadIntegerType::Uint16BE,
+                    6 => ReadIntegerType::Int32,
+                    7 => ReadIntegerType::Int32BE,
+                    8 => ReadIntegerType::Uint32,
+                    9 => ReadIntegerType::Uint32BE,
+                    v => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "invalid discriminant when deserializing a read integer type: {v}"
+                            ),
+                        ))
+                    }
+                };
+                let addr = deserialize_expr(ctx, reader)?;
+                Expression::ReadInteger {
+                    ty,
+                    addr: Box::new(addr),
+                }
+            }
+            3 => Expression::Integer(BD::deserialize_reader(reader)?),
+            4 => Expression::Double(BD::deserialize_reader(reader)?),
+            5 => Expression::Count(BD::deserialize_reader(reader)?),
+            6 => {
+                let variable_index = BD::deserialize_reader(reader)?;
+                let from = Box::new(deserialize_expr(ctx, reader)?);
+                let to = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::CountInRange {
+                    variable_index,
+                    from,
+                    to,
+                }
+            }
+            7 => {
+                let variable_index = BD::deserialize_reader(reader)?;
+                let occurence_number = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Offset {
+                    variable_index,
+                    occurence_number,
+                }
+            }
+            8 => {
+                let variable_index = BD::deserialize_reader(reader)?;
+                let occurence_number = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Length {
+                    variable_index,
+                    occurence_number,
+                }
+            }
+            9 => {
+                let expr = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Neg(expr)
+            }
+            10 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Add(a, b)
+            }
+            11 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Sub(a, b)
+            }
+            12 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Mul(a, b)
+            }
+            13 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Div(a, b)
+            }
+            14 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Mod(a, b)
+            }
+            15 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::BitwiseXor(a, b)
+            }
+            16 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::BitwiseAnd(a, b)
+            }
+            17 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::BitwiseOr(a, b)
+            }
+            18 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::BitwiseNot(a)
+            }
+            19 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::ShiftLeft(a, b)
+            }
+            20 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::ShiftRight(a, b)
+            }
+            21 => {
+                let exprs = deserialize_exprs(ctx, reader)?;
+                Expression::And(exprs)
+            }
+            22 => {
+                let exprs = deserialize_exprs(ctx, reader)?;
+                Expression::Or(exprs)
+            }
+            23 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Not(a)
+            }
+            24 => {
+                let left = Box::new(deserialize_expr(ctx, reader)?);
+                let right = Box::new(deserialize_expr(ctx, reader)?);
+                let less_than = BD::deserialize_reader(reader)?;
+                let can_be_equal = BD::deserialize_reader(reader)?;
+                Expression::Cmp {
+                    left,
+                    right,
+                    less_than,
+                    can_be_equal,
+                }
+            }
+            25 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::Eq(a, b)
+            }
+            26 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::NotEq(a, b)
+            }
+            27 => {
+                let haystack = Box::new(deserialize_expr(ctx, reader)?);
+                let needle = Box::new(deserialize_expr(ctx, reader)?);
+                let case_insensitive = BD::deserialize_reader(reader)?;
+                Expression::Contains {
+                    haystack,
+                    needle,
+                    case_insensitive,
+                }
+            }
+            28 => {
+                let expr = Box::new(deserialize_expr(ctx, reader)?);
+                let prefix = Box::new(deserialize_expr(ctx, reader)?);
+                let case_insensitive = BD::deserialize_reader(reader)?;
+                Expression::StartsWith {
+                    expr,
+                    prefix,
+                    case_insensitive,
+                }
+            }
+            29 => {
+                let expr = Box::new(deserialize_expr(ctx, reader)?);
+                let suffix = Box::new(deserialize_expr(ctx, reader)?);
+                let case_insensitive = BD::deserialize_reader(reader)?;
+                Expression::EndsWith {
+                    expr,
+                    suffix,
+                    case_insensitive,
+                }
+            }
+            30 => {
+                let a = Box::new(deserialize_expr(ctx, reader)?);
+                let b = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::IEquals(a, b)
+            }
+            31 => {
+                let expr = Box::new(deserialize_expr(ctx, reader)?);
+                let regex = BD::deserialize_reader(reader)?;
+                Expression::Matches(expr, regex)
+            }
+            32 => Expression::Defined(Box::new(deserialize_expr(ctx, reader)?)),
+            33 => Expression::Boolean(BD::deserialize_reader(reader)?),
+            34 => Expression::Variable(BD::deserialize_reader(reader)?),
+            35 => {
+                let variable_index = BD::deserialize_reader(reader)?;
+                let offset = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::VariableAt {
+                    variable_index,
+                    offset,
+                }
+            }
+            36 => {
+                let variable_index = BD::deserialize_reader(reader)?;
+                let from = Box::new(deserialize_expr(ctx, reader)?);
+                let to = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::VariableIn {
+                    variable_index,
+                    from,
+                    to,
+                }
+            }
+            37 => {
+                let selection = deserialize_for_selection(ctx, reader)?;
+                let set = BD::deserialize_reader(reader)?;
+                let body = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::For {
+                    selection,
+                    set,
+                    body,
+                }
+            }
+            38 => {
+                let selection = deserialize_for_selection(ctx, reader)?;
+                let iterator = deserialize_for_iterator(ctx, reader)?;
+                let body = Box::new(deserialize_expr(ctx, reader)?);
+                Expression::ForIdentifiers {
+                    selection,
+                    iterator,
+                    body,
+                }
+            }
+            39 => {
+                let selection = deserialize_for_selection(ctx, reader)?;
+                let set = BD::deserialize_reader(reader)?;
+                Expression::ForRules { selection, set }
+            }
+            40 => Expression::Module(ModuleExpression::deserialize(ctx, reader)?),
+            41 => Expression::Rule(BD::deserialize_reader(reader)?),
+            42 => Expression::ExternalSymbol(BD::deserialize_reader(reader)?),
+            43 => Expression::Bytes(BD::deserialize_reader(reader)?),
+            44 => Expression::Regex(BD::deserialize_reader(reader)?),
+            v => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid discriminant when deserializing an expression: {v}"),
+                ))
+            }
+        })
+    }
+
+    impl BorshSerialize for ForSelection {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::Any => 0_u8.serialize(writer)?,
+                Self::All => 1_u8.serialize(writer)?,
+                Self::None => 2_u8.serialize(writer)?,
+                Self::Expr { expr, as_percent } => {
+                    3_u8.serialize(writer)?;
+                    expr.serialize(writer)?;
+                    as_percent.serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    fn deserialize_for_selection<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ForSelection> {
+        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        match discriminant {
+            0 => Ok(ForSelection::Any),
+            1 => Ok(ForSelection::All),
+            2 => Ok(ForSelection::None),
+            3 => {
+                let expr = Box::new(deserialize_expr(ctx, reader)?);
+                let as_percent = BD::deserialize_reader(reader)?;
+                Ok(ForSelection::Expr { expr, as_percent })
+            }
+            v => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid discriminant when deserializing a for selection: {v}"),
+            )),
+        }
+    }
+
+    impl BorshSerialize for ForIterator {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::ModuleIterator(module_expr) => {
+                    0_u8.serialize(writer)?;
+                    module_expr.serialize(writer)?;
+                }
+                Self::Range { from, to } => {
+                    1_u8.serialize(writer)?;
+                    from.serialize(writer)?;
+                    to.serialize(writer)?;
+                }
+                Self::List(exprs) => {
+                    2_u8.serialize(writer)?;
+                    exprs.serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    fn deserialize_for_iterator<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ForIterator> {
+        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        match discriminant {
+            0 => {
+                let module_expr = ModuleExpression::deserialize(ctx, reader)?;
+                Ok(ForIterator::ModuleIterator(module_expr))
+            }
+            1 => {
+                let from = Box::new(deserialize_expr(ctx, reader)?);
+                let to = Box::new(deserialize_expr(ctx, reader)?);
+                Ok(ForIterator::Range { from, to })
+            }
+            2 => {
+                let exprs = deserialize_exprs(ctx, reader)?;
+                Ok(ForIterator::List(exprs))
+            }
+            v => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid discriminant when deserializing a for iterator: {v}"),
+            )),
+        }
+    }
+
+    impl BorshSerialize for RuleSet {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.elements.serialize(writer)?;
+            self.already_matched.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for RuleSet {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let elements = BD::deserialize_reader(reader)?;
+            let already_matched = BD::deserialize_reader(reader)?;
+            Ok(Self {
+                elements,
+                already_matched,
+            })
+        }
+    }
+
+    impl BorshSerialize for VariableSet {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.elements.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for VariableSet {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let elements = BD::deserialize_reader(reader)?;
+            Ok(Self { elements })
+        }
+    }
+
+    impl BorshSerialize for VariableIndex {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.0.serialize(writer)
+        }
+    }
+
+    impl BD for VariableIndex {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            Ok(Self(BD::deserialize_reader(reader)?))
+        }
+    }
 }
 
 #[cfg(test)]

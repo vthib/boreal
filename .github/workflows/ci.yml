@@ -312,11 +312,11 @@ jobs:
           cargo build -p boreal-test-helpers
 
           # Run the normal tests
-          cargo test --features magic,authenticode-verify,cuckoo
+          cargo test --features magic,authenticode-verify,cuckoo,serialize
 
           # And run the super user tests
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sudo -E" cargo \
-            test --features magic,authenticode-verify,cuckoo -- --ignored
+            test --features magic,authenticode-verify,cuckoo,serialize -- --ignored
 
           # And run the python bindings tests
           cd boreal-py
@@ -380,7 +380,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kind: [none, hash, object, process, hash_object, authenticode, authenticode_verify, all]
+        kind: [none, hash, object, process, hash_object, authenticode, authenticode_verify, serialize, all]
         include:
           - kind: none
             features: "--no-default-features"
@@ -402,6 +402,9 @@ jobs:
             boreal_cli: false
           - kind: authenticode_verify
             features: "--no-default-features --features=hash,object,authenticode,authenticode-verify"
+            boreal_cli: false
+          - kind: serialize
+            features: "--no-default-features --features=serialize"
             boreal_cli: false
           - kind: all
             features: "--all-features"

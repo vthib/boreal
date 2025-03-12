@@ -40,6 +40,16 @@ pub(crate) struct Rule {
     pub(crate) is_private: bool,
 }
 
+impl Rule {
+    #[cfg(feature = "serialize")]
+    pub(crate) fn deserialize<R: std::io::Read>(
+        ctx: &crate::wire::DeserializeContext,
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        wire::deserialize_rule(ctx, reader)
+    }
+}
+
 /// A metadata associated with a rule.
 #[derive(Debug)]
 pub struct Metadata {
@@ -323,6 +333,104 @@ pub(super) struct CompiledRule {
     pub variables_statistics: Vec<statistics::CompiledString>,
     pub warnings: Vec<CompilationError>,
     pub rule_wildcard_uses: Vec<String>,
+}
+
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::io;
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+
+    use crate::compiler::expression::Expression;
+    use crate::wire::DeserializeContext;
+
+    use super::{Metadata, MetadataValue, Rule};
+
+    impl BorshSerialize for Rule {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.name.serialize(writer)?;
+            self.namespace_index.serialize(writer)?;
+            self.nb_variables.serialize(writer)?;
+            self.is_private.serialize(writer)?;
+            self.tags.serialize(writer)?;
+            self.metadatas.serialize(writer)?;
+            self.condition.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    pub(super) fn deserialize_rule<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<Rule> {
+        let name = BD::deserialize_reader(reader)?;
+        let namespace_index = BD::deserialize_reader(reader)?;
+        let nb_variables = BD::deserialize_reader(reader)?;
+        let is_private = BD::deserialize_reader(reader)?;
+        let tags = BD::deserialize_reader(reader)?;
+        let metadatas = BD::deserialize_reader(reader)?;
+        let condition = Expression::deserialize(ctx, reader)?;
+        Ok(Rule {
+            name,
+            namespace_index,
+            tags,
+            metadatas,
+            nb_variables,
+            condition,
+            is_private,
+        })
+    }
+
+    impl BorshSerialize for Metadata {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.name.serialize(writer)?;
+            self.value.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl BD for Metadata {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let name = BD::deserialize_reader(reader)?;
+            let value = BD::deserialize_reader(reader)?;
+            Ok(Self { name, value })
+        }
+    }
+
+    impl BorshSerialize for MetadataValue {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::Bytes(s) => {
+                    0_u8.serialize(writer)?;
+                    s.serialize(writer)?;
+                }
+                Self::Integer(v) => {
+                    1_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+                Self::Boolean(v) => {
+                    2_u8.serialize(writer)?;
+                    v.serialize(writer)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    impl BD for MetadataValue {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            match discriminant {
+                0 => Ok(Self::Bytes(BD::deserialize_reader(reader)?)),
+                1 => Ok(Self::Integer(BD::deserialize_reader(reader)?)),
+                2 => Ok(Self::Boolean(BD::deserialize_reader(reader)?)),
+                v => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid discriminant when deserializing a metadata value: {v}"),
+                )),
+            }
+        }
+    }
 }
 
 #[cfg(test)]

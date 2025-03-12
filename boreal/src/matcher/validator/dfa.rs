@@ -31,6 +31,12 @@ pub(crate) struct DfaValidator {
     /// This is only used when the regex contains word boundaries, which cannot be translated into
     /// a corresponding "widened" HIR.
     use_custom_wide_runner: bool,
+
+    /// Saved expressions of the regex.
+    ///
+    /// Only used for serialization.
+    #[cfg(feature = "serialize")]
+    exprs: [Box<str>; 2],
 }
 
 impl DfaValidator {
@@ -50,7 +56,18 @@ impl DfaValidator {
             modifiers.wide = false;
         }
 
-        let dfa = Arc::new(build_dfa(hir, modifiers, reverse)?);
+        let (expr1, expr2) = if modifiers.wide {
+            let wide_hir = widen_hir(hir);
+
+            if modifiers.ascii {
+                (regex_hir_to_string(hir), regex_hir_to_string(&wide_hir))
+            } else {
+                (regex_hir_to_string(&wide_hir), String::new())
+            }
+        } else {
+            (regex_hir_to_string(hir), String::new())
+        };
+        let dfa = Arc::new(build_dfa(&expr1, &expr2, modifiers, reverse)?);
         let pool = {
             let dfa = Arc::clone(&dfa);
             let create: PoolCreateFn = Box::new(move || dfa.create_cache());
@@ -61,7 +78,18 @@ impl DfaValidator {
             dfa,
             pool,
             use_custom_wide_runner,
+            #[cfg(feature = "serialize")]
+            exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
         })
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(super) fn deserialize<R: std::io::Read>(
+        modifiers: Modifiers,
+        reverse: bool,
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        wire::deserialize_dfa_validator(modifiers, reverse, reader)
     }
 
     pub(crate) fn find_anchored_fwd(
@@ -249,7 +277,12 @@ fn match_type_to_pattern_index(match_type: MatchType) -> PatternID {
     })
 }
 
-fn build_dfa(hir: &Hir, modifiers: Modifiers, reverse: bool) -> Result<DFA, crate::regex::Error> {
+fn build_dfa(
+    expr1: &str,
+    expr2: &str,
+    modifiers: Modifiers,
+    reverse: bool,
+) -> Result<DFA, crate::regex::Error> {
     let mut builder = Builder::new();
     let _b = builder
         .configure(
@@ -278,18 +311,67 @@ fn build_dfa(hir: &Hir, modifiers: Modifiers, reverse: bool) -> Result<DFA, crat
                 .dot_matches_new_line(modifiers.dot_all),
         );
 
-    if modifiers.wide {
-        let wide_hir = widen_hir(hir);
-
-        if modifiers.ascii {
-            builder.build_many(&[regex_hir_to_string(hir), regex_hir_to_string(&wide_hir)])
-        } else {
-            builder.build(&regex_hir_to_string(&wide_hir))
-        }
+    if expr2.is_empty() {
+        builder.build(expr1)
     } else {
-        builder.build(&regex_hir_to_string(hir))
+        builder.build_many(&[expr1, expr2])
     }
     .map_err(crate::regex::Error::from)
+}
+
+#[cfg(feature = "serialize")]
+mod wire {
+    use std::{io, sync::Arc};
+
+    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use regex_automata::util::pool::Pool;
+
+    use crate::matcher::Modifiers;
+
+    use super::{build_dfa, DfaValidator, PoolCreateFn};
+
+    impl BorshSerialize for DfaValidator {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.exprs[0].serialize(writer)?;
+            self.exprs[1].serialize(writer)?;
+            self.use_custom_wide_runner.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    pub(super) fn deserialize_dfa_validator<R: io::Read>(
+        modifiers: Modifiers,
+        reverse: bool,
+        reader: &mut R,
+    ) -> io::Result<DfaValidator> {
+        let expr1: String = BD::deserialize_reader(reader)?;
+        let expr2: String = BD::deserialize_reader(reader)?;
+        let use_custom_wide_runner = BD::deserialize_reader(reader)?;
+
+        let dfa = Arc::new(
+            build_dfa(&expr1, &expr2, modifiers, reverse).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "unable to compile dfa with expressions \
+                            `{expr1}`, `{expr2}`: {err:?}",
+                    ),
+                )
+            })?,
+        );
+        let pool = {
+            let dfa = Arc::clone(&dfa);
+            let create: PoolCreateFn = Box::new(move || dfa.create_cache());
+            Pool::new(create)
+        };
+
+        Ok(DfaValidator {
+            dfa,
+            pool,
+            use_custom_wide_runner,
+            exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
+        })
+    }
 }
 
 #[cfg(test)]
