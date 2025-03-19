@@ -142,12 +142,13 @@ pub(super) fn compile_bounded_identifier_use<'a, 'b>(
 ) -> Result<ModuleUse<'a, 'b>, CompilationError> {
     let mut module_use = ModuleUse {
         compiler,
-        last_immediate_value: None,
-        current_value: ValueOrType::Type(starting_type),
         operations_expressions: Vec::new(),
         operations: Vec::with_capacity(identifier.operations.len()),
         current_span: identifier.name_span,
-        bounded_value_index: Some(BoundedValueIndex::BoundedStack(identifier_stack_index)),
+        kind: ModuleUseKind::Dynamic {
+            current_type: starting_type,
+            bounded_value_index: BoundedValueIndex::BoundedStack(identifier_stack_index),
+        },
     };
 
     for op in identifier.operations {
@@ -199,24 +200,25 @@ pub(super) fn compile_identifier<'a, 'b>(
     let mut module_use = match module.module.static_values.get(&**subfield) {
         Some(value) => ModuleUse {
             compiler,
-            last_immediate_value: Some(value),
-            current_value: ValueOrType::Value(value),
             operations_expressions: Vec::new(),
             operations: Vec::with_capacity(nb_ops),
             current_span: identifier.name_span,
-            bounded_value_index: None,
+            kind: ModuleUseKind::Static {
+                current_value: value,
+            },
         },
         None => {
             // otherwise, use dynamic types, and apply the first operation (so that it will be
             // applied on scan).
             let mut module_use = ModuleUse {
                 compiler,
-                last_immediate_value: None,
-                current_value: ValueOrType::Type(&module.module.dynamic_types),
                 operations_expressions: Vec::new(),
                 operations: Vec::with_capacity(nb_ops),
                 current_span: identifier.name_span,
-                bounded_value_index: Some(BoundedValueIndex::Module(module.module_index)),
+                kind: ModuleUseKind::Dynamic {
+                    current_type: &module.module.dynamic_types,
+                    bounded_value_index: BoundedValueIndex::Module(module.module_index),
+                },
             };
             module_use.add_operation(first_op)?;
             module_use
@@ -232,13 +234,6 @@ pub(super) fn compile_identifier<'a, 'b>(
 pub(super) struct ModuleUse<'a, 'b> {
     compiler: &'b mut RuleCompiler<'a>,
 
-    // Last value to can be computed immediately (does not depend on a function to be called during
-    // scanning).
-    last_immediate_value: Option<&'b StaticValue>,
-
-    // Current value (or type).
-    current_value: ValueOrType<'b>,
-
     // Expressions that needs to be evaluated to be able to evaluate the operations.
     operations_expressions: Vec<Expression>,
 
@@ -248,18 +243,42 @@ pub(super) struct ModuleUse<'a, 'b> {
     // Current span of the module + added operations.
     current_span: Range<usize>,
 
-    // Index for dynamic bounded value that will be used on evaluation.
-    bounded_value_index: Option<BoundedValueIndex>,
+    kind: ModuleUseKind<'b>,
+}
+
+enum ModuleUseKind<'a> {
+    /// A static value, coming from the `get_static_values` methods.
+    ///
+    /// This kind is kept for as long as possible, so that the compiled expression
+    /// can be optimized if possible.
+    Static { current_value: &'a StaticValue },
+    /// A static function.
+    ///
+    /// Once we reach the function, we cannot keep the next values as static values,
+    /// so we store the function pointer in the expression and keep the following operations
+    /// to be evaluated.
+    StaticFunction {
+        fun: fn(&mut EvalContext, Vec<Value>) -> Option<Value>,
+        current_type: &'a ValueType,
+    },
+    /// A dynamic value, coming from the `get_dynamic_values` methods.
+    ///
+    /// Since the value is dynamic, we can only type check it here, and keep the
+    /// operations to evaluate.
+    Dynamic {
+        current_type: &'a ValueType,
+        bounded_value_index: BoundedValueIndex,
+    },
 }
 
 impl ModuleUse<'_, '_> {
     fn add_operation(&mut self, op: IdentifierOperation) -> Result<(), CompilationError> {
         let res = match op.op {
             IdentifierOperationType::Subfield(subfield) => {
-                let res = self.current_value.subfield(&subfield);
-                match self.current_value {
-                    ValueOrType::Value(v) => self.last_immediate_value = Some(v),
-                    ValueOrType::Type(_) => {
+                let res = self.kind.subfield(&subfield);
+                match &self.kind {
+                    ModuleUseKind::Static { .. } => (),
+                    ModuleUseKind::StaticFunction { .. } | ModuleUseKind::Dynamic { .. } => {
                         self.operations
                             .push(ValueOperation::Subfield(subfield.to_string()));
                     }
@@ -271,7 +290,7 @@ impl ModuleUse<'_, '_> {
 
                 self.operations_expressions.push(expr);
                 self.operations.push(ValueOperation::Subscript);
-                self.current_value.subscript(ty, span)
+                self.kind.subscript(ty, span)
             }
             IdentifierOperationType::FunctionCall(arguments) => {
                 self.operations
@@ -284,7 +303,7 @@ impl ModuleUse<'_, '_> {
                     arguments_types.push(res.ty);
                 }
 
-                self.current_value.function_call(&arguments_types)
+                self.kind.function_call(&arguments_types)
             }
         };
 
@@ -325,48 +344,48 @@ impl ModuleUse<'_, '_> {
         }
     }
 
-    fn into_module_expression(self) -> Option<(ModuleExpression, ValueType)> {
-        let ty = self.current_value.into_type()?;
-        let expr = ModuleExpression {
-            kind: ModuleExpressionKind::BoundedModuleValueUse {
-                index: self.bounded_value_index?,
-            },
-            operations: ModuleOperations {
-                expressions: self.operations_expressions,
-                operations: self.operations,
-            },
-        };
-        Some((expr, ty))
-    }
-
     pub(super) fn into_expression(self) -> Option<(Expression, Type)> {
-        let (expr, ty) = match self.last_immediate_value {
-            Some(value) => {
-                let expr = match value {
+        let (expr, ty) = match self.kind {
+            ModuleUseKind::Static { current_value } => {
+                match current_value {
                     // Those are all primitive values. This means there are no operations applied, and
                     // we can directly generate a primitive expression.
-                    StaticValue::Integer(v) => Expression::Integer(*v),
-                    StaticValue::Float(v) => Expression::Double(*v),
-                    StaticValue::Bytes(v) => Expression::Bytes(self.compiler.bytes_pool.insert(v)),
-                    StaticValue::Boolean(v) => Expression::Boolean(*v),
+                    StaticValue::Integer(v) => (Expression::Integer(*v), ValueType::Integer),
+                    StaticValue::Float(v) => (Expression::Double(*v), ValueType::Float),
+                    StaticValue::Bytes(v) => (
+                        Expression::Bytes(self.compiler.bytes_pool.insert(v)),
+                        ValueType::Bytes,
+                    ),
+                    StaticValue::Boolean(v) => (Expression::Boolean(*v), ValueType::Boolean),
 
-                    StaticValue::Object(_) => return None,
-
-                    StaticValue::Function { fun, .. } => Expression::Module(ModuleExpression {
-                        kind: ModuleExpressionKind::StaticFunction { fun: *fun },
-                        operations: ModuleOperations {
-                            expressions: self.operations_expressions,
-                            operations: self.operations,
-                        },
-                    }),
-                };
-                let ty = self.current_value.into_type()?;
-
-                (expr, ty)
+                    _ => return None,
+                }
             }
-            None => {
-                let (module_expr, ty) = self.into_module_expression()?;
-                (Expression::Module(module_expr), ty)
+            ModuleUseKind::StaticFunction { fun, current_type } => {
+                let expr = Expression::Module(ModuleExpression {
+                    kind: ModuleExpressionKind::StaticFunction { fun },
+                    operations: ModuleOperations {
+                        expressions: self.operations_expressions,
+                        operations: self.operations,
+                    },
+                });
+
+                (expr, current_type.clone())
+            }
+            ModuleUseKind::Dynamic {
+                current_type,
+                bounded_value_index,
+            } => {
+                let expr = Expression::Module(ModuleExpression {
+                    kind: ModuleExpressionKind::BoundedModuleValueUse {
+                        index: bounded_value_index,
+                    },
+                    operations: ModuleOperations {
+                        expressions: self.operations_expressions,
+                        operations: self.operations,
+                    },
+                });
+                (expr, current_type.clone())
             }
         };
 
@@ -381,28 +400,35 @@ impl ModuleUse<'_, '_> {
     }
 
     pub(super) fn into_iterator_expression(self) -> Option<(ModuleExpression, IteratorType)> {
-        let (expr, ty) = self.into_module_expression()?;
-        let ty = match ty {
-            ValueType::Array { value_type, .. } => IteratorType::Array(*value_type),
-            ValueType::Dictionary { value_type, .. } => IteratorType::Dictionary(*value_type),
-            _ => return None,
-        };
+        match self.kind {
+            ModuleUseKind::Static { .. } | ModuleUseKind::StaticFunction { .. } => None,
+            ModuleUseKind::Dynamic {
+                current_type,
+                bounded_value_index,
+            } => {
+                let expr = ModuleExpression {
+                    kind: ModuleExpressionKind::BoundedModuleValueUse {
+                        index: bounded_value_index,
+                    },
+                    operations: ModuleOperations {
+                        expressions: self.operations_expressions,
+                        operations: self.operations,
+                    },
+                };
+                let ty = match current_type {
+                    ValueType::Array { value_type, .. } => {
+                        IteratorType::Array((**value_type).clone())
+                    }
+                    ValueType::Dictionary { value_type, .. } => {
+                        IteratorType::Dictionary((**value_type).clone())
+                    }
+                    _ => return None,
+                };
 
-        Some((expr, ty))
+                Some((expr, ty))
+            }
+        }
     }
-}
-
-/// Used to type-check use of a module in a rule.
-///
-/// Tries to keep a proper [`Value`] for as long as possible, so that the compiled expression
-/// can be optimized if possible (if the end value is a primitive of a function returning a
-/// primitive for example).
-#[derive(Debug)]
-enum ValueOrType<'a> {
-    /// Currently value, if available.
-    Value(&'a StaticValue),
-    /// Otherwise, type the expression will have when evaluated.
-    Type(&'a ValueType),
 }
 
 #[derive(Debug)]
@@ -422,25 +448,25 @@ enum TypeError {
     },
 }
 
-impl ValueOrType<'_> {
+impl ModuleUseKind<'_> {
     fn subfield(&mut self, subfield: &str) -> Result<(), TypeError> {
         match self {
-            Self::Value(value) => {
-                if let StaticValue::Object(map) = value {
+            Self::Static { current_value } => {
+                if let StaticValue::Object(map) = *current_value {
                     match map.get(subfield) {
                         Some(v) => {
-                            *self = Self::Value(v);
+                            *current_value = v;
                             return Ok(());
                         }
                         None => return Err(TypeError::UnknownSubfield(subfield.to_string())),
                     }
                 }
             }
-            Self::Type(ty) => {
-                if let ValueType::Object(map) = ty {
+            Self::StaticFunction { current_type, .. } | Self::Dynamic { current_type, .. } => {
+                if let ValueType::Object(map) = current_type {
                     match map.get(subfield) {
                         Some(v) => {
-                            *self = Self::Type(v);
+                            *current_type = v;
                             return Ok(());
                         }
                         None => return Err(TypeError::UnknownSubfield(subfield.to_string())),
@@ -473,20 +499,22 @@ impl ValueOrType<'_> {
         };
 
         match self {
-            Self::Value(_) => (),
-            Self::Type(ty) => match ty {
-                ValueType::Array { value_type, .. } => {
-                    check_subscript_type(Type::Integer)?;
-                    *self = Self::Type(value_type);
-                    return Ok(());
+            Self::Static { .. } => (),
+            Self::StaticFunction { current_type, .. } | Self::Dynamic { current_type, .. } => {
+                match current_type {
+                    ValueType::Array { value_type, .. } => {
+                        check_subscript_type(Type::Integer)?;
+                        *current_type = value_type;
+                        return Ok(());
+                    }
+                    ValueType::Dictionary { value_type, .. } => {
+                        check_subscript_type(Type::Bytes)?;
+                        *current_type = value_type;
+                        return Ok(());
+                    }
+                    _ => (),
                 }
-                ValueType::Dictionary { value_type, .. } => {
-                    check_subscript_type(Type::Bytes)?;
-                    *self = Self::Type(value_type);
-                    return Ok(());
-                }
-                _ => (),
-            },
+            }
         }
 
         Err(TypeError::WrongType {
@@ -497,26 +525,29 @@ impl ValueOrType<'_> {
 
     fn function_call(&mut self, actual_args_types: &[Type]) -> Result<(), TypeError> {
         match self {
-            Self::Value(value) => {
+            Self::Static { current_value, .. } => {
                 if let StaticValue::Function {
                     arguments_types,
                     return_type,
-                    ..
-                } = value
+                    fun,
+                } = current_value
                 {
                     check_all_arguments_types(arguments_types, actual_args_types)?;
-                    *self = Self::Type(return_type);
+                    *self = Self::StaticFunction {
+                        fun: *fun,
+                        current_type: return_type,
+                    };
                     return Ok(());
                 }
             }
-            Self::Type(ty) => {
+            Self::StaticFunction { current_type, .. } | Self::Dynamic { current_type, .. } => {
                 if let ValueType::Function {
                     arguments_types,
                     return_type,
-                } = ty
+                } = current_type
                 {
                     check_all_arguments_types(arguments_types, actual_args_types)?;
-                    *self = Self::Type(return_type);
+                    *current_type = return_type;
                     return Ok(());
                 }
             }
@@ -530,7 +561,7 @@ impl ValueOrType<'_> {
 
     fn type_to_string(&self) -> String {
         match self {
-            Self::Value(value) => match value {
+            Self::Static { current_value, .. } => match current_value {
                 StaticValue::Integer(_) => "integer",
                 StaticValue::Float(_) => "float",
                 StaticValue::Bytes(_) => "bytes",
@@ -538,32 +569,21 @@ impl ValueOrType<'_> {
                 StaticValue::Object(_) => "object",
                 StaticValue::Function { .. } => "function",
             },
-            Self::Type(ty) => match ty {
-                ValueType::Integer => "integer",
-                ValueType::Float => "float",
-                ValueType::Bytes => "bytes",
-                ValueType::Regex => "regex",
-                ValueType::Boolean => "boolean",
-                ValueType::Array { .. } => "array",
-                ValueType::Dictionary { .. } => "dict",
-                ValueType::Object(_) => "object",
-                ValueType::Function { .. } => "function",
-            },
+            Self::StaticFunction { current_type, .. } | Self::Dynamic { current_type, .. } => {
+                match current_type {
+                    ValueType::Integer => "integer",
+                    ValueType::Float => "float",
+                    ValueType::Bytes => "bytes",
+                    ValueType::Regex => "regex",
+                    ValueType::Boolean => "boolean",
+                    ValueType::Array { .. } => "array",
+                    ValueType::Dictionary { .. } => "dict",
+                    ValueType::Object(_) => "object",
+                    ValueType::Function { .. } => "function",
+                }
+            }
         }
         .to_owned()
-    }
-
-    fn into_type(self) -> Option<ValueType> {
-        match self {
-            Self::Value(value) => match value {
-                StaticValue::Integer(_) => Some(ValueType::Integer),
-                StaticValue::Float(_) => Some(ValueType::Float),
-                StaticValue::Bytes(_) => Some(ValueType::Bytes),
-                StaticValue::Boolean(_) => Some(ValueType::Boolean),
-                _ => None,
-            },
-            Self::Type(ty) => Some(ty.clone()),
-        }
     }
 }
 
@@ -651,6 +671,5 @@ mod tests {
         test_type_traits_non_clonable(ModuleExpressionKind::StaticFunction { fun: test_fun });
         test_type_traits_non_clonable(IteratorType::Array(ValueType::Integer));
         test_type_traits_non_clonable(TypeError::UnknownSubfield("a".to_owned()));
-        test_type_traits_non_clonable(ValueOrType::Type(&ValueType::Integer));
     }
 }
