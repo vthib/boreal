@@ -5,7 +5,7 @@ use boreal_parser::expression::{Identifier, IdentifierOperation, IdentifierOpera
 use super::expression::{compile_expression, Expr, Expression, Type};
 use super::rule::RuleCompiler;
 use super::{CompilationError, ImportedModule};
-use crate::module::{self, EvalContext, StaticValue, Type as ValueType, Value};
+use crate::module::{Module as ModuleTrait, StaticFunction, StaticValue, Type as ValueType};
 
 /// Module used during compilation
 #[derive(Debug)]
@@ -50,7 +50,7 @@ pub enum ModuleExpressionKind {
     /// A value coming from a function exposed by a module.
     StaticFunction {
         /// The function to call.
-        fun: fn(&mut EvalContext, Vec<Value>) -> Option<Value>,
+        fun: StaticFunction,
     },
 }
 
@@ -112,7 +112,7 @@ pub enum IteratorType {
     Dictionary(ValueType),
 }
 
-pub(crate) fn compile_module<M: module::Module>(module: &M) -> Module {
+pub(crate) fn compile_module<M: ModuleTrait>(module: &M) -> Module {
     Module {
         name: module.get_name(),
         static_values: module.get_static_values(),
@@ -258,7 +258,7 @@ enum ModuleUseKind<'a> {
     /// so we store the function pointer in the expression and keep the following operations
     /// to be evaluated.
     StaticFunction {
-        fun: fn(&mut EvalContext, Vec<Value>) -> Option<Value>,
+        fun: StaticFunction,
         current_type: &'a ValueType,
     },
     /// A dynamic value, coming from the `get_dynamic_values` methods.
@@ -638,8 +638,10 @@ fn module_type_to_expr_type(v: &ValueType) -> Option<Type> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::module::{EvalContext, Value};
     use crate::test_helpers::test_type_traits_non_clonable;
+
+    use super::*;
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn test_fun(_ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -649,7 +651,7 @@ mod tests {
 
     #[test]
     fn test_types_traits() {
-        test_type_traits_non_clonable(compile_module(&module::Time));
+        test_type_traits_non_clonable(compile_module(&crate::module::Time));
         test_type_traits_non_clonable(ValueOperation::Subfield("a".to_owned()));
         test_type_traits_non_clonable(BoundedValueIndex::Module(0));
         test_type_traits_non_clonable(ModuleOperations {
