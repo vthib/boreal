@@ -544,6 +544,8 @@ impl std::fmt::Debug for Value {
     }
 }
 
+pub(crate) type StaticFunction = fn(&mut EvalContext, Vec<Value>) -> Option<Value>;
+
 /// A static value provided by a module at compilation time.
 ///
 /// This is similar to [`Value`], but without some compounds values that require evaluation
@@ -564,7 +566,7 @@ pub enum StaticValue {
     /// A function, see [`Value::Function`].
     Function {
         /// The function to call.
-        fun: fn(&mut EvalContext, Vec<Value>) -> Option<Value>,
+        fun: StaticFunction,
 
         /// Types of arguments for the function.
         ///
