@@ -323,14 +323,14 @@ fn build_dfa(
 mod wire {
     use std::{io, sync::Arc};
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
     use regex_automata::util::pool::Pool;
 
     use crate::matcher::Modifiers;
 
     use super::{build_dfa, DfaValidator, PoolCreateFn};
 
-    impl BorshSerialize for DfaValidator {
+    impl Serialize for DfaValidator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.exprs[0].serialize(writer)?;
             self.exprs[1].serialize(writer)?;
@@ -344,9 +344,9 @@ mod wire {
         reverse: bool,
         reader: &mut R,
     ) -> io::Result<DfaValidator> {
-        let expr1: String = BD::deserialize_reader(reader)?;
-        let expr2: String = BD::deserialize_reader(reader)?;
-        let use_custom_wide_runner = BD::deserialize_reader(reader)?;
+        let expr1: String = DS::deserialize_reader(reader)?;
+        let expr2: String = DS::deserialize_reader(reader)?;
+        let use_custom_wide_runner = DS::deserialize_reader(reader)?;
 
         let dfa = Arc::new(
             build_dfa(&expr1, &expr2, modifiers, reverse).map_err(|err| {

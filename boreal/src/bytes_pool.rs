@@ -142,25 +142,25 @@ impl BytesPoolBuilder {
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use super::{BytesPool, BytesSymbol, StringSymbol};
 
-    impl BorshSerialize for BytesPool {
+    impl Serialize for BytesPool {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.buffer.serialize(writer)
         }
     }
 
-    impl BD for BytesPool {
+    impl DS for BytesPool {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
             Ok(Self {
-                buffer: BD::deserialize_reader(reader)?,
+                buffer: DS::deserialize_reader(reader)?,
             })
         }
     }
 
-    impl BorshSerialize for StringSymbol {
+    impl Serialize for StringSymbol {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.from.serialize(writer)?;
             self.to.serialize(writer)?;
@@ -168,15 +168,15 @@ mod wire {
         }
     }
 
-    impl BD for StringSymbol {
+    impl DS for StringSymbol {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let from = BD::deserialize_reader(reader)?;
-            let to = BD::deserialize_reader(reader)?;
+            let from = DS::deserialize_reader(reader)?;
+            let to = DS::deserialize_reader(reader)?;
             Ok(Self { from, to })
         }
     }
 
-    impl BorshSerialize for BytesSymbol {
+    impl Serialize for BytesSymbol {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.from.serialize(writer)?;
             self.to.serialize(writer)?;
@@ -184,10 +184,10 @@ mod wire {
         }
     }
 
-    impl BD for BytesSymbol {
+    impl DS for BytesSymbol {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let from = BD::deserialize_reader(reader)?;
-            let to = BD::deserialize_reader(reader)?;
+            let from = DS::deserialize_reader(reader)?;
+            let to = DS::deserialize_reader(reader)?;
             Ok(Self { from, to })
         }
     }

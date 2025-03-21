@@ -448,7 +448,7 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::matcher::Modifiers;
 
@@ -456,7 +456,7 @@ mod wire {
     use super::validator::Validator;
     use super::{Matcher, MatcherKind};
 
-    impl BorshSerialize for Matcher {
+    impl Serialize for Matcher {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.literals.serialize(writer)?;
             self.modifiers.serialize(writer)?;
@@ -465,10 +465,10 @@ mod wire {
         }
     }
 
-    impl BD for Matcher {
+    impl DS for Matcher {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let literals = BD::deserialize_reader(reader)?;
-            let modifiers = BD::deserialize_reader(reader)?;
+            let literals = DS::deserialize_reader(reader)?;
+            let modifiers = DS::deserialize_reader(reader)?;
             let kind = deserialize_matcher_kind(modifiers, reader)?;
             Ok(Self {
                 literals,
@@ -478,7 +478,7 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for MatcherKind {
+    impl Serialize for MatcherKind {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::Literals => {
@@ -501,7 +501,7 @@ mod wire {
         modifiers: Modifiers,
         reader: &mut R,
     ) -> io::Result<MatcherKind> {
-        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        let discriminant: u8 = DS::deserialize_reader(reader)?;
         match discriminant {
             0 => Ok(MatcherKind::Literals),
             1 => {
@@ -519,7 +519,7 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for Modifiers {
+    impl Serialize for Modifiers {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.fullword.serialize(writer)?;
             self.wide.serialize(writer)?;
@@ -531,14 +531,14 @@ mod wire {
         }
     }
 
-    impl BD for Modifiers {
+    impl DS for Modifiers {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let fullword = BD::deserialize_reader(reader)?;
-            let wide = BD::deserialize_reader(reader)?;
-            let ascii = BD::deserialize_reader(reader)?;
-            let nocase = BD::deserialize_reader(reader)?;
-            let dot_all = BD::deserialize_reader(reader)?;
-            let xor_start = BD::deserialize_reader(reader)?;
+            let fullword = DS::deserialize_reader(reader)?;
+            let wide = DS::deserialize_reader(reader)?;
+            let ascii = DS::deserialize_reader(reader)?;
+            let nocase = DS::deserialize_reader(reader)?;
+            let dot_all = DS::deserialize_reader(reader)?;
+            let xor_start = DS::deserialize_reader(reader)?;
             Ok(Self {
                 fullword,
                 wide,

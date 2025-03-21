@@ -153,11 +153,11 @@ impl std::fmt::Display for VariableCompilationError {
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use super::Variable;
 
-    impl BorshSerialize for Variable {
+    impl Serialize for Variable {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.name.serialize(writer)?;
             self.is_private.serialize(writer)?;
@@ -166,11 +166,11 @@ mod wire {
         }
     }
 
-    impl BD for Variable {
+    impl DS for Variable {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let name = BD::deserialize_reader(reader)?;
-            let is_private = BD::deserialize_reader(reader)?;
-            let matcher = BD::deserialize_reader(reader)?;
+            let name = DS::deserialize_reader(reader)?;
+            let is_private = DS::deserialize_reader(reader)?;
+            let matcher = DS::deserialize_reader(reader)?;
             Ok(Self {
                 name,
                 is_private,

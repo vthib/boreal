@@ -242,13 +242,13 @@ impl std::fmt::Display for HalfValidator {
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::matcher::Modifiers;
 
     use super::{dfa, HalfValidator, Validator};
 
-    impl BorshSerialize for Validator {
+    impl Serialize for Validator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Validator::NonGreedy { forward, reverse } => {
@@ -270,7 +270,7 @@ mod wire {
         modifiers: Modifiers,
         reader: &mut R,
     ) -> io::Result<Validator> {
-        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        let discriminant: u8 = DS::deserialize_reader(reader)?;
         match discriminant {
             0 => {
                 let forward = deserialize_half_validator(modifiers, false, reader)?;
@@ -312,10 +312,10 @@ mod wire {
         reverse: bool,
         reader: &mut R,
     ) -> io::Result<Option<HalfValidator>> {
-        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        let discriminant: u8 = DS::deserialize_reader(reader)?;
         match discriminant {
             0 => Ok(None),
-            1 => Ok(Some(HalfValidator::Simple(BD::deserialize_reader(reader)?))),
+            1 => Ok(Some(HalfValidator::Simple(DS::deserialize_reader(reader)?))),
             2 => {
                 let dfa = dfa::DfaValidator::deserialize(modifiers, reverse, reader)?;
                 Ok(Some(HalfValidator::Dfa(dfa)))

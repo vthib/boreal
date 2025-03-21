@@ -339,14 +339,14 @@ pub(super) struct CompiledRule {
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::compiler::expression::Expression;
     use crate::wire::DeserializeContext;
 
     use super::{Metadata, MetadataValue, Rule};
 
-    impl BorshSerialize for Rule {
+    impl Serialize for Rule {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.name.serialize(writer)?;
             self.namespace_index.serialize(writer)?;
@@ -363,12 +363,12 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Rule> {
-        let name = BD::deserialize_reader(reader)?;
-        let namespace_index = BD::deserialize_reader(reader)?;
-        let nb_variables = BD::deserialize_reader(reader)?;
-        let is_private = BD::deserialize_reader(reader)?;
-        let tags = BD::deserialize_reader(reader)?;
-        let metadatas = BD::deserialize_reader(reader)?;
+        let name = DS::deserialize_reader(reader)?;
+        let namespace_index = DS::deserialize_reader(reader)?;
+        let nb_variables = DS::deserialize_reader(reader)?;
+        let is_private = DS::deserialize_reader(reader)?;
+        let tags = DS::deserialize_reader(reader)?;
+        let metadatas = DS::deserialize_reader(reader)?;
         let condition = Expression::deserialize(ctx, reader)?;
         Ok(Rule {
             name,
@@ -381,7 +381,7 @@ mod wire {
         })
     }
 
-    impl BorshSerialize for Metadata {
+    impl Serialize for Metadata {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.name.serialize(writer)?;
             self.value.serialize(writer)?;
@@ -389,15 +389,15 @@ mod wire {
         }
     }
 
-    impl BD for Metadata {
+    impl DS for Metadata {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let name = BD::deserialize_reader(reader)?;
-            let value = BD::deserialize_reader(reader)?;
+            let name = DS::deserialize_reader(reader)?;
+            let value = DS::deserialize_reader(reader)?;
             Ok(Self { name, value })
         }
     }
 
-    impl BorshSerialize for MetadataValue {
+    impl Serialize for MetadataValue {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::Bytes(s) => {
@@ -417,13 +417,13 @@ mod wire {
         }
     }
 
-    impl BD for MetadataValue {
+    impl DS for MetadataValue {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            let discriminant: u8 = DS::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Bytes(BD::deserialize_reader(reader)?)),
-                1 => Ok(Self::Integer(BD::deserialize_reader(reader)?)),
-                2 => Ok(Self::Boolean(BD::deserialize_reader(reader)?)),
+                0 => Ok(Self::Bytes(DS::deserialize_reader(reader)?)),
+                1 => Ok(Self::Integer(DS::deserialize_reader(reader)?)),
+                2 => Ok(Self::Boolean(DS::deserialize_reader(reader)?)),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing a metadata value: {v}"),

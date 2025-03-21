@@ -198,11 +198,11 @@ fn add_hir_to_simple_nodes(
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use super::{SimpleNode, SimpleValidator};
 
-    impl BorshSerialize for SimpleValidator {
+    impl Serialize for SimpleValidator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.nodes.serialize(writer)?;
             self.length.serialize(writer)?;
@@ -210,16 +210,16 @@ mod wire {
         }
     }
 
-    impl BD for SimpleValidator {
+    impl DS for SimpleValidator {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let nodes = BD::deserialize_reader(reader)?;
-            let length = BD::deserialize_reader(reader)?;
+            let nodes = DS::deserialize_reader(reader)?;
+            let length = DS::deserialize_reader(reader)?;
 
             Ok(Self { nodes, length })
         }
     }
 
-    impl BorshSerialize for SimpleNode {
+    impl Serialize for SimpleNode {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::Byte(b) => {
@@ -249,22 +249,22 @@ mod wire {
         }
     }
 
-    impl BD for SimpleNode {
+    impl DS for SimpleNode {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            let discriminant: u8 = DS::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Byte(BD::deserialize_reader(reader)?)),
+                0 => Ok(Self::Byte(DS::deserialize_reader(reader)?)),
                 1 => {
-                    let value = BD::deserialize_reader(reader)?;
-                    let mask = BD::deserialize_reader(reader)?;
+                    let value = DS::deserialize_reader(reader)?;
+                    let mask = DS::deserialize_reader(reader)?;
                     Ok(Self::Mask { value, mask })
                 }
                 2 => {
-                    let value = BD::deserialize_reader(reader)?;
-                    let mask = BD::deserialize_reader(reader)?;
+                    let value = DS::deserialize_reader(reader)?;
+                    let mask = DS::deserialize_reader(reader)?;
                     Ok(Self::NegatedMask { value, mask })
                 }
-                3 => Ok(Self::Jump(BD::deserialize_reader(reader)?)),
+                3 => Ok(Self::Jump(DS::deserialize_reader(reader)?)),
                 4 => Ok(Self::Dot),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,

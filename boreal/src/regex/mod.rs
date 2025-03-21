@@ -321,11 +321,11 @@ impl std::error::Error for Error {}
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use super::Regex;
 
-    impl BorshSerialize for Regex {
+    impl Serialize for Regex {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.case_insensitive.serialize(writer)?;
             self.dot_all.serialize(writer)?;
@@ -334,11 +334,11 @@ mod wire {
         }
     }
 
-    impl BD for Regex {
+    impl DS for Regex {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let case_insensitive = BD::deserialize_reader(reader)?;
-            let dot_all = BD::deserialize_reader(reader)?;
-            let expr = BD::deserialize_reader(reader)?;
+            let case_insensitive = DS::deserialize_reader(reader)?;
+            let dot_all = DS::deserialize_reader(reader)?;
+            let expr = DS::deserialize_reader(reader)?;
             Regex::from_string(expr, case_insensitive, dot_all).map_err(|err| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
