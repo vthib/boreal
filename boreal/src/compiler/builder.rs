@@ -31,31 +31,11 @@ impl CompilerBuilder {
     /// create a [`CompilerBuilder`] without any modules, then add back only the desired modules.
     #[must_use]
     pub fn new() -> Self {
-        let this = Self::default();
+        let mut this = Self::default();
 
-        let this = this.add_module(crate::module::Time);
-        let this = this.add_module(crate::module::Math);
-        let this = this.add_module(crate::module::String_);
-
-        #[cfg(feature = "hash")]
-        let this = this.add_module(crate::module::Hash);
-
-        #[cfg(feature = "object")]
-        let this = this.add_module(crate::module::Pe);
-        #[cfg(feature = "object")]
-        let this = this.add_module(crate::module::Elf);
-        #[cfg(feature = "object")]
-        let this = this.add_module(crate::module::MachO);
-        #[cfg(feature = "object")]
-        let this = this.add_module(crate::module::Dotnet);
-        #[cfg(feature = "object")]
-        let this = this.add_module(crate::module::Dex);
-
-        #[cfg(feature = "magic")]
-        let this = this.add_module(crate::module::Magic);
-
-        #[cfg(feature = "cuckoo")]
-        let this = this.add_module(crate::module::Cuckoo);
+        crate::module::add_default_modules(|module| {
+            this.add_module_inner(module);
+        });
 
         this
     }
@@ -66,16 +46,20 @@ impl CompilerBuilder {
     /// This can be useful to change the parameters of a module.
     #[must_use]
     pub fn add_module<M: crate::module::Module + 'static>(mut self, module: M) -> Self {
-        let compiled_module = Arc::new(super::module::compile_module(&module));
+        self.add_module_inner(Box::new(module));
+        self
+    }
+
+    fn add_module_inner(&mut self, module: Box<dyn crate::module::Module>) {
+        let compiled_module = Arc::new(super::module::compile_module(&*module));
 
         let _r = self.modules.insert(
             compiled_module.name,
             AvailableModule {
                 compiled_module,
-                location: ModuleLocation::Module(Box::new(module)),
+                location: ModuleLocation::Module(module),
             },
         );
-        self
     }
 
     /// Set the profile to use when compiling rules.

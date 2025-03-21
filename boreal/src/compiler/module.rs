@@ -144,7 +144,7 @@ pub enum IteratorType {
     Dictionary(ValueType),
 }
 
-pub(crate) fn compile_module<M: ModuleTrait>(module: &M) -> Module {
+pub(crate) fn compile_module(module: &dyn ModuleTrait) -> Module {
     Module {
         name: module.get_name(),
         static_values: module.get_static_values(),
