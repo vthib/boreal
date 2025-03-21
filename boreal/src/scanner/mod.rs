@@ -223,6 +223,8 @@ impl Scanner {
                 external_symbols_map,
                 namespaces,
                 bytes_pool: bytes_pool.into_pool(),
+                #[cfg(feature = "serialize")]
+                profile,
             }),
             scan_params: ScanParams::default(),
             external_symbols_values,
@@ -726,6 +728,10 @@ struct Inner {
 
     /// Bytes intern pool.
     bytes_pool: BytesPool,
+
+    /// Profile used to compile the Aho-Corasick
+    #[cfg(feature = "serialize")]
+    profile: crate::compiler::CompilerProfile,
 }
 
 impl Inner {
@@ -1485,19 +1491,9 @@ mod wire {
             serialize_modules(&self.modules, writer)?;
             self.global_rules.serialize(writer)?;
             self.rules.serialize(writer)?;
+            self.profile.serialize(writer)?;
             Ok(())
         }
-    }
-
-    fn serialize_modules<W: io::Write>(
-        modules: &[Box<dyn Module>],
-        writer: &mut W,
-    ) -> io::Result<()> {
-        modules.len().serialize(writer)?;
-        for module in modules {
-            module.get_name().serialize(writer)?;
-        }
-        Ok(())
     }
 
     impl DS for Inner {
@@ -1517,8 +1513,8 @@ mod wire {
             let global_rules = deserialize_rules(&ctx, reader)?;
             let rules = deserialize_rules(&ctx, reader)?;
 
-            // FIXME: profile
-            let ac_scan = AcScan::new(&variables, CompilerProfile::Speed);
+            let profile = CompilerProfile::deserialize_reader(reader)?;
+            let ac_scan = AcScan::new(&variables, profile);
 
             Ok(Self {
                 rules,
@@ -1529,7 +1525,42 @@ mod wire {
                 external_symbols_map,
                 namespaces,
                 bytes_pool,
+                profile,
             })
+        }
+    }
+
+    fn serialize_modules<W: io::Write>(
+        modules: &[Box<dyn Module>],
+        writer: &mut W,
+    ) -> io::Result<()> {
+        modules.len().serialize(writer)?;
+        for module in modules {
+            module.get_name().serialize(writer)?;
+        }
+        Ok(())
+    }
+
+    impl Serialize for CompilerProfile {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            match self {
+                Self::Speed => 0_u8.serialize(writer),
+                Self::Memory => 1_u8.serialize(writer),
+            }
+        }
+    }
+
+    impl DS for CompilerProfile {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let tag = u8::deserialize_reader(reader)?;
+            match tag {
+                0 => Ok(Self::Speed),
+                1 => Ok(Self::Memory),
+                _ => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid value for CompilerProfile: {tag}"),
+                )),
+            }
         }
     }
 
