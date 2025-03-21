@@ -1,6 +1,7 @@
 use std::io;
 
-use borsh::{BorshDeserialize as BD, BorshSerialize};
+pub use borsh::BorshDeserialize as Deserialize;
+pub use borsh::BorshSerialize as Serialize;
 
 use crate::module::StaticValue;
 
@@ -22,21 +23,21 @@ pub(super) fn deserialize_header<R: io::Read>(
     expected_kind: [u8; 4],
     reader: &mut R,
 ) -> io::Result<()> {
-    let magic: [u8; 12] = BD::deserialize_reader(reader)?;
+    let magic: [u8; 12] = Deserialize::deserialize_reader(reader)?;
     if &magic != b"boreal_wire_" {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("invalid magic: {:x?}", &magic),
         ));
     }
-    let kind: [u8; 4] = BD::deserialize_reader(reader)?;
+    let kind: [u8; 4] = Deserialize::deserialize_reader(reader)?;
     if kind != expected_kind {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("invalid kind: {:x?}", &kind),
         ));
     }
-    let version: u32 = BD::deserialize_reader(reader)?;
+    let version: u32 = Deserialize::deserialize_reader(reader)?;
     if version != VERSION {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

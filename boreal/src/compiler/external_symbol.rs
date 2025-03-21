@@ -89,11 +89,11 @@ impl_into_bytes!(&str);
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use super::ExternalValue;
 
-    impl BorshSerialize for ExternalValue {
+    impl Serialize for ExternalValue {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::Integer(v) => {
@@ -117,14 +117,14 @@ mod wire {
         }
     }
 
-    impl BD for ExternalValue {
+    impl DS for ExternalValue {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            let discriminant: u8 = DS::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(ExternalValue::Integer(BD::deserialize_reader(reader)?)),
-                1 => Ok(ExternalValue::Float(BD::deserialize_reader(reader)?)),
-                2 => Ok(ExternalValue::Bytes(BD::deserialize_reader(reader)?)),
-                3 => Ok(ExternalValue::Boolean(BD::deserialize_reader(reader)?)),
+                0 => Ok(ExternalValue::Integer(DS::deserialize_reader(reader)?)),
+                1 => Ok(ExternalValue::Float(DS::deserialize_reader(reader)?)),
+                2 => Ok(ExternalValue::Bytes(DS::deserialize_reader(reader)?)),
+                3 => Ok(ExternalValue::Boolean(DS::deserialize_reader(reader)?)),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing an external value: {v}"),

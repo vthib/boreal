@@ -1343,14 +1343,14 @@ mod wire {
     use std::io;
 
     use boreal_parser::expression::ReadIntegerType;
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::wire::DeserializeContext;
 
     use super::module::ModuleExpression;
     use super::{Expression, ForIterator, ForSelection, RuleSet, VariableIndex, VariableSet};
 
-    impl BorshSerialize for Expression {
+    impl Serialize for Expression {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::Filesize => {
@@ -1630,7 +1630,7 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Vec<Expression>> {
-        let len: usize = BD::deserialize_reader(reader)?;
+        let len: usize = DS::deserialize_reader(reader)?;
         let mut exprs = Vec::with_capacity(len);
         for _ in 0..len {
             exprs.push(deserialize_expr(ctx, reader)?);
@@ -1642,12 +1642,12 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Expression> {
-        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        let discriminant: u8 = DS::deserialize_reader(reader)?;
         Ok(match discriminant {
             0 => Expression::Filesize,
             1 => Expression::Entrypoint,
             2 => {
-                let discriminant: u8 = BD::deserialize_reader(reader)?;
+                let discriminant: u8 = DS::deserialize_reader(reader)?;
                 let ty = match discriminant {
                     0 => ReadIntegerType::Int8,
                     1 => ReadIntegerType::Uint8,
@@ -1674,11 +1674,11 @@ mod wire {
                     addr: Box::new(addr),
                 }
             }
-            3 => Expression::Integer(BD::deserialize_reader(reader)?),
-            4 => Expression::Double(BD::deserialize_reader(reader)?),
-            5 => Expression::Count(BD::deserialize_reader(reader)?),
+            3 => Expression::Integer(DS::deserialize_reader(reader)?),
+            4 => Expression::Double(DS::deserialize_reader(reader)?),
+            5 => Expression::Count(DS::deserialize_reader(reader)?),
             6 => {
-                let variable_index = BD::deserialize_reader(reader)?;
+                let variable_index = DS::deserialize_reader(reader)?;
                 let from = Box::new(deserialize_expr(ctx, reader)?);
                 let to = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::CountInRange {
@@ -1688,7 +1688,7 @@ mod wire {
                 }
             }
             7 => {
-                let variable_index = BD::deserialize_reader(reader)?;
+                let variable_index = DS::deserialize_reader(reader)?;
                 let occurence_number = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::Offset {
                     variable_index,
@@ -1696,7 +1696,7 @@ mod wire {
                 }
             }
             8 => {
-                let variable_index = BD::deserialize_reader(reader)?;
+                let variable_index = DS::deserialize_reader(reader)?;
                 let occurence_number = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::Length {
                     variable_index,
@@ -1776,8 +1776,8 @@ mod wire {
             24 => {
                 let left = Box::new(deserialize_expr(ctx, reader)?);
                 let right = Box::new(deserialize_expr(ctx, reader)?);
-                let less_than = BD::deserialize_reader(reader)?;
-                let can_be_equal = BD::deserialize_reader(reader)?;
+                let less_than = DS::deserialize_reader(reader)?;
+                let can_be_equal = DS::deserialize_reader(reader)?;
                 Expression::Cmp {
                     left,
                     right,
@@ -1798,7 +1798,7 @@ mod wire {
             27 => {
                 let haystack = Box::new(deserialize_expr(ctx, reader)?);
                 let needle = Box::new(deserialize_expr(ctx, reader)?);
-                let case_insensitive = BD::deserialize_reader(reader)?;
+                let case_insensitive = DS::deserialize_reader(reader)?;
                 Expression::Contains {
                     haystack,
                     needle,
@@ -1808,7 +1808,7 @@ mod wire {
             28 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
                 let prefix = Box::new(deserialize_expr(ctx, reader)?);
-                let case_insensitive = BD::deserialize_reader(reader)?;
+                let case_insensitive = DS::deserialize_reader(reader)?;
                 Expression::StartsWith {
                     expr,
                     prefix,
@@ -1818,7 +1818,7 @@ mod wire {
             29 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
                 let suffix = Box::new(deserialize_expr(ctx, reader)?);
-                let case_insensitive = BD::deserialize_reader(reader)?;
+                let case_insensitive = DS::deserialize_reader(reader)?;
                 Expression::EndsWith {
                     expr,
                     suffix,
@@ -1832,14 +1832,14 @@ mod wire {
             }
             31 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
-                let regex = BD::deserialize_reader(reader)?;
+                let regex = DS::deserialize_reader(reader)?;
                 Expression::Matches(expr, regex)
             }
             32 => Expression::Defined(Box::new(deserialize_expr(ctx, reader)?)),
-            33 => Expression::Boolean(BD::deserialize_reader(reader)?),
-            34 => Expression::Variable(BD::deserialize_reader(reader)?),
+            33 => Expression::Boolean(DS::deserialize_reader(reader)?),
+            34 => Expression::Variable(DS::deserialize_reader(reader)?),
             35 => {
-                let variable_index = BD::deserialize_reader(reader)?;
+                let variable_index = DS::deserialize_reader(reader)?;
                 let offset = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::VariableAt {
                     variable_index,
@@ -1847,7 +1847,7 @@ mod wire {
                 }
             }
             36 => {
-                let variable_index = BD::deserialize_reader(reader)?;
+                let variable_index = DS::deserialize_reader(reader)?;
                 let from = Box::new(deserialize_expr(ctx, reader)?);
                 let to = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::VariableIn {
@@ -1858,7 +1858,7 @@ mod wire {
             }
             37 => {
                 let selection = deserialize_for_selection(ctx, reader)?;
-                let set = BD::deserialize_reader(reader)?;
+                let set = DS::deserialize_reader(reader)?;
                 let body = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::For {
                     selection,
@@ -1878,14 +1878,14 @@ mod wire {
             }
             39 => {
                 let selection = deserialize_for_selection(ctx, reader)?;
-                let set = BD::deserialize_reader(reader)?;
+                let set = DS::deserialize_reader(reader)?;
                 Expression::ForRules { selection, set }
             }
             40 => Expression::Module(ModuleExpression::deserialize(ctx, reader)?),
-            41 => Expression::Rule(BD::deserialize_reader(reader)?),
-            42 => Expression::ExternalSymbol(BD::deserialize_reader(reader)?),
-            43 => Expression::Bytes(BD::deserialize_reader(reader)?),
-            44 => Expression::Regex(BD::deserialize_reader(reader)?),
+            41 => Expression::Rule(DS::deserialize_reader(reader)?),
+            42 => Expression::ExternalSymbol(DS::deserialize_reader(reader)?),
+            43 => Expression::Bytes(DS::deserialize_reader(reader)?),
+            44 => Expression::Regex(DS::deserialize_reader(reader)?),
             v => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -1895,7 +1895,7 @@ mod wire {
         })
     }
 
-    impl BorshSerialize for ForSelection {
+    impl Serialize for ForSelection {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::Any => 0_u8.serialize(writer)?,
@@ -1915,14 +1915,14 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ForSelection> {
-        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        let discriminant: u8 = DS::deserialize_reader(reader)?;
         match discriminant {
             0 => Ok(ForSelection::Any),
             1 => Ok(ForSelection::All),
             2 => Ok(ForSelection::None),
             3 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
-                let as_percent = BD::deserialize_reader(reader)?;
+                let as_percent = DS::deserialize_reader(reader)?;
                 Ok(ForSelection::Expr { expr, as_percent })
             }
             v => Err(io::Error::new(
@@ -1932,7 +1932,7 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for ForIterator {
+    impl Serialize for ForIterator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::ModuleIterator(module_expr) => {
@@ -1957,7 +1957,7 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ForIterator> {
-        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        let discriminant: u8 = DS::deserialize_reader(reader)?;
         match discriminant {
             0 => {
                 let module_expr = ModuleExpression::deserialize(ctx, reader)?;
@@ -1979,7 +1979,7 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for RuleSet {
+    impl Serialize for RuleSet {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.elements.serialize(writer)?;
             self.already_matched.serialize(writer)?;
@@ -1987,10 +1987,10 @@ mod wire {
         }
     }
 
-    impl BD for RuleSet {
+    impl DS for RuleSet {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let elements = BD::deserialize_reader(reader)?;
-            let already_matched = BD::deserialize_reader(reader)?;
+            let elements = DS::deserialize_reader(reader)?;
+            let already_matched = DS::deserialize_reader(reader)?;
             Ok(Self {
                 elements,
                 already_matched,
@@ -1998,29 +1998,29 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for VariableSet {
+    impl Serialize for VariableSet {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.elements.serialize(writer)?;
             Ok(())
         }
     }
 
-    impl BD for VariableSet {
+    impl DS for VariableSet {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let elements = BD::deserialize_reader(reader)?;
+            let elements = DS::deserialize_reader(reader)?;
             Ok(Self { elements })
         }
     }
 
-    impl BorshSerialize for VariableIndex {
+    impl Serialize for VariableIndex {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.0.serialize(writer)
         }
     }
 
-    impl BD for VariableIndex {
+    impl DS for VariableIndex {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            Ok(Self(BD::deserialize_reader(reader)?))
+            Ok(Self(DS::deserialize_reader(reader)?))
         }
     }
 }

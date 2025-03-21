@@ -608,7 +608,7 @@ impl Scanner {
     ///
     #[cfg(feature = "serialize")]
     pub fn to_bytes(&self) -> std::io::Result<Vec<u8>> {
-        use borsh::BorshSerialize;
+        use crate::wire::Serialize;
 
         let mut buf = Vec::new();
         crate::wire::serialize_header(*b"scnr", &mut buf)?;
@@ -623,11 +623,11 @@ impl Scanner {
     ///
     #[cfg(feature = "serialize")]
     pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
-        use borsh::BorshDeserialize;
+        use crate::wire::Deserialize;
 
         let mut cursor = std::io::Cursor::new(bytes);
         crate::wire::deserialize_header(*b"scnr", &mut cursor)?;
-        let this = BorshDeserialize::deserialize_reader(&mut cursor)?;
+        let this = Deserialize::deserialize_reader(&mut cursor)?;
 
         Ok(this)
     }
@@ -1444,7 +1444,7 @@ mod wire {
     use std::io;
     use std::sync::Arc;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::compiler::variable::Variable;
     use crate::compiler::CompilerProfile;
@@ -1453,7 +1453,7 @@ mod wire {
 
     use super::{ac_scan::AcScan, Inner, Rule, Scanner};
 
-    impl BorshSerialize for Scanner {
+    impl Serialize for Scanner {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.scan_params.serialize(writer)?;
             self.external_symbols_values.serialize(writer)?;
@@ -1462,11 +1462,11 @@ mod wire {
         }
     }
 
-    impl BD for Scanner {
+    impl DS for Scanner {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let scan_params = BD::deserialize_reader(reader)?;
-            let external_symbols_values = BD::deserialize_reader(reader)?;
-            let inner: Inner = BD::deserialize_reader(reader)?;
+            let scan_params = DS::deserialize_reader(reader)?;
+            let external_symbols_values = DS::deserialize_reader(reader)?;
+            let inner: Inner = DS::deserialize_reader(reader)?;
             Ok(Self {
                 inner: Arc::new(inner),
                 scan_params,
@@ -1476,7 +1476,7 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for Inner {
+    impl Serialize for Inner {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.external_symbols_map.serialize(writer)?;
             self.namespaces.serialize(writer)?;
@@ -1500,12 +1500,12 @@ mod wire {
         Ok(())
     }
 
-    impl BD for Inner {
+    impl DS for Inner {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let external_symbols_map = BD::deserialize_reader(reader)?;
-            let namespaces = BD::deserialize_reader(reader)?;
-            let bytes_pool = BD::deserialize_reader(reader)?;
-            let variables: Vec<Variable> = BD::deserialize_reader(reader)?;
+            let external_symbols_map = DS::deserialize_reader(reader)?;
+            let namespaces = DS::deserialize_reader(reader)?;
+            let bytes_pool = DS::deserialize_reader(reader)?;
+            let variables: Vec<Variable> = DS::deserialize_reader(reader)?;
             let modules = deserialize_modules(reader)?;
 
             let ctx = DeserializeContext {
@@ -1537,7 +1537,7 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Vec<Rule>> {
-        let len: usize = BD::deserialize_reader(reader)?;
+        let len: usize = DS::deserialize_reader(reader)?;
         let mut rules = Vec::with_capacity(len);
         for _ in 0..len {
             rules.push(Rule::deserialize(ctx, reader)?);
@@ -1548,10 +1548,10 @@ mod wire {
     fn deserialize_modules<R: io::Read>(reader: &mut R) -> io::Result<Vec<Box<dyn Module>>> {
         let mut available_modules = build_available_modules();
 
-        let modules_len: usize = BD::deserialize_reader(reader)?;
+        let modules_len: usize = DS::deserialize_reader(reader)?;
         let mut modules = Vec::with_capacity(modules_len);
         for _ in 0..modules_len {
-            let name: String = BD::deserialize_reader(reader)?;
+            let name: String = DS::deserialize_reader(reader)?;
             match available_modules.remove(&*name) {
                 Some(module) => modules.push(module),
                 None => {

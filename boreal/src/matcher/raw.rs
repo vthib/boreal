@@ -175,14 +175,14 @@ fn unwide(mem: &[u8]) -> Vec<u8> {
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::matcher::Modifiers;
     use crate::regex::Regex;
 
     use super::RawMatcher;
 
-    impl BorshSerialize for RawMatcher {
+    impl Serialize for RawMatcher {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.exprs[0].serialize(writer)?;
             self.exprs[1].serialize(writer)?;
@@ -198,10 +198,10 @@ mod wire {
         modifiers: Modifiers,
         reader: &mut R,
     ) -> io::Result<RawMatcher> {
-        let expr1: String = BD::deserialize_reader(reader)?;
-        let expr2: String = BD::deserialize_reader(reader)?;
+        let expr1: String = DS::deserialize_reader(reader)?;
+        let expr2: String = DS::deserialize_reader(reader)?;
 
-        let non_wide_expr: Option<String> = BD::deserialize_reader(reader)?;
+        let non_wide_expr: Option<String> = DS::deserialize_reader(reader)?;
         let non_wide_regex = match non_wide_expr {
             Some(expr) => Some(
                 Regex::from_string(expr.clone(), modifiers.nocase, modifiers.dot_all).map_err(

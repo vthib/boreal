@@ -705,7 +705,7 @@ fn module_type_to_expr_type(v: &ValueType) -> Option<Type> {
 mod wire {
     use std::io;
 
-    use borsh::{BorshDeserialize as BD, BorshSerialize};
+    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::compiler::expression::Expression;
     use crate::module::StaticValue;
@@ -716,7 +716,7 @@ mod wire {
         StaticFunction, ValueOperation,
     };
 
-    impl BorshSerialize for ModuleExpression {
+    impl Serialize for ModuleExpression {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.kind.serialize(writer)?;
             self.operations.serialize(writer)?;
@@ -733,7 +733,7 @@ mod wire {
         Ok(ModuleExpression { kind, operations })
     }
 
-    impl BorshSerialize for ModuleOperations {
+    impl Serialize for ModuleOperations {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.expressions.serialize(writer)?;
             self.operations.serialize(writer)?;
@@ -745,19 +745,19 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ModuleOperations> {
-        let len: usize = BD::deserialize_reader(reader)?;
+        let len: usize = DS::deserialize_reader(reader)?;
         let mut expressions = Vec::with_capacity(len);
         for _ in 0..len {
             expressions.push(Expression::deserialize(ctx, reader)?);
         }
-        let operations = BD::deserialize_reader(reader)?;
+        let operations = DS::deserialize_reader(reader)?;
         Ok(ModuleOperations {
             expressions,
             operations,
         })
     }
 
-    impl BorshSerialize for ModuleExpressionKind {
+    impl Serialize for ModuleExpressionKind {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::BoundedModuleValueUse { index } => {
@@ -783,15 +783,15 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ModuleExpressionKind> {
-        let discriminant: u8 = BD::deserialize_reader(reader)?;
+        let discriminant: u8 = DS::deserialize_reader(reader)?;
         match discriminant {
             0 => {
-                let index = BD::deserialize_reader(reader)?;
+                let index = DS::deserialize_reader(reader)?;
                 Ok(ModuleExpressionKind::BoundedModuleValueUse { index })
             }
             1 => {
-                let module_index: usize = BD::deserialize_reader(reader)?;
-                let subfields: Vec<String> = BD::deserialize_reader(reader)?;
+                let module_index: usize = DS::deserialize_reader(reader)?;
+                let subfields: Vec<String> = DS::deserialize_reader(reader)?;
                 let Some(value) = ctx.modules_static_values.get(module_index) else {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -835,7 +835,7 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for BoundedValueIndex {
+    impl Serialize for BoundedValueIndex {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 Self::Module(v) => {
@@ -851,12 +851,12 @@ mod wire {
         }
     }
 
-    impl BD for BoundedValueIndex {
+    impl DS for BoundedValueIndex {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            let discriminant: u8 = DS::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Module(BD::deserialize_reader(reader)?)),
-                1 => Ok(Self::BoundedStack(BD::deserialize_reader(reader)?)),
+                0 => Ok(Self::Module(DS::deserialize_reader(reader)?)),
+                1 => Ok(Self::BoundedStack(DS::deserialize_reader(reader)?)),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing a bounded value index: {v}"),
@@ -865,7 +865,7 @@ mod wire {
         }
     }
 
-    impl BorshSerialize for ValueOperation {
+    impl Serialize for ValueOperation {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             match self {
                 ValueOperation::Subfield(v) => {
@@ -882,14 +882,14 @@ mod wire {
         }
     }
 
-    impl BD for ValueOperation {
+    impl DS for ValueOperation {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = BD::deserialize_reader(reader)?;
+            let discriminant: u8 = DS::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Subfield(BD::deserialize_reader(reader)?)),
+                0 => Ok(Self::Subfield(DS::deserialize_reader(reader)?)),
                 1 => Ok(Self::Subscript),
                 2 => {
-                    let v = BD::deserialize_reader(reader)?;
+                    let v = DS::deserialize_reader(reader)?;
                     Ok(Self::FunctionCall(v))
                 }
                 v => Err(io::Error::new(
