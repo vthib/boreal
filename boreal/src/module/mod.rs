@@ -447,6 +447,32 @@ impl<'scanner> ModuleDataMap<'scanner> {
     }
 }
 
+pub(crate) fn add_default_modules<F: FnMut(Box<dyn Module>)>(mut cb: F) {
+    cb(Box::new(Time));
+    cb(Box::new(Math));
+    cb(Box::new(String_));
+
+    #[cfg(feature = "hash")]
+    cb(Box::new(Hash));
+
+    #[cfg(feature = "object")]
+    cb(Box::new(Pe));
+    #[cfg(feature = "object")]
+    cb(Box::new(Elf));
+    #[cfg(feature = "object")]
+    cb(Box::new(MachO));
+    #[cfg(feature = "object")]
+    cb(Box::new(Dotnet));
+    #[cfg(feature = "object")]
+    cb(Box::new(Dex));
+
+    #[cfg(feature = "magic")]
+    cb(Box::new(Magic));
+
+    #[cfg(feature = "cuckoo")]
+    cb(Box::new(Cuckoo));
+}
+
 /// A value bound to an identifier.
 ///
 /// This object represents an immediately resolvable value for an identifier.

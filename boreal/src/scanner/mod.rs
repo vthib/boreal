@@ -1468,38 +1468,11 @@ mod wire {
 
     impl Default for DeserializeParams {
         fn default() -> Self {
-            fn add_module<M: Module + 'static>(
-                modules: &mut HashMap<&'static str, Box<dyn Module>>,
-                module: M,
-            ) {
-                let _r = modules.insert(module.get_name(), Box::new(module));
-            }
-
             let mut modules = HashMap::new();
 
-            add_module(&mut modules, crate::module::Time);
-            add_module(&mut modules, crate::module::Math);
-            add_module(&mut modules, crate::module::String_);
-
-            #[cfg(feature = "hash")]
-            add_module(&mut modules, crate::module::Hash);
-
-            #[cfg(feature = "object")]
-            add_module(&mut modules, crate::module::Pe);
-            #[cfg(feature = "object")]
-            add_module(&mut modules, crate::module::Elf);
-            #[cfg(feature = "object")]
-            add_module(&mut modules, crate::module::MachO);
-            #[cfg(feature = "object")]
-            add_module(&mut modules, crate::module::Dotnet);
-            #[cfg(feature = "object")]
-            add_module(&mut modules, crate::module::Dex);
-
-            #[cfg(feature = "magic")]
-            add_module(&mut modules, crate::module::Magic);
-
-            #[cfg(feature = "cuckoo")]
-            add_module(&mut modules, crate::module::Cuckoo);
+            crate::module::add_default_modules(|module| {
+                let _r = modules.insert(module.get_name(), module);
+            });
 
             Self { modules }
         }
