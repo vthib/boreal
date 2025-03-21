@@ -20,6 +20,7 @@ mod error;
 pub use error::ScanError;
 mod params;
 pub use params::{CallbackEvents, FragmentedScanMode, ScanParams};
+pub use wire::DeserializeParams;
 
 #[cfg(feature = "process")]
 mod process;
@@ -624,12 +625,10 @@ impl Scanner {
     /// # Errors
     ///
     #[cfg(feature = "serialize")]
-    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
-        use crate::wire::Deserialize;
-
+    pub fn from_bytes(bytes: &[u8], params: DeserializeParams) -> std::io::Result<Self> {
         let mut cursor = std::io::Cursor::new(bytes);
         crate::wire::deserialize_header(*b"scnr", &mut cursor)?;
-        let this = Deserialize::deserialize_reader(&mut cursor)?;
+        let this = wire::deserialize_scanner(params, &mut cursor)?;
 
         Ok(this)
     }
@@ -1459,6 +1458,72 @@ mod wire {
 
     use super::{ac_scan::AcScan, Inner, Rule, Scanner};
 
+    /// Parameters used during deserialization of a [`Scanner`].
+    ///
+    /// See [`Scanner::from_bytes`].
+    #[derive(Debug)]
+    pub struct DeserializeParams {
+        modules: HashMap<&'static str, Box<dyn Module>>,
+    }
+
+    impl Default for DeserializeParams {
+        fn default() -> Self {
+            fn add_module<M: Module + 'static>(
+                modules: &mut HashMap<&'static str, Box<dyn Module>>,
+                module: M,
+            ) {
+                let _r = modules.insert(module.get_name(), Box::new(module));
+            }
+
+            let mut modules = HashMap::new();
+
+            add_module(&mut modules, crate::module::Time);
+            add_module(&mut modules, crate::module::Math);
+            add_module(&mut modules, crate::module::String_);
+
+            #[cfg(feature = "hash")]
+            add_module(&mut modules, crate::module::Hash);
+
+            #[cfg(feature = "object")]
+            add_module(&mut modules, crate::module::Pe);
+            #[cfg(feature = "object")]
+            add_module(&mut modules, crate::module::Elf);
+            #[cfg(feature = "object")]
+            add_module(&mut modules, crate::module::MachO);
+            #[cfg(feature = "object")]
+            add_module(&mut modules, crate::module::Dotnet);
+            #[cfg(feature = "object")]
+            add_module(&mut modules, crate::module::Dex);
+
+            #[cfg(feature = "magic")]
+            add_module(&mut modules, crate::module::Magic);
+
+            #[cfg(feature = "cuckoo")]
+            add_module(&mut modules, crate::module::Cuckoo);
+
+            Self { modules }
+        }
+    }
+
+    impl DeserializeParams {
+        /// Add a module to be available during deserialization.
+        ///
+        /// If any serialized rule used a module, this module must be known when deserializing
+        /// rules. All the modules defined in [`boreal::module`] are available except for
+        /// the console module, so there is no need to add them through this API. See
+        /// the list documented in the [`crate::compiler::CompilerBuilder::new`] API.
+        ///
+        /// However, any modules that may have been added when compiling the rules before
+        /// serialization must be added here, including the console module or any third-party
+        /// ones.
+        ///
+        /// If the same module has already been added, it will be replaced by this one.
+        /// This can be useful to change the parameters of a module.
+        pub fn add_module<M: Module + 'static>(&mut self, module: M) {
+            let _r = self.modules.insert(module.get_name(), Box::new(module));
+        }
+    }
+
     impl Serialize for Scanner {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.scan_params.serialize(writer)?;
@@ -1468,18 +1533,19 @@ mod wire {
         }
     }
 
-    impl DS for Scanner {
-        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let scan_params = DS::deserialize_reader(reader)?;
-            let external_symbols_values = DS::deserialize_reader(reader)?;
-            let inner: Inner = DS::deserialize_reader(reader)?;
-            Ok(Self {
-                inner: Arc::new(inner),
-                scan_params,
-                external_symbols_values,
-                module_user_data: ModuleUserData::default(),
-            })
-        }
+    pub(super) fn deserialize_scanner<R: io::Read>(
+        params: DeserializeParams,
+        reader: &mut R,
+    ) -> io::Result<Scanner> {
+        let scan_params = DS::deserialize_reader(reader)?;
+        let external_symbols_values = DS::deserialize_reader(reader)?;
+        let inner = deserialize_inner(params, reader)?;
+        Ok(Scanner {
+            inner: Arc::new(inner),
+            scan_params,
+            external_symbols_values,
+            module_user_data: ModuleUserData::default(),
+        })
     }
 
     impl Serialize for Inner {
@@ -1496,49 +1562,39 @@ mod wire {
         }
     }
 
-    impl DS for Inner {
-        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let external_symbols_map = DS::deserialize_reader(reader)?;
-            let namespaces = DS::deserialize_reader(reader)?;
-            let bytes_pool = DS::deserialize_reader(reader)?;
-            let variables: Vec<Variable> = DS::deserialize_reader(reader)?;
-            let modules = deserialize_modules(reader)?;
+    fn deserialize_inner<R: io::Read>(
+        params: DeserializeParams,
+        reader: &mut R,
+    ) -> io::Result<Inner> {
+        let external_symbols_map = DS::deserialize_reader(reader)?;
+        let namespaces = DS::deserialize_reader(reader)?;
+        let bytes_pool = DS::deserialize_reader(reader)?;
+        let variables: Vec<Variable> = DS::deserialize_reader(reader)?;
+        let modules = deserialize_modules(params.modules, reader)?;
 
-            let ctx = DeserializeContext {
-                modules_static_values: modules
-                    .iter()
-                    .map(|module| StaticValue::Object(module.get_static_values()))
-                    .collect(),
-            };
-            let global_rules = deserialize_rules(&ctx, reader)?;
-            let rules = deserialize_rules(&ctx, reader)?;
+        let ctx = DeserializeContext {
+            modules_static_values: modules
+                .iter()
+                .map(|module| StaticValue::Object(module.get_static_values()))
+                .collect(),
+        };
+        let global_rules = deserialize_rules(&ctx, reader)?;
+        let rules = deserialize_rules(&ctx, reader)?;
 
-            let profile = CompilerProfile::deserialize_reader(reader)?;
-            let ac_scan = AcScan::new(&variables, profile);
+        let profile = CompilerProfile::deserialize_reader(reader)?;
+        let ac_scan = AcScan::new(&variables, profile);
 
-            Ok(Self {
-                rules,
-                global_rules,
-                variables,
-                ac_scan,
-                modules,
-                external_symbols_map,
-                namespaces,
-                bytes_pool,
-                profile,
-            })
-        }
-    }
-
-    fn serialize_modules<W: io::Write>(
-        modules: &[Box<dyn Module>],
-        writer: &mut W,
-    ) -> io::Result<()> {
-        modules.len().serialize(writer)?;
-        for module in modules {
-            module.get_name().serialize(writer)?;
-        }
-        Ok(())
+        Ok(Inner {
+            rules,
+            global_rules,
+            variables,
+            ac_scan,
+            modules,
+            external_symbols_map,
+            namespaces,
+            bytes_pool,
+            profile,
+        })
     }
 
     impl Serialize for CompilerProfile {
@@ -1576,9 +1632,21 @@ mod wire {
         Ok(rules)
     }
 
-    fn deserialize_modules<R: io::Read>(reader: &mut R) -> io::Result<Vec<Box<dyn Module>>> {
-        let mut available_modules = build_available_modules();
+    fn serialize_modules<W: io::Write>(
+        modules: &[Box<dyn Module>],
+        writer: &mut W,
+    ) -> io::Result<()> {
+        modules.len().serialize(writer)?;
+        for module in modules {
+            module.get_name().serialize(writer)?;
+        }
+        Ok(())
+    }
 
+    fn deserialize_modules<R: io::Read>(
+        mut available_modules: HashMap<&'static str, Box<dyn Module>>,
+        reader: &mut R,
+    ) -> io::Result<Vec<Box<dyn Module>>> {
         let modules_len: usize = DS::deserialize_reader(reader)?;
         let mut modules = Vec::with_capacity(modules_len);
         for _ in 0..modules_len {
@@ -1594,44 +1662,6 @@ mod wire {
             }
         }
         Ok(modules)
-    }
-
-    // FIXME: make this work with custom modules too
-    fn build_available_modules() -> HashMap<&'static str, Box<dyn Module>> {
-        fn add_module<M: Module + 'static>(
-            modules: &mut HashMap<&'static str, Box<dyn Module>>,
-            module: M,
-        ) {
-            let _r = modules.insert(module.get_name(), Box::new(module));
-        }
-
-        let mut modules = HashMap::new();
-
-        add_module(&mut modules, crate::module::Time);
-        add_module(&mut modules, crate::module::Math);
-        add_module(&mut modules, crate::module::String_);
-
-        #[cfg(feature = "hash")]
-        add_module(&mut modules, crate::module::Hash);
-
-        #[cfg(feature = "object")]
-        add_module(&mut modules, crate::module::Pe);
-        #[cfg(feature = "object")]
-        add_module(&mut modules, crate::module::Elf);
-        #[cfg(feature = "object")]
-        add_module(&mut modules, crate::module::MachO);
-        #[cfg(feature = "object")]
-        add_module(&mut modules, crate::module::Dotnet);
-        #[cfg(feature = "object")]
-        add_module(&mut modules, crate::module::Dex);
-
-        #[cfg(feature = "magic")]
-        add_module(&mut modules, crate::module::Magic);
-
-        #[cfg(feature = "cuckoo")]
-        add_module(&mut modules, crate::module::Cuckoo);
-
-        modules
     }
 }
 
