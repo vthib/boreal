@@ -17,7 +17,7 @@ pub(crate) struct ExternalSymbol {
 }
 
 /// A value used for an external symbol.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ExternalValue {
     /// An integer
     Integer(i64),
@@ -89,7 +89,7 @@ impl_into_bytes!(&str);
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use super::ExternalValue;
 
@@ -117,19 +117,35 @@ mod wire {
         }
     }
 
-    impl DS for ExternalValue {
+    impl Deserialize for ExternalValue {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = DS::deserialize_reader(reader)?;
+            let discriminant = u8::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(ExternalValue::Integer(DS::deserialize_reader(reader)?)),
-                1 => Ok(ExternalValue::Float(DS::deserialize_reader(reader)?)),
-                2 => Ok(ExternalValue::Bytes(DS::deserialize_reader(reader)?)),
-                3 => Ok(ExternalValue::Boolean(DS::deserialize_reader(reader)?)),
+                0 => Ok(ExternalValue::Integer(i64::deserialize_reader(reader)?)),
+                1 => Ok(ExternalValue::Float(f64::deserialize_reader(reader)?)),
+                2 => Ok(ExternalValue::Bytes(<Vec<u8>>::deserialize_reader(reader)?)),
+                3 => Ok(ExternalValue::Boolean(bool::deserialize_reader(reader)?)),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing an external value: {v}"),
                 )),
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::wire::tests::{test_invalid_deserialization, test_round_trip};
+
+        #[test]
+        fn test_wire_external_value() {
+            test_round_trip(&ExternalValue::Integer(-239), &[0, 2]);
+            test_round_trip(&ExternalValue::Float(-5.2), &[0, 2]);
+            test_round_trip(&ExternalValue::Bytes(b"azea".to_vec()), &[0, 2, 6]);
+            test_round_trip(&ExternalValue::Boolean(true), &[0, 1]);
+
+            test_invalid_deserialization::<ExternalValue>(b"\x05");
         }
     }
 }

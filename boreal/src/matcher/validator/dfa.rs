@@ -39,6 +39,13 @@ pub(crate) struct DfaValidator {
     exprs: [Box<str>; 2],
 }
 
+#[cfg(feature = "serialize")]
+impl PartialEq for DfaValidator {
+    fn eq(&self, other: &Self) -> bool {
+        self.use_custom_wide_runner == other.use_custom_wide_runner && self.exprs == other.exprs
+    }
+}
+
 impl DfaValidator {
     pub(crate) fn new(
         hir: &Hir,
@@ -323,7 +330,7 @@ fn build_dfa(
 mod wire {
     use std::{io, sync::Arc};
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
     use regex_automata::util::pool::Pool;
 
     use crate::matcher::Modifiers;
@@ -344,9 +351,9 @@ mod wire {
         reverse: bool,
         reader: &mut R,
     ) -> io::Result<DfaValidator> {
-        let expr1: String = DS::deserialize_reader(reader)?;
-        let expr2: String = DS::deserialize_reader(reader)?;
-        let use_custom_wide_runner = DS::deserialize_reader(reader)?;
+        let expr1 = String::deserialize_reader(reader)?;
+        let expr2 = String::deserialize_reader(reader)?;
+        let use_custom_wide_runner = bool::deserialize_reader(reader)?;
 
         let dfa = Arc::new(
             build_dfa(&expr1, &expr2, modifiers, reverse).map_err(|err| {
@@ -371,6 +378,31 @@ mod wire {
             use_custom_wide_runner,
             exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
         })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::matcher::analysis::analyze_hir;
+        use crate::regex::Hir;
+        use crate::wire::tests::test_round_trip_custom_deser;
+
+        use super::*;
+
+        #[test]
+        fn test_wire_dfa_validator() {
+            let hir = Hir::Dot;
+            let analysis = analyze_hir(&hir, true);
+            let modifiers = Modifiers::default();
+            test_round_trip_custom_deser(
+                &DfaValidator::new(&hir, &analysis, modifiers, true).unwrap(),
+                |reader| deserialize_dfa_validator(modifiers, true, reader),
+                &[0, 7, 9],
+            );
+
+            // Test failure when compiling expressions.
+            let mut reader = io::Cursor::new(b"\x01\x00\x00\x00[\x00\x00\x00\x00\x01");
+            assert!(deserialize_dfa_validator(modifiers, true, &mut reader).is_err());
+        }
     }
 }
 

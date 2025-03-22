@@ -20,6 +20,7 @@ mod error;
 pub use error::ScanError;
 mod params;
 pub use params::{CallbackEvents, FragmentedScanMode, ScanParams};
+#[cfg(feature = "serialize")]
 pub use wire::DeserializeParams;
 
 #[cfg(feature = "process")]
@@ -1449,14 +1450,15 @@ mod wire {
     use std::io;
     use std::sync::Arc;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use crate::compiler::variable::Variable;
-    use crate::compiler::CompilerProfile;
+    use crate::compiler::{CompilerProfile, ExternalValue};
     use crate::module::{Module, ModuleUserData, StaticValue};
     use crate::wire::DeserializeContext;
 
     use super::{ac_scan::AcScan, Inner, Rule, Scanner};
+    use super::{BytesPool, ScanParams};
 
     /// Parameters used during deserialization of a [`Scanner`].
     ///
@@ -1510,8 +1512,8 @@ mod wire {
         params: DeserializeParams,
         reader: &mut R,
     ) -> io::Result<Scanner> {
-        let scan_params = DS::deserialize_reader(reader)?;
-        let external_symbols_values = DS::deserialize_reader(reader)?;
+        let scan_params = ScanParams::deserialize_reader(reader)?;
+        let external_symbols_values = <Vec<ExternalValue>>::deserialize_reader(reader)?;
         let inner = deserialize_inner(params, reader)?;
         Ok(Scanner {
             inner: Arc::new(inner),
@@ -1539,10 +1541,10 @@ mod wire {
         params: DeserializeParams,
         reader: &mut R,
     ) -> io::Result<Inner> {
-        let external_symbols_map = DS::deserialize_reader(reader)?;
-        let namespaces = DS::deserialize_reader(reader)?;
-        let bytes_pool = DS::deserialize_reader(reader)?;
-        let variables: Vec<Variable> = DS::deserialize_reader(reader)?;
+        let external_symbols_map = <HashMap<String, usize>>::deserialize_reader(reader)?;
+        let namespaces = <Vec<Option<String>>>::deserialize_reader(reader)?;
+        let bytes_pool = BytesPool::deserialize_reader(reader)?;
+        let variables = <Vec<Variable>>::deserialize_reader(reader)?;
         let modules = deserialize_modules(params.modules, reader)?;
 
         let ctx = DeserializeContext {
@@ -1579,7 +1581,7 @@ mod wire {
         }
     }
 
-    impl DS for CompilerProfile {
+    impl Deserialize for CompilerProfile {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
             let tag = u8::deserialize_reader(reader)?;
             match tag {
@@ -1597,7 +1599,10 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Vec<Rule>> {
-        let len: usize = DS::deserialize_reader(reader)?;
+        let len = u32::deserialize_reader(reader)?;
+        let len = usize::try_from(len).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("length too big: {len}"))
+        })?;
         let mut rules = Vec::with_capacity(len);
         for _ in 0..len {
             rules.push(Rule::deserialize(ctx, reader)?);
@@ -1609,7 +1614,13 @@ mod wire {
         modules: &[Box<dyn Module>],
         writer: &mut W,
     ) -> io::Result<()> {
-        modules.len().serialize(writer)?;
+        let len = u32::try_from(modules.len()).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("modules length too big: {}", modules.len()),
+            )
+        })?;
+        len.serialize(writer)?;
         for module in modules {
             module.get_name().serialize(writer)?;
         }
@@ -1620,10 +1631,13 @@ mod wire {
         mut available_modules: HashMap<&'static str, Box<dyn Module>>,
         reader: &mut R,
     ) -> io::Result<Vec<Box<dyn Module>>> {
-        let modules_len: usize = DS::deserialize_reader(reader)?;
-        let mut modules = Vec::with_capacity(modules_len);
-        for _ in 0..modules_len {
-            let name: String = DS::deserialize_reader(reader)?;
+        let len = u32::deserialize_reader(reader)?;
+        let len = usize::try_from(len).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("length too big: {len}"))
+        })?;
+        let mut modules = Vec::with_capacity(len);
+        for _ in 0..len {
+            let name = String::deserialize_reader(reader)?;
             match available_modules.remove(&*name) {
                 Some(module) => modules.push(module),
                 None => {
@@ -1635,6 +1649,173 @@ mod wire {
             }
         }
         Ok(modules)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::bytes_pool::BytesPoolBuilder;
+        use crate::compiler::expression::Expression;
+        use crate::module::{Math, Time};
+        use crate::wire::tests::{
+            test_invalid_deserialization, test_round_trip, test_round_trip_custom_deser,
+        };
+
+        use super::*;
+
+        #[test]
+        fn test_wire_scanner() {
+            let scanner = Scanner {
+                scan_params: ScanParams::default(),
+                external_symbols_values: vec![ExternalValue::Integer(23)],
+                module_user_data: ModuleUserData::default(),
+                inner: Arc::new(Inner {
+                    external_symbols_map: HashMap::new(),
+                    namespaces: Vec::new(),
+                    bytes_pool: BytesPoolBuilder::default().into_pool(),
+                    variables: Vec::new(),
+                    modules: vec![Box::new(Math)],
+                    global_rules: Vec::new(),
+                    rules: Vec::new(),
+                    profile: CompilerProfile::Speed,
+                    ac_scan: AcScan::new(&[], CompilerProfile::Speed),
+                }),
+            };
+
+            let truncate_offset_errors = [0, 32, 46];
+
+            let mut buf = [0; 46];
+            for offset in &truncate_offset_errors {
+                assert!(scanner.serialize(&mut &mut buf[..*offset]).is_err());
+            }
+
+            let mut buf = Vec::new();
+            scanner.serialize(&mut buf).unwrap();
+            for offset in &truncate_offset_errors {
+                assert!(deserialize_scanner(
+                    DeserializeParams::default(),
+                    &mut io::Cursor::new(&buf[..*offset])
+                )
+                .is_err());
+            }
+
+            let scanner2 =
+                deserialize_scanner(DeserializeParams::default(), &mut io::Cursor::new(buf))
+                    .unwrap();
+            assert_eq!(scanner.scan_params, scanner2.scan_params);
+            assert_eq!(
+                scanner.external_symbols_values,
+                scanner2.external_symbols_values
+            );
+            assert_eq!(scanner2.inner.modules.len(), 1);
+            assert_eq!(scanner2.inner.modules[0].get_name(), "math");
+        }
+
+        #[test]
+        fn test_wire_inner() {
+            let inner = Inner {
+                external_symbols_map: [("abc".to_owned(), 33), ("zyx".to_owned(), 12)]
+                    .into_iter()
+                    .collect(),
+                namespaces: vec![Some("abc".to_owned()), None],
+                bytes_pool: BytesPoolBuilder::default().into_pool(),
+                variables: Vec::new(),
+                modules: vec![Box::new(Math), Box::new(Time)],
+                global_rules: Vec::new(),
+                rules: Vec::new(),
+                profile: CompilerProfile::Speed,
+                ac_scan: AcScan::new(&[], CompilerProfile::Speed),
+            };
+
+            let truncate_offset_errors = [0, 34, 47, 51, 55, 75, 79, 83];
+
+            let mut buf = [0; 83];
+            for offset in &truncate_offset_errors {
+                assert!(inner.serialize(&mut &mut buf[..*offset]).is_err());
+            }
+
+            let mut buf = Vec::new();
+            inner.serialize(&mut buf).unwrap();
+            for offset in &truncate_offset_errors {
+                assert!(deserialize_inner(
+                    DeserializeParams::default(),
+                    &mut io::Cursor::new(&buf[..*offset])
+                )
+                .is_err());
+            }
+
+            let inner2 =
+                deserialize_inner(DeserializeParams::default(), &mut io::Cursor::new(buf)).unwrap();
+            assert_eq!(inner.external_symbols_map, inner2.external_symbols_map);
+            assert_eq!(inner.namespaces, inner2.namespaces);
+            assert_eq!(inner.bytes_pool, inner2.bytes_pool);
+            assert_eq!(inner.variables, inner2.variables);
+            assert_eq!(inner2.modules.len(), 2);
+            assert_eq!(inner2.modules[0].get_name(), "math");
+            assert_eq!(inner2.modules[1].get_name(), "time");
+            assert_eq!(inner.global_rules, inner2.global_rules);
+            assert_eq!(inner.rules, inner2.rules);
+            assert_eq!(inner.profile, inner2.profile);
+        }
+
+        #[test]
+        fn test_wire_modules() {
+            fn build_available_modules() -> HashMap<&'static str, Box<dyn Module>> {
+                let mut map: HashMap<&'static str, Box<dyn Module>> = HashMap::new();
+                let _r = map.insert("time", Box::new(Time));
+                let _r = map.insert("math", Box::new(Math));
+                map
+            }
+
+            let modules: Vec<Box<dyn Module>> = vec![Box::new(Time), Box::new(Math)];
+
+            let mut buf = [0; 5];
+            assert!(serialize_modules(&modules, &mut &mut buf[..1]).is_err());
+            assert!(serialize_modules(&modules, &mut &mut buf[..5]).is_err());
+            let mut buf = Vec::new();
+            serialize_modules(&modules, &mut buf).unwrap();
+
+            assert!(deserialize_modules(
+                build_available_modules(),
+                &mut io::Cursor::new(&buf[..1])
+            )
+            .is_err());
+            assert!(deserialize_modules(
+                build_available_modules(),
+                &mut io::Cursor::new(&buf[..5])
+            )
+            .is_err());
+            let modules =
+                deserialize_modules(build_available_modules(), &mut io::Cursor::new(&buf)).unwrap();
+            assert_eq!(modules.len(), 2);
+            assert_eq!(modules[0].get_name(), "time");
+            assert_eq!(modules[1].get_name(), "math");
+
+            // Unknown module
+            assert!(deserialize_modules(HashMap::new(), &mut io::Cursor::new(&buf)).is_err());
+        }
+
+        #[test]
+        fn test_wire_rules() {
+            let ctx = DeserializeContext::default();
+            let rules = vec![Rule {
+                name: "a".to_owned(),
+                namespace_index: 0,
+                tags: Vec::new(),
+                metadatas: Vec::new(),
+                nb_variables: 0,
+                condition: Expression::Filesize,
+                is_private: false,
+            }];
+            test_round_trip_custom_deser(&rules, |reader| deserialize_rules(&ctx, reader), &[0, 4]);
+        }
+
+        #[test]
+        fn test_wire_compiler_profile() {
+            test_round_trip(&CompilerProfile::Speed, &[0]);
+            test_round_trip(&CompilerProfile::Memory, &[0]);
+
+            test_invalid_deserialization::<CompilerProfile>(b"\x05");
+        }
     }
 }
 
@@ -2326,5 +2507,7 @@ mod tests {
             string_name: "",
             string_index: 0,
         });
+        #[cfg(feature = "serialize")]
+        test_type_traits_non_clonable(DeserializeParams::default());
     }
 }

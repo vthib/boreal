@@ -27,6 +27,13 @@ pub(super) struct RawMatcher {
     exprs: [Box<str>; 2],
 }
 
+#[cfg(feature = "serialize")]
+impl PartialEq for RawMatcher {
+    fn eq(&self, other: &Self) -> bool {
+        self.non_wide_regex == other.non_wide_regex && self.exprs == other.exprs
+    }
+}
+
 impl RawMatcher {
     pub(super) fn new(
         hir: &Hir,
@@ -175,7 +182,7 @@ fn unwide(mem: &[u8]) -> Vec<u8> {
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use crate::matcher::Modifiers;
     use crate::regex::Regex;
@@ -198,10 +205,10 @@ mod wire {
         modifiers: Modifiers,
         reader: &mut R,
     ) -> io::Result<RawMatcher> {
-        let expr1: String = DS::deserialize_reader(reader)?;
-        let expr2: String = DS::deserialize_reader(reader)?;
+        let expr1 = String::deserialize_reader(reader)?;
+        let expr2 = String::deserialize_reader(reader)?;
 
-        let non_wide_expr: Option<String> = DS::deserialize_reader(reader)?;
+        let non_wide_expr = <Option<String>>::deserialize_reader(reader)?;
         let non_wide_regex = match non_wide_expr {
             Some(expr) => Some(
                 Regex::from_string(expr.clone(), modifiers.nocase, modifiers.dot_all).map_err(
@@ -233,6 +240,47 @@ mod wire {
             exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
             non_wide_regex,
         })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::matcher::analysis::analyze_hir;
+        use crate::regex::Hir;
+        use crate::wire::tests::test_round_trip_custom_deser;
+
+        use super::*;
+
+        #[test]
+        fn test_wire_raw_matcher() {
+            let hir = Hir::Dot;
+            let analysis = analyze_hir(&hir, true);
+
+            let modifiers = Modifiers {
+                ascii: true,
+                wide: true,
+                ..Default::default()
+            };
+            test_round_trip_custom_deser(
+                &RawMatcher::new(&hir, &analysis, modifiers).unwrap(),
+                |reader| deserialize_raw_matcher(modifiers, reader),
+                &[0],
+            );
+            let modifiers = Modifiers::default();
+            test_round_trip_custom_deser(
+                &RawMatcher::new(&hir, &analysis, modifiers).unwrap(),
+                |reader| deserialize_raw_matcher(modifiers, reader),
+                &[0, 7, 9],
+            );
+
+            // Test failure when compiling expressions.
+            let mut reader = io::Cursor::new(b"\x01\x00\x00\x00[\x00\x00\x00\x00\x00");
+            assert!(deserialize_raw_matcher(modifiers, &mut reader).is_err());
+
+            // Test failure when compiling non wide regex.
+            let mut reader =
+                io::Cursor::new(b"\x01\x00\x00\x00[\x00\x00\x00\x00\x01\x01\x00\x00\x00[");
+            assert!(deserialize_raw_matcher(modifiers, &mut reader).is_err());
+        }
     }
 }
 

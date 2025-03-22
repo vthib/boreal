@@ -29,6 +29,15 @@ pub struct Regex {
     dot_all: bool,
 }
 
+#[cfg(feature = "serialize")]
+impl PartialEq for Regex {
+    fn eq(&self, other: &Self) -> bool {
+        self.expr == other.expr
+            && self.case_insensitive == other.case_insensitive
+            && self.dot_all == other.dot_all
+    }
+}
+
 impl Regex {
     /// Build the regex from a string expression.
     ///
@@ -321,7 +330,7 @@ impl std::error::Error for Error {}
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use super::Regex;
 
@@ -334,17 +343,33 @@ mod wire {
         }
     }
 
-    impl DS for Regex {
+    impl Deserialize for Regex {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let case_insensitive = DS::deserialize_reader(reader)?;
-            let dot_all = DS::deserialize_reader(reader)?;
-            let expr = DS::deserialize_reader(reader)?;
+            let case_insensitive = bool::deserialize_reader(reader)?;
+            let dot_all = bool::deserialize_reader(reader)?;
+            let expr = String::deserialize_reader(reader)?;
             Regex::from_string(expr, case_insensitive, dot_all).map_err(|err| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid regex expression: {err:?}"),
                 )
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::wire::tests::{test_invalid_deserialization, test_round_trip};
+
+        #[test]
+        fn test_wire_regex() {
+            test_round_trip(
+                &Regex::from_string("abc".to_owned(), false, true).unwrap(),
+                &[0, 1, 2],
+            );
+
+            test_invalid_deserialization::<Regex>(b"\x00\x00\x01\x00\x00\x00[");
         }
     }
 }
