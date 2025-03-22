@@ -8,7 +8,7 @@ use crate::matcher::analysis::HirAnalysis;
 use crate::matcher::Modifiers;
 use crate::regex::Hir;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct SimpleValidator {
     /// List of nodes to match
     nodes: Vec<SimpleNode>,
@@ -198,7 +198,7 @@ fn add_hir_to_simple_nodes(
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use super::{SimpleNode, SimpleValidator};
 
@@ -210,10 +210,10 @@ mod wire {
         }
     }
 
-    impl DS for SimpleValidator {
+    impl Deserialize for SimpleValidator {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let nodes = DS::deserialize_reader(reader)?;
-            let length = DS::deserialize_reader(reader)?;
+            let nodes = <Vec<SimpleNode>>::deserialize_reader(reader)?;
+            let length = usize::deserialize_reader(reader)?;
 
             Ok(Self { nodes, length })
         }
@@ -249,28 +249,65 @@ mod wire {
         }
     }
 
-    impl DS for SimpleNode {
+    impl Deserialize for SimpleNode {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = DS::deserialize_reader(reader)?;
+            let discriminant = u8::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Byte(DS::deserialize_reader(reader)?)),
+                0 => Ok(Self::Byte(u8::deserialize_reader(reader)?)),
                 1 => {
-                    let value = DS::deserialize_reader(reader)?;
-                    let mask = DS::deserialize_reader(reader)?;
+                    let value = u8::deserialize_reader(reader)?;
+                    let mask = u8::deserialize_reader(reader)?;
                     Ok(Self::Mask { value, mask })
                 }
                 2 => {
-                    let value = DS::deserialize_reader(reader)?;
-                    let mask = DS::deserialize_reader(reader)?;
+                    let value = u8::deserialize_reader(reader)?;
+                    let mask = u8::deserialize_reader(reader)?;
                     Ok(Self::NegatedMask { value, mask })
                 }
-                3 => Ok(Self::Jump(DS::deserialize_reader(reader)?)),
+                3 => Ok(Self::Jump(u8::deserialize_reader(reader)?)),
                 4 => Ok(Self::Dot),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing a simple node: {v}"),
                 )),
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::wire::tests::{test_invalid_deserialization, test_round_trip};
+
+        #[test]
+        fn test_wire_simple_validator() {
+            test_round_trip(
+                &SimpleValidator {
+                    nodes: vec![SimpleNode::Byte(23), SimpleNode::Dot],
+                    length: 23,
+                },
+                &[0, 1, 6, 12],
+            );
+
+            test_round_trip(&SimpleNode::Byte(23), &[0, 1]);
+            test_round_trip(
+                &SimpleNode::Mask {
+                    value: 48,
+                    mask: 12,
+                },
+                &[0, 1, 2],
+            );
+            test_round_trip(
+                &SimpleNode::NegatedMask {
+                    value: 12,
+                    mask: 49,
+                },
+                &[0, 1, 2],
+            );
+            test_round_trip(&SimpleNode::Jump(23), &[0, 1]);
+            test_round_trip(&SimpleNode::Dot, &[0]);
+
+            test_invalid_deserialization::<SimpleNode>(b"\x05");
         }
     }
 }

@@ -26,20 +26,20 @@ use std::collections::HashMap;
 /// Some other implementations could be attempted to improve memory consumption further.
 /// For example, by adding a second vec to map an index to the (from, to) pair, so that the
 /// symbol can be a single usize.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct BytesPool {
     buffer: Vec<u8>,
 }
 
 /// Symbol for a bytes string stored in a bytes intern pool.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct BytesSymbol {
     from: usize,
     to: usize,
 }
 
 /// Symbol for a string stored in a bytes intern pool.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct StringSymbol {
     from: usize,
     to: usize,
@@ -142,7 +142,7 @@ impl BytesPoolBuilder {
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use super::{BytesPool, BytesSymbol, StringSymbol};
 
@@ -152,10 +152,10 @@ mod wire {
         }
     }
 
-    impl DS for BytesPool {
+    impl Deserialize for BytesPool {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
             Ok(Self {
-                buffer: DS::deserialize_reader(reader)?,
+                buffer: <Vec<u8>>::deserialize_reader(reader)?,
             })
         }
     }
@@ -168,10 +168,10 @@ mod wire {
         }
     }
 
-    impl DS for StringSymbol {
+    impl Deserialize for StringSymbol {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let from = DS::deserialize_reader(reader)?;
-            let to = DS::deserialize_reader(reader)?;
+            let from = usize::deserialize_reader(reader)?;
+            let to = usize::deserialize_reader(reader)?;
             Ok(Self { from, to })
         }
     }
@@ -184,11 +184,31 @@ mod wire {
         }
     }
 
-    impl DS for BytesSymbol {
+    impl Deserialize for BytesSymbol {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let from = DS::deserialize_reader(reader)?;
-            let to = DS::deserialize_reader(reader)?;
+            let from = usize::deserialize_reader(reader)?;
+            let to = usize::deserialize_reader(reader)?;
             Ok(Self { from, to })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::wire::tests::test_round_trip;
+
+        #[test]
+        fn test_wire_bytes_pool() {
+            test_round_trip(
+                &BytesPool {
+                    buffer: b"abcedf".to_vec(),
+                },
+                &[2, 6],
+            );
+            test_round_trip(&BytesPool { buffer: Vec::new() }, &[2]);
+
+            test_round_trip(&StringSymbol { from: 23, to: 2 }, &[0, 8]);
+            test_round_trip(&BytesSymbol { from: 3, to: 8 }, &[0, 8]);
         }
     }
 }

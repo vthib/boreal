@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::memory::MemoryParams;
 
 /// Parameters used to configure a scan.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScanParams {
     /// Compute full matches on matching rules.
     pub(crate) compute_full_matches: bool,
@@ -478,7 +478,7 @@ impl ScanParams {
 /// Bitflag values of callback events.
 ///
 /// See [`ScanParams::callback_events`] for more details.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct CallbackEvents(pub(crate) u32);
 
 impl CallbackEvents {
@@ -543,7 +543,7 @@ mod wire {
     use std::io;
     use std::time::Duration;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use super::{CallbackEvents, FragmentedScanMode, ScanParams};
 
@@ -553,7 +553,7 @@ mod wire {
             self.match_max_length.serialize(writer)?;
             self.string_max_nb_matches.serialize(writer)?;
             self.timeout_duration
-                .map(|v| v.as_millis())
+                .map(|v| (v.as_secs(), v.subsec_nanos()))
                 .serialize(writer)?;
             self.compute_statistics.serialize(writer)?;
             self.fragmented_scan_mode.serialize(writer)?;
@@ -566,24 +566,24 @@ mod wire {
         }
     }
 
-    impl DS for ScanParams {
+    impl Deserialize for ScanParams {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let compute_full_matches = DS::deserialize_reader(reader)?;
-            let match_max_length = DS::deserialize_reader(reader)?;
-            let string_max_nb_matches = DS::deserialize_reader(reader)?;
-            let timeout_duration: Option<u64> = DS::deserialize_reader(reader)?;
-            let compute_statistics = DS::deserialize_reader(reader)?;
-            let fragmented_scan_mode = DS::deserialize_reader(reader)?;
-            let process_memory = DS::deserialize_reader(reader)?;
-            let max_fetched_region_size = DS::deserialize_reader(reader)?;
-            let memory_chunk_size = DS::deserialize_reader(reader)?;
-            let callback_events = DS::deserialize_reader(reader)?;
-            let include_not_matched_rules = DS::deserialize_reader(reader)?;
+            let compute_full_matches = bool::deserialize_reader(reader)?;
+            let match_max_length = usize::deserialize_reader(reader)?;
+            let string_max_nb_matches = u32::deserialize_reader(reader)?;
+            let timeout_duration = <Option<(u64, u32)>>::deserialize_reader(reader)?;
+            let compute_statistics = bool::deserialize_reader(reader)?;
+            let fragmented_scan_mode = FragmentedScanMode::deserialize_reader(reader)?;
+            let process_memory = bool::deserialize_reader(reader)?;
+            let max_fetched_region_size = usize::deserialize_reader(reader)?;
+            let memory_chunk_size = <Option<usize>>::deserialize_reader(reader)?;
+            let callback_events = u32::deserialize_reader(reader)?;
+            let include_not_matched_rules = bool::deserialize_reader(reader)?;
             Ok(Self {
                 compute_full_matches,
                 match_max_length,
                 string_max_nb_matches,
-                timeout_duration: timeout_duration.map(Duration::from_millis),
+                timeout_duration: timeout_duration.map(|(secs, nanos)| Duration::new(secs, nanos)),
                 compute_statistics,
                 fragmented_scan_mode,
                 process_memory,
@@ -603,14 +603,51 @@ mod wire {
         }
     }
 
-    impl DS for FragmentedScanMode {
+    impl Deserialize for FragmentedScanMode {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let modules_dynamic_values = DS::deserialize_reader(reader)?;
-            let can_refetch_regions = DS::deserialize_reader(reader)?;
+            let modules_dynamic_values = bool::deserialize_reader(reader)?;
+            let can_refetch_regions = bool::deserialize_reader(reader)?;
             Ok(Self {
                 modules_dynamic_values,
                 can_refetch_regions,
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::wire::tests::test_round_trip;
+
+        #[test]
+        fn test_wire_scan_params() {
+            test_round_trip(
+                &ScanParams {
+                    compute_full_matches: true,
+                    match_max_length: 23,
+                    string_max_nb_matches: 12,
+                    timeout_duration: Some(Duration::from_millis(1_290_874)),
+                    compute_statistics: false,
+                    fragmented_scan_mode: FragmentedScanMode {
+                        modules_dynamic_values: false,
+                        can_refetch_regions: true,
+                    },
+                    process_memory: true,
+                    max_fetched_region_size: 29_392,
+                    memory_chunk_size: Some(128),
+                    callback_events: CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT,
+                    include_not_matched_rules: true,
+                },
+                &[0, 1, 9, 13, 26, 27, 29, 30, 38, 47, 51],
+            );
+
+            test_round_trip(
+                &FragmentedScanMode {
+                    modules_dynamic_values: true,
+                    can_refetch_regions: false,
+                },
+                &[0, 1],
+            );
         }
     }
 }

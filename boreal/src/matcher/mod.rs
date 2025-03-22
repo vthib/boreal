@@ -13,6 +13,7 @@ mod validator;
 mod widener;
 
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub(crate) struct Matcher {
     /// Set of literals extracted from the variable.
     ///
@@ -33,7 +34,7 @@ pub(crate) struct Matcher {
     pub(crate) modifiers: Modifiers,
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq)]
 pub(crate) struct Modifiers {
     pub fullword: bool,
     pub wide: bool,
@@ -97,6 +98,7 @@ enum Matches {
 }
 
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 enum MatcherKind {
     /// The literals cover entirely the variable.
     Literals,
@@ -448,7 +450,7 @@ fn string_to_wide(s: &[u8]) -> Vec<u8> {
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use crate::matcher::Modifiers;
 
@@ -465,10 +467,10 @@ mod wire {
         }
     }
 
-    impl DS for Matcher {
+    impl Deserialize for Matcher {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let literals = DS::deserialize_reader(reader)?;
-            let modifiers = DS::deserialize_reader(reader)?;
+            let literals = <Vec<Vec<u8>>>::deserialize_reader(reader)?;
+            let modifiers = Modifiers::deserialize_reader(reader)?;
             let kind = deserialize_matcher_kind(modifiers, reader)?;
             Ok(Self {
                 literals,
@@ -501,7 +503,7 @@ mod wire {
         modifiers: Modifiers,
         reader: &mut R,
     ) -> io::Result<MatcherKind> {
-        let discriminant: u8 = DS::deserialize_reader(reader)?;
+        let discriminant = u8::deserialize_reader(reader)?;
         match discriminant {
             0 => Ok(MatcherKind::Literals),
             1 => {
@@ -531,14 +533,14 @@ mod wire {
         }
     }
 
-    impl DS for Modifiers {
+    impl Deserialize for Modifiers {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let fullword = DS::deserialize_reader(reader)?;
-            let wide = DS::deserialize_reader(reader)?;
-            let ascii = DS::deserialize_reader(reader)?;
-            let nocase = DS::deserialize_reader(reader)?;
-            let dot_all = DS::deserialize_reader(reader)?;
-            let xor_start = DS::deserialize_reader(reader)?;
+            let fullword = bool::deserialize_reader(reader)?;
+            let wide = bool::deserialize_reader(reader)?;
+            let ascii = bool::deserialize_reader(reader)?;
+            let nocase = bool::deserialize_reader(reader)?;
+            let dot_all = bool::deserialize_reader(reader)?;
+            let xor_start = <Option<u8>>::deserialize_reader(reader)?;
             Ok(Self {
                 fullword,
                 wide,
@@ -547,6 +549,81 @@ mod wire {
                 dot_all,
                 xor_start,
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::matcher::analysis::analyze_hir;
+        use crate::regex::Hir;
+        use crate::wire::tests::{test_round_trip, test_round_trip_custom_deser};
+
+        use super::*;
+
+        #[test]
+        fn test_wire_matcher() {
+            test_round_trip(
+                &Matcher {
+                    literals: vec![vec![3]],
+                    modifiers: Modifiers::default(),
+                    kind: MatcherKind::Literals,
+                },
+                &[0, 9, 15],
+            );
+        }
+
+        #[test]
+        fn test_wire_matcher_kind() {
+            let modifiers = Modifiers::default();
+            let hir = Hir::Dot;
+            let analysis = analyze_hir(&hir, true);
+
+            test_round_trip_custom_deser(
+                &MatcherKind::Literals,
+                |reader| deserialize_matcher_kind(modifiers, reader),
+                &[0],
+            );
+            test_round_trip_custom_deser(
+                &MatcherKind::Atomized {
+                    validator: Validator::new(None, None, &hir, modifiers).unwrap(),
+                },
+                |reader| deserialize_matcher_kind(modifiers, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &MatcherKind::Raw(RawMatcher::new(&hir, &analysis, modifiers).unwrap()),
+                |reader| deserialize_matcher_kind(modifiers, reader),
+                &[0, 1],
+            );
+
+            let mut reader = io::Cursor::new(b"\x05");
+            assert!(deserialize_matcher_kind(modifiers, &mut reader).is_err());
+        }
+
+        #[test]
+        fn test_wire_modifiers() {
+            test_round_trip(
+                &Modifiers {
+                    fullword: false,
+                    wide: true,
+                    ascii: false,
+                    nocase: true,
+                    dot_all: false,
+                    xor_start: None,
+                },
+                &[0, 1, 2, 3, 4, 5],
+            );
+            test_round_trip(
+                &Modifiers {
+                    fullword: true,
+                    wide: false,
+                    ascii: true,
+                    nocase: false,
+                    dot_all: true,
+                    xor_start: Some(3),
+                },
+                &[0, 1, 2, 3, 4, 5],
+            );
         }
     }
 }

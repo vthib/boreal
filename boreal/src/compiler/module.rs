@@ -19,7 +19,7 @@ pub struct Module {
 }
 
 /// Index on a bounded value
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BoundedValueIndex {
     /// Index on the list of module values.
     ///
@@ -32,6 +32,7 @@ pub enum BoundedValueIndex {
 
 /// Different type of expressions related to the use of a module.
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub struct ModuleExpression {
     /// Kind of the expression.
     pub kind: ModuleExpressionKind,
@@ -50,6 +51,7 @@ impl ModuleExpression {
     }
 }
 
+#[derive(PartialEq)]
 pub enum ModuleExpressionKind {
     /// Operations on a bounded module value.
     BoundedModuleValueUse {
@@ -74,6 +76,7 @@ pub enum ModuleExpressionKind {
 
 /// Operations to apply to a module value.
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub struct ModuleOperations {
     /// List of expressions that needs to be evaluated to compute all of the operations.
     ///
@@ -89,7 +92,7 @@ pub struct ModuleOperations {
 }
 
 /// Operations on identifiers.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ValueOperation {
     /// Object subfield, i.e. `value.subfield`.
     Subfield(String),
@@ -415,6 +418,11 @@ impl ModuleUse<'_, '_> {
                 module_index,
                 applied_subfields,
             } => {
+                #[cfg(not(feature = "serialize"))]
+                {
+                    let _ = module_index;
+                    let _r = applied_subfields;
+                }
                 let expr = Expression::Module(ModuleExpression {
                     kind: ModuleExpressionKind::StaticFunction {
                         fun,
@@ -705,7 +713,7 @@ fn module_type_to_expr_type(v: &ValueType) -> Option<Type> {
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use crate::compiler::expression::Expression;
     use crate::module::StaticValue;
@@ -745,12 +753,15 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ModuleOperations> {
-        let len: usize = DS::deserialize_reader(reader)?;
+        let len = u32::deserialize_reader(reader)?;
+        let len = usize::try_from(len).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("length too big: {len}"))
+        })?;
         let mut expressions = Vec::with_capacity(len);
         for _ in 0..len {
             expressions.push(Expression::deserialize(ctx, reader)?);
         }
-        let operations = DS::deserialize_reader(reader)?;
+        let operations = <Vec<ValueOperation>>::deserialize_reader(reader)?;
         Ok(ModuleOperations {
             expressions,
             operations,
@@ -783,15 +794,15 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ModuleExpressionKind> {
-        let discriminant: u8 = DS::deserialize_reader(reader)?;
+        let discriminant = u8::deserialize_reader(reader)?;
         match discriminant {
             0 => {
-                let index = DS::deserialize_reader(reader)?;
+                let index = BoundedValueIndex::deserialize_reader(reader)?;
                 Ok(ModuleExpressionKind::BoundedModuleValueUse { index })
             }
             1 => {
-                let module_index: usize = DS::deserialize_reader(reader)?;
-                let subfields: Vec<String> = DS::deserialize_reader(reader)?;
+                let module_index = usize::deserialize_reader(reader)?;
+                let subfields = <Vec<String>>::deserialize_reader(reader)?;
                 let Some(value) = ctx.modules_static_values.get(module_index) else {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -851,12 +862,12 @@ mod wire {
         }
     }
 
-    impl DS for BoundedValueIndex {
+    impl Deserialize for BoundedValueIndex {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = DS::deserialize_reader(reader)?;
+            let discriminant = u8::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Module(DS::deserialize_reader(reader)?)),
-                1 => Ok(Self::BoundedStack(DS::deserialize_reader(reader)?)),
+                0 => Ok(Self::Module(usize::deserialize_reader(reader)?)),
+                1 => Ok(Self::BoundedStack(usize::deserialize_reader(reader)?)),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing a bounded value index: {v}"),
@@ -882,14 +893,14 @@ mod wire {
         }
     }
 
-    impl DS for ValueOperation {
+    impl Deserialize for ValueOperation {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = DS::deserialize_reader(reader)?;
+            let discriminant = u8::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Subfield(DS::deserialize_reader(reader)?)),
+                0 => Ok(Self::Subfield(String::deserialize_reader(reader)?)),
                 1 => Ok(Self::Subscript),
                 2 => {
-                    let v = DS::deserialize_reader(reader)?;
+                    let v = usize::deserialize_reader(reader)?;
                     Ok(Self::FunctionCall(v))
                 }
                 v => Err(io::Error::new(
@@ -897,6 +908,145 @@ mod wire {
                     format!("invalid discriminant when deserializing a value operation: {v}"),
                 )),
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::module::{Math, Module, Time};
+        use crate::wire::tests::{
+            test_invalid_deserialization, test_round_trip, test_round_trip_custom_deser,
+        };
+
+        #[test]
+        fn test_wire_module_expression() {
+            let ctx = DeserializeContext::default();
+            test_round_trip_custom_deser(
+                &ModuleExpression {
+                    kind: ModuleExpressionKind::BoundedModuleValueUse {
+                        index: BoundedValueIndex::Module(5),
+                    },
+                    operations: ModuleOperations {
+                        expressions: vec![],
+                        operations: vec![],
+                    },
+                },
+                |reader| deserialize_module_expression(&ctx, reader),
+                &[0, 10],
+            );
+            test_round_trip_custom_deser(
+                &ModuleOperations {
+                    expressions: vec![Expression::Integer(23)],
+                    operations: vec![
+                        ValueOperation::Subscript,
+                        ValueOperation::Subfield("abc".to_owned()),
+                    ],
+                },
+                |reader| deserialize_module_operations(&ctx, reader),
+                &[0, 4, 12],
+            );
+        }
+
+        #[test]
+        fn test_wire_module_expression_kind() {
+            let time_module = Time;
+            let time_static_values = time_module.get_static_values();
+            let now_fun = match time_static_values.get("now") {
+                Some(StaticValue::Function { fun, .. }) => *fun,
+                _ => panic!("missing now function in time module"),
+            };
+
+            let math_module = Math;
+            let math_static_values = math_module.get_static_values();
+            let mean_fun = match math_static_values.get("mean") {
+                Some(StaticValue::Function { fun, .. }) => *fun,
+                _ => panic!("missing mean function in math module"),
+            };
+
+            let ctx = DeserializeContext {
+                modules_static_values: vec![
+                    StaticValue::Object(time_static_values),
+                    StaticValue::Object(math_static_values),
+                ],
+            };
+
+            test_round_trip_custom_deser(
+                &ModuleExpressionKind::BoundedModuleValueUse {
+                    index: BoundedValueIndex::Module(3),
+                },
+                |reader| deserialize_module_expression_kind(&ctx, reader),
+                &[0, 2],
+            );
+            test_round_trip_custom_deser(
+                &ModuleExpressionKind::StaticFunction {
+                    fun: now_fun,
+                    module_index: 0,
+                    subfields: vec!["now".to_owned()],
+                },
+                |reader| deserialize_module_expression_kind(&ctx, reader),
+                &[0, 1, 9],
+            );
+            test_round_trip_custom_deser(
+                &ModuleExpressionKind::StaticFunction {
+                    fun: mean_fun,
+                    module_index: 1,
+                    subfields: vec!["mean".to_owned()],
+                },
+                |reader| deserialize_module_expression_kind(&ctx, reader),
+                &[0, 1, 9],
+            );
+
+            let test_fail_deser = |kind: ModuleExpressionKind| {
+                let mut buf = Vec::new();
+                kind.serialize(&mut buf).unwrap();
+                let mut reader = io::Cursor::new(&*buf);
+                assert!(deserialize_module_expression_kind(&ctx, &mut reader).is_err());
+            };
+
+            // Check invalid module_index value
+            test_fail_deser(ModuleExpressionKind::StaticFunction {
+                fun: mean_fun,
+                module_index: 5,
+                subfields: vec!["mean".to_owned()],
+            });
+
+            // Check invalid subfield value
+            test_fail_deser(ModuleExpressionKind::StaticFunction {
+                fun: mean_fun,
+                module_index: 1,
+                subfields: vec![],
+            });
+            test_fail_deser(ModuleExpressionKind::StaticFunction {
+                fun: mean_fun,
+                module_index: 1,
+                subfields: vec!["toto".to_owned()],
+            });
+            test_fail_deser(ModuleExpressionKind::StaticFunction {
+                fun: mean_fun,
+                module_index: 1,
+                subfields: vec!["MEAN_BYTES".to_owned(), "toto".to_owned()],
+            });
+
+            let mut reader = io::Cursor::new(b"\x05");
+            assert!(deserialize_module_expression_kind(&ctx, &mut reader).is_err());
+        }
+
+        #[test]
+        fn test_wire_bonded_value_index() {
+            test_round_trip(&BoundedValueIndex::Module(15), &[0, 2]);
+            test_round_trip(&BoundedValueIndex::BoundedStack(3), &[0, 2]);
+
+            test_invalid_deserialization::<BoundedValueIndex>(b"\x05");
+        }
+
+        #[test]
+        fn test_wire_value_operation() {
+            test_round_trip(&ValueOperation::Subfield("aze".to_string()), &[0, 2]);
+            test_round_trip(&ValueOperation::Subscript, &[0]);
+            test_round_trip(&ValueOperation::FunctionCall(23), &[0, 2]);
+
+            test_invalid_deserialization::<ValueOperation>(b"\x05");
         }
     }
 }

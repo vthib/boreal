@@ -4,7 +4,8 @@ use std::io::{Seek, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use boreal::compiler::CompilerBuilder;
-use boreal::MetadataValue;
+use boreal::module::Console;
+use boreal::{MetadataValue, Scanner};
 
 // An import is reused in the same namespace
 #[test]
@@ -70,10 +71,10 @@ fn test_compiler_builder_replace_module() {
 
     // Add the console module twice, to check the second one is used in place of the
     // first one.
-    let builder = builder.add_module(boreal::module::Console::with_callback(|_| {
+    let builder = builder.add_module(Console::with_callback(|_| {
         FIRST.store(true, Ordering::SeqCst)
     }));
-    let builder = builder.add_module(boreal::module::Console::with_callback(|_| {
+    let builder = builder.add_module(Console::with_callback(|_| {
         SECOND.store(true, Ordering::SeqCst)
     }));
 
@@ -232,7 +233,7 @@ rule yes2 { condition: true }
     );
 
     #[track_caller]
-    fn check_scan(scanner: &boreal::Scanner, mem: &[u8], expected_matches: &[(&str, bool)]) {
+    fn check_scan(scanner: &Scanner, mem: &[u8], expected_matches: &[(&str, bool)]) {
         let scan_res = scanner.scan_mem(mem).unwrap();
         let res: Vec<(String, bool)> = scan_res
             .rules
@@ -308,4 +309,57 @@ rule yes2 { condition: true }
             ("ns2:yes2", false),
         ],
     );
+}
+
+#[test]
+#[cfg(feature = "serialize")]
+fn test_scanner_serialize_module_use() {
+    use boreal::module::ConsoleData;
+    use boreal::scanner::DeserializeParams;
+    use std::sync::Mutex;
+
+    static LOGS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+    // Build a scanner using the console module
+    let mut compiler = CompilerBuilder::new()
+        .add_module(Console::with_callback(|_| LOGS.lock().unwrap().push(1)))
+        .build();
+    let _r = compiler
+        .add_rules_str(
+            r#"
+    import "console"
+
+    rule a {
+        condition:
+            console.log("poof")
+    }"#,
+        )
+        .unwrap();
+    let mut scanner = compiler.into_scanner();
+
+    let _r = scanner.scan_mem(b"").unwrap();
+    assert_eq!(&*LOGS.lock().unwrap(), &[1]);
+
+    scanner.set_module_data::<Console>(ConsoleData::new(|_| {
+        LOGS.lock().unwrap().push(2);
+    }));
+    let _r = scanner.scan_mem(b"").unwrap();
+    assert_eq!(&*LOGS.lock().unwrap(), &[1, 2]);
+
+    let buf = scanner.to_bytes().unwrap();
+    // Missing console module
+    assert!(Scanner::from_bytes(&buf, DeserializeParams::default()).is_err());
+
+    let mut params = DeserializeParams::default();
+    params.add_module(Console::with_callback(|_| LOGS.lock().unwrap().push(3)));
+    let mut scanner2 = Scanner::from_bytes(&buf, params).unwrap();
+
+    let _r = scanner2.scan_mem(b"").unwrap();
+    assert_eq!(&*LOGS.lock().unwrap(), &[1, 2, 3]);
+
+    scanner2.set_module_data::<Console>(ConsoleData::new(|_| {
+        LOGS.lock().unwrap().push(4);
+    }));
+    let _r = scanner2.scan_mem(b"").unwrap();
+    assert_eq!(&*LOGS.lock().unwrap(), &[1, 2, 3, 4]);
 }

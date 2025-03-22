@@ -10,6 +10,7 @@ use super::CompilationError;
 
 /// A compiled variable used in a rule.
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub struct Variable {
     /// Name of the variable, without the '$'.
     ///
@@ -153,9 +154,9 @@ impl std::fmt::Display for VariableCompilationError {
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
-    use super::Variable;
+    use super::{Matcher, Variable};
 
     impl Serialize for Variable {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -166,16 +167,38 @@ mod wire {
         }
     }
 
-    impl DS for Variable {
+    impl Deserialize for Variable {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let name = DS::deserialize_reader(reader)?;
-            let is_private = DS::deserialize_reader(reader)?;
-            let matcher = DS::deserialize_reader(reader)?;
+            let name = String::deserialize_reader(reader)?;
+            let is_private = bool::deserialize_reader(reader)?;
+            let matcher = Matcher::deserialize_reader(reader)?;
             Ok(Self {
                 name,
                 is_private,
                 matcher,
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use boreal_parser::rule::VariableModifiers;
+
+        use crate::matcher::Matcher;
+        use crate::wire::tests::test_round_trip;
+
+        use super::*;
+
+        #[test]
+        fn test_wire_variable() {
+            test_round_trip(
+                &Variable {
+                    name: "abc".to_owned(),
+                    is_private: true,
+                    matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),
+                },
+                &[0, 7, 8],
+            );
         }
     }
 }

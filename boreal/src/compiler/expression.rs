@@ -71,11 +71,11 @@ impl Expr {
 ///
 /// If None, this indicates an unnamed variable, and the one selected in a for expression must be
 /// used (e.g. '$').
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct VariableIndex(pub Option<usize>);
 
 /// Set of multiple variables.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VariableSet {
     /// Indexes of the variables selected in the set.
     ///
@@ -84,7 +84,7 @@ pub struct VariableSet {
 }
 
 /// Set of multiple rules.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RuleSet {
     /// Indexes of the rules selected in the set.
     ///
@@ -99,6 +99,7 @@ pub struct RuleSet {
 }
 
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub enum Expression {
     /// Size of the file being scanned.
     Filesize,
@@ -975,6 +976,7 @@ where
 /// This indicates how many variables must match the for condition
 /// for it to be considered true.
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub enum ForSelection {
     /// Any variable in the set must match the condition.
     Any,
@@ -1118,6 +1120,7 @@ fn compile_rule_set(
 
 /// Iterator for a 'for' expression over an identifier.
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 #[allow(variant_size_differences)]
 pub enum ForIterator {
     ModuleIterator(ModuleExpression),
@@ -1342,8 +1345,10 @@ fn compile_identifier_as_iterator(
 mod wire {
     use std::io;
 
+    use crate::regex::Regex;
+    use crate::wire::{Deserialize, Serialize};
+    use crate::BytesSymbol;
     use boreal_parser::expression::ReadIntegerType;
-    use crate::wire::{Deserialize as DS, Serialize};
 
     use crate::wire::DeserializeContext;
 
@@ -1361,19 +1366,7 @@ mod wire {
                 }
                 Self::ReadInteger { ty, addr } => {
                     2_u8.serialize(writer)?;
-                    let v = match ty {
-                        ReadIntegerType::Int8 => 0_u8,
-                        ReadIntegerType::Uint8 => 1,
-                        ReadIntegerType::Int16 => 2,
-                        ReadIntegerType::Int16BE => 3,
-                        ReadIntegerType::Uint16 => 4,
-                        ReadIntegerType::Uint16BE => 5,
-                        ReadIntegerType::Int32 => 6,
-                        ReadIntegerType::Int32BE => 7,
-                        ReadIntegerType::Uint32 => 8,
-                        ReadIntegerType::Uint32BE => 9,
-                    };
-                    v.serialize(writer)?;
+                    RIType(*ty).serialize(writer)?;
                     addr.serialize(writer)?;
                 }
                 Self::Integer(v) => {
@@ -1630,7 +1623,10 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Vec<Expression>> {
-        let len: usize = DS::deserialize_reader(reader)?;
+        let len = u32::deserialize_reader(reader)?;
+        let len = usize::try_from(len).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("length too big: {len}"))
+        })?;
         let mut exprs = Vec::with_capacity(len);
         for _ in 0..len {
             exprs.push(deserialize_expr(ctx, reader)?);
@@ -1642,43 +1638,23 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Expression> {
-        let discriminant: u8 = DS::deserialize_reader(reader)?;
+        let discriminant = u8::deserialize_reader(reader)?;
         Ok(match discriminant {
             0 => Expression::Filesize,
             1 => Expression::Entrypoint,
             2 => {
-                let discriminant: u8 = DS::deserialize_reader(reader)?;
-                let ty = match discriminant {
-                    0 => ReadIntegerType::Int8,
-                    1 => ReadIntegerType::Uint8,
-                    2 => ReadIntegerType::Int16,
-                    3 => ReadIntegerType::Int16BE,
-                    4 => ReadIntegerType::Uint16,
-                    5 => ReadIntegerType::Uint16BE,
-                    6 => ReadIntegerType::Int32,
-                    7 => ReadIntegerType::Int32BE,
-                    8 => ReadIntegerType::Uint32,
-                    9 => ReadIntegerType::Uint32BE,
-                    v => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
-                                "invalid discriminant when deserializing a read integer type: {v}"
-                            ),
-                        ))
-                    }
-                };
+                let ty = RIType::deserialize_reader(reader)?;
                 let addr = deserialize_expr(ctx, reader)?;
                 Expression::ReadInteger {
-                    ty,
+                    ty: ty.0,
                     addr: Box::new(addr),
                 }
             }
-            3 => Expression::Integer(DS::deserialize_reader(reader)?),
-            4 => Expression::Double(DS::deserialize_reader(reader)?),
-            5 => Expression::Count(DS::deserialize_reader(reader)?),
+            3 => Expression::Integer(i64::deserialize_reader(reader)?),
+            4 => Expression::Double(f64::deserialize_reader(reader)?),
+            5 => Expression::Count(VariableIndex::deserialize_reader(reader)?),
             6 => {
-                let variable_index = DS::deserialize_reader(reader)?;
+                let variable_index = VariableIndex::deserialize_reader(reader)?;
                 let from = Box::new(deserialize_expr(ctx, reader)?);
                 let to = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::CountInRange {
@@ -1688,7 +1664,7 @@ mod wire {
                 }
             }
             7 => {
-                let variable_index = DS::deserialize_reader(reader)?;
+                let variable_index = VariableIndex::deserialize_reader(reader)?;
                 let occurence_number = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::Offset {
                     variable_index,
@@ -1696,7 +1672,7 @@ mod wire {
                 }
             }
             8 => {
-                let variable_index = DS::deserialize_reader(reader)?;
+                let variable_index = VariableIndex::deserialize_reader(reader)?;
                 let occurence_number = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::Length {
                     variable_index,
@@ -1776,8 +1752,8 @@ mod wire {
             24 => {
                 let left = Box::new(deserialize_expr(ctx, reader)?);
                 let right = Box::new(deserialize_expr(ctx, reader)?);
-                let less_than = DS::deserialize_reader(reader)?;
-                let can_be_equal = DS::deserialize_reader(reader)?;
+                let less_than = bool::deserialize_reader(reader)?;
+                let can_be_equal = bool::deserialize_reader(reader)?;
                 Expression::Cmp {
                     left,
                     right,
@@ -1798,7 +1774,7 @@ mod wire {
             27 => {
                 let haystack = Box::new(deserialize_expr(ctx, reader)?);
                 let needle = Box::new(deserialize_expr(ctx, reader)?);
-                let case_insensitive = DS::deserialize_reader(reader)?;
+                let case_insensitive = bool::deserialize_reader(reader)?;
                 Expression::Contains {
                     haystack,
                     needle,
@@ -1808,7 +1784,7 @@ mod wire {
             28 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
                 let prefix = Box::new(deserialize_expr(ctx, reader)?);
-                let case_insensitive = DS::deserialize_reader(reader)?;
+                let case_insensitive = bool::deserialize_reader(reader)?;
                 Expression::StartsWith {
                     expr,
                     prefix,
@@ -1818,7 +1794,7 @@ mod wire {
             29 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
                 let suffix = Box::new(deserialize_expr(ctx, reader)?);
-                let case_insensitive = DS::deserialize_reader(reader)?;
+                let case_insensitive = bool::deserialize_reader(reader)?;
                 Expression::EndsWith {
                     expr,
                     suffix,
@@ -1832,14 +1808,14 @@ mod wire {
             }
             31 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
-                let regex = DS::deserialize_reader(reader)?;
+                let regex = Regex::deserialize_reader(reader)?;
                 Expression::Matches(expr, regex)
             }
             32 => Expression::Defined(Box::new(deserialize_expr(ctx, reader)?)),
-            33 => Expression::Boolean(DS::deserialize_reader(reader)?),
-            34 => Expression::Variable(DS::deserialize_reader(reader)?),
+            33 => Expression::Boolean(bool::deserialize_reader(reader)?),
+            34 => Expression::Variable(VariableIndex::deserialize_reader(reader)?),
             35 => {
-                let variable_index = DS::deserialize_reader(reader)?;
+                let variable_index = VariableIndex::deserialize_reader(reader)?;
                 let offset = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::VariableAt {
                     variable_index,
@@ -1847,7 +1823,7 @@ mod wire {
                 }
             }
             36 => {
-                let variable_index = DS::deserialize_reader(reader)?;
+                let variable_index = VariableIndex::deserialize_reader(reader)?;
                 let from = Box::new(deserialize_expr(ctx, reader)?);
                 let to = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::VariableIn {
@@ -1858,7 +1834,7 @@ mod wire {
             }
             37 => {
                 let selection = deserialize_for_selection(ctx, reader)?;
-                let set = DS::deserialize_reader(reader)?;
+                let set = VariableSet::deserialize_reader(reader)?;
                 let body = Box::new(deserialize_expr(ctx, reader)?);
                 Expression::For {
                     selection,
@@ -1878,14 +1854,14 @@ mod wire {
             }
             39 => {
                 let selection = deserialize_for_selection(ctx, reader)?;
-                let set = DS::deserialize_reader(reader)?;
+                let set = RuleSet::deserialize_reader(reader)?;
                 Expression::ForRules { selection, set }
             }
             40 => Expression::Module(ModuleExpression::deserialize(ctx, reader)?),
-            41 => Expression::Rule(DS::deserialize_reader(reader)?),
-            42 => Expression::ExternalSymbol(DS::deserialize_reader(reader)?),
-            43 => Expression::Bytes(DS::deserialize_reader(reader)?),
-            44 => Expression::Regex(DS::deserialize_reader(reader)?),
+            41 => Expression::Rule(usize::deserialize_reader(reader)?),
+            42 => Expression::ExternalSymbol(usize::deserialize_reader(reader)?),
+            43 => Expression::Bytes(BytesSymbol::deserialize_reader(reader)?),
+            44 => Expression::Regex(Regex::deserialize_reader(reader)?),
             v => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -1915,14 +1891,14 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ForSelection> {
-        let discriminant: u8 = DS::deserialize_reader(reader)?;
+        let discriminant = u8::deserialize_reader(reader)?;
         match discriminant {
             0 => Ok(ForSelection::Any),
             1 => Ok(ForSelection::All),
             2 => Ok(ForSelection::None),
             3 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
-                let as_percent = DS::deserialize_reader(reader)?;
+                let as_percent = bool::deserialize_reader(reader)?;
                 Ok(ForSelection::Expr { expr, as_percent })
             }
             v => Err(io::Error::new(
@@ -1957,7 +1933,7 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<ForIterator> {
-        let discriminant: u8 = DS::deserialize_reader(reader)?;
+        let discriminant = u8::deserialize_reader(reader)?;
         match discriminant {
             0 => {
                 let module_expr = ModuleExpression::deserialize(ctx, reader)?;
@@ -1987,10 +1963,10 @@ mod wire {
         }
     }
 
-    impl DS for RuleSet {
+    impl Deserialize for RuleSet {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let elements = DS::deserialize_reader(reader)?;
-            let already_matched = DS::deserialize_reader(reader)?;
+            let elements = <Vec<usize>>::deserialize_reader(reader)?;
+            let already_matched = usize::deserialize_reader(reader)?;
             Ok(Self {
                 elements,
                 already_matched,
@@ -2005,9 +1981,9 @@ mod wire {
         }
     }
 
-    impl DS for VariableSet {
+    impl Deserialize for VariableSet {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let elements = DS::deserialize_reader(reader)?;
+            let elements = <Vec<usize>>::deserialize_reader(reader)?;
             Ok(Self { elements })
         }
     }
@@ -2018,9 +1994,514 @@ mod wire {
         }
     }
 
-    impl DS for VariableIndex {
+    impl Deserialize for VariableIndex {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            Ok(Self(DS::deserialize_reader(reader)?))
+            Ok(Self(<Option<usize>>::deserialize_reader(reader)?))
+        }
+    }
+
+    /// New struct required to be able to impl the ser/deser traits, since
+    /// `ReadIntegerType` is defined in another crate.
+    #[derive(PartialEq, Debug)]
+    #[repr(transparent)]
+    struct RIType(ReadIntegerType);
+
+    impl Serialize for RIType {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            let v = match self.0 {
+                ReadIntegerType::Int8 => 0_u8,
+                ReadIntegerType::Uint8 => 1,
+                ReadIntegerType::Int16 => 2,
+                ReadIntegerType::Int16BE => 3,
+                ReadIntegerType::Uint16 => 4,
+                ReadIntegerType::Uint16BE => 5,
+                ReadIntegerType::Int32 => 6,
+                ReadIntegerType::Int32BE => 7,
+                ReadIntegerType::Uint32 => 8,
+                ReadIntegerType::Uint32BE => 9,
+            };
+            v.serialize(writer)
+        }
+    }
+
+    impl Deserialize for RIType {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let discriminant = u8::deserialize_reader(reader)?;
+            let ty = match discriminant {
+                0 => ReadIntegerType::Int8,
+                1 => ReadIntegerType::Uint8,
+                2 => ReadIntegerType::Int16,
+                3 => ReadIntegerType::Int16BE,
+                4 => ReadIntegerType::Uint16,
+                5 => ReadIntegerType::Uint16BE,
+                6 => ReadIntegerType::Int32,
+                7 => ReadIntegerType::Int32BE,
+                8 => ReadIntegerType::Uint32,
+                9 => ReadIntegerType::Uint32BE,
+                v => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid discriminant when deserializing a read integer type: {v}"),
+                    ))
+                }
+            };
+            Ok(RIType(ty))
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::compiler::module::{BoundedValueIndex, ModuleExpressionKind, ModuleOperations};
+        use crate::compiler::BytesPoolBuilder;
+        use crate::wire::tests::{
+            test_invalid_deserialization, test_round_trip, test_round_trip_custom_deser,
+        };
+
+        #[test]
+        fn test_wire_expression() {
+            let ctx = DeserializeContext::default();
+
+            test_round_trip_custom_deser(
+                &Expression::Filesize,
+                |reader| deserialize_expr(&ctx, reader),
+                &[0],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Entrypoint,
+                |reader| deserialize_expr(&ctx, reader),
+                &[0],
+            );
+            test_round_trip_custom_deser(
+                &Expression::ReadInteger {
+                    ty: ReadIntegerType::Int16,
+                    addr: Box::new(Expression::Filesize),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Integer(-23),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Double(-2.3),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Count(VariableIndex(None)),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::CountInRange {
+                    variable_index: VariableIndex(None),
+                    from: Box::new(Expression::Filesize),
+                    to: Box::new(Expression::Entrypoint),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 3],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Offset {
+                    variable_index: VariableIndex(None),
+                    occurence_number: Box::new(Expression::Filesize),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Length {
+                    variable_index: VariableIndex(None),
+                    occurence_number: Box::new(Expression::Filesize),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Neg(Box::new(Expression::Filesize)),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Add(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Sub(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Mul(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Div(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Mod(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::BitwiseXor(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::BitwiseAnd(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::BitwiseOr(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::BitwiseNot(Box::new(Expression::Entrypoint)),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::ShiftLeft(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::ShiftRight(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::And(vec![Expression::Entrypoint, Expression::Filesize]),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Or(vec![Expression::Entrypoint, Expression::Filesize]),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Not(Box::new(Expression::Entrypoint)),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Cmp {
+                    left: Box::new(Expression::Entrypoint),
+                    right: Box::new(Expression::Filesize),
+                    less_than: false,
+                    can_be_equal: true,
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 3, 4],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Eq(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::NotEq(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Contains {
+                    haystack: Box::new(Expression::Entrypoint),
+                    needle: Box::new(Expression::Filesize),
+                    case_insensitive: true,
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 3],
+            );
+            test_round_trip_custom_deser(
+                &Expression::StartsWith {
+                    expr: Box::new(Expression::Entrypoint),
+                    prefix: Box::new(Expression::Filesize),
+                    case_insensitive: true,
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 3],
+            );
+            test_round_trip_custom_deser(
+                &Expression::EndsWith {
+                    expr: Box::new(Expression::Entrypoint),
+                    suffix: Box::new(Expression::Filesize),
+                    case_insensitive: true,
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 3],
+            );
+            test_round_trip_custom_deser(
+                &Expression::IEquals(
+                    Box::new(Expression::Entrypoint),
+                    Box::new(Expression::Filesize),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Matches(
+                    Box::new(Expression::Entrypoint),
+                    Regex::from_string("ab+c{2,3}".to_owned(), true, false).unwrap(),
+                ),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Defined(Box::new(Expression::Entrypoint)),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Boolean(true),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Variable(VariableIndex(None)),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::VariableAt {
+                    variable_index: VariableIndex(None),
+                    offset: Box::new(Expression::Entrypoint),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::VariableIn {
+                    variable_index: VariableIndex(None),
+                    from: Box::new(Expression::Entrypoint),
+                    to: Box::new(Expression::Filesize),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 3],
+            );
+            test_round_trip_custom_deser(
+                &Expression::For {
+                    selection: ForSelection::Any,
+                    set: VariableSet { elements: vec![1] },
+                    body: Box::new(Expression::Filesize),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 14],
+            );
+            test_round_trip_custom_deser(
+                &Expression::ForIdentifiers {
+                    selection: ForSelection::Any,
+                    iterator: ForIterator::List(Vec::new()),
+                    body: Box::new(Expression::Filesize),
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2, 7],
+            );
+            test_round_trip_custom_deser(
+                &Expression::ForRules {
+                    selection: ForSelection::Any,
+                    set: RuleSet {
+                        elements: vec![1],
+                        already_matched: 3,
+                    },
+                },
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1, 2],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Module(ModuleExpression {
+                    kind: ModuleExpressionKind::BoundedModuleValueUse {
+                        index: BoundedValueIndex::Module(5),
+                    },
+                    operations: ModuleOperations {
+                        expressions: vec![],
+                        operations: vec![],
+                    },
+                }),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Rule(5),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::ExternalSymbol(5),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            let mut pool = BytesPoolBuilder::default();
+            test_round_trip_custom_deser(
+                &Expression::Bytes(pool.insert(b"abc")),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &Expression::Regex(Regex::from_string("abc".to_owned(), false, true).unwrap()),
+                |reader| deserialize_expr(&ctx, reader),
+                &[0, 1],
+            );
+
+            let mut reader = io::Cursor::new(b"\xA2");
+            assert!(deserialize_expr(&ctx, &mut reader).is_err());
+        }
+
+        #[test]
+        fn test_wire_for_selection() {
+            let ctx = DeserializeContext::default();
+
+            test_round_trip_custom_deser(
+                &ForSelection::Any,
+                |reader| deserialize_for_selection(&ctx, reader),
+                &[0],
+            );
+            test_round_trip_custom_deser(
+                &ForSelection::All,
+                |reader| deserialize_for_selection(&ctx, reader),
+                &[0],
+            );
+            test_round_trip_custom_deser(
+                &ForSelection::None,
+                |reader| deserialize_for_selection(&ctx, reader),
+                &[0],
+            );
+            test_round_trip_custom_deser(
+                &ForSelection::Expr {
+                    expr: Box::new(Expression::Filesize),
+                    as_percent: true,
+                },
+                |reader| deserialize_for_selection(&ctx, reader),
+                &[0, 1, 2],
+            );
+
+            let mut reader = io::Cursor::new(b"\x05");
+            assert!(deserialize_for_selection(&ctx, &mut reader).is_err());
+        }
+
+        #[test]
+        fn test_wire_for_iterator() {
+            let ctx = DeserializeContext::default();
+
+            test_round_trip_custom_deser(
+                &ForIterator::ModuleIterator(ModuleExpression {
+                    kind: ModuleExpressionKind::BoundedModuleValueUse {
+                        index: BoundedValueIndex::Module(5),
+                    },
+                    operations: ModuleOperations {
+                        expressions: vec![],
+                        operations: vec![],
+                    },
+                }),
+                |reader| deserialize_for_iterator(&ctx, reader),
+                &[0, 1],
+            );
+            test_round_trip_custom_deser(
+                &ForIterator::Range {
+                    from: Box::new(Expression::Filesize),
+                    to: Box::new(Expression::Integer(3)),
+                },
+                |reader| deserialize_for_iterator(&ctx, reader),
+                &[0, 1, 9],
+            );
+            test_round_trip_custom_deser(
+                &ForIterator::List(vec![Expression::Filesize, Expression::Integer(3)]),
+                |reader| deserialize_for_iterator(&ctx, reader),
+                &[0, 1, 9],
+            );
+
+            let mut reader = io::Cursor::new(b"\x05");
+            assert!(deserialize_for_iterator(&ctx, &mut reader).is_err());
+        }
+
+        #[test]
+        fn test_wire_rule_set() {
+            test_round_trip(
+                &RuleSet {
+                    elements: vec![15, 23],
+                    already_matched: 232,
+                },
+                &[0, 22],
+            );
+        }
+
+        #[test]
+        fn test_wire_variable_set() {
+            test_round_trip(
+                &VariableSet {
+                    elements: vec![15, 23],
+                },
+                &[0],
+            );
+        }
+
+        #[test]
+        fn test_wire_variable_index() {
+            test_round_trip(&VariableIndex(Some(3)), &[0, 1]);
+            test_round_trip(&VariableIndex(None), &[0]);
+        }
+
+        #[test]
+        fn test_wire_read_integer_type() {
+            test_round_trip(&RIType(ReadIntegerType::Int8), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Uint8), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Int16), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Int16BE), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Uint16), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Uint16BE), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Int32), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Int32BE), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Uint32), &[0]);
+            test_round_trip(&RIType(ReadIntegerType::Uint32BE), &[0]);
+
+            test_invalid_deserialization::<RIType>(b"\xC5");
         }
     }
 }

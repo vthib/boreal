@@ -14,6 +14,7 @@ use crate::statistics;
 
 /// A compiled scanning rule.
 #[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub(crate) struct Rule {
     /// Name of the rule.
     pub(crate) name: String,
@@ -51,7 +52,7 @@ impl Rule {
 }
 
 /// A metadata associated with a rule.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Metadata {
     /// Name of the metadata.
     ///
@@ -63,7 +64,7 @@ pub struct Metadata {
 }
 
 /// Value of a rule metadata.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum MetadataValue {
     /// Bytestring variant.
     ///
@@ -339,10 +340,11 @@ pub(super) struct CompiledRule {
 mod wire {
     use std::io;
 
-    use crate::wire::{Deserialize as DS, Serialize};
+    use crate::wire::{Deserialize, Serialize};
 
     use crate::compiler::expression::Expression;
     use crate::wire::DeserializeContext;
+    use crate::{BytesSymbol, StringSymbol};
 
     use super::{Metadata, MetadataValue, Rule};
 
@@ -363,12 +365,12 @@ mod wire {
         ctx: &DeserializeContext,
         reader: &mut R,
     ) -> io::Result<Rule> {
-        let name = DS::deserialize_reader(reader)?;
-        let namespace_index = DS::deserialize_reader(reader)?;
-        let nb_variables = DS::deserialize_reader(reader)?;
-        let is_private = DS::deserialize_reader(reader)?;
-        let tags = DS::deserialize_reader(reader)?;
-        let metadatas = DS::deserialize_reader(reader)?;
+        let name = String::deserialize_reader(reader)?;
+        let namespace_index = usize::deserialize_reader(reader)?;
+        let nb_variables = usize::deserialize_reader(reader)?;
+        let is_private = bool::deserialize_reader(reader)?;
+        let tags = <Vec<String>>::deserialize_reader(reader)?;
+        let metadatas = <Vec<Metadata>>::deserialize_reader(reader)?;
         let condition = Expression::deserialize(ctx, reader)?;
         Ok(Rule {
             name,
@@ -389,10 +391,10 @@ mod wire {
         }
     }
 
-    impl DS for Metadata {
+    impl Deserialize for Metadata {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let name = DS::deserialize_reader(reader)?;
-            let value = DS::deserialize_reader(reader)?;
+            let name = StringSymbol::deserialize_reader(reader)?;
+            let value = MetadataValue::deserialize_reader(reader)?;
             Ok(Self { name, value })
         }
     }
@@ -417,18 +419,73 @@ mod wire {
         }
     }
 
-    impl DS for MetadataValue {
+    impl Deserialize for MetadataValue {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let discriminant: u8 = DS::deserialize_reader(reader)?;
+            let discriminant = u8::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Bytes(DS::deserialize_reader(reader)?)),
-                1 => Ok(Self::Integer(DS::deserialize_reader(reader)?)),
-                2 => Ok(Self::Boolean(DS::deserialize_reader(reader)?)),
+                0 => Ok(Self::Bytes(BytesSymbol::deserialize_reader(reader)?)),
+                1 => Ok(Self::Integer(i64::deserialize_reader(reader)?)),
+                2 => Ok(Self::Boolean(bool::deserialize_reader(reader)?)),
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing a metadata value: {v}"),
                 )),
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::compiler::BytesPoolBuilder;
+        use crate::wire::tests::{
+            test_invalid_deserialization, test_round_trip, test_round_trip_custom_deser,
+        };
+
+        use super::*;
+
+        #[test]
+        fn test_wire_rule() {
+            let ctx = DeserializeContext::default();
+
+            test_round_trip_custom_deser(
+                &Rule {
+                    name: "a".to_owned(),
+                    namespace_index: 0,
+                    nb_variables: 0,
+                    is_private: false,
+                    tags: Vec::new(),
+                    metadatas: Vec::new(),
+                    condition: Expression::Filesize,
+                },
+                |reader| deserialize_rule(&ctx, reader),
+                &[0, 5, 13, 21, 22, 26, 30],
+            );
+        }
+
+        #[test]
+        fn test_wire_metadata() {
+            let mut pool = BytesPoolBuilder::default();
+
+            test_round_trip(
+                &Metadata {
+                    name: pool.insert_str("ab"),
+                    value: MetadataValue::Boolean(true),
+                },
+                &[0, 16],
+            );
+
+            test_invalid_deserialization::<MetadataValue>(b"\x05");
+        }
+
+        #[test]
+        fn test_wire_metadata_value() {
+            let mut pool = BytesPoolBuilder::default();
+
+            test_round_trip(&MetadataValue::Bytes(pool.insert(b"a")), &[0, 1]);
+            test_round_trip(&MetadataValue::Integer(23), &[0, 1]);
+            test_round_trip(&MetadataValue::Boolean(true), &[0, 1]);
+
+            test_invalid_deserialization::<MetadataValue>(b"\x05");
         }
     }
 }

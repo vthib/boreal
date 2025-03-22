@@ -13,7 +13,7 @@ rust-version = "1.74"
 exclude = ["/tests"]
 
 [features]
-default = ["hash", "object", "memmap", "process", "authenticode", "serialize"]
+default = ["hash", "object", "memmap", "process", "authenticode"]
 
 # Enables the "hash" module.
 hash = ["dep:md-5", "dep:sha1", "dep:sha2", "dep:crc32fast", "dep:tlsh2"]
