@@ -47,7 +47,14 @@ process = ["dep:libc", "dep:windows-sys", "dep:mach2"]
 # Enables computation of statistics during scanning.
 profiling = []
 
-# Enables serialization and deserialization of rules
+# Enables serialization and deserialization of the scanner object.
+#
+# See `Scanner::to_bytes` and `Scanner::from_bytes_unchecked`.
+# Note that in order for a scanner to be serialized, it requires storing data
+# that is not required otherwise. This means that enabling this feature will
+# make the Scanner object that a bit more memory than if the feature is disabled.
+# This is marginal, but it is thus recommended to avoid enabling this feature
+# if not needed.
 serialize = ["dep:borsh"]
 
 [dependencies]

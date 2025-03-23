@@ -606,27 +606,100 @@ impl Scanner {
         }
     }
 
-    /// DOC
+    /// Serialize the scanner into bytes.
+    ///
+    /// This method serializes the scanner into a bytestring that can be used
+    /// to recreate the scanner through the [`Scanner::from_bytes_unchecked`]
+    /// method.
+    ///
+    /// There are several limitations to this serialization:
+    ///
+    /// - The scanner cannot be serialized entirely. Notably, several objects
+    ///   generated during the compilation of rules cannot be serialized, which
+    ///   means they need to be compiled again upon deserialization. This can
+    ///   be relatively fast in most cases, but this implies that the
+    ///   deserialization of a scanner is not guaranteed to be much faster
+    ///   than adding rules and compiling them.
+    ///
+    /// - The module data set in the scanner through the use of the
+    ///   [`Scanner::set_module_data`] method cannot be serialized. Those data
+    ///   must be set by hand again after deserialization.
+    ///
+    /// - Deserialization is only guaranteed to work if the serialization
+    ///   was done on the same version of this crate. That is, the serialized
+    ///   format does not follow semantic versioning.
+    ///
+    /// - The serialization format does not include any consistency or full
+    ///   validity checks. Deserializing may generate a scanner that can panic
+    ///   upon use if the serialized data has been tampered with.
+    ///
+    /// For all these reasons, it is highly preferable to go through adding
+    /// rules in textual format and compiling them to generate a scanner, rather
+    /// than using the serialized format. Serialization should only be used
+    /// if and only if:
+    ///
+    /// - The libraries used to serialize and deserialize are guaranteed to be
+    ///   at the same version.
+    /// - The serialized bytes are wrapped into a system to control those bytes
+    ///   are valid and not modified through a data integrity checking setup.
     ///
     /// # Errors
     ///
+    /// This function can fail if the provided buffer is too small and cannot
+    /// be extended. If a Vec is passed, this cannot happen.
     #[cfg(feature = "serialize")]
-    pub fn to_bytes(&self) -> std::io::Result<Vec<u8>> {
+    pub fn to_bytes<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         use crate::wire::Serialize;
 
-        let mut buf = Vec::new();
-        crate::wire::serialize_header(*b"scnr", &mut buf)?;
-        self.serialize(&mut buf)?;
+        crate::wire::serialize_header(*b"scnr", writer)?;
+        self.serialize(writer)?;
 
-        Ok(buf)
+        Ok(())
     }
 
-    /// DOC
+    /// Deserialize a scanner from a bytestring.
+    ///
+    /// This method allows recreating a [`Scanner`] that was previously serialized
+    /// through the [`Scanner::to_bytes`] method.
+    ///
+    /// Note that this functions trusts the provided buffer was generated from
+    /// a call to [`Scanner::to_bytes`] and has not been tampered with. You must
+    /// add your own layer of data integrity if this byte string does not come
+    /// from a trusted input.
+    ///
+    /// If the serialized scanner used a custom module or the console module,
+    /// those modules must be provided in the `params` parameter.
+    ///
+    /// See [`Scanner::to_bytes`] documentation for more details on the limits of
+    /// this serialization format.
     ///
     /// # Errors
     ///
+    /// This function can fail if:
+    ///
+    /// - the serialization was done in a version that is incompatible with the current one
+    /// - the serialized scanner used a module that is not built into this library or
+    ///   provided in the `params` object.
+    /// - the provided bytes do not deserialize properly into a Scanner object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut compiler = boreal::Compiler::new();
+    /// compiler.add_rules_str("rule a { strings: $a = \"abc\" condition: $a }").unwrap();
+    /// let scanner = compiler.into_scanner();
+    ///
+    /// let mut buffer = Vec::new();
+    /// scanner.to_bytes(&mut buffer).unwrap();
+    ///
+    /// let params = boreal::scanner::DeserializeParams::default();
+    /// let scanner2 = boreal::Scanner::from_bytes_unchecked(&buffer, params).unwrap();
+    ///
+    /// let scan_result = scanner2.scan_mem(b"abc").unwrap();
+    /// assert_eq!(scan_result.rules.len(), 1);
+    /// ```
     #[cfg(feature = "serialize")]
-    pub fn from_bytes(bytes: &[u8], params: DeserializeParams) -> std::io::Result<Self> {
+    pub fn from_bytes_unchecked(bytes: &[u8], params: DeserializeParams) -> std::io::Result<Self> {
         let mut cursor = std::io::Cursor::new(bytes);
         crate::wire::deserialize_header(*b"scnr", &mut cursor)?;
         let this = wire::deserialize_scanner(params, &mut cursor)?;
@@ -1462,7 +1535,7 @@ mod wire {
 
     /// Parameters used during deserialization of a [`Scanner`].
     ///
-    /// See [`Scanner::from_bytes`].
+    /// See [`Scanner::from_bytes_unchecked`].
     #[derive(Debug)]
     pub struct DeserializeParams {
         modules: HashMap<&'static str, Box<dyn Module>>,
@@ -1484,7 +1557,7 @@ mod wire {
         /// Add a module to be available during deserialization.
         ///
         /// If any serialized rule used a module, this module must be known when deserializing
-        /// rules. All the modules defined in [`boreal::module`] are available except for
+        /// rules. All the modules defined in [`crate::module`] are available except for
         /// the console module, so there is no need to add them through this API. See
         /// the list documented in the [`crate::compiler::CompilerBuilder::new`] API.
         ///
