@@ -1751,6 +1751,101 @@ fn test_invalid_save() {
     }
 }
 
+#[test]
+#[cfg(feature = "cuckoo")]
+fn test_module_data() {
+    let temp = TempDir::new().unwrap();
+
+    let rule = temp.path().join("rule");
+    fs::write(
+        &rule,
+        r#"
+import "cuckoo"
+
+rule a {
+    condition:
+        cuckoo.network.host(/bcd/) == 1
+}"#,
+    )
+    .unwrap();
+
+    let data = temp.path().join("data");
+    fs::write(&data, r#"{ "network": { "hosts": ["abcde"] } }"#).unwrap();
+
+    let input = temp.path().join("input");
+    fs::write(&input, "").unwrap();
+
+    cmd()
+        .arg(format!("--module-data=cuckoo={}", data.display()))
+        .arg(&rule)
+        .arg(&input)
+        .assert()
+        .stdout(format!("a {}\n", input.display()))
+        .stderr("")
+        .success();
+}
+
+#[test]
+#[cfg(feature = "cuckoo")]
+fn test_invalid_module_data() {
+    let temp = TempDir::new().unwrap();
+
+    let rule = temp.path().join("rule");
+    fs::write(&rule, "rule a { condition: true }").unwrap();
+
+    let data = temp.path().join("data");
+    fs::write(&data, r"{").unwrap();
+
+    let input = temp.path().join("input");
+    fs::write(&input, "").unwrap();
+
+    // Invalid module data
+    cmd()
+        .arg("-x")
+        .arg("name")
+        .arg(&rule)
+        .arg(&input)
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid value 'name' for '--module-data <MODULE=FILE>': \
+            missing '=' delimiter",
+        ))
+        .failure();
+
+    // Unknown module
+    cmd()
+        .arg(format!("--module-data=piou={}", data.display()))
+        .arg(&rule)
+        .arg(&input)
+        .assert()
+        .stdout("")
+        .stderr("Cannot set data for unsupported module piou\n")
+        .failure();
+
+    // Non existing file
+    cmd()
+        .arg("-x")
+        .arg("cuckoo=non_existing")
+        .arg(&rule)
+        .arg(&input)
+        .assert()
+        .stderr(predicate::str::contains(
+            "Unable to read cuckoo data from file non_existing",
+        ))
+        .failure();
+
+    // Cannot parse data
+    cmd()
+        .arg(format!("--module-data=cuckoo={}", data.display()))
+        .arg(&rule)
+        .arg(&input)
+        .assert()
+        .stdout("")
+        .stderr("The data for the cuckoo module is invalid\n")
+        .failure();
+}
+
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
 // modified too frequently.
 struct BinHelper {
