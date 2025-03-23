@@ -1,8 +1,8 @@
 // [error: invalid identifier type]
-import "pe"
+import "math"
 
 rule c {
     condition:
-        pe[2] == /aab/
+        math[2] == /aab/
 }
 

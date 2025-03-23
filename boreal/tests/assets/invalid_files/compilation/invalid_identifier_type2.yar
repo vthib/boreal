@@ -1,7 +1,7 @@
 // [error: invalid identifier type]
-import "pe"
+import "math"
 
 rule c {
     condition:
-        pe.os_version[2] == /aab/
+        math.MEAN_BYTES[2] == /aab/
 }

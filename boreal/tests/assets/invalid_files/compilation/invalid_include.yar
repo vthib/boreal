@@ -1,6 +1,4 @@
 // [error: cannot include]
-import "pe"
-
 rule a {
     condition: true
 }

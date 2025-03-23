@@ -1,7 +1,7 @@
 // [error: identifier is not iterable]
-import "pe"
+import "math"
 
 rule a {
     condition:
-        for any a, b in pe.is_dll: (true)
+        for any a, b in math.mean: (true)
 }

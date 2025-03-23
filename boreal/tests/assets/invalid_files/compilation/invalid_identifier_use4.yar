@@ -1,9 +1,9 @@
 // [error: wrong use of identifier]
-import "pe"
+import "tests"
 
 rule c {
     condition:
-        for any a in pe.import_details: (
-            a.functions == 2
+        for any a in tests.empty_struct_array: (
+            a.struct_array == 2
         )
 }

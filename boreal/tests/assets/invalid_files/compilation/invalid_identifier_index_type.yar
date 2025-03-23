@@ -1,7 +1,7 @@
 // [error: expected an expression of type integer]
-import "pe"
+import "tests"
 
 rule a {
     condition:
-        pe.sections["a"] == 3
+        tests.integer_array["a"] == 3
 }

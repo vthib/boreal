@@ -1,7 +1,7 @@
 // [error: wrong use of identifier]
-import "pe"
+import "tests"
 
 rule c {
     condition:
-        pe.sections == /aab/
+        tests.string_array == /aab/
 }
