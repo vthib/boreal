@@ -362,21 +362,47 @@ jobs:
           cd boreal-test-helpers
           cargo build
 
-      - name: Run tests
+      - name: Run boreal tests
         env:
           YARA_CRYPTO_LIB: openssl
-        run: cargo test ${{matrix.features}}
+        run: |
+          cd boreal
+          cargo test ${{matrix.features}}
+
+      - name: Run boreal-cli tests
+        if: ${{ matrix.boreal_cli }}
+        env:
+          YARA_CRYPTO_LIB: openssl
+        run: |
+          cd boreal-cli
+          cargo test ${{matrix.features}}
 
     strategy:
       fail-fast: false
       matrix:
-        features: [
-          "--no-default-features",
-          "--no-default-features --features=hash",
-          "--no-default-features --features=object",
-          "--no-default-features --features=process",
-          "--no-default-features --features=hash,object",
-          "--no-default-features --features=object,authenticode",
-          "--no-default-features --features=object,authenticode,authenticode-verify",
-          "--all-features"
-        ]
+        kind: [none, hash, object, process, hash_object, authenticode, authenticode_verify, all]
+        include:
+          - kind: none
+            features: "--no-default-features"
+            boreal_cli: true
+          - kind: hash
+            features: "--no-default-features --features=hash"
+            boreal_cli: false
+          - kind: object
+            features: "--no-default-features --features=object"
+            boreal_cli: false
+          - kind: process
+            features: "--no-default-features --features=process"
+            boreal_cli: false
+          - kind: hash_object
+            features: "--no-default-features --features=hash,object"
+            boreal_cli: false
+          - kind: authenticode
+            features: "--no-default-features --features=object,authenticode"
+            boreal_cli: false
+          - kind: authenticode_verify
+            features: "--no-default-features --features=hash,object,authenticode,authenticode-verify"
+            boreal_cli: false
+          - kind: all
+            features: "--all-features"
+            boreal_cli: true
