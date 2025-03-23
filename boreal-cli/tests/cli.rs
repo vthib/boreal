@@ -1618,6 +1618,139 @@ rule a {
         .success();
 }
 
+#[test]
+#[cfg(feature = "serialize")]
+fn test_save_load() {
+    let rule_file = test_file(
+        br#"
+import "console"
+
+rule a {
+    condition:
+        console.log("foo")
+}
+"#,
+    );
+
+    let temp = TempDir::new().unwrap();
+    let save_path = temp.path().join("serialized_rules");
+    let input = temp.path().join("input");
+    fs::write(&input, b"a").unwrap();
+
+    // Save into the file
+    cmd()
+        .arg("--save")
+        .arg(rule_file.path())
+        .arg(&save_path)
+        .assert()
+        .success();
+
+    // Now reload
+    cmd()
+        .arg("-C")
+        .arg(&save_path)
+        .arg(&input)
+        .assert()
+        .stdout(format!("foo\na {}\n", input.display()))
+        .stderr("")
+        .success();
+}
+
+#[test]
+#[cfg(feature = "serialize")]
+fn test_invalid_load() {
+    let temp = TempDir::new().unwrap();
+    let input = temp.path().join("input");
+    fs::write(&input, b"a").unwrap();
+
+    // Non existing path
+    let fake_path = temp.path().join("non_existing");
+    cmd()
+        .arg("-C")
+        .arg(&fake_path)
+        .arg(&input)
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains(format!(
+            "Unable to read from {}",
+            fake_path.display()
+        )))
+        .failure();
+
+    // Failure during deserialization
+    cmd()
+        .arg("-C")
+        .arg(&input)
+        .arg(&input)
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains("Unable to deserialize rules"))
+        .failure();
+}
+
+#[test]
+#[cfg(feature = "serialize")]
+fn test_invalid_save() {
+    let temp = TempDir::new().unwrap();
+    let rule = temp.path().join("rule");
+    fs::write(&rule, b"rule a { condition: true }").unwrap();
+
+    // Non existing path
+    cmd()
+        .arg("--save")
+        .arg(&rule)
+        .arg(&rule)
+        .assert()
+        .stdout("")
+        .stderr(predicate::str::contains(format!(
+            "File {} already exists",
+            rule.display()
+        )))
+        .failure();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let subdir = temp.path().join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        let out = subdir.join("out");
+
+        // cannot inspect file
+        let mut perms = fs::metadata(&subdir).unwrap().permissions();
+        perms.set_mode(0o000);
+        fs::set_permissions(&subdir, perms).unwrap();
+        cmd()
+            .arg("--save")
+            .arg(&rule)
+            .arg(&out)
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(format!(
+                "Unable to inspect file {}",
+                out.display()
+            )))
+            .failure();
+
+        // cannot create file
+        let mut perms = fs::metadata(&subdir).unwrap().permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&subdir, perms).unwrap();
+        let out_path = subdir.join("out");
+        cmd()
+            .arg("--save")
+            .arg(&rule)
+            .arg(&out_path)
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(format!(
+                "Unable to create file {}",
+                out.display()
+            )))
+            .failure();
+    }
+}
+
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
 // modified too frequently.
 struct BinHelper {
