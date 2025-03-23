@@ -1,7 +1,7 @@
 // [error: unknown field "myn"]
-import "pe"
+import "math"
 
 rule a {
     condition:
-        pe.myn == 2
+        math.myn == 2
 }

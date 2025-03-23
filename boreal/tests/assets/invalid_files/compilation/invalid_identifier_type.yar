@@ -1,7 +1,7 @@
 // [error: invalid identifier type]
-import "pe"
+import "tests"
 
 rule c {
     condition:
-        pe.os_version() == /aab/
+        tests.struct_array() == /aab/
 }

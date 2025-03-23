@@ -1,7 +1,7 @@
 // [error: invalid identifier type]
-import "pe"
+import "tests"
 
 rule c {
     condition:
-        pe.sections.foo == /aab/
+        tests.string_array.foo == /aab/
 }

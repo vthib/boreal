@@ -1,7 +1,7 @@
 // [error: invalid arguments types: [integer]]
-import "pe"
+import "math"
 
 rule a {
     condition:
-        pe.is_dll(2) == 3
+        math.to_number(2) == 3
 }

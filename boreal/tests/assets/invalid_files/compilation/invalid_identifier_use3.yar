@@ -1,8 +1,8 @@
 // [error: wrong use of identifier]
-import "pe"
+import "time"
 
 rule c {
     condition:
-        pe == 2
+        time == 2
 }
 

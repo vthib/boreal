@@ -1,6 +1,4 @@
 // [error: identifier is not iterable]
-import "pe"
-
 rule z {
     condition: true
 }
