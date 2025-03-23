@@ -77,13 +77,21 @@ fn build_command() -> Command {
             Arg::new("rules_file")
                 .value_parser(value_parser!(PathBuf))
                 .required_unless_present("module_names")
-                .help("Path to a yara file containing rules"),
+                .help("Path to a yara file containing rules")
+                .long_help(
+                    "Path to a yara file containing rules.\n\
+                     If -C is specified, this is the path to a file containing serialized rules."
+                )
         )
         .arg(
             Arg::new("input")
                 .value_parser(value_parser!(String))
                 .required_unless_present("module_names")
-                .help("File or directory to scan"),
+                .help("File or directory to scan")
+                .long_help(
+                    "File or directory to scan.\n\
+                     If --save is specified, this is the path to the file to create."
+                )
         )
         .arg(
             Arg::new("define")
@@ -285,6 +293,30 @@ fn build_command() -> Command {
                 .help("Scan files listed in input, each line is a path to a file or directory"),
         );
 
+    if cfg!(feature = "serialize") {
+        command = command
+            .arg(
+                Arg::new("save")
+                    .long("save")
+                    .action(ArgAction::SetTrue)
+                    .help("Serialize the compiled rules into bytes and save it at the given path")
+                    .long_help(
+                        "Serialize the compiled rules into bytes and save it at the given path.\n\
+                    The last argument must be the path to the file that will be created to\n\
+                    hold this serialization. The file must not already exists.\n\
+                    This differs from normal execution where the path points to an existing file\n\
+                    that must be scanned.",
+                    ),
+            )
+            .arg(
+                Arg::new("load_from_bytes")
+                    .short('C')
+                    .long("compiled-rules")
+                    .action(ArgAction::SetTrue)
+                    .help("Load compiled rules from bytes. See --save option"),
+            );
+    }
+
     if cfg!(feature = "memmap") {
         command = command.arg(
             Arg::new("no_mmap")
@@ -302,7 +334,6 @@ fn build_command() -> Command {
 
     command
 }
-
 fn main() -> ExitCode {
     let mut args = build_command().get_matches();
 
@@ -319,58 +350,8 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let mut scanner = {
-        let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
-
-        let mut builder = CompilerBuilder::new();
-
-        // Even if the console logs are disabled, add the module so that rules that use it
-        // can still compile properly.
-        let no_console_logs = args.get_flag("no_console_logs");
-        builder = builder.add_module(Console::with_callback(move |log| {
-            if !no_console_logs {
-                println!("{log}");
-            }
-        }));
-
-        if let Some(profile) = args.get_one::<CompilerProfile>("profile") {
-            builder = builder.profile(*profile);
-        }
-
-        let mut compiler = builder.build();
-
-        let mut params = CompilerParams::default()
-            .fail_on_warnings(args.get_flag("fail_on_warnings"))
-            .compute_statistics(args.get_flag("string_statistics"));
-        if let Some(limit) = args.get_one::<usize>("max_strings_per_rule") {
-            params = params.max_strings_per_rule(*limit);
-        }
-        compiler.set_params(params);
-
-        if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
-            for (name, value) in defines {
-                let _r = compiler.define_symbol(name, value);
-            }
-        }
-
-        match compiler.add_rules_file(&rules_file) {
-            Ok(status) => {
-                if !args.get_flag("no_warnings") {
-                    for warn in status.warnings() {
-                        display_diagnostic(&rules_file, warn);
-                    }
-                }
-                for rule_stat in status.statistics() {
-                    display_rule_stats(rule_stat);
-                }
-            }
-            Err(err) => {
-                display_diagnostic(&rules_file, &err);
-                return ExitCode::FAILURE;
-            }
-        }
-
-        compiler.into_scanner()
+    let Some(mut scanner) = build_scanner(&mut args) else {
+        return ExitCode::FAILURE;
     };
 
     let scan_options = ScanOptions::new(&args);
@@ -383,6 +364,11 @@ fn main() -> ExitCode {
         scan_params = scan_params.string_max_nb_matches(*limit);
     }
     scanner.set_scan_params(scan_params);
+
+    #[cfg(feature = "serialize")]
+    if args.get_flag("save") {
+        return save_scanner(&scanner, &args);
+    }
 
     let mut nb_rules = 0;
     match Input::new(&args) {
@@ -438,6 +424,124 @@ fn main() -> ExitCode {
         }
         Err(err) => {
             eprintln!("{err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn build_scanner(args: &mut ArgMatches) -> Option<Scanner> {
+    let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
+    let no_console_logs = args.get_flag("no_console_logs");
+
+    #[cfg(feature = "serialize")]
+    if args.get_flag("load_from_bytes") {
+        return load_scanner_from_bytes(&rules_file, no_console_logs);
+    }
+
+    let mut builder = CompilerBuilder::new();
+
+    // Even if the console logs are disabled, add the module so that rules that use it
+    // can still compile properly.
+    builder = builder.add_module(Console::with_callback(move |log| {
+        if !no_console_logs {
+            println!("{log}");
+        }
+    }));
+
+    if let Some(profile) = args.get_one::<CompilerProfile>("profile") {
+        builder = builder.profile(*profile);
+    }
+
+    let mut compiler = builder.build();
+
+    let mut params = CompilerParams::default()
+        .fail_on_warnings(args.get_flag("fail_on_warnings"))
+        .compute_statistics(args.get_flag("string_statistics"));
+    if let Some(limit) = args.get_one::<usize>("max_strings_per_rule") {
+        params = params.max_strings_per_rule(*limit);
+    }
+    compiler.set_params(params);
+
+    if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
+        for (name, value) in defines {
+            let _r = compiler.define_symbol(name, value);
+        }
+    }
+
+    match compiler.add_rules_file(&rules_file) {
+        Ok(status) => {
+            if !args.get_flag("no_warnings") {
+                for warn in status.warnings() {
+                    display_diagnostic(&rules_file, warn);
+                }
+            }
+            for rule_stat in status.statistics() {
+                display_rule_stats(rule_stat);
+            }
+        }
+        Err(err) => {
+            display_diagnostic(&rules_file, &err);
+            return None;
+        }
+    }
+
+    Some(compiler.into_scanner())
+}
+
+#[cfg(feature = "serialize")]
+fn load_scanner_from_bytes(rules_file: &Path, no_console_logs: bool) -> Option<Scanner> {
+    let contents = match std::fs::read(rules_file) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Unable to read from {}: {:?}", rules_file.display(), err);
+            return None;
+        }
+    };
+
+    let mut params = boreal::scanner::DeserializeParams::default();
+    params.add_module(Console::with_callback(move |log| {
+        if !no_console_logs {
+            println!("{log}");
+        }
+    }));
+
+    match Scanner::from_bytes_unchecked(&contents, params) {
+        Ok(v) => Some(v),
+        Err(err) => {
+            eprintln!("Unable to deserialize rules: {err:?}");
+            None
+        }
+    }
+}
+
+#[cfg(feature = "serialize")]
+fn save_scanner(scanner: &Scanner, args: &ArgMatches) -> ExitCode {
+    let input: &String = args.get_one("input").unwrap();
+    let path = PathBuf::from(input);
+
+    match std::fs::exists(&path) {
+        Ok(false) => (),
+        Ok(true) => {
+            eprintln!("File {} already exists, not saving rules", path.display());
+            return ExitCode::FAILURE;
+        }
+        Err(err) => {
+            eprintln!("Unable to inspect file {}: {:?}", path.display(), err);
+            return ExitCode::FAILURE;
+        }
+    }
+
+    let mut file = match File::create(&path) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Unable to create file {}: {:?}", path.display(), err);
+            return ExitCode::FAILURE;
+        }
+    };
+    match scanner.to_bytes(&mut file) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("Cannot serialize rules into {}: {:?}", path.display(), err);
             ExitCode::FAILURE
         }
     }

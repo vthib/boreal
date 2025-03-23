@@ -14,7 +14,7 @@ name = "boreal"
 path = "src/main.rs"
 
 [features]
-default = ["authenticode", "memmap", "profiling"]
+default = ["authenticode", "memmap", "profiling", "serialize"]
 
 # Enable authenticode parsing in boreal, requires OpenSSL
 authenticode = ["boreal/authenticode"]
@@ -25,6 +25,10 @@ memmap = ["boreal/memmap"]
 # Enables scan statistics. Should not impact performances
 # significantly, and very useful in a CLI tool to debug rules.
 profiling = ["boreal/profiling"]
+
+# Enable serialization to be able to save rules into bytes and
+# reload it.
+serialize = ["boreal/serialize"]
 
 [dependencies]
 boreal = { path = "../boreal", version = "0.9.0" }
