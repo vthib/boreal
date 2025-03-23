@@ -291,6 +291,19 @@ fn build_command() -> Command {
                 .long("scan-list")
                 .action(ArgAction::SetTrue)
                 .help("Scan files listed in input, each line is a path to a file or directory"),
+        )
+        .arg(
+            Arg::new("module_data")
+                .short('x')
+                .long("module-data")
+                .value_name("MODULE=FILE")
+                .action(ArgAction::Append)
+                .value_parser(parse_module_data)
+                .help("Specify the data to use in a module")
+                .long_help(
+                    "Specify the data to use in a module.\n\
+                     Note that only the cuckoo module is supported."
+                )
         );
 
     if cfg!(feature = "serialize") {
@@ -364,6 +377,46 @@ fn main() -> ExitCode {
         scan_params = scan_params.string_max_nb_matches(*limit);
     }
     scanner.set_scan_params(scan_params);
+
+    if let Some(module_data) = args.remove_many::<(String, PathBuf)>("module_data") {
+        #[allow(clippy::never_loop)]
+        for (name, path) in module_data {
+            #[cfg(feature = "cuckoo")]
+            {
+                use ::boreal::module::{Cuckoo, CuckooData};
+                if name == "cuckoo" {
+                    let contents = match std::fs::read_to_string(&path) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            eprintln!(
+                                "Unable to read {} data from file {}: {:?}",
+                                name,
+                                path.display(),
+                                err
+                            );
+                            return ExitCode::FAILURE;
+                        }
+                    };
+                    match CuckooData::from_json_report(&contents) {
+                        Some(data) => scanner.set_module_data::<Cuckoo>(data),
+                        None => {
+                            eprintln!("The data for the cuckoo module is invalid");
+                            return ExitCode::FAILURE;
+                        }
+                    }
+                    continue;
+                }
+            }
+            #[cfg(not(feature = "cuckoo"))]
+            // Suppress unused var warnings
+            {
+                drop(path);
+            }
+
+            eprintln!("Cannot set data for unsupported module {name}");
+            return ExitCode::FAILURE;
+        }
+    }
 
     #[cfg(feature = "serialize")]
     if args.get_flag("save") {
@@ -708,6 +761,14 @@ fn parse_compiler_profile(profile: &str) -> Result<CompilerProfile, String> {
         "memory" => Ok(CompilerProfile::Memory),
         _ => Err("invalid value".to_string()),
     }
+}
+
+fn parse_module_data(arg: &str) -> Result<(String, PathBuf), String> {
+    let Some((name, path)) = arg.split_once('=') else {
+        return Err("missing '=' delimiter".to_owned());
+    };
+
+    Ok((name.to_owned(), PathBuf::from(path)))
 }
 
 #[derive(Clone, Debug)]

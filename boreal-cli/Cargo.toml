@@ -30,6 +30,9 @@ profiling = ["boreal/profiling"]
 # reload it.
 serialize = ["boreal/serialize"]
 
+# Enable the cuckoo module.
+cuckoo = ["boreal/cuckoo"]
+
 [dependencies]
 boreal = { path = "../boreal", version = "0.9.0" }
 
