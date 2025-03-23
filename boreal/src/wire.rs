@@ -1,3 +1,39 @@
+//! Serialization and deserialization routines.
+//!
+//! This module defines the different serialization and deserialization traits and methods
+//! used throughout the crate, and exposed through the [`crate::Scanner::to_bytes`] and
+//! [`crate::Scanner::from_bytes_unchecked`] methods.
+//!
+//! # Architecture
+//!
+//! The `borsh` library is used to provide ser/deser implementations for all std types.
+//! This library provides some good safe defaults and is very simple.
+//!
+//! All ser/deser implementations follow this design:
+//!
+//! - The derive methods are *not* used, for several reasons:
+//!
+//!   - Making those methods explicit guarantees that a innocuous change in an object
+//!     does not break serialization.
+//!   - This allows testing the serialization of those objects more thoroughly
+//!   - derive implementations uses proc macros which are slow and bring more, unneeded,
+//!     dependencies.
+//!
+//! - Use of the `Deserialize` trait is made through explicit types. This ensures that
+//!   changing the type of a field, which means a break in the serialization format,
+//!   forces a change in those routines. This makes the break explicit. That is,
+//!   do not do `Deserialize::deserialize_reader(reader)`, but do
+//!   `String::deserialize_reader(reader)`.
+//!
+//! - A few objects needs additional data to deserialize properly. In that case, the object
+//!   implements the Serialize trait normally, but exposes a `deserialize` method that takes
+//!   this additional data instead of implementing the Deserialize trait.
+//!
+//! - A few objects requires storing additional data in the Scanner in order to be able to
+//!   be serialized and deserialized properly. In that case, those additional datas are
+//!   conditioned through the use of the `serialize` feature, to ensure that if this
+//!   feature is enabled, those useless fields are not stored and do not increase the RAM
+//!   usage of the scanner.
 use std::io;
 
 pub use borsh::BorshDeserialize as Deserialize;

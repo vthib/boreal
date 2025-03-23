@@ -346,13 +346,14 @@ fn test_scanner_serialize_module_use() {
     let _r = scanner.scan_mem(b"").unwrap();
     assert_eq!(&*LOGS.lock().unwrap(), &[1, 2]);
 
-    let buf = scanner.to_bytes().unwrap();
+    let mut buf = Vec::new();
+    scanner.to_bytes(&mut buf).unwrap();
     // Missing console module
-    assert!(Scanner::from_bytes(&buf, DeserializeParams::default()).is_err());
+    assert!(Scanner::from_bytes_unchecked(&buf, DeserializeParams::default()).is_err());
 
     let mut params = DeserializeParams::default();
     params.add_module(Console::with_callback(|_| LOGS.lock().unwrap().push(3)));
-    let mut scanner2 = Scanner::from_bytes(&buf, params).unwrap();
+    let mut scanner2 = Scanner::from_bytes_unchecked(&buf, params).unwrap();
 
     let _r = scanner2.scan_mem(b"").unwrap();
     assert_eq!(&*LOGS.lock().unwrap(), &[1, 2, 3]);
