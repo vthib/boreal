@@ -801,7 +801,6 @@ rule my_rule {
         assert len(matches) == 1
 
 
-
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_save_load_invalid_types(module, is_yara):
     # Do not run the test if boreal was not compiled with the
@@ -825,3 +824,31 @@ def test_save_load_invalid_types(module, is_yara):
         module.load(filepath=1)
     with pytest.raises(TypeError):
         module.load(file='str')
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_allow_duplicate_metadata(module):
+    rules = module.compile(source="""
+rule my_rule {
+    meta:
+        foo = "foo #1"
+        foo = "foo #2"
+        bar = "bar"
+    condition:
+        true
+}""")
+
+    with YaraCompatibilityMode():
+        matches = rules.match(data="")
+        r = matches[0]
+        assert r.meta == {
+            'foo': 'foo #2',
+            'bar': 'bar'
+        }
+
+        matches = rules.match(data="", allow_duplicate_metadata=True)
+        r = matches[0]
+        assert r.meta == {
+            'foo': ['foo #1', 'foo #2'],
+            'bar': ['bar']
+        }
