@@ -233,7 +233,7 @@ def test_compile_errors_invalid_types(module, is_yara):
         module.compile(sources=1)
     with pytest.raises(TypeError):
         module.compile(filepaths=1)
-    # segfaults in yaran on Windows: https://github.com/VirusTotal/yara-python/pull/269
+    # segfaults in yara on Windows: https://github.com/VirusTotal/yara-python/pull/269
     if not is_yara:
         with pytest.raises(AttributeError):
             module.compile(file='str')

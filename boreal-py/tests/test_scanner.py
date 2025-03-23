@@ -764,3 +764,64 @@ rule my_rule {
         assert len(matches) == 1
         m0 = matches[0]
         assert len(m0.strings) == 0
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_save_load(module):
+    # Do not run the test if boreal was not compiled with the
+    # serialize feature
+    if not hasattr(boreal, 'load'):
+        return
+
+    # Compile with a rule that can be evaluated without scanning rules
+    rules = module.compile(source="""
+rule my_rule {
+    strings:
+        $s = "abc"
+    condition:
+        any of them
+}
+""")
+
+    with tempfile.TemporaryDirectory() as fd:
+        # Test save + load with filepath
+        path = f"{fd}/file"
+        rules.save(filepath=path)
+        rules2 = module.load(filepath=path)
+        matches = rules2.match(data=b"abc")
+        assert len(matches) == 1
+
+        # Test save + load with file
+        path2 = f"{fd}/file2"
+        with open(path2, "wb") as file:
+            rules.save(file=file)
+        with open(path2, "rb") as file:
+            rules2 = module.load(file=file)
+        matches = rules2.match(data=b"abc")
+        assert len(matches) == 1
+
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_save_load_invalid_types(module, is_yara):
+    # Do not run the test if boreal was not compiled with the
+    # serialize feature
+    if not hasattr(boreal, 'load'):
+        return
+
+    # Compile with a rule that can be evaluated without scanning rules
+    rules = module.compile(source="rule my_rule { condition: true }")
+
+    with pytest.raises(TypeError):
+        rules.save()
+    with pytest.raises(TypeError):
+        rules.save(filepath=1)
+    with pytest.raises(TypeError):
+        rules.save(file='str')
+
+    with pytest.raises(TypeError):
+        module.load()
+    with pytest.raises(TypeError):
+        module.load(filepath=1)
+    with pytest.raises(TypeError):
+        module.load(file='str')

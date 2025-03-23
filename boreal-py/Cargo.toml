@@ -16,9 +16,11 @@ name = "boreal"
 crate-type = ["cdylib"]
 
 [features]
-default = []
+default = ["serialize"]
 
 cuckoo = ["boreal/cuckoo"]
+
+serialize = ["boreal/serialize"]
 
 [dependencies]
 boreal = { path = "../boreal", version = "0.9.0" }

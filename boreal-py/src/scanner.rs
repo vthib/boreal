@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -32,6 +33,17 @@ pub struct Scanner {
 impl Scanner {
     pub fn new(scanner: scanner::Scanner, warnings: Vec<String>) -> Self {
         Self { scanner, warnings }
+    }
+
+    #[cfg(feature = "serialize")]
+    pub(crate) fn load(buf: &[u8]) -> std::io::Result<Self> {
+        let params = ::boreal::scanner::DeserializeParams::default();
+
+        let scanner = scanner::Scanner::from_bytes_unchecked(buf, params)?;
+        Ok(Self {
+            scanner,
+            warnings: Vec::new(),
+        })
     }
 }
 
@@ -215,6 +227,37 @@ impl Scanner {
                 scanner::ScanError::Timeout => Err(TimeoutError::new_err("")),
                 _ => Err(ScanError::new_err(format!("{err}"))),
             },
+        }
+    }
+
+    #[cfg(feature = "serialize")]
+    #[pyo3(signature = (
+        filepath=None,
+        file=None,
+    ))]
+    fn save(&self, filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        match (filepath, file) {
+            (Some(filepath), None) => {
+                let mut file = File::create(filepath)?;
+                self.scanner.to_bytes(&mut file)?;
+                Ok(())
+            }
+            (None, Some(file)) => {
+                match (file.hasattr("write"), file.hasattr("flush")) {
+                    (Ok(true), Ok(true)) => (),
+                    _ => {
+                        return Err(PyTypeError::new_err(
+                            "file parameter must have a write and a flush method",
+                        ))
+                    }
+                }
+                let mut obj = PyObjectWriter { file };
+                self.scanner.to_bytes(&mut obj)?;
+                Ok(())
+            }
+            _ => Err(PyTypeError::new_err(
+                "one of filepath or file must be passed",
+            )),
         }
     }
 
@@ -457,4 +500,21 @@ fn set_modules_data(
     }
 
     Ok(())
+}
+
+struct PyObjectWriter<'a, 'b> {
+    file: &'a Bound<'b, PyAny>,
+}
+
+impl std::io::Write for PyObjectWriter<'_, '_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let res = self.file.call_method1("write", (buf,))?;
+        let res: usize = res.extract()?;
+        Ok(res)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let _r = self.file.call_method0("flush")?;
+        Ok(())
+    }
 }

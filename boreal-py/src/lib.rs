@@ -45,6 +45,8 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(compile, m)?)?;
     m.add_function(wrap_pyfunction!(set_config, m)?)?;
+    #[cfg(feature = "serialize")]
+    m.add_function(wrap_pyfunction!(load, m)?)?;
 
     m.add("modules", get_available_modules(py))?;
 
@@ -229,6 +231,33 @@ fn set_config(
     }
     // Ignore stack size, this isn't used in boreal.
     let _ = stack_size;
+}
+
+#[cfg(feature = "serialize")]
+#[pyfunction]
+#[pyo3(signature = (
+        filepath=None,
+        file=None,
+    ))]
+fn load(filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<scanner::Scanner> {
+    match (filepath, file) {
+        (Some(filepath), None) => {
+            let contents = std::fs::read(filepath)?;
+            Ok(scanner::Scanner::load(&contents)?)
+        }
+        (None, Some(file)) => {
+            let Ok(res) = file.call_method0(intern!(file.py(), "read")) else {
+                return Err(PyTypeError::new_err(
+                    "the file parameter must implement the read method",
+                ));
+            };
+            let contents: &[u8] = res.extract()?;
+            Ok(scanner::Scanner::load(contents)?)
+        }
+        _ => Err(PyTypeError::new_err(
+            "one of filepath or file must be passed",
+        )),
+    }
 }
 
 fn get_available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
