@@ -63,6 +63,7 @@ impl Scanner {
         warnings_callback=None,
         which_callbacks=None,
         console_callback=None,
+        allow_duplicate_metadata=None,
     ))]
     fn r#match(
         &self,
@@ -78,6 +79,7 @@ impl Scanner {
         warnings_callback: Option<&Bound<'_, PyAny>>,
         which_callbacks: Option<&Bound<'_, PyAny>>,
         console_callback: Option<&Bound<'_, PyAny>>,
+        allow_duplicate_metadata: Option<bool>,
     ) -> PyResult<Vec<Match>> {
         let mut scanner = self.scanner.clone();
 
@@ -185,6 +187,7 @@ impl Scanner {
             modules_callback,
             warnings_callback,
             which,
+            allow_duplicate_metadata.unwrap_or(false),
         );
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
@@ -282,6 +285,7 @@ struct CallbackHandler<'s> {
     callback: Option<Py<PyAny>>,
     modules_callback: Option<Py<PyAny>>,
     warnings_callback: Option<Py<PyAny>>,
+    allow_duplicate_metadata: bool,
     which: u32,
     error: Option<PyErr>,
 }
@@ -293,6 +297,7 @@ impl<'s> CallbackHandler<'s> {
         modules_callback: Option<Py<PyAny>>,
         warnings_callback: Option<Py<PyAny>>,
         which: u32,
+        allow_duplicate_metadata: bool,
     ) -> Self {
         Self {
             scanner,
@@ -300,6 +305,7 @@ impl<'s> CallbackHandler<'s> {
             callback,
             modules_callback,
             warnings_callback,
+            allow_duplicate_metadata,
             which,
             error: None,
         }
@@ -360,7 +366,7 @@ impl<'s> CallbackHandler<'s> {
         matched: bool,
     ) -> PyResult<ScanCallbackResult> {
         Python::with_gil(|py| {
-            let m = Match::new(py, self.scanner, rule)?;
+            let m = Match::new(py, self.scanner, rule, self.allow_duplicate_metadata)?;
 
             let ret = match &self.callback {
                 Some(cb) => {

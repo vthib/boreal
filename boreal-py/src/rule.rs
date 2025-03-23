@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
 use pyo3::prelude::*;
@@ -45,13 +46,7 @@ impl Rule {
         Ok(Self {
             identifier: PyString::new(py, rule.name).unbind(),
             namespace: PyString::new(py, rule.namespace.unwrap_or_default()).unbind(),
-            meta: rule
-                .metadatas
-                .iter()
-                .map(|m| convert_metadata(py, scanner, m))
-                .collect::<Result<Vec<_>, _>>()?
-                .into_py_dict(py)?
-                .unbind(),
+            meta: convert_metadatas(py, scanner, rule.metadatas, false)?.unbind(),
             tags: PyList::new(py, rule.tags)?.unbind(),
             is_global: rule.is_global,
             is_private: rule.is_private,
@@ -59,13 +54,42 @@ impl Rule {
     }
 }
 
-pub fn convert_metadata(
-    py: Python,
+pub fn convert_metadatas<'py>(
+    py: Python<'py>,
     scanner: &scanner::Scanner,
-    metadata: &Metadata,
-) -> Result<(Py<PyString>, Py<PyAny>), PyErr> {
-    let name = PyString::new(py, scanner.get_string_symbol(metadata.name));
-    let value = match metadata.value {
+    metadatas: &[Metadata],
+    allow_duplicate_metadata: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    if allow_duplicate_metadata {
+        let mut res: HashMap<&str, Bound<'_, PyList>> = HashMap::new();
+
+        for m in metadatas {
+            let name = scanner.get_string_symbol(m.name);
+            let value = convert_metadata_value(py, scanner, m.value)?;
+            res.entry(name)
+                .or_insert_with(|| PyList::empty(py))
+                .append(value)?;
+        }
+        res.into_py_dict(py)
+    } else {
+        let mut res: HashMap<&str, Bound<'_, PyAny>> = HashMap::new();
+
+        for m in metadatas {
+            let name = scanner.get_string_symbol(m.name);
+            let value = convert_metadata_value(py, scanner, m.value)?;
+            let _r = res.insert(name, value);
+        }
+
+        res.into_py_dict(py)
+    }
+}
+
+fn convert_metadata_value<'py>(
+    py: Python<'py>,
+    scanner: &scanner::Scanner,
+    value: MetadataValue,
+) -> Result<Bound<'py, PyAny>, PyErr> {
+    Ok(match value {
         MetadataValue::Bytes(v) => {
             let bytes = scanner.get_bytes_symbol(v).to_vec().into_pyobject(py)?;
             // XXX: Yara forces a string conversion here, losing data in the
@@ -79,6 +103,5 @@ pub fn convert_metadata(
         }
         MetadataValue::Integer(v) => v.into_pyobject(py)?.into_any(),
         MetadataValue::Boolean(v) => PyBool::new(py, v).to_owned().into_any(),
-    };
-    Ok((name.unbind(), value.unbind()))
+    })
 }

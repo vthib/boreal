@@ -2,11 +2,11 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use pyo3::basic::CompareOp;
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyDict, PyList};
+use pyo3::types::{PyDict, PyList};
 
 use ::boreal::scanner;
 
-use crate::rule::convert_metadata;
+use crate::rule::convert_metadatas;
 use crate::string_matches::StringMatches;
 
 /// A matching rule
@@ -65,16 +65,12 @@ impl Match {
         py: Python,
         scanner: &scanner::Scanner,
         rule: scanner::EvaluatedRule,
+        allow_duplicate_metadata: bool,
     ) -> Result<Self, PyErr> {
         Ok(Self {
             rule: rule.name.to_string(),
             namespace: rule.namespace.unwrap_or("default").to_string(),
-            meta: rule
-                .metadatas
-                .iter()
-                .map(|m| convert_metadata(py, scanner, m))
-                .collect::<Result<Vec<_>, _>>()?
-                .into_py_dict(py)?
+            meta: convert_metadatas(py, scanner, rule.metadatas, allow_duplicate_metadata)?
                 .unbind(),
             tags: PyList::new(py, rule.tags)?.unbind(),
             strings: PyList::new(py, rule.matches.into_iter().map(StringMatches::new))?.unbind(),
