@@ -16,11 +16,13 @@ name = "boreal"
 crate-type = ["cdylib"]
 
 [features]
-default = ["serialize"]
+default = ["serialize", "authenticode-verify"]
 
 cuckoo = ["boreal/cuckoo"]
 
 serialize = ["boreal/serialize"]
+
+authenticode-verify = ["boreal/authenticode-verify"]
 
 [dependencies]
 boreal = { path = "../boreal", version = "0.9.0" }
