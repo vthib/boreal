@@ -130,6 +130,32 @@ impl Compiler {
     }
 
     #[track_caller]
+    pub fn check_add_rules_in_namespace_err(
+        mut self,
+        rules: &str,
+        ns: &str,
+        expected_prefix: &str,
+    ) {
+        let err = self
+            .compiler
+            .add_rules_str_in_namespace(rules, ns)
+            .unwrap_err();
+        let desc = add_rule_error_get_desc(&err, rules);
+        assert!(
+            desc.starts_with(expected_prefix),
+            "error: {desc}\nexpected prefix: {expected_prefix}"
+        );
+
+        // Check libyara also rejects it
+        if let Some(compiler) = self.yara_compiler.take() {
+            assert!(
+                compiler.add_rules_str_with_namespace(rules, ns).is_err(),
+                "conformity test failed for libyara"
+            );
+        }
+    }
+
+    #[track_caller]
     pub fn check_add_rules_err_boreal(&mut self, rules: &str, expected_prefix: &str) {
         let err = self.compiler.add_rules_str(rules).unwrap_err();
         let desc = add_rule_error_get_desc(&err, rules);
@@ -189,6 +215,26 @@ impl Compiler {
                 panic!("conformity test failed for libyara: {err:?}");
             }
         }
+    }
+    pub fn set_include_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(&str, Option<&Path>, Option<&str>) -> std::io::Result<String>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+    {
+        if let Some(compiler) = self.yara_compiler.as_mut() {
+            let callback = callback.clone();
+            compiler.set_include_callback(move |include_name, current_filename, mut ns| {
+                // FIXME: default namespace difference...
+                if ns == Some("default") {
+                    ns = None;
+                }
+                callback(include_name, current_filename.map(Path::new), ns).ok()
+            });
+        }
+        self.compiler.set_include_callback(callback);
     }
 
     define_symbol_compiler_method!(define_symbol_int, i64);
