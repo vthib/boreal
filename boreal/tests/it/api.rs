@@ -364,3 +364,125 @@ fn test_scanner_serialize_module_use() {
     let _r = scanner2.scan_mem(b"").unwrap();
     assert_eq!(&*LOGS.lock().unwrap(), &[1, 2, 3, 4]);
 }
+
+#[test]
+fn test_compiler_set_include_callback() {
+    let mut compiler = crate::utils::Compiler::new_without_yara();
+
+    // TODO: make it work with yara as well?
+    compiler
+        .compiler
+        .set_include_callback(|include_name, current_path, namespace| {
+            let current_path = current_path.map(|v| v.display().to_string());
+
+            if namespace.is_none() {
+                match (include_name, current_path.as_deref()) {
+                    ("first.yar", None) => Ok(r#"
+                        include "second/../boo.yar"
+                        rule first { condition: true }
+                    "#
+                    .to_owned()),
+                    ("second/../boo.yar", Some("first.yar")) => Ok(r#"
+                        include "first.yar"
+                        rule second { condition: true }
+                    "#
+                    .to_owned()),
+                    ("first.yar", Some("second/../boo.yar")) => Ok(r#"
+                        rule third { condition: true }
+                    "#
+                    .to_owned()),
+                    _ => panic!(
+                        "unexpected include on {} from {:?}",
+                        include_name, current_path
+                    ),
+                }
+            } else if namespace == Some("ns") {
+                match (include_name, current_path.as_deref()) {
+                    ("first.yar", _) => {
+                        // Check the end of the path, but the rest is from a tempdir.
+                        assert!(current_path
+                            .as_ref()
+                            .unwrap()
+                            .ends_with(&format!("subdir{}initial.yar", std::path::MAIN_SEPARATOR)));
+                        Ok(r#"
+                            include "second/../boo.yar"
+                            rule r1 { condition: true }
+                        "#
+                        .to_owned())
+                    }
+                    ("second/../boo.yar", Some("first.yar")) => Ok(r#"
+                        include "../../../grandparent.yar"
+                        rule r2 { condition: true }
+                    "#
+                    .to_owned()),
+                    ("../../../grandparent.yar", Some("second/../boo.yar")) => Ok(r#"
+                        include "a/../b/./boo.yar"
+                        rule r3 { condition: true }
+                    "#
+                    .to_owned()),
+                    ("a/../b/./boo.yar", Some("../../../grandparent.yar")) => Ok(r#"
+                        rule r4 { condition: true }
+                    "#
+                    .to_owned()),
+                    _ => panic!(
+                        "unexpected include on {} from {:?}",
+                        include_name, current_path
+                    ),
+                }
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("unknown namespace {namespace:?}"),
+                ))
+            }
+        });
+
+    // Trigger first include chain, should add rules "first", "second" and "third".
+    compiler
+        .compiler
+        .add_rules_str(r#"include "first.yar""#)
+        .unwrap();
+
+    // Trigger second include chain, should add rules "r0", "r1", "r2", "r3" and "r4".
+    let test_dir = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir(test_dir.path().join("subdir")).unwrap();
+    let file_path = test_dir.path().join("subdir").join("initial.yar");
+    std::fs::write(
+        &file_path,
+        r#"
+        include "first.yar"
+        rule r0 { condition: true }
+    "#,
+    )
+    .unwrap();
+    compiler
+        .compiler
+        .add_rules_file_in_namespace(file_path, "ns")
+        .unwrap();
+
+    // Third chain returns an error.
+    let contents = r#"include "first.yar""#;
+    let err = compiler
+        .compiler
+        .add_rules_str_in_namespace(contents, "ns2")
+        .unwrap_err();
+    assert_eq!(
+        err.to_short_description("input", contents),
+        "input:1:1: error: cannot include `first.yar`: unknown namespace Some(\"ns2\")\n"
+    );
+
+    let mut checker = compiler.into_checker();
+    checker.check_rule_matches(
+        b"",
+        &[
+            "default:first",
+            "default:second",
+            "default:third",
+            "ns:r0",
+            "ns:r1",
+            "ns:r2",
+            "ns:r3",
+            "ns:r4",
+        ],
+    );
+}

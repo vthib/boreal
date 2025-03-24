@@ -72,6 +72,24 @@ pub struct Compiler {
 
     /// Profile to use when compiling rules.
     pub(crate) profile: CompilerProfile,
+
+    /// Callback to use to resolve includes.
+    include_callback: Option<IncludeCallback>,
+}
+
+#[allow(clippy::type_complexity)]
+struct IncludeCallback(
+    Box<
+        dyn FnMut(&str, Option<&Path>, Option<&str>) -> Result<String, std::io::Error>
+            + Send
+            + Sync,
+    >,
+);
+
+impl std::fmt::Debug for IncludeCallback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IncludeCallback").finish()
+    }
 }
 
 #[derive(Debug)]
@@ -165,6 +183,7 @@ impl Compiler {
             external_symbols: Vec::new(),
             bytes_pool: BytesPoolBuilder::default(),
             params: CompilerParams::default(),
+            include_callback: None,
         }
     }
 
@@ -302,23 +321,47 @@ impl Compiler {
                         kind: AddRuleErrorKind::UnauthorizedInclude { span: include.span },
                     });
                 }
-                // Resolve the given path relative to the current one
-                let path = match current_filepath {
-                    None => PathBuf::from(include.path),
-                    Some(current_path) => current_path
-                        .parent()
-                        .unwrap_or(current_path)
-                        .join(include.path),
-                };
-                let path = path.canonicalize().map_err(|error| AddRuleError {
-                    path: current_filepath.map(Path::to_path_buf),
-                    kind: AddRuleErrorKind::InvalidInclude {
-                        path,
-                        span: include.span,
-                        error,
-                    },
-                })?;
-                self.add_rules_file_inner(&path, namespace_name, status)?;
+                match &mut self.include_callback {
+                    Some(cb) => {
+                        // With an include callback, we do not attempt to resolve the path
+                        // through the local filesystem, and just pass to the callback the
+                        // include path as is.
+                        let contents = (cb.0)(&include.path, current_filepath, namespace_name)
+                            .map_err(|error| AddRuleError {
+                                path: current_filepath.map(Path::to_path_buf),
+                                kind: AddRuleErrorKind::InvalidInclude {
+                                    path: PathBuf::from(&include.path),
+                                    span: include.span,
+                                    error,
+                                },
+                            })?;
+                        self.add_rules_str_inner(
+                            &contents,
+                            namespace_name,
+                            Some(Path::new(&include.path)),
+                            status,
+                        )?;
+                    }
+                    None => {
+                        // Resolve the given path relative to the current one
+                        let path = match current_filepath {
+                            None => PathBuf::from(include.path),
+                            Some(current_path) => current_path
+                                .parent()
+                                .unwrap_or(current_path)
+                                .join(include.path),
+                        };
+                        let path = path.canonicalize().map_err(|error| AddRuleError {
+                            path: current_filepath.map(Path::to_path_buf),
+                            kind: AddRuleErrorKind::InvalidInclude {
+                                path,
+                                span: include.span,
+                                error,
+                            },
+                        })?;
+                        self.add_rules_file_inner(&path, namespace_name, status)?;
+                    }
+                }
             }
             YaraFileComponent::Import(import) => {
                 match self.available_modules.get_mut(&*import.name) {
@@ -505,6 +548,58 @@ impl Compiler {
     /// Names of modules that are available for use in rules.
     pub fn available_modules(&self) -> impl Iterator<Item = &str> {
         self.available_modules.keys().map(|v| &**v)
+    }
+
+    /// Set a callback to use to resolve includes.
+    ///
+    /// This can be used to implement custom handling of includes.
+    /// The callback receives as arguments:
+    ///
+    /// - The include name (the literal string used in the include directive).
+    ///
+    /// - The path of the current document. This is either:
+    ///
+    ///   - `None` if the current document comes from a string, i.e. from
+    ///     [`Compiler::add_rules_str`] or its namespaced variant.
+    ///   - The path to the current document if the current document
+    ///     comes [`Compiler::add_rules_file`] or its namespaced variant.
+    ///   - The last include name if the current document is from an include.
+    ///
+    /// - The current namespace.
+    ///
+    /// For example, lets consider three documents:
+    /// - `first.yar` that includes `../second.yar`
+    /// - `../second.yar` that includes `subdir/third.yar`.
+    /// - `third.yar` that does not contains includes.
+    ///
+    /// Then:
+    ///
+    /// ```no_run
+    /// # let mut compiler = boreal::Compiler::new();
+    /// // This will call the include callback with:
+    /// //
+    /// // - first:   ("first.yar",        None,                  None)
+    /// // - then:    ("../second.yar",    Some("first.yar"),     None)
+    /// // - finally: ("subdir/third.yar", Some("../second.yar"), None)
+    /// compiler.add_rules_str(r#"
+    /// include "first.yar"
+    /// ...
+    /// "#);
+    ///
+    /// // This will call the include callback with:
+    /// //
+    /// // - first: ("../second.yar",    Some("path/to/first.yar"), Some("ns"))
+    /// // - then:  ("subdir/third.yar", Some("../second.yar"),     Some("ns"))
+    /// compiler.add_rules_file_in_namespace("path/to/first.yar", "ns");
+    /// ```
+    pub fn set_include_callback<F>(&mut self, callback: F)
+    where
+        F: FnMut(&str, Option<&Path>, Option<&str>) -> Result<String, std::io::Error>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.include_callback = Some(IncludeCallback(Box::new(callback)));
     }
 
     /// Finalize the compiler and generate a [`Scanner`].
