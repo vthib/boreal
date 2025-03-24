@@ -2,6 +2,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::CString;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
@@ -92,7 +93,8 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sources=None,
     externals=None,
     includes=true,
-    error_on_warning=false
+    error_on_warning=false,
+    include_callback=None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn compile(
@@ -104,6 +106,7 @@ fn compile(
     externals: Option<&Bound<'_, PyDict>>,
     includes: bool,
     error_on_warning: bool,
+    include_callback: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<scanner::Scanner> {
     let mut compiler = build_compiler();
 
@@ -119,6 +122,18 @@ fn compile(
 
     if let Some(externals) = externals {
         add_externals(&mut compiler, externals)?;
+    }
+
+    if let Some(cb) = include_callback {
+        if !cb.is_callable() {
+            return Err(PyTypeError::new_err("include_callback is not callable"));
+        }
+
+        let include_callback = cb.clone().unbind();
+        compiler.set_include_callback(move |include_name, current_path, ns| {
+            call_py_include_callback(&include_callback, include_name, current_path, ns)
+                .map_err(|desc| std::io::Error::new(std::io::ErrorKind::Other, desc))
+        });
     }
 
     let mut warnings = Vec::new();
@@ -258,6 +273,27 @@ fn load(filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<sca
             "one of filepath or file must be passed",
         )),
     }
+}
+
+fn call_py_include_callback(
+    include_callback: &Py<PyAny>,
+    include_name: &str,
+    current_path: Option<&Path>,
+    mut ns: Option<&str>,
+) -> Result<String, String> {
+    let current_path = current_path.map(|v| v.display().to_string());
+
+    if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+        ns = Some(ns.unwrap_or("default"));
+    }
+
+    Python::with_gil(|py| {
+        let res = include_callback
+            .call1(py, (include_name, current_path, ns))
+            .map_err(|err| format!("error when calling include callback: {err:?}"))?;
+        res.extract(py)
+            .map_err(|err| format!("include callback did not return a string: {err:?}"))
+    })
 }
 
 fn get_available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {

@@ -2,7 +2,7 @@ import boreal
 import pytest
 import tempfile
 import yara
-from .utils import MODULES, MODULES_DISTINCT
+from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
 
 
 @pytest.mark.parametrize('module', MODULES)
@@ -255,24 +255,75 @@ def test_compile_errors_invalid_types(module, is_yara):
             module.compile(source=source, externals={ 1: 'a' })
     with pytest.raises(TypeError):
         module.compile(source=source, externals={ 'a': [1] })
+    with pytest.raises(TypeError):
+        module.compile(source=source, include_callback=1)
 
 
-@pytest.mark.parametrize('module', MODULES)
-def test_compile_errors_compilation(module):
-    with tempfile.TemporaryDirectory() as fd:
-        path = f"{fd}/file"
-        with open(path, "w") as f:
-            f.write("rule")
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_compile_include_callback(module, is_yara):
+    def include_cb(name, current, ns):
+        if ns == "default":
+            if name == "first":
+                return """
+                    include "../second"
+                    rule b { condition: true }
+                """
+            elif name == "../second":
+                return "rule c { condition: true }"
+            else:
+                return None
+        elif ns == "ns":
+            if name == "first":
+                return """
+                    include "../second"
+                    rule d { condition: true }
+                """
+            elif name == "../second":
+                return "rule e { condition: true }"
+            else:
+                return None
+        else:
+            return None
 
-        with pytest.raises(module.SyntaxError):
-            module.compile(filepath=path)
-        with pytest.raises(module.SyntaxError):
-            module.compile(filepaths={ 'ns': path })
-        with open(path, "r") as f:
-            with pytest.raises(module.SyntaxError):
-                module.compile(file=f)
+    data = """
+        include "first"
+        rule a { condition: true }
+    """
+    # Compat mode to get "default" for the default namespace instead of None
+    with YaraCompatibilityMode():
+        rules = module.compile(source=data, include_callback=include_cb)
+        matches = rules.match(data="")
+        assert sorted([r.rule for r in matches]) == ["a", "b", "c"]
 
+    rules = module.compile(sources={ 'ns': data }, include_callback=include_cb)
+    matches = rules.match(data="")
+    assert sorted([r.rule for r in matches]) == ["a", "d", "e"]
+
+    # Test that namespace is None when not in compat mode
+    if not is_yara:
+        def include_cb(name, current, nb):
+            assert nb is None
+            return "rule f { condition: true }"
+        rules = module.compile(source=data, include_callback=include_cb)
+        matches = rules.match(data="")
+        assert sorted([r.rule for r in matches]) == ["a", "f"]
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_compile_include_callback_errors(module, is_yara):
+    data = """
+        include "first"
+        rule a { condition: true }
+    """
+
+    # invalid return type
+    def include_cb(name, current, ns):
+        return 1
     with pytest.raises(module.SyntaxError):
-        module.compile(source='rule')
+        module.compile(source=data, include_callback=include_cb)
+
+    # exception during call
+    def include_cb(name, current, ns):
+        raise Exception('dead')
     with pytest.raises(module.SyntaxError):
-        module.compile(sources={ 'ns': 'rule' })
+        module.compile(source=data, include_callback=include_cb)
