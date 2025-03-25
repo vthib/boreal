@@ -100,7 +100,8 @@ impl Scanner {
             scanner.set_module_data::<Console>(ConsoleData::new(move |log| {
                 Python::with_gil(|py| {
                     let pylog = PyString::new(py, &log);
-                    // FIXME: Ignore result
+                    // XXX: Ignore result, we cannot abort a scan here, while this
+                    // is allegedly possible in yara (though who would do this?).
                     let _r = cb.call1(py, (pylog,));
                 });
             }));
@@ -175,7 +176,6 @@ impl Scanner {
         // For the moment, simply disables computing the full matches when
         // in fast mode: this allows all the fast optims to run.
         if !fast {
-            eprintln!("NOT FAST MODE");
             params = params.compute_full_matches(true);
         }
 

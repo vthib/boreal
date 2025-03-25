@@ -95,7 +95,8 @@ fn convert_metadata_value<'py>(
             // XXX: Yara forces a string conversion here, losing data in the
             // process. Prefer using the right type here.
             if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
-                // FIXME: report this to pyo3, a c-string is expected here
+                // The \0 are required for soundness, see
+                // <https://github.com/PyO3/pyo3/issues/5005>
                 PyString::from_object(&bytes, "utf-8\0", "ignore\0")?.into_any()
             } else {
                 bytes

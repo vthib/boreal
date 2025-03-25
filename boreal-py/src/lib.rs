@@ -13,9 +13,6 @@ use pyo3::{create_exception, ffi, intern};
 
 use ::boreal::compiler;
 
-// TODO: all clone impls should be efficient...
-// TODO: check GIL handling in all functions (especially match)
-
 mod module;
 mod rule;
 mod rule_match;
