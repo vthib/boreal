@@ -364,8 +364,8 @@ rule r: tag {
         assert rules[0].namespace == "default"
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
-def test_match_callback(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_match_callback(module):
     rules = module.compile(source="""
 global rule a: tag1 tag2 {
     meta:
@@ -557,7 +557,7 @@ rule a { condition: true }
 
     rules.match(data='', modules_callback=modules_callback)
 
-    # FIXME: difference with yara here
+    # Difference with yara here, but it's not a big deal.
     if is_yara:
         assert len(received_values) == 2
         assert received_values[0]['module'] == 'math'
@@ -712,7 +712,8 @@ rule my_rule {
     assert len(matches) == 1
 
     # It is also possible to abort
-    # FIXME: this does not work well in yara
+    # this does not work well in yara, it returns an "internal error: 30".
+    # Lets ignore it, this is not a big deal.
     if not is_yara:
         received_values = []
         def warnings_callback(warning_type, message):
@@ -803,8 +804,8 @@ rule my_rule {
         assert len(matches) == 1
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
-def test_save_load_invalid_types(module, is_yara):
+@pytest.mark.parametrize('module', MODULES)
+def test_save_load_invalid_types(module):
     # Do not run the test if boreal was not compiled with the
     # serialize feature
     if not hasattr(boreal, 'load'):

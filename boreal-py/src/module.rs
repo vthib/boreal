@@ -41,11 +41,13 @@ fn convert_value<'py>(py: Python<'py>, value: &Value) -> PyResult<Option<Bound<'
         Value::Dictionary(map) => {
             let dict = PyDict::new(py);
             for (k, v) in map {
+                // XXX: YARA pretends the key is utf-8, which is not guaranteed. This makes
+                // the whole match call fail if it is not the case.
+                // See <https://github.com/VirusTotal/yara-python/issues/273>.
+                // The ideal behavior is to use a byte string as the key, which we do by default.
+                // But this is not compatible with yara, so in compat mode, we use a string as
+                // well, except we skip the key if invalid instead of breaking the whole scan.
                 let key = if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
-                    // FIXME: YARA pretends the key is utf-8, which is not guaranteed. This makes
-                    // the whole match call fail if it is not the case. Would be nice to fix on
-                    // YARA side, but in the meantime, we reproduce the same logic, except we
-                    // do not abort the scan.
                     let Ok(s) = std::str::from_utf8(k) else {
                         continue;
                     };

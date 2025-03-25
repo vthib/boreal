@@ -203,7 +203,7 @@ rule foo {
     # check special method __repr__
     assert i0.__repr__() == '<a>'
     assert i1.__repr__() == '<\td>'
-    # TODO: difference here, should we care about it?
+    # XXX: difference here, but i don't think this is a big deal.
     assert i2.__repr__() == '<\x00\\xff\\xfb>' if is_yara else '<\x00\uFFFD\uFFFD>'
 
     # In yara, the hash depends only on the matched_data
