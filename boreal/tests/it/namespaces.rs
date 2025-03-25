@@ -73,6 +73,17 @@ fn test_namespaces_errors() {
     );
 }
 
+// Check the default namespace is named "default".
+#[test]
+fn test_namespace_default() {
+    let mut compiler = Compiler::new();
+    compiler.add_rules_in_namespace("rule a { condition: true }", "default");
+    compiler.check_add_rules_err(
+        "rule a { condition: true }",
+        "mem:1:6: error: rule `a` is already declared in this namespace",
+    );
+}
+
 // Dependencies on other rules in a given namespace
 #[test]
 fn test_rule_dependencies() {
