@@ -124,7 +124,10 @@ rule foo {
     condition:
         any of them
 }""")
-    matches = rule.match(data=b'abca')
+    # Compat mode to get the identifiers with the '$' prefix
+    with YaraCompatibilityMode():
+        matches = rule.match(data=b'abca')
+
     assert len(matches) == 1
     m = matches[0]
     assert len(m.strings) == 3
@@ -151,6 +154,18 @@ rule foo {
     # outside of compat mode, this is not true
     if not is_yara:
         assert hash(s0) != hash(s1)
+
+    # Outside compat mode, we do not have this '$' prefix
+    if not is_yara:
+        matches = rule.match(data=b'abca')
+        m = matches[0]
+        s0 = m.strings[0]
+        s1 = m.strings[1]
+        s2 = m.strings[2]
+
+        assert s0.identifier == ''
+        assert s1.identifier == ''
+        assert s2.identifier == 'c'
 
 
 @pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)

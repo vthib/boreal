@@ -25,8 +25,11 @@ pub struct StringMatches {
 impl StringMatches {
     pub fn new(s: scanner::StringMatches) -> Self {
         Self {
-            // FIXME
-            identifier: format!("${}", &s.name),
+            identifier: if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+                format!("${}", &s.name)
+            } else {
+                s.name.to_string()
+            },
             instances: s
                 .matches
                 .into_iter()
