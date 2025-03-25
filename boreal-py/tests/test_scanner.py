@@ -386,11 +386,13 @@ rule b { condition: false }
         callback_rules.append(rule)
         return module.CALLBACK_CONTINUE
 
-    matches = rules.match(
-        data='dcabc <3>',
-        which_callbacks=module.CALLBACK_MATCHES,
-        callback=my_callback
-    )
+    # Compat mode to get the '$' prefix for identifiers
+    with YaraCompatibilityMode():
+        matches = rules.match(
+            data='dcabc <3>',
+            which_callbacks=module.CALLBACK_MATCHES,
+            callback=my_callback
+        )
     assert len(matches) == 1
     assert len(callback_rules) == 1
 
@@ -415,7 +417,7 @@ rule b { condition: false }
     assert r.namespace == "default"
     assert r.tags == ["tag1", "tag2"]
     assert r.meta == {
-        's': 'str' if is_yara else b'str',
+        's': 'str',
         'i': -23,
     }
     check_strings(r.strings)
@@ -426,7 +428,7 @@ rule b { condition: false }
     assert r['namespace'] == "default"
     assert r['tags'] == ["tag1", "tag2"]
     assert r['meta'] == {
-        's': 'str' if is_yara else b'str',
+        's': 'str',
         'i': -23,
     }
     check_strings(r['strings'])
