@@ -283,10 +283,13 @@ fn test_types_traits() {
     });
     test_type_traits_non_clonable(AddRuleError {
         path: None,
-        kind: AddRuleErrorKind::Compilation(CompilationError::DuplicatedRuleName {
-            name: "a".to_owned(),
-            span: 0..1,
-        }),
+        kind: Box::new(AddRuleErrorKind::Compilation(
+            CompilationError::DuplicatedRuleName {
+                name: "a".to_owned(),
+                span: 0..1,
+            },
+        )),
+        desc: String::new(),
     });
     test_type_traits(CompilerParams::default());
     test_type_traits(CompilerProfile::default());

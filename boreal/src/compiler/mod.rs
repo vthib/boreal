@@ -1,6 +1,7 @@
 //! Provides the [`Compiler`] object used to compile YARA rules.
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -222,12 +223,15 @@ impl Compiler {
         namespace: &str,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
-        let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError {
-            path: Some(path.to_path_buf()),
-            kind: AddRuleErrorKind::IO {
-                path: path.to_path_buf(),
-                error,
-            },
+        let contents = std::fs::read_to_string(path).map_err(|error| {
+            AddRuleError::new(
+                AddRuleErrorKind::IO {
+                    path: path.to_path_buf(),
+                    error,
+                },
+                Some(path),
+                "",
+            )
         })?;
         self.add_rules_str_inner(&contents, namespace, Some(path), status)
     }
@@ -270,9 +274,8 @@ impl Compiler {
         current_filepath: Option<&Path>,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
-        let file = boreal_parser::parse(s).map_err(|error| AddRuleError {
-            path: current_filepath.map(Path::to_path_buf),
-            kind: AddRuleErrorKind::Parse(error),
+        let file = boreal_parser::parse(s).map_err(|error| {
+            AddRuleError::new(AddRuleErrorKind::Parse(error), current_filepath, s)
         })?;
         for component in file.components {
             self.add_component(component, namespace, current_filepath, s, status)?;
@@ -307,10 +310,11 @@ impl Compiler {
         match component {
             YaraFileComponent::Include(include) => {
                 if self.params.disable_includes {
-                    return Err(AddRuleError {
-                        path: current_filepath.map(Path::to_path_buf),
-                        kind: AddRuleErrorKind::UnauthorizedInclude { span: include.span },
-                    });
+                    return Err(AddRuleError::new(
+                        AddRuleErrorKind::UnauthorizedInclude { span: include.span },
+                        current_filepath,
+                        parsed_contents,
+                    ));
                 }
                 match &mut self.include_callback {
                     Some(cb) => {
@@ -318,13 +322,16 @@ impl Compiler {
                         // through the local filesystem, and just pass to the callback the
                         // include path as is.
                         let contents = (cb.0)(&include.path, current_filepath, namespace_name)
-                            .map_err(|error| AddRuleError {
-                                path: current_filepath.map(Path::to_path_buf),
-                                kind: AddRuleErrorKind::InvalidInclude {
-                                    path: PathBuf::from(&include.path),
-                                    span: include.span,
-                                    error,
-                                },
+                            .map_err(|error| {
+                                AddRuleError::new(
+                                    AddRuleErrorKind::InvalidInclude {
+                                        path: PathBuf::from(&include.path),
+                                        span: include.span,
+                                        error,
+                                    },
+                                    current_filepath,
+                                    parsed_contents,
+                                )
                             })?;
                         self.add_rules_str_inner(
                             &contents,
@@ -342,13 +349,16 @@ impl Compiler {
                                 .unwrap_or(current_path)
                                 .join(include.path),
                         };
-                        let path = path.canonicalize().map_err(|error| AddRuleError {
-                            path: current_filepath.map(Path::to_path_buf),
-                            kind: AddRuleErrorKind::InvalidInclude {
-                                path,
-                                span: include.span,
-                                error,
-                            },
+                        let path = path.canonicalize().map_err(|error| {
+                            AddRuleError::new(
+                                AddRuleErrorKind::InvalidInclude {
+                                    path,
+                                    span: include.span,
+                                    error,
+                                },
+                                current_filepath,
+                                parsed_contents,
+                            )
                         })?;
                         self.add_rules_file_inner(&path, namespace_name, status)?;
                     }
@@ -385,29 +395,31 @@ impl Compiler {
                         );
                     }
                     None => {
-                        return Err(AddRuleError {
-                            path: current_filepath.map(Path::to_path_buf),
-                            kind: AddRuleErrorKind::Compilation(CompilationError::UnknownImport {
+                        return Err(AddRuleError::new(
+                            AddRuleErrorKind::Compilation(CompilationError::UnknownImport {
                                 name: import.name,
                                 span: import.span,
                             }),
-                        })
+                            current_filepath,
+                            parsed_contents,
+                        ))
                     }
                 };
             }
             YaraFileComponent::Rule(rule) => {
                 for prefix in &namespace.forbidden_rule_prefixes {
                     if rule.name.starts_with(prefix) {
-                        return Err(AddRuleError {
-                            path: current_filepath.map(Path::to_path_buf),
-                            kind: AddRuleErrorKind::Compilation(
+                        return Err(AddRuleError::new(
+                            AddRuleErrorKind::Compilation(
                                 CompilationError::MatchOnWildcardRuleSet {
                                     rule_name: rule.name,
                                     name_span: rule.name_span,
                                     rule_set: format!("{prefix}*"),
                                 },
                             ),
-                        });
+                            current_filepath,
+                            parsed_contents,
+                        ));
                     }
                 }
 
@@ -430,20 +442,24 @@ impl Compiler {
                     parsed_contents,
                     &mut self.bytes_pool,
                 )
-                .map_err(|error| AddRuleError {
-                    path: current_filepath.map(Path::to_path_buf),
-                    kind: AddRuleErrorKind::Compilation(error),
+                .map_err(|error| {
+                    AddRuleError::new(
+                        AddRuleErrorKind::Compilation(error),
+                        current_filepath,
+                        parsed_contents,
+                    )
                 })?;
 
                 // Check the rule has no name conflict.
                 if namespace.rules_indexes.contains_key(&rule_name) {
-                    return Err(AddRuleError {
-                        path: current_filepath.map(Path::to_path_buf),
-                        kind: AddRuleErrorKind::Compilation(CompilationError::DuplicatedRuleName {
+                    return Err(AddRuleError::new(
+                        AddRuleErrorKind::Compilation(CompilationError::DuplicatedRuleName {
                             name: rule_name,
                             span: name_span,
                         }),
-                    });
+                        current_filepath,
+                        parsed_contents,
+                    ));
                 }
 
                 // From this point onward, the rule is valid. We can add all data related
@@ -459,12 +475,13 @@ impl Compiler {
 
                 // Append warnings for this rule to the warnings of all the currently added
                 // string or file.
-                status
-                    .warnings
-                    .extend(warnings.into_iter().map(|error| AddRuleError {
-                        path: current_filepath.map(Path::to_path_buf),
-                        kind: AddRuleErrorKind::Compilation(error),
-                    }));
+                status.warnings.extend(warnings.into_iter().map(|error| {
+                    AddRuleError::new(
+                        AddRuleErrorKind::Compilation(error),
+                        current_filepath,
+                        parsed_contents,
+                    )
+                }));
 
                 namespace.forbidden_rule_prefixes.extend(rule_wildcard_uses);
 
@@ -668,8 +685,20 @@ pub struct AddRuleError {
     pub path: Option<PathBuf>,
 
     /// The kind of error.
-    kind: AddRuleErrorKind,
+    ///
+    /// Boxed because big.
+    kind: Box<AddRuleErrorKind>,
+
+    /// Description of the error.
+    desc: String,
 }
+
+impl Display for AddRuleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.desc)
+    }
+}
+impl std::error::Error for AddRuleError {}
 
 /// Kind of error when adding a rule to a [`Compiler`].
 #[derive(Debug)]
@@ -714,25 +743,18 @@ enum AddRuleErrorKind {
 }
 
 impl AddRuleError {
-    /// Convert to a displayable, single-lined description.
-    ///
-    /// # Arguments
-    ///
-    /// * `input_name`: a name for the input, used at the beginning of the
-    ///   description: `<filename>:<line>:<column>: <description>`.
-    /// * `input`: the input given to [`boreal_parser::parse`] that generated the error.
-    #[must_use]
-    pub fn to_short_description(&self, input_name: &str, input: &str) -> String {
-        // Generate a small report using codespan_reporting
-        let mut writer = term::termcolor::Buffer::no_color();
-        let config = term::Config {
-            display_style: term::DisplayStyle::Short,
-            ..term::Config::default()
-        };
+    fn new(kind: AddRuleErrorKind, input_path: Option<&Path>, input: &str) -> Self {
+        let path_display = input_path.map(|v| v.display().to_string());
 
-        let files = SimpleFile::new(&input_name, &input);
-        let _res = term::emit(&mut writer, &config, &files, &self.to_diagnostic());
-        String::from_utf8_lossy(writer.as_slice()).to_string()
+        Self {
+            desc: generate_description(
+                &kind.to_diagnostic(),
+                path_display.as_deref().unwrap_or("mem"),
+                input,
+            ),
+            path: input_path.map(Path::to_path_buf),
+            kind: Box::new(kind),
+        }
     }
 
     /// Convert to a [`Diagnostic`].
@@ -743,6 +765,32 @@ impl AddRuleError {
     pub fn to_diagnostic(&self) -> Diagnostic<()> {
         self.kind.to_diagnostic()
     }
+}
+
+/// Convert to a displayable, single-lined description.
+///
+/// # Arguments
+///
+/// * `input_name`: a name for the input, used at the beginning of the
+///   description: `<filename>:<line>:<column>: <description>`.
+/// * `input`: the input given to [`boreal_parser::parse`] that generated the error.
+#[must_use]
+pub fn generate_description(diag: &Diagnostic<()>, input_name: &str, input: &str) -> String {
+    // Generate a small report using codespan_reporting
+    let mut writer = term::termcolor::Buffer::no_color();
+    let config = term::Config {
+        display_style: term::DisplayStyle::Short,
+        ..term::Config::default()
+    };
+
+    let files = SimpleFile::new(input_name, &input);
+    let _res = term::emit(&mut writer, &config, &files, diag);
+    let mut res = writer.as_slice();
+    // remove the trailing \n that codespan reporting adds.
+    if res.ends_with(b"\n") {
+        res = &res[..(res.len() - 1)];
+    }
+    String::from_utf8_lossy(res).to_string()
 }
 
 impl AddRuleErrorKind {

@@ -142,23 +142,14 @@ fn compile(
         (Some(filepath), None, None, None, None) => {
             let res = compiler
                 .add_rules_file(filepath)
-                // TODO: contents
-                .map_err(|err| convert_compiler_error(&err, filepath, ""))
-                .map_err(AddRuleError::new_err)?;
-            warnings = res
-                .warnings()
-                .map(|err| convert_compiler_error(err, filepath, ""))
-                .collect();
+                .map_err(|err| AddRuleError::new_err(format!("{err}")))?;
+            warnings = res.warnings().map(|err| format!("{err}")).collect();
         }
         (None, Some(source), None, None, None) => {
             let res = compiler
                 .add_rules_str(source)
-                .map_err(|err| convert_compiler_error(&err, "source", source))
-                .map_err(AddRuleError::new_err)?;
-            warnings = res
-                .warnings()
-                .map(|err| convert_compiler_error(err, "source", source))
-                .collect();
+                .map_err(|err| AddRuleError::new_err(format!("{err}")))?;
+            warnings = res.warnings().map(|err| format!("{err}")).collect();
         }
         (None, None, Some(file), None, None) => {
             // Read the file into a string
@@ -167,12 +158,8 @@ fn compile(
 
             let res = compiler
                 .add_rules_str(contents)
-                .map_err(|err| convert_compiler_error(&err, "file", contents))
-                .map_err(AddRuleError::new_err)?;
-            warnings = res
-                .warnings()
-                .map(|err| convert_compiler_error(err, "file", contents))
-                .collect();
+                .map_err(|err| AddRuleError::new_err(format!("{err}")))?;
+            warnings = res.warnings().map(|err| format!("{err}")).collect();
         }
         (None, None, None, Some(filepaths), None) => {
             for (key, value) in filepaths {
@@ -184,13 +171,8 @@ fn compile(
                 })?;
                 let res = compiler
                     .add_rules_file_in_namespace(filepath, namespace)
-                    // TODO: contents
-                    .map_err(|err| convert_compiler_error(&err, filepath, ""))
-                    .map_err(AddRuleError::new_err)?;
-                warnings.extend(
-                    res.warnings()
-                        .map(|err| convert_compiler_error(err, filepath, "")),
-                );
+                    .map_err(|err| AddRuleError::new_err(format!("{err}")))?;
+                warnings.extend(res.warnings().map(|err| format!("{err}")));
             }
         }
         (None, None, None, None, Some(sources)) => {
@@ -203,12 +185,8 @@ fn compile(
                 })?;
                 let res = compiler
                     .add_rules_str_in_namespace(source, namespace)
-                    .map_err(|err| convert_compiler_error(&err, namespace, source))
-                    .map_err(AddRuleError::new_err)?;
-                warnings.extend(
-                    res.warnings()
-                        .map(|err| convert_compiler_error(err, namespace, source)),
-                );
+                    .map_err(|err| AddRuleError::new_err(format!("{err}")))?;
+                warnings.extend(res.warnings().map(|err| format!("{err}")));
             }
         }
         _ => return Err(PyTypeError::new_err("invalid arguments passed")),
@@ -311,10 +289,6 @@ fn build_compiler() -> compiler::Compiler {
             }
         }))
         .build()
-}
-
-fn convert_compiler_error(err: &compiler::AddRuleError, input_name: &str, input: &str) -> String {
-    err.to_short_description(input_name, input)
 }
 
 fn add_externals(compiler: &mut compiler::Compiler, externals: &Bound<'_, PyDict>) -> PyResult<()> {

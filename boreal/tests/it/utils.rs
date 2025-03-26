@@ -72,7 +72,7 @@ impl Compiler {
 
     pub fn add_rules(&mut self, rules: &str) {
         if let Err(err) = self.compiler.add_rules_str(rules) {
-            panic!("parsing failed: {}", add_rule_error_get_desc(&err, rules));
+            panic!("parsing failed: {}", err);
         }
         self.yara_compiler = self
             .yara_compiler
@@ -90,11 +90,7 @@ impl Compiler {
 
     pub fn add_file(&mut self, path: &Path) {
         if let Err(err) = self.compiler.add_rules_file(path) {
-            panic!(
-                "add of file {} failed: {}",
-                path.display(),
-                add_rule_error_get_desc(&err, ""),
-            );
+            panic!("add of file {} failed: {}", path.display(), err,);
         }
         self.yara_compiler = self
             .yara_compiler
@@ -104,11 +100,7 @@ impl Compiler {
 
     pub fn add_file_in_namespace(&mut self, path: &Path, ns: &str) {
         if let Err(err) = self.compiler.add_rules_file_in_namespace(path, ns) {
-            panic!(
-                "add of file {} failed: {}",
-                path.display(),
-                add_rule_error_get_desc(&err, ""),
-            );
+            panic!("add of file {} failed: {}", path.display(), err,);
         }
         self.yara_compiler = self
             .yara_compiler
@@ -140,7 +132,7 @@ impl Compiler {
             .compiler
             .add_rules_str_in_namespace(rules, ns)
             .unwrap_err();
-        let desc = add_rule_error_get_desc(&err, rules);
+        let desc = format!("{}", err);
         assert!(
             desc.starts_with(expected_prefix),
             "error: {desc}\nexpected prefix: {expected_prefix}"
@@ -158,7 +150,7 @@ impl Compiler {
     #[track_caller]
     pub fn check_add_rules_err_boreal(&mut self, rules: &str, expected_prefix: &str) {
         let err = self.compiler.add_rules_str(rules).unwrap_err();
-        let desc = add_rule_error_get_desc(&err, rules);
+        let desc = format!("{}", err);
         assert!(
             desc.starts_with(expected_prefix),
             "error: {desc}\nexpected prefix: {expected_prefix}"
@@ -181,12 +173,9 @@ impl Compiler {
     #[track_caller]
     pub fn check_add_file_err_boreal(&mut self, path: &Path, expected_prefix: &str) {
         let err = self.compiler.add_rules_file(path).unwrap_err();
-        let desc = err.to_short_description(
-            &path.file_name().unwrap().to_string_lossy(),
-            &std::fs::read_to_string(path).unwrap(),
-        );
+        let err = format!("{}", err);
         // Remove the prefix up to the "error: " string
-        let desc = desc.split("error: ").nth(1).unwrap();
+        let desc = err.split("error: ").nth(1).unwrap();
         assert!(
             desc.starts_with(expected_prefix),
             "error: {desc}\nexpected prefix: {expected_prefix}"
@@ -195,15 +184,13 @@ impl Compiler {
 
     pub fn check_add_rules_warnings(mut self, rules: &str, expected_warnings_prefix: &[&str]) {
         let status = self.compiler.add_rules_str(rules).unwrap();
-        let warnings: Vec<_> = status
-            .warnings()
-            .map(|warn| add_rule_error_get_desc(warn, rules))
-            .collect();
+        let warnings: Vec<_> = status.warnings().map(|warn| format!("{}", warn)).collect();
         assert_eq!(warnings.len(), expected_warnings_prefix.len());
-        for (desc, expected_prefix) in warnings.iter().zip(expected_warnings_prefix.iter()) {
+        for (desc, expected_suffix) in warnings.iter().zip(expected_warnings_prefix.iter()) {
+            // Use ends_with to avoid the /tmp/... before the file path
             assert!(
-                desc.starts_with(expected_prefix),
-                "warning: {desc}\nexpected prefix: {expected_prefix}"
+                desc.ends_with(expected_suffix),
+                "warning: {desc}\nexpected suffix: {expected_suffix}"
             );
         }
 
@@ -865,16 +852,6 @@ rule a {{
         and for all of ($*) : (# >= 0) // this part is just to remove "unused strings" errors
 }}"#
     )
-}
-
-fn add_rule_error_get_desc(err: &boreal::compiler::AddRuleError, rules: &str) -> String {
-    match &err.path {
-        Some(path) => err.to_short_description(
-            &path.file_name().unwrap().to_string_lossy(),
-            &std::fs::read_to_string(path).unwrap(),
-        ),
-        None => err.to_short_description("mem", rules),
-    }
 }
 
 /// Compare boreal & yara module values on a given file

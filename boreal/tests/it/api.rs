@@ -42,16 +42,12 @@ fn test_add_rules_file_err() {
     let mut compiler = boreal::Compiler::new();
     let path = "non_existing";
     let err = compiler.add_rules_file(path).unwrap_err();
-    assert!(err
-        .to_short_description(path, "")
-        .starts_with("error: Cannot read rules file non_existing: "));
+    assert!(format!("{}", err).starts_with("error: Cannot read rules file non_existing: "));
 
     let err = compiler
         .add_rules_file_in_namespace(path, "ns")
         .unwrap_err();
-    assert!(err
-        .to_short_description(path, "")
-        .starts_with("error: Cannot read rules file non_existing: "));
+    assert!(format!("{}", err).starts_with("error: Cannot read rules file non_existing: "));
 }
 
 // An import is reused in the same namespace
