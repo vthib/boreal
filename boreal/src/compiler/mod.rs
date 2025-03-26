@@ -185,7 +185,7 @@ impl Compiler {
 
     /// Add rules to compile from a file.
     ///
-    /// The default namespace will be used.
+    /// The namespace named "default" will be used.
     ///
     /// # Errors
     ///
@@ -201,8 +201,6 @@ impl Compiler {
     }
 
     /// Add rules to compile from a file into a specific namespace.
-    ///
-    /// The default namespace will be used.
     ///
     /// # Errors
     ///
@@ -236,7 +234,7 @@ impl Compiler {
 
     /// Add rules to compile from a string.
     ///
-    /// The default namespace will be used.
+    /// The namespace named "default" will be used.
     ///
     /// # Errors
     ///
