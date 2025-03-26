@@ -2,7 +2,7 @@ import boreal
 import pytest
 import tempfile
 import yara
-from .utils import MODULES, MODULES_DISTINCT
+from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
 
 
 @pytest.mark.parametrize('module', MODULES)
@@ -257,6 +257,8 @@ def test_compile_errors_invalid_types(module, is_yara):
         module.compile(source=source, externals={ 'a': [1] })
     with pytest.raises(TypeError):
         module.compile(source=source, include_callback=1)
+    with pytest.raises(TypeError):
+        module.compile(source=source, strict_escape="a")
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
@@ -316,3 +318,34 @@ def test_compile_include_callback_errors(module, is_yara):
         raise Exception('dead')
     with pytest.raises(module.SyntaxError):
         module.compile(source=data, include_callback=include_cb)
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_compile_strict_escape(module, is_yara):
+    data = r"""
+        rule a {
+            strings:
+                $a = /C:\Users/
+            condition:
+                $a
+        }
+    """
+
+    with YaraCompatibilityMode():
+        # By default, do not report unknown escape warnings
+        rules = module.compile(source=data)
+        assert len(rules.warnings) == 0
+
+        # By default, do not report unknown escape warnings
+        rules = module.compile(source=data, strict_escape=True)
+        assert len(rules.warnings) == 1
+        assert "unknown escape sequence" in rules.warnings[0]
+
+        rules = module.compile(source=data, strict_escape=False)
+        assert len(rules.warnings) == 0
+
+    if not is_yara:
+        # default behavior for boreal is enabling this warning
+        rules = module.compile(source=data)
+        assert len(rules.warnings) == 1
+        assert "unknown escape sequence" in rules.warnings[0]

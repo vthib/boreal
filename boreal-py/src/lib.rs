@@ -83,7 +83,6 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-// TODO: add strict_escape?
 #[pyfunction]
 #[pyo3(signature = (
     filepath=None,
@@ -95,6 +94,7 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     includes=true,
     error_on_warning=false,
     include_callback=None,
+    strict_escape=None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn compile(
@@ -107,6 +107,7 @@ fn compile(
     includes: bool,
     error_on_warning: bool,
     include_callback: Option<&Bound<'_, PyAny>>,
+    strict_escape: Option<bool>,
 ) -> PyResult<scanner::Scanner> {
     let mut compiler = build_compiler();
 
@@ -135,6 +136,11 @@ fn compile(
                 .map_err(|desc| std::io::Error::new(std::io::ErrorKind::Other, desc))
         });
     }
+
+    // By default, enable strict escape, this is the default behavior in boreal.
+    // If in yara compat mode, use the yara default behavior and disable it.
+    let strict_escape =
+        strict_escape.unwrap_or_else(|| !YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst));
 
     let mut warnings = Vec::new();
 
@@ -190,6 +196,14 @@ fn compile(
             }
         }
         _ => return Err(PyTypeError::new_err("invalid arguments passed")),
+    }
+
+    if !strict_escape {
+        // Filtering errors based on their display string is quite ugly, but
+        // it works relatively well and avoids over complexifying the rest of the code
+        // simply to have this "yara compatibility" behavior that probably no-one will
+        // ever use.
+        warnings.retain(|err| !err.contains("unknown escape sequence"));
     }
 
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
