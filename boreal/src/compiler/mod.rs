@@ -79,11 +79,7 @@ pub struct Compiler {
 
 #[allow(clippy::type_complexity)]
 struct IncludeCallback(
-    Box<
-        dyn FnMut(&str, Option<&Path>, Option<&str>) -> Result<String, std::io::Error>
-            + Send
-            + Sync,
-    >,
+    Box<dyn FnMut(&str, Option<&Path>, &str) -> Result<String, std::io::Error> + Send + Sync>,
 );
 
 impl std::fmt::Debug for IncludeCallback {
@@ -173,7 +169,7 @@ impl Compiler {
             available_modules,
             profile,
 
-            namespaces: vec![Namespace::default()],
+            namespaces: Vec::new(),
             rules: Vec::new(),
             global_rules: Vec::new(),
             variables: Vec::new(),
@@ -200,7 +196,7 @@ impl Compiler {
         path: T,
     ) -> Result<AddRuleStatus, AddRuleError> {
         let mut status = AddRuleStatus::default();
-        self.add_rules_file_inner(path.as_ref(), None, &mut status)?;
+        self.add_rules_file_inner(path.as_ref(), "default", &mut status)?;
         Ok(status)
     }
 
@@ -218,14 +214,14 @@ impl Compiler {
         namespace: S,
     ) -> Result<AddRuleStatus, AddRuleError> {
         let mut status = AddRuleStatus::default();
-        self.add_rules_file_inner(path.as_ref(), Some(namespace.as_ref()), &mut status)?;
+        self.add_rules_file_inner(path.as_ref(), namespace.as_ref(), &mut status)?;
         Ok(status)
     }
 
     fn add_rules_file_inner(
         &mut self,
         path: &Path,
-        namespace: Option<&str>,
+        namespace: &str,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
         let contents = std::fs::read_to_string(path).map_err(|error| AddRuleError {
@@ -250,7 +246,7 @@ impl Compiler {
         rules: T,
     ) -> Result<AddRuleStatus, AddRuleError> {
         let mut status = AddRuleStatus::default();
-        self.add_rules_str_inner(rules.as_ref(), None, None, &mut status)?;
+        self.add_rules_str_inner(rules.as_ref(), "default", None, &mut status)?;
         Ok(status)
     }
 
@@ -265,14 +261,14 @@ impl Compiler {
         namespace: S,
     ) -> Result<AddRuleStatus, AddRuleError> {
         let mut status = AddRuleStatus::default();
-        self.add_rules_str_inner(rules.as_ref(), Some(namespace.as_ref()), None, &mut status)?;
+        self.add_rules_str_inner(rules.as_ref(), namespace.as_ref(), None, &mut status)?;
         Ok(status)
     }
 
     fn add_rules_str_inner(
         &mut self,
         s: &str,
-        namespace: Option<&str>,
+        namespace: &str,
         current_filepath: Option<&Path>,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
@@ -289,27 +285,24 @@ impl Compiler {
     fn add_component(
         &mut self,
         component: YaraFileComponent,
-        namespace_name: Option<&str>,
+        namespace_name: &str,
         current_filepath: Option<&Path>,
         parsed_contents: &str,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
-        let ns_index = match namespace_name {
-            Some(name) => match self.namespaces_indexes.entry(name.to_string()) {
-                Entry::Occupied(o) => *o.get(),
-                Entry::Vacant(v) => {
-                    // New namespace: insert it and save its index in the namespaces_indexes
-                    // map.
-                    let idx = self.namespaces.len();
-                    let _r = v.insert(idx);
-                    self.namespaces.push(Namespace {
-                        name: Some(name.to_string()),
-                        ..Namespace::default()
-                    });
-                    idx
-                }
-            },
-            None => 0,
+        let ns_index = match self.namespaces_indexes.entry(namespace_name.to_string()) {
+            Entry::Occupied(o) => *o.get(),
+            Entry::Vacant(v) => {
+                // New namespace: insert it and save its index in the namespaces_indexes
+                // map.
+                let idx = self.namespaces.len();
+                let _r = v.insert(idx);
+                self.namespaces.push(Namespace {
+                    name: namespace_name.to_string(),
+                    ..Namespace::default()
+                });
+                idx
+            }
         };
         let namespace = &mut self.namespaces[ns_index];
 
@@ -594,7 +587,7 @@ impl Compiler {
     /// ```
     pub fn set_include_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&str, Option<&Path>, Option<&str>) -> Result<String, std::io::Error>
+        F: FnMut(&str, Option<&Path>, &str) -> Result<String, std::io::Error>
             + Send
             + Sync
             + 'static,
@@ -621,8 +614,8 @@ impl Compiler {
 /// - new rules can either import new modules, or directly use already imported modules
 #[derive(Debug, Default)]
 pub(crate) struct Namespace {
-    /// Name of the namespace, `None` if default.
-    pub(crate) name: Option<String>,
+    /// Name of the namespace.
+    pub(crate) name: String,
 
     /// Map of a rule name to its index in the `rules` vector in [`Compiler`].
     ///

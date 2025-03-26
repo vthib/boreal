@@ -161,7 +161,7 @@ pub enum ScanEvent<'scanner, 'a> {
 #[non_exhaustive]
 pub struct StringIdentifier<'scanner> {
     /// Namespace of the rule containing the string.
-    pub rule_namespace: Option<&'scanner str>,
+    pub rule_namespace: &'scanner str,
 
     /// Name of the rule containing the string.
     pub rule_name: &'scanner str,
@@ -713,7 +713,7 @@ impl Scanner {
 pub struct RulesIter<'scanner> {
     global_rules: std::slice::Iter<'scanner, Rule>,
     rules: std::slice::Iter<'scanner, Rule>,
-    namespaces: &'scanner [Option<String>],
+    namespaces: &'scanner [String],
 }
 
 impl<'scanner> Iterator for RulesIter<'scanner> {
@@ -727,10 +727,7 @@ impl<'scanner> Iterator for RulesIter<'scanner> {
 
         Some(RuleDetails {
             name: &rule.name,
-            namespace: self
-                .namespaces
-                .get(rule.namespace_index)
-                .and_then(|v| v.as_deref()),
+            namespace: self.namespaces[rule.namespace_index].as_ref(),
             tags: &rule.tags,
             metadatas: &rule.metadatas,
             is_global,
@@ -746,8 +743,8 @@ pub struct RuleDetails<'scanner> {
     /// Name of the rule.
     pub name: &'scanner str,
 
-    /// Namespace containing the rule. None if in the default namespace.
-    pub namespace: Option<&'scanner str>,
+    /// Namespace containing the rule.
+    pub namespace: &'scanner str,
 
     /// Tags associated with the rule.
     pub tags: &'scanner [String],
@@ -795,9 +792,7 @@ struct Inner {
     external_symbols_map: HashMap<String, usize>,
 
     /// Namespaces names.
-    ///
-    /// None is used for the default namespace.
-    namespaces: Vec<Option<String>>,
+    namespaces: Vec<String>,
 
     /// Bytes intern pool.
     bytes_pool: BytesPool,
@@ -1406,15 +1401,13 @@ impl ScanData<'_, '_> {
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     variables: &'a [Variable],
-    namespaces_names: &'a [Option<String>],
+    namespaces_names: &'a [String],
     var_matches: Vec<Vec<StringMatch>>,
     matched: bool,
 ) -> EvaluatedRule<'a> {
     EvaluatedRule {
         name: &rule.name,
-        namespace: namespaces_names
-            .get(rule.namespace_index)
-            .and_then(|v| v.as_deref()),
+        namespace: namespaces_names[rule.namespace_index].as_ref(),
         tags: &rule.tags,
         metadatas: &rule.metadatas,
         matches: var_matches
@@ -1460,8 +1453,8 @@ pub struct EvaluatedRule<'scanner> {
     /// Name of the rule.
     pub name: &'scanner str,
 
-    /// Namespace containing the rule. None if in the default namespace.
-    pub namespace: Option<&'scanner str>,
+    /// Namespace containing the rule.
+    pub namespace: &'scanner str,
 
     /// Tags associated with the rule.
     pub tags: &'scanner [String],
@@ -1615,7 +1608,7 @@ mod wire {
         reader: &mut R,
     ) -> io::Result<Inner> {
         let external_symbols_map = <HashMap<String, usize>>::deserialize_reader(reader)?;
-        let namespaces = <Vec<Option<String>>>::deserialize_reader(reader)?;
+        let namespaces = <Vec<String>>::deserialize_reader(reader)?;
         let bytes_pool = BytesPool::deserialize_reader(reader)?;
         let variables = <Vec<Variable>>::deserialize_reader(reader)?;
         let modules = deserialize_modules(params.modules, reader)?;
@@ -1789,7 +1782,7 @@ mod wire {
                 external_symbols_map: [("abc".to_owned(), 33), ("zyx".to_owned(), 12)]
                     .into_iter()
                     .collect(),
-                namespaces: vec![Some("abc".to_owned()), None],
+                namespaces: vec!["abc".to_owned()],
                 bytes_pool: BytesPoolBuilder::default().into_pool(),
                 variables: Vec::new(),
                 modules: vec![Box::new(Math), Box::new(Time)],
@@ -1799,7 +1792,7 @@ mod wire {
                 ac_scan: AcScan::new(&[], CompilerProfile::Speed),
             };
 
-            let truncate_offset_errors = [0, 34, 47, 51, 55, 75, 79, 83];
+            let truncate_offset_errors = [0, 34, 45, 49, 53, 73, 77, 81];
 
             let mut buf = [0; 83];
             for offset in &truncate_offset_errors {
@@ -2534,7 +2527,7 @@ mod tests {
         });
         test_type_traits_non_clonable(EvaluatedRule {
             name: "a",
-            namespace: None,
+            namespace: "b",
             tags: &[],
             metadatas: &[],
             matches: Vec::new(),
@@ -2568,14 +2561,14 @@ mod tests {
         });
         test_type_traits_non_clonable(RuleDetails {
             name: "",
-            namespace: None,
+            namespace: "c",
             tags: &[],
             metadatas: &[],
             is_global: false,
             is_private: false,
         });
         test_type_traits_non_clonable(StringIdentifier {
-            rule_namespace: None,
+            rule_namespace: "a",
             rule_name: "",
             string_name: "",
             string_index: 0,

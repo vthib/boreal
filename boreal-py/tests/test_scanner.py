@@ -357,11 +357,11 @@ rule r: tag {
     assert not r3.is_private
     assert r3.meta == {}
 
-    # Test the namespace value for the default one
     if not is_yara:
+        # Test the namespace value for the default one
         scanner = module.compile(source="rule a { condition: true }")
         rules = [r for r in scanner]
-        assert rules[0].namespace == ""
+        assert rules[0].namespace == "default"
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)

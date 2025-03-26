@@ -45,7 +45,7 @@ impl Rule {
     ) -> PyResult<Self> {
         Ok(Self {
             identifier: PyString::new(py, rule.name).unbind(),
-            namespace: PyString::new(py, rule.namespace.unwrap_or_default()).unbind(),
+            namespace: PyString::new(py, rule.namespace).unbind(),
             meta: convert_metadatas(py, scanner, rule.metadatas, false)?.unbind(),
             tags: PyList::new(py, rule.tags)?.unbind(),
             is_global: rule.is_global,

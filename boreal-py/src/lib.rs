@@ -279,13 +279,9 @@ fn call_py_include_callback(
     include_callback: &Py<PyAny>,
     include_name: &str,
     current_path: Option<&Path>,
-    mut ns: Option<&str>,
+    ns: &str,
 ) -> Result<String, String> {
     let current_path = current_path.map(|v| v.display().to_string());
-
-    if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
-        ns = Some(ns.unwrap_or("default"));
-    }
 
     Python::with_gil(|py| {
         let res = include_callback

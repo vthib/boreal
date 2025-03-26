@@ -139,7 +139,7 @@ rule r: tag {
 
     let r0 = &rules[0];
     assert_eq!(r0.name, "g");
-    assert_eq!(r0.namespace, None);
+    assert_eq!(r0.namespace, "default");
     assert_eq!(r0.tags.len(), 0);
     assert!(r0.is_global);
     assert!(!r0.is_private);
@@ -147,7 +147,7 @@ rule r: tag {
 
     let r1 = &rules[1];
     assert_eq!(r1.name, "pg");
-    assert_eq!(r1.namespace, Some("namespace"));
+    assert_eq!(r1.namespace, "namespace");
     assert_eq!(r1.tags, &["tag1", "tag2"]);
     assert!(r1.is_global);
     assert!(r1.is_private);
@@ -165,7 +165,7 @@ rule r: tag {
 
     let r2 = &rules[2];
     assert_eq!(r2.name, "p");
-    assert_eq!(r2.namespace, None);
+    assert_eq!(r2.namespace, "default");
     assert_eq!(r2.tags, &["tag"]);
     assert!(!r2.is_global);
     assert!(r2.is_private);
@@ -178,7 +178,7 @@ rule r: tag {
 
     let r3 = &rules[3];
     assert_eq!(r3.name, "r");
-    assert_eq!(r3.namespace, Some("namespace"));
+    assert_eq!(r3.namespace, "namespace");
     assert_eq!(r3.tags, &["tag"]);
     assert!(!r3.is_global);
     assert!(!r3.is_private);
@@ -239,11 +239,7 @@ rule yes2 { condition: true }
             .rules
             .iter()
             .map(|v| {
-                let name = if let Some(ns) = &v.namespace {
-                    format!("{}:{}", ns, v.name)
-                } else {
-                    format!("default:{}", v.name)
-                };
+                let name = format!("{}:{}", v.namespace, v.name);
                 (name, v.matched)
             })
             .collect();
@@ -372,7 +368,7 @@ fn test_compiler_set_include_callback() {
     compiler.set_include_callback(|include_name, current_path, namespace| {
         let current_path = current_path.map(|v| v.display().to_string());
 
-        if namespace.is_none() {
+        if namespace == "default" {
             match (include_name, current_path.as_deref()) {
                 ("first.yar", None) => Ok(r#"
                         include "second/../boo.yar"
@@ -398,7 +394,7 @@ fn test_compiler_set_include_callback() {
                     include_name, current_path
                 ),
             }
-        } else if namespace == Some("ns") {
+        } else if namespace == "ns" {
             match (include_name, current_path.as_deref()) {
                 ("first.yar", _) => {
                     // Check the end of the path, but the rest is from a tempdir.

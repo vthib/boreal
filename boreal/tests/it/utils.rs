@@ -218,20 +218,12 @@ impl Compiler {
     }
     pub fn set_include_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&str, Option<&Path>, Option<&str>) -> std::io::Result<String>
-            + Clone
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(&str, Option<&Path>, &str) -> std::io::Result<String> + Clone + Send + Sync + 'static,
     {
         if let Some(compiler) = self.yara_compiler.as_mut() {
             let callback = callback.clone();
-            compiler.set_include_callback(move |include_name, current_filename, mut ns| {
-                // FIXME: default namespace difference...
-                if ns == Some("default") {
-                    ns = None;
-                }
-                callback(include_name, current_filename.map(Path::new), ns).ok()
+            compiler.set_include_callback(move |include_name, current_filename, ns| {
+                callback(include_name, current_filename.map(Path::new), ns.unwrap()).ok()
             });
         }
         self.compiler.set_include_callback(callback);
@@ -346,13 +338,7 @@ impl Checker {
         let mut res: Vec<String> = scan_res
             .rules
             .iter()
-            .map(|v| {
-                if let Some(ns) = &v.namespace {
-                    format!("{}:{}", ns, v.name)
-                } else {
-                    format!("default:{}", v.name)
-                }
-            })
+            .map(|v| format!("{}:{}", v.namespace, v.name))
             .collect();
         res.sort_unstable();
         assert_eq!(res, expected, "test failed for boreal");
@@ -768,11 +754,7 @@ pub fn get_boreal_full_matches<'a>(res: &'a ScanResult<'a>) -> FullMatches<'a> {
     res.rules
         .iter()
         .map(|v| {
-            let rule_name = if let Some(ns) = &v.namespace {
-                format!("{}:{}", ns, v.name)
-            } else {
-                format!("default:{}", v.name)
-            };
+            let rule_name = format!("{}:{}", v.namespace, v.name);
             let str_matches: Vec<_> = v
                 .matches
                 .iter()
