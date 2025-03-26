@@ -223,13 +223,13 @@ fn test_arithmetic_operators() {
 
     check_err(
         "rule test { condition: 9007199254740992KB > 0 }",
-        "mem:1:24: error: multiplication 9007199254740992 * 1024 overflows\n",
+        "mem:1:24: error: multiplication 9007199254740992 * 1024 overflows",
     );
 
     check_err(
         // integer too long
         "rule test { condition: 8796093022208MB > 0 }",
-        "mem:1:24: error: multiplication 8796093022208 * 1048576 overflows\n",
+        "mem:1:24: error: multiplication 8796093022208 * 1048576 overflows",
     );
 
     check_err(
