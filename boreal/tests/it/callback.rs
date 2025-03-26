@@ -25,7 +25,7 @@ const TIMEOUT_COND: &str = r#"
 "#;
 
 #[track_caller]
-fn check_rule_match(event: ScanEvent, rule_name: &str, namespace: Option<&str>) {
+fn check_rule_match(event: ScanEvent, rule_name: &str, namespace: &str) {
     match &event {
         ScanEvent::RuleMatch(m) => {
             assert!(
@@ -41,7 +41,7 @@ fn check_rule_match(event: ScanEvent, rule_name: &str, namespace: Option<&str>) 
 }
 
 #[track_caller]
-fn check_rule_no_match(event: ScanEvent, rule_name: &str, namespace: Option<&str>) {
+fn check_rule_no_match(event: ScanEvent, rule_name: &str, namespace: &str) {
     match &event {
         ScanEvent::RuleNoMatch(m) => assert!(
             m.name == rule_name && m.namespace == namespace,
@@ -79,7 +79,7 @@ fn check_module_import(
 #[track_caller]
 fn check_string_reached_match_limit(
     event: ScanEvent,
-    expected_rule_namespace: Option<&str>,
+    expected_rule_namespace: &str,
     expected_rule_name: &str,
     expected_string_name: &str,
     expected_string_index: usize,
@@ -167,14 +167,14 @@ rule c {
 
     scan_mem(&scanner, b"<abcdef>", 2, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         }
     });
 
     scan_mem(&scanner, b"<abef>", 1, |event, _nb| {
-        check_rule_match(event, "a", None);
+        check_rule_match(event, "a", "default");
     });
 }
 
@@ -211,19 +211,19 @@ rule c {
 
     scan_mem(&scanner, b"<abcdef>", 2, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         }
     });
 
     scan_mem(&scanner, b"<abcdefghi>", 3, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         }
     });
 
@@ -249,19 +249,19 @@ rule c { condition: filesize > 7 }
 
     scan_mem(&scanner, b"12345", 2, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         }
     });
 
     scan_mem(&scanner, b"12345678", 3, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         }
     });
 }
@@ -287,9 +287,9 @@ rule b { condition: filesize >= 3 }
     let mut counter = 0;
     let res = scanner.scan_mem_with_callback(b"123", |event| {
         if counter == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if counter == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         }
         counter += 1;
         ScanCallbackResult::Continue
@@ -319,36 +319,36 @@ rule d { condition: true }
     let scanner = compiler.into_scanner();
 
     scan_mem_with_abort(&scanner, b"abc", 0, |event, _nb| {
-        check_rule_match(event, "a", None);
+        check_rule_match(event, "a", "default");
     });
 
     scan_mem_with_abort(&scanner, b"abc", 1, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         }
     });
 
     scan_mem_with_abort(&scanner, b"abc", 2, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         }
     });
 
     scan_mem_with_abort(&scanner, b"abc", 3, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         } else if nb == 3 {
-            check_rule_match(event, "d", None);
+            check_rule_match(event, "d", "default");
         }
     });
 }
@@ -369,36 +369,36 @@ rule d { condition: true }
     let scanner = compiler.into_scanner();
 
     scan_mem_with_abort(&scanner, b"", 0, |event, _nb| {
-        check_rule_match(event, "a", None);
+        check_rule_match(event, "a", "default");
     });
 
     scan_mem_with_abort(&scanner, b"", 1, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         }
     });
 
     scan_mem_with_abort(&scanner, b"", 2, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         }
     });
 
     scan_mem_with_abort(&scanner, b"", 3, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         } else if nb == 3 {
-            check_rule_match(event, "d", None);
+            check_rule_match(event, "d", "default");
         }
     });
 }
@@ -419,7 +419,7 @@ fn test_scan_mem_with_callback_abort_timeout() {
         .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
 
     scan_mem_with_abort(&scanner, b"", 0, |event, _nb| {
-        check_rule_match(event, "a", None);
+        check_rule_match(event, "a", "default");
     });
 }
 
@@ -443,7 +443,7 @@ fn test_scan_file_with_callback() {
     let mut counter = 0;
     scanner
         .scan_file_with_callback(&file, |event| {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
             counter += 1;
             ScanCallbackResult::Continue
         })
@@ -476,7 +476,7 @@ fn test_scan_file_memmap_with_callback() {
     // Safety: testing
     unsafe {
         scanner.scan_file_memmap_with_callback(&file, |event| {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
             counter += 1;
             ScanCallbackResult::Continue
         })
@@ -510,7 +510,7 @@ rule a {
     let mut counter = 0;
     scanner
         .scan_fragmented_with_callback(FragmentedSlices::new(regions), |event| {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
             counter += 1;
             ScanCallbackResult::Continue
         })
@@ -544,7 +544,7 @@ rule a {
     let mut counter = 0;
     scanner
         .scan_process_with_callback(helper.pid(), |event| {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
             counter += 1;
             ScanCallbackResult::Continue
         })
@@ -590,7 +590,7 @@ fn test_module_import_event() {
         } else if nb == 1 {
             check_module_import(event, "time", None);
         } else if nb == 2 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         }
     });
 }
@@ -617,7 +617,7 @@ fn test_module_import_event_fragmented() {
                 } else if counter == 1 {
                     check_module_import(event, "time", None);
                 } else if counter == 2 {
-                    check_rule_match(event, "a", None);
+                    check_rule_match(event, "a", "default");
                 }
                 counter += 1;
                 ScanCallbackResult::Continue
@@ -681,9 +681,9 @@ rule b {
     // By default, we get rule match, but not module import
     scan_mem(&scanner, b"abcdef", 2, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_match(event, "b", None);
+            check_rule_match(event, "b", "default");
         }
     });
 
@@ -759,21 +759,21 @@ private rule e { condition: false }
 
     scan_mem(&scanner, b"abcde", 3, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_no_match(event, "b", None);
+            check_rule_no_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_match(event, "c", None);
+            check_rule_match(event, "c", "default");
         }
     });
 
     scan_mem(&scanner, b"", 3, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_no_match(event, "b", None);
+            check_rule_no_match(event, "b", "default");
         } else if nb == 2 {
-            check_rule_no_match(event, "c", None);
+            check_rule_no_match(event, "c", "default");
         }
     });
 }
@@ -828,68 +828,68 @@ rule yes2 { condition: true }
     // Nothing matches
     scan_mem(&scanner, b"", 6, |event, nb| {
         if nb == 0 {
-            check_rule_no_match(event, "ga", None);
+            check_rule_no_match(event, "ga", "default");
         } else if nb == 1 {
-            check_rule_no_match(event, "gb", None);
+            check_rule_no_match(event, "gb", "default");
         } else if nb == 2 {
-            check_rule_no_match(event, "gc", Some("ns2"));
+            check_rule_no_match(event, "gc", "ns2");
         } else if nb == 3 {
-            check_rule_no_match(event, "yes1", None);
+            check_rule_no_match(event, "yes1", "default");
         } else if nb == 4 {
-            check_rule_no_match(event, "no", None);
+            check_rule_no_match(event, "no", "default");
         } else if nb == 5 {
-            check_rule_no_match(event, "yes2", Some("ns2"));
+            check_rule_no_match(event, "yes2", "ns2");
         }
     });
 
     // Namespace ns2 matches
     scan_mem(&scanner, b"c", 6, |event, nb| {
         if nb == 0 {
-            check_rule_no_match(event, "ga", None);
+            check_rule_no_match(event, "ga", "default");
         } else if nb == 1 {
-            check_rule_no_match(event, "gb", None);
+            check_rule_no_match(event, "gb", "default");
         } else if nb == 2 {
-            check_rule_match(event, "gc", Some("ns2"));
+            check_rule_match(event, "gc", "ns2");
         } else if nb == 3 {
-            check_rule_no_match(event, "yes1", None);
+            check_rule_no_match(event, "yes1", "default");
         } else if nb == 4 {
-            check_rule_no_match(event, "no", None);
+            check_rule_no_match(event, "no", "default");
         } else if nb == 5 {
-            check_rule_match(event, "yes2", Some("ns2"));
+            check_rule_match(event, "yes2", "ns2");
         }
     });
 
     // gc1 matches in theory but is invalidated by the other global rule
     scan_mem(&scanner, b"a", 6, |event, nb| {
         if nb == 0 {
-            check_rule_no_match(event, "ga", None);
+            check_rule_no_match(event, "ga", "default");
         } else if nb == 1 {
-            check_rule_no_match(event, "gb", None);
+            check_rule_no_match(event, "gb", "default");
         } else if nb == 2 {
-            check_rule_no_match(event, "gc", Some("ns2"));
+            check_rule_no_match(event, "gc", "ns2");
         } else if nb == 3 {
-            check_rule_no_match(event, "yes1", None);
+            check_rule_no_match(event, "yes1", "default");
         } else if nb == 4 {
-            check_rule_no_match(event, "no", None);
+            check_rule_no_match(event, "no", "default");
         } else if nb == 5 {
-            check_rule_no_match(event, "yes2", Some("ns2"));
+            check_rule_no_match(event, "yes2", "ns2");
         }
     });
 
     // Both matches, this is now ok
     scan_mem(&scanner, b"ab", 6, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "ga", None);
+            check_rule_match(event, "ga", "default");
         } else if nb == 1 {
-            check_rule_match(event, "gb", None);
+            check_rule_match(event, "gb", "default");
         } else if nb == 2 {
-            check_rule_no_match(event, "gc", Some("ns2"));
+            check_rule_no_match(event, "gc", "ns2");
         } else if nb == 3 {
-            check_rule_match(event, "yes1", None);
+            check_rule_match(event, "yes1", "default");
         } else if nb == 4 {
-            check_rule_no_match(event, "no", None);
+            check_rule_no_match(event, "no", "default");
         } else if nb == 5 {
-            check_rule_no_match(event, "yes2", Some("ns2"));
+            check_rule_no_match(event, "yes2", "ns2");
         }
     });
 }
@@ -934,16 +934,16 @@ rule c {
     // Abort on global that fails
     scan_mem_with_abort(&scanner, b"", 0, |event, nb| {
         if nb == 0 {
-            check_rule_no_match(event, "a", None);
+            check_rule_no_match(event, "a", "default");
         }
     });
 
     // Abort on rule that fails
     scan_mem_with_abort(&scanner, b"a", 1, |event, nb| {
         if nb == 0 {
-            check_rule_match(event, "a", None);
+            check_rule_match(event, "a", "default");
         } else if nb == 1 {
-            check_rule_no_match(event, "b", None);
+            check_rule_no_match(event, "b", "default");
         }
     });
 }
@@ -1034,21 +1034,21 @@ rule r4 {
         b"aaaaa eeeeee fffff kkkkkk lllll nnnnn iiiii ddddd",
         15,
         |event, nb| match nb {
-            0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
-            1 => check_string_reached_match_limit(event, None, "r1", "str2", 1),
-            2 => check_string_reached_match_limit(event, Some("ns2"), "r2", "", 0),
-            3 => check_string_reached_match_limit(event, Some("ns3"), "g3", "", 1),
-            4 => check_string_reached_match_limit(event, Some("ns3"), "r4", "str1", 0),
-            5 => check_string_reached_match_limit(event, Some("ns3"), "r4", "str3", 2),
-            6 => check_string_reached_match_limit(event, Some("ns2"), "g2", "", 2),
-            7 => check_string_reached_match_limit(event, None, "r1", "str1", 0),
-            8 => check_rule_match(event, "g1", None),
-            9 => check_rule_match(event, "g2", Some("ns2")),
-            10 => check_rule_match(event, "g3", Some("ns3")),
-            11 => check_rule_match(event, "r1", None),
-            12 => check_rule_match(event, "r2", Some("ns2")),
-            13 => check_rule_match(event, "r3", Some("ns3")),
-            14 => check_rule_match(event, "r4", Some("ns3")),
+            0 => check_string_reached_match_limit(event, "default", "g1", "str1", 0),
+            1 => check_string_reached_match_limit(event, "default", "r1", "str2", 1),
+            2 => check_string_reached_match_limit(event, "ns2", "r2", "", 0),
+            3 => check_string_reached_match_limit(event, "ns3", "g3", "", 1),
+            4 => check_string_reached_match_limit(event, "ns3", "r4", "str1", 0),
+            5 => check_string_reached_match_limit(event, "ns3", "r4", "str3", 2),
+            6 => check_string_reached_match_limit(event, "ns2", "g2", "", 2),
+            7 => check_string_reached_match_limit(event, "default", "r1", "str1", 0),
+            8 => check_rule_match(event, "g1", "default"),
+            9 => check_rule_match(event, "g2", "ns2"),
+            10 => check_rule_match(event, "g3", "ns3"),
+            11 => check_rule_match(event, "r1", "default"),
+            12 => check_rule_match(event, "r2", "ns2"),
+            13 => check_rule_match(event, "r3", "ns3"),
+            14 => check_rule_match(event, "r4", "ns3"),
             _ => (),
         },
     );
@@ -1104,19 +1104,19 @@ global rule g3 {
         b"aaaaa eeeeee fffff kkkkkk lllll nnnnn iiiii ddddd",
         6,
         |event, nb| match nb {
-            0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
-            1 => check_string_reached_match_limit(event, None, "g3", "", 1),
-            2 => check_string_reached_match_limit(event, None, "g2", "", 2),
-            3 => check_rule_match(event, "g1", None),
-            4 => check_rule_match(event, "g2", None),
-            5 => check_rule_match(event, "g3", None),
+            0 => check_string_reached_match_limit(event, "default", "g1", "str1", 0),
+            1 => check_string_reached_match_limit(event, "default", "g3", "", 1),
+            2 => check_string_reached_match_limit(event, "default", "g2", "", 2),
+            3 => check_rule_match(event, "g1", "default"),
+            4 => check_rule_match(event, "g2", "default"),
+            5 => check_rule_match(event, "g3", "default"),
             _ => (),
         },
     );
 
     scan_mem(&scanner, b"aaaaa kkkkkk", 2, |event, nb| match nb {
-        0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
-        1 => check_string_reached_match_limit(event, None, "g3", "", 1),
+        0 => check_string_reached_match_limit(event, "default", "g1", "str1", 0),
+        1 => check_string_reached_match_limit(event, "default", "g3", "", 1),
         _ => (),
     });
 }
@@ -1158,20 +1158,20 @@ rule r1 {
 
     scan_mem_with_abort(&scanner, b"aaaaa eeeeee", 0, |event, nb| {
         if nb == 0 {
-            check_string_reached_match_limit(event, None, "g1", "str1", 0)
+            check_string_reached_match_limit(event, "default", "g1", "str1", 0)
         }
     });
 
     scan_mem_with_abort(&scanner, b"aaaaa eeeeee", 1, |event, nb| match nb {
-        0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
-        1 => check_string_reached_match_limit(event, None, "r1", "str2", 1),
+        0 => check_string_reached_match_limit(event, "default", "g1", "str1", 0),
+        1 => check_string_reached_match_limit(event, "default", "r1", "str2", 1),
         _ => (),
     });
 
     scan_mem_with_abort(&scanner, b"aaaaa eeeeee", 2, |event, nb| match nb {
-        0 => check_string_reached_match_limit(event, None, "g1", "str1", 0),
-        1 => check_string_reached_match_limit(event, None, "r1", "str2", 1),
-        2 => check_rule_match(event, "g1", None),
+        0 => check_string_reached_match_limit(event, "default", "g1", "str1", 0),
+        1 => check_string_reached_match_limit(event, "default", "r1", "str2", 1),
+        2 => check_rule_match(event, "g1", "default"),
         _ => (),
     });
 }

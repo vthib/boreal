@@ -901,7 +901,7 @@ fn handle_event(
             eprintln!(
                 "warning: string ${} in rule {}:{} reached the maximum number of matches",
                 string_identifier.string_name,
-                string_identifier.rule_namespace.unwrap_or("default"),
+                string_identifier.rule_namespace,
                 string_identifier.rule_name,
             );
 
@@ -939,7 +939,7 @@ fn display_rule(
 
     // <rule_namespace>:<rule_name> [<ruletags>] <matched object>
     if options.print_namespace {
-        write!(stdout, "{}:", rule.namespace.unwrap_or("default")).unwrap();
+        write!(stdout, "{}:", rule.namespace).unwrap();
     }
     write!(stdout, "{}", &rule.name).unwrap();
     if options.print_tags {
@@ -1083,11 +1083,7 @@ fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
 }
 
 fn display_rule_stats(stats: &statistics::CompiledRule) {
-    print!(
-        "{}:{}",
-        stats.namespace.as_deref().unwrap_or("default"),
-        stats.name
-    );
+    print!("{}:{}", stats.namespace, stats.name);
     match &stats.filepath {
         Some(path) => println!(" (from {})", path.display()),
         None => println!(),

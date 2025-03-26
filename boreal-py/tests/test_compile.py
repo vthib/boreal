@@ -2,7 +2,7 @@ import boreal
 import pytest
 import tempfile
 import yara
-from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
+from .utils import MODULES, MODULES_DISTINCT
 
 
 @pytest.mark.parametrize('module', MODULES)
@@ -289,24 +289,13 @@ def test_compile_include_callback(module, is_yara):
         include "first"
         rule a { condition: true }
     """
-    # Compat mode to get "default" for the default namespace instead of None
-    with YaraCompatibilityMode():
-        rules = module.compile(source=data, include_callback=include_cb)
-        matches = rules.match(data="")
-        assert sorted([r.rule for r in matches]) == ["a", "b", "c"]
+    rules = module.compile(source=data, include_callback=include_cb)
+    matches = rules.match(data="")
+    assert sorted([r.rule for r in matches]) == ["a", "b", "c"]
 
     rules = module.compile(sources={ 'ns': data }, include_callback=include_cb)
     matches = rules.match(data="")
     assert sorted([r.rule for r in matches]) == ["a", "d", "e"]
-
-    # Test that namespace is None when not in compat mode
-    if not is_yara:
-        def include_cb(name, current, nb):
-            assert nb is None
-            return "rule f { condition: true }"
-        rules = module.compile(source=data, include_callback=include_cb)
-        matches = rules.match(data="")
-        assert sorted([r.rule for r in matches]) == ["a", "f"]
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)

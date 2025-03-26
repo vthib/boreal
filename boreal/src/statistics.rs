@@ -12,9 +12,7 @@ pub struct CompiledRule {
     pub filepath: Option<PathBuf>,
 
     /// Namespace containing the rule.
-    ///
-    /// None for the default namespace.
-    pub namespace: Option<String>,
+    pub namespace: String,
 
     /// Name of the rule.
     pub name: String,
@@ -109,7 +107,7 @@ mod tests {
     fn test_types_traits() {
         test_type_traits(CompiledRule {
             filepath: Some(PathBuf::new()),
-            namespace: Some(String::new()),
+            namespace: String::new(),
             name: String::new(),
             strings: Vec::new(),
         });

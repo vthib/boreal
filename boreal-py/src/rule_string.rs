@@ -22,7 +22,7 @@ pub struct RuleString {
 impl RuleString {
     pub fn new(py: Python, id: &StringIdentifier) -> Self {
         Self {
-            namespace: PyString::new(py, id.rule_namespace.unwrap_or("default")).unbind(),
+            namespace: PyString::new(py, id.rule_namespace).unbind(),
             rule: PyString::new(py, id.rule_name).unbind(),
             string: PyString::new(py, &format!("${}", id.string_name)).unbind(),
         }

@@ -326,10 +326,7 @@ fn build_string_identifier(
     for rule in scanner.global_rules.iter().chain(scanner.rules.iter()) {
         if index + rule.nb_variables > variable_index {
             return Some(StringIdentifier {
-                rule_namespace: scanner
-                    .namespaces
-                    .get(rule.namespace_index)
-                    .and_then(|v| v.as_deref()),
+                rule_namespace: scanner.namespaces[rule.namespace_index].as_ref(),
                 rule_name: &rule.name,
                 string_name: &scanner.variables[variable_index].name,
                 string_index: variable_index - index,

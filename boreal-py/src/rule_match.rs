@@ -69,7 +69,7 @@ impl Match {
     ) -> Result<Self, PyErr> {
         Ok(Self {
             rule: rule.name.to_string(),
-            namespace: rule.namespace.unwrap_or("default").to_string(),
+            namespace: rule.namespace.to_string(),
             meta: convert_metadatas(py, scanner, rule.metadatas, allow_duplicate_metadata)?
                 .unbind(),
             tags: PyList::new(py, rule.tags)?.unbind(),
