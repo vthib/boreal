@@ -117,3 +117,20 @@ fn test_fail_on_warning_param() {
         "mem:1:21: warning: implicit cast from a bytes value to a boolean",
     );
 }
+
+#[test]
+fn test_disable_unknown_escape_warning() {
+    let mut compiler = Compiler::new();
+
+    let params = boreal::compiler::CompilerParams::default()
+        .fail_on_warnings(true)
+        .disable_unknown_escape_warning(true);
+    compiler.set_params(params);
+    compiler.add_rules(
+        r"
+rule a {
+    condition:
+        /\V/
+}",
+    );
+}

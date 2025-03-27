@@ -240,6 +240,12 @@ impl<'a> RuleCompiler<'a> {
     }
 
     pub(super) fn add_warning(&mut self, err: CompilationError) -> Result<(), CompilationError> {
+        if matches!(err, CompilationError::RegexUnknownEscape { .. })
+            && self.params.disable_unknown_escape_warning
+        {
+            return Ok(());
+        }
+
         if self.params.fail_on_warnings {
             Err(err)
         } else {
