@@ -17,6 +17,9 @@ pub struct CompilerParams {
 
     /// Maximum number of strings in a single rule.
     pub(crate) max_strings_per_rule: usize,
+
+    /// Disable unknown escapes in regex warnings.
+    pub(crate) disable_unknown_escape_warning: bool,
 }
 
 impl Default for CompilerParams {
@@ -27,6 +30,7 @@ impl Default for CompilerParams {
             compute_statistics: false,
             disable_includes: false,
             max_strings_per_rule: 10_000,
+            disable_unknown_escape_warning: false,
         }
     }
 }
@@ -96,6 +100,18 @@ impl CompilerParams {
     #[must_use]
     pub fn max_strings_per_rule(mut self, max_strings_per_rule: usize) -> Self {
         self.max_strings_per_rule = max_strings_per_rule;
+        self
+    }
+
+    /// Disable the "unknown escape sequence" warning.
+    ///
+    /// By default, unknown escape sequences in regexes generate warnings.
+    /// Setting this parameter to true removes those warnings.
+    ///
+    /// Default value is false
+    #[must_use]
+    pub fn disable_unknown_escape_warning(mut self, disable_unknown_escape_warning: bool) -> Self {
+        self.disable_unknown_escape_warning = disable_unknown_escape_warning;
         self
     }
 }

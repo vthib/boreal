@@ -349,3 +349,8 @@ def test_compile_strict_escape(module, is_yara):
         rules = module.compile(source=data)
         assert len(rules.warnings) == 1
         assert "unknown escape sequence" in rules.warnings[0]
+
+    # If disabling strict_escape but making warnings fails the
+    # compilation, compilation should work
+    rules = module.compile(source=data, strict_escape=False, error_on_warning=True)
+    assert len(rules.warnings) == 0

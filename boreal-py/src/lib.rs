@@ -108,14 +108,23 @@ fn compile(
 ) -> PyResult<scanner::Scanner> {
     let mut compiler = build_compiler();
 
+    // By default, enable strict escape, this is the default behavior in boreal.
+    // If in yara compat mode, use the yara default behavior and disable it.
+    let disable_unknown_escape_warning = match strict_escape {
+        Some(v) => !v,
+        None => YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst),
+    };
+
     let mut params = compiler::CompilerParams::default()
         .disable_includes(!includes)
-        .fail_on_warnings(error_on_warning);
+        .fail_on_warnings(error_on_warning)
+        .disable_unknown_escape_warning(disable_unknown_escape_warning);
     if let Ok(lock) = MAX_STRINGS_PER_RULE.lock() {
         if let Some(value) = *lock {
             params = params.max_strings_per_rule(value);
         }
     }
+
     compiler.set_params(params);
 
     if let Some(externals) = externals {
@@ -133,11 +142,6 @@ fn compile(
                 .map_err(|desc| std::io::Error::new(std::io::ErrorKind::Other, desc))
         });
     }
-
-    // By default, enable strict escape, this is the default behavior in boreal.
-    // If in yara compat mode, use the yara default behavior and disable it.
-    let strict_escape =
-        strict_escape.unwrap_or_else(|| !YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst));
 
     let mut warnings = Vec::new();
 
@@ -193,14 +197,6 @@ fn compile(
             }
         }
         _ => return Err(PyTypeError::new_err("invalid arguments passed")),
-    }
-
-    if !strict_escape {
-        // Filtering errors based on their display string is quite ugly, but
-        // it works relatively well and avoids over complexifying the rest of the code
-        // simply to have this "yara compatibility" behavior that probably no-one will
-        // ever use.
-        warnings.retain(|err| !err.contains("unknown escape sequence"));
     }
 
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
