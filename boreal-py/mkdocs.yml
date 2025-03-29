@@ -1,0 +1,23 @@
+site_name: My Docs
+
+theme:
+  name: "material"
+
+plugins:
+- search
+- mkdocstrings:
+    handlers:
+      python:
+        options:
+          extensions:
+            - griffeext.py
+          find_stubs_package: true
+
+          # group_by_category: false
+          # members_order: source
+
+          separate_signature: true
+          summary: true
+          show_signature_annotations: true
+          signature_crossrefs: true
+          show_if_no_docstring: true

@@ -37,6 +37,7 @@ const CALLBACK_ALL: u32 = CALLBACK_MATCHES | CALLBACK_NON_MATCHES;
 // Same value as declared in yara, for compatibility.
 const CALLBACK_TOO_MANY_MATCHES: u32 = 6;
 
+/// Python bindings for the YARA scanner boreal.
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
@@ -80,6 +81,38 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// Compile YARA rules and generate a Scanner object.
+///
+/// One of `filepath`, `filepaths`, `source`, `sources`
+/// or `file` must be passed.
+///
+/// Args:
+///     filepath: Path to a file containing the rules to compile.
+///     filepaths: Dictionary where the value is a path to a file, containing
+///     rules to compile, and the key is the name of the namespace that will
+///     contain those rules.
+///     source: String containing the rules to compile.
+///     sources: Dictionary where the value is a string containing the rules
+///       to compile, and the key is the name of the namespace that will
+///       contain those rules.
+///     file: An opened file containing the rules to compile. This can be any
+///       object that exposes a `read` method.
+///     externals: Dictionary of externals symbols to make available during
+///       compilation. The key is the name of the external symbol, and the
+///       value is the original value to assign to this symbol. This original
+///       value can be replaced during scanning by specifying an `externals`
+///       dictionary, see the `Scanner::match` method.
+///     includes: Allow rules to use the `include` directive. If set to False,
+///       any use of the `include` directive will result in a compilation
+///       error.
+///     error_on_warning: If true, make the compilation fail when a warning
+///       is emitted. If false, warnings can be found in the resulting
+///       `Scanner` object, see `Scanner::warnings`.
+///     include_callback: TODO
+///     strict_escape: If true, invalid escape sequences in regexes will
+///       generate warnings. The default value depends on the yara
+///       compatibility mode: it is False if in compat mode, or True
+///       otherwise.
 #[pyfunction]
 #[pyo3(signature = (
     filepath=None,
@@ -202,6 +235,7 @@ fn compile(
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
 }
 
+/// Doc set_config
 #[pyfunction]
 #[pyo3(signature = (
     max_strings_per_rule=None,

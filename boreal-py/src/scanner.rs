@@ -21,6 +21,9 @@ use crate::{
 create_exception!(boreal, ScanError, PyException, "error when scanning");
 create_exception!(boreal, TimeoutError, PyException, "scan timed out");
 
+/// I am a scanner
+///
+/// Plip Plop
 #[pyclass(frozen, module = "boreal")]
 pub struct Scanner {
     scanner: scanner::Scanner,

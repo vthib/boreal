@@ -12,12 +12,25 @@ build-backend = "maturin"
 
 [dependency-groups]
 dev = [
+    "mkdocs-material>=9.6.9",
+    "mkdocstrings[python]>=0.29.0",
+    "monkeytype>=23.3.0",
+    "pdoc>=15.0.1",
     "pytest>=8.3.4",
+    "ruff>=0.11.2",
+    "sphinx>=8.2.3",
     "yara-python>=4.5.1",
 ]
 
 [tool.uv]
-cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "src/**/*" }]
+[[tool.uv.cache-keys]]
+file = "pyproject.toml"
+[[tool.uv.cache-keys]]
+file = "Cargo.toml"
+[[tool.uv.cache-keys]]
+file = "boreal.pyi"
+[[tool.uv.cache-keys]]
+file = "src/**/*"
 
 [tool.pytest.ini_options]
 addopts = [
