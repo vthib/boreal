@@ -7,11 +7,11 @@ use ::boreal::scanner;
 
 use crate::{string_match_instance::StringMatchInstance, YARA_PYTHON_COMPATIBILITY};
 
-/// List of match instances of a YARA string
+/// Details about the matches of a string.
 #[pyclass(frozen, module = "boreal")]
 #[derive(Clone, Hash)]
 pub struct StringMatches {
-    /// Name of the matching string.
+    /// Name of the string.
     #[pyo3(get)]
     identifier: String,
 

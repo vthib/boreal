@@ -1,7 +1,27 @@
-# Python bindings for the boreal YARA scanner.
+# Python bindings for the boreal YARA scanner
 
 The library allows using the [boreal](https://github.com/vthib/boreal) library
 to scan files and processes using YARA rules.
+
+```py
+import boreal
+
+scanner = boreal.compile(source="""
+rule example {
+    meta:
+        description = "This is an YARA rule example"
+        date = "2022-11-11"
+    strings:
+        $s1 = { 78 6d 6c 68 74 74 70 2e 73 65 6e 64 28 29 }
+        $s2 = "tmp.dat" fullword wide
+    condition:
+        any of them
+}
+""");
+
+results = scanner.match(data=b"<\0t\0m\0p\0.\0d\0a\0t\0>\0")
+assert [rule.name for rule in results] == ["example"]
+```
 
 ## Description
 
@@ -49,116 +69,5 @@ to ensure that nothing can break.
 This is recommended if using this library from scratch, or when all the uses
 of the yara library can be easily checked to ensure nothing will break.
 
-### Differences
-
-If the yara compatibility mode is not enabled, the following differences
-exist with the yara library:
-
-- Fast mode is enabled by default instead of being opt-in. This enables several
-  optimizations, but means that results may not contain all possible match details.
-
-```py
-import boreal
-
-rules = boreal.compile(source="...")
-# No need to specify fast=True. `matches` will list all matching rules,
-# but details on the string matches might be missing if the scan did not
-# need to compute them to complete faster.
-matches = rules.match(data="...")
-```
-
-- The `strict_escape` parameter in `boreal.compile()` defaults to `True`
-  instead of `False`. This means that rules that contain invalid escaping
-  in regexes produce warnings by default.
-
-```py
-import boreal
-
-rules = boreal.compile(source="""
-rule foo {
-    strings:
-        $ = /C:\Users/
-    condition:
-        any of them
-}
-""")
-# A warning is emitted by default, as opposed to yara
-assert len(rules.warnings) == 1
-```
-
-- The `__hash__` implementation for the `StringMatches` and `StringMatchInstance`
-  objects is improved to avoid collision issues. Those objects are returned
-  in a scan result:
-
-```py
-import boreal
-
-rules = boreal.compile(source="...")
-results = rules.match(data="...")
-rule_match = results[0]
-string_matches = rule_match.strings[0] # This is StringMatches
-string_instances = string_matches.instances[0] # This is StringMatchInstance
-```
-
-- The `identifier` field in `StringMatches` is not prefixed by `$`.
-
-```py
-import boreal
-
-rules = boreal.compile(source="""
-rule foo {
-    strings:
-        $mystr = "abc"
-    condition:
-        any of them
-results = rules.match(data="abc")
-rule_match = results[0]
-string_matches = rule_match.strings[0]
-assert string_matches.identifier == "mystr"  # as opposed to "$mystr" in yara
-```
-
-- Text metadata values are returned as bytestrings instead of strings.
-
-```py
-import boreal
-    rules = module.compile(source="""
-
-rule a {
-    meta:
-        foo = "a normal string"
-        bar = "a string with non ascii bytes: \\xCA\xFE"
-    condition: true
-}""")
-matches = rules.match(data='')
-assert matches[0].meta == {
-    'foo': b'a normal string'
-    'bar': b'a string with non ascii bytes: \xCA\xFE' # yara does not return this properly
-}
-```
-
-- The maximum number of matches for a single string is much reduced
-  compared to the 1 000 000 set in yara. This avoids performance regressions
-  on strings matching too often.
-
-TODO example
-
-- Dictionaries that are contained in module values returned in the modules_callback
-  uses bytestrings as keys instead of strings. This can happen for example in the
-  `pe.version_info` dictionary:
-
-```py
-rules = boreal.compile(source="""
-import "pe"
-rule a { condition: true }
-""")
-
-    def modules_callback(values):
-        assert values['version_info'][b'InternalName'] == b'MTXEX.DLL'
-        # This is ['version_info']['InternalName'] in yara
-
-    rules.match('mtxex.dll', modules_callback=modules_callback)
-```
-
-  This is required because those keys are not guaranteed to be strings.
-  There is [a known bug](https://github.com/VirusTotal/yara-python/issues/273) in
-  yara due to this: if a dictionary key is not a proper string, the scan will fail.
+For a description of all the differences that exists when the compatibility mode
+is not enabled, you can consult [this documentation](https://vthib.github.io/boreal/boreal-py/dev/yara_compatibility_mode/).

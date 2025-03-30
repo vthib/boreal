@@ -9,7 +9,7 @@ use ::boreal::scanner;
 use crate::rule::convert_metadatas;
 use crate::string_matches::StringMatches;
 
-/// A matching rule
+/// Details about a matching rule.
 #[pyclass(frozen, module = "boreal")]
 pub struct Match {
     /// Name of the matching rule
@@ -28,7 +28,7 @@ pub struct Match {
     #[pyo3(get)]
     pub(crate) meta: Py<PyDict>,
 
-    /// Tuple with offsets and strings that matched the file
+    /// Details about the string matches of the rule.
     #[pyo3(get)]
     pub(crate) strings: Py<PyList>,
 }
