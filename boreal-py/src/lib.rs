@@ -21,10 +21,11 @@ mod scanner;
 mod string_match_instance;
 mod string_matches;
 
+create_exception!(boreal, Error, PyException, "Generic boreal error");
 create_exception!(
     boreal,
     AddRuleError,
-    PyException,
+    Error,
     "Raised when failing to compile a rule"
 );
 
@@ -62,6 +63,7 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("CALLBACK_ALL", CALLBACK_ALL)?;
     m.add("CALLBACK_TOO_MANY_MATCHES", CALLBACK_TOO_MANY_MATCHES)?;
 
+    m.add("Error", py.get_type::<Error>())?;
     m.add("AddRuleError", py.get_type::<AddRuleError>())?;
     // Add an alias for SyntaxError: this provides compatibility
     // with code using yara.
@@ -314,7 +316,8 @@ fn set_config(
 /// Args:
 ///   filepath: The path to the file containing the serialized files.
 ///   file: An opened file containing the serialized files. This can be any
-///       object that exposes a `read` method.
+///       object that exposes a `read` method, as long as this read method
+///       returns bytes.
 ///
 /// Returns:
 ///   a `Scanner` object.
@@ -322,7 +325,7 @@ fn set_config(
 /// Raises:
 ///  TypeError: A provided argument has the wrong type, or none
 ///      of the input arguments were provided.
-///  FIXME: document error when deserializing fails
+///  boreal.Error: The deserialization failed.
 // FIXME: add data argument
 #[cfg(feature = "serialize")]
 #[pyfunction]
@@ -331,10 +334,10 @@ fn set_config(
     file=None,
 ))]
 fn load(filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<scanner::Scanner> {
-    match (filepath, file) {
+    let res = match (filepath, file) {
         (Some(filepath), None) => {
             let contents = std::fs::read(filepath)?;
-            Ok(scanner::Scanner::load(&contents)?)
+            scanner::Scanner::load(&contents)
         }
         (None, Some(file)) => {
             let Ok(res) = file.call_method0(intern!(file.py(), "read")) else {
@@ -343,12 +346,16 @@ fn load(filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<sca
                 ));
             };
             let contents: &[u8] = res.extract()?;
-            Ok(scanner::Scanner::load(contents)?)
+            scanner::Scanner::load(contents)
         }
-        _ => Err(PyTypeError::new_err(
-            "one of filepath or file must be passed",
-        )),
-    }
+        _ => {
+            return Err(PyTypeError::new_err(
+                "one of filepath or file must be passed",
+            ))
+        }
+    };
+
+    res.map_err(|err| Error::new_err(format!("Unable to create a Scanner from bytes: {err:?}")))
 }
 
 fn call_py_include_callback(

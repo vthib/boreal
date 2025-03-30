@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyTypeError};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 
@@ -18,12 +18,12 @@ use crate::{
     MATCH_MAX_LENGTH, YARA_PYTHON_COMPATIBILITY,
 };
 
-create_exception!(boreal, ScanError, PyException, "Raised when a scan fails");
+create_exception!(boreal, ScanError, crate::Error, "Raised when a scan fails");
 create_exception!(
     boreal,
     TimeoutError,
-    PyException,
-    " Raised when a scan times out"
+    crate::Error,
+    "Raised when a scan times out"
 );
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
@@ -323,23 +323,23 @@ impl Scanner {
     /// Args:
     ///   filepath: The path to the file containing the serialized files.
     ///   file: An opened file where the serialization will be written. This
-    ///     can be any object that exposes a `write` and a `flush` method.
+    ///     can be any object that exposes a `write` and a `flush` method,
+    ///     as long the write method accepts bytes.
     ///
     /// Raises:
     ///  TypeError: A provided argument has the wrong type, or none of the
     ///      input arguments were provided.
-    //  FIXME: document error when serializing fails
+    ///  boreal.Error: The serialization failed.
     #[cfg(feature = "serialize")]
     #[pyo3(signature = (
         filepath=None,
         file=None,
     ))]
     fn save(&self, filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
-        match (filepath, file) {
+        let res = match (filepath, file) {
             (Some(filepath), None) => {
                 let mut file = File::create(filepath)?;
-                self.scanner.to_bytes(&mut file)?;
-                Ok(())
+                self.scanner.to_bytes(&mut file)
             }
             (None, Some(file)) => {
                 match (file.hasattr("write"), file.hasattr("flush")) {
@@ -351,13 +351,18 @@ impl Scanner {
                     }
                 }
                 let mut obj = PyObjectWriter { file };
-                self.scanner.to_bytes(&mut obj)?;
-                Ok(())
+                self.scanner.to_bytes(&mut obj)
             }
-            _ => Err(PyTypeError::new_err(
-                "one of filepath or file must be passed",
-            )),
-        }
+            _ => {
+                return Err(PyTypeError::new_err(
+                    "one of filepath or file must be passed",
+                ))
+            }
+        };
+
+        res.map_err(|err| {
+            crate::Error::new_err(format!("Unable to serialize the Scanner: {err:?}"))
+        })
     }
 
     /// Iterate over the rules contained in this `Scanner`.
