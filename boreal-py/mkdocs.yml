@@ -1,0 +1,38 @@
+site_name: My Docs
+
+theme:
+  name: "material"
+
+plugins:
+- search
+- mkdocstrings:
+    handlers:
+      python:
+        options:
+          extensions:
+            - docs/griffe_customization.py
+          find_stubs_package: true
+          show_category_heading: True
+          separate_signature: true
+          summary: true
+          show_signature_annotations: true
+          signature_crossrefs: true
+          show_if_no_docstring: false
+          filters:
+            - '!__all__'
+            - '!__doc__'
+
+# Enable syntax highlighting in code blocks
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+nav:
+  - User Guide: README.md
+  - YARA Compatibility details: yara_compatibility_mode.md
+  - API Reference: api.md

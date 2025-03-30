@@ -18,9 +18,15 @@ use crate::{
     MATCH_MAX_LENGTH, YARA_PYTHON_COMPATIBILITY,
 };
 
-create_exception!(boreal, ScanError, PyException, "error when scanning");
-create_exception!(boreal, TimeoutError, PyException, "scan timed out");
+create_exception!(boreal, ScanError, PyException, "Raised when a scan fails");
+create_exception!(
+    boreal,
+    TimeoutError,
+    PyException,
+    " Raised when a scan times out"
+);
 
+/// Holds a list of rules, and provides methods to run them on files or bytes.
 #[pyclass(frozen, module = "boreal")]
 pub struct Scanner {
     scanner: scanner::Scanner,
@@ -49,6 +55,75 @@ impl Scanner {
 
 #[pymethods]
 impl Scanner {
+    /// Scan data against the compiled rules.
+    ///
+    /// By default, this function will scan the provided input and return
+    /// a list of the matching rules. However, this behavior can be customized
+    /// greatly with different parameters.
+    ///
+    /// One of `filepath`, `data` or `pid` must be specified.
+    ///
+    /// Args:
+    ///     filepath:
+    ///         Path to the file to scan.
+    ///     data:
+    ///         Data to scan.
+    ///     pid:
+    ///         The pid of the process to scan.
+    ///     externals:
+    ///         A dictionary specifying values for external symbols.
+    ///         The keys are the name of the symbols, and the value are the
+    ///         values to use during the scan, in place of the default value
+    ///         specified during compilation. All symbols must have been
+    ///         declared during compilation, see the `externals` argument
+    ///         in [`compile()`](#boreal.compile).
+    ///     callback:
+    ///         Callback called when a rule is evaluated. The
+    ///         `which_callbacks` argument is used to specify which rules
+    ///         are passed to this callback.
+    ///     which_callbacks:
+    ///         Specify which rules to pass to the callback.
+    ///         This must be one of:
+    ///
+    ///           - `CALLBACK_MATCHES`: the callback is called when a rule
+    ///               matches.
+    ///           - `CALLBACK_NON_MATCHES`: the callback is called when a
+    ///               rule does not match.
+    ///           - `CALLBACK_ALL`: the callback is called in both cases.
+    ///     fast:
+    ///         Enable or disable `fast` mode. If fast mode is enabled,
+    ///         strings may not be scanned if rules can be evaluated without
+    ///         them. That is, matching rules are not guaranteed to contain
+    ///         details about string matches.
+    ///         The default value depends on the compatibility mode: it is
+    ///         False if in compat mode, and True otherwise.
+    ///     timeout:
+    ///         Specify the number of seconds after which the scan times out.
+    ///     modules_data:
+    ///         Specify data to pass to modules.
+    ///         This is a dictionary mapping the module name to its data.
+    ///         Only the cuckoo module is supported, and the library must
+    ///         have been built with cuckoo support.
+    ///     modules_callback:
+    ///         Callback called when a module is evaluated.
+    ///         The callback will receive the dynamic values of the module.
+    ///     warnings_callback:
+    ///         Callback called when the scan emits a warning.
+    ///     console_callback:
+    ///         Callback called with the `console` module is used.
+    ///     allow_duplicate_metadata:
+    ///         If true, the metadata returned with matching rules will be a
+    ///         dictionary that maps the metadata keys to a list of all values
+    ///         associated with this key. This can be used when multiple
+    ///         metadata with the same key are specified in the same rule.
+    ///
+    /// Returns: A list of all the rules that matched.
+    ///
+    /// Raises:
+    ///  TypeError: A provided argument has the wrong type, or none of the
+    ///      input arguments were provided.
+    ///  ScanError: An error happened during the scan.
+    ///  TimeoutError: The scan timed out.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         filepath=None,
@@ -56,14 +131,14 @@ impl Scanner {
         pid=None,
         externals=None,
         callback=None,
+        which_callbacks=None,
         fast=None,
         timeout=None,
         modules_data=None,
         modules_callback=None,
         warnings_callback=None,
-        which_callbacks=None,
         console_callback=None,
-        allow_duplicate_metadata=None,
+        allow_duplicate_metadata=false,
     ))]
     fn r#match(
         &self,
@@ -72,14 +147,14 @@ impl Scanner {
         pid: Option<u32>,
         externals: Option<&Bound<'_, PyDict>>,
         callback: Option<&Bound<'_, PyAny>>,
+        which_callbacks: Option<&Bound<'_, PyAny>>,
         fast: Option<bool>,
         timeout: Option<u64>,
         modules_data: Option<&Bound<'_, PyDict>>,
         modules_callback: Option<&Bound<'_, PyAny>>,
         warnings_callback: Option<&Bound<'_, PyAny>>,
-        which_callbacks: Option<&Bound<'_, PyAny>>,
         console_callback: Option<&Bound<'_, PyAny>>,
-        allow_duplicate_metadata: Option<bool>,
+        allow_duplicate_metadata: bool,
     ) -> PyResult<Vec<Match>> {
         let mut scanner = self.scanner.clone();
 
@@ -139,6 +214,7 @@ impl Scanner {
             Some(v) => v
                 .extract::<u32>()
                 .map_err(|_| PyTypeError::new_err("invalid `which_callbacks` parameter: {:?}"))?,
+            // FIXME: do not use all in not in compat mode
             None => CALLBACK_ALL,
         };
 
@@ -187,7 +263,7 @@ impl Scanner {
             modules_callback,
             warnings_callback,
             which,
-            allow_duplicate_metadata.unwrap_or(false),
+            allow_duplicate_metadata,
         );
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
@@ -233,6 +309,26 @@ impl Scanner {
         }
     }
 
+    /// Save the `Scanner` object into a bytestring.
+    ///
+    /// This method allows serializing the object into a bytestring that can
+    /// then be reloaded at a later date or on another machine using the
+    /// `load` function.
+    ///
+    /// See [the boreal documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.Scanner.html#method.to_bytes)
+    /// for more details about this feature and its limitations.
+    ///
+    /// One of `filepath` or `file` must be provided.
+    ///
+    /// Args:
+    ///   filepath: The path to the file containing the serialized files.
+    ///   file: An opened file where the serialization will be written. This
+    ///     can be any object that exposes a `write` and a `flush` method.
+    ///
+    /// Raises:
+    ///  TypeError: A provided argument has the wrong type, or none of the
+    ///      input arguments were provided.
+    //  FIXME: document error when serializing fails
     #[cfg(feature = "serialize")]
     #[pyo3(signature = (
         filepath=None,
@@ -264,6 +360,7 @@ impl Scanner {
         }
     }
 
+    /// Iterate over the rules contained in this `Scanner`.
     fn __iter__(&self, py: Python<'_>) -> PyResult<RulesIter> {
         // Unfortunately, we cannot return an object with a lifetime, so
         // we need to collect all rules into a vec of owned elements before
@@ -418,6 +515,7 @@ fn convert_callback_return_value(py: Python, value: &PyObject) -> ScanCallbackRe
     }
 }
 
+/// Iterator over the rules of a `Scanner` object.
 #[pyclass(module = "boreal")]
 pub struct RulesIter {
     rules_iter: std::vec::IntoIter<crate::rule::Rule>,

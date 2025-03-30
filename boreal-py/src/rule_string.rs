@@ -2,7 +2,7 @@ use pyo3::{prelude::*, types::PyString};
 
 use ::boreal::scanner::StringIdentifier;
 
-/// Identifier for a string
+/// Details about a string.
 // FIXME: this is a namedtuple in yara
 #[pyclass(frozen, module = "boreal")]
 pub struct RuleString {
@@ -10,7 +10,7 @@ pub struct RuleString {
     #[pyo3(get)]
     namespace: Py<PyString>,
 
-    /// Name of the rle containing the string.
+    /// Name of the rule containing the string.
     #[pyo3(get)]
     rule: Py<PyString>,
 

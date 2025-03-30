@@ -7,7 +7,7 @@ use ::boreal::scanner;
 
 use crate::YARA_PYTHON_COMPATIBILITY;
 
-/// Match instance of a YARA string
+/// Details about a single match instance of a string.
 #[pyclass(frozen, module = "boreal")]
 #[derive(Clone, Hash)]
 pub struct StringMatchInstance {
@@ -15,10 +15,13 @@ pub struct StringMatchInstance {
     #[pyo3(get)]
     offset: usize,
 
-    /// Matched data, might have been truncated if too long.
     matched_data: Box<[u8]>,
 
-    /// Length of the entire match.
+    /// Length of the entire match before truncation.
+    ///
+    /// This is the actual length of the matched data, which can be different
+    /// from the length of the `matched_data` field, since this field can
+    /// be truncated.
     #[pyo3(get)]
     matched_length: usize,
 
@@ -40,11 +43,19 @@ impl StringMatchInstance {
 
 #[pymethods]
 impl StringMatchInstance {
+    /// The matched data.
+    ///
+    /// If the match exceeded the `max_matched_data` limit specified in the
+    /// `set_config` function, the data is truncated.
     #[getter]
     fn matched_data(&self) -> &[u8] {
         &self.matched_data
     }
 
+    /// The matched data after application of the xor operation.
+    ///
+    /// If the string had a xor modifier, this method can be used to
+    /// get the matched data after application of the xor key.
     fn plaintext(&self) -> Vec<u8> {
         self.matched_data.iter().map(|b| b ^ self.xor_key).collect()
     }

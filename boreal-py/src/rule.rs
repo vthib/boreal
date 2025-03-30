@@ -9,7 +9,7 @@ use ::boreal::{Metadata, MetadataValue};
 
 use crate::YARA_PYTHON_COMPATIBILITY;
 
-/// A matching rule
+/// Details about a rule contained in the `Scanner` object.
 #[pyclass(frozen, module = "boreal")]
 pub struct Rule {
     /// Name of the rule

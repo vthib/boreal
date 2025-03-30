@@ -21,7 +21,12 @@ mod scanner;
 mod string_match_instance;
 mod string_matches;
 
-create_exception!(boreal, AddRuleError, PyException, "error when adding rules");
+create_exception!(
+    boreal,
+    AddRuleError,
+    PyException,
+    "Raised when failing to compile a rule"
+);
 
 static MAX_STRINGS_PER_RULE: Mutex<Option<usize>> = Mutex::new(None);
 static MATCH_MAX_LENGTH: Mutex<Option<usize>> = Mutex::new(None);
@@ -37,6 +42,7 @@ const CALLBACK_ALL: u32 = CALLBACK_MATCHES | CALLBACK_NON_MATCHES;
 // Same value as declared in yara, for compatibility.
 const CALLBACK_TOO_MANY_MATCHES: u32 = 6;
 
+/// Python bindings for the YARA scanner boreal.
 #[pymodule]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
@@ -76,10 +82,58 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "StringMatches",
         py.get_type::<string_matches::StringMatches>(),
     )?;
+    m.add("RuleString", py.get_type::<rule_string::RuleString>())?;
 
     Ok(())
 }
 
+/// Compile YARA rules and generate a Scanner object.
+///
+/// One of `filepath`, `filepaths`, `source`, `sources`
+/// or `file` must be passed.
+///
+/// Args:
+///     filepath: Path to a file containing the rules to compile.
+///     filepaths: Dictionary where the value is a path to a file, containing
+///         rules to compile, and the key is the name of the namespace that
+///         will contain those rules.
+///     source: String containing the rules to compile.
+///     sources: Dictionary where the value is a string containing the rules
+///         to compile, and the key is the name of the namespace that will
+///         contain those rules.
+///     file: An opened file containing the rules to compile. This can be any
+///         object that exposes a `read` method.
+///     externals: Dictionary of externals symbols to make available during
+///         compilation. The key is the name of the external symbol, and the
+///         value is the original value to assign to this symbol. This original
+///         value can be replaced during scanning by specifying an `externals`
+///         dictionary, see the `Scanner::match` method.
+///     includes: Allow rules to use the `include` directive. If set to False,
+///         any use of the `include` directive will result in a compilation
+///         error.
+///     error_on_warning: If true, make the compilation fail when a warning
+///         is emitted. If false, warnings can be found in the resulting
+///         `Scanner` object, see `Scanner::warnings`.
+///     include_callback: If specified, this callback is used to resolve
+///         callbacks. The callback will receive three arguments:
+///           - The path being included.
+///           - The path of the current document. Can be None if the current
+///             document was specified as a string, such as when using the
+///             `source` or `sources` parameter.
+///           - The current namespace.
+///         The callback must return a string which is the included document.
+///     strict_escape: If true, invalid escape sequences in regexes will
+///         generate warnings. The default value depends on the yara
+///         compatibility mode: it is False if in compat mode, or True
+///         otherwise.
+///
+/// Returns:
+///   a `Scanner` object that holds the compiled rules.
+///
+/// Raises:
+///  TypeError: A provided argument has the wrong type, or none
+///      of the input arguments were provided.
+///  boreal.AddRuleError: A rule failed to compile.
 #[pyfunction]
 #[pyo3(signature = (
     filepath=None,
@@ -202,6 +256,20 @@ fn compile(
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
 }
 
+/// Modify some global parameters
+///
+/// Args:
+///   max_strings_per_rule: Maximum number of strings allowed in a single rule.
+///       If a rule has more strings than this limit, its compilation will fail.
+///   max_match_data: Maximum length for the match data returned in match
+///       results. The match details returned in results will be truncated if
+///       they exceed this limit. Default value is 512
+///   stack_size: Unused, this is accepted purely for compatibility with yara.
+///   yara_compatibility: Enable or disable full YARA compatibility. See the
+///       global documentation of this library for more details.
+///
+/// Raises:
+///  TypeError: A provided argument has the wrong type
 #[pyfunction]
 #[pyo3(signature = (
     max_strings_per_rule=None,
@@ -233,12 +301,35 @@ fn set_config(
     let _ = stack_size;
 }
 
+/// Load rules from a serialized scanner object.
+///
+/// A scanner can be serialized into a bytestring and reloaded using
+/// this function.
+///
+/// See [the boreal documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.Scanner.html#method.to_bytes)
+/// for more details about this feature and its limitations.
+///
+/// One of `filepath` or `file` must be provided.
+///
+/// Args:
+///   filepath: The path to the file containing the serialized files.
+///   file: An opened file containing the serialized files. This can be any
+///       object that exposes a `read` method.
+///
+/// Returns:
+///   a `Scanner` object.
+///
+/// Raises:
+///  TypeError: A provided argument has the wrong type, or none
+///      of the input arguments were provided.
+///  FIXME: document error when deserializing fails
+// FIXME: add data argument
 #[cfg(feature = "serialize")]
 #[pyfunction]
 #[pyo3(signature = (
-        filepath=None,
-        file=None,
-    ))]
+    filepath=None,
+    file=None,
+))]
 fn load(filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<scanner::Scanner> {
     match (filepath, file) {
         (Some(filepath), None) => {

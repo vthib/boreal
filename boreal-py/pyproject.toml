@@ -15,9 +15,21 @@ dev = [
     "pytest>=8.3.4",
     "yara-python>=4.5.1",
 ]
+doc = [
+    "mkdocs-material>=9.6.9",
+    "mkdocstrings[python]>=0.29.0",
+    "ruff>=0.11.2",
+]
 
 [tool.uv]
-cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "src/**/*" }]
+[[tool.uv.cache-keys]]
+file = "pyproject.toml"
+[[tool.uv.cache-keys]]
+file = "Cargo.toml"
+[[tool.uv.cache-keys]]
+file = "boreal.pyi"
+[[tool.uv.cache-keys]]
+file = "src/**/*"
 
 [tool.pytest.ini_options]
 addopts = [
