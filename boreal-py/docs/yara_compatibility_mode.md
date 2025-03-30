@@ -110,6 +110,24 @@ assert matches[0].meta == {
 }
 ```
 
+## Match callback only receive matching rules by default
+
+If `which_callbacks` is not specified in the `match` method, the default value is
+`CALLBACK_MATCHES` and not `CALLBACK_ALL`. This default value is almost always
+what is expected, and enabling the collection of non matching rules disables
+fast mode, making it undesirable.
+
+```py
+import boreal
+
+def cb(rule):
+    # This callback only receives matching rules
+    pass
+
+rules = boreal.compile(source="...")
+matches = rules.match(data="...", callback=cb)
+```
+
 ## Maximum number of matches is reduced
 
 The maximum number of matches for a single string is much reduced
