@@ -828,6 +828,22 @@ def test_save_load_invalid_types(module):
     with pytest.raises(TypeError):
         module.load(file='str')
 
+    # Check the error if deserialization fails
+    with tempfile.NamedTemporaryFile() as fp:
+        fp.write(b'invalid bytes')
+        fp.flush()
+
+        with pytest.raises(module.Error):
+            module.load(filepath=fp.name)
+
+        with open(fp.name, "rb") as f:
+            with pytest.raises(module.Error):
+                module.load(file=f)
+
+        with open(fp.name, "w") as f:
+            with pytest.raises(module.Error):
+                rules.save(file=f)
+
 
 @pytest.mark.parametrize('module', MODULES)
 def test_allow_duplicate_metadata(module):
