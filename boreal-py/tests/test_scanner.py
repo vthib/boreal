@@ -804,6 +804,26 @@ rule my_rule {
         assert len(matches) == 1
 
 
+def test_save_load_bytes():
+    # Yara does not support this, so only test on boreal
+
+    rules = boreal.compile(source="""
+rule my_rule {
+    strings:
+        $s = "abc"
+    condition:
+        any of them
+}
+""")
+
+    data = rules.save(to_bytes=True)
+    assert data is not None
+
+    rules2 = boreal.load(data=data)
+    matches = rules2.match(data=b"abc")
+    assert len(matches) == 1
+
+
 @pytest.mark.parametrize('module', MODULES)
 def test_save_load_invalid_types(module):
     # Do not run the test if boreal was not compiled with the
@@ -829,18 +849,19 @@ def test_save_load_invalid_types(module):
         module.load(file='str')
 
     # Check the error if deserialization fails
-    with tempfile.NamedTemporaryFile() as fp:
-        fp.write(b'invalid bytes')
-        fp.flush()
+    with tempfile.TemporaryDirectory() as fd:
+        path = f"{fd}/file"
+        with open(path, "wb") as f:
+            f.write(b'invalid bytes')
 
         with pytest.raises(module.Error):
-            module.load(filepath=fp.name)
+            module.load(filepath=path)
 
-        with open(fp.name, "rb") as f:
+        with open(path, "rb") as f:
             with pytest.raises(module.Error):
                 module.load(file=f)
 
-        with open(fp.name, "w") as f:
+        with open(path, "w") as f:
             with pytest.raises(module.Error):
                 rules.save(file=f)
 

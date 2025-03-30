@@ -311,13 +311,14 @@ fn set_config(
 /// See [the boreal documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.Scanner.html#method.to_bytes)
 /// for more details about this feature and its limitations.
 ///
-/// One of `filepath` or `file` must be provided.
+/// One of `filepath`, `file` or `data` must be provided.
 ///
 /// Args:
 ///   filepath: The path to the file containing the serialized files.
 ///   file: An opened file containing the serialized files. This can be any
 ///       object that exposes a `read` method, as long as this read method
 ///       returns bytes.
+///   data: The serialized bytes.
 ///
 /// Returns:
 ///   a `Scanner` object.
@@ -326,20 +327,24 @@ fn set_config(
 ///  TypeError: A provided argument has the wrong type, or none
 ///      of the input arguments were provided.
 ///  boreal.Error: The deserialization failed.
-// FIXME: add data argument
 #[cfg(feature = "serialize")]
 #[pyfunction]
 #[pyo3(signature = (
     filepath=None,
     file=None,
+    data=None,
 ))]
-fn load(filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<scanner::Scanner> {
-    let res = match (filepath, file) {
-        (Some(filepath), None) => {
+fn load(
+    filepath: Option<&str>,
+    file: Option<&Bound<'_, PyAny>>,
+    data: Option<&[u8]>,
+) -> PyResult<scanner::Scanner> {
+    let res = match (filepath, file, data) {
+        (Some(filepath), None, None) => {
             let contents = std::fs::read(filepath)?;
             scanner::Scanner::load(&contents)
         }
-        (None, Some(file)) => {
+        (None, Some(file), None) => {
             let Ok(res) = file.call_method0(intern!(file.py(), "read")) else {
                 return Err(PyTypeError::new_err(
                     "the file parameter must implement the read method",
@@ -348,6 +353,7 @@ fn load(filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<sca
             let contents: &[u8] = res.extract()?;
             scanner::Scanner::load(contents)
         }
+        (None, None, Some(data)) => scanner::Scanner::load(data),
         _ => {
             return Err(PyTypeError::new_err(
                 "one of filepath or file must be passed",
