@@ -16,6 +16,7 @@ dev = [
     "yara-python>=4.5.1",
 ]
 doc = [
+    "mike>=2.1.3",
     "mkdocs-material>=9.6.9",
     "mkdocstrings[python]>=0.29.0",
     "ruff>=0.11.2",

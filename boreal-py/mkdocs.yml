@@ -4,6 +4,8 @@ theme:
   name: "material"
 
 plugins:
+- mike:
+    deploy_prefix: 'boreal-py'
 - search
 - mkdocstrings:
     handlers:
