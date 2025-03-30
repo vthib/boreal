@@ -318,13 +318,16 @@ impl Scanner {
     /// See [the boreal documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.Scanner.html#method.to_bytes)
     /// for more details about this feature and its limitations.
     ///
-    /// One of `filepath` or `file` must be provided.
+    /// One of `filepath`, `file` or `to_bytes` must be provided.
     ///
     /// Args:
     ///   filepath: The path to the file containing the serialized files.
     ///   file: An opened file where the serialization will be written. This
     ///     can be any object that exposes a `write` and a `flush` method,
     ///     as long the write method accepts bytes.
+    ///   to_bytes: If true, return a bytestring containing the serialization.
+    ///
+    /// Returns: The serialize bytestring if `to_bytes` is true, None otherwise.
     ///
     /// Raises:
     ///  TypeError: A provided argument has the wrong type, or none of the
@@ -334,14 +337,22 @@ impl Scanner {
     #[pyo3(signature = (
         filepath=None,
         file=None,
+        to_bytes=false,
     ))]
-    fn save(&self, filepath: Option<&str>, file: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
-        let res = match (filepath, file) {
-            (Some(filepath), None) => {
+    fn save(
+        &self,
+        filepath: Option<&str>,
+        file: Option<&Bound<'_, PyAny>>,
+        to_bytes: bool,
+    ) -> PyResult<Option<Vec<u8>>> {
+        let mut result = None;
+
+        let res = match (filepath, file, to_bytes) {
+            (Some(filepath), None, false) => {
                 let mut file = File::create(filepath)?;
                 self.scanner.to_bytes(&mut file)
             }
-            (None, Some(file)) => {
+            (None, Some(file), false) => {
                 match (file.hasattr("write"), file.hasattr("flush")) {
                     (Ok(true), Ok(true)) => (),
                     _ => {
@@ -353,6 +364,12 @@ impl Scanner {
                 let mut obj = PyObjectWriter { file };
                 self.scanner.to_bytes(&mut obj)
             }
+            (None, None, true) => {
+                let mut data = Vec::new();
+                let v = self.scanner.to_bytes(&mut data);
+                result = Some(data);
+                v
+            }
             _ => {
                 return Err(PyTypeError::new_err(
                     "one of filepath or file must be passed",
@@ -360,9 +377,12 @@ impl Scanner {
             }
         };
 
-        res.map_err(|err| {
-            crate::Error::new_err(format!("Unable to serialize the Scanner: {err:?}"))
-        })
+        match res {
+            Ok(()) => Ok(result),
+            Err(err) => Err(crate::Error::new_err(format!(
+                "Unable to serialize the Scanner: {err:?}"
+            ))),
+        }
     }
 
     /// Iterate over the rules contained in this `Scanner`.

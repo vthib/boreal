@@ -19,6 +19,7 @@ def compile(
 def load(
     filepath: str | None = None,
     file: Readable | None = None,
+    data: bytes | None = None,
 ) -> Scanner: ...
 
 def set_config(
@@ -87,7 +88,8 @@ class Scanner(abc.Iterable[Rule]):
         self,
         filepath: str | None = None,
         file: Writable | None = None,
-    ) -> None: ...
+        to_bytes: bool = False
+    ) -> bytes | None: ...
 
     def __iter__(self) -> RulesIter: ...
 
