@@ -902,3 +902,36 @@ rule my_rule {
             'foo': ['foo #1', 'foo #2'],
             'bar': ['bar']
         }
+
+
+def test_set_params():
+    # Only run on boreal, yara does not support this
+    rules = boreal.compile(source="""
+rule a {
+    strings:
+        $ = "abc"
+    condition:
+        any of them
+}""")
+
+    # Simply check setting those parameters work. All those
+    # parameters are properly tested in the boreal crate.
+    rules.set_params(
+        use_mmap=True,
+        string_max_nb_matches=100,
+        fragmented_scan_mode="fast",
+        process_memory=False,
+        max_fetched_region_size=100,
+        memory_chunk_size=23,
+    )
+
+    with tempfile.NamedTemporaryFile() as fp:
+        fp.write(b'dcabc <3>')
+        fp.flush()
+        matches = rules.match(filepath=fp.name)
+        assert len(matches) == 1
+
+    with pytest.raises(TypeError):
+        rules.set_params(
+            fragmented_scan_mode="unknown",
+        )

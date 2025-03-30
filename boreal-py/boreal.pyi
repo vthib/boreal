@@ -91,6 +91,16 @@ class Scanner(abc.Iterable[Rule]):
         to_bytes: bool = False
     ) -> bytes | None: ...
 
+    def set_params(
+        self,
+        use_mmap: bool | None = None,
+        string_max_nb_matches: int | None = None,
+        fragmented_scan_mode: str | None = None,
+        process_memory: bool | None = None,
+        max_fetched_region_size: int | None = None,
+        memory_chunk_size: int | None = None,
+    ) -> None: ...
+
     def __iter__(self) -> RulesIter: ...
 
 class RulesIter(abc.Iterator[Rule]):
