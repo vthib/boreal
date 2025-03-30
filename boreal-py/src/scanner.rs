@@ -90,6 +90,12 @@ impl Scanner {
     ///           - `CALLBACK_NON_MATCHES`: the callback is called when a
     ///               rule does not match.
     ///           - `CALLBACK_ALL`: the callback is called in both cases.
+    ///
+    ///         The default value depends on the compatibility mode: it is
+    ///         `CALLBACK_ALL` if in compat mode, `CALLBACK_MATCHES`
+    ///         otherwise.
+    ///
+    ///         Note that enabling non matching rules disables fast mode.
     ///     fast:
     ///         Enable or disable `fast` mode. If fast mode is enabled,
     ///         strings may not be scanned if rules can be evaluated without
@@ -214,8 +220,13 @@ impl Scanner {
             Some(v) => v
                 .extract::<u32>()
                 .map_err(|_| PyTypeError::new_err("invalid `which_callbacks` parameter: {:?}"))?,
-            // FIXME: do not use all in not in compat mode
-            None => CALLBACK_ALL,
+            None => {
+                if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
+                    CALLBACK_ALL
+                } else {
+                    CALLBACK_MATCHES
+                }
+            }
         };
 
         let mut params = scanner.scan_params().clone();

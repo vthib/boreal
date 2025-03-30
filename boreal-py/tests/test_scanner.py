@@ -567,8 +567,8 @@ rule a { condition: true }
         assert received_values[0]['module'] == 'math'
 
 
-@pytest.mark.parametrize('module', MODULES)
-def test_match_which_callbacks(module):
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_match_which_callbacks(module, is_yara):
     rules = module.compile(source="""
 rule a { condition: true }
 rule b { condition: false }
@@ -589,23 +589,33 @@ rule b { condition: false }
         assert len(matches) == 1
         assert matches[0].rule == 'a'
 
+    def check_only_matching(received_values, matches):
+        assert len(received_values) == 1
+        assert received_values[0]['rule'] == 'a'
+        assert received_values[0]['matches']
+        assert len(matches) == 1
+        assert matches[0].rule == 'a'
+
     # check CALLBACK_ALL
     matches = rules.match(data='', which_callbacks=module.CALLBACK_ALL, callback=callback)
     check_all(received_values, matches)
 
-    # Not specifying is equivalent to ALL
-    received_values = []
-    matches = rules.match(data='', callback=callback)
-    check_all(received_values, matches)
+    # In compatibility mode, not specifying defaults to ALL
+    with YaraCompatibilityMode():
+        received_values = []
+        matches = rules.match(data='', callback=callback)
+        check_all(received_values, matches)
+
+    # Outside of it, it defaults to MATCHES
+    if not is_yara:
+        received_values = []
+        matches = rules.match(data='', callback=callback)
+        check_only_matching(received_values, matches)
 
     # only match
     received_values = []
     matches = rules.match(data='', which_callbacks=module.CALLBACK_MATCHES, callback=callback)
-    assert len(received_values) == 1
-    assert received_values[0]['rule'] == 'a'
-    assert received_values[0]['matches']
-    assert len(matches) == 1
-    assert matches[0].rule == 'a'
+    check_only_matching(received_values, matches)
 
     # only non match
     received_values = []
