@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 
 use ::boreal::module::{Console, ConsoleData, Value};
-use ::boreal::scanner::{self, CallbackEvents, ScanCallbackResult, ScanEvent};
+use ::boreal::scanner::{self, CallbackEvents, FragmentedScanMode, ScanCallbackResult, ScanEvent};
 
 use crate::rule_match::Match;
 use crate::rule_string::RuleString;
@@ -27,18 +27,24 @@ create_exception!(
 );
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
-#[pyclass(frozen, module = "boreal")]
+#[pyclass(module = "boreal")]
 pub struct Scanner {
     scanner: scanner::Scanner,
 
     /// List of warnings generated when compiling rules.
     #[pyo3(get)]
     warnings: Vec<String>,
+
+    use_mmap: bool,
 }
 
 impl Scanner {
     pub fn new(scanner: scanner::Scanner, warnings: Vec<String>) -> Self {
-        Self { scanner, warnings }
+        Self {
+            scanner,
+            warnings,
+            use_mmap: false,
+        }
     }
 
     #[cfg(feature = "serialize")]
@@ -49,6 +55,7 @@ impl Scanner {
         Ok(Self {
             scanner,
             warnings: Vec::new(),
+            use_mmap: false,
         })
     }
 }
@@ -278,7 +285,18 @@ impl Scanner {
         );
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
-                scanner.scan_file_with_callback(filepath, |event| cb_handler.handle_event(event))
+                if self.use_mmap {
+                    // Safety: unsafe because of mmap semantics, but opted in by
+                    // setting the use_mmap param to true.
+                    unsafe {
+                        scanner.scan_file_memmap_with_callback(filepath, |event| {
+                            cb_handler.handle_event(event)
+                        })
+                    }
+                } else {
+                    scanner
+                        .scan_file_with_callback(filepath, |event| cb_handler.handle_event(event))
+                }
             }
             (None, Some(data), None) => {
                 if let Ok(s) = data.extract::<&[u8]>() {
@@ -394,6 +412,84 @@ impl Scanner {
                 "Unable to serialize the Scanner: {err:?}"
             ))),
         }
+    }
+
+    /// Modify scan parameters.
+    ///
+    /// Those parameters are documented in details in
+    /// the [boreal documentation](https://docs.rs/boreal/latest/boreal/scanner/struct.ScanParams.html).
+    ///
+    /// Args:
+    ///     use_mmap:
+    ///         If true, use mmap to scan files specified by the `filepath`
+    ///         argument in the `match` method.
+    ///     string_max_nb_matches:
+    ///         Maximum number of matches for a given string. If this limit
+    ///         is reached, matches are no longer counted nor reported.
+    ///     fragmented_scan_mode:
+    ///         Scan mode to use on fragmented memory, notable process scanning.
+    ///         for more details. This must be one of `legacy`, `fast` or
+    ///         `single_pass`.
+    ///     process_memory:
+    ///         Scanned bytes are part of the memory of a process.
+    ///     max_fetched_region_size:
+    ///         Maximum size of a fetched region, used during process scanning.
+    ///     memory_chunk_size:
+    ///         Size of memory chunks to scan, used during process scanning.
+    ///
+    /// Raises:
+    ///     TypeError: A provided argument has the wrong type
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        use_mmap=None,
+        string_max_nb_matches=None,
+        fragmented_scan_mode=None,
+        process_memory=None,
+        max_fetched_region_size=None,
+        memory_chunk_size=None,
+    ))]
+    fn set_params(
+        &mut self,
+        use_mmap: Option<bool>,
+        string_max_nb_matches: Option<u32>,
+        fragmented_scan_mode: Option<&str>,
+        process_memory: Option<bool>,
+        max_fetched_region_size: Option<usize>,
+        memory_chunk_size: Option<usize>,
+    ) -> PyResult<()> {
+        let mut params = self.scanner.scan_params().clone();
+
+        if let Some(v) = use_mmap {
+            self.use_mmap = v;
+        }
+
+        if let Some(v) = string_max_nb_matches {
+            params = params.string_max_nb_matches(v);
+        }
+        if let Some(v) = fragmented_scan_mode {
+            params = params.fragmented_scan_mode(match v {
+                "legacy" => FragmentedScanMode::legacy(),
+                "fast" => FragmentedScanMode::fast(),
+                "single_pass" => FragmentedScanMode::single_pass(),
+                _ => {
+                    return Err(PyTypeError::new_err(format!(
+                        "unknown fragmented scan mode `{v}`"
+                    )));
+                }
+            });
+        }
+        if let Some(v) = process_memory {
+            params = params.process_memory(v);
+        }
+        if let Some(v) = max_fetched_region_size {
+            params = params.max_fetched_region_size(v);
+        }
+        if let Some(v) = memory_chunk_size {
+            params = params.memory_chunk_size(Some(v));
+        }
+
+        self.scanner.set_scan_params(params);
+        Ok(())
     }
 
     /// Iterate over the rules contained in this `Scanner`.

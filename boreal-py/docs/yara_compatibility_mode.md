@@ -132,9 +132,15 @@ matches = rules.match(data="...", callback=cb)
 
 The maximum number of matches for a single string is much reduced
 compared to the 1 000 000 set in yara. This avoids performance regressions
-on strings matching too often.
+on strings matching too often. The default value is 1000, but this can easily
+be modified:
 
-TODO example
+```py
+import boreal
+
+rules = boreal.compile(source="...")
+rules.set_params(string_max_nb_matches=100000)
+```
 
 ## Dictionaries returned by modules uses byte-strings as keys
 
