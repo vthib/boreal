@@ -354,3 +354,23 @@ def test_compile_strict_escape(module, is_yara):
     # compilation, compilation should work
     rules = module.compile(source=data, strict_escape=False, error_on_warning=True)
     assert len(rules.warnings) == 0
+
+
+def test_compiler_profile():
+    # Yara does not have this, only test on boreal
+    data = r"""
+        rule a {
+            strings:
+                $a = "abc"
+            condition:
+                $a
+        }
+    """
+
+    rules = boreal.compile(source=data, profile=boreal.CompilerProfile.Speed)
+    matches = rules.match(data='abc')
+    assert len(matches) == 1
+
+    rules = boreal.compile(source=data, profile=boreal.CompilerProfile.Memory)
+    matches = rules.match(data='abc')
+    assert len(matches) == 1
