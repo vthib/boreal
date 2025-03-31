@@ -85,6 +85,7 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<string_matches::StringMatches>(),
     )?;
     m.add("RuleString", py.get_type::<rule_string::RuleString>())?;
+    m.add("CompilerProfile", py.get_type::<CompilerProfile>())?;
 
     Ok(())
 }
@@ -128,6 +129,8 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
 ///         generate warnings. The default value depends on the yara
 ///         compatibility mode: it is False if in compat mode, or True
 ///         otherwise.
+///     profile: Profile to use when compiling the rules. If not specified,
+///         `CompilerProfile::Speed` is used.
 ///
 /// Returns:
 ///   a `Scanner` object that holds the compiled rules.
@@ -139,30 +142,32 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(signature = (
     filepath=None,
-    source=None,
-    file=None,
     filepaths=None,
+    source=None,
     sources=None,
+    file=None,
     externals=None,
     includes=true,
     error_on_warning=false,
     include_callback=None,
     strict_escape=None,
+    profile=None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn compile(
     filepath: Option<&str>,
-    source: Option<&str>,
-    file: Option<&Bound<'_, PyAny>>,
     filepaths: Option<&Bound<'_, PyDict>>,
+    source: Option<&str>,
     sources: Option<&Bound<'_, PyDict>>,
+    file: Option<&Bound<'_, PyAny>>,
     externals: Option<&Bound<'_, PyDict>>,
     includes: bool,
     error_on_warning: bool,
     include_callback: Option<&Bound<'_, PyAny>>,
     strict_escape: Option<bool>,
+    profile: Option<&CompilerProfile>,
 ) -> PyResult<scanner::Scanner> {
-    let mut compiler = build_compiler();
+    let mut compiler = build_compiler(profile);
 
     // By default, enable strict escape, this is the default behavior in boreal.
     // If in yara compat mode, use the yara default behavior and disable it.
@@ -256,6 +261,22 @@ fn compile(
     }
 
     Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
+}
+
+/// Profile to use when compiling rules.
+#[pyclass(eq, eq_int, module = "boreal")]
+#[derive(Debug, PartialEq)]
+enum CompilerProfile {
+    /// Prioritize scan speed.
+    ///
+    /// This profile will strive to get the best possible scan speed by using more memory
+    /// when possible.
+    Speed = 0,
+    /// Prioritize memory usage
+    ///
+    /// This profile will strive to reduce memory usage as much as possible, even if it means
+    /// a slower scan speed overall.
+    Memory = 1,
 }
 
 /// Modify some global parameters
@@ -382,14 +403,18 @@ fn call_py_include_callback(
 }
 
 fn get_available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
-    build_compiler()
+    build_compiler(None)
         .available_modules()
         .map(|s| PyString::new(py, s))
         .collect()
 }
 
-fn build_compiler() -> compiler::Compiler {
+fn build_compiler(profile: Option<&CompilerProfile>) -> compiler::Compiler {
     compiler::CompilerBuilder::new()
+        .profile(match profile {
+            Some(CompilerProfile::Speed) | None => ::boreal::compiler::CompilerProfile::Speed,
+            Some(CompilerProfile::Memory) => ::boreal::compiler::CompilerProfile::Memory,
+        })
         .add_module(::boreal::module::Console::with_callback(|log| {
             // XXX: when targetting python 3.12 or above, this could be simplified
             // by using the "%.*s" format, avoiding the CString conversion.

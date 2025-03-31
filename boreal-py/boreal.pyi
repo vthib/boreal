@@ -1,4 +1,4 @@
-from typing import Any, Callable, Protocol, TypeAlias, TypedDict
+from typing import Any, Callable, Protocol, TypeAlias, TypedDict, final
 from collections import abc
 
 
@@ -14,6 +14,7 @@ def compile(
     error_on_warning: bool = False,
     include_callback: IncludeCallback | None = None,
     strict_escape: bool | None = None,
+    profile: CompilerProfile | None = None,
 ) -> Scanner: ...
 
 def load(
@@ -38,6 +39,8 @@ class SyntaxError(Error): ...
 class ScanError(Error): ...
 class TimeoutError(Error): ...
 
+
+@final
 class Rule:
     identifier: str
     namespace: str
@@ -47,6 +50,7 @@ class Rule:
     is_private: bool
 
 
+@final
 class Match:
     rule: str
     namespace: str
@@ -63,6 +67,7 @@ class Match:
     def __hash__(self) -> int: ...
 
 
+@final
 class Scanner(abc.Iterable[Rule]):
     warnings: list[str]
 
@@ -103,11 +108,14 @@ class Scanner(abc.Iterable[Rule]):
 
     def __iter__(self) -> RulesIter: ...
 
+
+@final
 class RulesIter(abc.Iterator[Rule]):
     def __iter__(self) -> RulesIter: ...
     def __next__(self) -> Rule: ...
 
 
+@final
 class StringMatchInstance:
     offset: int
     matched_data: bytes
@@ -119,6 +127,7 @@ class StringMatchInstance:
     def __hash__(self) -> int: ...
 
 
+@final
 class StringMatches:
     identifier: str
     instances: list[StringMatchInstance]
@@ -128,10 +137,17 @@ class StringMatches:
     def __hash__(self) -> int: ...
 
 
+@final
 class RuleString:
     namespace: str
     rule: str
     string: str
+
+
+@final
+class CompilerProfile:
+    Speed: 'CompilerProfile'
+    Memory: 'CompilerProfile'
 
 
 class RuleDetails(TypedDict):
