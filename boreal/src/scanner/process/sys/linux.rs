@@ -197,12 +197,10 @@ impl MapRegion {
     fn open_file(&self) -> Option<(File, usize)> {
         let check_metadata = |metadata: std::fs::Metadata| -> bool {
             let dev = metadata.dev();
-            // Safety: this is always safe to call.
-            let (dmaj, dmin) = unsafe { (libc::major(dev), libc::minor(dev)) };
 
             metadata.ino() == self.inode
-                && dmaj == self.dev_major
-                && dmin == self.dev_minor
+                && libc::major(dev) == self.dev_major
+                && libc::minor(dev) == self.dev_minor
                 && metadata.mode() & libc::S_IFMT == libc::S_IFREG
                 && metadata.len() > self.offset
         };
