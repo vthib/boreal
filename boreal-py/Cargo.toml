@@ -27,7 +27,7 @@ authenticode-verify = ["boreal/authenticode-verify"]
 [dependencies]
 boreal = { path = "../boreal", version = "0.9.0", features = ["memmap"] }
 
-pyo3 = { version = "0.23", features = ["abi3", "abi3-py311", "extension-module", "macros"] }
+pyo3 = { version = "0.24", features = ["abi3", "abi3-py311", "extension-module", "macros"] }
 
 [lints]
 workspace = true
