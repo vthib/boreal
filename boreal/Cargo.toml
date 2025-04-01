@@ -61,7 +61,7 @@ serialize = ["dep:borsh"]
 boreal-parser = { path = "../boreal-parser", version = "0.6.0" }
 
 # Proper error reporting on compilation
-codespan-reporting = "0.11"
+codespan-reporting = "0.12"
 
 # Scanning for bytes
 aho-corasick = "1.1"
