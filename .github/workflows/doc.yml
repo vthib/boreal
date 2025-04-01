@@ -1,0 +1,49 @@
+name: Publish documentation
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.25"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          architecture: ${{matrix.architecture}}
+          python-version-file: "boreal-py/pyproject.toml"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{matrix.target}}
+
+      - name: Set up git config
+        run: |
+          git config --global user.name "Docs Deploy"
+          git config --global user.email "docs.deploy@users.noreply.github.com"
+
+      - name: Build and deploy release docs
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          cd boreal-py
+          uv run --group doc mike deploy --push ${{ github.ref_name }}
+
+      - name: Build and deploy dev docs
+        if: ${{ github.ref_type == 'branch' }}
+        run: |
+          cd boreal-py
+          uv run --group doc mike deploy --push dev
