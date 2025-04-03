@@ -202,7 +202,7 @@ impl Visitor for AstPrinter {
                             RepetitionRange::Bounded(n, m) => write!(self.res, "{{{n},{m}}}"),
                         };
                     }
-                };
+                }
                 if !greedy {
                     self.res.push('?');
                 }

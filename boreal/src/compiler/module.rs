@@ -540,7 +540,7 @@ impl ModuleUseKind<'_> {
                     }
                 }
             }
-        };
+        }
 
         Err(TypeError::WrongType {
             actual_type: self.type_to_string(),

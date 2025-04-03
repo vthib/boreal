@@ -547,7 +547,7 @@ fn base64_modifier(input: Input) -> ParseResult<Modifier> {
                     ErrorKind::Base64AlphabetInvalidLength { length },
                 )));
             }
-        };
+        }
         let (input2, _) = cut(rtrim(char(')'))).parse(input2)?;
         input = input2;
     }

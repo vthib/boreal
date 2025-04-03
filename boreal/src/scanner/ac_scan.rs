@@ -245,7 +245,7 @@ impl AcScan {
                         xor_key,
                     ));
                 }
-            };
+            }
 
             if var_matches.len() > (scan_data.params.string_max_nb_matches as usize) {
                 var_matches.truncate(scan_data.params.string_max_nb_matches as usize);

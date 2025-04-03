@@ -460,7 +460,7 @@ impl Evaluator<'_, '_, '_, '_> {
                         Err(PoisonKind::Undefined) => return Ok(Value::Boolean(false)),
                         Err(PoisonKind::VarNeeded) => var_needed = true,
                         Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
-                    };
+                    }
                 }
                 if var_needed {
                     Err(PoisonKind::VarNeeded)
@@ -481,7 +481,7 @@ impl Evaluator<'_, '_, '_, '_> {
                         Err(PoisonKind::Undefined) => (),
                         Err(PoisonKind::VarNeeded) => var_needed = true,
                         Err(PoisonKind::Timeout) => return Err(PoisonKind::Timeout),
-                    };
+                    }
                 }
                 if var_needed {
                     Err(PoisonKind::VarNeeded)
@@ -827,7 +827,7 @@ impl Evaluator<'_, '_, '_, '_> {
                         }
                     }
                     _ => return Err(PoisonKind::Undefined),
-                };
+                }
 
                 selection
             }

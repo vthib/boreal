@@ -165,12 +165,12 @@ impl std::fmt::Display for Validator {
                 match reverse {
                     Some(v) => write!(f, "reverse: {v}")?,
                     None => write!(f, "reverse: none")?,
-                };
+                }
                 write!(f, ", ")?;
                 match forward {
                     Some(v) => write!(f, "forward: {v}")?,
                     None => write!(f, "forward: none")?,
-                };
+                }
                 write!(f, " }}")
             }
             Self::Greedy { .. } => {

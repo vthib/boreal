@@ -404,7 +404,7 @@ impl Compiler {
                             parsed_contents,
                         ))
                     }
-                };
+                }
             }
             YaraFileComponent::Rule(rule) => {
                 for prefix in &namespace.forbidden_rule_prefixes {
