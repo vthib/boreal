@@ -210,9 +210,7 @@ impl Region {
         file.write_all(&contents).unwrap();
 
         // Erase contents to not let it live in our RAM.
-        for b in &mut contents {
-            *b = 0;
-        }
+        contents.fill(0);
         drop(contents);
 
         let map = unsafe {
@@ -248,7 +246,5 @@ fn xor_bytes_into(v: &[u8], xor_byte: u8, dest: &mut [u8]) {
 
 fn erase(mut contents: Vec<u8>) {
     // Erase contents to not let it live in our RAM.
-    for b in &mut contents {
-        *b = 0;
-    }
+    contents.fill(0);
 }

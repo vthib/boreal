@@ -202,7 +202,7 @@ mod tests {
             match res {
                 Some(v) => assert_eq!(v, expected.unwrap()),
                 None => assert!(expected.is_none()),
-            };
+            }
         }
 
         // Assertions and repetitions means no literals
@@ -298,7 +298,7 @@ mod tests {
             match &res {
                 Some(v) => assert_eq!(v, expected.unwrap()),
                 None => assert!(expected.is_none()),
-            };
+            }
         }
 
         test("{ AB CD 01 }", Some(&[b"\xab\xcd\x01"]));

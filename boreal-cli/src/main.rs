@@ -1087,7 +1087,7 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
     match &stats.filepath {
         Some(path) => println!(" (from {})", path.display()),
         None => println!(),
-    };
+    }
     for var in &stats.strings {
         let lits: Vec<_> = var.literals.iter().map(|v| ByteString(v)).collect();
         let atoms: Vec<_> = var.atoms.iter().map(|v| ByteString(v)).collect();

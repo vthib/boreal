@@ -1134,7 +1134,7 @@ impl Module for Pe {
                 data.found_pe = true;
             }
             None => *out = [("is_pe", 0.into())].into(),
-        };
+        }
     }
 }
 

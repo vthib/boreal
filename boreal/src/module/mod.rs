@@ -156,7 +156,7 @@ pub trait Module: Send + Sync + UnwindSafe + RefUnwindSafe {
     ///
     /// * `foo.a > 0` would fail to compile, as the module does not expose the key `a`.
     /// * `foo.int == !a` would compile directly to `1 == !a`, as we already know the value of this
-    ///    key when compiling the rule.
+    ///   key when compiling the rule.
     /// * `foo.array[2] matches /regex/` would compile properly, but delay evaluation of the array
     ///   on every scan.
     /// * `foo.array[2] + 1` would fail to compile, as the array is indicated as returning a

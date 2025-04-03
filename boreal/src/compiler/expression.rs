@@ -1153,14 +1153,12 @@ fn compile_for_iterator(
                 compile_identifier_as_iterator(compiler, identifier, iterator_span)?;
 
             match iterator_type {
-                module::IteratorType::Array(value_type) => {
-                    match &identifiers {
-                        &[name] => {
-                            compiler.add_bounded_identifier(name, value_type, identifiers_span)?;
-                        }
-                        _ => invalid_binding(1)?,
-                    };
-                }
+                module::IteratorType::Array(value_type) => match &identifiers {
+                    &[name] => {
+                        compiler.add_bounded_identifier(name, value_type, identifiers_span)?;
+                    }
+                    _ => invalid_binding(1)?,
+                },
                 module::IteratorType::Dictionary(value_type) => match &identifiers {
                     &[key, value] => {
                         compiler.add_bounded_identifier(
@@ -1172,7 +1170,7 @@ fn compile_for_iterator(
                     }
                     _ => invalid_binding(2)?,
                 },
-            };
+            }
 
             Ok(ForIterator::ModuleIterator(expr))
         }
@@ -1186,7 +1184,7 @@ fn compile_for_iterator(
                 }
 
                 _ => invalid_binding(1)?,
-            };
+            }
 
             Ok(ForIterator::Range {
                 from: from.unwrap_expr(Type::Integer)?,
@@ -1225,7 +1223,7 @@ fn compile_for_iterator(
                 }
 
                 _ => invalid_binding(1)?,
-            };
+            }
 
             Ok(ForIterator::List(res))
         }
