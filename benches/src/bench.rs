@@ -1,7 +1,7 @@
 //! Benchmarks boreal against libyara
 use std::path::PathBuf;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use walkdir::WalkDir;
 
 const RULES_SETS: [(&str, &str); 7] = [
@@ -31,8 +31,9 @@ fn setup_benches(c: &mut Criterion) {
 
         let boreal_scanner = build_boreal_scanner(&rules);
         let yara_rules = build_yara_rules(&rules);
+        let yara_x_rules = build_yara_x_rules(&rules);
 
-        bench_scan_pes(c, name, &boreal_scanner, &yara_rules);
+        bench_scan_pes(c, name, &boreal_scanner, &yara_rules, &yara_x_rules);
         bench_scan_process(c, name, &boreal_scanner, &yara_rules);
     }
 }
@@ -41,6 +42,7 @@ fn setup_benches(c: &mut Criterion) {
 fn bench_compilation(c: &mut Criterion, rules_name: &str, rules: &[PathBuf]) {
     let mut group = c.benchmark_group(format!("Parse and compile {}", rules_name));
     group.sample_size(20);
+
     group.bench_with_input("boreal", rules, |b, rules| {
         b.iter_with_large_drop(|| {
             let mut compiler = build_boreal_compiler();
@@ -59,6 +61,17 @@ fn bench_compilation(c: &mut Criterion, rules_name: &str, rules: &[PathBuf]) {
             compiler.compile_rules().unwrap()
         })
     });
+    group.bench_with_input("yara-x", rules, |b, rules| {
+        b.iter_with_large_drop(|| {
+            let mut compiler = build_yara_x_compiler();
+            for path in rules {
+                compiler
+                    .add_source(&*std::fs::read_to_string(path).unwrap())
+                    .unwrap();
+            }
+            compiler.build()
+        })
+    });
 
     group.finish();
 }
@@ -69,6 +82,7 @@ fn bench_scan_pes(
     rules_name: &str,
     boreal_scanner: &boreal::Scanner,
     yara_rules: &yara::Rules,
+    yara_x_rules: &yara_x::Rules,
 ) {
     // Test files in assets/pes
     for pe_path in glob::glob("assets/pes/*").unwrap() {
@@ -86,6 +100,15 @@ fn bench_scan_pes(
         });
         group.bench_with_input("libyara", &(yara_rules, &mem), |b, (rules, mem)| {
             b.iter(|| rules.scan_mem(mem, 30))
+        });
+        group.bench_with_input("yara-x", &(yara_x_rules, &mem), |b, (rules, mem)| {
+            b.iter_batched_ref(
+                || yara_x::Scanner::new(rules),
+                |scanner| {
+                    let _r = scanner.scan(mem);
+                },
+                BatchSize::LargeInput,
+            )
         });
 
         group.finish();
@@ -133,6 +156,17 @@ fn build_yara_compiler() -> yara::Compiler {
     let _ = yara_compiler.define_variable("extension", "bin");
     let _ = yara_compiler.define_variable("filetype", "bin");
     yara_compiler
+}
+
+fn build_yara_x_compiler<'a>() -> yara_x::Compiler<'a> {
+    let mut compiler = yara_x::Compiler::new();
+    compiler.relaxed_re_syntax(true);
+    let _ = compiler.define_global("owner", "owner");
+    let _ = compiler.define_global("filename", "filename");
+    let _ = compiler.define_global("filepath", "filepath");
+    let _ = compiler.define_global("extension", "bin");
+    let _ = compiler.define_global("filetype", "bin");
+    compiler
 }
 
 fn get_yara_files_from_path(path: &str) -> Vec<PathBuf> {
@@ -186,6 +220,23 @@ fn build_yara_rules(rules: &[PathBuf]) -> yara::Rules {
     }
 
     yara_compiler.compile_rules().unwrap()
+}
+
+fn build_yara_x_rules(rules: &[PathBuf]) -> yara_x::Rules {
+    let mut yara_x_compiler = build_yara_x_compiler();
+    for path in rules {
+        yara_x_compiler
+            .add_source(&*std::fs::read_to_string(path).unwrap())
+            .unwrap_or_else(|err| {
+                panic!(
+                    "cannot parse rules from {} for yara_x: {:?}",
+                    path.display(),
+                    err
+                )
+            });
+    }
+
+    yara_x_compiler.build()
 }
 
 criterion_group!(benches, setup_benches);

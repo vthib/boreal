@@ -13,6 +13,7 @@ criterion = "0.5"
 glob = "0.3.1"
 walkdir = "2.3"
 yara = { version = "0.30", features = ["vendored"] }
+yara-x = "0.14"
 
 [[bench]]
 name = "boreal"
@@ -22,6 +23,6 @@ path = "src/bench.rs"
 [lib]
 bench = false
 
-# Keep it outside the boreal workspace, criterion is too
-# chunky, I don't want it polluting by Cargo.lock
+# Keep it outside the boreal workspace, criterion and yara-x are way too
+# chunky, I don't want it polluting the Cargo.lock
 [workspace]
