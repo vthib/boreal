@@ -7,7 +7,7 @@ repository = "https://github.com/vthib/boreal"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 
-[dev-dependencies]
+[dependencies]
 boreal = { path = "../boreal", version = "*", features = ["authenticode", "serialize"] }
 criterion = "0.5"
 glob = "0.3.1"
@@ -22,6 +22,10 @@ path = "src/bench.rs"
 
 [lib]
 bench = false
+
+[[bin]]
+name = "serialized-size"
+path = "src/serialized_size.rs"
 
 # Keep it outside the boreal workspace, criterion and yara-x are way too
 # chunky, I don't want it polluting the Cargo.lock
