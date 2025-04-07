@@ -1,7 +1,7 @@
 //! Benchmarks boreal against libyara
 use std::path::PathBuf;
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion, SamplingMode};
 use walkdir::WalkDir;
 
 const RULES_SETS: [(&str, &str); 7] = [
@@ -30,11 +30,13 @@ fn setup_benches(c: &mut Criterion) {
         bench_compilation(c, name, &rules);
 
         let boreal_scanner = build_boreal_scanner(&rules);
-        let yara_rules = build_yara_rules(&rules);
+        let mut yara_rules = build_yara_rules(&rules);
         let yara_x_rules = build_yara_x_rules(&rules);
 
         bench_scan_pes(c, name, &boreal_scanner, &yara_rules, &yara_x_rules);
         bench_scan_process(c, name, &boreal_scanner, &yara_rules);
+        bench_serialization(c, name, &boreal_scanner, &yara_rules, &yara_x_rules);
+        bench_deserialization(c, name, &boreal_scanner, &mut yara_rules, &yara_x_rules);
     }
 }
 
@@ -131,6 +133,82 @@ fn bench_scan_process(
     });
     group.bench_with_input("libyara", &yara_rules, |b, rules| {
         b.iter(|| rules.scan_process(pid, 0))
+    });
+
+    group.finish();
+}
+
+fn bench_serialization(
+    c: &mut Criterion,
+    rules_name: &str,
+    boreal_scanner: &boreal::Scanner,
+    yara_rules: &yara::Rules,
+    yara_x_rules: &yara_x::Rules,
+) {
+    let mut group = c.benchmark_group(format!("Serialize {}", rules_name));
+    group.sample_size(20);
+    group.sampling_mode(SamplingMode::Flat);
+
+    group.bench_with_input("boreal", &boreal_scanner, |b, scanner| {
+        b.iter_batched_ref(
+            Vec::new,
+            |mut data| scanner.to_bytes(&mut data).unwrap(),
+            BatchSize::LargeInput,
+        )
+    });
+
+    //FIXME: serialization does not need mut
+    let ptr: *mut std::ffi::c_void = std::ptr::from_ref(yara_rules).cast_mut().cast();
+    group.bench_with_input("yara", &ptr, move |b, ptr| {
+        b.iter_batched_ref(
+            Vec::new,
+            |mut data| {
+                let rules: &mut yara::Rules =
+                    unsafe { ptr.cast::<yara::Rules>().as_mut().unwrap() };
+                rules.save_to_stream(&mut data).unwrap()
+            },
+            BatchSize::LargeInput,
+        )
+    });
+
+    group.bench_with_input("yara-x", yara_x_rules, move |b, rules| {
+        b.iter_with_large_drop(|| rules.serialize().unwrap())
+    });
+
+    group.finish();
+}
+
+fn bench_deserialization(
+    c: &mut Criterion,
+    rules_name: &str,
+    boreal_scanner: &boreal::Scanner,
+    yara_rules: &mut yara::Rules,
+    yara_x_rules: &yara_x::Rules,
+) {
+    let mut group = c.benchmark_group(format!("Deserialize {}", rules_name));
+    group.sample_size(20);
+    group.sampling_mode(SamplingMode::Flat);
+
+    let mut boreal_data = Vec::new();
+    boreal_scanner.to_bytes(&mut boreal_data).unwrap();
+    group.bench_with_input("boreal", &boreal_data, |b, data| {
+        b.iter_with_large_drop(|| {
+            boreal::Scanner::from_bytes_unchecked(
+                data,
+                boreal::scanner::DeserializeParams::default(),
+            )
+        })
+    });
+
+    let mut yara_data = Vec::new();
+    yara_rules.save_to_stream(&mut yara_data).unwrap();
+    group.bench_with_input("yara", &yara_data, |b, data| {
+        b.iter_with_large_drop(|| yara::Rules::load_from_stream(&**data).unwrap())
+    });
+
+    let yara_x_data = yara_x_rules.serialize().unwrap();
+    group.bench_with_input("yara-x", &yara_x_data, move |b, data| {
+        b.iter_with_large_drop(|| yara_x::Rules::deserialize(data).unwrap())
     });
 
     group.finish();
