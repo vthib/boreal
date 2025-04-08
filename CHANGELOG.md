@@ -7,12 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- Python bindings have been added, and are available through the `boreal-python` pypi package.
+  Those bindings provide a "yara compatibility" mode with full compatibility with the yara
+  python bindings, allowing seamless transition from it.
+
+- The `boreal` CLI tool has been reworked and completed. It now supports all options from
+  the `yara` CLI tool (except `--atom-quality-table`) and provides a "yara compatibility"
+  mode through the use of the `yr` subcommand, allowing seamless transition from it.
+
+- A scanner can now be serialized into bytes (and deserialized) through the `serialize`
+  feature. This is the equivalent of the yara save/load API. This however increases the
+  scanner size by a few percent, and has a lot of caveats linked to it. See the
+  [`Scanner::to_bytes`](https://docs.rs/boreal/latest/boreal/scanner/struct.Scanner.html#method.to_bytes)
+  for more details.
+
+- All scanning APIs now have a variant that uses a callback. This callback will be called
+  on specific events: when a rule matches, when a module is imported, etc.
+  [`scanner::ScanEvent`](https://docs.rs/boreal/latest/boreal/scanner/struct.ScanEvent.html)
+  for more details.
+
+- Several more features have been added: modifying the include callback, limiting the
+  number of strings per rule, etc. See the changelog below for details.
+
+- The benchmarks have been reworked: `YARA-X` have been added to it and benchmarks on
+  the serialize feature have been added.
+
+Since this is the first stable release, several breaking changes have been done to stabilize
+the API. See the breaking changes list just below.
+
 ### boreal
 
 Breaking changes:
 
+- The `Compiler::into_scanner` method has been renamed to `Compiler::finalize`
+  [#226](https://github.com/vthib/boreal/pull/226).
+- The `namespace` field for rules is now non optional, and the default namespace is named
+  `"default"`. This means that if you previously added rules in the default namespace and
+  rules in a custom namespace named `"default"`, this would now add to the same namespace
+  and may conflict. This aligns the logic on what yara does and simplifies compatibility
+  [4ffca07](https://github.com/vthib/boreal/commit/4ffca07ab352f6c5bd687d00ddbef41bb5291baf)
 - The `ScanResult::statistics` field is now boxed. This reduces the size of the
   object greatly.
+- The `ScanResult::module_values` field has been replaced by `ScanResult::modules`, which
+  also returns a pointer to the modules, allowing access to their static values
+  [#225](https://github.com/vthib/boreal/pull/225).
+- `boreal::scanner::MatchedRule` has been renamed to `boreal::scanner::EvaluatedRule`
+  [979f162](https://github.com/vthib/boreal/commit/979f162fe9b6d703e7ca1158961eb24255aa1c32).
+- `boreal::Compiler::default` has been removed, use of the `CompilerBuilder` object
+  is mandatory to customize which modules are enabled
+  [586be27](https://github.com/vthib/boreal/commit/586be27d9e6ceb37dab0fe2ea1f55cc847db2de0).
+- Bump MSRV to 1.74
+  [928e380](https://github.com/vthib/boreal/commit/928e3806668267f2d8e90d5a5ca631b760e462a3).
+- `boreal::scanner::StringMatch::data` has changed from a `Vec<u8>` to a `Box<[u8]>`
+  to reduce the memory size of this object
+  [928e380](https://github.com/vthib/boreal/commit/928e3806668267f2d8e90d5a5ca631b760e462a3).
+- `boreal::compiler::AddRuleError` no longer has a `to_short_description` method. Instead,
+  this object implements `std::fmt::Display` which can be used to generate the same short
+  description
+  [6658ebb](https://github.com/vthib/boreal/commit/6658ebb0c5351361d81c3d0bf75ff8e5935218e7).
+
+#### Added
+
+- Added callback based API variants for all `Scanner::scan_*` methods. For example,
+  `Scanner::scan_mem_with_callback`, `Scanner::scan_process_with_callback`. This
+  callback can receive several type of events, and is able to abort the scan during
+  any received event. See `boreal::scanner::ScanEvent` and `boreal::scanner::CallbackEvents`
+  for more details on the types of events handled
+  [#187](https://github.com/vthib/boreal/pull/187).
+- Added `serialize` feature to serialize a `Scanner` object into bytes which can be
+  deserialized on another computer. See `Scanner::to_bytes` for more details.
+  [#203](https://github.com/vthib/boreal/pull/203).
+- Added ability to customize include behavior with a callback used during compilation.
+  See `Compiler::set_include_callback` for more details
+  [637dece](https://github.com/vthib/boreal/commit/637deceedf9657ac8a1aa9c6766cb7acc068caf0).
+- Added scan parameters to include not matched rules in results
+  [8a951d8](https://github.com/vthib/boreal/commit/8a951d8fc0d4a09d58016044049368ab94cc330c).
+- Callback for console module can now be provided in the scanner rather than
+  during compilation
+  [3522484](https://github.com/vthib/boreal/commit/3522484ea9a08770fe702f7efce7482ff70134f8).
+- Added `Scanner::rules` to iterate over the rules contained in a scanner
+  [68ee69b](https://github.com/vthib/boreal/commit/68ee69bc7f80d9862bb83c383bc78922c53eb5a3).
+- Added `max_strings_per_rule` compilation parameter to fail compilation if a rule contains
+  too many rules
+  [696ce79](https://github.com/vthib/boreal/commit/696ce79549013a3caf33cc7b13329b93fc94a19b).
+- Added `xor_key` field in `boreal::scanner::StringMatch` to indicate which xor key was used
+  on a given match
+  [7c9fd27](https://github.com/vthib/boreal/commit/7c9fd2720e3a8af315f9ff986cae02b2702ec05c).
+- Added `has_xor_modifier` field in `boreal::scanner::StringMatches`
+  [6853938](https://github.com/vthib/boreal/commit/6853938e60066649cabd406e2db559393a3d1209).
+- Implement `std::fmt::Display` and `std::error::Error` on `boreal::compiler::AddRuleError`.
+  This means this is now a real Error object and the `AddRuleError::to_short_description`
+  method no longer needs to be called to generate a description for the error
+  [6658ebb](https://github.com/vthib/boreal/commit/6658ebb0c5351361d81c3d0bf75ff8e5935218e7).
+
+#### Updated
+
+- update codespan-reporting to 0.12
+  [2b7f394](https://github.com/vthib/boreal/commit/2b7f394e47ba13121876bfc29c29740ab144a659)
+- update to nom 8.0
+  [d62db91](https://github.com/vthib/boreal/commit/d62db91896abaa44733ffce26961922926308c85)
+
+### boreal-cli
+
+See [the boreal-cli CHANGELOG file](boreal-cli/CHANGELOG.md#1.0.0).
 
 ## [0.9.0] - 2024-10-11
 
