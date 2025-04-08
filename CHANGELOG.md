@@ -7,12 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+TODO boreal-py
+
 ### boreal
 
 Breaking changes:
 
+- The `namespace` field for rules is now non optional, and the default namespace is named
+  `"default"`. This means that if you previously added rules in the default namespace and
+  rules in a custom namespace named `"default"`, this would now add to the same namespace
+  and may conflict. This aligns the logic on what yara does and simplifies compatibility
+  [4ffca07](https://github.com/vthib/boreal/commit/4ffca07ab352f6c5bd687d00ddbef41bb5291baf)
 - The `ScanResult::statistics` field is now boxed. This reduces the size of the
   object greatly.
+- `boreal::scanner::MatchedRule` has been renamed to `boreal::scanner::EvaluatedRule`
+  [979f162](https://github.com/vthib/boreal/commit/979f162fe9b6d703e7ca1158961eb24255aa1c32).
+- `boreal::Compiler::default` has been removed, use of the `CompilerBuilder` object
+  is mandatory to customize which modules are enabled
+  [586be27](https://github.com/vthib/boreal/commit/586be27d9e6ceb37dab0fe2ea1f55cc847db2de0).
+- Bump MSRV to 1.74
+  [928e380](https://github.com/vthib/boreal/commit/928e3806668267f2d8e90d5a5ca631b760e462a3).
+- `boreal::scanner::StringMatch::data` has changed from a `Vec<u8>` to a `Box<[u8]>`
+  to reduce the memory size of this object
+  [928e380](https://github.com/vthib/boreal/commit/928e3806668267f2d8e90d5a5ca631b760e462a3).
+- `boreal::compiler::AddRuleError` no longer has a `to_short_description` method. Instead,
+  this object implements `std::fmt::Display` which can be used to generate the same short
+  description
+  [6658ebb](https://github.com/vthib/boreal/commit/6658ebb0c5351361d81c3d0bf75ff8e5935218e7).
+
+#### Added
+
+- Added callback based API variants for all `Scanner::scan_*` methods. For example,
+  `Scanner::scan_mem_with_callback`, `Scanner::scan_process_with_callback`. This
+  callback can receive several type of events, and is able to abort the scan during
+  any received event. See `boreal::scanner::ScanEvent` and `boreal::scanner::CallbackEvents`
+  for more details on the types of events handled. TODO link PRs
+- Added `serialize` feature to serialize a `Scanner` object into bytes which can be
+  deserialized on another computer. See `Scanner::to_bytes` for more details. TODO link PR
+- Added ability to customize include behavior with a callback used during compilation.
+  See `Compiler::set_include_callback` for more details
+  [637dece](https://github.com/vthib/boreal/commit/637deceedf9657ac8a1aa9c6766cb7acc068caf0).
+- Added scan parameters to include not matched rules in results
+  [8a951d8](https://github.com/vthib/boreal/commit/8a951d8fc0d4a09d58016044049368ab94cc330c).
+- Callback for console module can now be provided in the scanner rather than
+  during compilation
+  [3522484](https://github.com/vthib/boreal/commit/3522484ea9a08770fe702f7efce7482ff70134f8).
+- Added `Scanner::rules` to iterate over the rules contained in a scanner
+  [68ee69b](https://github.com/vthib/boreal/commit/68ee69bc7f80d9862bb83c383bc78922c53eb5a3).
+- Added `max_strings_per_rule` compilation parameter to fail compilation if a rule contains
+  too many rules
+  [696ce79](https://github.com/vthib/boreal/commit/696ce79549013a3caf33cc7b13329b93fc94a19b).
+- Added `xor_key` field in `boreal::scanner::StringMatch` to indicate which xor key was used
+  on a given match
+  [7c9fd27](https://github.com/vthib/boreal/commit/7c9fd2720e3a8af315f9ff986cae02b2702ec05c).
+- Added `has_xor_modifier` field in `boreal::scanner::StringMatches`
+  [6853938](https://github.com/vthib/boreal/commit/6853938e60066649cabd406e2db559393a3d1209).
+- Implement `std::fmt::Display` and `std::error::Error` on `boreal::compiler::AddRuleError`.
+  This means this is now a real Error object and the `AddRuleError::to_short_description`
+  method no longer needs to be called to generate a description for the error
+  [6658ebb](https://github.com/vthib/boreal/commit/6658ebb0c5351361d81c3d0bf75ff8e5935218e7).
+
+### boreal-cli
+
+#### Added
+
+- Added --save and -C/--compiled-rules to respectively save compiled rules into a file and
+  load compiled rules from a file. This mirrors the yarac binary and the -C option in yara
+  [54b01f2](https://github.com/vthib/boreal/commit/54b01f2c10f57be95e20230e5566a0141e45e86d).
+- Added -n/--negate option to print non matching rules, mirroring the equivalent in the yara
+  CLI tool
+  [9fc0d73](https://github.com/vthib/boreal/commit/9fc0d73b48b6ba535eaa235e66525b576176c669).
+- Added -c/--count option to print the number of matching rules (or non matching if negated),
+  mirroring the equivalent in the yara CLI tool
+  [28722ec](https://github.com/vthib/boreal/commit/28722ec0fab8a97b9649b0aff8454fd3b18b7d05).
+- Added -l/--max-rules option to abort the scan once a certain number of rules has matched
+ (or not matched if negated), mirroring the equivalent in the yara CLI tool
+  [5fc7ac5](https://github.com/vthib/boreal/commit/5fc7ac5f7cff2bad712f07619ccaa5002b723f23).
+- Added --max-strings-per-rule to fail compilation if a rule contains too many strings,
+  mirroring the equivalent in the yara CLI tool
+  [b48f8cf](https://github.com/vthib/boreal/commit/b48f8cf94673a9d5ae1e29a39c24028105b4e3e2)
+- Added -X/--print-xor-key to display xor key used on string match, mirroring the equivalent
+  in the yara CLI tool
+  [35bf7c4](https://github.com/vthib/boreal/commit/35bf7c48866d6bccdf64b37407fc4e5410997a68).
+- Added --string-max-nb-matches to display a warning when a string has too many matches
+  [bda80aa](https://github.com/vthib/boreal/commit/bda80aad322133cec0177151f64221793272952d).
+- Added -x/--module-data option to specify options for modules. This only works on
+  the cuckoo module
+  [5997546](https://github.com/vthib/boreal/commit/599754615110c20f4f7edaf004aed75c365a7d19).
+
+#### Updated
+
+- Use callback API to print matching rules as it happens instead of once the scan is done
+  [d6eae09](https://github.com/vthib/boreal/commit/d6eae09dd534963d1e67103d16d46832cb7ff874).
+
+fix: properly handle strict_escape mode in boreal-py
+  [fb8a42c](https://github.com/vthib/boreal/commit/fb8a42c675b61dbab8a19dd76b26976a536f56d3)
+chore: update codespan-reporting to 0.12
+  [2b7f394](https://github.com/vthib/boreal/commit/2b7f394e47ba13121876bfc29c29740ab144a659)
+chore: update to nom 8.0
+  [d62db91](https://github.com/vthib/boreal/commit/d62db91896abaa44733ffce26961922926308c85)
 
 ## [0.9.0] - 2024-10-11
 
