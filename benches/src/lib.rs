@@ -46,9 +46,13 @@ pub fn get_yara_files_from_path(path: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-pub fn build_boreal_compiler() -> boreal::Compiler {
+pub fn build_boreal_compiler(speed: bool) -> boreal::Compiler {
     let mut boreal_compiler = boreal::compiler::CompilerBuilder::new()
-        .profile(boreal::compiler::CompilerProfile::Speed)
+        .profile(if speed {
+            boreal::compiler::CompilerProfile::Speed
+        } else {
+            boreal::compiler::CompilerProfile::Memory
+        })
         .build();
     let _ = boreal_compiler.define_symbol("owner", "owner");
     let _ = boreal_compiler.define_symbol("filename", "filename");
@@ -79,8 +83,8 @@ pub fn build_yara_x_compiler<'a>() -> yara_x::Compiler<'a> {
     compiler
 }
 
-pub fn build_boreal_scanner(rules: &[PathBuf]) -> boreal::Scanner {
-    let mut boreal_compiler = build_boreal_compiler();
+pub fn build_boreal_scanner(rules: &[PathBuf], speed: bool) -> boreal::Scanner {
+    let mut boreal_compiler = build_boreal_compiler(speed);
 
     for path in rules {
         boreal_compiler.add_rules_file(path).unwrap_or_else(|err| {

@@ -14,14 +14,42 @@ fn setup_benches(c: &mut Criterion) {
 
         bench_compilation(c, name, &rules);
 
-        let boreal_scanner = build_boreal_scanner(&rules);
+        let boreal_speed_scanner = build_boreal_scanner(&rules, true);
+        let boreal_memory_scanner = build_boreal_scanner(&rules, false);
         let mut yara_rules = build_yara_rules(&rules);
         let yara_x_rules = build_yara_x_rules(&rules);
 
-        bench_scan_pes(c, name, &boreal_scanner, &yara_rules, &yara_x_rules);
-        bench_scan_process(c, name, &boreal_scanner, &yara_rules);
-        bench_serialization(c, name, &boreal_scanner, &yara_rules, &yara_x_rules);
-        bench_deserialization(c, name, &boreal_scanner, &mut yara_rules, &yara_x_rules);
+        bench_scan_pes(
+            c,
+            name,
+            &boreal_speed_scanner,
+            &boreal_memory_scanner,
+            &yara_rules,
+            &yara_x_rules,
+        );
+        bench_scan_process(
+            c,
+            name,
+            &boreal_speed_scanner,
+            &boreal_memory_scanner,
+            &yara_rules,
+        );
+        bench_serialization(
+            c,
+            name,
+            &boreal_speed_scanner,
+            &boreal_memory_scanner,
+            &yara_rules,
+            &yara_x_rules,
+        );
+        bench_deserialization(
+            c,
+            name,
+            &boreal_speed_scanner,
+            &boreal_memory_scanner,
+            &mut yara_rules,
+            &yara_x_rules,
+        );
     }
 }
 
@@ -30,9 +58,18 @@ fn bench_compilation(c: &mut Criterion, rules_name: &str, rules: &[PathBuf]) {
     let mut group = c.benchmark_group(format!("Parse and compile {}", rules_name));
     group.sample_size(20);
 
-    group.bench_with_input("boreal", rules, |b, rules| {
+    group.bench_with_input("boreal-speed", rules, |b, rules| {
         b.iter_with_large_drop(|| {
-            let mut compiler = build_boreal_compiler();
+            let mut compiler = build_boreal_compiler(true);
+            for path in rules {
+                compiler.add_rules_file(path).unwrap();
+            }
+            compiler.into_scanner()
+        })
+    });
+    group.bench_with_input("boreal-memory", rules, |b, rules| {
+        b.iter_with_large_drop(|| {
+            let mut compiler = build_boreal_compiler(false);
             for path in rules {
                 compiler.add_rules_file(path).unwrap();
             }
@@ -67,7 +104,8 @@ fn bench_compilation(c: &mut Criterion, rules_name: &str, rules: &[PathBuf]) {
 fn bench_scan_pes(
     c: &mut Criterion,
     rules_name: &str,
-    boreal_scanner: &boreal::Scanner,
+    boreal_speed_scanner: &boreal::Scanner,
+    boreal_memory_scanner: &boreal::Scanner,
     yara_rules: &yara::Rules,
     yara_x_rules: &yara_x::Rules,
 ) {
@@ -82,9 +120,16 @@ fn bench_scan_pes(
             rules_name
         ));
         group.sample_size(20);
-        group.bench_with_input("boreal", &(boreal_scanner, &mem), |b, (scanner, mem)| {
-            b.iter(|| scanner.scan_mem(mem))
-        });
+        group.bench_with_input(
+            "boreal-speed",
+            &(boreal_speed_scanner, &mem),
+            |b, (scanner, mem)| b.iter(|| scanner.scan_mem(mem)),
+        );
+        group.bench_with_input(
+            "boreal-memory",
+            &(boreal_memory_scanner, &mem),
+            |b, (scanner, mem)| b.iter(|| scanner.scan_mem(mem)),
+        );
         group.bench_with_input("libyara", &(yara_rules, &mem), |b, (rules, mem)| {
             b.iter(|| rules.scan_mem(mem, 30))
         });
@@ -105,7 +150,8 @@ fn bench_scan_pes(
 fn bench_scan_process(
     c: &mut Criterion,
     rules_name: &str,
-    boreal_scanner: &boreal::Scanner,
+    boreal_speed_scanner: &boreal::Scanner,
+    boreal_memory_scanner: &boreal::Scanner,
     yara_rules: &yara::Rules,
 ) {
     // To update accordingly when benching the scan of a process.
@@ -113,7 +159,10 @@ fn bench_scan_process(
 
     let mut group = c.benchmark_group(format!("Scan process {} using {} rules", pid, rules_name));
     group.sample_size(20);
-    group.bench_with_input("boreal", &boreal_scanner, |b, scanner| {
+    group.bench_with_input("boreal-speed", &boreal_speed_scanner, |b, scanner| {
+        b.iter(|| scanner.scan_process(pid))
+    });
+    group.bench_with_input("boreal-memory", &boreal_memory_scanner, |b, scanner| {
         b.iter(|| scanner.scan_process(pid))
     });
     group.bench_with_input("libyara", &yara_rules, |b, rules| {
@@ -126,7 +175,8 @@ fn bench_scan_process(
 fn bench_serialization(
     c: &mut Criterion,
     rules_name: &str,
-    boreal_scanner: &boreal::Scanner,
+    boreal_speed_scanner: &boreal::Scanner,
+    boreal_memory_scanner: &boreal::Scanner,
     yara_rules: &yara::Rules,
     yara_x_rules: &yara_x::Rules,
 ) {
@@ -134,7 +184,14 @@ fn bench_serialization(
     group.sample_size(20);
     group.sampling_mode(SamplingMode::Flat);
 
-    group.bench_with_input("boreal", &boreal_scanner, |b, scanner| {
+    group.bench_with_input("boreal-speed", &boreal_speed_scanner, |b, scanner| {
+        b.iter_batched_ref(
+            Vec::new,
+            |mut data| scanner.to_bytes(&mut data).unwrap(),
+            BatchSize::LargeInput,
+        )
+    });
+    group.bench_with_input("boreal-memory", &boreal_memory_scanner, |b, scanner| {
         b.iter_batched_ref(
             Vec::new,
             |mut data| scanner.to_bytes(&mut data).unwrap(),
@@ -166,7 +223,8 @@ fn bench_serialization(
 fn bench_deserialization(
     c: &mut Criterion,
     rules_name: &str,
-    boreal_scanner: &boreal::Scanner,
+    boreal_speed_scanner: &boreal::Scanner,
+    boreal_memory_scanner: &boreal::Scanner,
     yara_rules: &mut yara::Rules,
     yara_x_rules: &yara_x::Rules,
 ) {
@@ -175,8 +233,19 @@ fn bench_deserialization(
     group.sampling_mode(SamplingMode::Flat);
 
     let mut boreal_data = Vec::new();
-    boreal_scanner.to_bytes(&mut boreal_data).unwrap();
-    group.bench_with_input("boreal", &boreal_data, |b, data| {
+    boreal_speed_scanner.to_bytes(&mut boreal_data).unwrap();
+    group.bench_with_input("boreal-speed", &boreal_data, |b, data| {
+        b.iter_with_large_drop(|| {
+            boreal::Scanner::from_bytes_unchecked(
+                data,
+                boreal::scanner::DeserializeParams::default(),
+            )
+        })
+    });
+
+    let mut boreal_data = Vec::new();
+    boreal_memory_scanner.to_bytes(&mut boreal_data).unwrap();
+    group.bench_with_input("boreal-memory", &boreal_data, |b, data| {
         b.iter_with_large_drop(|| {
             boreal::Scanner::from_bytes_unchecked(
                 data,
