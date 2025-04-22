@@ -27,6 +27,14 @@ bench = false
 name = "serialized-size"
 path = "src/serialized_size.rs"
 
+[[bin]]
+name = "compiled-size"
+path = "src/compiled_size.rs"
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
 # Keep it outside the boreal workspace, criterion and yara-x are way too
 # chunky, I don't want it polluting the Cargo.lock
 [workspace]
