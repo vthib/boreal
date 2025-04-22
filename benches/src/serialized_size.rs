@@ -9,7 +9,7 @@ fn main() {
 
         let rules = get_yara_files_from_path(rules_path);
 
-        let boreal_scanner = build_boreal_scanner(&rules);
+        let boreal_scanner = build_boreal_scanner(&rules, true);
         let mut yara_rules = build_yara_rules(&rules);
         let yara_x_rules = build_yara_x_rules(&rules);
 
