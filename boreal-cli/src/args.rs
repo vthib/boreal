@@ -1,10 +1,8 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 use boreal::{
-    compiler::{CompilerBuilder, CompilerParams, CompilerProfile, ExternalValue},
-    module::{Console, ConsoleData},
-    scanner::{CallbackEvents, FragmentedScanMode, ScanParams},
-    Compiler, Scanner,
+    compiler::{CompilerProfile, ExternalValue},
+    scanner::FragmentedScanMode,
 };
 use clap::{command, parser::Values, value_parser, Arg, ArgAction, ArgMatches, Command};
 
@@ -18,13 +16,13 @@ pub struct CompilerOptions {
 
 #[derive(Debug)]
 pub struct ScannerOptions {
-    memory_chunk_size: Option<usize>,
-    timeout: Option<u64>,
-    max_fetched_region_size: Option<usize>,
-    fragmented_scan_mode: Option<FragmentedScanMode>,
-    string_max_nb_matches: Option<u32>,
-    module_data: Option<Values<(String, PathBuf)>>,
-    no_console_logs: bool,
+    pub memory_chunk_size: Option<usize>,
+    pub timeout: Option<u64>,
+    pub max_fetched_region_size: Option<usize>,
+    pub fragmented_scan_mode: Option<FragmentedScanMode>,
+    pub string_max_nb_matches: Option<u32>,
+    pub module_data: Option<Values<(String, PathBuf)>>,
+    pub no_console_logs: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +62,94 @@ pub enum WarningMode {
     Print,
     /// Ignore warnings.
     Ignore,
+}
+
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum ExecutionMode {
+    /// Compile rules and scan an input
+    CompileAndScan(CompileScanExecution),
+
+    /// Load a serialized scanner and scan
+    #[cfg(feature = "serialize")]
+    LoadAndScan(LoadScanExecution),
+
+    /// Compile rules and serialize the scanner.
+    #[cfg(feature = "serialize")]
+    CompileAndSave(CompileSaveExecution),
+
+    /// List available modules.
+    ListModules,
+}
+
+#[derive(Debug)]
+pub struct CompileScanExecution {
+    pub warning_mode: WarningMode,
+    pub compiler_options: CompilerOptions,
+    pub scanner_options: ScannerOptions,
+    pub callback_options: CallbackOptions,
+    pub input_options: InputOptions,
+
+    pub rules_file: PathBuf,
+}
+
+#[cfg(feature = "serialize")]
+#[derive(Debug)]
+pub struct LoadScanExecution {
+    pub scanner_options: ScannerOptions,
+    pub callback_options: CallbackOptions,
+    pub input_options: InputOptions,
+
+    pub scanner_file: PathBuf,
+}
+
+#[cfg(feature = "serialize")]
+#[derive(Debug)]
+pub struct CompileSaveExecution {
+    pub warning_mode: WarningMode,
+    pub compiler_options: CompilerOptions,
+
+    pub rules_file: PathBuf,
+    pub destination_path: String,
+}
+
+impl ExecutionMode {
+    pub fn from_args(mut args: ArgMatches) -> Self {
+        if args.get_flag("module_names") {
+            return Self::ListModules;
+        }
+
+        let warning_mode = WarningMode::from_args(&args);
+
+        #[cfg(feature = "serialize")]
+        if args.get_flag("save") {
+            return Self::CompileAndSave(CompileSaveExecution {
+                warning_mode,
+                compiler_options: CompilerOptions::from_args(&mut args),
+                rules_file: args.remove_one("rules_file").unwrap(),
+                destination_path: args.remove_one("input").unwrap(),
+            });
+        }
+
+        #[cfg(feature = "serialize")]
+        if args.get_flag("load_from_bytes") {
+            return Self::LoadAndScan(LoadScanExecution {
+                scanner_options: ScannerOptions::from_args(&mut args),
+                callback_options: CallbackOptions::from_args(&args, warning_mode),
+                input_options: InputOptions::from_args(&mut args),
+                scanner_file: args.remove_one("rules_file").unwrap(),
+            });
+        }
+
+        Self::CompileAndScan(CompileScanExecution {
+            warning_mode,
+            compiler_options: CompilerOptions::from_args(&mut args),
+            scanner_options: ScannerOptions::from_args(&mut args),
+            callback_options: CallbackOptions::from_args(&args, warning_mode),
+            input_options: InputOptions::from_args(&mut args),
+            rules_file: args.remove_one("rules_file").unwrap(),
+        })
+    }
 }
 
 pub fn build_command() -> Command {
@@ -482,104 +568,6 @@ impl ScannerOptions {
     }
 }
 
-pub fn set_scanner_options(scanner: &mut Scanner, options: ScannerOptions) -> Result<(), String> {
-    scanner.set_scan_params(build_scan_params(&options));
-
-    if let Some(module_data) = options.module_data {
-        #[allow(clippy::never_loop)]
-        for (name, path) in module_data {
-            #[cfg(feature = "cuckoo")]
-            {
-                use ::boreal::module::{Cuckoo, CuckooData};
-                if name == "cuckoo" {
-                    let contents = std::fs::read_to_string(&path).map_err(|err| {
-                        format!(
-                            "Unable to read {} data from file {}: {:?}",
-                            name,
-                            path.display(),
-                            err
-                        )
-                    })?;
-                    match CuckooData::from_json_report(&contents) {
-                        Some(data) => scanner.set_module_data::<Cuckoo>(data),
-                        None => {
-                            return Err("The data for the cuckoo module is invalid".to_string());
-                        }
-                    }
-                    continue;
-                }
-            }
-            #[cfg(not(feature = "cuckoo"))]
-            // Suppress unused var warnings
-            {
-                drop(path);
-            }
-
-            return Err(format!("Cannot set data for unsupported module {name}"));
-        }
-    }
-
-    if options.no_console_logs {
-        scanner.set_module_data::<Console>(ConsoleData::new(|_log| {}));
-    }
-
-    Ok(())
-}
-
-fn build_scan_params(options: &ScannerOptions) -> ScanParams {
-    let mut scan_params = ScanParams::default()
-        .memory_chunk_size(options.memory_chunk_size)
-        .timeout_duration(options.timeout.map(Duration::from_secs));
-
-    if let Some(size) = options.max_fetched_region_size {
-        scan_params = scan_params.max_fetched_region_size(size);
-    }
-
-    if let Some(scan_mode) = options.fragmented_scan_mode {
-        scan_params = scan_params.fragmented_scan_mode(scan_mode);
-    }
-
-    if let Some(limit) = options.string_max_nb_matches {
-        scan_params = scan_params.string_max_nb_matches(limit);
-    }
-
-    scan_params
-}
-
-pub fn update_scanner_params_from_callback_options(
-    scanner: &mut Scanner,
-    options: &CallbackOptions,
-) {
-    let mut callback_events = CallbackEvents::empty();
-    match options.warning_mode {
-        WarningMode::Ignore => (),
-        WarningMode::Fail | WarningMode::Print => {
-            callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
-        }
-    }
-    if options.print_module_data {
-        callback_events |= CallbackEvents::MODULE_IMPORT;
-    }
-    if options.print_statistics {
-        callback_events |= CallbackEvents::SCAN_STATISTICS;
-    }
-    if options.negate {
-        callback_events |= CallbackEvents::RULE_NO_MATCH;
-    } else {
-        callback_events |= CallbackEvents::RULE_MATCH;
-    }
-
-    scanner.set_scan_params(
-        scanner
-            .scan_params()
-            .clone()
-            .compute_full_matches(options.print_strings_matches())
-            .compute_statistics(options.print_statistics)
-            .include_not_matched_rules(options.negate)
-            .callback_events(callback_events),
-    );
-}
-
 impl CallbackOptions {
     pub fn from_args(args: &ArgMatches, warning_mode: WarningMode) -> Self {
         Self {
@@ -616,45 +604,6 @@ impl CompilerOptions {
     }
 }
 
-pub fn build_compiler(options: CompilerOptions, warning_mode: WarningMode) -> Compiler {
-    let CompilerOptions {
-        profile,
-        compute_statistics,
-        max_strings_per_rule,
-        defines,
-    } = options;
-    let mut builder = CompilerBuilder::new();
-
-    // Regardless of whether the console logs are disabled, add the module so that rules that use it
-    // can still compile properly.
-    // If the logs are disabled, it will be updated in the scanner, so just print the log here.
-    builder = builder.add_module(Console::with_callback(move |log| {
-        println!("{log}");
-    }));
-
-    if let Some(profile) = profile {
-        builder = builder.profile(profile);
-    }
-
-    let mut compiler = builder.build();
-
-    let mut params = CompilerParams::default()
-        .fail_on_warnings(matches!(warning_mode, WarningMode::Fail))
-        .compute_statistics(compute_statistics);
-    if let Some(limit) = max_strings_per_rule {
-        params = params.max_strings_per_rule(limit);
-    }
-    compiler.set_params(params);
-
-    if let Some(defines) = defines {
-        for (name, value) in defines {
-            let _r = compiler.define_symbol(name, value);
-        }
-    }
-
-    compiler
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,35 +611,5 @@ mod tests {
     #[test]
     fn verify_cli() {
         build_command().debug_assert();
-    }
-
-    #[test]
-    fn test_scan_params_from_args() {
-        fn parse(cmdline: &str) -> ScanParams {
-            let mut args = build_command().get_matches_from(cmdline.split(' '));
-            build_scan_params(&ScannerOptions::from_args(&mut args))
-        }
-
-        let params = parse("boreal --max-process-memory-chunk 500 rules input");
-        assert_eq!(params.get_memory_chunk_size(), Some(500));
-
-        let params = parse("boreal --max-fetched-region-size 500 rules input");
-        assert_eq!(params.get_max_fetched_region_size(), 500);
-
-        let params = parse("boreal --fragmented-scan-mode legacy rules input");
-        assert_eq!(
-            params.get_fragmented_scan_mode(),
-            FragmentedScanMode::legacy()
-        );
-        let params = parse("boreal --fragmented-scan-mode fast rules input");
-        assert_eq!(
-            params.get_fragmented_scan_mode(),
-            FragmentedScanMode::fast()
-        );
-        let params = parse("boreal --fragmented-scan-mode singlepass rules input");
-        assert_eq!(
-            params.get_fragmented_scan_mode(),
-            FragmentedScanMode::single_pass()
-        );
     }
 }
