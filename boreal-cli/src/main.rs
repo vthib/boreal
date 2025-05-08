@@ -57,11 +57,11 @@ fn main() -> ExitCode {
     };
 
     // Parameters that controls what to scan and what to print.
-    let scan_options = ScanOptions::new(&args);
+    let callback_options = CallbackOptions::from_args(&args);
 
     // Parameters to set in the boreal scanner
     let scan_params = scan_params_from_args(&args);
-    let scan_params = update_scan_params_from_print_options(scan_params, &scan_options);
+    let scan_params = update_scan_params_from_callback_options(scan_params, &callback_options);
 
     scanner.set_scan_params(scan_params);
 
@@ -110,10 +110,17 @@ fn main() -> ExitCode {
         return save_scanner(&scanner, &args);
     }
 
+    let no_mmap = if cfg!(feature = "memmap") {
+        args.get_flag("no_mmap")
+    } else {
+        false
+    };
+
     let mut nb_rules = 0;
     match Input::new(&args) {
         Ok(Input::Directory(path)) => {
-            let (thread_pool, sender) = ThreadPool::new(&scanner, &scan_options, &args);
+            let (thread_pool, sender) =
+                ThreadPool::new(&scanner, &callback_options, no_mmap, &args);
 
             send_directory(&path, &args, &sender);
             drop(sender);
@@ -121,22 +128,24 @@ fn main() -> ExitCode {
 
             ExitCode::SUCCESS
         }
-        Ok(Input::File(path)) => match scan_file(&scanner, &path, &scan_options, &mut nb_rules) {
-            Ok(()) => {
-                if scan_options.print_count {
-                    println!("{}: {}", path.display(), nb_rules);
-                }
-                ExitCode::SUCCESS
-            }
-            Err(err) => {
-                eprintln!("Cannot scan {}: {}", path.display(), err);
-                ExitCode::FAILURE
-            }
-        },
-        Ok(Input::Process(pid)) => {
-            match scan_process(&scanner, pid, &scan_options, &mut nb_rules) {
+        Ok(Input::File(path)) => {
+            match scan_file(&scanner, &path, &callback_options, no_mmap, &mut nb_rules) {
                 Ok(()) => {
-                    if scan_options.print_count {
+                    if callback_options.print_count {
+                        println!("{}: {}", path.display(), nb_rules);
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    eprintln!("Cannot scan {}: {}", path.display(), err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Ok(Input::Process(pid)) => {
+            match scan_process(&scanner, pid, &callback_options, &mut nb_rules) {
+                Ok(()) => {
+                    if callback_options.print_count {
                         println!("{pid}: {nb_rules}");
                     }
                     ExitCode::SUCCESS
@@ -148,7 +157,8 @@ fn main() -> ExitCode {
             }
         }
         Ok(Input::Files(files)) => {
-            let (thread_pool, sender) = ThreadPool::new(&scanner, &scan_options, &args);
+            let (thread_pool, sender) =
+                ThreadPool::new(&scanner, &callback_options, no_mmap, &args);
 
             for path in files {
                 if path.is_dir() {
@@ -390,7 +400,10 @@ fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
     scan_params
 }
 
-fn update_scan_params_from_print_options(params: ScanParams, options: &ScanOptions) -> ScanParams {
+fn update_scan_params_from_callback_options(
+    params: ScanParams,
+    options: &CallbackOptions,
+) -> ScanParams {
     let mut callback_events = CallbackEvents::empty();
     if !options.do_not_print_warnings {
         callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
@@ -415,7 +428,7 @@ fn update_scan_params_from_print_options(params: ScanParams, options: &ScanOptio
 }
 
 #[derive(Clone, Debug)]
-struct ScanOptions {
+struct CallbackOptions {
     print_strings_matches_data: bool,
     print_string_length: bool,
     print_xor_key: bool,
@@ -427,15 +440,14 @@ struct ScanOptions {
     print_module_data: bool,
     do_not_print_warnings: bool,
     count_limit: Option<u64>,
-    no_mmap: bool,
     identifier: Option<String>,
     tag: Option<String>,
     fail_on_warnings: bool,
     negate: bool,
 }
 
-impl ScanOptions {
-    fn new(args: &ArgMatches) -> Self {
+impl CallbackOptions {
+    fn from_args(args: &ArgMatches) -> Self {
         Self {
             print_strings_matches_data: args.get_flag("print_strings"),
             print_string_length: args.get_flag("print_string_length"),
@@ -448,11 +460,6 @@ impl ScanOptions {
             print_module_data: args.get_flag("print_module_data"),
             do_not_print_warnings: args.get_flag("do_not_print_warnings"),
             count_limit: args.get_one::<u64>("count_limit").copied(),
-            no_mmap: if cfg!(feature = "memmap") {
-                args.get_flag("no_mmap")
-            } else {
-                false
-            },
             identifier: args.get_one("identifier").cloned(),
             tag: args.get_one("tag").cloned(),
             fail_on_warnings: args.get_flag("fail_on_warnings"),
@@ -468,12 +475,13 @@ impl ScanOptions {
 fn scan_file(
     scanner: &Scanner,
     path: &Path,
-    options: &ScanOptions,
+    options: &CallbackOptions,
+    no_mmap: bool,
     nb_rules: &mut u64,
 ) -> Result<(), ScanError> {
     let what = path.display().to_string();
 
-    let res = if cfg!(feature = "memmap") && !options.no_mmap {
+    let res = if cfg!(feature = "memmap") && !no_mmap {
         // Safety: By default, we accept that this CLI tool can abort if the underlying
         // file is truncated while the scan is ongoing.
         unsafe {
@@ -496,7 +504,7 @@ fn scan_file(
 fn scan_process(
     scanner: &Scanner,
     pid: u32,
-    options: &ScanOptions,
+    options: &CallbackOptions,
     nb_rules: &mut u64,
 ) -> Result<(), ScanError> {
     let what = pid.to_string();
@@ -513,7 +521,7 @@ fn handle_event(
     scanner: &Scanner,
     event: ScanEvent,
     what: &str,
-    options: &ScanOptions,
+    options: &CallbackOptions,
     nb_rules: &mut u64,
 ) -> ScanCallbackResult {
     // Lock stdout to avoid having multiple threads interlap their writes
@@ -575,7 +583,7 @@ fn display_rule(
     rule: &EvaluatedRule,
     scanner: &Scanner,
     what: &str,
-    options: &ScanOptions,
+    options: &CallbackOptions,
 ) {
     if let Some(id) = options.identifier.as_ref() {
         if rule.name != id {
@@ -665,7 +673,8 @@ struct ThreadPool {
 impl ThreadPool {
     fn new(
         scanner: &Scanner,
-        scan_options: &ScanOptions,
+        callback_options: &CallbackOptions,
+        no_mmap: bool,
         args: &ArgMatches,
     ) -> (Self, Sender<PathBuf>) {
         let nb_cpus = if let Some(nb) = args.get_one::<usize>("threads") {
@@ -680,7 +689,7 @@ impl ThreadPool {
         (
             Self {
                 threads: (0..nb_cpus)
-                    .map(|_| Self::worker_thread(scanner, &receiver, scan_options))
+                    .map(|_| Self::worker_thread(scanner, &receiver, callback_options, no_mmap))
                     .collect(),
             },
             sender,
@@ -696,19 +705,22 @@ impl ThreadPool {
     fn worker_thread(
         scanner: &Scanner,
         receiver: &Receiver<PathBuf>,
-        scan_options: &ScanOptions,
+        callback_options: &CallbackOptions,
+        no_mmap: bool,
     ) -> JoinHandle<()> {
         let scanner = scanner.clone();
         let receiver = receiver.clone();
-        let scan_options = scan_options.clone();
+        let callback_options = callback_options.clone();
 
         std::thread::spawn(move || {
             while let Ok(path) = receiver.recv() {
                 let mut nb_rules = 0;
-                if let Err(err) = scan_file(&scanner, &path, &scan_options, &mut nb_rules) {
+                if let Err(err) =
+                    scan_file(&scanner, &path, &callback_options, no_mmap, &mut nb_rules)
+                {
                     eprintln!("Cannot scan file {}: {}", path.display(), err);
                 }
-                if scan_options.print_count {
+                if callback_options.print_count {
                     println!("{}: {}", path.display(), nb_rules);
                 }
             }
@@ -849,7 +861,7 @@ mod tests {
             let _r = format!("{:?}", &t);
         }
 
-        test(ScanOptions {
+        test(CallbackOptions {
             print_strings_matches_data: false,
             print_string_length: false,
             print_xor_key: false,
@@ -861,7 +873,6 @@ mod tests {
             print_module_data: false,
             do_not_print_warnings: false,
             count_limit: None,
-            no_mmap: false,
             identifier: None,
             tag: None,
             fail_on_warnings: false,
