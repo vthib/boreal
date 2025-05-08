@@ -34,6 +34,7 @@ fn setup_benches(c: &mut Criterion) {
             &boreal_memory_scanner,
             &yara_rules,
         );
+        #[cfg(feature = "serialize")]
         bench_serialization(
             c,
             name,
@@ -42,6 +43,7 @@ fn setup_benches(c: &mut Criterion) {
             &yara_rules,
             &yara_x_rules,
         );
+        #[cfg(feature = "serialize")]
         bench_deserialization(
             c,
             name,
@@ -172,6 +174,7 @@ fn bench_scan_process(
     group.finish();
 }
 
+#[cfg(feature = "serialize")]
 fn bench_serialization(
     c: &mut Criterion,
     rules_name: &str,
@@ -220,6 +223,7 @@ fn bench_serialization(
     group.finish();
 }
 
+#[cfg(feature = "serialize")]
 fn bench_deserialization(
     c: &mut Criterion,
     rules_name: &str,
