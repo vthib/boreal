@@ -31,10 +31,17 @@ The main goals of the project are:
 * Rules can be optimized for different situations, by prioritizing either scanning speed or memory consumption.
 * Pure Rust implementation without any C dependency such as OpenSSL, making it very easy to build and use
   on any target. The only exception is the magic module which requires libmagic.
+* All YARA features are supported. This includes all the official modules, serialization into bytes, etc.
 
 ## Installation & use
 
-Boreal is available as a library and as a commandline tool.
+Boreal is available:
+
+- as a rust library, providing all of the features and configurations available in libyara and some additional ones.
+- as a commandline tool, which reproduces the same flags and invocations as the yara CLI tool. It can thus replace
+  as is the yara CLI tool.
+- as a python library, which reproduces with 100% compatibility the API and objects of the yara python library.
+  See the [python library documentation](https://vthib.github.io/boreal/boreal-py/dev/)  for more details.
 
 The commandline tool can be built from source:
 
@@ -83,8 +90,6 @@ the YARA repository as well as the addition of many other tests, all of which ar
 on boreal and YARA to guarantee the exact same behavior.
 
 There are however, some exceptions to this compatibility:
-
-* Evaluation bugs. Boreal may not suffer from some of them, or may has already fixed some of them.
 
 * Overflows or underflows. Those are not specified by YARA and in fact, signed overflows is UB in
   itself. Behavior of evaluations on overflows/underflows is no longer UB in boreal, but is
@@ -161,13 +166,7 @@ There are still some work to do on this. For example, the common "$a at X" rule 
 properly handle and will require a scan for the string. If you think you have a rule that should
 not require scanning but does, please report it.
 
-## Save and load compiled rules
-
-The only YARA feature that have not been implemented is the ability to save and load compiled
-rules, as I am not quite sure what are the use-cases for this feature.
-Please create an issue with a use-case if this is a feature you would need.
-
-## crate feature flags
+## Crate feature flags
 
 ### Enabled by default
 
@@ -185,6 +184,13 @@ Please create an issue with a use-case if this is a feature you would need.
 - `cuckoo`: enables the `cuckoo` module.
 - `authenticode-verify`: enables the `pe.signed`, `pe.signatures[*].verified` and
   `pe.signatures[*].countersignatures[*].verified` part of the `pe` module.
+- `serialize`: enables the API to save a scanner into bytes and reload them on
+   another computer. Note that to make this feature work, some additional data
+   must be saved in the scanner, which is not saved if the feature is disabled.
+   This overhead will depend on the type of rules used, but is usually between
+   a 2 to 6% increase. It it thus recommended to not enable this feature if
+   serialization is not needed.
+   See the [benchmarks](/benches/README.md#cost-of-serialize-feature) for details.
 
 ### `authenticode-verify`
 
