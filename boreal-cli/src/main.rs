@@ -15,12 +15,15 @@ use std::io::{BufRead, BufReader, StdoutLock, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
-use boreal::module::Value as ModuleValue;
-use boreal::scanner::{EvaluatedRule, ScanCallbackResult, ScanError, ScanEvent};
+use boreal::compiler::{CompilerBuilder, CompilerParams};
+use boreal::module::{Console, ConsoleData, Value as ModuleValue};
+use boreal::scanner::{
+    CallbackEvents, EvaluatedRule, ScanCallbackResult, ScanError, ScanEvent, ScanParams,
+};
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
 
-use clap::ArgMatches;
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term::{
     self,
@@ -30,57 +33,96 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use walkdir::WalkDir;
 
 mod args;
-use args::{CallbackOptions, InputOptions, WarningMode};
+use args::{
+    CallbackOptions, CompileScanExecution, CompilerOptions, ExecutionMode, InputOptions,
+    ScannerOptions, WarningMode,
+};
 
 fn main() -> ExitCode {
-    let mut args = args::build_command().get_matches();
+    let args = args::build_command().get_matches();
+    let exec_mode = ExecutionMode::from_args(args);
 
-    if args.get_flag("module_names") {
-        let compiler = Compiler::new();
-
-        let mut names: Vec<_> = compiler.available_modules().collect();
-        names.sort_unstable();
-
-        for name in names {
-            println!("{name}");
-        }
-
-        return ExitCode::SUCCESS;
+    match exec_mode {
+        ExecutionMode::CompileAndScan(v) => compile_and_scan(v),
+        #[cfg(feature = "serialize")]
+        ExecutionMode::LoadAndScan(v) => load_and_scan(v),
+        #[cfg(feature = "serialize")]
+        ExecutionMode::CompileAndSave(v) => compile_and_save(v),
+        ExecutionMode::ListModules => list_modules(),
     }
+}
 
-    let warning_mode = WarningMode::from_args(&args);
+fn compile_and_scan(options: CompileScanExecution) -> ExitCode {
+    let CompileScanExecution {
+        warning_mode,
+        compiler_options,
+        scanner_options,
+        callback_options,
+        input_options,
+        rules_file,
+    } = options;
 
-    let Some(mut scanner) = build_scanner(&mut args, warning_mode) else {
+    let Some(scanner) = compile_rules(&rules_file, compiler_options, warning_mode) else {
         return ExitCode::FAILURE;
     };
 
-    let scanner_options = args::ScannerOptions::from_args(&mut args);
-    if let Err(err) = args::set_scanner_options(&mut scanner, scanner_options) {
+    scan_input(scanner, scanner_options, &callback_options, &input_options)
+}
+
+#[cfg(feature = "serialize")]
+fn load_and_scan(options: args::LoadScanExecution) -> ExitCode {
+    let args::LoadScanExecution {
+        scanner_options,
+        callback_options,
+        input_options,
+        scanner_file,
+    } = options;
+
+    let Some(scanner) = load_scanner(&scanner_file) else {
+        return ExitCode::FAILURE;
+    };
+
+    scan_input(scanner, scanner_options, &callback_options, &input_options)
+}
+
+#[cfg(feature = "serialize")]
+fn compile_and_save(options: args::CompileSaveExecution) -> ExitCode {
+    let args::CompileSaveExecution {
+        warning_mode,
+        compiler_options,
+        rules_file,
+        destination_path,
+    } = options;
+
+    let Some(scanner) = compile_rules(&rules_file, compiler_options, warning_mode) else {
+        return ExitCode::FAILURE;
+    };
+    save_scanner(&scanner, Path::new(&destination_path))
+}
+
+fn scan_input(
+    mut scanner: Scanner,
+    scanner_options: ScannerOptions,
+    callback_options: &CallbackOptions,
+    input_options: &InputOptions,
+) -> ExitCode {
+    if let Err(err) = set_scanner_options(&mut scanner, scanner_options) {
         eprintln!("{err}");
         return ExitCode::FAILURE;
     }
-
-    let callback_options = CallbackOptions::from_args(&args, warning_mode);
-    args::update_scanner_params_from_callback_options(&mut scanner, &callback_options);
-
-    #[cfg(feature = "serialize")]
-    if args.get_flag("save") {
-        return save_scanner(&scanner, &args);
-    }
-
-    let input_options = InputOptions::from_args(&mut args);
+    update_scanner_params_from_callback_options(&mut scanner, callback_options);
 
     let mut nb_rules = 0;
-    match Input::new(&input_options) {
+    match Input::new(input_options) {
         Ok(Input::Directory(path)) => {
             let (thread_pool, sender) = ThreadPool::new(
                 &scanner,
-                &callback_options,
+                callback_options,
                 input_options.nb_threads,
                 input_options.no_mmap,
             );
 
-            send_directory(&path, &input_options, &sender);
+            send_directory(&path, input_options, &sender);
             drop(sender);
             thread_pool.join();
 
@@ -90,7 +132,7 @@ fn main() -> ExitCode {
             match scan_file(
                 &scanner,
                 &path,
-                &callback_options,
+                callback_options,
                 input_options.no_mmap,
                 &mut nb_rules,
             ) {
@@ -107,7 +149,7 @@ fn main() -> ExitCode {
             }
         }
         Ok(Input::Process(pid)) => {
-            match scan_process(&scanner, pid, &callback_options, &mut nb_rules) {
+            match scan_process(&scanner, pid, callback_options, &mut nb_rules) {
                 Ok(()) => {
                     if callback_options.print_count {
                         println!("{pid}: {nb_rules}");
@@ -123,14 +165,14 @@ fn main() -> ExitCode {
         Ok(Input::Files(files)) => {
             let (thread_pool, sender) = ThreadPool::new(
                 &scanner,
-                &callback_options,
+                callback_options,
                 input_options.nb_threads,
                 input_options.no_mmap,
             );
 
             for path in files {
                 if path.is_dir() {
-                    send_directory(&path, &input_options, &sender);
+                    send_directory(&path, input_options, &sender);
                 } else {
                     sender.send(path).unwrap();
                 }
@@ -147,22 +189,65 @@ fn main() -> ExitCode {
     }
 }
 
-fn build_scanner(args: &mut ArgMatches, warning_mode: WarningMode) -> Option<Scanner> {
-    let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
+fn list_modules() -> ExitCode {
+    let compiler = Compiler::new();
+    // TODO: add console module
 
-    #[cfg(feature = "serialize")]
-    if args.get_flag("load_from_bytes") {
-        return load_scanner_from_bytes(&rules_file);
+    let mut names: Vec<_> = compiler.available_modules().collect();
+    names.sort_unstable();
+
+    for name in names {
+        println!("{name}");
     }
 
-    let compiler_options = args::CompilerOptions::from_args(args);
-    let mut compiler = args::build_compiler(compiler_options, warning_mode);
+    ExitCode::SUCCESS
+}
 
-    match compiler.add_rules_file(&rules_file) {
+fn compile_rules(
+    rules_file: &Path,
+    options: CompilerOptions,
+    warning_mode: WarningMode,
+) -> Option<Scanner> {
+    let CompilerOptions {
+        profile,
+        compute_statistics,
+        max_strings_per_rule,
+        defines,
+    } = options;
+    let mut builder = CompilerBuilder::new();
+
+    // Regardless of whether the console logs are disabled, add the module so that rules that use it
+    // can still compile properly.
+    // If the logs are disabled, it will be updated in the scanner, so just print the log here.
+    builder = builder.add_module(Console::with_callback(move |log| {
+        println!("{log}");
+    }));
+
+    if let Some(profile) = profile {
+        builder = builder.profile(profile);
+    }
+
+    let mut compiler = builder.build();
+
+    let mut params = CompilerParams::default()
+        .fail_on_warnings(matches!(warning_mode, WarningMode::Fail))
+        .compute_statistics(compute_statistics);
+    if let Some(limit) = max_strings_per_rule {
+        params = params.max_strings_per_rule(limit);
+    }
+    compiler.set_params(params);
+
+    if let Some(defines) = defines {
+        for (name, value) in defines {
+            let _r = compiler.define_symbol(name, value);
+        }
+    }
+
+    match compiler.add_rules_file(rules_file) {
         Ok(status) => {
             if !matches!(warning_mode, WarningMode::Ignore) {
                 for warn in status.warnings() {
-                    display_diagnostic(&rules_file, warn);
+                    display_diagnostic(rules_file, warn);
                 }
             }
             for rule_stat in status.statistics() {
@@ -170,7 +255,7 @@ fn build_scanner(args: &mut ArgMatches, warning_mode: WarningMode) -> Option<Sca
             }
         }
         Err(err) => {
-            display_diagnostic(&rules_file, &err);
+            display_diagnostic(rules_file, &err);
             return None;
         }
     }
@@ -179,18 +264,18 @@ fn build_scanner(args: &mut ArgMatches, warning_mode: WarningMode) -> Option<Sca
 }
 
 #[cfg(feature = "serialize")]
-fn load_scanner_from_bytes(rules_file: &Path) -> Option<Scanner> {
-    let contents = match std::fs::read(rules_file) {
+fn load_scanner(scanner_file: &Path) -> Option<Scanner> {
+    let contents = match std::fs::read(scanner_file) {
         Ok(v) => v,
         Err(err) => {
-            eprintln!("Unable to read from {}: {:?}", rules_file.display(), err);
+            eprintln!("Unable to read from {}: {:?}", scanner_file.display(), err);
             return None;
         }
     };
 
     let mut params = boreal::scanner::DeserializeParams::default();
     // If the logs are disabled, it will be updated in the scanner, so just print the log here.
-    params.add_module(boreal::module::Console::with_callback(move |log| {
+    params.add_module(Console::with_callback(move |log| {
         println!("{log}");
     }));
 
@@ -204,11 +289,8 @@ fn load_scanner_from_bytes(rules_file: &Path) -> Option<Scanner> {
 }
 
 #[cfg(feature = "serialize")]
-fn save_scanner(scanner: &Scanner, args: &ArgMatches) -> ExitCode {
-    let input: &String = args.get_one("input").unwrap();
-    let path = PathBuf::from(input);
-
-    match std::fs::exists(&path) {
+fn save_scanner(scanner: &Scanner, path: &Path) -> ExitCode {
+    match std::fs::exists(path) {
         Ok(false) => (),
         Ok(true) => {
             eprintln!("File {} already exists, not saving rules", path.display());
@@ -220,7 +302,7 @@ fn save_scanner(scanner: &Scanner, args: &ArgMatches) -> ExitCode {
         }
     }
 
-    let mut file = match File::create(&path) {
+    let mut file = match File::create(path) {
         Ok(v) => v,
         Err(err) => {
             eprintln!("Unable to create file {}: {:?}", path.display(), err);
@@ -234,6 +316,101 @@ fn save_scanner(scanner: &Scanner, args: &ArgMatches) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn set_scanner_options(scanner: &mut Scanner, options: ScannerOptions) -> Result<(), String> {
+    scanner.set_scan_params(build_scan_params(&options));
+
+    if let Some(module_data) = options.module_data {
+        #[allow(clippy::never_loop)]
+        for (name, path) in module_data {
+            #[cfg(feature = "cuckoo")]
+            {
+                use ::boreal::module::{Cuckoo, CuckooData};
+                if name == "cuckoo" {
+                    let contents = std::fs::read_to_string(&path).map_err(|err| {
+                        format!(
+                            "Unable to read {} data from file {}: {:?}",
+                            name,
+                            path.display(),
+                            err
+                        )
+                    })?;
+                    match CuckooData::from_json_report(&contents) {
+                        Some(data) => scanner.set_module_data::<Cuckoo>(data),
+                        None => {
+                            return Err("The data for the cuckoo module is invalid".to_string());
+                        }
+                    }
+                    continue;
+                }
+            }
+            #[cfg(not(feature = "cuckoo"))]
+            // Suppress unused var warnings
+            {
+                drop(path);
+            }
+
+            return Err(format!("Cannot set data for unsupported module {name}"));
+        }
+    }
+
+    if options.no_console_logs {
+        scanner.set_module_data::<Console>(ConsoleData::new(|_log| {}));
+    }
+
+    Ok(())
+}
+
+fn build_scan_params(options: &ScannerOptions) -> ScanParams {
+    let mut scan_params = ScanParams::default()
+        .memory_chunk_size(options.memory_chunk_size)
+        .timeout_duration(options.timeout.map(Duration::from_secs));
+
+    if let Some(size) = options.max_fetched_region_size {
+        scan_params = scan_params.max_fetched_region_size(size);
+    }
+
+    if let Some(scan_mode) = options.fragmented_scan_mode {
+        scan_params = scan_params.fragmented_scan_mode(scan_mode);
+    }
+
+    if let Some(limit) = options.string_max_nb_matches {
+        scan_params = scan_params.string_max_nb_matches(limit);
+    }
+
+    scan_params
+}
+
+fn update_scanner_params_from_callback_options(scanner: &mut Scanner, options: &CallbackOptions) {
+    let mut callback_events = CallbackEvents::empty();
+    match options.warning_mode {
+        WarningMode::Ignore => (),
+        WarningMode::Fail | WarningMode::Print => {
+            callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
+        }
+    }
+    if options.print_module_data {
+        callback_events |= CallbackEvents::MODULE_IMPORT;
+    }
+    if options.print_statistics {
+        callback_events |= CallbackEvents::SCAN_STATISTICS;
+    }
+    if options.negate {
+        callback_events |= CallbackEvents::RULE_NO_MATCH;
+    } else {
+        callback_events |= CallbackEvents::RULE_MATCH;
+    }
+
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .compute_full_matches(options.print_strings_matches())
+            .compute_statistics(options.print_statistics)
+            .include_not_matched_rules(options.negate)
+            .callback_events(callback_events),
+    );
 }
 
 #[derive(Debug)]
@@ -681,6 +858,8 @@ impl std::fmt::Debug for ByteString<'_> {
 
 #[cfg(test)]
 mod tests {
+    use boreal::scanner::FragmentedScanMode;
+
     use super::*;
 
     #[test]
@@ -711,5 +890,35 @@ mod tests {
             warning_mode: WarningMode::Fail,
         });
         test_non_clonable(Input::Process(32));
+    }
+
+    #[test]
+    fn test_scan_params_from_args() {
+        fn parse(cmdline: &str) -> ScanParams {
+            let mut args = args::build_command().get_matches_from(cmdline.split(' '));
+            build_scan_params(&ScannerOptions::from_args(&mut args))
+        }
+
+        let params = parse("boreal --max-process-memory-chunk 500 rules input");
+        assert_eq!(params.get_memory_chunk_size(), Some(500));
+
+        let params = parse("boreal --max-fetched-region-size 500 rules input");
+        assert_eq!(params.get_max_fetched_region_size(), 500);
+
+        let params = parse("boreal --fragmented-scan-mode legacy rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::legacy()
+        );
+        let params = parse("boreal --fragmented-scan-mode fast rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::fast()
+        );
+        let params = parse("boreal --fragmented-scan-mode singlepass rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::single_pass()
+        );
     }
 }
