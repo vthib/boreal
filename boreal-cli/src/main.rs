@@ -43,7 +43,13 @@ fn main() -> ExitCode {
 
     let (subcommand_name, subargs) = args.remove_subcommand().unwrap();
     let exec_mode = match &*subcommand_name {
+        "scan" => ExecutionMode::CompileAndScan(CompileScanExecution::from_args(subargs)),
+        #[cfg(feature = "serialize")]
+        "save" => ExecutionMode::CompileAndSave(args::CompileSaveExecution::from_args(subargs)),
+        #[cfg(feature = "serialize")]
+        "load" => ExecutionMode::LoadAndScan(args::LoadScanExecution::from_args(subargs)),
         "yr" => ExecutionMode::from_yr_args(subargs),
+        "list-modules" => ExecutionMode::ListModules,
         _ => unreachable!(),
     };
 
