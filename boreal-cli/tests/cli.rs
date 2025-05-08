@@ -24,13 +24,14 @@ fn test_file(contents: &[u8]) -> NamedTempFile {
 #[test]
 fn test_no_arguments() {
     // Some arguments are required to do anything
-    cmd().assert().failure();
+    cmd().arg("yr").assert().failure();
 }
 
 #[test]
 fn test_invalid_path() {
     // Invalid path to rule
     cmd()
+        .arg("yr")
         .arg("do_not_exist")
         .arg("input")
         .assert()
@@ -43,6 +44,7 @@ fn test_invalid_path() {
     // Invalid path to input
     let rule_file = test_file(b"");
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg("bad_input")
         .assert()
@@ -66,6 +68,7 @@ rule my_rule {
     let input = test_file(b"aaa");
     // Not matching
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
@@ -76,6 +79,7 @@ rule my_rule {
     let input = test_file(b"zeabce");
     // Matching
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
@@ -103,6 +107,7 @@ rule process_scan {
 
     // Not matching
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(pid.to_string())
         .assert()
@@ -125,6 +130,7 @@ fn test_scan_process_not_found() {
 
     // Not matching
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(pid.to_string())
         .assert()
@@ -152,6 +158,7 @@ rule is_file {
     fs::write(file, "gabuzomeu").unwrap();
     // Matching
     cmd()
+        .arg("yr")
         .current_dir(temp.path())
         .arg(rule_file.path())
         .arg("1")
@@ -172,6 +179,7 @@ fn test_rule_error() {
 
     let input = test_file(b"");
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
@@ -198,6 +206,7 @@ fn test_rule_warning() {
 
     // Warning is OK and rule is eval'ed
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
@@ -211,6 +220,7 @@ fn test_rule_warning() {
 
     // Warning is considered an error
     cmd()
+        .arg("yr")
         .arg("--fail-on-warnings")
         .arg(rule_file.path())
         .arg(input.path())
@@ -225,6 +235,7 @@ fn test_rule_warning() {
 
     // Ignore warnings
     cmd()
+        .arg("yr")
         .arg("-w")
         .arg(rule_file.path())
         .arg(input.path())
@@ -271,6 +282,7 @@ rule includer {
     // Match on the included
     let input = test_file(b"abc");
     cmd()
+        .arg("yr")
         .arg(&rule_a)
         .arg(input.path())
         .assert()
@@ -280,6 +292,7 @@ rule includer {
     // Match on both
     let input = test_file(b"xyz abc");
     cmd()
+        .arg("yr")
         .arg(rule_a)
         .arg(input.path())
         .assert()
@@ -315,6 +328,7 @@ rule included {
     // Match on the included
     let input = test_file(b"");
     cmd()
+        .arg("yr")
         .arg(rule_a)
         .arg(input.path())
         .assert()
@@ -375,6 +389,7 @@ fn test_rule_dir() {
 
     // Non recursive
     cmd()
+        .arg("yr")
         // Add some threads to instrument the code
         .args(["--threads", "20"])
         .arg(rule_file.path())
@@ -393,6 +408,7 @@ fn test_rule_dir() {
 
     // Non recursive and non follow symlinks
     cmd()
+        .arg("yr")
         .arg("-N")
         .arg(rule_file.path())
         .arg(temp.path())
@@ -410,6 +426,7 @@ fn test_rule_dir() {
 
     // Recursive
     cmd()
+        .arg("yr")
         .arg("-r")
         .arg(rule_file.path())
         .arg(temp.path())
@@ -427,6 +444,7 @@ fn test_rule_dir() {
 
     // recursive and non follow symlinks
     cmd()
+        .arg("yr")
         .arg("--recursive")
         .arg("--no-follow-symlinks")
         // Add some threads to instrument the code
@@ -470,6 +488,7 @@ fn test_skip_larger() {
 
     // default will match the 3 files
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(temp.path())
         .assert()
@@ -484,6 +503,7 @@ fn test_skip_larger() {
 
     // Limit to 1024, will skip c
     cmd()
+        .arg("yr")
         .args(["--skip-larger", "512"])
         .arg(rule_file.path())
         .arg(temp.path())
@@ -504,6 +524,7 @@ fn test_skip_larger() {
 
     // Limit to 10, will skip all but a
     cmd()
+        .arg("yr")
         .args(["-z", "10"])
         .arg(rule_file.path())
         .arg(temp.path())
@@ -543,6 +564,7 @@ rule a {
         .join("data")
         .join("mtxex.dll");
     cmd()
+        .arg("yr")
         .arg("-D")
         .arg(rule_file.path())
         .arg(input)
@@ -631,6 +653,7 @@ rule a {
 
     let input = test_file(b"");
     cmd()
+        .arg("yr")
         .arg("--string-stats")
         .arg(rule_file.path())
         .arg(input.path())
@@ -659,6 +682,7 @@ rule a {
 
     let input = test_file(b"abc");
     cmd()
+        .arg("yr")
         .arg("--scan-stats")
         .arg(rule_file.path())
         .arg(input.path())
@@ -707,6 +731,7 @@ fn test_input_cannot_read() {
     fs::set_permissions(&subdir, fs::Permissions::from_mode(0o000)).unwrap();
 
     cmd()
+        .arg("yr")
         .arg("-r")
         .arg(rule_file.path())
         .arg(temp.path())
@@ -724,6 +749,7 @@ fn test_input_cannot_read() {
 #[test]
 fn test_module_names() {
     cmd()
+        .arg("yr")
         .arg("-M")
         .assert()
         .stdout(
@@ -758,6 +784,7 @@ rule second {
     let input = test_file(b"xyabcz");
     // Not matching
     cmd()
+        .arg("yr")
         .arg("--no-mmap")
         .arg(rule_file.path())
         .arg(input.path())
@@ -783,6 +810,7 @@ rule logger {
     let path = input.path().display();
 
     cmd()
+        .arg("yr")
         .arg(rule_file.path())
         .arg(input.path())
         .assert()
@@ -792,6 +820,7 @@ rule logger {
 
     // Logs can be disabled with the -q flag
     cmd()
+        .arg("yr")
         .arg("-q")
         .arg(rule_file.path())
         .arg(input.path())
@@ -805,6 +834,7 @@ rule logger {
 fn test_invalid_fragmented_scan_mode() {
     // Invalid path to rule
     cmd()
+        .arg("yr")
         .arg("--fragmented-scan-mode")
         .arg("bad_value")
         .arg("rules.yar")
@@ -821,6 +851,7 @@ fn test_invalid_fragmented_scan_mode() {
 #[test]
 fn test_invalid_compiler_profile() {
     cmd()
+        .arg("yr")
         .arg("--profile")
         .arg("bad_value")
         .arg("rules.yar")
@@ -858,6 +889,7 @@ rule tag3: first second third {
 
     // Test print tags
     cmd()
+        .arg("yr")
         .arg("-g")
         .arg(rule_file.path())
         .arg(input.path())
@@ -872,6 +904,7 @@ rule tag3: first second third {
 
     // Test filter by tag
     cmd()
+        .arg("yr")
         .arg("-t")
         .arg("first")
         .arg(rule_file.path())
@@ -881,6 +914,7 @@ rule tag3: first second third {
         .stderr("")
         .success();
     cmd()
+        .arg("yr")
         .arg("--tag=third")
         .arg(rule_file.path())
         .arg(input.path())
@@ -889,6 +923,7 @@ rule tag3: first second third {
         .stderr("")
         .success();
     cmd()
+        .arg("yr")
         .arg("-t")
         .arg("")
         .arg(rule_file.path())
@@ -913,6 +948,7 @@ rule second { condition: true }
 
     // Test filter by identifier
     cmd()
+        .arg("yr")
         .arg("-i")
         .arg("first")
         .arg(rule_file.path())
@@ -922,6 +958,7 @@ rule second { condition: true }
         .stderr("")
         .success();
     cmd()
+        .arg("yr")
         .arg("--identifier=second")
         .arg(rule_file.path())
         .arg(input.path())
@@ -930,6 +967,7 @@ rule second { condition: true }
         .stderr("")
         .success();
     cmd()
+        .arg("yr")
         .arg("--identifier=third")
         .arg(rule_file.path())
         .arg(input.path())
@@ -970,6 +1008,7 @@ rule fourth { condition: true }
 
     // Test print meta
     cmd()
+        .arg("yr")
         .arg("-m")
         .arg(rule_file.path())
         .arg(input.path())
@@ -985,6 +1024,7 @@ rule fourth { condition: true }
 
     // Test print meta + tag
     cmd()
+        .arg("yr")
         .arg("-g")
         .arg("--print-meta")
         .arg(rule_file.path())
@@ -1028,6 +1068,7 @@ rule my_rule {
 
     // Test match data only
     cmd()
+        .arg("yr")
         .arg("-s")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1048,6 +1089,7 @@ rule my_rule {
 
     // Test match length only
     cmd()
+        .arg("yr")
         .arg("-L")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1068,6 +1110,7 @@ rule my_rule {
 
     // Test both
     cmd()
+        .arg("yr")
         .arg("--print-strings")
         .arg("--print-string-length")
         .arg(rule_file.path())
@@ -1108,6 +1151,7 @@ rule my_rule {
 
     // Test xor only
     cmd()
+        .arg("yr")
         .arg("-X")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1125,6 +1169,7 @@ rule my_rule {
 
     // With match data
     cmd()
+        .arg("yr")
         .arg("-Xs")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1164,6 +1209,7 @@ rule too_long {
 
     // Test filter by identifier
     cmd()
+        .arg("yr")
         .arg("-a")
         .arg("1")
         .arg(rule_file.path())
@@ -1187,6 +1233,7 @@ rule first { condition: true }
 
     // Test filter by identifier
     cmd()
+        .arg("yr")
         .arg("-e")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1217,6 +1264,7 @@ rule symbols {
     );
 
     cmd()
+        .arg("yr")
         .arg("-d")
         .arg("symbol_float=-1.8")
         .arg("--define=symbol_int=-3")
@@ -1239,6 +1287,7 @@ rule symbols {
 
     // Test a bad define
     cmd()
+        .arg("yr")
         .arg("-d")
         .arg("name")
         .arg(rule_file.path())
@@ -1261,6 +1310,7 @@ rule bad_symbols {
 "#,
     );
     cmd()
+        .arg("yr")
         .arg("-d")
         .arg("symbol_float=-1.8")
         .arg(bad_rule.path())
@@ -1298,6 +1348,7 @@ fn test_scan_list() {
     // dir1 + c, will match the 3 filse
     let list = test_file(format!("{}\n{}\n", dir1.path().display(), file_c.display()).as_bytes());
     cmd()
+        .arg("yr")
         .arg("--scan-list")
         .arg(rule_file.path())
         .arg(list.path())
@@ -1313,6 +1364,7 @@ fn test_scan_list() {
     // a + dir2, but not recursive, will match only a
     let list = test_file(format!("{}\n{}\n", file_a.display(), dir2.path().display()).as_bytes());
     cmd()
+        .arg("yr")
         .arg("--scan-list")
         .arg(rule_file.path())
         .arg(list.path())
@@ -1327,6 +1379,7 @@ fn test_scan_list() {
 
     // When recursive, will match c
     cmd()
+        .arg("yr")
         .arg("--scan-list")
         .arg("-r")
         .arg(rule_file.path())
@@ -1343,6 +1396,7 @@ fn test_scan_list() {
     // Empty
     let list = test_file(b"");
     cmd()
+        .arg("yr")
         .arg("--scan-list")
         .arg(rule_file.path())
         .arg(list.path())
@@ -1357,6 +1411,7 @@ fn test_scan_list() {
         // On linux, the open on a dir works but the read fails, making
         // this a great test to test the read failure case.
         cmd()
+            .arg("yr")
             .arg("--scan-list")
             .arg(rule_file.path())
             .arg(dir1.path())
@@ -1370,6 +1425,7 @@ fn test_scan_list() {
 
         // path does not exist
         cmd()
+            .arg("yr")
             .arg("--scan-list")
             .arg(rule_file.path())
             .arg("invalid_path")
@@ -1396,6 +1452,7 @@ rule d { condition: false }
     let input = test_file(b"");
     // Not matching
     cmd()
+        .arg("yr")
         .arg("-n")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1438,6 +1495,7 @@ rule b {
 
     // Test against a single file
     cmd()
+        .arg("yr")
         .arg("-c")
         .arg(rule_file.path())
         .arg(&file_a)
@@ -1448,6 +1506,7 @@ rule b {
 
     // Test in combination with the negate flag
     cmd()
+        .arg("yr")
         .arg("-cn")
         .arg(rule_file.path())
         .arg(&file_c)
@@ -1458,6 +1517,7 @@ rule b {
 
     // Test against a directory
     cmd()
+        .arg("yr")
         .arg("-c")
         .arg(rule_file.path())
         .arg(temp.path())
@@ -1489,6 +1549,7 @@ rule process_scan {
 
     // Not matching
     cmd()
+        .arg("yr")
         .arg("--count")
         .arg(rule_file.path())
         .arg(pid.to_string())
@@ -1511,6 +1572,7 @@ rule c { condition: true }
 
     let input = test_file(b"");
     cmd()
+        .arg("yr")
         .arg("-l")
         .arg("2")
         .arg(rule_file.path())
@@ -1530,6 +1592,7 @@ rule c { condition: true }
 
     // Not matching
     cmd()
+        .arg("yr")
         .arg("--max-rules=2")
         .arg(rule_file.path())
         .arg(pid.to_string())
@@ -1556,6 +1619,7 @@ rule a {
 
     let input = test_file(b"");
     cmd()
+        .arg("yr")
         .arg("--max-strings-per-rule=2")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1587,6 +1651,7 @@ rule a {
     // Default behavior is to print the warning and continue
     let input = test_file(b"aaaa");
     cmd()
+        .arg("yr")
         .arg("--string-max-nb-matches=2")
         .arg(rule_file.path())
         .arg(input.path())
@@ -1597,6 +1662,7 @@ rule a {
 
     // We can ignore warnings with a flag
     cmd()
+        .arg("yr")
         .arg("--string-max-nb-matches=2")
         .arg("--no-warnings")
         .arg(rule_file.path())
@@ -1608,6 +1674,7 @@ rule a {
 
     // Or we can abort on warnings
     cmd()
+        .arg("yr")
         .arg("--string-max-nb-matches=2")
         .arg("--fail-on-warnings")
         .arg(rule_file.path())
@@ -1639,6 +1706,7 @@ rule a {
 
     // Save into the file
     cmd()
+        .arg("yr")
         .arg("--save")
         .arg(rule_file.path())
         .arg(&save_path)
@@ -1647,6 +1715,7 @@ rule a {
 
     // Now reload
     cmd()
+        .arg("yr")
         .arg("-C")
         .arg(&save_path)
         .arg(&input)
@@ -1666,6 +1735,7 @@ fn test_invalid_load() {
     // Non existing path
     let fake_path = temp.path().join("non_existing");
     cmd()
+        .arg("yr")
         .arg("-C")
         .arg(&fake_path)
         .arg(&input)
@@ -1679,6 +1749,7 @@ fn test_invalid_load() {
 
     // Failure during deserialization
     cmd()
+        .arg("yr")
         .arg("-C")
         .arg(&input)
         .arg(&input)
@@ -1697,6 +1768,7 @@ fn test_invalid_save() {
 
     // Non existing path
     cmd()
+        .arg("yr")
         .arg("--save")
         .arg(&rule)
         .arg(&rule)
@@ -1721,6 +1793,7 @@ fn test_invalid_save() {
         perms.set_mode(0o000);
         fs::set_permissions(&subdir, perms).unwrap();
         cmd()
+            .arg("yr")
             .arg("--save")
             .arg(&rule)
             .arg(&out)
@@ -1738,6 +1811,7 @@ fn test_invalid_save() {
         fs::set_permissions(&subdir, perms).unwrap();
         let out_path = subdir.join("out");
         cmd()
+            .arg("yr")
             .arg("--save")
             .arg(&rule)
             .arg(&out_path)
@@ -1776,6 +1850,7 @@ rule a {
     fs::write(&input, "").unwrap();
 
     cmd()
+        .arg("yr")
         .arg(format!("--module-data=cuckoo={}", data.display()))
         .arg(&rule)
         .arg(&input)
@@ -1801,6 +1876,7 @@ fn test_invalid_module_data() {
 
     // Invalid module data
     cmd()
+        .arg("yr")
         .arg("-x")
         .arg("name")
         .arg(&rule)
@@ -1815,6 +1891,7 @@ fn test_invalid_module_data() {
 
     // Unknown module
     cmd()
+        .arg("yr")
         .arg(format!("--module-data=piou={}", data.display()))
         .arg(&rule)
         .arg(&input)
@@ -1825,6 +1902,7 @@ fn test_invalid_module_data() {
 
     // Non existing file
     cmd()
+        .arg("yr")
         .arg("-x")
         .arg("cuckoo=non_existing")
         .arg(&rule)
@@ -1837,6 +1915,7 @@ fn test_invalid_module_data() {
 
     // Cannot parse data
     cmd()
+        .arg("yr")
         .arg(format!("--module-data=cuckoo={}", data.display()))
         .arg(&rule)
         .arg(&input)

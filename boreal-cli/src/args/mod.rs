@@ -61,7 +61,7 @@ pub struct CompileSaveExecution {
 }
 
 impl ExecutionMode {
-    pub fn from_args(mut args: ArgMatches) -> Self {
+    pub fn from_yr_args(mut args: ArgMatches) -> Self {
         if args.get_flag("module_names") {
             return Self::ListModules;
         }
@@ -100,8 +100,23 @@ impl ExecutionMode {
 }
 
 pub fn build_command() -> Command {
-    let mut command = command!();
+    command!()
+        .subcommand_required(true)
+        .subcommand(build_yr_subcommand())
+}
 
+fn build_yr_subcommand() -> Command {
+    let mut command = Command::new("yr")
+        .about("Invoke boreal with a yara-compatible interface")
+        .long_about(
+            "This subcommand allows specifying options exactly as done with the yara CLI.\n\
+             This allows substituting uses of the yara CLI without risks.\n\
+             This API can be a bit ambiguous at times with multiple rules inputs, and many options\n\
+             can be specified that will not be used in some contexts.\n\
+             For these reasons, using the other subcommands is recommended for improved clarity.");
+
+    // Add all options in the yr subcommand. The type of invokation will
+    // be distinguished through the detection of specific options (see `ExecutionMode::from_yr_args`).
     command = command
         .arg(
             Arg::new("rules_file")
@@ -125,7 +140,7 @@ pub fn build_command() -> Command {
     command = compiler::add_compiler_args(command);
     command = input::add_input_args(command);
     command = scanner::add_scanner_args(command);
-    command = add_warning_args(command);
+    command = add_warnings_args(command);
 
     if cfg!(feature = "serialize") {
         command = command
@@ -176,7 +191,7 @@ impl WarningMode {
     }
 }
 
-fn add_warning_args(command: Command) -> Command {
+fn add_warnings_args(command: Command) -> Command {
     command
         .arg(
             Arg::new("fail_on_warnings")

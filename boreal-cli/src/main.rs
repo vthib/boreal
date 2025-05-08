@@ -39,8 +39,13 @@ use args::{
 };
 
 fn main() -> ExitCode {
-    let args = args::build_command().get_matches();
-    let exec_mode = ExecutionMode::from_args(args);
+    let mut args = args::build_command().get_matches();
+
+    let (subcommand_name, subargs) = args.remove_subcommand().unwrap();
+    let exec_mode = match &*subcommand_name {
+        "yr" => ExecutionMode::from_yr_args(subargs),
+        _ => unreachable!(),
+    };
 
     match exec_mode {
         ExecutionMode::CompileAndScan(v) => compile_and_scan(v),
@@ -896,26 +901,27 @@ mod tests {
     fn test_scan_params_from_args() {
         fn parse(cmdline: &str) -> ScanParams {
             let mut args = args::build_command().get_matches_from(cmdline.split(' '));
+            let mut args = args.remove_subcommand().unwrap().1;
             build_scan_params(&ScannerOptions::from_args(&mut args))
         }
 
-        let params = parse("boreal --max-process-memory-chunk 500 rules input");
+        let params = parse("boreal yr --max-process-memory-chunk 500 rules input");
         assert_eq!(params.get_memory_chunk_size(), Some(500));
 
-        let params = parse("boreal --max-fetched-region-size 500 rules input");
+        let params = parse("boreal yr --max-fetched-region-size 500 rules input");
         assert_eq!(params.get_max_fetched_region_size(), 500);
 
-        let params = parse("boreal --fragmented-scan-mode legacy rules input");
+        let params = parse("boreal yr --fragmented-scan-mode legacy rules input");
         assert_eq!(
             params.get_fragmented_scan_mode(),
             FragmentedScanMode::legacy()
         );
-        let params = parse("boreal --fragmented-scan-mode fast rules input");
+        let params = parse("boreal yr --fragmented-scan-mode fast rules input");
         assert_eq!(
             params.get_fragmented_scan_mode(),
             FragmentedScanMode::fast()
         );
-        let params = parse("boreal --fragmented-scan-mode singlepass rules input");
+        let params = parse("boreal yr --fragmented-scan-mode singlepass rules input");
         assert_eq!(
             params.get_fragmented_scan_mode(),
             FragmentedScanMode::single_pass()
