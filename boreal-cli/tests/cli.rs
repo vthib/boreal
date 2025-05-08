@@ -1706,8 +1706,7 @@ rule a {
 
     // Save into the file
     cmd()
-        .arg("yr")
-        .arg("--save")
+        .arg("save")
         .arg(rule_file.path())
         .arg(&save_path)
         .assert()
@@ -1768,8 +1767,7 @@ fn test_invalid_save() {
 
     // Non existing path
     cmd()
-        .arg("yr")
-        .arg("--save")
+        .arg("save")
         .arg(&rule)
         .arg(&rule)
         .assert()
@@ -1793,8 +1791,7 @@ fn test_invalid_save() {
         perms.set_mode(0o000);
         fs::set_permissions(&subdir, perms).unwrap();
         cmd()
-            .arg("yr")
-            .arg("--save")
+            .arg("save")
             .arg(&rule)
             .arg(&out)
             .assert()
@@ -1811,8 +1808,7 @@ fn test_invalid_save() {
         fs::set_permissions(&subdir, perms).unwrap();
         let out_path = subdir.join("out");
         cmd()
-            .arg("yr")
-            .arg("--save")
+            .arg("save")
             .arg(&rule)
             .arg(&out_path)
             .assert()
