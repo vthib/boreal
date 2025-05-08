@@ -322,6 +322,28 @@ pub fn build_command() -> Command {
     command
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum WarningMode {
+    /// Fail compilation and scan when a warning happens.
+    Fail,
+    /// Print warnings but keep going.
+    Print,
+    /// Ignore warnings.
+    Ignore,
+}
+
+impl WarningMode {
+    pub fn from_args(args: &ArgMatches) -> Self {
+        if args.get_flag("fail_on_warnings") {
+            Self::Fail
+        } else if args.get_flag("do_not_print_warnings") {
+            Self::Ignore
+        } else {
+            Self::Print
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct InputOptions {
     pub scan_list: bool,
@@ -463,8 +485,11 @@ pub fn update_scanner_params_from_callback_options(
     options: &CallbackOptions,
 ) {
     let mut callback_events = CallbackEvents::empty();
-    if !options.do_not_print_warnings {
-        callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
+    match options.warning_mode {
+        WarningMode::Ignore => (),
+        WarningMode::Fail | WarningMode::Print => {
+            callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
+        }
     }
     if options.print_module_data {
         callback_events |= CallbackEvents::MODULE_IMPORT;
@@ -500,16 +525,15 @@ pub struct CallbackOptions {
     pub print_count: bool,
     pub print_statistics: bool,
     pub print_module_data: bool,
-    pub do_not_print_warnings: bool,
     pub count_limit: Option<u64>,
     pub identifier: Option<String>,
     pub tag: Option<String>,
-    pub fail_on_warnings: bool,
     pub negate: bool,
+    pub warning_mode: WarningMode,
 }
 
 impl CallbackOptions {
-    pub fn from_args(args: &ArgMatches) -> Self {
+    pub fn from_args(args: &ArgMatches, warning_mode: WarningMode) -> Self {
         Self {
             print_strings_matches_data: args.get_flag("print_strings"),
             print_string_length: args.get_flag("print_string_length"),
@@ -520,12 +544,11 @@ impl CallbackOptions {
             print_count: args.get_flag("count"),
             print_statistics: args.get_flag("print_scan_statistics"),
             print_module_data: args.get_flag("print_module_data"),
-            do_not_print_warnings: args.get_flag("do_not_print_warnings"),
             count_limit: args.get_one::<u64>("count_limit").copied(),
             identifier: args.get_one("identifier").cloned(),
             tag: args.get_one("tag").cloned(),
-            fail_on_warnings: args.get_flag("fail_on_warnings"),
             negate: args.get_flag("negate"),
+            warning_mode,
         }
     }
 
@@ -534,7 +557,7 @@ impl CallbackOptions {
     }
 }
 
-pub fn build_compiler_from_args(args: &mut ArgMatches) -> Compiler {
+pub fn build_compiler_from_args(args: &mut ArgMatches, warning_mode: WarningMode) -> Compiler {
     let mut builder = CompilerBuilder::new();
 
     // Even if the console logs are disabled, add the module so that rules that use it
@@ -553,7 +576,7 @@ pub fn build_compiler_from_args(args: &mut ArgMatches) -> Compiler {
     let mut compiler = builder.build();
 
     let mut params = CompilerParams::default()
-        .fail_on_warnings(args.get_flag("fail_on_warnings"))
+        .fail_on_warnings(matches!(warning_mode, WarningMode::Fail))
         .compute_statistics(args.get_flag("string_statistics"));
     if let Some(limit) = args.get_one::<usize>("max_strings_per_rule") {
         params = params.max_strings_per_rule(*limit);

@@ -30,7 +30,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use walkdir::WalkDir;
 
 mod args;
-use args::{CallbackOptions, InputOptions};
+use args::{CallbackOptions, InputOptions, WarningMode};
 
 fn main() -> ExitCode {
     let mut args = args::build_command().get_matches();
@@ -48,7 +48,9 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let Some(mut scanner) = build_scanner(&mut args) else {
+    let warning_mode = WarningMode::from_args(&args);
+
+    let Some(mut scanner) = build_scanner(&mut args, warning_mode) else {
         return ExitCode::FAILURE;
     };
 
@@ -57,7 +59,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let callback_options = CallbackOptions::from_args(&args);
+    let callback_options = CallbackOptions::from_args(&args, warning_mode);
     args::update_scanner_params_from_callback_options(&mut scanner, &callback_options);
 
     #[cfg(feature = "serialize")]
@@ -143,7 +145,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn build_scanner(args: &mut ArgMatches) -> Option<Scanner> {
+fn build_scanner(args: &mut ArgMatches, warning_mode: WarningMode) -> Option<Scanner> {
     let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
 
     #[cfg(feature = "serialize")]
@@ -153,11 +155,11 @@ fn build_scanner(args: &mut ArgMatches) -> Option<Scanner> {
         return load_scanner_from_bytes(&rules_file, no_console_logs);
     }
 
-    let mut compiler = args::build_compiler_from_args(args);
+    let mut compiler = args::build_compiler_from_args(args, warning_mode);
 
     match compiler.add_rules_file(&rules_file) {
         Ok(status) => {
-            if !args.get_flag("do_not_print_warnings") {
+            if !matches!(warning_mode, WarningMode::Ignore) {
                 for warn in status.warnings() {
                     display_diagnostic(&rules_file, warn);
                 }
@@ -403,7 +405,7 @@ fn handle_event(
                 string_identifier.rule_name,
             );
 
-            if options.fail_on_warnings {
+            if matches!(options.warning_mode, WarningMode::Fail) {
                 return ScanCallbackResult::Abort;
             }
         }
@@ -702,12 +704,11 @@ mod tests {
             print_count: false,
             print_statistics: false,
             print_module_data: false,
-            do_not_print_warnings: false,
             count_limit: None,
             identifier: None,
             tag: None,
-            fail_on_warnings: false,
             negate: false,
+            warning_mode: WarningMode::Fail,
         });
         test_non_clonable(Input::Process(32));
     }
