@@ -6,7 +6,63 @@ use boreal::{
     scanner::{CallbackEvents, FragmentedScanMode, ScanParams},
     Compiler, Scanner,
 };
-use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{command, parser::Values, value_parser, Arg, ArgAction, ArgMatches, Command};
+
+#[derive(Debug)]
+pub struct CompilerOptions {
+    pub profile: Option<CompilerProfile>,
+    pub compute_statistics: bool,
+    pub max_strings_per_rule: Option<usize>,
+    pub defines: Option<Values<(String, ExternalValue)>>,
+}
+
+#[derive(Debug)]
+pub struct ScannerOptions {
+    memory_chunk_size: Option<usize>,
+    timeout: Option<u64>,
+    max_fetched_region_size: Option<usize>,
+    fragmented_scan_mode: Option<FragmentedScanMode>,
+    string_max_nb_matches: Option<u32>,
+    module_data: Option<Values<(String, PathBuf)>>,
+    no_console_logs: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct CallbackOptions {
+    pub print_strings_matches_data: bool,
+    pub print_string_length: bool,
+    pub print_xor_key: bool,
+    pub print_metadata: bool,
+    pub print_namespace: bool,
+    pub print_tags: bool,
+    pub print_count: bool,
+    pub print_statistics: bool,
+    pub print_module_data: bool,
+    pub count_limit: Option<u64>,
+    pub identifier: Option<String>,
+    pub tag: Option<String>,
+    pub negate: bool,
+    pub warning_mode: WarningMode,
+}
+
+#[derive(Debug)]
+pub struct InputOptions {
+    pub scan_list: bool,
+    pub no_follow_symlinks: bool,
+    pub recursive: bool,
+    pub skip_larger: Option<u64>,
+    pub input: String,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum WarningMode {
+    /// Fail compilation and scan when a warning happens.
+    Fail,
+    /// Print warnings but keep going.
+    Print,
+    /// Ignore warnings.
+    Ignore,
+}
 
 pub fn build_command() -> Command {
     let mut command = command!()
@@ -322,16 +378,6 @@ pub fn build_command() -> Command {
     command
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum WarningMode {
-    /// Fail compilation and scan when a warning happens.
-    Fail,
-    /// Print warnings but keep going.
-    Print,
-    /// Ignore warnings.
-    Ignore,
-}
-
 impl WarningMode {
     pub fn from_args(args: &ArgMatches) -> Self {
         if args.get_flag("fail_on_warnings") {
@@ -342,15 +388,6 @@ impl WarningMode {
             Self::Print
         }
     }
-}
-
-#[derive(Debug)]
-pub struct InputOptions {
-    pub scan_list: bool,
-    pub no_follow_symlinks: bool,
-    pub recursive: bool,
-    pub skip_larger: Option<u64>,
-    pub input: String,
 }
 
 impl InputOptions {
@@ -414,13 +451,24 @@ fn parse_module_data(arg: &str) -> Result<(String, PathBuf), String> {
     Ok((name.to_owned(), PathBuf::from(path)))
 }
 
-pub fn set_scanner_params_from_args(
-    scanner: &mut Scanner,
-    args: &mut ArgMatches,
-) -> Result<(), String> {
-    scanner.set_scan_params(scan_params_from_args(args));
+impl ScannerOptions {
+    pub fn from_args(args: &mut ArgMatches) -> Self {
+        Self {
+            memory_chunk_size: args.remove_one("memory_chunk_size"),
+            timeout: args.remove_one("timeout"),
+            max_fetched_region_size: args.remove_one("max_fetched_region_size"),
+            fragmented_scan_mode: args.remove_one("fragmented_scan_mode"),
+            string_max_nb_matches: args.remove_one("string_max_nb_matches"),
+            module_data: args.remove_many::<(String, PathBuf)>("module_data"),
+            no_console_logs: args.get_flag("no_console_logs"),
+        }
+    }
+}
 
-    if let Some(module_data) = args.remove_many::<(String, PathBuf)>("module_data") {
+pub fn set_scanner_options(scanner: &mut Scanner, options: ScannerOptions) -> Result<(), String> {
+    scanner.set_scan_params(build_scan_params(&options));
+
+    if let Some(module_data) = options.module_data {
         #[allow(clippy::never_loop)]
         for (name, path) in module_data {
             #[cfg(feature = "cuckoo")]
@@ -454,31 +502,28 @@ pub fn set_scanner_params_from_args(
         }
     }
 
-    if args.get_flag("no_console_logs") {
+    if options.no_console_logs {
         scanner.set_module_data::<Console>(ConsoleData::new(|_log| {}));
     }
 
     Ok(())
 }
 
-fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
+fn build_scan_params(options: &ScannerOptions) -> ScanParams {
     let mut scan_params = ScanParams::default()
-        .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied())
-        .timeout_duration(
-            args.get_one::<u64>("timeout")
-                .map(|s| Duration::from_secs(*s)),
-        );
+        .memory_chunk_size(options.memory_chunk_size)
+        .timeout_duration(options.timeout.map(Duration::from_secs));
 
-    if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
-        scan_params = scan_params.max_fetched_region_size(*size);
+    if let Some(size) = options.max_fetched_region_size {
+        scan_params = scan_params.max_fetched_region_size(size);
     }
 
-    if let Some(scan_mode) = args.get_one::<FragmentedScanMode>("fragmented_scan_mode") {
-        scan_params = scan_params.fragmented_scan_mode(*scan_mode);
+    if let Some(scan_mode) = options.fragmented_scan_mode {
+        scan_params = scan_params.fragmented_scan_mode(scan_mode);
     }
 
-    if let Some(limit) = args.get_one::<u32>("string_max_nb_matches") {
-        scan_params = scan_params.string_max_nb_matches(*limit);
+    if let Some(limit) = options.string_max_nb_matches {
+        scan_params = scan_params.string_max_nb_matches(limit);
     }
 
     scan_params
@@ -518,24 +563,6 @@ pub fn update_scanner_params_from_callback_options(
     );
 }
 
-#[derive(Clone, Debug)]
-pub struct CallbackOptions {
-    pub print_strings_matches_data: bool,
-    pub print_string_length: bool,
-    pub print_xor_key: bool,
-    pub print_metadata: bool,
-    pub print_namespace: bool,
-    pub print_tags: bool,
-    pub print_count: bool,
-    pub print_statistics: bool,
-    pub print_module_data: bool,
-    pub count_limit: Option<u64>,
-    pub identifier: Option<String>,
-    pub tag: Option<String>,
-    pub negate: bool,
-    pub warning_mode: WarningMode,
-}
-
 impl CallbackOptions {
     pub fn from_args(args: &ArgMatches, warning_mode: WarningMode) -> Self {
         Self {
@@ -561,7 +588,24 @@ impl CallbackOptions {
     }
 }
 
-pub fn build_compiler_from_args(args: &mut ArgMatches, warning_mode: WarningMode) -> Compiler {
+impl CompilerOptions {
+    pub fn from_args(args: &mut ArgMatches) -> Self {
+        Self {
+            profile: args.remove_one::<CompilerProfile>("profile"),
+            compute_statistics: args.get_flag("string_statistics"),
+            max_strings_per_rule: args.remove_one::<usize>("max_strings_per_rule"),
+            defines: args.remove_many::<(String, ExternalValue)>("define"),
+        }
+    }
+}
+
+pub fn build_compiler(options: CompilerOptions, warning_mode: WarningMode) -> Compiler {
+    let CompilerOptions {
+        profile,
+        compute_statistics,
+        max_strings_per_rule,
+        defines,
+    } = options;
     let mut builder = CompilerBuilder::new();
 
     // Regardless of whether the console logs are disabled, add the module so that rules that use it
@@ -571,21 +615,21 @@ pub fn build_compiler_from_args(args: &mut ArgMatches, warning_mode: WarningMode
         println!("{log}");
     }));
 
-    if let Some(profile) = args.get_one::<CompilerProfile>("profile") {
-        builder = builder.profile(*profile);
+    if let Some(profile) = profile {
+        builder = builder.profile(profile);
     }
 
     let mut compiler = builder.build();
 
     let mut params = CompilerParams::default()
         .fail_on_warnings(matches!(warning_mode, WarningMode::Fail))
-        .compute_statistics(args.get_flag("string_statistics"));
-    if let Some(limit) = args.get_one::<usize>("max_strings_per_rule") {
-        params = params.max_strings_per_rule(*limit);
+        .compute_statistics(compute_statistics);
+    if let Some(limit) = max_strings_per_rule {
+        params = params.max_strings_per_rule(limit);
     }
     compiler.set_params(params);
 
-    if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
+    if let Some(defines) = defines {
         for (name, value) in defines {
             let _r = compiler.define_symbol(name, value);
         }
@@ -606,8 +650,8 @@ mod tests {
     #[test]
     fn test_scan_params_from_args() {
         fn parse(cmdline: &str) -> ScanParams {
-            let args = build_command().get_matches_from(cmdline.split(' '));
-            scan_params_from_args(&args)
+            let mut args = build_command().get_matches_from(cmdline.split(' '));
+            build_scan_params(&ScannerOptions::from_args(&mut args))
         }
 
         let params = parse("boreal --max-process-memory-chunk 500 rules input");

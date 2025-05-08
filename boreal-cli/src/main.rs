@@ -54,7 +54,8 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    if let Err(err) = args::set_scanner_params_from_args(&mut scanner, &mut args) {
+    let scanner_options = args::ScannerOptions::from_args(&mut args);
+    if let Err(err) = args::set_scanner_options(&mut scanner, scanner_options) {
         eprintln!("{err}");
         return ExitCode::FAILURE;
     }
@@ -150,18 +151,11 @@ fn build_scanner(args: &mut ArgMatches, warning_mode: WarningMode) -> Option<Sca
 
     #[cfg(feature = "serialize")]
     if args.get_flag("load_from_bytes") {
-<<<<<<< HEAD
-        let no_console_logs = args.get_flag("no_console_logs");
-
-        return load_scanner_from_bytes(&rules_file, no_console_logs);
-||||||| parent of 71cb675 (refacto[boreal-cli]: handle no_console_logs in scanner module data)
-        return load_scanner_from_bytes(&rules_file, no_console_logs);
-=======
         return load_scanner_from_bytes(&rules_file);
->>>>>>> 71cb675 (refacto[boreal-cli]: handle no_console_logs in scanner module data)
     }
 
-    let mut compiler = args::build_compiler_from_args(args, warning_mode);
+    let compiler_options = args::CompilerOptions::from_args(args);
+    let mut compiler = args::build_compiler(compiler_options, warning_mode);
 
     match compiler.add_rules_file(&rules_file) {
         Ok(status) => {
