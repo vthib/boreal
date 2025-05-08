@@ -2,7 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 use boreal::{
     compiler::{CompilerBuilder, CompilerParams, CompilerProfile, ExternalValue},
-    module::Console,
+    module::{Console, ConsoleData},
     scanner::{CallbackEvents, FragmentedScanMode, ScanParams},
     Compiler, Scanner,
 };
@@ -454,6 +454,10 @@ pub fn set_scanner_params_from_args(
         }
     }
 
+    if args.get_flag("no_console_logs") {
+        scanner.set_module_data::<Console>(ConsoleData::new(|_log| {}));
+    }
+
     Ok(())
 }
 
@@ -560,13 +564,11 @@ impl CallbackOptions {
 pub fn build_compiler_from_args(args: &mut ArgMatches, warning_mode: WarningMode) -> Compiler {
     let mut builder = CompilerBuilder::new();
 
-    // Even if the console logs are disabled, add the module so that rules that use it
+    // Regardless of whether the console logs are disabled, add the module so that rules that use it
     // can still compile properly.
-    let no_console_logs = args.get_flag("no_console_logs");
+    // If the logs are disabled, it will be updated in the scanner, so just print the log here.
     builder = builder.add_module(Console::with_callback(move |log| {
-        if !no_console_logs {
-            println!("{log}");
-        }
+        println!("{log}");
     }));
 
     if let Some(profile) = args.get_one::<CompilerProfile>("profile") {
