@@ -16,8 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread::JoinHandle;
 
-use boreal::compiler::{CompilerBuilder, CompilerParams, CompilerProfile, ExternalValue};
-use boreal::module::{Console, Value as ModuleValue};
+use boreal::module::Value as ModuleValue;
 use boreal::scanner::{EvaluatedRule, ScanCallbackResult, ScanError, ScanEvent};
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
 
@@ -179,42 +178,15 @@ fn main() -> ExitCode {
 
 fn build_scanner(args: &mut ArgMatches) -> Option<Scanner> {
     let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
-    let no_console_logs = args.get_flag("no_console_logs");
 
     #[cfg(feature = "serialize")]
     if args.get_flag("load_from_bytes") {
+        let no_console_logs = args.get_flag("no_console_logs");
+
         return load_scanner_from_bytes(&rules_file, no_console_logs);
     }
 
-    let mut builder = CompilerBuilder::new();
-
-    // Even if the console logs are disabled, add the module so that rules that use it
-    // can still compile properly.
-    builder = builder.add_module(Console::with_callback(move |log| {
-        if !no_console_logs {
-            println!("{log}");
-        }
-    }));
-
-    if let Some(profile) = args.get_one::<CompilerProfile>("profile") {
-        builder = builder.profile(*profile);
-    }
-
-    let mut compiler = builder.build();
-
-    let mut params = CompilerParams::default()
-        .fail_on_warnings(args.get_flag("fail_on_warnings"))
-        .compute_statistics(args.get_flag("string_statistics"));
-    if let Some(limit) = args.get_one::<usize>("max_strings_per_rule") {
-        params = params.max_strings_per_rule(*limit);
-    }
-    compiler.set_params(params);
-
-    if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
-        for (name, value) in defines {
-            let _r = compiler.define_symbol(name, value);
-        }
-    }
+    let mut compiler = args::build_compiler_from_args(args);
 
     match compiler.add_rules_file(&rules_file) {
         Ok(status) => {
@@ -247,7 +219,7 @@ fn load_scanner_from_bytes(rules_file: &Path, no_console_logs: bool) -> Option<S
     };
 
     let mut params = boreal::scanner::DeserializeParams::default();
-    params.add_module(Console::with_callback(move |log| {
+    params.add_module(boreal::module::Console::with_callback(move |log| {
         if !no_console_logs {
             println!("{log}");
         }
