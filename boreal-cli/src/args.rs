@@ -1,8 +1,10 @@
 use std::{path::PathBuf, time::Duration};
 
 use boreal::{
-    compiler::{CompilerProfile, ExternalValue},
+    compiler::{CompilerBuilder, CompilerParams, CompilerProfile, ExternalValue},
+    module::Console,
     scanner::{CallbackEvents, FragmentedScanMode, ScanParams},
+    Compiler,
 };
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
 
@@ -462,6 +464,41 @@ impl CallbackOptions {
     pub fn print_strings_matches(&self) -> bool {
         self.print_strings_matches_data || self.print_string_length || self.print_xor_key
     }
+}
+
+pub fn build_compiler_from_args(args: &mut ArgMatches) -> Compiler {
+    let mut builder = CompilerBuilder::new();
+
+    // Even if the console logs are disabled, add the module so that rules that use it
+    // can still compile properly.
+    let no_console_logs = args.get_flag("no_console_logs");
+    builder = builder.add_module(Console::with_callback(move |log| {
+        if !no_console_logs {
+            println!("{log}");
+        }
+    }));
+
+    if let Some(profile) = args.get_one::<CompilerProfile>("profile") {
+        builder = builder.profile(*profile);
+    }
+
+    let mut compiler = builder.build();
+
+    let mut params = CompilerParams::default()
+        .fail_on_warnings(args.get_flag("fail_on_warnings"))
+        .compute_statistics(args.get_flag("string_statistics"));
+    if let Some(limit) = args.get_one::<usize>("max_strings_per_rule") {
+        params = params.max_strings_per_rule(*limit);
+    }
+    compiler.set_params(params);
+
+    if let Some(defines) = args.remove_many::<(String, ExternalValue)>("define") {
+        for (name, value) in defines {
+            let _r = compiler.define_symbol(name, value);
+        }
+    }
+
+    compiler
 }
 
 #[cfg(test)]
