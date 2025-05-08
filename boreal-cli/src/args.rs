@@ -322,6 +322,27 @@ pub fn build_command() -> Command {
     command
 }
 
+#[derive(Debug)]
+pub struct InputOptions {
+    pub scan_list: bool,
+    pub no_follow_symlinks: bool,
+    pub recursive: bool,
+    pub skip_larger: Option<u64>,
+    pub input: String,
+}
+
+impl InputOptions {
+    pub fn from_args(args: &mut ArgMatches) -> Self {
+        Self {
+            scan_list: args.get_flag("scan_list"),
+            no_follow_symlinks: args.get_flag("no_follow_symlinks"),
+            recursive: args.get_flag("recursive"),
+            skip_larger: args.remove_one::<u64>("skip_larger"),
+            input: args.remove_one("input").unwrap(),
+        }
+    }
+}
+
 fn parse_define(arg: &str) -> Result<(String, ExternalValue), String> {
     let Some((name, value)) = arg.split_once('=') else {
         return Err("missing '=' delimiter".to_owned());
