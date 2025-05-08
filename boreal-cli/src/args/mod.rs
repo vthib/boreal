@@ -29,37 +29,6 @@ pub enum ExecutionMode {
     ListModules,
 }
 
-#[derive(Debug)]
-pub struct CompileScanExecution {
-    pub warning_mode: WarningMode,
-    pub compiler_options: CompilerOptions,
-    pub scanner_options: ScannerOptions,
-    pub callback_options: CallbackOptions,
-    pub input_options: InputOptions,
-
-    pub rules_file: PathBuf,
-}
-
-#[cfg(feature = "serialize")]
-#[derive(Debug)]
-pub struct LoadScanExecution {
-    pub scanner_options: ScannerOptions,
-    pub callback_options: CallbackOptions,
-    pub input_options: InputOptions,
-
-    pub scanner_file: PathBuf,
-}
-
-#[cfg(feature = "serialize")]
-#[derive(Debug)]
-pub struct CompileSaveExecution {
-    pub warning_mode: WarningMode,
-    pub compiler_options: CompilerOptions,
-
-    pub rules_file: PathBuf,
-    pub destination_path: String,
-}
-
 impl ExecutionMode {
     pub fn from_yr_args(mut args: ArgMatches) -> Self {
         if args.get_flag("module_names") {
@@ -74,7 +43,7 @@ impl ExecutionMode {
                 warning_mode,
                 compiler_options: CompilerOptions::from_args(&mut args),
                 rules_file: args.remove_one("rules_file").unwrap(),
-                destination_path: args.remove_one("input").unwrap(),
+                destination_path: PathBuf::from(args.remove_one::<String>("input").unwrap()),
             });
         }
 
@@ -100,9 +69,21 @@ impl ExecutionMode {
 }
 
 pub fn build_command() -> Command {
-    command!()
-        .subcommand_required(true)
-        .subcommand(build_yr_subcommand())
+    let mut command = command!().subcommand_required(true);
+
+    command = command.subcommand(build_yr_subcommand());
+    command = command.subcommand(build_scan_subcommand());
+    command = command.subcommand(
+        Command::new("list-modules").about("Display the names of all available modules"),
+    );
+
+    #[cfg(feature = "serialize")]
+    {
+        command = command.subcommand(build_save_subcommand());
+        command = command.subcommand(build_load_subcommand());
+    }
+
+    command
 }
 
 fn build_yr_subcommand() -> Command {
@@ -138,7 +119,7 @@ fn build_yr_subcommand() -> Command {
 
     command = callback::add_callback_args(command);
     command = compiler::add_compiler_args(command);
-    command = input::add_input_args(command);
+    command = input::add_input_args(command, true);
     command = scanner::add_scanner_args(command);
     command = add_warnings_args(command);
 
@@ -165,6 +146,142 @@ fn build_yr_subcommand() -> Command {
                     .help("Load compiled rules from bytes. See --save option"),
             );
     }
+
+    command
+}
+
+#[derive(Debug)]
+pub struct CompileScanExecution {
+    pub warning_mode: WarningMode,
+    pub compiler_options: CompilerOptions,
+    pub scanner_options: ScannerOptions,
+    pub callback_options: CallbackOptions,
+    pub input_options: InputOptions,
+
+    pub rules_file: PathBuf,
+}
+
+impl CompileScanExecution {
+    pub fn from_args(mut args: ArgMatches) -> Self {
+        let warning_mode = WarningMode::from_args(&args);
+
+        Self {
+            warning_mode,
+            compiler_options: CompilerOptions::from_args(&mut args),
+            scanner_options: ScannerOptions::from_args(&mut args),
+            callback_options: CallbackOptions::from_args(&args, warning_mode),
+            input_options: InputOptions::from_args(&mut args),
+            rules_file: args.remove_one("rules_file").unwrap(),
+        }
+    }
+}
+
+fn build_scan_subcommand() -> Command {
+    let mut command =
+        Command::new("scan").about("Compile rules and scan a file, a directory or a process");
+
+    // Add all options in the yr subcommand. The type of invokation will
+    // be distinguished through the detection of specific options (see `ExecutionMode::from_yr_args`).
+    command = command.arg(
+        Arg::new("rules_file")
+            .value_parser(value_parser!(PathBuf))
+            .help("Path to a yara file containing rules"),
+    );
+
+    command = add_warnings_args(command);
+    command = compiler::add_compiler_args(command);
+    command = scanner::add_scanner_args(command);
+    command = callback::add_callback_args(command);
+    command = input::add_input_args(command, false);
+
+    command
+}
+
+#[cfg(feature = "serialize")]
+#[derive(Debug)]
+pub struct CompileSaveExecution {
+    pub warning_mode: WarningMode,
+    pub compiler_options: CompilerOptions,
+
+    pub rules_file: PathBuf,
+    pub destination_path: PathBuf,
+}
+
+#[cfg(feature = "serialize")]
+impl CompileSaveExecution {
+    pub fn from_args(mut args: ArgMatches) -> Self {
+        let warning_mode = WarningMode::from_args(&args);
+
+        Self {
+            warning_mode,
+            compiler_options: CompilerOptions::from_args(&mut args),
+            rules_file: args.remove_one("rules_file").unwrap(),
+            destination_path: args.remove_one("destination_path").unwrap(),
+        }
+    }
+}
+
+#[cfg(feature = "serialize")]
+fn build_save_subcommand() -> Command {
+    let mut command =
+        Command::new("save").about("Compile rules and serialize the results into a file");
+
+    command = command
+        .arg(
+            Arg::new("rules_file")
+                .value_parser(value_parser!(PathBuf))
+                .help("Path to a yara file containing rules"),
+        )
+        .arg(
+            Arg::new("destination_path")
+                .value_parser(value_parser!(PathBuf))
+                .help("Path where the serialization of the compiled rules will be written"),
+        );
+
+    command = add_warnings_args(command);
+    command = compiler::add_compiler_args(command);
+
+    command
+}
+
+#[cfg(feature = "serialize")]
+#[derive(Debug)]
+pub struct LoadScanExecution {
+    pub scanner_options: ScannerOptions,
+    pub callback_options: CallbackOptions,
+    pub input_options: InputOptions,
+
+    pub scanner_file: PathBuf,
+}
+
+#[cfg(feature = "serialize")]
+impl LoadScanExecution {
+    pub fn from_args(mut args: ArgMatches) -> Self {
+        let warning_mode = WarningMode::from_args(&args);
+
+        Self {
+            scanner_options: ScannerOptions::from_args(&mut args),
+            callback_options: CallbackOptions::from_args(&args, warning_mode),
+            input_options: InputOptions::from_args(&mut args),
+            scanner_file: args.remove_one("compiled_rules").unwrap(),
+        }
+    }
+}
+
+#[cfg(feature = "serialize")]
+fn build_load_subcommand() -> Command {
+    let mut command = Command::new("load").about("Load compiled rules from a file and scan");
+
+    command = command.arg(
+        Arg::new("compiled_rules")
+            .value_parser(value_parser!(PathBuf))
+            .help("Path to a file containing serialized compiled rules"),
+    );
+
+    command = add_warnings_args(command);
+    command = scanner::add_scanner_args(command);
+    command = callback::add_callback_args(command);
+    command = input::add_input_args(command, false);
 
     command
 }
