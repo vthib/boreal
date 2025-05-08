@@ -30,7 +30,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use walkdir::WalkDir;
 
 mod args;
-use args::CallbackOptions;
+use args::{CallbackOptions, InputOptions};
 
 fn main() -> ExitCode {
     let mut args = args::build_command().get_matches();
@@ -112,14 +112,23 @@ fn main() -> ExitCode {
     } else {
         false
     };
+    let nb_threads = if let Some(nb) = args.get_one::<usize>("threads") {
+        std::cmp::min(1, *nb)
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(32)
+    };
+
+    let input_options = InputOptions::from_args(&mut args);
 
     let mut nb_rules = 0;
-    match Input::new(&args) {
+    match Input::new(&input_options) {
         Ok(Input::Directory(path)) => {
             let (thread_pool, sender) =
-                ThreadPool::new(&scanner, &callback_options, no_mmap, &args);
+                ThreadPool::new(&scanner, &callback_options, nb_threads, no_mmap);
 
-            send_directory(&path, &args, &sender);
+            send_directory(&path, &input_options, &sender);
             drop(sender);
             thread_pool.join();
 
@@ -155,11 +164,11 @@ fn main() -> ExitCode {
         }
         Ok(Input::Files(files)) => {
             let (thread_pool, sender) =
-                ThreadPool::new(&scanner, &callback_options, no_mmap, &args);
+                ThreadPool::new(&scanner, &callback_options, nb_threads, no_mmap);
 
             for path in files {
                 if path.is_dir() {
-                    send_directory(&path, &args, &sender);
+                    send_directory(&path, &input_options, &sender);
                 } else {
                     sender.send(path).unwrap();
                 }
@@ -276,15 +285,12 @@ enum Input {
 }
 
 impl Input {
-    fn new(args: &ArgMatches) -> Result<Self, String> {
-        let input: &String = args.get_one("input").unwrap();
-        let scan_list = args.get_flag("scan_list");
-
+    fn new(options: &InputOptions) -> Result<Self, String> {
         // Same semantics as YARA: only parse it as a PID if there is no
         // file with this name.
-        let path = PathBuf::from(input);
+        let path = PathBuf::from(&options.input);
 
-        Ok(if scan_list {
+        Ok(if options.scan_list {
             let file = File::open(&path)
                 .map_err(|err| format!("cannot open scan list {}: {}", path.display(), err))?;
             let reader = BufReader::new(file);
@@ -301,7 +307,7 @@ impl Input {
         } else if path.exists() {
             Input::File(path)
         } else {
-            match input.parse() {
+            match options.input.parse() {
                 Ok(pid) => Self::Process(pid),
                 Err(_) => Input::File(path),
             }
@@ -309,9 +315,9 @@ impl Input {
     }
 }
 
-fn send_directory(path: &Path, args: &ArgMatches, sender: &Sender<PathBuf>) {
-    let mut walker = WalkDir::new(path).follow_links(!args.get_flag("no_follow_symlinks"));
-    if !args.get_flag("recursive") {
+fn send_directory(path: &Path, options: &InputOptions, sender: &Sender<PathBuf>) {
+    let mut walker = WalkDir::new(path).follow_links(!options.no_follow_symlinks);
+    if !options.recursive {
         walker = walker.max_depth(1);
     }
 
@@ -328,10 +334,10 @@ fn send_directory(path: &Path, args: &ArgMatches, sender: &Sender<PathBuf>) {
             continue;
         }
 
-        if let Some(max_size) = args.get_one::<u64>("skip_larger") {
-            if *max_size > 0 && entry.depth() > 0 {
+        if let Some(max_size) = options.skip_larger {
+            if max_size > 0 && entry.depth() > 0 {
                 let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
-                if file_length >= *max_size {
+                if file_length >= max_size {
                     eprintln!(
                         "skipping {} ({} bytes) because it's larger than {} bytes.",
                         entry.path().display(),
@@ -549,21 +555,13 @@ impl ThreadPool {
     fn new(
         scanner: &Scanner,
         callback_options: &CallbackOptions,
+        nb_threads: usize,
         no_mmap: bool,
-        args: &ArgMatches,
     ) -> (Self, Sender<PathBuf>) {
-        let nb_cpus = if let Some(nb) = args.get_one::<usize>("threads") {
-            std::cmp::min(1, *nb)
-        } else {
-            std::thread::available_parallelism()
-                .map(std::num::NonZero::get)
-                .unwrap_or(32)
-        };
-
-        let (sender, receiver) = bounded(nb_cpus * 5);
+        let (sender, receiver) = bounded(nb_threads * 5);
         (
             Self {
-                threads: (0..nb_cpus)
+                threads: (0..nb_threads)
                     .map(|_| Self::worker_thread(scanner, &receiver, callback_options, no_mmap))
                     .collect(),
             },
