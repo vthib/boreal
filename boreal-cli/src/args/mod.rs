@@ -36,34 +36,28 @@ impl ExecutionMode {
         }
 
         let warning_mode = WarningMode::from_args(&args);
-
-        #[cfg(feature = "serialize")]
-        if args.get_flag("save") {
-            return Self::CompileAndSave(CompileSaveExecution {
-                warning_mode,
-                compiler_options: CompilerOptions::from_args(&mut args),
-                rules_file: args.remove_one("rules_file").unwrap(),
-                destination_path: PathBuf::from(args.remove_one::<String>("input").unwrap()),
-            });
-        }
+        let scanner_options = ScannerOptions::from_args(&mut args);
+        let callback_options = CallbackOptions::from_args(&args, warning_mode);
+        let input_options = InputOptions::from_args(&mut args);
+        let rules_file = args.remove_one("rules_file").unwrap();
 
         #[cfg(feature = "serialize")]
         if args.get_flag("load_from_bytes") {
             return Self::LoadAndScan(LoadScanExecution {
-                scanner_options: ScannerOptions::from_args(&mut args),
-                callback_options: CallbackOptions::from_args(&args, warning_mode),
-                input_options: InputOptions::from_args(&mut args),
-                scanner_file: args.remove_one("rules_file").unwrap(),
+                scanner_options,
+                callback_options,
+                input_options,
+                scanner_file: rules_file,
             });
         }
 
         Self::CompileAndScan(CompileScanExecution {
             warning_mode,
             compiler_options: CompilerOptions::from_args(&mut args),
-            scanner_options: ScannerOptions::from_args(&mut args),
-            callback_options: CallbackOptions::from_args(&args, warning_mode),
-            input_options: InputOptions::from_args(&mut args),
-            rules_file: args.remove_one("rules_file").unwrap(),
+            scanner_options,
+            callback_options,
+            input_options,
+            rules_file,
         })
     }
 }
@@ -124,27 +118,13 @@ fn build_yr_subcommand() -> Command {
     command = add_warnings_args(command);
 
     if cfg!(feature = "serialize") {
-        command = command
-            .arg(
-                Arg::new("save")
-                    .long("save")
-                    .action(ArgAction::SetTrue)
-                    .help("Serialize the compiled rules into bytes and save it at the given path")
-                    .long_help(
-                        "Serialize the compiled rules into bytes and save it at the given path.\n\
-                    The last argument must be the path to the file that will be created to\n\
-                    hold this serialization. The file must not already exists.\n\
-                    This differs from normal execution where the path points to an existing file\n\
-                    that must be scanned.",
-                    ),
-            )
-            .arg(
-                Arg::new("load_from_bytes")
-                    .short('C')
-                    .long("compiled-rules")
-                    .action(ArgAction::SetTrue)
-                    .help("Load compiled rules from bytes. See --save option"),
-            );
+        command = command.arg(
+            Arg::new("load_from_bytes")
+                .short('C')
+                .long("compiled-rules")
+                .action(ArgAction::SetTrue)
+                .help("Load compiled rules from bytes. See save subcommand"),
+        );
     }
 
     command
