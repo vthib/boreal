@@ -68,26 +68,17 @@ fn main() -> ExitCode {
         return save_scanner(&scanner, &args);
     }
 
-    let no_mmap = if cfg!(feature = "memmap") {
-        args.get_flag("no_mmap")
-    } else {
-        false
-    };
-    let nb_threads = if let Some(nb) = args.get_one::<usize>("threads") {
-        std::cmp::min(1, *nb)
-    } else {
-        std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(32)
-    };
-
     let input_options = InputOptions::from_args(&mut args);
 
     let mut nb_rules = 0;
     match Input::new(&input_options) {
         Ok(Input::Directory(path)) => {
-            let (thread_pool, sender) =
-                ThreadPool::new(&scanner, &callback_options, nb_threads, no_mmap);
+            let (thread_pool, sender) = ThreadPool::new(
+                &scanner,
+                &callback_options,
+                input_options.nb_threads,
+                input_options.no_mmap,
+            );
 
             send_directory(&path, &input_options, &sender);
             drop(sender);
@@ -96,7 +87,13 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Input::File(path)) => {
-            match scan_file(&scanner, &path, &callback_options, no_mmap, &mut nb_rules) {
+            match scan_file(
+                &scanner,
+                &path,
+                &callback_options,
+                input_options.no_mmap,
+                &mut nb_rules,
+            ) {
                 Ok(()) => {
                     if callback_options.print_count {
                         println!("{}: {}", path.display(), nb_rules);
@@ -124,8 +121,12 @@ fn main() -> ExitCode {
             }
         }
         Ok(Input::Files(files)) => {
-            let (thread_pool, sender) =
-                ThreadPool::new(&scanner, &callback_options, nb_threads, no_mmap);
+            let (thread_pool, sender) = ThreadPool::new(
+                &scanner,
+                &callback_options,
+                input_options.nb_threads,
+                input_options.no_mmap,
+            );
 
             for path in files {
                 if path.is_dir() {

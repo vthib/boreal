@@ -52,6 +52,8 @@ pub struct InputOptions {
     pub recursive: bool,
     pub skip_larger: Option<u64>,
     pub input: String,
+    pub no_mmap: bool,
+    pub nb_threads: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -392,12 +394,27 @@ impl WarningMode {
 
 impl InputOptions {
     pub fn from_args(args: &mut ArgMatches) -> Self {
+        let no_mmap = if cfg!(feature = "memmap") {
+            args.get_flag("no_mmap")
+        } else {
+            false
+        };
+        let nb_threads = if let Some(nb) = args.get_one::<usize>("threads") {
+            std::cmp::min(1, *nb)
+        } else {
+            std::thread::available_parallelism()
+                .map(std::num::NonZero::get)
+                .unwrap_or(32)
+        };
+
         Self {
             scan_list: args.get_flag("scan_list"),
             no_follow_symlinks: args.get_flag("no_follow_symlinks"),
             recursive: args.get_flag("recursive"),
             skip_larger: args.remove_one::<u64>("skip_larger"),
             input: args.remove_one("input").unwrap(),
+            no_mmap,
+            nb_threads,
         }
     }
 }
