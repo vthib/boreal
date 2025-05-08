@@ -52,55 +52,13 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    // Parameters that controls what to scan and what to print.
-    let callback_options = CallbackOptions::from_args(&args);
-
-    // Parameters to set in the boreal scanner
-    let scan_params = args::scan_params_from_args(&args);
-    let scan_params =
-        args::update_scan_params_from_callback_options(scan_params, &callback_options);
-
-    scanner.set_scan_params(scan_params);
-
-    if let Some(module_data) = args.remove_many::<(String, PathBuf)>("module_data") {
-        #[allow(clippy::never_loop)]
-        for (name, path) in module_data {
-            #[cfg(feature = "cuckoo")]
-            {
-                use ::boreal::module::{Cuckoo, CuckooData};
-                if name == "cuckoo" {
-                    let contents = match std::fs::read_to_string(&path) {
-                        Ok(v) => v,
-                        Err(err) => {
-                            eprintln!(
-                                "Unable to read {} data from file {}: {:?}",
-                                name,
-                                path.display(),
-                                err
-                            );
-                            return ExitCode::FAILURE;
-                        }
-                    };
-                    match CuckooData::from_json_report(&contents) {
-                        Some(data) => scanner.set_module_data::<Cuckoo>(data),
-                        None => {
-                            eprintln!("The data for the cuckoo module is invalid");
-                            return ExitCode::FAILURE;
-                        }
-                    }
-                    continue;
-                }
-            }
-            #[cfg(not(feature = "cuckoo"))]
-            // Suppress unused var warnings
-            {
-                drop(path);
-            }
-
-            eprintln!("Cannot set data for unsupported module {name}");
-            return ExitCode::FAILURE;
-        }
+    if let Err(err) = args::set_scanner_params_from_args(&mut scanner, &mut args) {
+        eprintln!("{err}");
+        return ExitCode::FAILURE;
     }
+
+    let callback_options = CallbackOptions::from_args(&args);
+    args::update_scanner_params_from_callback_options(&mut scanner, &callback_options);
 
     #[cfg(feature = "serialize")]
     if args.get_flag("save") {

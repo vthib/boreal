@@ -4,7 +4,7 @@ use boreal::{
     compiler::{CompilerBuilder, CompilerParams, CompilerProfile, ExternalValue},
     module::Console,
     scanner::{CallbackEvents, FragmentedScanMode, ScanParams},
-    Compiler,
+    Compiler, Scanner,
 };
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
 
@@ -392,7 +392,50 @@ fn parse_module_data(arg: &str) -> Result<(String, PathBuf), String> {
     Ok((name.to_owned(), PathBuf::from(path)))
 }
 
-pub fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
+pub fn set_scanner_params_from_args(
+    scanner: &mut Scanner,
+    args: &mut ArgMatches,
+) -> Result<(), String> {
+    scanner.set_scan_params(scan_params_from_args(args));
+
+    if let Some(module_data) = args.remove_many::<(String, PathBuf)>("module_data") {
+        #[allow(clippy::never_loop)]
+        for (name, path) in module_data {
+            #[cfg(feature = "cuckoo")]
+            {
+                use ::boreal::module::{Cuckoo, CuckooData};
+                if name == "cuckoo" {
+                    let contents = std::fs::read_to_string(&path).map_err(|err| {
+                        format!(
+                            "Unable to read {} data from file {}: {:?}",
+                            name,
+                            path.display(),
+                            err
+                        )
+                    })?;
+                    match CuckooData::from_json_report(&contents) {
+                        Some(data) => scanner.set_module_data::<Cuckoo>(data),
+                        None => {
+                            return Err("The data for the cuckoo module is invalid".to_string());
+                        }
+                    }
+                    continue;
+                }
+            }
+            #[cfg(not(feature = "cuckoo"))]
+            // Suppress unused var warnings
+            {
+                drop(path);
+            }
+
+            return Err(format!("Cannot set data for unsupported module {name}"));
+        }
+    }
+
+    Ok(())
+}
+
+fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
     let mut scan_params = ScanParams::default()
         .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied())
         .timeout_duration(
@@ -415,10 +458,10 @@ pub fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
     scan_params
 }
 
-pub fn update_scan_params_from_callback_options(
-    params: ScanParams,
+pub fn update_scanner_params_from_callback_options(
+    scanner: &mut Scanner,
     options: &CallbackOptions,
-) -> ScanParams {
+) {
     let mut callback_events = CallbackEvents::empty();
     if !options.do_not_print_warnings {
         callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
@@ -435,11 +478,15 @@ pub fn update_scan_params_from_callback_options(
         callback_events |= CallbackEvents::RULE_MATCH;
     }
 
-    params
-        .compute_full_matches(options.print_strings_matches())
-        .compute_statistics(options.print_statistics)
-        .include_not_matched_rules(options.negate)
-        .callback_events(callback_events)
+    scanner.set_scan_params(
+        scanner
+            .scan_params()
+            .clone()
+            .compute_full_matches(options.print_strings_matches())
+            .compute_statistics(options.print_statistics)
+            .include_not_matched_rules(options.negate)
+            .callback_events(callback_events),
+    );
 }
 
 #[derive(Clone, Debug)]
