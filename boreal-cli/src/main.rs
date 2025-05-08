@@ -56,15 +56,13 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
+    // Parameters that controls what to scan and what to print.
     let scan_options = ScanOptions::new(&args);
 
-    let mut scan_params = scan_params_from_args(&args);
-    if scan_options.print_strings_matches() {
-        scan_params = scan_params.compute_full_matches(true);
-    }
-    if let Some(limit) = args.get_one::<u32>("string_max_nb_matches") {
-        scan_params = scan_params.string_max_nb_matches(*limit);
-    }
+    // Parameters to set in the boreal scanner
+    let scan_params = scan_params_from_args(&args);
+    let scan_params = update_scan_params_from_print_options(scan_params, &scan_options);
+
     scanner.set_scan_params(scan_params);
 
     if let Some(module_data) = args.remove_many::<(String, PathBuf)>("module_data") {
@@ -212,7 +210,7 @@ fn build_scanner(args: &mut ArgMatches) -> Option<Scanner> {
 
     match compiler.add_rules_file(&rules_file) {
         Ok(status) => {
-            if !args.get_flag("no_warnings") {
+            if !args.get_flag("do_not_print_warnings") {
                 for warn in status.warnings() {
                     display_diagnostic(&rules_file, warn);
                 }
@@ -370,35 +368,12 @@ fn send_directory(path: &Path, args: &ArgMatches, sender: &Sender<PathBuf>) {
 }
 
 fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
-    let enable_stats = args.get_flag("scan_statistics");
-    let negate = args.get_flag("negate");
-
-    let mut callback_events = CallbackEvents::empty();
-    if args.get_flag("print_module_data") {
-        callback_events |= CallbackEvents::MODULE_IMPORT;
-    }
-    if !args.get_flag("no_warnings") {
-        callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
-    }
-
-    if enable_stats {
-        callback_events |= CallbackEvents::SCAN_STATISTICS;
-    }
-    if negate {
-        callback_events |= CallbackEvents::RULE_NO_MATCH;
-    } else {
-        callback_events |= CallbackEvents::RULE_MATCH;
-    }
-
     let mut scan_params = ScanParams::default()
-        .compute_statistics(enable_stats)
         .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied())
         .timeout_duration(
             args.get_one::<u64>("timeout")
                 .map(|s| Duration::from_secs(*s)),
-        )
-        .callback_events(callback_events)
-        .include_not_matched_rules(negate);
+        );
 
     if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
         scan_params = scan_params.max_fetched_region_size(*size);
@@ -408,7 +383,35 @@ fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
         scan_params = scan_params.fragmented_scan_mode(*scan_mode);
     }
 
+    if let Some(limit) = args.get_one::<u32>("string_max_nb_matches") {
+        scan_params = scan_params.string_max_nb_matches(*limit);
+    }
+
     scan_params
+}
+
+fn update_scan_params_from_print_options(params: ScanParams, options: &ScanOptions) -> ScanParams {
+    let mut callback_events = CallbackEvents::empty();
+    if !options.do_not_print_warnings {
+        callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
+    }
+    if options.print_module_data {
+        callback_events |= CallbackEvents::MODULE_IMPORT;
+    }
+    if options.print_statistics {
+        callback_events |= CallbackEvents::SCAN_STATISTICS;
+    }
+    if options.negate {
+        callback_events |= CallbackEvents::RULE_NO_MATCH;
+    } else {
+        callback_events |= CallbackEvents::RULE_MATCH;
+    }
+
+    params
+        .compute_full_matches(options.print_strings_matches())
+        .compute_statistics(options.print_statistics)
+        .include_not_matched_rules(options.negate)
+        .callback_events(callback_events)
 }
 
 #[derive(Clone, Debug)]
@@ -420,11 +423,15 @@ struct ScanOptions {
     print_namespace: bool,
     print_tags: bool,
     print_count: bool,
+    print_statistics: bool,
+    print_module_data: bool,
+    do_not_print_warnings: bool,
     count_limit: Option<u64>,
     no_mmap: bool,
     identifier: Option<String>,
     tag: Option<String>,
     fail_on_warnings: bool,
+    negate: bool,
 }
 
 impl ScanOptions {
@@ -437,6 +444,9 @@ impl ScanOptions {
             print_namespace: args.get_flag("print_namespace"),
             print_tags: args.get_flag("print_tags"),
             print_count: args.get_flag("count"),
+            print_statistics: args.get_flag("print_scan_statistics"),
+            print_module_data: args.get_flag("print_module_data"),
+            do_not_print_warnings: args.get_flag("do_not_print_warnings"),
             count_limit: args.get_one::<u64>("count_limit").copied(),
             no_mmap: if cfg!(feature = "memmap") {
                 args.get_flag("no_mmap")
@@ -446,6 +456,7 @@ impl ScanOptions {
             identifier: args.get_one("identifier").cloned(),
             tag: args.get_one("tag").cloned(),
             fail_on_warnings: args.get_flag("fail_on_warnings"),
+            negate: args.get_flag("negate"),
         }
     }
 
@@ -846,11 +857,15 @@ mod tests {
             print_namespace: false,
             print_tags: false,
             print_count: false,
+            print_statistics: false,
+            print_module_data: false,
+            do_not_print_warnings: false,
             count_limit: None,
             no_mmap: false,
             identifier: None,
             tag: None,
             fail_on_warnings: false,
+            negate: false,
         });
         test_non_clonable(Input::Process(32));
     }

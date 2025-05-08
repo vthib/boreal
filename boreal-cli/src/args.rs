@@ -94,7 +94,7 @@ pub fn build_command() -> Command {
                 .help("Display statistics on rules' compilation"),
         )
         .arg(
-            Arg::new("scan_statistics")
+            Arg::new("print_scan_statistics")
                 .long("scan-stats")
                 .action(ArgAction::SetTrue)
                 .help("Display statistics on rules' evaluation"),
@@ -252,7 +252,7 @@ pub fn build_command() -> Command {
                 .help("Do not follow symlinks when scanning"),
         )
         .arg(
-            Arg::new("no_warnings")
+            Arg::new("do_not_print_warnings")
                 .short('w')
                 .long("no-warnings")
                 .action(ArgAction::SetTrue)
