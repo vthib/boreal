@@ -150,9 +150,15 @@ fn build_scanner(args: &mut ArgMatches, warning_mode: WarningMode) -> Option<Sca
 
     #[cfg(feature = "serialize")]
     if args.get_flag("load_from_bytes") {
+<<<<<<< HEAD
         let no_console_logs = args.get_flag("no_console_logs");
 
         return load_scanner_from_bytes(&rules_file, no_console_logs);
+||||||| parent of 71cb675 (refacto[boreal-cli]: handle no_console_logs in scanner module data)
+        return load_scanner_from_bytes(&rules_file, no_console_logs);
+=======
+        return load_scanner_from_bytes(&rules_file);
+>>>>>>> 71cb675 (refacto[boreal-cli]: handle no_console_logs in scanner module data)
     }
 
     let mut compiler = args::build_compiler_from_args(args, warning_mode);
@@ -178,7 +184,7 @@ fn build_scanner(args: &mut ArgMatches, warning_mode: WarningMode) -> Option<Sca
 }
 
 #[cfg(feature = "serialize")]
-fn load_scanner_from_bytes(rules_file: &Path, no_console_logs: bool) -> Option<Scanner> {
+fn load_scanner_from_bytes(rules_file: &Path) -> Option<Scanner> {
     let contents = match std::fs::read(rules_file) {
         Ok(v) => v,
         Err(err) => {
@@ -188,10 +194,9 @@ fn load_scanner_from_bytes(rules_file: &Path, no_console_logs: bool) -> Option<S
     };
 
     let mut params = boreal::scanner::DeserializeParams::default();
+    // If the logs are disabled, it will be updated in the scanner, so just print the log here.
     params.add_module(boreal::module::Console::with_callback(move |log| {
-        if !no_console_logs {
-            println!("{log}");
-        }
+        println!("{log}");
     }));
 
     match Scanner::from_bytes_unchecked(&contents, params) {
