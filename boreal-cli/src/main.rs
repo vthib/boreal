@@ -15,14 +15,10 @@ use std::io::{BufRead, BufReader, StdoutLock, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread::JoinHandle;
-use std::time::Duration;
 
 use boreal::compiler::{CompilerBuilder, CompilerParams, CompilerProfile, ExternalValue};
 use boreal::module::{Console, Value as ModuleValue};
-use boreal::scanner::{
-    CallbackEvents, EvaluatedRule, FragmentedScanMode, ScanCallbackResult, ScanError, ScanEvent,
-    ScanParams,
-};
+use boreal::scanner::{EvaluatedRule, ScanCallbackResult, ScanError, ScanEvent};
 use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
 
 use clap::ArgMatches;
@@ -35,6 +31,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use walkdir::WalkDir;
 
 mod args;
+use args::CallbackOptions;
 
 fn main() -> ExitCode {
     let mut args = args::build_command().get_matches();
@@ -60,8 +57,9 @@ fn main() -> ExitCode {
     let callback_options = CallbackOptions::from_args(&args);
 
     // Parameters to set in the boreal scanner
-    let scan_params = scan_params_from_args(&args);
-    let scan_params = update_scan_params_from_callback_options(scan_params, &callback_options);
+    let scan_params = args::scan_params_from_args(&args);
+    let scan_params =
+        args::update_scan_params_from_callback_options(scan_params, &callback_options);
 
     scanner.set_scan_params(scan_params);
 
@@ -374,101 +372,6 @@ fn send_directory(path: &Path, args: &ArgMatches, sender: &Sender<PathBuf>) {
         }
 
         sender.send(entry.path().to_path_buf()).unwrap();
-    }
-}
-
-fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
-    let mut scan_params = ScanParams::default()
-        .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied())
-        .timeout_duration(
-            args.get_one::<u64>("timeout")
-                .map(|s| Duration::from_secs(*s)),
-        );
-
-    if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
-        scan_params = scan_params.max_fetched_region_size(*size);
-    }
-
-    if let Some(scan_mode) = args.get_one::<FragmentedScanMode>("fragmented_scan_mode") {
-        scan_params = scan_params.fragmented_scan_mode(*scan_mode);
-    }
-
-    if let Some(limit) = args.get_one::<u32>("string_max_nb_matches") {
-        scan_params = scan_params.string_max_nb_matches(*limit);
-    }
-
-    scan_params
-}
-
-fn update_scan_params_from_callback_options(
-    params: ScanParams,
-    options: &CallbackOptions,
-) -> ScanParams {
-    let mut callback_events = CallbackEvents::empty();
-    if !options.do_not_print_warnings {
-        callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
-    }
-    if options.print_module_data {
-        callback_events |= CallbackEvents::MODULE_IMPORT;
-    }
-    if options.print_statistics {
-        callback_events |= CallbackEvents::SCAN_STATISTICS;
-    }
-    if options.negate {
-        callback_events |= CallbackEvents::RULE_NO_MATCH;
-    } else {
-        callback_events |= CallbackEvents::RULE_MATCH;
-    }
-
-    params
-        .compute_full_matches(options.print_strings_matches())
-        .compute_statistics(options.print_statistics)
-        .include_not_matched_rules(options.negate)
-        .callback_events(callback_events)
-}
-
-#[derive(Clone, Debug)]
-struct CallbackOptions {
-    print_strings_matches_data: bool,
-    print_string_length: bool,
-    print_xor_key: bool,
-    print_metadata: bool,
-    print_namespace: bool,
-    print_tags: bool,
-    print_count: bool,
-    print_statistics: bool,
-    print_module_data: bool,
-    do_not_print_warnings: bool,
-    count_limit: Option<u64>,
-    identifier: Option<String>,
-    tag: Option<String>,
-    fail_on_warnings: bool,
-    negate: bool,
-}
-
-impl CallbackOptions {
-    fn from_args(args: &ArgMatches) -> Self {
-        Self {
-            print_strings_matches_data: args.get_flag("print_strings"),
-            print_string_length: args.get_flag("print_string_length"),
-            print_xor_key: args.get_flag("print_xor_key"),
-            print_metadata: args.get_flag("print_metadata"),
-            print_namespace: args.get_flag("print_namespace"),
-            print_tags: args.get_flag("print_tags"),
-            print_count: args.get_flag("count"),
-            print_statistics: args.get_flag("print_scan_statistics"),
-            print_module_data: args.get_flag("print_module_data"),
-            do_not_print_warnings: args.get_flag("do_not_print_warnings"),
-            count_limit: args.get_one::<u64>("count_limit").copied(),
-            identifier: args.get_one("identifier").cloned(),
-            tag: args.get_one("tag").cloned(),
-            fail_on_warnings: args.get_flag("fail_on_warnings"),
-            negate: args.get_flag("negate"),
-        }
-    }
-
-    fn print_strings_matches(&self) -> bool {
-        self.print_strings_matches_data || self.print_string_length || self.print_xor_key
     }
 }
 
@@ -879,35 +782,5 @@ mod tests {
             negate: false,
         });
         test_non_clonable(Input::Process(32));
-    }
-
-    #[test]
-    fn test_scan_params_from_args() {
-        fn parse(cmdline: &str) -> ScanParams {
-            let args = args::build_command().get_matches_from(cmdline.split(' '));
-            scan_params_from_args(&args)
-        }
-
-        let params = parse("boreal --max-process-memory-chunk 500 rules input");
-        assert_eq!(params.get_memory_chunk_size(), Some(500));
-
-        let params = parse("boreal --max-fetched-region-size 500 rules input");
-        assert_eq!(params.get_max_fetched_region_size(), 500);
-
-        let params = parse("boreal --fragmented-scan-mode legacy rules input");
-        assert_eq!(
-            params.get_fragmented_scan_mode(),
-            FragmentedScanMode::legacy()
-        );
-        let params = parse("boreal --fragmented-scan-mode fast rules input");
-        assert_eq!(
-            params.get_fragmented_scan_mode(),
-            FragmentedScanMode::fast()
-        );
-        let params = parse("boreal --fragmented-scan-mode singlepass rules input");
-        assert_eq!(
-            params.get_fragmented_scan_mode(),
-            FragmentedScanMode::single_pass()
-        );
     }
 }

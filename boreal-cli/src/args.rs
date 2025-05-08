@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use boreal::{
     compiler::{CompilerProfile, ExternalValue},
-    scanner::FragmentedScanMode,
+    scanner::{CallbackEvents, FragmentedScanMode, ScanParams},
 };
-use clap::{command, value_parser, Arg, ArgAction, Command};
+use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
 
 pub fn build_command() -> Command {
     let mut command = command!()
@@ -369,6 +369,101 @@ fn parse_module_data(arg: &str) -> Result<(String, PathBuf), String> {
     Ok((name.to_owned(), PathBuf::from(path)))
 }
 
+pub fn scan_params_from_args(args: &ArgMatches) -> ScanParams {
+    let mut scan_params = ScanParams::default()
+        .memory_chunk_size(args.get_one::<usize>("memory_chunk_size").copied())
+        .timeout_duration(
+            args.get_one::<u64>("timeout")
+                .map(|s| Duration::from_secs(*s)),
+        );
+
+    if let Some(size) = args.get_one::<usize>("max_fetched_region_size") {
+        scan_params = scan_params.max_fetched_region_size(*size);
+    }
+
+    if let Some(scan_mode) = args.get_one::<FragmentedScanMode>("fragmented_scan_mode") {
+        scan_params = scan_params.fragmented_scan_mode(*scan_mode);
+    }
+
+    if let Some(limit) = args.get_one::<u32>("string_max_nb_matches") {
+        scan_params = scan_params.string_max_nb_matches(*limit);
+    }
+
+    scan_params
+}
+
+pub fn update_scan_params_from_callback_options(
+    params: ScanParams,
+    options: &CallbackOptions,
+) -> ScanParams {
+    let mut callback_events = CallbackEvents::empty();
+    if !options.do_not_print_warnings {
+        callback_events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
+    }
+    if options.print_module_data {
+        callback_events |= CallbackEvents::MODULE_IMPORT;
+    }
+    if options.print_statistics {
+        callback_events |= CallbackEvents::SCAN_STATISTICS;
+    }
+    if options.negate {
+        callback_events |= CallbackEvents::RULE_NO_MATCH;
+    } else {
+        callback_events |= CallbackEvents::RULE_MATCH;
+    }
+
+    params
+        .compute_full_matches(options.print_strings_matches())
+        .compute_statistics(options.print_statistics)
+        .include_not_matched_rules(options.negate)
+        .callback_events(callback_events)
+}
+
+#[derive(Clone, Debug)]
+pub struct CallbackOptions {
+    pub print_strings_matches_data: bool,
+    pub print_string_length: bool,
+    pub print_xor_key: bool,
+    pub print_metadata: bool,
+    pub print_namespace: bool,
+    pub print_tags: bool,
+    pub print_count: bool,
+    pub print_statistics: bool,
+    pub print_module_data: bool,
+    pub do_not_print_warnings: bool,
+    pub count_limit: Option<u64>,
+    pub identifier: Option<String>,
+    pub tag: Option<String>,
+    pub fail_on_warnings: bool,
+    pub negate: bool,
+}
+
+impl CallbackOptions {
+    pub fn from_args(args: &ArgMatches) -> Self {
+        Self {
+            print_strings_matches_data: args.get_flag("print_strings"),
+            print_string_length: args.get_flag("print_string_length"),
+            print_xor_key: args.get_flag("print_xor_key"),
+            print_metadata: args.get_flag("print_metadata"),
+            print_namespace: args.get_flag("print_namespace"),
+            print_tags: args.get_flag("print_tags"),
+            print_count: args.get_flag("count"),
+            print_statistics: args.get_flag("print_scan_statistics"),
+            print_module_data: args.get_flag("print_module_data"),
+            do_not_print_warnings: args.get_flag("do_not_print_warnings"),
+            count_limit: args.get_one::<u64>("count_limit").copied(),
+            identifier: args.get_one("identifier").cloned(),
+            tag: args.get_one("tag").cloned(),
+            fail_on_warnings: args.get_flag("fail_on_warnings"),
+            negate: args.get_flag("negate"),
+        }
+    }
+
+    pub fn print_strings_matches(&self) -> bool {
+        self.print_strings_matches_data || self.print_string_length || self.print_xor_key
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,5 +471,35 @@ mod tests {
     #[test]
     fn verify_cli() {
         build_command().debug_assert();
+    }
+
+    #[test]
+    fn test_scan_params_from_args() {
+        fn parse(cmdline: &str) -> ScanParams {
+            let args = build_command().get_matches_from(cmdline.split(' '));
+            scan_params_from_args(&args)
+        }
+
+        let params = parse("boreal --max-process-memory-chunk 500 rules input");
+        assert_eq!(params.get_memory_chunk_size(), Some(500));
+
+        let params = parse("boreal --max-fetched-region-size 500 rules input");
+        assert_eq!(params.get_max_fetched_region_size(), 500);
+
+        let params = parse("boreal --fragmented-scan-mode legacy rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::legacy()
+        );
+        let params = parse("boreal --fragmented-scan-mode fast rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::fast()
+        );
+        let params = parse("boreal --fragmented-scan-mode singlepass rules input");
+        assert_eq!(
+            params.get_fragmented_scan_mode(),
+            FragmentedScanMode::single_pass()
+        );
     }
 }
