@@ -47,6 +47,7 @@ impl CallbackOptions {
 
 pub fn add_callback_args(command: Command) -> Command {
     command
+        .next_help_heading("Display options")
         .arg(
             Arg::new("print_strings")
                 .short('s')

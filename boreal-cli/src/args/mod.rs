@@ -88,7 +88,8 @@ fn build_yr_subcommand() -> Command {
              This allows substituting uses of the yara CLI without risks.\n\
              This API can be a bit ambiguous at times with multiple rules inputs, and many options\n\
              can be specified that will not be used in some contexts.\n\
-             For these reasons, using the other subcommands is recommended for improved clarity.");
+             For these reasons, using the other subcommands is recommended for improved clarity.")
+        .next_help_heading(None);
 
     // Add all options in the yr subcommand. The type of invokation will
     // be distinguished through the detection of specific options (see `ExecutionMode::from_yr_args`).
@@ -111,12 +112,6 @@ fn build_yr_subcommand() -> Command {
                 .help("Display the names of all available modules"),
         );
 
-    command = callback::add_callback_args(command);
-    command = compiler::add_compiler_args(command);
-    command = input::add_input_args(command, true);
-    command = scanner::add_scanner_args(command);
-    command = add_warnings_args(command);
-
     if cfg!(feature = "serialize") {
         command = command.arg(
             Arg::new("load_from_bytes")
@@ -126,6 +121,12 @@ fn build_yr_subcommand() -> Command {
                 .help("Load compiled rules from bytes. See save subcommand"),
         );
     }
+
+    command = callback::add_callback_args(command);
+    command = compiler::add_compiler_args(command);
+    command = input::add_input_args(command, true);
+    command = scanner::add_scanner_args(command);
+    command = add_warnings_args(command);
 
     command
 }
@@ -290,11 +291,12 @@ impl WarningMode {
 
 fn add_warnings_args(command: Command) -> Command {
     command
+        .next_help_heading(None)
         .arg(
             Arg::new("fail_on_warnings")
                 .long("fail-on-warnings")
                 .action(ArgAction::SetTrue)
-                .help("Fail compilation of rules on warnings"),
+                .help("Fail compilation or abort scans on warnings"),
         )
         .arg(
             Arg::new("do_not_print_warnings")
