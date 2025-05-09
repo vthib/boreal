@@ -40,6 +40,7 @@ impl InputOptions {
 
 pub fn add_input_args(command: Command, in_yr_subcommand: bool) -> Command {
     let mut command = command
+        .next_help_heading("Input options")
         .arg(
             Arg::new("scan_list")
                 .long("scan-list")
@@ -77,18 +78,6 @@ pub fn add_input_args(command: Command, in_yr_subcommand: bool) -> Command {
                 .help("Number of threads to use when scanning directories"),
         );
 
-    let mut input_arg = Arg::new("input")
-        .value_parser(value_parser!(String))
-        .help("File or directory to scan")
-        .long_help(
-            "File or directory to scan.\n\
-                     If --save is specified, this is the path to the file to create.",
-        );
-    if in_yr_subcommand {
-        input_arg = input_arg.required_unless_present("module_names");
-    }
-    command = command.arg(input_arg);
-
     if cfg!(feature = "memmap") {
         command = command.arg(
             Arg::new("no_mmap")
@@ -103,6 +92,15 @@ pub fn add_input_args(command: Command, in_yr_subcommand: bool) -> Command {
                 ),
         );
     }
+
+    let mut input_arg = Arg::new("input")
+        .value_name("FILE | DIRECTORY | PID")
+        .value_parser(value_parser!(String))
+        .help("File, directory or pid to scan");
+    if in_yr_subcommand {
+        input_arg = input_arg.required_unless_present("module_names");
+    }
+    command = command.next_help_heading(None).arg(input_arg);
 
     command
 }

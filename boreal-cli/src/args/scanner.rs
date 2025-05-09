@@ -31,6 +31,7 @@ impl ScannerOptions {
 
 pub fn add_scanner_args(command: Command) -> Command {
     command
+        .next_help_heading("Scanning options")
         .arg(
             Arg::new("memory_chunk_size")
                 .long("max-process-memory-chunk")

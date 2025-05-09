@@ -23,6 +23,7 @@ impl CompilerOptions {
 
 pub fn add_compiler_args(command: Command) -> Command {
     command
+        .next_help_heading("Compilation options")
         .arg(
             Arg::new("profile")
                 .long("profile")
