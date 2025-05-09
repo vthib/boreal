@@ -104,7 +104,9 @@ rule my_rule {
     let input = test_file(b"aaa");
     // Not matching
     test_cmd(CmdKind::Scan, |cmd| {
-        cmd.arg(rule_file.path())
+        cmd.arg("--profile")
+            .arg("memory")
+            .arg(rule_file.path())
             .arg(input.path())
             .assert()
             .stdout("")
@@ -1808,6 +1810,18 @@ fn test_invalid_save() {
                 "File {} already exists",
                 rule.display()
             )))
+            .failure();
+    });
+
+    let bad_rule = temp.path().join("bad_rule");
+    fs::write(&bad_rule, b"rule a { ").unwrap();
+    // Compilation error
+    test_cmd(CmdKind::Save, |cmd| {
+        cmd.arg(&bad_rule)
+            .arg(&bad_rule)
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains("syntax error"))
             .failure();
     });
 
