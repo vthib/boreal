@@ -11,46 +11,82 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::{NamedTempFile, TempDir};
 
-fn cmd() -> Command {
-    Command::cargo_bin("boreal").unwrap()
-}
-
 fn test_file(contents: &[u8]) -> NamedTempFile {
     let mut file = NamedTempFile::new().unwrap();
     file.write_all(contents).unwrap();
     file
 }
 
+enum CmdKind {
+    Scan,
+    #[cfg(feature = "serialize")]
+    Save,
+    #[cfg(feature = "serialize")]
+    Load,
+    ListModules,
+}
+
+fn test_cmd<F>(kind: CmdKind, test: F)
+where
+    F: Fn(&mut Command),
+{
+    fn cmd() -> Command {
+        Command::cargo_bin("boreal").unwrap()
+    }
+
+    match kind {
+        CmdKind::Scan => {
+            test(cmd().arg("yr"));
+            test(cmd().arg("scan"));
+        }
+        #[cfg(feature = "serialize")]
+        CmdKind::Save => {
+            test(cmd().arg("save"));
+        }
+        #[cfg(feature = "serialize")]
+        CmdKind::Load => {
+            test(cmd().arg("yr").arg("-C"));
+            test(cmd().arg("load"));
+        }
+        CmdKind::ListModules => {
+            test(cmd().arg("yr").arg("-M"));
+            test(cmd().arg("list-modules"));
+        }
+    }
+}
+
 #[test]
 fn test_no_arguments() {
     // Some arguments are required to do anything
-    cmd().arg("yr").assert().failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.assert().failure();
+    });
 }
 
 #[test]
 fn test_invalid_path() {
     // Invalid path to rule
-    cmd()
-        .arg("yr")
-        .arg("do_not_exist")
-        .arg("input")
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(
-            "Cannot read rules file do_not_exist: ",
-        ))
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("do_not_exist")
+            .arg("input")
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(
+                "Cannot read rules file do_not_exist: ",
+            ))
+            .failure();
+    });
 
     // Invalid path to input
     let rule_file = test_file(b"");
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg("bad_input")
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains("Cannot scan bad_input"))
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg("bad_input")
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains("Cannot scan bad_input"))
+            .failure();
+    });
 }
 
 #[test]
@@ -67,25 +103,25 @@ rule my_rule {
 
     let input = test_file(b"aaa");
     // Not matching
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr("")
+            .success();
+    });
 
     let input = test_file(b"zeabce");
     // Matching
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("my_rule {}\n", input.path().display()))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("my_rule {}\n", input.path().display()))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -106,14 +142,14 @@ rule process_scan {
     let pid = proc.pid();
 
     // Not matching
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(pid.to_string())
-        .assert()
-        .stdout(format!("process_scan {}\n", pid))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(pid.to_string())
+            .assert()
+            .stdout(format!("process_scan {}\n", pid))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -129,14 +165,14 @@ fn test_scan_process_not_found() {
     }
 
     // Not matching
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(pid.to_string())
-        .assert()
-        .stdout("")
-        .stderr(format!("Cannot scan {}: unknown process\n", pid))
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(pid.to_string())
+            .assert()
+            .stdout("")
+            .stderr(format!("Cannot scan {}: unknown process\n", pid))
+            .failure();
+    });
 }
 
 #[test]
@@ -157,15 +193,15 @@ rule is_file {
     let file = temp.path().join("1");
     fs::write(file, "gabuzomeu").unwrap();
     // Matching
-    cmd()
-        .arg("yr")
-        .current_dir(temp.path())
-        .arg(rule_file.path())
-        .arg("1")
-        .assert()
-        .stdout("is_file 1\n")
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.current_dir(temp.path())
+            .arg(rule_file.path())
+            .arg("1")
+            .assert()
+            .stdout("is_file 1\n")
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -178,17 +214,17 @@ fn test_rule_error() {
     );
 
     let input = test_file(b"");
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(
-            predicate::str::contains("error")
-                .and(predicate::str::contains("invalid regex class range")),
-        )
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(
+                predicate::str::contains("error")
+                    .and(predicate::str::contains("invalid regex class range")),
+            )
+            .failure();
+    });
 }
 
 #[test]
@@ -205,44 +241,44 @@ fn test_rule_warning() {
     let path = input.path().display();
 
     // Warning is OK and rule is eval'ed
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("rule_with_warning {path}\n"))
-        .stderr(
-            predicate::str::contains("warning").and(predicate::str::contains(
-                "implicit cast from a bytes value to a boolean",
-            )),
-        )
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("rule_with_warning {path}\n"))
+            .stderr(
+                predicate::str::contains("warning").and(predicate::str::contains(
+                    "implicit cast from a bytes value to a boolean",
+                )),
+            )
+            .success();
+    });
 
     // Warning is considered an error
-    cmd()
-        .arg("yr")
-        .arg("--fail-on-warnings")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(
-            predicate::str::contains("warning").and(predicate::str::contains(
-                "implicit cast from a bytes value to a boolean",
-            )),
-        )
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--fail-on-warnings")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(
+                predicate::str::contains("warning").and(predicate::str::contains(
+                    "implicit cast from a bytes value to a boolean",
+                )),
+            )
+            .failure();
+    });
 
     // Ignore warnings
-    cmd()
-        .arg("yr")
-        .arg("-w")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("rule_with_warning {path}\n"))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-w")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("rule_with_warning {path}\n"))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -281,27 +317,27 @@ rule includer {
 
     // Match on the included
     let input = test_file(b"abc");
-    cmd()
-        .arg("yr")
-        .arg(&rule_a)
-        .arg(input.path())
-        .assert()
-        .stdout(format!("included {}\n", input.path().display()))
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(&rule_a)
+            .arg(input.path())
+            .assert()
+            .stdout(format!("included {}\n", input.path().display()))
+            .success();
+    });
 
     // Match on both
     let input = test_file(b"xyz abc");
-    cmd()
-        .arg("yr")
-        .arg(rule_a)
-        .arg(input.path())
-        .assert()
-        .stdout(
-            predicate::str::contains(format!("included {}", input.path().display())).and(
-                predicate::str::contains(format!("includer {}", input.path().display())),
-            ),
-        )
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(&rule_a)
+            .arg(input.path())
+            .assert()
+            .stdout(
+                predicate::str::contains(format!("included {}", input.path().display())).and(
+                    predicate::str::contains(format!("includer {}", input.path().display())),
+                ),
+            )
+            .success();
+    });
 }
 
 #[test]
@@ -327,27 +363,27 @@ rule included {
 
     // Match on the included
     let input = test_file(b"");
-    cmd()
-        .arg("yr")
-        .arg(rule_a)
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(
-            // Contains the path to the faulty file
-            // Need canonicalize as the path is canonicalized in boreal, and this causes
-            // differences on Windows.
-            predicate::str::contains(rule_b.canonicalize().unwrap().display().to_string())
-                .and(
-                    // And the proper string that caused the error
-                    predicate::str::contains("z-a"),
-                )
-                .and(
-                    // And the error message
-                    predicate::str::contains("invalid regex class range"),
-                ),
-        )
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(&rule_a)
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(
+                // Contains the path to the faulty file
+                // Need canonicalize as the path is canonicalized in boreal, and this causes
+                // differences on Windows.
+                predicate::str::contains(rule_b.canonicalize().unwrap().display().to_string())
+                    .and(
+                        // And the proper string that caused the error
+                        predicate::str::contains("z-a"),
+                    )
+                    .and(
+                        // And the error message
+                        predicate::str::contains("invalid regex class range"),
+                    ),
+            )
+            .failure();
+    });
 }
 
 #[test]
@@ -388,80 +424,81 @@ fn test_rule_dir() {
     let match_str = |input: &Path| predicate::str::contains(format!("a {}", input.display()));
 
     // Non recursive
-    cmd()
-        .arg("yr")
-        // Add some threads to instrument the code
-        .args(["--threads", "20"])
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            // match on "a", "b" and "d"
-            match_str(&file_a)
-                .and(match_str(&file_b))
-                .and(match_str(&file_c).not())
-                .and(match_str(&file_d))
-                .and(match_str(&file_e).not()),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd
+            // Add some threads to instrument the code
+            .args(["--threads", "20"])
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                // match on "a", "b" and "d"
+                match_str(&file_a)
+                    .and(match_str(&file_b))
+                    .and(match_str(&file_c).not())
+                    .and(match_str(&file_d))
+                    .and(match_str(&file_e).not()),
+            )
+            .stderr("")
+            .success();
+    });
 
     // Non recursive and non follow symlinks
-    cmd()
-        .arg("yr")
-        .arg("-N")
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            // match on "a" and "b"
-            match_str(&file_a)
-                .and(match_str(&file_b))
-                .and(match_str(&file_c).not())
-                .and(match_str(&file_d).not())
-                .and(match_str(&file_e).not()),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-N")
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                // match on "a" and "b"
+                match_str(&file_a)
+                    .and(match_str(&file_b))
+                    .and(match_str(&file_c).not())
+                    .and(match_str(&file_d).not())
+                    .and(match_str(&file_e).not()),
+            )
+            .stderr("")
+            .success();
+    });
 
     // Recursive
-    cmd()
-        .arg("yr")
-        .arg("-r")
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            // match on all
-            match_str(&file_a)
-                .and(match_str(&file_b))
-                .and(match_str(&file_c))
-                .and(match_str(&file_d))
-                .and(match_str(&file_e)),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-r")
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                // match on all
+                match_str(&file_a)
+                    .and(match_str(&file_b))
+                    .and(match_str(&file_c))
+                    .and(match_str(&file_d))
+                    .and(match_str(&file_e)),
+            )
+            .stderr("")
+            .success();
+    });
 
     // recursive and non follow symlinks
-    cmd()
-        .arg("yr")
-        .arg("--recursive")
-        .arg("--no-follow-symlinks")
-        // Add some threads to instrument the code
-        .args(["-p", "2"])
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            // match on "a", "b" and "c"
-            match_str(&file_a)
-                .and(match_str(&file_b))
-                .and(match_str(&file_c))
-                .and(match_str(&file_d).not())
-                .and(match_str(&file_e).not()),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--recursive")
+            .arg("--no-follow-symlinks")
+            // Add some threads to instrument the code
+            .args(["-p", "2"])
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                // match on "a", "b" and "c"
+                match_str(&file_a)
+                    .and(match_str(&file_b))
+                    .and(match_str(&file_c))
+                    .and(match_str(&file_d).not())
+                    .and(match_str(&file_e).not()),
+            )
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -487,61 +524,61 @@ fn test_skip_larger() {
         |input: &Path| predicate::str::contains(format!("skipping {}", input.display()));
 
     // default will match the 3 files
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            // match on "a", "b" and "d"
-            match_file(&file_a)
-                .and(match_file(&file_b))
-                .and(match_file(&file_c)),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                // match on "a", "b" and "d"
+                match_file(&file_a)
+                    .and(match_file(&file_b))
+                    .and(match_file(&file_c)),
+            )
+            .stderr("")
+            .success();
+    });
 
     // Limit to 1024, will skip c
-    cmd()
-        .arg("yr")
-        .args(["--skip-larger", "512"])
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            // match on "a" and "b"
-            match_file(&file_a)
-                .and(match_file(&file_b))
-                .and(match_file(&file_c).not()),
-        )
-        .stderr(
-            skip_file(&file_a)
-                .not()
-                .and(skip_file(&file_b).not())
-                .and(skip_file(&file_c)),
-        )
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.args(["--skip-larger", "512"])
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                // match on "a" and "b"
+                match_file(&file_a)
+                    .and(match_file(&file_b))
+                    .and(match_file(&file_c).not()),
+            )
+            .stderr(
+                skip_file(&file_a)
+                    .not()
+                    .and(skip_file(&file_b).not())
+                    .and(skip_file(&file_c)),
+            )
+            .success();
+    });
 
     // Limit to 10, will skip all but a
-    cmd()
-        .arg("yr")
-        .args(["-z", "10"])
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            // match on all
-            match_file(&file_a)
-                .and(match_file(&file_b).not())
-                .and(match_file(&file_c).not()),
-        )
-        .stderr(
-            skip_file(&file_a)
-                .not()
-                .and(skip_file(&file_b))
-                .and(skip_file(&file_c)),
-        )
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.args(["-z", "10"])
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                // match on all
+                match_file(&file_a)
+                    .and(match_file(&file_b).not())
+                    .and(match_file(&file_c).not()),
+            )
+            .stderr(
+                skip_file(&file_a)
+                    .not()
+                    .and(skip_file(&file_b))
+                    .and(skip_file(&file_c)),
+            )
+            .success();
+    });
 }
 
 #[test]
@@ -563,53 +600,53 @@ rule a {
         .join("libyara")
         .join("data")
         .join("mtxex.dll");
-    cmd()
-        .arg("yr")
-        .arg("-D")
-        .arg(rule_file.path())
-        .arg(input)
-        .assert()
-        .stdout(
-            predicate::str::starts_with("pe\n")
-                // Integer
-                .and(predicate::str::contains("base_of_code = 4096 (0x1000)"))
-                // Undef
-                .and(predicate::str::contains("base_of_data[undef]"))
-                // Array
-                .and(predicate::str::contains(
-                    r#"
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-D")
+            .arg(rule_file.path())
+            .arg(&input)
+            .assert()
+            .stdout(
+                predicate::str::starts_with("pe\n")
+                    // Integer
+                    .and(predicate::str::contains("base_of_code = 4096 (0x1000)"))
+                    // Undef
+                    .and(predicate::str::contains("base_of_data[undef]"))
+                    // Array
+                    .and(predicate::str::contains(
+                        r#"
     data_directories
         [0]
             size = 220 (0xdc)
 "#,
-                ))
-                // Empty array
-                .and(predicate::str::contains("delayed_import_details = []"))
-                // Bytes printable
-                .and(predicate::str::contains(r#"dll_name = "mtxex.dll""#))
-                // Bytes non-printable
-                .and(predicate::str::contains(
-                    "[\"ProductName\"] = { 4d6963726f736f6674ae2057696e646f7773ae204f7065\
+                    ))
+                    // Empty array
+                    .and(predicate::str::contains("delayed_import_details = []"))
+                    // Bytes printable
+                    .and(predicate::str::contains(r#"dll_name = "mtxex.dll""#))
+                    // Bytes non-printable
+                    .and(predicate::str::contains(
+                        "[\"ProductName\"] = { 4d6963726f736f6674ae2057696e646f7773ae204f7065\
                                            726174696e672053797374656d }",
-                ))
-                // Struct
-                .and(predicate::str::contains(
-                    r#"
+                    ))
+                    // Struct
+                    .and(predicate::str::contains(
+                        r#"
     image_version
         major = 10 (0xa)
         minor = 0 (0x0)
 "#,
-                ))
-                // Dictionary
-                .and(predicate::str::contains(
-                    r#"
+                    ))
+                    // Dictionary
+                    .and(predicate::str::contains(
+                        r#"
     version_info
         ["CompanyName"] = "Microsoft Corporation"
 "#,
-                )),
-        )
-        .stderr("")
-        .success();
+                    )),
+            )
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -652,19 +689,19 @@ rule a {
 "#;
 
     let input = test_file(b"");
-    cmd()
-        .arg("yr")
-        .arg("--string-stats")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            "default:a (from {}){}",
-            rule_file.path().display(),
-            stats
-        ))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--string-stats")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                "default:a (from {}){}",
+                rule_file.path().display(),
+                stats
+            ))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -681,15 +718,14 @@ rule a {
     );
 
     let input = test_file(b"abc");
-    cmd()
-        .arg("yr")
-        .arg("--scan-stats")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(
-            predicate::str::is_match(
-                r"Evaluation \{
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--scan-stats")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(
+                predicate::str::is_match(
+                    r"Evaluation \{
     no_scan_eval_duration: .*,
     ac_duration: .*,
     fetch_memory_duration: .*,
@@ -701,11 +737,12 @@ rule a {
     nb_memory_chunks: .*,
 \}
 ",
+                )
+                .unwrap(),
             )
-            .unwrap(),
-        )
-        .stderr("")
-        .success();
+            .stderr("")
+            .success();
+    });
 }
 
 // Test when some inputs in a dir cannot be read
@@ -730,36 +767,38 @@ fn test_input_cannot_read() {
     fs::create_dir(&subdir).unwrap();
     fs::set_permissions(&subdir, fs::Permissions::from_mode(0o000)).unwrap();
 
-    cmd()
-        .arg("yr")
-        .arg("-r")
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout("")
-        .stderr(
-            predicate::str::contains(format!("Cannot scan file {}", child.display())).and(
-                predicate::str::contains(format!("IO error for operation on {}", subdir.display())),
-            ),
-        )
-        // Still successful, since some other files in the directory may have been scanned
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-r")
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout("")
+            .stderr(
+                predicate::str::contains(format!("Cannot scan file {}", child.display())).and(
+                    predicate::str::contains(format!(
+                        "IO error for operation on {}",
+                        subdir.display()
+                    )),
+                ),
+            )
+            // Still successful, since some other files in the directory may have been scanned
+            .success();
+    });
 }
 
 #[test]
 fn test_module_names() {
-    cmd()
-        .arg("yr")
-        .arg("-M")
-        .assert()
-        .stdout(
-            predicate::str::contains("math\n")
-                .and(predicate::str::contains("string\n"))
-                .and(predicate::str::contains("time\n")),
-        )
-        .stderr("")
-        // Still successful, since some other files in the directory may have been scanned
-        .success();
+    test_cmd(CmdKind::ListModules, |cmd| {
+        cmd.assert()
+            .stdout(
+                predicate::str::contains("math\n")
+                    .and(predicate::str::contains("string\n"))
+                    .and(predicate::str::contains("time\n")),
+            )
+            .stderr("")
+            // Still successful, since some other files in the directory may have been scanned
+            .success();
+    });
 }
 
 #[test]
@@ -783,15 +822,15 @@ rule second {
 
     let input = test_file(b"xyabcz");
     // Not matching
-    cmd()
-        .arg("yr")
-        .arg("--no-mmap")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("first {}\n", input.path().display()))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--no-mmap")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("first {}\n", input.path().display()))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -809,60 +848,60 @@ rule logger {
     let input = test_file(b"");
     let path = input.path().display();
 
-    cmd()
-        .arg("yr")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("this is a log\nlogger {path}\n"))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("this is a log\nlogger {path}\n"))
+            .stderr("")
+            .success();
+    });
 
     // Logs can be disabled with the -q flag
-    cmd()
-        .arg("yr")
-        .arg("-q")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("logger {path}\n"))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-q")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("logger {path}\n"))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
 fn test_invalid_fragmented_scan_mode() {
     // Invalid path to rule
-    cmd()
-        .arg("yr")
-        .arg("--fragmented-scan-mode")
-        .arg("bad_value")
-        .arg("rules.yar")
-        .arg("input")
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(
-            "invalid value 'bad_value' for \
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--fragmented-scan-mode")
+            .arg("bad_value")
+            .arg("rules.yar")
+            .arg("input")
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(
+                "invalid value 'bad_value' for \
             '--fragmented-scan-mode <legacy|fast|singlepass>\': invalid value",
-        ))
-        .failure();
+            ))
+            .failure();
+    });
 }
 
 #[test]
 fn test_invalid_compiler_profile() {
-    cmd()
-        .arg("yr")
-        .arg("--profile")
-        .arg("bad_value")
-        .arg("rules.yar")
-        .arg("input")
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(
-            "invalid value 'bad_value' for \
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--profile")
+            .arg("bad_value")
+            .arg("rules.yar")
+            .arg("input")
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(
+                "invalid value 'bad_value' for \
             '--profile <speed|memory>\': invalid value",
-        ))
-        .failure();
+            ))
+            .failure();
+    });
 }
 
 #[test]
@@ -888,50 +927,50 @@ rule tag3: first second third {
     let path = input.path().display();
 
     // Test print tags
-    cmd()
-        .arg("yr")
-        .arg("-g")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            "notag [] {path}\n\
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-g")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                "notag [] {path}\n\
              tag1 [first] {path}\n\
              tag3 [first,second,third] {path}\n"
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 
     // Test filter by tag
-    cmd()
-        .arg("yr")
-        .arg("-t")
-        .arg("first")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("tag1 {path}\ntag3 {path}\n"))
-        .stderr("")
-        .success();
-    cmd()
-        .arg("yr")
-        .arg("--tag=third")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("tag3 {path}\n"))
-        .stderr("")
-        .success();
-    cmd()
-        .arg("yr")
-        .arg("-t")
-        .arg("")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-t")
+            .arg("first")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("tag1 {path}\ntag3 {path}\n"))
+            .stderr("")
+            .success();
+    });
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--tag=third")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("tag3 {path}\n"))
+            .stderr("")
+            .success();
+    });
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-t")
+            .arg("")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -947,34 +986,34 @@ rule second { condition: true }
     let path = input.path().display();
 
     // Test filter by identifier
-    cmd()
-        .arg("yr")
-        .arg("-i")
-        .arg("first")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("first {path}\n"))
-        .stderr("")
-        .success();
-    cmd()
-        .arg("yr")
-        .arg("--identifier=second")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("second {path}\n"))
-        .stderr("")
-        .success();
-    cmd()
-        .arg("yr")
-        .arg("--identifier=third")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-i")
+            .arg("first")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("first {path}\n"))
+            .stderr("")
+            .success();
+    });
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--identifier=second")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("second {path}\n"))
+            .stderr("")
+            .success();
+    });
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--identifier=third")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1007,37 +1046,37 @@ rule fourth { condition: true }
     let path = input.path().display();
 
     // Test print meta
-    cmd()
-        .arg("yr")
-        .arg("-m")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            "first [integer=-15,string=\"d mol\",test=true] {path}\n\
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-m")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                "first [integer=-15,string=\"d mol\",test=true] {path}\n\
              second [] {path}\n\
              third [value=\"ok\"] {path}\n\
              fourth [] {path}\n"
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 
     // Test print meta + tag
-    cmd()
-        .arg("yr")
-        .arg("-g")
-        .arg("--print-meta")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            "first [tag] [integer=-15,string=\"d mol\",test=true] {path}\n\
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-g")
+            .arg("--print-meta")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                "first [tag] [integer=-15,string=\"d mol\",test=true] {path}\n\
              second [tag] [] {path}\n\
              third [tag] [value=\"ok\"] {path}\n\
              fourth [] [] {path}\n"
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1067,14 +1106,13 @@ rule my_rule {
     let path = input.path().display();
 
     // Test match data only
-    cmd()
-        .arg("yr")
-        .arg("-s")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            r#"my_rule {path}
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-s")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                r#"my_rule {path}
 0x0:$a: <a>
 0x5:$a: <<abc>
 0x6:$a: <abc>
@@ -1083,19 +1121,19 @@ rule my_rule {
 0x1c:$a: <a\xff>
 0x7:$b: abc
 "#
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 
     // Test match length only
-    cmd()
-        .arg("yr")
-        .arg("-L")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            r#"my_rule {path}
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-L")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                r#"my_rule {path}
 0x0:3:$a
 0x5:6:$a
 0x6:5:$a
@@ -1104,20 +1142,20 @@ rule my_rule {
 0x1c:4:$a
 0x7:3:$b
 "#
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 
     // Test both
-    cmd()
-        .arg("yr")
-        .arg("--print-strings")
-        .arg("--print-string-length")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            r#"my_rule {path}
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--print-strings")
+            .arg("--print-string-length")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                r#"my_rule {path}
 0x0:3:$a: <a>
 0x5:6:$a: <<abc>
 0x6:5:$a: <abc>
@@ -1126,9 +1164,10 @@ rule my_rule {
 0x1c:4:$a: <a\xff>
 0x7:3:$b: abc
 "#
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1150,40 +1189,40 @@ rule my_rule {
     let path = input.path().display();
 
     // Test xor only
-    cmd()
-        .arg("yr")
-        .arg("-X")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            r#"my_rule {path}
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-X")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                r#"my_rule {path}
 0x0:$a:xor(0x00,aaa)
 0x4:$a:xor(0x03,aaa)
 0xa:$a:xor(0x02,aaa)
 0x10:$a:xor(0x23,a\x00a\x00a\x00)
 "#
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 
     // With match data
-    cmd()
-        .arg("yr")
-        .arg("-Xs")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            r#"my_rule {path}
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-Xs")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                r#"my_rule {path}
 0x0:$a:xor(0x00,aaa): aaa
 0x4:$a:xor(0x03,aaa): bbb
 0xa:$a:xor(0x02,aaa): ccc
 0x10:$a:xor(0x23,a\x00a\x00a\x00): B#B#B#
 "#
-        ))
-        .stderr("")
-        .success();
+            ))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1208,16 +1247,16 @@ rule too_long {
     let path = input.path().display();
 
     // Test filter by identifier
-    cmd()
-        .arg("yr")
-        .arg("-a")
-        .arg("1")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(format!("Cannot scan {path}: timeout\n"))
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-a")
+            .arg("1")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(format!("Cannot scan {path}: timeout\n"))
+            .failure();
+    });
 }
 
 #[test]
@@ -1232,15 +1271,15 @@ rule first { condition: true }
     let path = input.path().display();
 
     // Test filter by identifier
-    cmd()
-        .arg("yr")
-        .arg("-e")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("default:first {path}\n"))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-e")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("default:first {path}\n"))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1263,42 +1302,42 @@ rule symbols {
 "#,
     );
 
-    cmd()
-        .arg("yr")
-        .arg("-d")
-        .arg("symbol_float=-1.8")
-        .arg("--define=symbol_int=-3")
-        .arg("--define")
-        .arg("symbol_true=true")
-        .arg("--define")
-        .arg("symbol_false=false")
-        .arg("--define")
-        .arg("symbol_str=a_string")
-        .arg("--define")
-        .arg("symbol_str2=2.5a")
-        .arg("--define")
-        .arg("symbol_empty=")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("symbols {path}\n"))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-d")
+            .arg("symbol_float=-1.8")
+            .arg("--define=symbol_int=-3")
+            .arg("--define")
+            .arg("symbol_true=true")
+            .arg("--define")
+            .arg("symbol_false=false")
+            .arg("--define")
+            .arg("symbol_str=a_string")
+            .arg("--define")
+            .arg("symbol_str2=2.5a")
+            .arg("--define")
+            .arg("symbol_empty=")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("symbols {path}\n"))
+            .stderr("")
+            .success();
+    });
 
     // Test a bad define
-    cmd()
-        .arg("yr")
-        .arg("-d")
-        .arg("name")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(
-            "invalid value 'name' for '--define <VAR=VALUE>': \
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-d")
+            .arg("name")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(
+                "invalid value 'name' for '--define <VAR=VALUE>': \
             missing '=' delimiter",
-        ))
-        .failure();
+            ))
+            .failure();
+    });
 
     // Test a mismatched type
     let bad_rule = test_file(
@@ -1309,16 +1348,16 @@ rule bad_symbols {
 }
 "#,
     );
-    cmd()
-        .arg("yr")
-        .arg("-d")
-        .arg("symbol_float=-1.8")
-        .arg(bad_rule.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains("expressions have invalid types"))
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-d")
+            .arg("symbol_float=-1.8")
+            .arg(bad_rule.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains("expressions have invalid types"))
+            .failure();
+    });
 }
 
 #[test]
@@ -1347,94 +1386,94 @@ fn test_scan_list() {
 
     // dir1 + c, will match the 3 filse
     let list = test_file(format!("{}\n{}\n", dir1.path().display(), file_c.display()).as_bytes());
-    cmd()
-        .arg("yr")
-        .arg("--scan-list")
-        .arg(rule_file.path())
-        .arg(list.path())
-        .assert()
-        .stdout(
-            match_str(&file_a)
-                .and(match_str(&file_b))
-                .and(match_str(&file_c)),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--scan-list")
+            .arg(rule_file.path())
+            .arg(list.path())
+            .assert()
+            .stdout(
+                match_str(&file_a)
+                    .and(match_str(&file_b))
+                    .and(match_str(&file_c)),
+            )
+            .stderr("")
+            .success();
+    });
 
     // a + dir2, but not recursive, will match only a
     let list = test_file(format!("{}\n{}\n", file_a.display(), dir2.path().display()).as_bytes());
-    cmd()
-        .arg("yr")
-        .arg("--scan-list")
-        .arg(rule_file.path())
-        .arg(list.path())
-        .assert()
-        .stdout(
-            match_str(&file_a)
-                .and(match_str(&file_b).not())
-                .and(match_str(&file_c).not()),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--scan-list")
+            .arg(rule_file.path())
+            .arg(list.path())
+            .assert()
+            .stdout(
+                match_str(&file_a)
+                    .and(match_str(&file_b).not())
+                    .and(match_str(&file_c).not()),
+            )
+            .stderr("")
+            .success();
+    });
 
     // When recursive, will match c
-    cmd()
-        .arg("yr")
-        .arg("--scan-list")
-        .arg("-r")
-        .arg(rule_file.path())
-        .arg(list.path())
-        .assert()
-        .stdout(
-            match_str(&file_a)
-                .and(match_str(&file_b).not())
-                .and(match_str(&file_c)),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--scan-list")
+            .arg("-r")
+            .arg(rule_file.path())
+            .arg(list.path())
+            .assert()
+            .stdout(
+                match_str(&file_a)
+                    .and(match_str(&file_b).not())
+                    .and(match_str(&file_c)),
+            )
+            .stderr("")
+            .success();
+    });
 
     // Empty
     let list = test_file(b"");
-    cmd()
-        .arg("yr")
-        .arg("--scan-list")
-        .arg(rule_file.path())
-        .arg(list.path())
-        .assert()
-        .stdout("")
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--scan-list")
+            .arg(rule_file.path())
+            .arg(list.path())
+            .assert()
+            .stdout("")
+            .stderr("")
+            .success();
+    });
 
     // Do these tests only on linux, as the error messages can depend on the OS.
     if cfg!(target_os = "linux") {
         // path is a directory
         // On linux, the open on a dir works but the read fails, making
         // this a great test to test the read failure case.
-        cmd()
-            .arg("yr")
-            .arg("--scan-list")
-            .arg(rule_file.path())
-            .arg(dir1.path())
-            .assert()
-            .stdout("")
-            .stderr(predicate::str::contains(format!(
-                "cannot read from scan list {}: Is a directory",
-                dir1.path().display()
-            )))
-            .failure();
+        test_cmd(CmdKind::Scan, |cmd| {
+            cmd.arg("--scan-list")
+                .arg(rule_file.path())
+                .arg(dir1.path())
+                .assert()
+                .stdout("")
+                .stderr(predicate::str::contains(format!(
+                    "cannot read from scan list {}: Is a directory",
+                    dir1.path().display()
+                )))
+                .failure();
+        });
 
         // path does not exist
-        cmd()
-            .arg("yr")
-            .arg("--scan-list")
-            .arg(rule_file.path())
-            .arg("invalid_path")
-            .assert()
-            .stdout("")
-            .stderr(predicate::str::contains(
-                "cannot open scan list invalid_path: No such file or directory",
-            ))
-            .failure();
+        test_cmd(CmdKind::Scan, |cmd| {
+            cmd.arg("--scan-list")
+                .arg(rule_file.path())
+                .arg("invalid_path")
+                .assert()
+                .stdout("")
+                .stderr(predicate::str::contains(
+                    "cannot open scan list invalid_path: No such file or directory",
+                ))
+                .failure();
+        });
     }
 }
 
@@ -1451,19 +1490,19 @@ rule d { condition: false }
 
     let input = test_file(b"");
     // Not matching
-    cmd()
-        .arg("yr")
-        .arg("-n")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            "b {}\nd {}\n",
-            input.path().display(),
-            input.path().display()
-        ))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-n")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                "b {}\nd {}\n",
+                input.path().display(),
+                input.path().display()
+            ))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1494,41 +1533,41 @@ rule b {
     fs::write(&file_c, "").unwrap();
 
     // Test against a single file
-    cmd()
-        .arg("yr")
-        .arg("-c")
-        .arg(rule_file.path())
-        .arg(&file_a)
-        .assert()
-        .stdout(format!("{}: 1\n", file_a.display()))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-c")
+            .arg(rule_file.path())
+            .arg(&file_a)
+            .assert()
+            .stdout(format!("{}: 1\n", file_a.display()))
+            .stderr("")
+            .success();
+    });
 
     // Test in combination with the negate flag
-    cmd()
-        .arg("yr")
-        .arg("-cn")
-        .arg(rule_file.path())
-        .arg(&file_c)
-        .assert()
-        .stdout(format!("{}: 2\n", file_c.display()))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-cn")
+            .arg(rule_file.path())
+            .arg(&file_c)
+            .assert()
+            .stdout(format!("{}: 2\n", file_c.display()))
+            .stderr("")
+            .success();
+    });
 
     // Test against a directory
-    cmd()
-        .arg("yr")
-        .arg("-c")
-        .arg(rule_file.path())
-        .arg(temp.path())
-        .assert()
-        .stdout(
-            predicate::str::contains(format!("{}: 1", file_a.display()))
-                .and(predicate::str::contains(format!("{}: 2", file_b.display())))
-                .and(predicate::str::contains(format!("{}: 0", file_c.display()))),
-        )
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-c")
+            .arg(rule_file.path())
+            .arg(temp.path())
+            .assert()
+            .stdout(
+                predicate::str::contains(format!("{}: 1", file_a.display()))
+                    .and(predicate::str::contains(format!("{}: 2", file_b.display())))
+                    .and(predicate::str::contains(format!("{}: 0", file_c.display()))),
+            )
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1548,15 +1587,15 @@ rule process_scan {
     let pid = proc.pid();
 
     // Not matching
-    cmd()
-        .arg("yr")
-        .arg("--count")
-        .arg(rule_file.path())
-        .arg(pid.to_string())
-        .assert()
-        .stdout(format!("{pid}: 1\n"))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--count")
+            .arg(rule_file.path())
+            .arg(pid.to_string())
+            .assert()
+            .stdout(format!("{pid}: 1\n"))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1571,35 +1610,35 @@ rule c { condition: true }
     );
 
     let input = test_file(b"");
-    cmd()
-        .arg("yr")
-        .arg("-l")
-        .arg("2")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!(
-            "a {}\nb {}\n",
-            input.path().display(),
-            input.path().display(),
-        ))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-l")
+            .arg("2")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!(
+                "a {}\nb {}\n",
+                input.path().display(),
+                input.path().display(),
+            ))
+            .stderr("")
+            .success();
+    });
 
     // Also works with a process
     let proc = BinHelper::run("stack");
     let pid = proc.pid();
 
     // Not matching
-    cmd()
-        .arg("yr")
-        .arg("--max-rules=2")
-        .arg(rule_file.path())
-        .arg(pid.to_string())
-        .assert()
-        .stdout(format!("a {pid}\nb {pid}\n"))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--max-rules=2")
+            .arg(rule_file.path())
+            .arg(pid.to_string())
+            .assert()
+            .stdout(format!("a {pid}\nb {pid}\n"))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1618,19 +1657,19 @@ rule a {
     );
 
     let input = test_file(b"");
-    cmd()
-        .arg("yr")
-        .arg("--max-strings-per-rule=2")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(
-            predicate::str::contains("error").and(predicate::str::contains(
-                "the rule contains more than 2 strings",
-            )),
-        )
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--max-strings-per-rule=2")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(
+                predicate::str::contains("error").and(predicate::str::contains(
+                    "the rule contains more than 2 strings",
+                )),
+            )
+            .failure();
+    });
 }
 
 #[test]
@@ -1650,39 +1689,39 @@ rule a {
 
     // Default behavior is to print the warning and continue
     let input = test_file(b"aaaa");
-    cmd()
-        .arg("yr")
-        .arg("--string-max-nb-matches=2")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("a {}\n", input.path().display()))
-        .stderr(predicate::str::contains(warning))
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--string-max-nb-matches=2")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("a {}\n", input.path().display()))
+            .stderr(predicate::str::contains(warning))
+            .success();
+    });
 
     // We can ignore warnings with a flag
-    cmd()
-        .arg("yr")
-        .arg("--string-max-nb-matches=2")
-        .arg("--no-warnings")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout(format!("a {}\n", input.path().display()))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--string-max-nb-matches=2")
+            .arg("--no-warnings")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout(format!("a {}\n", input.path().display()))
+            .stderr("")
+            .success();
+    });
 
     // Or we can abort on warnings
-    cmd()
-        .arg("yr")
-        .arg("--string-max-nb-matches=2")
-        .arg("--fail-on-warnings")
-        .arg(rule_file.path())
-        .arg(input.path())
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(warning))
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("--string-max-nb-matches=2")
+            .arg("--fail-on-warnings")
+            .arg(rule_file.path())
+            .arg(input.path())
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(warning))
+            .success();
+    });
 }
 
 #[test]
@@ -1705,23 +1744,19 @@ rule a {
     fs::write(&input, b"a").unwrap();
 
     // Save into the file
-    cmd()
-        .arg("save")
-        .arg(rule_file.path())
-        .arg(&save_path)
-        .assert()
-        .success();
+    test_cmd(CmdKind::Save, |cmd| {
+        cmd.arg(rule_file.path()).arg(&save_path).assert().success();
+    });
 
     // Now reload
-    cmd()
-        .arg("yr")
-        .arg("-C")
-        .arg(&save_path)
-        .arg(&input)
-        .assert()
-        .stdout(format!("foo\na {}\n", input.display()))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Load, |cmd| {
+        cmd.arg(&save_path)
+            .arg(&input)
+            .assert()
+            .stdout(format!("foo\na {}\n", input.display()))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1733,29 +1768,27 @@ fn test_invalid_load() {
 
     // Non existing path
     let fake_path = temp.path().join("non_existing");
-    cmd()
-        .arg("yr")
-        .arg("-C")
-        .arg(&fake_path)
-        .arg(&input)
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(format!(
-            "Unable to read from {}",
-            fake_path.display()
-        )))
-        .failure();
+    test_cmd(CmdKind::Load, |cmd| {
+        cmd.arg(&fake_path)
+            .arg(&input)
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(format!(
+                "Unable to read from {}",
+                fake_path.display()
+            )))
+            .failure();
+    });
 
     // Failure during deserialization
-    cmd()
-        .arg("yr")
-        .arg("-C")
-        .arg(&input)
-        .arg(&input)
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains("Unable to deserialize rules"))
-        .failure();
+    test_cmd(CmdKind::Load, |cmd| {
+        cmd.arg(&input)
+            .arg(&input)
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains("Unable to deserialize rules"))
+            .failure();
+    });
 }
 
 #[test]
@@ -1766,17 +1799,17 @@ fn test_invalid_save() {
     fs::write(&rule, b"rule a { condition: true }").unwrap();
 
     // Non existing path
-    cmd()
-        .arg("save")
-        .arg(&rule)
-        .arg(&rule)
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(format!(
-            "File {} already exists",
-            rule.display()
-        )))
-        .failure();
+    test_cmd(CmdKind::Save, |cmd| {
+        cmd.arg(&rule)
+            .arg(&rule)
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(format!(
+                "File {} already exists",
+                rule.display()
+            )))
+            .failure();
+    });
 
     #[cfg(unix)]
     {
@@ -1790,34 +1823,34 @@ fn test_invalid_save() {
         let mut perms = fs::metadata(&subdir).unwrap().permissions();
         perms.set_mode(0o000);
         fs::set_permissions(&subdir, perms).unwrap();
-        cmd()
-            .arg("save")
-            .arg(&rule)
-            .arg(&out)
-            .assert()
-            .stdout("")
-            .stderr(predicate::str::contains(format!(
-                "Unable to inspect file {}",
-                out.display()
-            )))
-            .failure();
+        test_cmd(CmdKind::Save, |cmd| {
+            cmd.arg(&rule)
+                .arg(&out)
+                .assert()
+                .stdout("")
+                .stderr(predicate::str::contains(format!(
+                    "Unable to inspect file {}",
+                    out.display()
+                )))
+                .failure();
+        });
 
         // cannot create file
         let mut perms = fs::metadata(&subdir).unwrap().permissions();
         perms.set_mode(0o555);
         fs::set_permissions(&subdir, perms).unwrap();
         let out_path = subdir.join("out");
-        cmd()
-            .arg("save")
-            .arg(&rule)
-            .arg(&out_path)
-            .assert()
-            .stdout("")
-            .stderr(predicate::str::contains(format!(
-                "Unable to create file {}",
-                out.display()
-            )))
-            .failure();
+        test_cmd(CmdKind::Save, |cmd| {
+            cmd.arg(&rule)
+                .arg(&out_path)
+                .assert()
+                .stdout("")
+                .stderr(predicate::str::contains(format!(
+                    "Unable to create file {}",
+                    out.display()
+                )))
+                .failure();
+        });
     }
 }
 
@@ -1845,15 +1878,15 @@ rule a {
     let input = temp.path().join("input");
     fs::write(&input, "").unwrap();
 
-    cmd()
-        .arg("yr")
-        .arg(format!("--module-data=cuckoo={}", data.display()))
-        .arg(&rule)
-        .arg(&input)
-        .assert()
-        .stdout(format!("a {}\n", input.display()))
-        .stderr("")
-        .success();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(format!("--module-data=cuckoo={}", data.display()))
+            .arg(&rule)
+            .arg(&input)
+            .assert()
+            .stdout(format!("a {}\n", input.display()))
+            .stderr("")
+            .success();
+    });
 }
 
 #[test]
@@ -1871,54 +1904,54 @@ fn test_invalid_module_data() {
     fs::write(&input, "").unwrap();
 
     // Invalid module data
-    cmd()
-        .arg("yr")
-        .arg("-x")
-        .arg("name")
-        .arg(&rule)
-        .arg(&input)
-        .assert()
-        .stdout("")
-        .stderr(predicate::str::contains(
-            "invalid value 'name' for '--module-data <MODULE=FILE>': \
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-x")
+            .arg("name")
+            .arg(&rule)
+            .arg(&input)
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains(
+                "invalid value 'name' for '--module-data <MODULE=FILE>': \
             missing '=' delimiter",
-        ))
-        .failure();
+            ))
+            .failure();
+    });
 
     // Unknown module
-    cmd()
-        .arg("yr")
-        .arg(format!("--module-data=piou={}", data.display()))
-        .arg(&rule)
-        .arg(&input)
-        .assert()
-        .stdout("")
-        .stderr("Cannot set data for unsupported module piou\n")
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(format!("--module-data=piou={}", data.display()))
+            .arg(&rule)
+            .arg(&input)
+            .assert()
+            .stdout("")
+            .stderr("Cannot set data for unsupported module piou\n")
+            .failure();
+    });
 
     // Non existing file
-    cmd()
-        .arg("yr")
-        .arg("-x")
-        .arg("cuckoo=non_existing")
-        .arg(&rule)
-        .arg(&input)
-        .assert()
-        .stderr(predicate::str::contains(
-            "Unable to read cuckoo data from file non_existing",
-        ))
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg("-x")
+            .arg("cuckoo=non_existing")
+            .arg(&rule)
+            .arg(&input)
+            .assert()
+            .stderr(predicate::str::contains(
+                "Unable to read cuckoo data from file non_existing",
+            ))
+            .failure();
+    });
 
     // Cannot parse data
-    cmd()
-        .arg("yr")
-        .arg(format!("--module-data=cuckoo={}", data.display()))
-        .arg(&rule)
-        .arg(&input)
-        .assert()
-        .stdout("")
-        .stderr("The data for the cuckoo module is invalid\n")
-        .failure();
+    test_cmd(CmdKind::Scan, |cmd| {
+        cmd.arg(format!("--module-data=cuckoo={}", data.display()))
+            .arg(&rule)
+            .arg(&input)
+            .assert()
+            .stdout("")
+            .stderr("The data for the cuckoo module is invalid\n")
+            .failure();
+    });
 }
 
 // Copied in `boreal/tests/it/utils.rs`. Not trivial to share, and won't be
