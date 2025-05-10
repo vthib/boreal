@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use boreal::compiler::{CompilerProfile, ExternalValue};
 use clap::parser::Values;
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
@@ -8,21 +10,34 @@ pub struct CompilerOptions {
     pub compute_statistics: bool,
     pub max_strings_per_rule: Option<usize>,
     pub defines: Option<Values<(String, ExternalValue)>>,
+    pub rules_files: Vec<PathBuf>,
 }
 
 impl CompilerOptions {
-    pub fn from_args(args: &mut ArgMatches) -> Self {
+    pub fn from_args(args: &mut ArgMatches, in_yr_subcommand: bool) -> Self {
+        // In the yr subcommand, rules_file are part of the positional arguments,
+        // and are parsed differently.
+        let rules_files = if in_yr_subcommand {
+            Vec::new()
+        } else {
+            match args.remove_many::<PathBuf>("rules_file") {
+                Some(v) => v.into_iter().collect(),
+                None => Vec::new(),
+            }
+        };
+
         Self {
             profile: args.remove_one::<CompilerProfile>("profile"),
             compute_statistics: args.get_flag("string_statistics"),
             max_strings_per_rule: args.remove_one::<usize>("max_strings_per_rule"),
             defines: args.remove_many::<(String, ExternalValue)>("define"),
+            rules_files,
         }
     }
 }
 
-pub fn add_compiler_args(command: Command) -> Command {
-    command
+pub fn add_compiler_args(mut command: Command, in_yr_subcommand: bool) -> Command {
+    command = command
         .next_help_heading("Compilation options")
         .arg(
             Arg::new("profile")
@@ -52,7 +67,21 @@ pub fn add_compiler_args(command: Command) -> Command {
                 .action(ArgAction::Append)
                 .value_parser(parse_define)
                 .help("Define a symbol that can be used in rules"),
-        )
+        );
+
+    if !in_yr_subcommand {
+        command = command.arg(
+            Arg::new("rules_file")
+                .short('f')
+                .long("rules-file")
+                .value_name("RULES_FILE")
+                .value_parser(value_parser!(PathBuf))
+                .action(ArgAction::Append)
+                .help("Path to a file containing rules, can be repeated."),
+        );
+    }
+
+    command
 }
 
 fn parse_compiler_profile(profile: &str) -> Result<CompilerProfile, String> {

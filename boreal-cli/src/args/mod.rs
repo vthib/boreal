@@ -39,7 +39,7 @@ impl ExecutionMode {
         let scanner_options = ScannerOptions::from_args(&mut args);
         let callback_options = CallbackOptions::from_args(&args, warning_mode);
         let input_options = InputOptions::from_args(&mut args);
-        let rules_file = args.remove_one("rules_file").unwrap();
+        let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
 
         #[cfg(feature = "serialize")]
         if args.get_flag("load_from_bytes") {
@@ -51,13 +51,15 @@ impl ExecutionMode {
             });
         }
 
+        let mut compiler_options = CompilerOptions::from_args(&mut args, true);
+        compiler_options.rules_files = vec![rules_file];
+
         Self::CompileAndScan(CompileScanExecution {
             warning_mode,
-            compiler_options: CompilerOptions::from_args(&mut args),
+            compiler_options,
             scanner_options,
             callback_options,
             input_options,
-            rules_file,
         })
     }
 }
@@ -123,7 +125,7 @@ fn build_yr_subcommand() -> Command {
     }
 
     command = callback::add_callback_args(command);
-    command = compiler::add_compiler_args(command);
+    command = compiler::add_compiler_args(command, true);
     command = input::add_input_args(command, true);
     command = scanner::add_scanner_args(command);
     command = add_warnings_args(command);
@@ -138,8 +140,6 @@ pub struct CompileScanExecution {
     pub scanner_options: ScannerOptions,
     pub callback_options: CallbackOptions,
     pub input_options: InputOptions,
-
-    pub rules_file: PathBuf,
 }
 
 impl CompileScanExecution {
@@ -148,11 +148,10 @@ impl CompileScanExecution {
 
         Self {
             warning_mode,
-            compiler_options: CompilerOptions::from_args(&mut args),
+            compiler_options: CompilerOptions::from_args(&mut args, false),
             scanner_options: ScannerOptions::from_args(&mut args),
             callback_options: CallbackOptions::from_args(&args, warning_mode),
             input_options: InputOptions::from_args(&mut args),
-            rules_file: args.remove_one("rules_file").unwrap(),
         }
     }
 }
@@ -161,16 +160,8 @@ fn build_scan_subcommand() -> Command {
     let mut command =
         Command::new("scan").about("Compile rules and scan a file, a directory or a process");
 
-    // Add all options in the yr subcommand. The type of invokation will
-    // be distinguished through the detection of specific options (see `ExecutionMode::from_yr_args`).
-    command = command.arg(
-        Arg::new("rules_file")
-            .value_parser(value_parser!(PathBuf))
-            .help("Path to a yara file containing rules"),
-    );
-
     command = add_warnings_args(command);
-    command = compiler::add_compiler_args(command);
+    command = compiler::add_compiler_args(command, false);
     command = scanner::add_scanner_args(command);
     command = callback::add_callback_args(command);
     command = input::add_input_args(command, false);
@@ -184,7 +175,6 @@ pub struct CompileSaveExecution {
     pub warning_mode: WarningMode,
     pub compiler_options: CompilerOptions,
 
-    pub rules_file: PathBuf,
     pub destination_path: PathBuf,
 }
 
@@ -195,8 +185,7 @@ impl CompileSaveExecution {
 
         Self {
             warning_mode,
-            compiler_options: CompilerOptions::from_args(&mut args),
-            rules_file: args.remove_one("rules_file").unwrap(),
+            compiler_options: CompilerOptions::from_args(&mut args, false),
             destination_path: args.remove_one("destination_path").unwrap(),
         }
     }
@@ -207,20 +196,14 @@ fn build_save_subcommand() -> Command {
     let mut command =
         Command::new("save").about("Compile rules and serialize the results into a file");
 
-    command = command
-        .arg(
-            Arg::new("rules_file")
-                .value_parser(value_parser!(PathBuf))
-                .help("Path to a yara file containing rules"),
-        )
-        .arg(
-            Arg::new("destination_path")
-                .value_parser(value_parser!(PathBuf))
-                .help("Path where the serialization of the compiled rules will be written"),
-        );
+    command = command.arg(
+        Arg::new("destination_path")
+            .value_parser(value_parser!(PathBuf))
+            .help("Path where the serialization of the compiled rules will be written"),
+    );
 
     command = add_warnings_args(command);
-    command = compiler::add_compiler_args(command);
+    command = compiler::add_compiler_args(command, false);
 
     command
 }
