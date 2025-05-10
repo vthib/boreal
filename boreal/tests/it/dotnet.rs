@@ -1,5 +1,3 @@
-use boreal::module::Dotnet;
-
 use crate::utils::{check_file, compare_module_values_on_file, Checker};
 
 #[test]
@@ -860,68 +858,68 @@ fn test_recursive_limit() {
 fn test_coverage_0ca09bde() {
     let diffs = [];
     let path = "tests/assets/libyara/data/0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
-    compare_module_values_on_file(Dotnet, path, true, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_756684f4() {
     let diffs = [];
     let path = "tests/assets/libyara/data/756684f4017ba7e931a26724ae61606b16b5f8cc84ed38a260a34e50c5016f59";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
-    compare_module_values_on_file(Dotnet, path, true, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_bad_dotnet_pe() {
     let diffs = [];
     let path = "tests/assets/libyara/data/bad_dotnet_pe";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
-    compare_module_values_on_file(Dotnet, path, true, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_types() {
     let diffs = [];
     let path = "tests/assets/dotnet/types.exe";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
-    compare_module_values_on_file(Dotnet, path, true, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, true, &diffs);
 }
 
 #[test]
 fn test_coverage_types2() {
     let diffs = [];
     let path = "tests/assets/dotnet/types2.dll";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
 
     // DLL so not considered when scanning as a process memory
-    compare_module_values_on_file(Dotnet, path, true, &[]);
+    compare_module_values_on_file("dotnet", path, true, &[]);
 }
 
 #[test]
 fn test_coverage_assembly() {
     let diffs = [];
     let path = "tests/assets/dotnet/assembly.dll";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
 
     // DLL so not considered when scanning as a process memory
-    compare_module_values_on_file(Dotnet, path, true, &[]);
+    compare_module_values_on_file("dotnet", path, true, &[]);
 }
 
 #[test]
 fn test_coverage_classes() {
     let diffs = [];
     let path = "tests/assets/dotnet/classes.dll";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
 
     // DLL so not considered when scanning as a process memory
-    compare_module_values_on_file(Dotnet, path, true, &[]);
+    compare_module_values_on_file("dotnet", path, true, &[]);
 }
 
 #[test]
 fn test_coverage_constants() {
     let diffs = [];
     let path = "tests/assets/dotnet/constants.exe";
-    compare_module_values_on_file(Dotnet, path, false, &diffs);
-    compare_module_values_on_file(Dotnet, path, true, &diffs);
+    compare_module_values_on_file("dotnet", path, false, &diffs);
+    compare_module_values_on_file("dotnet", path, true, &diffs);
 }

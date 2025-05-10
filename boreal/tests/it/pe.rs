@@ -1,5 +1,3 @@
-use boreal::module::Pe;
-
 use crate::utils::{check_file, compare_module_values_on_file};
 
 #[test]
@@ -439,8 +437,8 @@ fn test_coverage_pe_ord_and_delay() {
         "pe.is_signed",
     ];
     let path = "tests/assets/pe/ord_and_delay.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -453,8 +451,8 @@ fn test_coverage_pe_resources_only() {
         "pe.is_signed",
     ];
     let path = "tests/assets/pe/resources_only.dll";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &[]);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &[]);
 }
 
 #[test]
@@ -475,8 +473,8 @@ fn test_coverage_pe_libyara_079a472d() {
     let path = "tests/assets/libyara/data/\
         079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885";
 
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &[]);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &[]);
 }
 
 #[test]
@@ -490,8 +488,8 @@ fn test_coverage_pe_libyara_079a472d_upx() {
     ];
     let path = "tests/assets/libyara/data/\
         079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885.upx";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &[]);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &[]);
 }
 
 #[test]
@@ -505,8 +503,8 @@ fn test_coverage_pe_libyara_0ca09bde() {
     ];
     let path = "tests/assets/libyara/data/\
         0ca09bde7602769120fadc4f7a4147347a7a97271370583586c9e587fd396171";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &[]);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &[]);
 }
 
 #[test]
@@ -520,8 +518,8 @@ fn test_coverage_pe_libyara_33fc70f9() {
     ];
     let path = "tests/assets/libyara/data/\
         33fc70f99be6d2833ae48852d611c8048d0c053ed0b2c626db4dbe902832a08b";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -545,8 +543,8 @@ fn test_coverage_pe_libyara_3b8b9015() {
     ];
     let path = "tests/assets/libyara/data/\
         3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &[]);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &[]);
 }
 
 #[test]
@@ -560,8 +558,8 @@ fn test_coverage_pe_libyara_ca21e1c32() {
     ];
     let path = "tests/assets/libyara/data/\
         ca21e1c32065352d352be6cde97f89c141d7737ea92434831f998080783d5386";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -574,8 +572,8 @@ fn test_coverage_pe_libyara_mtxex() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/mtxex.dll";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &[]);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &[]);
 }
 
 #[test]
@@ -588,8 +586,8 @@ fn test_coverage_pe_libyara_mtxex_modified() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/mtxex_modified_rsrc_rva.dll";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &[]);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &[]);
 }
 
 #[test]
@@ -602,8 +600,8 @@ fn test_coverage_pe_libyara_pe_imports() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/pe_imports";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -616,8 +614,8 @@ fn test_coverage_pe_libyara_pe_mingw() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/pe_mingw";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -630,8 +628,8 @@ fn test_coverage_pe_libyara_tiny() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/tiny";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -644,8 +642,8 @@ fn test_coverage_pe_libyara_tiny_51ff() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/tiny-idata-51ff";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -658,8 +656,8 @@ fn test_coverage_pe_libyara_tiny_5200() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/tiny-idata-5200";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -672,8 +670,8 @@ fn test_coverage_pe_libyara_tiny_overlay() {
         "pe.is_signed",
     ];
     let path = "tests/assets/libyara/data/tiny-overlay";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -686,8 +684,8 @@ fn test_coverage_pe_1561_std() {
         "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/x64/FileTest.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -700,8 +698,8 @@ fn test_coverage_pe_1561_align_40() {
         "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/x64/FileTest_alignment_40.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -714,8 +712,8 @@ fn test_coverage_pe_1561_32_align_40() {
         "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/Win32/FileTest_Alignment_40.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -728,8 +726,8 @@ fn test_coverage_pe_1561_32_section1() {
         "pe.is_signed",
     ];
     let path = "tests/assets/yara_1561/Win32/FileTest_Section1_Starts_at_header.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -743,8 +741,8 @@ fn test_coverage_pe_c6f9709f() {
     ];
     let path = "tests/assets/libyara/data/\
          c6f9709feccf42f2d9e22057182fe185f177fb9daaa2649b4669a24f2ee7e3ba_0h_410h";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -757,8 +755,8 @@ fn test_coverage_pe_long_name_exporter() {
         "pe.is_signed",
     ];
     let path = "tests/assets/pe/long_name_exporter.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -771,8 +769,8 @@ fn test_coverage_pe_long_dll_name() {
         "pe.is_signed",
     ];
     let path = "tests/assets/pe/long_dll_name.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -785,8 +783,8 @@ fn test_coverage_pe_long_name_importer() {
         "pe.is_signed",
     ];
     let path = "tests/assets/pe/long_name_importer.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -799,8 +797,8 @@ fn test_coverage_pe_invalid_dll_names() {
         "pe.is_signed",
     ];
     let path = "tests/assets/pe/invalid_dll_names.exe";
-    compare_module_values_on_file(Pe, path, false, &diffs);
-    compare_module_values_on_file(Pe, path, true, &diffs);
+    compare_module_values_on_file("pe", path, false, &diffs);
+    compare_module_values_on_file("pe", path, true, &diffs);
 }
 
 #[test]
@@ -893,6 +891,6 @@ fn test_signatures_verify() {
         checker.check(&mem, true);
 
         // Check full coverage
-        compare_module_values_on_file(Pe, &path, false, &diffs);
+        compare_module_values_on_file("pe", &path, false, &diffs);
     }
 }

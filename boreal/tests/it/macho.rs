@@ -1,5 +1,3 @@
-use boreal::module::MachO;
-
 use crate::libyara_compat::util::{
     ELF32_FILE, MACHO_PPC_FILE, MACHO_X86_64_DYLIB_FILE, MACHO_X86_FILE, MACHO_X86_OBJECT_FILE,
 };
@@ -108,33 +106,33 @@ fn test_entry_point_for_arch() {
 
 #[test]
 fn test_coverage_non_macho() {
-    compare_module_values_on_mem(MachO, "ELF32_FILE", ELF32_FILE, false, &[]);
-    compare_module_values_on_mem(MachO, "ELF32_FILE", ELF32_FILE, true, &[]);
+    compare_module_values_on_mem("macho", "ELF32_FILE", ELF32_FILE, false, &[]);
+    compare_module_values_on_mem("macho", "ELF32_FILE", ELF32_FILE, true, &[]);
 }
 
 #[test]
 fn test_coverage_macho_x86() {
-    compare_module_values_on_mem(MachO, "MACHO_X86_FILE", MACHO_X86_FILE, false, &[]);
-    compare_module_values_on_mem(MachO, "MACHO_X86_FILE", MACHO_X86_FILE, true, &[]);
+    compare_module_values_on_mem("macho", "MACHO_X86_FILE", MACHO_X86_FILE, false, &[]);
+    compare_module_values_on_mem("macho", "MACHO_X86_FILE", MACHO_X86_FILE, true, &[]);
 }
 
 #[test]
 fn test_coverage_macho_ppc() {
-    compare_module_values_on_mem(MachO, "MACHO_PPC_FILE", MACHO_PPC_FILE, false, &[]);
-    compare_module_values_on_mem(MachO, "MACHO_PPC_FILE", MACHO_PPC_FILE, true, &[]);
+    compare_module_values_on_mem("macho", "MACHO_PPC_FILE", MACHO_PPC_FILE, false, &[]);
+    compare_module_values_on_mem("macho", "MACHO_PPC_FILE", MACHO_PPC_FILE, true, &[]);
 }
 
 #[test]
 fn test_coverage_macho_x86_object() {
     compare_module_values_on_mem(
-        MachO,
+        "macho",
         "MACHO_X86_OBJECT_FILE",
         MACHO_X86_OBJECT_FILE,
         false,
         &[],
     );
     compare_module_values_on_mem(
-        MachO,
+        "macho",
         "MACHO_X86_OBJECT_FILE",
         MACHO_X86_OBJECT_FILE,
         true,
@@ -145,14 +143,14 @@ fn test_coverage_macho_x86_object() {
 #[test]
 fn test_coverage_macho_x64_dylib() {
     compare_module_values_on_mem(
-        MachO,
+        "macho",
         "MACHO_X86_64_DYLIB_FILE",
         MACHO_X86_64_DYLIB_FILE,
         false,
         &[],
     );
     compare_module_values_on_mem(
-        MachO,
+        "macho",
         "MACHO_X86_64_DYLIB_FILE",
         MACHO_X86_64_DYLIB_FILE,
         true,
@@ -162,29 +160,34 @@ fn test_coverage_macho_x64_dylib() {
 
 #[test]
 fn test_coverage_macho_tiny_macho() {
-    compare_module_values_on_file(MachO, "tests/assets/libyara/data/tiny-macho", false, &[]);
-    compare_module_values_on_file(MachO, "tests/assets/libyara/data/tiny-macho", true, &[]);
+    compare_module_values_on_file("macho", "tests/assets/libyara/data/tiny-macho", false, &[]);
+    compare_module_values_on_file("macho", "tests/assets/libyara/data/tiny-macho", true, &[]);
 }
 
 #[test]
 fn test_coverage_macho_tiny_universal() {
     compare_module_values_on_file(
-        MachO,
+        "macho",
         "tests/assets/libyara/data/tiny-universal",
         false,
         &[],
     );
-    compare_module_values_on_file(MachO, "tests/assets/libyara/data/tiny-universal", true, &[]);
+    compare_module_values_on_file(
+        "macho",
+        "tests/assets/libyara/data/tiny-universal",
+        true,
+        &[],
+    );
 }
 
 #[test]
 fn test_coverage_macho_entry_points() {
-    compare_module_values_on_file(MachO, "tests/assets/macho/entry_points", false, &[]);
-    compare_module_values_on_file(MachO, "tests/assets/macho/entry_points", true, &[]);
+    compare_module_values_on_file("macho", "tests/assets/macho/entry_points", false, &[]);
+    compare_module_values_on_file("macho", "tests/assets/macho/entry_points", true, &[]);
 }
 
 #[test]
 fn test_coverage_macho_fat64() {
-    compare_module_values_on_file(MachO, "tests/assets/macho/fat64", false, &[]);
-    compare_module_values_on_file(MachO, "tests/assets/macho/fat64", true, &[]);
+    compare_module_values_on_file("macho", "tests/assets/macho/fat64", false, &[]);
+    compare_module_values_on_file("macho", "tests/assets/macho/fat64", true, &[]);
 }
