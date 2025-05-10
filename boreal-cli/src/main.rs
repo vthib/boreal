@@ -70,10 +70,9 @@ fn compile_and_scan(options: CompileScanExecution) -> ExitCode {
         scanner_options,
         callback_options,
         input_options,
-        rules_file,
     } = options;
 
-    let Some(scanner) = compile_rules(&rules_file, compiler_options, warning_mode) else {
+    let Some(scanner) = compile_rules(compiler_options, warning_mode) else {
         return ExitCode::FAILURE;
     };
 
@@ -101,11 +100,10 @@ fn compile_and_save(options: args::CompileSaveExecution) -> ExitCode {
     let args::CompileSaveExecution {
         warning_mode,
         compiler_options,
-        rules_file,
         destination_path,
     } = options;
 
-    let Some(scanner) = compile_rules(&rules_file, compiler_options, warning_mode) else {
+    let Some(scanner) = compile_rules(compiler_options, warning_mode) else {
         return ExitCode::FAILURE;
     };
     save_scanner(&scanner, Path::new(&destination_path))
@@ -214,16 +212,13 @@ fn list_modules() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn compile_rules(
-    rules_file: &Path,
-    options: CompilerOptions,
-    warning_mode: WarningMode,
-) -> Option<Scanner> {
+fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<Scanner> {
     let CompilerOptions {
         profile,
         compute_statistics,
         max_strings_per_rule,
         defines,
+        rules_files,
     } = options;
     let mut builder = CompilerBuilder::new();
 
@@ -254,20 +249,22 @@ fn compile_rules(
         }
     }
 
-    match compiler.add_rules_file(rules_file) {
-        Ok(status) => {
-            if !matches!(warning_mode, WarningMode::Ignore) {
-                for warn in status.warnings() {
-                    display_diagnostic(rules_file, warn);
+    for filepath in rules_files {
+        match compiler.add_rules_file(&filepath) {
+            Ok(status) => {
+                if !matches!(warning_mode, WarningMode::Ignore) {
+                    for warn in status.warnings() {
+                        display_diagnostic(&filepath, warn);
+                    }
+                }
+                for rule_stat in status.statistics() {
+                    display_rule_stats(rule_stat);
                 }
             }
-            for rule_stat in status.statistics() {
-                display_rule_stats(rule_stat);
+            Err(err) => {
+                display_diagnostic(&filepath, &err);
+                return None;
             }
-        }
-        Err(err) => {
-            display_diagnostic(rules_file, &err);
-            return None;
         }
     }
 
