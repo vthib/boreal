@@ -611,6 +611,12 @@ rule a {
         cmd.assert()
             .stdout(
                 predicate::str::starts_with("pe\n")
+                    // Static values
+                    // Integer
+                    .and(predicate::str::contains("DLL = 8192 (0x2000)"))
+                    // Function
+                    .and(predicate::str::contains("section_index[function]"))
+                    // Dynamic values
                     // Integer
                     .and(predicate::str::contains("base_of_code = 4096 (0x1000)"))
                     // Undef
@@ -618,9 +624,9 @@ rule a {
                     // Array
                     .and(predicate::str::contains(
                         r#"
-    data_directories
-        [0]
-            size = 220 (0xdc)
+        data_directories
+            [0]
+                size = 220 (0xdc)
 "#,
                     ))
                     // Empty array
@@ -635,16 +641,16 @@ rule a {
                     // Struct
                     .and(predicate::str::contains(
                         r#"
-    image_version
-        major = 10 (0xa)
-        minor = 0 (0x0)
+        image_version
+            major = 10 (0xa)
+            minor = 0 (0x0)
 "#,
                     ))
                     // Dictionary
                     .and(predicate::str::contains(
                         r#"
-    version_info
-        ["CompanyName"] = "Microsoft Corporation"
+        version_info
+            ["CompanyName"] = "Microsoft Corporation"
 "#,
                     )),
             )

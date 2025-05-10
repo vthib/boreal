@@ -18,7 +18,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use boreal::compiler::{CompilerBuilder, CompilerParams};
-use boreal::module::{Console, ConsoleData, Value as ModuleValue};
+use boreal::module::{Console, ConsoleData, StaticValue, Value as ModuleValue};
 use boreal::scanner::{
     CallbackEvents, EvaluatedRule, ScanCallbackResult, ScanError, ScanEvent, ScanParams,
 };
@@ -590,14 +590,15 @@ fn handle_event(
             }
         }
         ScanEvent::ModuleImport(evaluated_module) => {
-            // A module value must be an object. Filter out empty ones, it means the module has not
-            // generated any values.
-            if let ModuleValue::Object(map) = &evaluated_module.dynamic_values {
-                if !map.is_empty() {
-                    write!(stdout, "{}", evaluated_module.module.get_name()).unwrap();
-                    print_module_value(&mut stdout, &evaluated_module.dynamic_values, 4);
-                }
-            }
+            writeln!(stdout, "{}", evaluated_module.module.get_name()).unwrap();
+            write!(stdout, "    [static values]").unwrap();
+            print_module_static_value(
+                &mut stdout,
+                &StaticValue::Object(evaluated_module.module.get_static_values()),
+                8,
+            );
+            write!(stdout, "    [dynamic values]").unwrap();
+            print_module_dynamic_value(&mut stdout, &evaluated_module.dynamic_values, 8);
         }
         ScanEvent::ScanStatistics(stats) => {
             writeln!(stdout, "{what}: {stats:#?}").unwrap();
@@ -800,7 +801,7 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
     }
 }
 
-/// Print a module value.
+/// Print a module dynamic value.
 ///
 /// This is a recursive function.
 ///
@@ -813,7 +814,7 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
 ///
 /// - print " = ..." for primitive values
 /// - print "\n..." for compound values
-fn print_module_value(stdout: &mut StdoutLock, value: &ModuleValue, indent: usize) {
+fn print_module_dynamic_value(stdout: &mut StdoutLock, value: &ModuleValue, indent: usize) {
     match value {
         ModuleValue::Integer(i) => writeln!(stdout, " = {i} (0x{i:x})").unwrap(),
         ModuleValue::Float(v) => writeln!(stdout, " = {v}").unwrap(),
@@ -836,7 +837,7 @@ fn print_module_value(stdout: &mut StdoutLock, value: &ModuleValue, indent: usiz
             keys.sort_unstable();
             for key in keys {
                 write!(stdout, "{:indent$}{}", "", key).unwrap();
-                print_module_value(stdout, &obj[key], indent + 4);
+                print_module_dynamic_value(stdout, &obj[key], indent + 4);
             }
         }
         ModuleValue::Array(array) => {
@@ -848,7 +849,7 @@ fn print_module_value(stdout: &mut StdoutLock, value: &ModuleValue, indent: usiz
             writeln!(stdout,).unwrap();
             for (index, subval) in array.iter().enumerate() {
                 write!(stdout, "{:indent$}[{}]", "", index).unwrap();
-                print_module_value(stdout, subval, indent + 4);
+                print_module_dynamic_value(stdout, subval, indent + 4);
             }
         }
         ModuleValue::Dictionary(dict) => {
@@ -865,11 +866,45 @@ fn print_module_value(stdout: &mut StdoutLock, value: &ModuleValue, indent: usiz
             keys.sort_unstable();
             for key in keys {
                 write!(stdout, "{:indent$}[{:?}]", "", ByteString(key)).unwrap();
-                print_module_value(stdout, &dict[key], indent + 4);
+                print_module_dynamic_value(stdout, &dict[key], indent + 4);
             }
         }
         ModuleValue::Function(_) => writeln!(stdout, "[function]").unwrap(),
         ModuleValue::Undefined => writeln!(stdout, "[undef]").unwrap(),
+    }
+}
+
+/// Print a module static value.
+///
+/// This is a recursive function.
+///
+/// The invariants are the same as `print_module_dynamic_value`.
+fn print_module_static_value(stdout: &mut StdoutLock, value: &StaticValue, indent: usize) {
+    match value {
+        StaticValue::Integer(i) => writeln!(stdout, " = {i} (0x{i:x})").unwrap(),
+        StaticValue::Float(v) => writeln!(stdout, " = {v}").unwrap(),
+        StaticValue::Bytes(bytes) => {
+            writeln!(stdout, " = {:?}", ByteString(bytes)).unwrap();
+        }
+        StaticValue::Boolean(b) => writeln!(stdout, " = {b:?}").unwrap(),
+        StaticValue::Object(obj) => {
+            if obj.is_empty() {
+                writeln!(stdout, " = {{}}").unwrap();
+                return;
+            }
+
+            writeln!(stdout).unwrap();
+
+            // For improved readability, we sort the keys before printing. Cost is of no concern,
+            // this is only for CLI debugging.
+            let mut keys: Vec<_> = obj.keys().collect();
+            keys.sort_unstable();
+            for key in keys {
+                write!(stdout, "{:indent$}{}", "", key).unwrap();
+                print_module_static_value(stdout, &obj[key], indent + 4);
+            }
+        }
+        StaticValue::Function { .. } => writeln!(stdout, "[function]").unwrap(),
     }
 }
 
