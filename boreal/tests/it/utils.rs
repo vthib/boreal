@@ -911,11 +911,11 @@ pub fn compare_module_values_on_mem<M: Module>(
     };
 
     let mut boreal_value = res
-        .module_values
+        .modules
         .into_iter()
-        .find_map(|(name, module_value)| {
-            if name == module.get_name() {
-                Some(module_value)
+        .find_map(|evaluated_module| {
+            if evaluated_module.module.get_name() == module.get_name() {
+                Some(evaluated_module.dynamic_values)
             } else {
                 None
             }

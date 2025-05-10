@@ -554,26 +554,25 @@ impl<'s> CallbackHandler<'s> {
         match event {
             ScanEvent::RuleMatch(rule_match) => self.handle_rule_event(rule_match, true),
             ScanEvent::RuleNoMatch(rule_match) => self.handle_rule_event(rule_match, false),
-            ScanEvent::ModuleImport {
-                module_name,
-                dynamic_values,
-            } => match &self.modules_callback {
-                Some(cb) => Python::with_gil(|py| {
-                    // A module value must be an object. If empty,  means the module has not
-                    // generated any values.
-                    let dict = match dynamic_values {
-                        Value::Object(map) => crate::module::convert_object(py, map)?,
-                        _ => PyDict::new(py),
-                    };
-                    // XXX: Yara override the value, here, so reproduce it, we don't really
-                    // have the opportunity to do better here, not unless the callback takes
-                    // additional arguments.
-                    dict.set_item("module", module_name)?;
-                    let result = cb.call1(py, (dict,))?;
-                    Ok(convert_callback_return_value(py, &result))
-                }),
-                None => Ok(ScanCallbackResult::Continue),
-            },
+            ScanEvent::ModuleImport(module) => {
+                match &self.modules_callback {
+                    Some(cb) => Python::with_gil(|py| {
+                        // A module value must be an object. If empty,  means the module has not
+                        // generated any values.
+                        let dict = match &module.dynamic_values {
+                            Value::Object(map) => crate::module::convert_object(py, map)?,
+                            _ => PyDict::new(py),
+                        };
+                        // XXX: Yara override the value, here, so reproduce it, we don't really
+                        // have the opportunity to do better here, not unless the callback takes
+                        // additional arguments.
+                        dict.set_item("module", module.module.get_name())?;
+                        let result = cb.call1(py, (dict,))?;
+                        Ok(convert_callback_return_value(py, &result))
+                    }),
+                    None => Ok(ScanCallbackResult::Continue),
+                }
+            }
             ScanEvent::StringReachedMatchLimit(string_identifier) => {
                 match &self.warnings_callback {
                     Some(cb) => Python::with_gil(|py| {

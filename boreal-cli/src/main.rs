@@ -589,16 +589,13 @@ fn handle_event(
                 display_rule(&mut stdout, &rule, scanner, what, options);
             }
         }
-        ScanEvent::ModuleImport {
-            module_name,
-            dynamic_values,
-        } => {
+        ScanEvent::ModuleImport(evaluated_module) => {
             // A module value must be an object. Filter out empty ones, it means the module has not
             // generated any values.
-            if let ModuleValue::Object(map) = &dynamic_values {
+            if let ModuleValue::Object(map) = &evaluated_module.dynamic_values {
                 if !map.is_empty() {
-                    write!(stdout, "{module_name}").unwrap();
-                    print_module_value(&mut stdout, dynamic_values, 4);
+                    write!(stdout, "{}", evaluated_module.module.get_name()).unwrap();
+                    print_module_value(&mut stdout, &evaluated_module.dynamic_values, 4);
                 }
             }
         }
