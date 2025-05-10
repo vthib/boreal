@@ -39,7 +39,8 @@ use args::{
 };
 
 fn main() -> ExitCode {
-    let mut args = args::build_command().get_matches();
+    let cmd = args::build_command();
+    let mut args = cmd.get_matches();
 
     let (subcommand_name, subargs) = args.remove_subcommand().unwrap();
     let exec_mode = match &*subcommand_name {
@@ -48,7 +49,13 @@ fn main() -> ExitCode {
         "save" => ExecutionMode::CompileAndSave(args::CompileSaveExecution::from_args(subargs)),
         #[cfg(feature = "serialize")]
         "load" => ExecutionMode::LoadAndScan(args::LoadScanExecution::from_args(subargs)),
-        "yr" => ExecutionMode::from_yr_args(subargs),
+        "yr" => match ExecutionMode::from_yr_args(subargs) {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!("{err}\n");
+                return ExitCode::FAILURE;
+            }
+        },
         "list-modules" => ExecutionMode::ListModules,
         _ => unreachable!(),
     };
@@ -250,11 +257,12 @@ fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<
     }
 
     for filepath in rules_files {
-        match compiler.add_rules_file(&filepath) {
+        let filepath = Path::new(&filepath);
+        match compiler.add_rules_file(filepath) {
             Ok(status) => {
                 if !matches!(warning_mode, WarningMode::Ignore) {
                     for warn in status.warnings() {
-                        display_diagnostic(&filepath, warn);
+                        display_diagnostic(filepath, warn);
                     }
                 }
                 for rule_stat in status.statistics() {
@@ -262,7 +270,7 @@ fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<
                 }
             }
             Err(err) => {
-                display_diagnostic(&filepath, &err);
+                display_diagnostic(filepath, &err);
                 return None;
             }
         }

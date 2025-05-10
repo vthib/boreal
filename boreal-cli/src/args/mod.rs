@@ -1,5 +1,7 @@
+#[cfg(feature = "serialize")]
 use std::path::PathBuf;
 
+use clap::parser::Values;
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
 
 mod callback;
@@ -30,54 +32,65 @@ pub enum ExecutionMode {
 }
 
 impl ExecutionMode {
-    pub fn from_yr_args(mut args: ArgMatches) -> Self {
+    pub fn from_yr_args(mut args: ArgMatches) -> Result<Self, String> {
         if args.get_flag("module_names") {
-            return Self::ListModules;
+            return Ok(Self::ListModules);
         }
+
+        let positional_args: Values<String> = args.remove_many("args").unwrap();
+        if positional_args.len() < 2 {
+            return Err("invalid number of arguments, at least one rules file \
+                and a scan target must be specified"
+                .to_owned());
+        }
+
+        let mut rules_files: Vec<String> = positional_args.into_iter().collect();
+        let input = rules_files.pop().unwrap();
 
         let warning_mode = WarningMode::from_args(&args);
         let scanner_options = ScannerOptions::from_args(&mut args);
         let callback_options = CallbackOptions::from_args(&args, warning_mode);
-        let input_options = InputOptions::from_args(&mut args);
-        let rules_file: PathBuf = args.remove_one("rules_file").unwrap();
+        let input_options = InputOptions::from_args(&mut args, Some(input));
 
         #[cfg(feature = "serialize")]
         if args.get_flag("load_from_bytes") {
-            return Self::LoadAndScan(LoadScanExecution {
+            if rules_files.len() != 1 {
+                return Err("One a single rules path must be passed when -C is used".to_owned());
+            }
+            return Ok(Self::LoadAndScan(LoadScanExecution {
                 scanner_options,
                 callback_options,
                 input_options,
-                scanner_file: rules_file,
-            });
+                scanner_file: PathBuf::from(rules_files.pop().unwrap()),
+            }));
         }
 
-        let mut compiler_options = CompilerOptions::from_args(&mut args, true);
-        compiler_options.rules_files = vec![rules_file];
-
-        Self::CompileAndScan(CompileScanExecution {
+        let compiler_options = CompilerOptions::from_args(&mut args, Some(rules_files));
+        Ok(Self::CompileAndScan(CompileScanExecution {
             warning_mode,
             compiler_options,
             scanner_options,
             callback_options,
             input_options,
-        })
+        }))
     }
 }
 
 pub fn build_command() -> Command {
     let mut command = command!().subcommand_required(true);
 
-    command = command.subcommand(build_yr_subcommand());
     command = command.subcommand(build_scan_subcommand());
-    command = command.subcommand(
-        Command::new("list-modules").about("Display the names of all available modules"),
-    );
 
     #[cfg(feature = "serialize")]
     {
         command = command.subcommand(build_save_subcommand());
         command = command.subcommand(build_load_subcommand());
     }
+
+    command = command.subcommand(build_yr_subcommand());
+    command = command.subcommand(
+        Command::new("list-modules").about("Display the names of all available modules"),
+    );
 
     command
 }
@@ -90,29 +103,7 @@ fn build_yr_subcommand() -> Command {
              This allows substituting uses of the yara CLI without risks.\n\
              This API can be a bit ambiguous at times with multiple rules inputs, and many options\n\
              can be specified that will not be used in some contexts.\n\
-             For these reasons, using the other subcommands is recommended for improved clarity.")
-        .next_help_heading(None);
-
-    // Add all options in the yr subcommand. The type of invokation will
-    // be distinguished through the detection of specific options (see `ExecutionMode::from_yr_args`).
-    command = command
-        .arg(
-            Arg::new("rules_file")
-                .value_parser(value_parser!(PathBuf))
-                .required_unless_present("module_names")
-                .help("Path to a yara file containing rules")
-                .long_help(
-                    "Path to a yara file containing rules.\n\
-                     If -C is specified, this is the path to a file containing serialized rules.",
-                ),
-        )
-        .arg(
-            Arg::new("module_names")
-                .short('M')
-                .long("module-names")
-                .action(ArgAction::SetTrue)
-                .help("Display the names of all available modules"),
-        );
+             For these reasons, using the other subcommands is recommended for improved clarity.");
 
     if cfg!(feature = "serialize") {
         command = command.arg(
@@ -120,7 +111,14 @@ fn build_yr_subcommand() -> Command {
                 .short('C')
                 .long("compiled-rules")
                 .action(ArgAction::SetTrue)
-                .help("Load compiled rules from bytes. See save subcommand"),
+                .help("Load compiled rules from bytes.")
+                .long_help(
+                    "Load compiled rules from bytes.\n\
+                    If specified, then a single rules path must be \n\
+                    specified, which must point to a file containing \n\
+                    serialized rules.\n
+                    See the scan subcommand for how to generate such a file.",
+                ),
         );
     }
 
@@ -129,6 +127,31 @@ fn build_yr_subcommand() -> Command {
     command = input::add_input_args(command, true);
     command = scanner::add_scanner_args(command);
     command = add_warnings_args(command);
+
+    command = command
+        .next_help_heading(None)
+        .arg(
+            Arg::new("module_names")
+                .short('M')
+                .long("module-names")
+                .action(ArgAction::SetTrue)
+                .help("Display the names of all available modules"),
+        )
+        .arg(
+            Arg::new("args")
+                .value_parser(value_parser!(String))
+                .action(ArgAction::Append)
+                .help("List of rules file followed by the file, directory or pid to scan")
+                .long_help(
+                    "At least two arguments must be specified: the path to the \n\
+                rules file, and the input to scan. Several rules files can \n\
+                be specified: the last argument will always be the input to \n\
+                scan.\n\n\
+                If --scan-list is specified, the input is a file containing \n\
+                a list of inputs to scan, one per line.",
+                )
+                .required_unless_present("module_names"),
+        );
 
     command
 }
@@ -148,10 +171,10 @@ impl CompileScanExecution {
 
         Self {
             warning_mode,
-            compiler_options: CompilerOptions::from_args(&mut args, false),
+            compiler_options: CompilerOptions::from_args(&mut args, None),
             scanner_options: ScannerOptions::from_args(&mut args),
             callback_options: CallbackOptions::from_args(&args, warning_mode),
-            input_options: InputOptions::from_args(&mut args),
+            input_options: InputOptions::from_args(&mut args, None),
         }
     }
 }
@@ -185,7 +208,7 @@ impl CompileSaveExecution {
 
         Self {
             warning_mode,
-            compiler_options: CompilerOptions::from_args(&mut args, false),
+            compiler_options: CompilerOptions::from_args(&mut args, None),
             destination_path: args.remove_one("destination_path").unwrap(),
         }
     }
@@ -226,7 +249,7 @@ impl LoadScanExecution {
         Self {
             scanner_options: ScannerOptions::from_args(&mut args),
             callback_options: CallbackOptions::from_args(&args, warning_mode),
-            input_options: InputOptions::from_args(&mut args),
+            input_options: InputOptions::from_args(&mut args, None),
             scanner_file: args.remove_one("compiled_rules").unwrap(),
         }
     }

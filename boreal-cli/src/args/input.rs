@@ -12,7 +12,7 @@ pub struct InputOptions {
 }
 
 impl InputOptions {
-    pub fn from_args(args: &mut ArgMatches) -> Self {
+    pub fn from_args(args: &mut ArgMatches, input: Option<String>) -> Self {
         let no_mmap = if cfg!(feature = "memmap") {
             args.get_flag("no_mmap")
         } else {
@@ -31,7 +31,7 @@ impl InputOptions {
             no_follow_symlinks: args.get_flag("no_follow_symlinks"),
             recursive: args.get_flag("recursive"),
             skip_larger: args.remove_one::<u64>("skip_larger"),
-            input: args.remove_one("input").unwrap(),
+            input: input.unwrap_or_else(|| args.remove_one("input").unwrap()),
             no_mmap,
             nb_threads,
         }
@@ -93,14 +93,14 @@ pub fn add_input_args(command: Command, in_yr_subcommand: bool) -> Command {
         );
     }
 
-    let mut input_arg = Arg::new("input")
-        .value_name("FILE | DIRECTORY | PID")
-        .value_parser(value_parser!(String))
-        .help("File, directory or pid to scan");
-    if in_yr_subcommand {
-        input_arg = input_arg.required_unless_present("module_names");
+    if !in_yr_subcommand {
+        command = command.next_help_heading(None).arg(
+            Arg::new("input")
+                .value_name("FILE | DIRECTORY | PID")
+                .value_parser(value_parser!(String))
+                .help("File, directory or pid to scan"),
+        );
     }
-    command = command.next_help_heading(None).arg(input_arg);
 
     command
 }
