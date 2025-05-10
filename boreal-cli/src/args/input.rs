@@ -85,7 +85,7 @@ pub fn add_input_args(command: Command, in_yr_subcommand: bool) -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Disable the use of memory maps.")
                 .long_help(
-                    "Disable the use of memory maps.\n\
+                    "Disable the use of memory maps.\n\n\
                     By default, memory maps are used to load files to scan.\n\
                     This can cause the program to abort unexpectedly \
                     if files are simultaneous truncated.",
@@ -96,9 +96,18 @@ pub fn add_input_args(command: Command, in_yr_subcommand: bool) -> Command {
     if !in_yr_subcommand {
         command = command.next_help_heading(None).arg(
             Arg::new("input")
-                .value_name("FILE | DIRECTORY | PID")
+                .value_name("FILE | DIRECTORY | PID | SCAN_LIST")
                 .value_parser(value_parser!(String))
-                .help("File, directory or pid to scan"),
+                .help("Target to scan")
+                .long_help(
+                    "Target to scan.\n\n\
+This can be either:\n
+  - A path to a file.
+  - A path to a directory, in which files will be scanned.
+  - The pid of the a process to scan.
+  - A file containing a list of targets to scan, one per line, if --scan-list\
+    is specified.",
+                ),
         );
     }
 

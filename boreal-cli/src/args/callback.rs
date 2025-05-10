@@ -55,8 +55,9 @@ pub fn add_callback_args(command: Command) -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Print strings matches")
                 .long_help(
-                    "Note that enabling this parameter will force the \
-                     computation of all string matches,\ndisabling \
+                    "Print strings matches.\n\n\
+                     Note that enabling this parameter will force the\
+                     computation of all string matches,\ndisabling\
                      the no scan optimization in the process.",
                 ),
         )
@@ -67,8 +68,9 @@ pub fn add_callback_args(command: Command) -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Print the length of strings matches")
                 .long_help(
-                    "Note that enabling this parameter will force the \
-                     computation of all string matches,\ndisabling \
+                    "Print the length of strings matches.\n\n\
+                     Note that enabling this parameter will force the\
+                     computation of all string matches,\ndisabling\
                      the no scan optimization in the process.",
                 ),
         )
@@ -79,8 +81,9 @@ pub fn add_callback_args(command: Command) -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Print the xor key and the plaintext of matched strings")
                 .long_help(
-                    "Note that enabling this parameter will force the \
-                     computation of all string matches,\ndisabling \
+                    "Print the xor key and the plaintext of matched strings.\n\n\
+                     Note that enabling this parameter will force the\
+                     computation of all string matches,\ndisabling\
                      the no scan optimization in the process.",
                 ),
         )

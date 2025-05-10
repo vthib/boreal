@@ -101,9 +101,10 @@ fn build_yr_subcommand() -> Command {
         .long_about(
             "This subcommand allows specifying options exactly as done with the yara CLI.\n\
              This allows substituting uses of the yara CLI without risks.\n\
-             This API can be a bit ambiguous at times with multiple rules inputs, and many options\n\
+             This API can be a bit ambiguous at times with multiple rules inputs, and many options\
              can be specified that will not be used in some contexts.\n\
-             For these reasons, using the other subcommands is recommended for improved clarity.");
+             For these reasons, using the other subcommands is recommended for improved clarity.",
+        );
 
     if cfg!(feature = "serialize") {
         command = command.arg(
@@ -113,10 +114,10 @@ fn build_yr_subcommand() -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Load compiled rules from bytes.")
                 .long_help(
-                    "Load compiled rules from bytes.\n\
-                    If specified, then a single rules path must be \n\
-                    specified, which must point to a file containing \n\
-                    serialized rules.\n
+                    "Load compiled rules from bytes.\n\n\
+                    If specified, then a single rules path must be\
+                    specified, which must point to a file containing\
+                    serialized rules.\n\
                     See the scan subcommand for how to generate such a file.",
                 ),
         );
@@ -190,8 +191,9 @@ impl CompileScanExecution {
 }
 
 fn build_scan_subcommand() -> Command {
-    let mut command =
-        Command::new("scan").about("Compile rules and scan a file, a directory or a process");
+    let mut command = Command::new("scan")
+        .about("Compile rules and scan a target")
+        .override_usage("boreal scan [OPTIONS] [-f RULES]... [FILE | DIRECTORY | PID | SCAN_LIST]");
 
     command = add_warnings_args(command);
     command = compiler::add_compiler_args(command, false);
@@ -219,18 +221,19 @@ impl CompileSaveExecution {
         Self {
             warning_mode,
             compiler_options: CompilerOptions::from_args(&mut args, None),
-            destination_path: args.remove_one("destination_path").unwrap(),
+            destination_path: args.remove_one("output_file").unwrap(),
         }
     }
 }
 
 #[cfg(feature = "serialize")]
 fn build_save_subcommand() -> Command {
-    let mut command =
-        Command::new("save").about("Compile rules and serialize the results into a file");
+    let mut command = Command::new("save")
+        .about("Compile rules and serialize the results into a file")
+        .override_usage("boreal save [OPTIONS] [-f RULES]... [OUTPUT_FILE]");
 
     command = command.arg(
-        Arg::new("destination_path")
+        Arg::new("output_file")
             .value_parser(value_parser!(PathBuf))
             .help("Path where the serialization of the compiled rules will be written"),
     );
