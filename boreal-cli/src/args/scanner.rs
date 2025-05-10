@@ -77,7 +77,7 @@ pub fn add_scanner_args(command: Command) -> Command {
                 .value_parser(parse_module_data)
                 .help("Specify the data to use in a module")
                 .long_help(
-                    "Specify the data to use in a module.\n\
+                    "Specify the data to use in a module.\n\n\
                      Note that only the cuckoo module is supported.",
                 ),
         )
