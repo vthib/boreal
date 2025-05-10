@@ -105,7 +105,7 @@ This can be either:\n
   - A path to a file.
   - A path to a directory, in which files will be scanned.
   - The pid of the a process to scan.
-  - A file containing a list of targets to scan, one per line, if --scan-list\
+  - A file containing a list of targets to scan, one per line, if --scan-list \
     is specified.",
                 ),
         );
