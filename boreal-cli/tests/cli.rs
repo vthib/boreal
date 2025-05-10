@@ -1664,6 +1664,74 @@ rule a {
 }
 
 #[test]
+fn test_yr_invalid_number_of_arguments() {
+    // Not enough arguments
+    boreal_cmd()
+        .arg("yr")
+        .arg("rules_file")
+        .assert()
+        .stderr(predicate::str::contains("Invalid number of arguments"))
+        .failure();
+
+    #[cfg(feature = "serialize")]
+    {
+        // -C means a single rules_file
+        boreal_cmd()
+            .arg("yr")
+            .arg("-C")
+            .arg("rules_file")
+            .arg("rules_file2")
+            .arg("input")
+            .assert()
+            .stderr(predicate::str::contains(
+                "Only a single rules path must be passed",
+            ))
+            .failure();
+    }
+}
+
+#[test]
+fn test_multiple_rules_files() {
+    let rule_a = test_file(b"rule a { condition: true }");
+    let rule_b = test_file(b"rule b { condition: true }");
+    let rule_c = test_file(b"rule c { condition: true }");
+
+    let input = test_file(b"");
+    let input_path = input.path().display().to_string();
+
+    test_scan(&[], &[rule_a.path(), rule_b.path()], input.path(), |cmd| {
+        cmd.assert()
+            .stdout(format!("a {input_path}\nb {input_path}\n"))
+            .success();
+    });
+    test_scan(
+        &[],
+        &[rule_a.path(), rule_b.path(), rule_c.path()],
+        input.path(),
+        |cmd| {
+            cmd.assert()
+                .stdout(format!("a {input_path}\nb {input_path}\nc {input_path}\n"))
+                .success();
+        },
+    );
+
+    // Name collision will make compilation fail
+    test_scan(
+        &[],
+        &[rule_a.path(), rule_b.path(), rule_a.path()],
+        input.path(),
+        |cmd| {
+            cmd.assert()
+                .stdout("")
+                .stderr(predicate::str::contains(
+                    "rule `a` is already declared in this namespace",
+                ))
+                .failure();
+        },
+    );
+}
+
+#[test]
 #[cfg(feature = "serialize")]
 fn test_save_load() {
     let rule_file = test_file(
