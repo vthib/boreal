@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use boreal::compiler::CompilerParams;
 use boreal::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
-use boreal::module::{Module, StaticValue, Value as ModuleValue};
+use boreal::module::{StaticValue, Value as ModuleValue};
 use boreal::scanner::{ScanError, ScanParams, ScanResult};
 
 pub struct Checker {
@@ -855,19 +855,19 @@ rule a {{
 }
 
 /// Compare boreal & yara module values on a given file
-pub fn compare_module_values_on_file<M: Module>(
-    module: M,
+pub fn compare_module_values_on_file(
+    module_name: &str,
     path: &str,
     process_memory: bool,
     ignored_diffs: &[&str],
 ) {
     let mem = std::fs::read(path).unwrap();
-    compare_module_values_on_mem(module, path, &mem, process_memory, ignored_diffs);
+    compare_module_values_on_mem(module_name, path, &mem, process_memory, ignored_diffs);
 }
 
 /// Compare boreal & yara module values on a given bytestring
-pub fn compare_module_values_on_mem<M: Module>(
-    module: M,
+pub fn compare_module_values_on_mem(
+    module_name: &str,
     mem_name: &str,
     mem: &[u8],
     process_memory: bool,
@@ -878,7 +878,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     compiler
         .add_rules_str(format!(
             "import \"{}\" rule a {{ condition: true }}",
-            module.get_name()
+            module_name
         ))
         .unwrap();
     let mut scanner = compiler.into_scanner();
@@ -892,7 +892,7 @@ pub fn compare_module_values_on_mem<M: Module>(
     let c = c
         .add_rules_str(&format!(
             "import \"{}\" rule a {{ condition: true }}",
-            module.get_name()
+            module_name
         ))
         .unwrap();
     let yara_rules = c.compile_rules().unwrap();
@@ -910,12 +910,12 @@ pub fn compare_module_values_on_mem<M: Module>(
         scanner.scan_mem(mem).unwrap()
     };
 
-    let mut boreal_value = res
+    let mut evaluated_module = res
         .modules
         .into_iter()
         .find_map(|evaluated_module| {
-            if evaluated_module.module.get_name() == module.get_name() {
-                Some(evaluated_module.dynamic_values)
+            if evaluated_module.module.get_name() == module_name {
+                Some(evaluated_module)
             } else {
                 None
             }
@@ -923,7 +923,10 @@ pub fn compare_module_values_on_mem<M: Module>(
         .unwrap();
 
     // Enrich value using the static values, so that it can be compared with yara's
-    enrich_with_static_values(&mut boreal_value, module.get_static_values());
+    enrich_with_static_values(
+        &mut evaluated_module.dynamic_values,
+        evaluated_module.module.get_static_values(),
+    );
 
     let yara_cb = |msg| {
         if let yara::CallbackMsg::ModuleImported(obj) = msg {
@@ -944,7 +947,12 @@ pub fn compare_module_values_on_mem<M: Module>(
             }
 
             let mut diffs = Vec::new();
-            compare_module_values(&boreal_value, yara_value, module.get_name(), &mut diffs);
+            compare_module_values(
+                &evaluated_module.dynamic_values,
+                yara_value,
+                module_name,
+                &mut diffs,
+            );
 
             // Remove ignored diffs from the reported ones.
             for path in ignored_diffs {
@@ -962,7 +970,7 @@ pub fn compare_module_values_on_mem<M: Module>(
                 panic!(
                     "found {} differences for module {} on {}{}: {:#?}",
                     diffs.len(),
-                    module.get_name(),
+                    module_name,
                     mem_name,
                     if process_memory {
                         " with process memory flag"

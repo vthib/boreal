@@ -1,5 +1,3 @@
-use boreal::module::Elf;
-
 use crate::libyara_compat::util::{
     ELF32_FILE, ELF32_MIPS_FILE, ELF32_NOSECTIONS, ELF32_SHAREDOBJ, ELF64_FILE, ELF_X64_FILE,
 };
@@ -44,71 +42,71 @@ condition:
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_elf32() {
-    compare_module_values_on_mem(Elf, "ELF32_FILE", ELF32_FILE, false, &[]);
-    compare_module_values_on_mem(Elf, "ELF32_FILE", ELF32_FILE, true, &[]);
+    compare_module_values_on_mem("elf", "ELF32_FILE", ELF32_FILE, false, &[]);
+    compare_module_values_on_mem("elf", "ELF32_FILE", ELF32_FILE, true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_elf64() {
-    compare_module_values_on_mem(Elf, "ELF64_FILE", ELF64_FILE, false, &[]);
-    compare_module_values_on_mem(Elf, "ELF64_FILE", ELF64_FILE, true, &[]);
+    compare_module_values_on_mem("elf", "ELF64_FILE", ELF64_FILE, false, &[]);
+    compare_module_values_on_mem("elf", "ELF64_FILE", ELF64_FILE, true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_elf32_nosections() {
-    compare_module_values_on_mem(Elf, "ELF32_NOSECTIONS", ELF32_NOSECTIONS, false, &[]);
-    compare_module_values_on_mem(Elf, "ELF32_NOSECTIONS", ELF32_NOSECTIONS, true, &[]);
+    compare_module_values_on_mem("elf", "ELF32_NOSECTIONS", ELF32_NOSECTIONS, false, &[]);
+    compare_module_values_on_mem("elf", "ELF32_NOSECTIONS", ELF32_NOSECTIONS, true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_elf32_sharedobj() {
-    compare_module_values_on_mem(Elf, "ELF32_SHAREDOBJ", ELF32_SHAREDOBJ, false, &[]);
-    compare_module_values_on_mem(Elf, "ELF32_SHAREDOBJ", ELF32_SHAREDOBJ, true, &[]);
+    compare_module_values_on_mem("elf", "ELF32_SHAREDOBJ", ELF32_SHAREDOBJ, false, &[]);
+    compare_module_values_on_mem("elf", "ELF32_SHAREDOBJ", ELF32_SHAREDOBJ, true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_elf32_mips() {
-    compare_module_values_on_mem(Elf, "ELF32_MIPS_FILE", ELF32_MIPS_FILE, false, &[]);
-    compare_module_values_on_mem(Elf, "ELF32_MIPS_FILE", ELF32_MIPS_FILE, true, &[]);
+    compare_module_values_on_mem("elf", "ELF32_MIPS_FILE", ELF32_MIPS_FILE, false, &[]);
+    compare_module_values_on_mem("elf", "ELF32_MIPS_FILE", ELF32_MIPS_FILE, true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_elf_x64_file() {
-    compare_module_values_on_mem(Elf, "ELF_X64_FILE", ELF_X64_FILE, false, &[]);
-    compare_module_values_on_mem(Elf, "ELF_X64_FILE", ELF_X64_FILE, true, &[]);
+    compare_module_values_on_mem("elf", "ELF_X64_FILE", ELF_X64_FILE, false, &[]);
+    compare_module_values_on_mem("elf", "ELF_X64_FILE", ELF_X64_FILE, true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_smallest() {
-    compare_module_values_on_file(Elf, "tests/assets/elf/smallest", false, &[]);
-    compare_module_values_on_file(Elf, "tests/assets/elf/smallest", true, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/smallest", false, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/smallest", true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_invalid_sections() {
-    compare_module_values_on_file(Elf, "tests/assets/elf/invalid_sections", false, &[]);
-    compare_module_values_on_file(Elf, "tests/assets/elf/invalid_sections", true, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/invalid_sections", false, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/invalid_sections", true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_invalid_program_header() {
-    compare_module_values_on_file(Elf, "tests/assets/elf/invalid_program_header", false, &[]);
-    compare_module_values_on_file(Elf, "tests/assets/elf/invalid_program_header", true, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/invalid_program_header", false, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/invalid_program_header", true, &[]);
 }
 
 #[test]
 #[cfg(feature = "hash")]
 fn test_coverage_invalid_symbols() {
-    compare_module_values_on_file(Elf, "tests/assets/elf/invalid_symbols", false, &[]);
-    compare_module_values_on_file(Elf, "tests/assets/elf/invalid_symbols", true, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/invalid_symbols", false, &[]);
+    compare_module_values_on_file("elf", "tests/assets/elf/invalid_symbols", true, &[]);
 }
 
 #[test]
