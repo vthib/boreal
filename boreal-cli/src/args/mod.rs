@@ -143,11 +143,21 @@ fn build_yr_subcommand() -> Command {
                 .action(ArgAction::Append)
                 .help("List of rules file followed by the file, directory or pid to scan")
                 .long_help(
-                    "At least two arguments must be specified: the path to the \n\
-                rules file, and the input to scan. Several rules files can \n\
-                be specified: the last argument will always be the input to \n\
+                    "List of rules file followed by the file, directory or pid to scan.\n\n\
+\
+                [NAMESPACE:]RULES_FILE... [FILE | DIRECTORY | PID | SCAN_LIST]\n\n\
+\
+                At least two arguments must be specified: the path to the\
+                rules file, and the input to scan.\nSeveral rules files can\
+                be specified: the last argument will always be the input to\
                 scan.\n\n\
-                If --scan-list is specified, the input is a file containing \n\
+\
+                The path to rules files can be prefixed by the namespace in\
+                which to compile the rules, followed by a colon.\n\
+                This can notably be used to avoid name collisions when\
+                using multiple rules files.\n\n\
+\
+                If --scan-list is specified, the input is a file containing\
                 a list of inputs to scan, one per line.",
                 )
                 .required_unless_present("module_names"),

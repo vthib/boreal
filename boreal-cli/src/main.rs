@@ -256,9 +256,24 @@ fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<
         }
     }
 
-    for filepath in rules_files {
-        let filepath = Path::new(&filepath);
-        match compiler.add_rules_file(filepath) {
+    for file in rules_files {
+        let filepath = Path::new(&file);
+
+        // The `<namespace>:<path>` syntax is allowed. However,
+        // having a `:` in a path is perfectly valid, so to distinguish the two,
+        // first check if the path exists, otherwise try to split the namespace.
+        let res = if filepath.exists() {
+            compiler.add_rules_file(filepath)
+        } else {
+            match file.split_once(':') {
+                Some((namespace, path)) => compiler.add_rules_file_in_namespace(path, namespace),
+                // Here we basically already know the path does not exist, but calling this
+                // function allows ensuring the returned error is of the right type.
+                None => compiler.add_rules_file(filepath),
+            }
+        };
+
+        match res {
             Ok(status) => {
                 if !matches!(warning_mode, WarningMode::Ignore) {
                     for warn in status.warnings() {
