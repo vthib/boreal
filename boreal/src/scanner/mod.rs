@@ -13,6 +13,7 @@ use crate::module::{Module, ModuleData, ModuleUserData};
 use crate::timeout::TimeoutChecker;
 use crate::{statistics, Compiler, Metadata};
 
+pub use crate::evaluator::module::EvaluatedModule;
 pub use crate::evaluator::variable::StringMatch;
 
 mod ac_scan;
@@ -128,13 +129,7 @@ pub enum ScanEvent<'scanner, 'a> {
     /// A module has been imported.
     ///
     /// The [`CallbackEvents::MODULE_IMPORT`] bitflag must be set to receive this event.
-    ModuleImport {
-        /// Name of the module.
-        module_name: &'static str,
-
-        /// Dynamic values produced by this module.
-        dynamic_values: &'a crate::module::Value,
-    },
+    ModuleImport(&'a EvaluatedModule<'scanner>),
 
     /// List scan statistics once the scan is finished.
     ///
@@ -830,7 +825,7 @@ impl Inner {
         let res = self.do_scan(mem, &mut scan_data);
         let results = ScanResult {
             rules: scan_data.rules,
-            module_values: scan_data.module_values.values,
+            modules: scan_data.module_values.evaluated_modules,
             statistics: scan_data.statistics.map(Box::new),
         };
 
@@ -887,11 +882,9 @@ impl Inner {
     ) -> Result<(), ScanError> {
         if let Some(mem) = mem.get_direct() {
             // We can evaluate module values and then try to evaluate rules without matches.
-            scan_data.module_values.scan_region(
-                &Region { start: 0, mem },
-                &self.modules,
-                scan_data.params.process_memory,
-            );
+            scan_data
+                .module_values
+                .scan_region(&Region { start: 0, mem }, scan_data.params.process_memory);
 
             scan_data.send_module_import_events_to_cb()?;
         }
@@ -1088,11 +1081,9 @@ impl Inner {
 
                     if scan_data.params.fragmented_scan_mode.modules_dynamic_values {
                         // And finally, evaluate the module values on each region.
-                        scan_data.module_values.scan_region(
-                            &region,
-                            &self.modules,
-                            scan_data.params.process_memory,
-                        );
+                        scan_data
+                            .module_values
+                            .scan_region(&region, scan_data.params.process_memory);
                     }
                 }
 
@@ -1384,11 +1375,8 @@ impl ScanData<'_, '_> {
             return Ok(());
         }
 
-        for (module_name, dynamic_values) in &self.module_values.values {
-            match (cb)(ScanEvent::ModuleImport {
-                module_name,
-                dynamic_values,
-            }) {
+        for evaluated_module in &self.module_values.evaluated_modules {
+            match (cb)(ScanEvent::ModuleImport(evaluated_module)) {
                 ScanCallbackResult::Continue => (),
                 ScanCallbackResult::Abort => return Err(ScanError::CallbackAbort),
             }
@@ -1436,10 +1424,8 @@ pub struct ScanResult<'scanner> {
     /// between the two.
     pub rules: Vec<EvaluatedRule<'scanner>>,
 
-    /// On-scan values of all modules used in the scanner.
-    ///
-    /// First element is the module name, second one is the dynamic values produced by the module.
-    pub module_values: Vec<(&'static str, crate::module::Value)>,
+    /// Results of the evaluation of modules during the scan.
+    pub modules: Vec<EvaluatedModule<'scanner>>,
 
     /// Statistics related to the scan.
     // This is boxed to reduce the size of the struct, especially as this field
@@ -1983,7 +1969,7 @@ mod tests {
         let user_data = ModuleUserData::default();
         let mut module_values =
             evaluator::module::EvalData::new(&scanner.inner.modules, &user_data);
-        module_values.scan_region(&Region { start: 0, mem }, &scanner.inner.modules, false);
+        module_values.scan_region(&Region { start: 0, mem }, false);
 
         let mut mem = Memory::Direct(mem);
         let mut scan_data = ScanData {
@@ -2522,7 +2508,7 @@ mod tests {
 
         test_type_traits_non_clonable(ScanResult {
             rules: Vec::new(),
-            module_values: Vec::new(),
+            modules: Vec::new(),
             statistics: None,
         });
         test_type_traits_non_clonable(EvaluatedRule {
@@ -2543,7 +2529,7 @@ mod tests {
             external_symbols_values: &[],
             rules: Vec::new(),
             module_values: evaluator::module::EvalData {
-                values: Vec::new(),
+                evaluated_modules: Vec::new(),
                 data_map: crate::module::ModuleDataMap::new(&ModuleUserData::default()),
             },
             statistics: None,

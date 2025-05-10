@@ -13,47 +13,69 @@ use crate::module::{
 
 use super::{Evaluator, PoisonKind, Value};
 
+/// Result of a module evaluation during a scan.
+#[non_exhaustive]
+pub struct EvaluatedModule<'scanner> {
+    /// The evaluated module.
+    pub module: &'scanner dyn Module,
+
+    /// Dynamic values produced by this module.
+    pub dynamic_values: crate::module::Value,
+}
+
+impl std::fmt::Debug for EvaluatedModule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvaluatedModule")
+            .field("module", &self.module.get_name())
+            .field("dynamic_values", &self.dynamic_values)
+            .finish()
+    }
+}
+
 #[derive(Debug)]
 pub struct EvalData<'scanner> {
-    pub values: Vec<(&'static str, ModuleValue)>,
+    pub evaluated_modules: Vec<EvaluatedModule<'scanner>>,
     pub data_map: ModuleDataMap<'scanner>,
 }
 
 impl<'scanner> EvalData<'scanner> {
-    pub fn new(modules: &[Box<dyn Module>], user_data: &'scanner ModuleUserData) -> Self {
+    pub fn new(modules: &'scanner [Box<dyn Module>], user_data: &'scanner ModuleUserData) -> Self {
         let mut data_map = ModuleDataMap::new(user_data);
 
-        let values = modules
+        let evaluated_modules = modules
             .iter()
             .map(|module| {
                 module.setup_new_scan(&mut data_map);
 
-                (module.get_name(), ModuleValue::Object(HashMap::new()))
+                EvaluatedModule {
+                    module: &**module,
+                    dynamic_values: ModuleValue::Object(HashMap::new()),
+                }
             })
             .collect();
 
-        Self { values, data_map }
+        Self {
+            evaluated_modules,
+            data_map,
+        }
     }
 
-    pub fn scan_region(
-        &mut self,
-        region: &Region,
-        modules: &[Box<dyn Module>],
-        process_memory: bool,
-    ) {
+    pub fn scan_region(&mut self, region: &Region, process_memory: bool) {
         let mut scan_ctx = ScanContext {
             region,
             module_data: &mut self.data_map,
             process_memory,
         };
 
-        for (module, values) in modules.iter().zip(self.values.iter_mut()) {
-            let ModuleValue::Object(values) = &mut values.1 else {
+        for evaluated_module in &mut self.evaluated_modules {
+            let ModuleValue::Object(values) = &mut evaluated_module.dynamic_values else {
                 // Safety: this value is built in the new method of this object and guaranteed
                 // to be of this type.
                 unreachable!();
             };
-            module.get_dynamic_values(&mut scan_ctx, values);
+            evaluated_module
+                .module
+                .get_dynamic_values(&mut scan_ctx, values);
         }
     }
 }
@@ -82,10 +104,10 @@ pub(super) fn evaluate_expr(
                     &evaluator
                         .scan_data
                         .module_values
-                        .values
+                        .evaluated_modules
                         .get(*index)
                         .ok_or(PoisonKind::Undefined)?
-                        .1
+                        .dynamic_values
                 }
                 BoundedValueIndex::BoundedStack(index) => evaluator
                     .bounded_identifiers_stack
@@ -217,8 +239,12 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(EvalData {
-            values: Vec::new(),
+            evaluated_modules: Vec::new(),
             data_map: ModuleDataMap::new(&ModuleUserData::default()),
+        });
+        test_type_traits_non_clonable(EvaluatedModule {
+            module: &crate::module::Math,
+            dynamic_values: ModuleValue::Object(HashMap::new()),
         });
     }
 }

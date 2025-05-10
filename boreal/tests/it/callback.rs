@@ -59,17 +59,14 @@ fn check_module_import(
     dynamic_value_field: Option<&str>,
 ) {
     match &event {
-        ScanEvent::ModuleImport {
-            module_name,
-            dynamic_values,
-        } => {
-            assert_eq!(*module_name, expected_module_name);
-            match dynamic_values {
+        ScanEvent::ModuleImport(module) => {
+            assert_eq!(module.module.get_name(), expected_module_name);
+            match &module.dynamic_values {
                 Value::Object(obj) => match dynamic_value_field {
                     Some(field) => assert!(obj.contains_key(field)),
                     None => assert_eq!(obj.len(), 0),
                 },
-                _ => panic!("invalid dynamic values {:?}", dynamic_values),
+                _ => panic!("invalid dynamic values {:?}", module.dynamic_values),
             }
         }
         evt => panic!("unexpected event {:?}", evt),
