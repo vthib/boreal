@@ -101,7 +101,7 @@ fn build_yr_subcommand() -> Command {
         .long_about(
             "This subcommand allows specifying options exactly as done with the yara CLI.\n\
              This allows substituting uses of the yara CLI without risks.\n\
-             This API can be a bit ambiguous at times with multiple rules inputs, and many options\
+             This API can be a bit ambiguous at times with multiple rules inputs, and many options \
              can be specified that will not be used in some contexts.\n\
              For these reasons, using the other subcommands is recommended for improved clarity.",
         );
@@ -115,8 +115,8 @@ fn build_yr_subcommand() -> Command {
                 .help("Load compiled rules from bytes.")
                 .long_help(
                     "Load compiled rules from bytes.\n\n\
-                    If specified, then a single rules path must be\
-                    specified, which must point to a file containing\
+                    If specified, then a single rules path must be \
+                    specified, which must point to a file containing \
                     serialized rules.\n\
                     See the scan subcommand for how to generate such a file.",
                 ),
@@ -148,17 +148,17 @@ fn build_yr_subcommand() -> Command {
 \
                 [NAMESPACE:]RULES_FILE... [FILE | DIRECTORY | PID | SCAN_LIST]\n\n\
 \
-                At least two arguments must be specified: the path to the\
-                rules file, and the input to scan.\nSeveral rules files can\
-                be specified: the last argument will always be the input to\
+                At least two arguments must be specified: the path to the \
+                rules file, and the input to scan.\nSeveral rules files can \
+                be specified: the last argument will always be the input to \
                 scan.\n\n\
 \
-                The path to rules files can be prefixed by the namespace in\
+                The path to rules files can be prefixed by the namespace in \
                 which to compile the rules, followed by a colon.\n\
-                This can notably be used to avoid name collisions when\
+                This can notably be used to avoid name collisions when \
                 using multiple rules files.\n\n\
 \
-                If --scan-list is specified, the input is a file containing\
+                If --scan-list is specified, the input is a file containing \
                 a list of inputs to scan, one per line.",
                 )
                 .required_unless_present("module_names"),

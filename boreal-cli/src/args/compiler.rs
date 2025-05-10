@@ -74,9 +74,9 @@ pub fn add_compiler_args(mut command: Command, in_yr_subcommand: bool) -> Comman
                 .help("Path to a file containing rules, can be repeated.")
                 .long_help(
                     "Path to a file containing rules, can be repeated.\n\n\
-                     The path can be prefixed by the namespace in which to\
+                     The path can be prefixed by the namespace in which to \
                      compile the rules, followed by a colon.\n\
-                     This can notably be used to avoid name collisions when\
+                     This can notably be used to avoid name collisions when \
                      using multiple rules files.",
                 ),
         );
