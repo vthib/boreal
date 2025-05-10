@@ -1793,6 +1793,24 @@ fn test_rules_files_namespace() {
 }
 
 #[test]
+fn test_ignored_arguments() {
+    let rule_file = test_file(b"rule a { strings: $ = /abc/ condition: any of them }");
+    let input = test_file(b"abc");
+
+    boreal_cmd()
+        .arg("yr")
+        .arg("-E")
+        .arg("--fast-scan")
+        .arg("--stack-size=300")
+        .arg(rule_file.path())
+        .arg(input.path())
+        .assert()
+        .stdout(format!("a {}\n", input.path().display()))
+        .stderr("")
+        .success();
+}
+
+#[test]
 #[cfg(feature = "serialize")]
 fn test_save_load() {
     let rule_file = test_file(

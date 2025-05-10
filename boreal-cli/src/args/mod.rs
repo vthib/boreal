@@ -164,6 +164,45 @@ fn build_yr_subcommand() -> Command {
                 .required_unless_present("module_names"),
         );
 
+    // Add arguments that are ignored: this is only to ease migration from yara CLI
+    command = command
+        .next_help_heading("Ignored options (present for yara compatibility)")
+        .arg(
+            Arg::new("strict_escape")
+                .short('E')
+                .long("strict-escape")
+                .action(ArgAction::SetTrue)
+                .help("warn on unknown escape sequences (ignored).")
+                .long_help(
+                    "warn on unknown escape sequences.\n\n\
+                    Ignored, unknown escape sequences in regexes \
+                    always generate warnings.",
+                ),
+        )
+        .arg(
+            Arg::new("fast")
+                .short('f')
+                .long("fast-scan")
+                .action(ArgAction::SetTrue)
+                .help("Scan in fast mode (ignored).")
+                .long_help(
+                    "Scan in fast mode.\n\n\
+                    Ignored, scans are always in \"fast mode\" unless an \
+                    option disables fast scanning.",
+                ),
+        )
+        .arg(
+            Arg::new("stack_size")
+                .short('k')
+                .long("stack-size")
+                .value_name("SLOTS")
+                .help("Maximum stack size (ignored).")
+                .long_help(
+                    "Maximum stack size.\n\n\
+                    Ignored, boreal does not use a stack to evaluate rules",
+                ),
+        );
+
     command
 }
 
