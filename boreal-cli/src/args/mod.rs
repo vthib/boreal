@@ -39,7 +39,7 @@ impl ExecutionMode {
 
         let positional_args: Values<String> = args.remove_many("args").unwrap();
         if positional_args.len() < 2 {
-            return Err("invalid number of arguments, at least one rules file \
+            return Err("Invalid number of arguments, at least one rules file \
                 and a scan target must be specified"
                 .to_owned());
         }
@@ -55,7 +55,7 @@ impl ExecutionMode {
         #[cfg(feature = "serialize")]
         if args.get_flag("load_from_bytes") {
             if rules_files.len() != 1 {
-                return Err("One a single rules path must be passed when -C is used".to_owned());
+                return Err("Only a single rules path must be passed when -C is used".to_owned());
             }
             return Ok(Self::LoadAndScan(LoadScanExecution {
                 scanner_options,
