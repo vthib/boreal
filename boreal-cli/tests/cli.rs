@@ -1732,6 +1732,67 @@ fn test_multiple_rules_files() {
 }
 
 #[test]
+fn test_rules_files_namespace() {
+    let temp = TempDir::new().unwrap();
+    let rule_a = temp.path().join("rule_a");
+    fs::write(&rule_a, b"rule a { condition: true }").unwrap();
+    let rule_b = temp.path().join("rule:b");
+    fs::write(&rule_b, b"rule b { condition: true }").unwrap();
+
+    let input = temp.path().join("input");
+    fs::write(&input, b"").unwrap();
+    let input_path = input.display().to_string();
+
+    // Specify namespaces using the ':' spearator
+    test_scan(
+        &["-e"],
+        &[Path::new("ns1:rule_a"), Path::new("ns2:rule_a")],
+        &input,
+        |cmd| {
+            cmd.current_dir(temp.path())
+                .assert()
+                .stdout(format!("ns1:a {input_path}\nns2:a {input_path}\n"))
+                .success();
+        },
+    );
+
+    // A filepath has a ':' in it: it should not be taken as a namespace if possible
+    test_scan(
+        &["-e"],
+        &[
+            Path::new("ns1:rule_a"),
+            Path::new("rule:b"),
+            Path::new("ns2:rule:b"),
+        ],
+        &input,
+        |cmd| {
+            cmd.current_dir(temp.path())
+                .assert()
+                .stdout(format!(
+                    "ns1:a {input_path}\ndefault:b {input_path}\nns2:b {input_path}\n"
+                ))
+                .success();
+        },
+    );
+
+    // When a filepath that has a ':' does not exist, it should fail properly
+    test_scan(&["-e"], &[Path::new("rule:c")], &input, |cmd| {
+        cmd.current_dir(temp.path())
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains("Cannot read rules file c:"))
+            .failure();
+    });
+    test_scan(&["-e"], &[Path::new("ns1:rule:c")], &input, |cmd| {
+        cmd.current_dir(temp.path())
+            .assert()
+            .stdout("")
+            .stderr(predicate::str::contains("Cannot read rules file rule:c:"))
+            .failure();
+    });
+}
+
+#[test]
 #[cfg(feature = "serialize")]
 fn test_save_load() {
     let rule_file = test_file(

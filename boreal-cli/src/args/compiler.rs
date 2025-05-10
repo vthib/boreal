@@ -69,9 +69,16 @@ pub fn add_compiler_args(mut command: Command, in_yr_subcommand: bool) -> Comman
             Arg::new("rules_file")
                 .short('f')
                 .long("rules-file")
-                .value_name("RULES_FILE")
+                .value_name("[NAMESPACE:]RULES_FILE")
                 .action(ArgAction::Append)
-                .help("Path to a file containing rules, can be repeated."),
+                .help("Path to a file containing rules, can be repeated.")
+                .long_help(
+                    "Path to a file containing rules, can be repeated.\n\n\
+                     The path can be prefixed by the namespace in which to\
+                     compile the rules, followed by a colon.\n\
+                     This can notably be used to avoid name collisions when\
+                     using multiple rules files.",
+                ),
         );
     }
 
