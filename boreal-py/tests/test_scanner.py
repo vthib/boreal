@@ -504,6 +504,12 @@ rule a { condition: true }
 
     assert len(received_values) == 1
     v = received_values[0]
+
+    # static values are present
+    assert v['DLL'] == 8192
+    # but functions are not included
+    assert 'section_index' not in v
+
     # string
     assert v['module'] == 'pe'
     # integer
