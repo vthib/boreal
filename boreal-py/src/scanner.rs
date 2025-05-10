@@ -554,19 +554,24 @@ impl<'s> CallbackHandler<'s> {
         match event {
             ScanEvent::RuleMatch(rule_match) => self.handle_rule_event(rule_match, true),
             ScanEvent::RuleNoMatch(rule_match) => self.handle_rule_event(rule_match, false),
-            ScanEvent::ModuleImport(module) => {
+            ScanEvent::ModuleImport(evaluated_module) => {
                 match &self.modules_callback {
                     Some(cb) => Python::with_gil(|py| {
                         // A module value must be an object. If empty,  means the module has not
                         // generated any values.
-                        let dict = match &module.dynamic_values {
-                            Value::Object(map) => crate::module::convert_object(py, map)?,
-                            _ => PyDict::new(py),
-                        };
+                        let dict = PyDict::new(py);
+                        crate::module::add_static_values_to_dict(
+                            py,
+                            &dict,
+                            evaluated_module.module.get_static_values(),
+                        )?;
+                        if let Value::Object(map) = &evaluated_module.dynamic_values {
+                            crate::module::add_dynamic_values_to_dict(py, &dict, map)?;
+                        }
                         // XXX: Yara override the value, here, so reproduce it, we don't really
                         // have the opportunity to do better here, not unless the callback takes
                         // additional arguments.
-                        dict.set_item("module", module.module.get_name())?;
+                        dict.set_item("module", evaluated_module.module.get_name())?;
                         let result = cb.call1(py, (dict,))?;
                         Ok(convert_callback_return_value(py, &result))
                     }),
