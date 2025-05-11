@@ -260,7 +260,7 @@ fn compile(
         _ => return Err(PyTypeError::new_err("invalid arguments passed")),
     }
 
-    Ok(scanner::Scanner::new(compiler.into_scanner(), warnings))
+    Ok(scanner::Scanner::new(compiler.finalize(), warnings))
 }
 
 /// Profile to use when compiling rules.

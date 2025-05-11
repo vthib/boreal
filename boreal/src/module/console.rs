@@ -26,7 +26,7 @@ use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, V
 /// rule a {
 ///     condition: console.log("one")
 /// }"#).unwrap();
-/// let mut scanner = compiler.into_scanner();
+/// let mut scanner = compiler.finalize();
 ///
 /// scanner.scan_mem(b""); // Will not log anything
 ///

@@ -77,7 +77,7 @@ rule example {
 }
 "#)?;
 
-let scanner = compiler.into_scanner();
+let scanner = compiler.finalize();
 let res = scanner.scan_mem(b"<\0t\0m\0p\0.\0d\0a\0t\0>\0");
 assert!(res.matched_rules.iter().any(|rule| rule.name == "example"));
 ```

@@ -611,12 +611,8 @@ impl Compiler {
     }
 
     /// Finalize the compiler and generate a [`Scanner`].
-    ///
-    /// # Errors
-    ///
-    /// Can fail if generating a set of all rules variables is not possible.
     #[must_use]
-    pub fn into_scanner(self) -> Scanner {
+    pub fn finalize(self) -> Scanner {
         Scanner::new(self)
     }
 }

@@ -291,7 +291,7 @@ fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<
         }
     }
 
-    Some(compiler.into_scanner())
+    Some(compiler.finalize())
 }
 
 #[cfg(feature = "serialize")]

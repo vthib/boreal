@@ -231,7 +231,7 @@ impl Compiler {
 
     pub fn into_checker(self) -> Checker {
         Checker {
-            scanner: self.compiler.into_scanner(),
+            scanner: self.compiler.finalize(),
             yara_rules: self.yara_compiler.map(|v| v.compile_rules().unwrap()),
             assert_success: true,
             last_err: None,
@@ -881,7 +881,7 @@ pub fn compare_module_values_on_mem(
             module_name
         ))
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
     if process_memory {
         let params = scanner.scan_params().clone();
         scanner.set_scan_params(params.process_memory(true));

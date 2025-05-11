@@ -95,7 +95,7 @@ pub fn build_boreal_scanner(rules: &[PathBuf], speed: bool) -> boreal::Scanner {
             )
         });
     }
-    boreal_compiler.into_scanner()
+    boreal_compiler.finalize()
 }
 
 pub fn build_yara_rules(rules: &[PathBuf]) -> yara::Rules {

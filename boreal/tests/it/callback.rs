@@ -160,7 +160,7 @@ rule c {
 "#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     scan_mem(&scanner, b"<abcdef>", 2, |event, nb| {
         if nb == 0 {
@@ -202,7 +202,7 @@ rule c {
 "#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     scan_mem(&scanner, b"<abc>", 0, |_, _| panic!());
 
@@ -239,7 +239,7 @@ rule c { condition: filesize > 7 }
 "#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     scan_mem(&scanner, b"12", 0, |_, _| panic!());
     scan_mem(&scanner, b"123", 0, |_, _| panic!());
@@ -277,7 +277,7 @@ rule b { condition: filesize >= 3 }
     compiler
         .add_rules_str(format!("rule c {{ condition: {} }}", TIMEOUT_COND))
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
     scanner
         .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
 
@@ -313,7 +313,7 @@ rule d { condition: true }
 "#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     scan_mem_with_abort(&scanner, b"abc", 0, |event, _nb| {
         check_rule_match(event, "a", "default");
@@ -363,7 +363,7 @@ rule d { condition: true }
 "#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     scan_mem_with_abort(&scanner, b"", 0, |event, _nb| {
         check_rule_match(event, "a", "default");
@@ -411,7 +411,7 @@ fn test_scan_mem_with_callback_abort_timeout() {
     compiler
         .add_rules_str(format!("rule c {{ condition: {} }}", TIMEOUT_COND))
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
     scanner
         .set_scan_params(ScanParams::default().timeout_duration(Some(Duration::from_millis(100))));
 
@@ -426,7 +426,7 @@ fn test_scan_file_with_callback() {
     compiler
         .add_rules_str("rule a { condition: true }")
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     let mut counter = 0;
     let res = scanner.scan_file_with_callback("not_existing", |_event| {
@@ -455,7 +455,7 @@ fn test_scan_file_memmap_with_callback() {
     compiler
         .add_rules_str("rule a { condition: true }")
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     let mut counter = 0;
     // Safety: testing
@@ -497,7 +497,7 @@ rule a {
 }"#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     let regions = &[
         (0, Some(b"zyx".as_slice())),
@@ -535,7 +535,7 @@ rule a {
 }"#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     let helper = BinHelper::run("stack");
     let mut counter = 0;
@@ -569,7 +569,7 @@ rule a {
 "#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
     scanner.set_scan_params(
         ScanParams::default()
             .callback_events(CallbackEvents::RULE_MATCH | CallbackEvents::MODULE_IMPORT),
@@ -673,7 +673,7 @@ rule b {
 "#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     // By default, we get rule match, but not module import
     scan_mem(&scanner, b"abcdef", 2, |event, nb| {
@@ -711,7 +711,7 @@ rule a {
 "#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     // By default, we get rule match, but not module import
     scanner.set_scan_params(
@@ -745,7 +745,7 @@ private rule e { condition: false }
 "#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
     scanner.set_scan_params(
         scanner
             .scan_params()
@@ -812,7 +812,7 @@ rule yes2 { condition: true }
             "ns2",
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     scanner.set_scan_params(
         scanner
@@ -918,7 +918,7 @@ rule c {
 "#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     scanner.set_scan_params(
         scanner
@@ -1014,7 +1014,7 @@ rule r4 {
             "ns3",
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     scanner.set_scan_params(
         scanner
@@ -1084,7 +1084,7 @@ global rule g3 {
 }"#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     scanner.set_scan_params(
         scanner
@@ -1141,7 +1141,7 @@ rule r1 {
 }"#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     scanner.set_scan_params(
         scanner

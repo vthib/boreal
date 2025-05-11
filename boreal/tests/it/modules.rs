@@ -532,7 +532,7 @@ rule a {
         )
         .unwrap();
 
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
 
     // Nothing emitted by default
     scanner.scan_mem(b"").unwrap();

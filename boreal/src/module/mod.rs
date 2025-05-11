@@ -379,7 +379,7 @@ impl std::fmt::Debug for ModuleDataMap<'_> {
 ///     condition: bar.get_data_value() == 3
 /// }"#).unwrap();
 ///
-/// let mut scanner = compiler.into_scanner();
+/// let mut scanner = compiler.finalize();
 /// scanner.set_module_data::<Bar>(BarUserData { value: 3 });
 ///
 /// let result = scanner.scan_mem(b"").unwrap();

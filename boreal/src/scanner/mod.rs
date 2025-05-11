@@ -39,7 +39,7 @@ mod process;
 /// compiler.add_rules_str("rule a { strings: $a = \"abc\" condition: $a }")?;
 ///
 /// // Compile all the rules and generate a scanner.
-/// let scanner = compiler.into_scanner();
+/// let scanner = compiler.finalize();
 ///
 /// // Use the scanner to run the rules against byte strings or files.
 /// let scan_result = scanner.scan_mem(b"abc").unwrap();
@@ -55,7 +55,7 @@ mod process;
 /// let mut compiler = boreal::Compiler::new();
 /// compiler.define_symbol("extension", "");
 /// compiler.add_rules_str("rule a { condition: extension endswith \"pdf\" }")?;
-/// let scanner = compiler.into_scanner();
+/// let scanner = compiler.finalize();
 ///
 /// let thread1 = {
 ///     let mut scanner = scanner.clone();
@@ -682,7 +682,7 @@ impl Scanner {
     /// ```
     /// let mut compiler = boreal::Compiler::new();
     /// compiler.add_rules_str("rule a { strings: $a = \"abc\" condition: $a }").unwrap();
-    /// let scanner = compiler.into_scanner();
+    /// let scanner = compiler.finalize();
     ///
     /// let mut buffer = Vec::new();
     /// scanner.to_bytes(&mut buffer).unwrap();
@@ -1964,7 +1964,7 @@ mod tests {
     fn test_eval_with_poison(rule_str: &str, mem: &[u8], expected: Option<bool>) {
         let mut compiler = CompilerBuilder::default().add_module(Test).build();
         let _r = compiler.add_rules_str(rule_str).unwrap();
-        let scanner = compiler.into_scanner();
+        let scanner = compiler.finalize();
 
         let user_data = ModuleUserData::default();
         let mut module_values =
