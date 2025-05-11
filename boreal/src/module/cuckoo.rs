@@ -19,7 +19,7 @@ use super::{EvalContext, Module, ModuleData, StaticValue, Type, Value};
 /// rule a {
 ///     condition: cuckoo.network.host(/crates.io/)
 /// }"#).unwrap();
-/// let mut scanner = compiler.into_scanner();
+/// let mut scanner = compiler.finalize();
 ///
 /// let report = r#"{ "network": { "hosts": ["crates.io"] } }"#;
 /// let cuckoo_data = CuckooData::from_json_report(report).unwrap();

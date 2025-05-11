@@ -25,7 +25,7 @@
 //! "#)?;
 //!
 //! // Then, all added rules are compiled into a scanner object.
-//! let scanner = compiler.into_scanner();
+//! let scanner = compiler.finalize();
 //!
 //! // Use this object to scan strings or files.
 //! let res = scanner.scan_mem(b"<\0t\0m\0p\0.\0d\0a\0t\0>\0").unwrap();

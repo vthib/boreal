@@ -22,7 +22,7 @@ rule bar {
 }"#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
     assert!(scanner.scan_file("not_existing").is_err());
 
     let file = tempfile::NamedTempFile::new().unwrap();
@@ -85,7 +85,7 @@ rule a {
 }"#,
         )
         .unwrap();
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
     scanner.scan_mem(b"").unwrap();
 
     assert!(!FIRST.load(Ordering::SeqCst));
@@ -128,7 +128,7 @@ rule r: tag {
         )
         .unwrap();
 
-    let scanner = compiler.into_scanner();
+    let scanner = compiler.finalize();
     let rules: Vec<_> = scanner.rules().collect();
 
     assert_eq!(rules.len(), 4);
@@ -219,7 +219,7 @@ rule yes2 { condition: true }
             "ns2",
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     scanner.set_scan_params(
         scanner
@@ -327,7 +327,7 @@ fn test_scanner_serialize_module_use() {
     }"#,
         )
         .unwrap();
-    let mut scanner = compiler.into_scanner();
+    let mut scanner = compiler.finalize();
 
     let _r = scanner.scan_mem(b"").unwrap();
     assert_eq!(&*LOGS.lock().unwrap(), &[1]);

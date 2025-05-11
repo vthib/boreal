@@ -370,7 +370,7 @@ impl ScanParams {
     ///
     /// ```
     /// use boreal::scanner::{CallbackEvents, ScanParams};
-    /// # let mut scanner = boreal::Compiler::new().into_scanner();
+    /// # let mut scanner = boreal::Compiler::new().finalize();
     ///
     /// scanner.set_scan_params(
     ///     ScanParams::default()

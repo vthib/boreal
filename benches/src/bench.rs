@@ -66,7 +66,7 @@ fn bench_compilation(c: &mut Criterion, rules_name: &str, rules: &[PathBuf]) {
             for path in rules {
                 compiler.add_rules_file(path).unwrap();
             }
-            compiler.into_scanner()
+            compiler.finalize()
         })
     });
     group.bench_with_input("boreal-memory", rules, |b, rules| {
@@ -75,7 +75,7 @@ fn bench_compilation(c: &mut Criterion, rules_name: &str, rules: &[PathBuf]) {
             for path in rules {
                 compiler.add_rules_file(path).unwrap();
             }
-            compiler.into_scanner()
+            compiler.finalize()
         })
     });
     group.bench_with_input("libyara", rules, |b, rules| {
