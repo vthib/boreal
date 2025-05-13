@@ -1,0 +1,197 @@
+# This is mostly copied from
+# <https://github.com/messense/crfs-rs/blob/main/.github/workflows/Python.yml>
+
+name: release-python-wheels
+
+on:
+  push:
+    tags:
+    - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+jobs:
+  # Windows & macos
+  build-dist-wheel:
+    name: Build wheel for ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version-file: "boreal-py/pyproject.toml"
+        architecture: ${{ matrix.platform.pyarch }}
+
+    - name: Build wheels
+      uses: PyO3/maturin-action@v1
+      with:
+        target: ${{ matrix.platform.target }}
+        args: --release --auditwheel check --out dist -m boreal-py/Cargo.toml
+
+    - name: Test installing built wheel
+      run: |
+        pip install boreal-python --no-index --find-links dist --force-reinstall
+        python -c "import boreal"
+
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-${{ matrix.platform.name }}
+        path: dist
+
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: windows-x64
+            runner: windows-latest
+            target: x86_64
+            pyarch: x64
+
+          - name: windows-i686
+            runner: windows-latest
+            target: x86
+            pyarch: x86
+
+          - name: macos-x64
+            runner: macos-13
+            target: x86_64
+            pyarch: x64
+
+          - name: macos-aarch64
+            runner: macos-14
+            target: aarch64
+            pyarch: arm64
+
+  # Linux for glibc
+  build-manylinux:
+    name: Build wheel for manylinux ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version-file: "boreal-py/pyproject.toml"
+
+    - name: Build wheels
+      uses: PyO3/maturin-action@v1
+      with:
+        target: ${{ matrix.target }}
+        manylinux: auto
+        args: --release --auditwheel check --out dist -m boreal-py/Cargo.toml
+
+    - name: Test installing built wheel
+      if: ${{ matrix.target == 'x86_64' }}
+      run: |
+        pip install boreal-python --no-index --find-links dist --force-reinstall
+        python -c "import boreal"
+
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-manylinux-${{ matrix.target }}
+        path: dist
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, x86]
+
+  # Linux for musl
+  build-musllinux:
+    name: Build wheel for musllinux ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version-file: "boreal-py/pyproject.toml"
+
+    - name: Build wheels
+      uses: PyO3/maturin-action@v1
+      with:
+        target: ${{ matrix.target }}
+        manylinux: musllinux_1_2
+        args: --release --auditwheel repair --out dist -m boreal-py/Cargo.toml
+
+    - name: Setup alpine
+      uses: jirutka/setup-alpine@v1
+      with:
+        arch: ${{ matrix.target }}
+        packages: py3-pip
+
+    - name: Test installing the wheel
+      run: |
+        python3 -m venv .venv
+        . .venv/bin/activate
+        pip install boreal-python --no-index --find-links /home/runner/work/boreal/boreal/dist --force-reinstall
+        python3 -c "import boreal"
+      shell: alpine.sh {0}
+
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-musllinux-${{ matrix.target }}
+        path: dist
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, x86]
+
+  # Source wheel
+  build-source:
+    name: Build source wheel
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version-file: "boreal-py/pyproject.toml"
+
+    - name: Build source wheel
+      uses: PyO3/maturin-action@v1
+      with:
+        command: sdist
+        args: --out dist -m boreal-py/Cargo.toml
+
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-sdist
+        path: dist
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    needs: [build-dist-wheel, build-manylinux, build-musllinux, build-source]
+    permissions:
+      # Use to sign the release artifacts
+      id-token: write
+      # Used to upload release artifacts
+      contents: write
+      # Used to generate artifact attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'wheels-*/*'
+      - name: Publish to PyPI
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: PyO3/maturin-action@v1
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: upload
+          working-directory: boreal-py
+          args: --non-interactive --skip-existing ../wheels-*/*

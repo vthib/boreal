@@ -1,5 +1,5 @@
 [project]
-name = "boreal"
+name = "boreal-python"
 version = "0.1.0"
 readme = "README.md"
 description = "Python bindings to the boreal YARA scanner"
