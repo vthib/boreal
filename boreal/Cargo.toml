@@ -1,6 +1,6 @@
 [package]
 name = "boreal"
-version = "0.9.0"
+version = "1.0.0"
 description = "A library to evaluate YARA rules, used to scan bytes for textual and binary pattern"
 repository = "https://github.com/vthib/boreal"
 readme = "README.md"
@@ -58,7 +58,7 @@ profiling = []
 serialize = ["dep:borsh"]
 
 [dependencies]
-boreal-parser = { path = "../boreal-parser", version = "0.6.0" }
+boreal-parser = { path = "../boreal-parser", version = "1.0.0" }
 
 # Proper error reporting on compilation
 codespan-reporting = "0.12"

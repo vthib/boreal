@@ -1,6 +1,6 @@
 [package]
 name = "boreal-cli"
-version = "0.9.0"
+version = "1.0.0"
 description = "CLI utility to run boreal, a YARA rules engine"
 repository = "https://github.com/vthib/boreal"
 readme = "README.md"
@@ -34,7 +34,7 @@ serialize = ["boreal/serialize"]
 cuckoo = ["boreal/cuckoo"]
 
 [dependencies]
-boreal = { path = "../boreal", version = "0.9.0" }
+boreal = { path = "../boreal", version = "1.0.0" }
 
 # CLI arguments handling
 clap = { version = "4.5", features = ["cargo"] }
