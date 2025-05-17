@@ -181,11 +181,14 @@ jobs:
       # Used to generate artifact attestation
       attestations: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        with:
+          path: boreal-py
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'wheels-*/*'
+          subject-path: 'boreal-py/wheels-*/*'
       - name: Publish to PyPI
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: PyO3/maturin-action@v1
@@ -194,4 +197,4 @@ jobs:
         with:
           command: upload
           working-directory: boreal-py
-          args: --non-interactive --skip-existing ../wheels-*/*
+          args: --non-interactive --skip-existing wheels-*/*

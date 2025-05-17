@@ -42,7 +42,7 @@ jobs:
       RUST_BACKTRACE: 1
     strategy:
       matrix:
-        build: [linux, linux32, win-msvc, win32-msvc]
+        build: [linux, linux32, win-msvc, win32-msvc, macos-x64, macos-arm64]
         include:
         - build: linux
           os: ubuntu-22.04
@@ -58,6 +58,12 @@ jobs:
           os: windows-2022
           target: i686-pc-windows-msvc
           vcpkg_triplet: x86-windows-static
+        - build: macos-x64
+          os: macos-13
+          target: x86_64-apple-darwin
+        - build: macos-arm64
+          os: macos-14
+          target: aarch64-apple-darwin
 
     steps:
     - name: Checkout repository
@@ -68,36 +74,16 @@ jobs:
       run: |
         sudo dpkg --add-architecture i386
         sudo apt update
-        sudo apt install libssl-dev:i386 gcc-multilib
-        echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
-        echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
-
-    - name: Install packages (Windows)
-      uses: lukka/run-vcpkg@v10
-      if: ${{ matrix.os == 'windows-2022' }}
-      env:
-        VCPKG_DEFAULT_TRIPLET: ${{ matrix.vcpkg_triplet }}
-        VCPKG_INSTALLED_DIR: '${{ runner.workspace }}/vcpkg/installed'
-      with:
-        appendedCacheKey: ${{matrix.vcpkg_triplet}}
-        vcpkgDirectory: '${{ runner.workspace }}/vcpkg'
-        vcpkgGitCommitId: '4cac260c4b7331538d31886f57739fea0bffa27e'
-        runVcpkgInstall: true
-
-    - name: Export VCPKGRS_TRIPLET and OPENSSL_DIR env var
-      if: ${{ matrix.os == 'windows-2022' }}
-      shell: bash
-      run: |
-        echo "VCPKGRS_TRIPLET=${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
-        echo "OPENSSL_DIR=${{ runner.workspace }}\\vcpkg\\installed\\${{ matrix.vcpkg_triplet }}" >> $GITHUB_ENV
+        sudo apt install gcc-multilib
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         target: ${{ matrix.target }}
-
     - name: Build release binary
-      run: cargo build --verbose --release --features authenticode --target=${{ matrix.target }}
+      run: |
+        cd boreal-cli
+        cargo build --release --features authenticode --target=${{ matrix.target }}
 
     - name: Strip release binary (linux)
       if: matrix.os == 'ubuntu-22.04'
