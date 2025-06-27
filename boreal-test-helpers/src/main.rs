@@ -17,7 +17,7 @@ fn main() {
         "memory_chunk_size" => memory_chunk_size(),
         "file_copy_on_write" => file_copy_on_write(),
         "rework_file" => rework_file(),
-        _ => panic!("unknown arg {}", arg),
+        _ => panic!("unknown arg {arg}"),
     }
 }
 

@@ -42,12 +42,12 @@ fn test_add_rules_file_err() {
     let mut compiler = boreal::Compiler::new();
     let path = "non_existing";
     let err = compiler.add_rules_file(path).unwrap_err();
-    assert!(format!("{}", err).starts_with("error: Cannot read rules file non_existing: "));
+    assert!(format!("{err}").starts_with("error: Cannot read rules file non_existing: "));
 
     let err = compiler
         .add_rules_file_in_namespace(path, "ns")
         .unwrap_err();
-    assert!(format!("{}", err).starts_with("error: Cannot read rules file non_existing: "));
+    assert!(format!("{err}").starts_with("error: Cannot read rules file non_existing: "));
 }
 
 // An import is reused in the same namespace
@@ -385,10 +385,7 @@ fn test_compiler_set_include_callback() {
                         rule third { condition: true }
                     "#
                 .to_owned()),
-                _ => panic!(
-                    "unexpected include on {} from {:?}",
-                    include_name, current_path
-                ),
+                _ => panic!("unexpected include on {include_name} from {current_path:?}",),
             }
         } else if namespace == "ns" {
             match (include_name, current_path.as_deref()) {
@@ -418,10 +415,7 @@ fn test_compiler_set_include_callback() {
                         rule r4 { condition: true }
                     "#
                 .to_owned()),
-                _ => panic!(
-                    "unexpected include on {} from {:?}",
-                    include_name, current_path
-                ),
+                _ => panic!("unexpected include on {include_name} from {current_path:?}",),
             }
         } else {
             Err(std::io::Error::new(

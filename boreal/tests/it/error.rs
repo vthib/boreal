@@ -83,7 +83,7 @@ fn extract_directives(contents: &str) -> Directives {
                 "no libyara conformance" => directives.without_yara = true,
                 "disable includes" => directives.disable_includes = true,
                 "skip" => directives.skip = true,
-                dir => panic!("unknown directive {}", dir),
+                dir => panic!("unknown directive {dir}"),
             }
         }
     }

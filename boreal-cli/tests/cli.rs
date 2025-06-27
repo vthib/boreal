@@ -170,7 +170,7 @@ rule process_scan {
         Path::new(&pid.to_string()),
         |cmd| {
             cmd.assert()
-                .stdout(format!("process_scan {}\n", pid))
+                .stdout(format!("process_scan {pid}\n"))
                 .stderr("")
                 .success();
         },
@@ -197,7 +197,7 @@ fn test_scan_process_not_found() {
         |cmd| {
             cmd.assert()
                 .stdout("")
-                .stderr(format!("Cannot scan {}: unknown process\n", pid))
+                .stderr(format!("Cannot scan {pid}: unknown process\n"))
                 .failure();
         },
     );
