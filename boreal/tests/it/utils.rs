@@ -72,7 +72,7 @@ impl Compiler {
 
     pub fn add_rules(&mut self, rules: &str) {
         if let Err(err) = self.compiler.add_rules_str(rules) {
-            panic!("parsing failed: {}", err);
+            panic!("parsing failed: {err}");
         }
         self.yara_compiler = self
             .yara_compiler
@@ -132,7 +132,7 @@ impl Compiler {
             .compiler
             .add_rules_str_in_namespace(rules, ns)
             .unwrap_err();
-        let desc = format!("{}", err);
+        let desc = format!("{err}");
         assert!(
             desc.starts_with(expected_prefix),
             "error: {desc}\nexpected prefix: {expected_prefix}"
@@ -150,7 +150,7 @@ impl Compiler {
     #[track_caller]
     pub fn check_add_rules_err_boreal(&mut self, rules: &str, expected_prefix: &str) {
         let err = self.compiler.add_rules_str(rules).unwrap_err();
-        let desc = format!("{}", err);
+        let desc = format!("{err}");
         assert!(
             desc.starts_with(expected_prefix),
             "error: {desc}\nexpected prefix: {expected_prefix}"
@@ -173,7 +173,7 @@ impl Compiler {
     #[track_caller]
     pub fn check_add_file_err_boreal(&mut self, path: &Path, expected_prefix: &str) {
         let err = self.compiler.add_rules_file(path).unwrap_err();
-        let err = format!("{}", err);
+        let err = format!("{err}");
         // Remove the prefix up to the "error: " string
         let desc = err.split("error: ").nth(1).unwrap();
         assert!(
@@ -184,7 +184,7 @@ impl Compiler {
 
     pub fn check_add_rules_warnings(mut self, rules: &str, expected_warnings_prefix: &[&str]) {
         let status = self.compiler.add_rules_str(rules).unwrap();
-        let warnings: Vec<_> = status.warnings().map(|warn| format!("{}", warn)).collect();
+        let warnings: Vec<_> = status.warnings().map(|warn| format!("{warn}")).collect();
         assert_eq!(warnings.len(), expected_warnings_prefix.len());
         for (desc, expected_suffix) in warnings.iter().zip(expected_warnings_prefix.iter()) {
             // Use ends_with to avoid the /tmp/... before the file path
@@ -297,7 +297,7 @@ impl Checker {
             }
             Err((err, v)) => {
                 if self.assert_success {
-                    panic!("scan failed: {:?}", err);
+                    panic!("scan failed: {err:?}");
                 }
                 self.last_err = Some(err);
                 v
@@ -503,7 +503,7 @@ impl Checker {
             }
             Err((err, v)) => {
                 if self.assert_success {
-                    panic!("scan failed: {:?}", err);
+                    panic!("scan failed: {err:?}");
                 }
                 self.last_err = Some(err);
                 v
@@ -521,7 +521,7 @@ impl Checker {
                 }
                 Err(err) => {
                     if self.assert_success {
-                        panic!("yara scan failed: {:?}", err);
+                        panic!("yara scan failed: {err:?}");
                     }
                 }
             }
@@ -877,8 +877,7 @@ pub fn compare_module_values_on_mem(
     let mut compiler = build_compiler(false);
     compiler
         .add_rules_str(format!(
-            "import \"{}\" rule a {{ condition: true }}",
-            module_name
+            "import \"{module_name}\" rule a {{ condition: true }}",
         ))
         .unwrap();
     let mut scanner = compiler.finalize();
@@ -891,8 +890,7 @@ pub fn compare_module_values_on_mem(
     let c = yara::Compiler::new().unwrap();
     let c = c
         .add_rules_str(&format!(
-            "import \"{}\" rule a {{ condition: true }}",
-            module_name
+            "import \"{module_name}\" rule a {{ condition: true }}",
         ))
         .unwrap();
     let yara_rules = c.compile_rules().unwrap();
@@ -1181,7 +1179,7 @@ impl std::fmt::Debug for Diff {
 }
 
 pub fn join_str(a: &str, b: &str) -> Vec<u8> {
-    format!("{}{}", a, b).into_bytes()
+    format!("{a}{b}").into_bytes()
 }
 
 struct YaraBlocks<'a> {

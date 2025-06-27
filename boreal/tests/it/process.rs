@@ -35,7 +35,7 @@ fn test_process_not_found() {
 
     checker.check_process(pid, false);
     let err = checker.last_err.unwrap();
-    assert!(matches!(err, ScanError::UnknownProcess), "{:?}", err);
+    assert!(matches!(err, ScanError::UnknownProcess), "{err:?}");
     assert_eq!(err.to_string(), "unknown process");
 }
 
@@ -62,12 +62,7 @@ fn test_process_permission_denied() {
             }
             #[cfg(not(target_os = "macos"))]
             {
-                assert_eq!(
-                    err.kind(),
-                    std::io::ErrorKind::PermissionDenied,
-                    "{:?}",
-                    err
-                );
+                assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied, "{err:?}",);
             }
         }
         err => panic!("Unexpected last err: {err:?}"),
@@ -283,7 +278,7 @@ rule a {
     let helper = BinHelper::run("stack");
 
     fn get_vm_rss(pid: u32) -> u64 {
-        let status = std::fs::read_to_string(format!("/proc/{}/status", pid)).unwrap();
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap();
         let rss_line = status
             .split('\n')
             .find(|line| line.starts_with("VmRSS"))

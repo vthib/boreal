@@ -30,25 +30,20 @@ fn check_rule_match(event: ScanEvent, rule_name: &str, namespace: &str) {
         ScanEvent::RuleMatch(m) => {
             assert!(
                 m.name == rule_name && m.namespace == namespace,
-                "event {:?} is not a match for rule {:?}:{}",
-                event,
-                namespace,
-                rule_name
+                "event {event:?} is not a match for rule {namespace:?}:{rule_name}",
             );
         }
-        evt => panic!("unexpected event {:?}", evt),
+        evt => panic!("unexpected event {evt:?}"),
     };
 }
 
 #[track_caller]
 fn check_rule_no_match(event: ScanEvent, rule_name: &str, namespace: &str) {
     match &event {
-        ScanEvent::RuleNoMatch(m) => assert!(
-            m.name == rule_name && m.namespace == namespace,
-            "{:?}",
-            event
-        ),
-        evt => panic!("unexpected event {:?}", evt),
+        ScanEvent::RuleNoMatch(m) => {
+            assert!(m.name == rule_name && m.namespace == namespace, "{event:?}")
+        }
+        evt => panic!("unexpected event {evt:?}"),
     };
 }
 
@@ -69,7 +64,7 @@ fn check_module_import(
                 _ => panic!("invalid dynamic values {:?}", module.dynamic_values),
             }
         }
-        evt => panic!("unexpected event {:?}", evt),
+        evt => panic!("unexpected event {evt:?}"),
     }
 }
 
@@ -96,11 +91,10 @@ fn check_string_reached_match_limit(
                     && rule_name == expected_rule_name
                     && string_name == expected_string_name
                     && string_index == expected_string_index,
-                "unexpected event {:?}",
-                event,
+                "unexpected event {event:?}"
             );
         }
-        evt => panic!("unexpected event {:?}", evt),
+        evt => panic!("unexpected event {evt:?}"),
     };
 }
 
@@ -275,7 +269,7 @@ rule b { condition: filesize >= 3 }
         )
         .unwrap();
     compiler
-        .add_rules_str(format!("rule c {{ condition: {} }}", TIMEOUT_COND))
+        .add_rules_str(format!("rule c {{ condition: {TIMEOUT_COND} }}"))
         .unwrap();
     let mut scanner = compiler.finalize();
     scanner
@@ -409,7 +403,7 @@ fn test_scan_mem_with_callback_abort_timeout() {
         .add_rules_str("rule a { condition: true }")
         .unwrap();
     compiler
-        .add_rules_str(format!("rule c {{ condition: {} }}", TIMEOUT_COND))
+        .add_rules_str(format!("rule c {{ condition: {TIMEOUT_COND} }}"))
         .unwrap();
     let mut scanner = compiler.finalize();
     scanner
