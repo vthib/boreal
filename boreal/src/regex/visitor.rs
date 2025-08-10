@@ -124,7 +124,7 @@ impl<'a> StackFrame<'a> {
 }
 
 /// Build a stack frame for the given hir.
-fn build_stack_frame(hir: &Hir) -> Option<StackFrame> {
+fn build_stack_frame(hir: &Hir) -> Option<StackFrame<'_>> {
     match hir {
         Hir::Group(hir) | Hir::Repetition { hir, .. } => Some(StackFrame {
             hir,

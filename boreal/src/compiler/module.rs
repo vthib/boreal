@@ -51,7 +51,9 @@ impl ModuleExpression {
     }
 }
 
-#[derive(PartialEq)]
+// Allowed because only used in tests
+#[allow(unpredictable_function_pointer_comparisons)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub enum ModuleExpressionKind {
     /// Operations on a bounded module value.
     BoundedModuleValueUse {

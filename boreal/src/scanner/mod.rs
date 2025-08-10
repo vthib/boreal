@@ -295,7 +295,7 @@ impl Scanner {
     pub fn scan_file<P: AsRef<std::path::Path>>(
         &self,
         path: P,
-    ) -> Result<ScanResult, (ScanError, ScanResult)> {
+    ) -> Result<ScanResult<'_>, (ScanError, ScanResult<'_>)> {
         match std::fs::read(path.as_ref()) {
             Ok(contents) => self.scan_mem(&contents),
             Err(err) => Err((ScanError::CannotReadFile(err), ScanResult::default())),
@@ -346,7 +346,7 @@ impl Scanner {
     pub unsafe fn scan_file_memmap<P: AsRef<std::path::Path>>(
         &self,
         path: P,
-    ) -> Result<ScanResult, (ScanError, ScanResult)> {
+    ) -> Result<ScanResult<'_>, (ScanError, ScanResult<'_>)> {
         match std::fs::File::open(path.as_ref()).and_then(|file| {
             // Safety: guaranteed by the safety contract of this function
             unsafe { memmap2::Mmap::map(&file) }
@@ -412,7 +412,7 @@ impl Scanner {
     /// Should fetches from some memory regions of the process fail, those regions will not be
     /// scanned, but the scan will keep going.
     #[cfg(feature = "process")]
-    pub fn scan_process(&self, pid: u32) -> Result<ScanResult, (ScanError, ScanResult)> {
+    pub fn scan_process(&self, pid: u32) -> Result<ScanResult<'_>, (ScanError, ScanResult<'_>)> {
         match process::process_memory(pid) {
             Ok(memory) => self.inner.scan(
                 Memory::new_fragmented(memory, self.scan_params.to_memory_params()),
@@ -474,7 +474,7 @@ impl Scanner {
     /// Fails if the process cannot be opened or its memory cannot be listed.
     /// Should fetches from some memory regions of the process fail, those regions will not be
     /// scanned, but the scan will keep going.
-    pub fn scan_fragmented<T>(&self, obj: T) -> Result<ScanResult, (ScanError, ScanResult)>
+    pub fn scan_fragmented<T>(&self, obj: T) -> Result<ScanResult<'_>, (ScanError, ScanResult<'_>)>
     where
         T: FragmentedMemory,
     {
@@ -593,7 +593,7 @@ impl Scanner {
 
     /// List rules contained in this scanner.
     #[must_use]
-    pub fn rules(&self) -> RulesIter {
+    pub fn rules(&self) -> RulesIter<'_> {
         RulesIter {
             global_rules: self.inner.global_rules.iter(),
             rules: self.inner.rules.iter(),

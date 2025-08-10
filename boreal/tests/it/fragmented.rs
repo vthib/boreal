@@ -678,7 +678,7 @@ impl FragmentedMemory for &mut Observer {
         }
     }
 
-    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
+    fn fetch(&mut self, _params: &MemoryParams) -> Option<Region<'_>> {
         self.fetched = true;
         Some(Region {
             start: 100,

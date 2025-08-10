@@ -261,7 +261,7 @@ pub trait FragmentedMemory: Send + Sync + std::fmt::Debug {
     ///   if used).
     /// - If the fetch was done during evaluation, the expression will evaluate
     ///   as `undefined`.
-    fn fetch(&mut self, params: &MemoryParams) -> Option<Region>;
+    fn fetch(&mut self, params: &MemoryParams) -> Option<Region<'_>>;
 
     /// Reset the object.
     ///
@@ -315,7 +315,7 @@ mod tests {
         }
 
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn fetch(&mut self, _params: &MemoryParams) -> Option<Region> {
+        fn fetch(&mut self, _params: &MemoryParams) -> Option<Region<'_>> {
             None
         }
     }

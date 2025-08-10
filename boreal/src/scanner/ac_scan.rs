@@ -307,7 +307,7 @@ fn scan_single_variable(
 fn build_string_identifier(
     scanner: &super::Inner,
     variable_index: usize,
-) -> Option<StringIdentifier> {
+) -> Option<StringIdentifier<'_>> {
     let mut index = 0;
     // Go through all the rules of the scanner to find the right one.
     // This is O(n) on the rules, which isn't ideal. But this is only done

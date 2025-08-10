@@ -2322,7 +2322,7 @@ impl<'data> MetadataRoot<'data> {
         })
     }
 
-    fn streams(&self) -> StreamIterator {
+    fn streams(&self) -> StreamIterator<'_> {
         StreamIterator {
             nb_streams_left: self.number_of_streams,
             data: self.streams_data,

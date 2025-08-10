@@ -227,7 +227,7 @@ impl Evaluator<'_, '_, '_, '_> {
             .ok_or(PoisonKind::Undefined)
     }
 
-    fn get_var_matches(&self) -> Result<&variable::VarMatches, PoisonKind> {
+    fn get_var_matches(&self) -> Result<&variable::VarMatches<'_>, PoisonKind> {
         self.var_matches.as_ref().ok_or(PoisonKind::VarNeeded)
     }
 

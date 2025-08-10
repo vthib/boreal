@@ -289,7 +289,7 @@ impl Checker {
         }
     }
 
-    pub fn scan_mem(&mut self, mem: &[u8]) -> ScanResult {
+    pub fn scan_mem<'scanner>(&'scanner mut self, mem: &[u8]) -> ScanResult<'scanner> {
         match self.scanner.scan_mem(mem) {
             Ok(v) => {
                 self.last_err = None;
@@ -307,7 +307,7 @@ impl Checker {
 
     // Check matches against a list of "<namespace>:<rule_name>" strings.
     #[track_caller]
-    pub fn check_rule_matches(&mut self, mem: &[u8], expected_matches: &[&str]) -> ScanResult {
+    pub fn check_rule_matches(&mut self, mem: &[u8], expected_matches: &[&str]) -> ScanResult<'_> {
         let mut expected: Vec<String> = expected_matches.iter().map(|v| v.to_string()).collect();
         expected.sort_unstable();
 
@@ -528,7 +528,7 @@ impl Checker {
         }
     }
 
-    pub fn scanner(&self) -> Scanner {
+    pub fn scanner(&self) -> Scanner<'_> {
         Scanner {
             scanner: self.scanner.clone(),
             yara_scanner: self.yara_rules.as_ref().map(|v| v.scanner().unwrap()),
@@ -618,7 +618,7 @@ impl FragmentedMemory for FragmentedSlices<'_, '_> {
         }
     }
 
-    fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
+    fn fetch<'a>(&'a mut self, params: &MemoryParams) -> Option<Region<'a>> {
         let (region_index, offset) = self.current?;
 
         self.regions.get(region_index).and_then(|(start, mem)| {
@@ -1188,12 +1188,12 @@ struct YaraBlocks<'a> {
 }
 
 impl yara::MemoryBlockIterator for YaraBlocks<'_> {
-    fn first(&mut self) -> Option<yara::MemoryBlock> {
+    fn first(&mut self) -> Option<yara::MemoryBlock<'_>> {
         self.current = 0;
         self.next()
     }
 
-    fn next(&mut self) -> Option<yara::MemoryBlock> {
+    fn next(&mut self) -> Option<yara::MemoryBlock<'_>> {
         let (start, mem) = self.regions.get(self.current)?;
         self.current += 1;
         Some(yara::MemoryBlock::new(*start as u64, mem.unwrap_or(b"")))

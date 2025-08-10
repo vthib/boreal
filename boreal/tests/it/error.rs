@@ -64,7 +64,7 @@ struct Directives<'a> {
     max_strings_per_rule: Option<usize>,
 }
 
-fn extract_directives(contents: &str) -> Directives {
+fn extract_directives(contents: &str) -> Directives<'_> {
     let mut directives = Directives::default();
 
     for line in contents.lines() {

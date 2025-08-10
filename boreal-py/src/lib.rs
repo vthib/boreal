@@ -1,5 +1,8 @@
 //! Python bindings for the boreal library.
 #![allow(unsafe_code)]
+// The changes recommended by this lint does not integrate well
+// with python docstrings.
+#![allow(clippy::doc_markdown)]
 
 use std::ffi::CString;
 use std::path::Path;
