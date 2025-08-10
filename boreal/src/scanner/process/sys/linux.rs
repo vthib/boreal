@@ -170,7 +170,7 @@ impl FragmentedMemory for LinuxProcessMemory {
             .map(|line| line.region_description(params, self.page_size))
     }
 
-    fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
+    fn fetch<'a>(&'a mut self, params: &MemoryParams) -> Option<Region<'a>> {
         let current_region = self.current_region.as_mut()?;
         current_region.fetch(
             params,

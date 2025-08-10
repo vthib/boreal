@@ -156,7 +156,7 @@ impl FragmentedMemory for MacosProcessMemory {
             .map(|region| get_chunked_region(region, params))
     }
 
-    fn fetch(&mut self, params: &MemoryParams) -> Option<Region> {
+    fn fetch(&mut self, params: &MemoryParams) -> Option<Region<'_>> {
         let desc = get_chunked_region(self.current_region?, params);
 
         self.buffer.resize(

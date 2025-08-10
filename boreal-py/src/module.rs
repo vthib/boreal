@@ -90,7 +90,7 @@ fn convert_dynamic_value<'py>(
     Ok(Some(result))
 }
 
-fn convert_static_value(py: Python, value: StaticValue) -> PyResult<Option<Bound<'_, PyAny>>> {
+fn convert_static_value(py: Python<'_>, value: StaticValue) -> PyResult<Option<Bound<'_, PyAny>>> {
     let result = match value {
         StaticValue::Integer(i) => i.into_pyobject(py)?.into_any(),
         StaticValue::Float(f) => f.into_pyobject(py)?.into_any(),

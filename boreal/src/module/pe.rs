@@ -1987,7 +1987,7 @@ fn add_resources(
 
 fn resource_entry_name(
     entry: pe::ImageResourceDirectoryEntry,
-    dir: ResourceDirectory,
+    dir: ResourceDirectory<'_>,
 ) -> Option<&[u8]> {
     match entry.name_or_id() {
         ResourceNameOrId::Name(resource_name) => match resource_name.raw_data(dir) {
