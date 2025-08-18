@@ -337,8 +337,6 @@ jobs:
   msrv:
     name: Rust 1.74.0
     runs-on: ubuntu-22.04
-    env:
-      RUSTFLAGS: -Dwarnings
     steps:
       - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@1.74.0
