@@ -104,7 +104,7 @@ jobs:
       - uses: actions/checkout@v4.1.1
 
       - name: Install OpenSSL on windows
-        uses: lukka/run-vcpkg@v10
+        uses: lukka/run-vcpkg@v11
         id: runvcpkg
         env:
           VCPKG_DEFAULT_TRIPLET: ${{matrix.vcpkg_triplet}}
@@ -112,7 +112,7 @@ jobs:
         with:
           appendedCacheKey: ${{matrix.vcpkg_triplet}}
           vcpkgDirectory: '${{ runner.workspace }}/vcpkg'
-          vcpkgGitCommitId: '4cac260c4b7331538d31886f57739fea0bffa27e'
+          vcpkgGitCommitId: 'ee0973d8090e4e3e452244bb50d34c25fe907dc2'
           runVcpkgInstall: true
 
       - name: Export VCPKGRS_TRIPLET and OPENSSL_DIR env var
