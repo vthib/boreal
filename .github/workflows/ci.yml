@@ -27,21 +27,21 @@ jobs:
           echo "OPENSSL_LIB_DIR=/usr/lib/i386-linux-gnu" >> $GITHUB_ENV
           echo "YARA_OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{matrix.target}}
 
       - name: Install uv for the python bindings tests
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         # There is no available python x86 for linux, so only run those on 64 bits.
         if: ${{ matrix.build == 'linux' }}
         with:
           version: "0.5.25"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         if: ${{ matrix.build == 'linux' }}
         with:
           python-version-file: "boreal-py/pyproject.toml"
@@ -101,7 +101,7 @@ jobs:
       RUSTFLAGS: -Dwarnings
 
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
 
       - name: Install OpenSSL on windows
         uses: lukka/run-vcpkg@v11
@@ -124,12 +124,12 @@ jobs:
           echo "YARA_CRYPTO_LIB=openssl" >> $GITHUB_ENV
 
       - name: Install uv for the python bindings tests
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.5.25"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           architecture: ${{matrix.architecture}}
           python-version-file: "boreal-py/pyproject.toml"
@@ -192,17 +192,17 @@ jobs:
           echo "YARA_OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR" >> $GITHUB_ENV
           echo "YARA_OPENSSL_LIB_DIR=$OPENSSL_LIB_DIR" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install uv for the python bindings tests
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.5.25"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: "boreal-py/pyproject.toml"
 
@@ -254,7 +254,7 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -266,7 +266,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -276,8 +276,8 @@ jobs:
     name: Deny
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.1.1
-      - uses: EmbarkStudios/cargo-deny-action@v1
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
 
   coverage:
     name: Coverage
@@ -285,7 +285,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
 
       - name: Install cargo-llvm-cov
@@ -295,12 +295,12 @@ jobs:
         run: sudo apt install libjansson-dev libmagic-dev
 
       - name: Install uv for the python bindings tests
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.5.25"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: "boreal-py/pyproject.toml"
 
@@ -328,7 +328,7 @@ jobs:
             --ignore-filename-regex boreal-test-helpers/src/main.rs
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           file: lcov.info
           fail_ci_if_error: false
@@ -338,7 +338,7 @@ jobs:
     name: Rust 1.74.0
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.74.0
       # Only check boreal (and boreal-parser).
       # boreal-cli is a useful tool, but MSRV on it is not really useful.
@@ -351,7 +351,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Install dependencies
         run: sudo apt install libjansson-dev libmagic-dev
