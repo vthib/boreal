@@ -55,12 +55,12 @@ jobs:
             pyarch: x86
 
           - name: macos-x64
-            runner: macos-13
+            runner: macos-15-intel
             target: x86_64
             pyarch: x64
 
           - name: macos-aarch64
-            runner: macos-14
+            runner: macos-15
             target: aarch64
             pyarch: arm64
 
