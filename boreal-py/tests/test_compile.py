@@ -1,8 +1,10 @@
 import boreal
 import pytest
 import tempfile
-import yara
-from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
+from . import utils
+
+MODULES = utils.modules()
+MODULES_DISTINCT = utils.modules_distinct()
 
 
 @pytest.mark.parametrize('module', MODULES)
@@ -153,6 +155,7 @@ def test_compile_warnings(module, is_yara):
 
     # error_on_warning can modify this
     if is_yara:
+        import yara
         # Yara uses a different exception for warnings turned into errors.
         exctype = yara.WarningError
     else:
@@ -331,7 +334,7 @@ def test_compile_strict_escape(module, is_yara):
         }
     """
 
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         # By default, do not report unknown escape warnings
         rules = module.compile(source=data)
         assert len(rules.warnings) == 0
