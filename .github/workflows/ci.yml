@@ -11,7 +11,7 @@ on:
 jobs:
   test-linux:
     name: Test ${{matrix.build}}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     env:
       RUSTFLAGS: -Dwarnings
@@ -73,7 +73,7 @@ jobs:
       - name: Run optional module tests
         if: ${{ matrix.build == 'linux' }}
         run: |
-          sudo apt install libjansson-dev
+          sudo apt install libjansson-dev libmagic-dev
           cargo test --features magic,cuckoo --target=${{matrix.target}}
 
       - name: Run python tests
@@ -95,7 +95,7 @@ jobs:
 
   test-windows:
     name: Test ${{matrix.build}}
-    runs-on: windows-2022
+    runs-on: windows-2025
 
     env:
       RUSTFLAGS: -Dwarnings
@@ -157,7 +157,7 @@ jobs:
         run: |
           cd boreal-py
           uv sync --dev
-          uv run --config-setting "build-args=--target=${{matrix.target}}" pytest
+          uv run pytest
 
     strategy:
       fail-fast: false
@@ -250,7 +250,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -Dwarnings
     steps:
@@ -259,12 +259,12 @@ jobs:
         with:
           components: clippy
       - name: Install dependencies
-        run: sudo apt install libjansson-dev
+        run: sudo apt install libjansson-dev libmagic-dev
       - run: cargo clippy --tests --all-features
 
   rustmt:
     name: Rustfmt
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@stable
@@ -274,14 +274,14 @@ jobs:
 
   deny:
     name: Deny
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.1.1
       - uses: EmbarkStudios/cargo-deny-action@v1
 
   coverage:
     name: Coverage
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -292,7 +292,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Install dependencies
-        run: sudo apt install libjansson-dev
+        run: sudo apt install libjansson-dev libmagic-dev
 
       - name: Install uv for the python bindings tests
         uses: astral-sh/setup-uv@v5
@@ -336,7 +336,7 @@ jobs:
 
   msrv:
     name: Rust 1.74.0
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@1.74.0
@@ -348,13 +348,13 @@ jobs:
 
   features-matrix:
     name: Test features ${{matrix.features}}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4.1.1
       - uses: dtolnay/rust-toolchain@stable
       - name: Install dependencies
-        run: sudo apt install libjansson-dev
+        run: sudo apt install libjansson-dev libmagic-dev
       - name: Build test helpers
         run: |
           cd boreal-test-helpers

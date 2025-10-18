@@ -9,7 +9,7 @@ on:
 jobs:
   create-release:
     name: create-release
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       upload_url: ${{ steps.release.outputs.upload_url }}
       boreal_version: ${{ env.BOREAL_VERSION }}
@@ -45,17 +45,17 @@ jobs:
         build: [linux, linux32, win-msvc, win32-msvc, macos-x64, macos-arm64]
         include:
         - build: linux
-          os: ubuntu-22.04
+          os: ubuntu-24.04
           target: x86_64-unknown-linux-gnu
         - build: linux32
-          os: ubuntu-22.04
+          os: ubuntu-24.04
           target: i686-unknown-linux-gnu
         - build: win-msvc
-          os: windows-2022
+          os: windows-2025
           target: x86_64-pc-windows-msvc
           vcpkg_triplet: x64-windows-static
         - build: win32-msvc
-          os: windows-2022
+          os: windows-2025
           target: i686-pc-windows-msvc
           vcpkg_triplet: x86-windows-static
         - build: macos-x64
