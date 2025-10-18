@@ -59,10 +59,10 @@ jobs:
           target: i686-pc-windows-msvc
           vcpkg_triplet: x86-windows-static
         - build: macos-x64
-          os: macos-13
+          os: macos-15-intel
           target: x86_64-apple-darwin
         - build: macos-arm64
-          os: macos-14
+          os: macos-15
           target: aarch64-apple-darwin
 
     steps:

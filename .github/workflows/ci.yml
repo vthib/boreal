@@ -244,9 +244,9 @@ jobs:
         build: [macos-x64, macos-arm64]
         include:
           - build: macos-x64
-            runner: macos-13
+            runner: macos-15-intel
           - build: macos-arm64
-            runner: macos-14
+            runner: macos-15
 
   clippy:
     name: Clippy
