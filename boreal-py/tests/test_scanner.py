@@ -5,8 +5,10 @@ import os
 import pytest
 import subprocess
 import tempfile
-import yara
-from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
+from . import utils
+
+MODULES = utils.modules()
+MODULES_DISTINCT = utils.modules_distinct()
 
 
 def get_rules(module):
@@ -195,13 +197,13 @@ def test_match_externals_unknown(module):
 def test_match_scan_failed(module, is_yara):
     rules = get_rules(module)
 
-    if is_yara:
-        exctype = yara.Error
-    else:
-        exctype = boreal.ScanError
-
-    with pytest.raises(exctype):
+    with pytest.raises(module.Error):
         rules.match(pid=99999999)
+
+    # boreal uses a ScanError class
+    if not is_yara:
+        with pytest.raises(module.ScanError):
+            rules.match(pid=99999999)
 
 
 @pytest.mark.parametrize('module', MODULES)
@@ -387,7 +389,7 @@ rule b { condition: false }
         return module.CALLBACK_CONTINUE
 
     # Compat mode to get the '$' prefix for identifiers
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         matches = rules.match(
             data='dcabc <3>',
             which_callbacks=module.CALLBACK_MATCHES,
@@ -499,7 +501,7 @@ rule a { condition: true }
         received_values.append(v)
         return module.CALLBACK_CONTINUE
 
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
 
     assert len(received_values) == 1
@@ -607,7 +609,7 @@ rule b { condition: false }
     check_all(received_values, matches)
 
     # In compatibility mode, not specifying defaults to ALL
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         received_values = []
         matches = rules.match(data='', callback=callback)
         check_all(received_values, matches)
@@ -754,7 +756,7 @@ rule my_rule {
 }
 """)
 
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         # In yara compat mode, all string matches are computed in all cases
         matches = rules.match(data=b"\x00 aa")
         assert len(matches) == 1
@@ -894,7 +896,7 @@ rule my_rule {
         true
 }""")
 
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         matches = rules.match(data="")
         r = matches[0]
         assert r.meta == {

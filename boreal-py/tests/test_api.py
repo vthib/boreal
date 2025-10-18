@@ -1,5 +1,7 @@
 import pytest
-from .utils import MODULES
+from . import utils
+
+MODULES = utils.modules()
 
 
 @pytest.mark.parametrize('module', MODULES)

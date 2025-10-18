@@ -1,5 +1,8 @@
 import pytest
-from .utils import MODULES, MODULES_DISTINCT, YaraCompatibilityMode
+from . import utils
+
+MODULES = utils.modules()
+MODULES_DISTINCT = utils.modules_distinct()
 
 
 @pytest.mark.parametrize("module", MODULES)
@@ -37,7 +40,7 @@ rule r3 { condition: true }
     })
     # Enable compatibility mode to get a string in the meta object instead of
     # a byte string, see the test_meta_bytes test.
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         matches = rules.match(data='')
     assert len(matches) == 4
     m0 = matches[0]
@@ -125,7 +128,7 @@ rule foo {
         any of them
 }""")
     # Compat mode to get the identifiers with the '$' prefix
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         matches = rule.match(data=b'abca')
 
     assert len(matches) == 1
@@ -149,7 +152,7 @@ rule foo {
     assert s2.__repr__() == '$c'
 
     # In yara, the hash depends on the name only
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         assert hash(s0) == hash(s1)
     # outside of compat mode, this is not true
     if not is_yara:
@@ -207,7 +210,7 @@ rule foo {
     assert i2.__repr__() == '<\x00\\xff\\xfb>' if is_yara else '<\x00\uFFFD\uFFFD>'
 
     # In yara, the hash depends only on the matched_data
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         assert hash(i0) == hash(i3)
     # outside of compat mode, this is not true
     if not is_yara:
@@ -266,7 +269,7 @@ rule a {
 
     # In compat mode, the same string conversion as done in libyara
     # is done.
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         matches = rules.match(data='')
         assert matches[0].meta['s'] == 'bc'
 
@@ -274,6 +277,6 @@ rule a {
     if not is_yara:
         r = list(rules)[0]
         assert r.meta['s'] == b'b\xFFc'
-    with YaraCompatibilityMode():
+    with utils.YaraCompatibilityMode():
         r = list(rules)[0]
         assert r.meta['s'] == 'bc'
