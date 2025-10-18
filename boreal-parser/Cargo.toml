@@ -16,7 +16,7 @@ rust-version = "1.74"
 nom = "8.0"
 
 # Proper error reporting on parsing
-codespan-reporting = "0.12"
+codespan-reporting = "0.13"
 
 [lints]
 workspace = true
