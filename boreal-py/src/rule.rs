@@ -95,7 +95,7 @@ fn convert_metadata_value<'py>(
             // XXX: Yara forces a string conversion here, losing data in the
             // process. Prefer using the right type here.
             if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
-                PyString::from_object(&bytes, "utf-8", "ignore")?.into_any()
+                PyString::from_encoded_object(&bytes, Some(c"utf-8"), Some(c"ignore"))?.into_any()
             } else {
                 bytes
             }

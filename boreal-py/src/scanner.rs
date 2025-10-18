@@ -192,7 +192,7 @@ impl Scanner {
             // Not sure how to avoid the AssertUnwindSafe
             let cb = AssertUnwindSafe(cb.clone().unbind());
             scanner.set_module_data::<Console>(ConsoleData::new(move |log| {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let pylog = PyString::new(py, &log);
                     // XXX: Ignore result, we cannot abort a scan here, while this
                     // is allegedly possible in yara (though who would do this?).
@@ -567,7 +567,7 @@ impl<'s> CallbackHandler<'s> {
             ScanEvent::RuleNoMatch(rule_match) => self.handle_rule_event(rule_match, false),
             ScanEvent::ModuleImport(evaluated_module) => {
                 match &self.modules_callback {
-                    Some(cb) => Python::with_gil(|py| {
+                    Some(cb) => Python::attach(|py| {
                         // A module value must be an object. If empty,  means the module has not
                         // generated any values.
                         let dict = PyDict::new(py);
@@ -591,7 +591,7 @@ impl<'s> CallbackHandler<'s> {
             }
             ScanEvent::StringReachedMatchLimit(string_identifier) => {
                 match &self.warnings_callback {
-                    Some(cb) => Python::with_gil(|py| {
+                    Some(cb) => Python::attach(|py| {
                         let rule_string = RuleString::new(py, &string_identifier);
                         let msg_id = CALLBACK_TOO_MANY_MATCHES;
                         let result = cb.call1(py, (msg_id, rule_string))?;
@@ -609,7 +609,7 @@ impl<'s> CallbackHandler<'s> {
         rule: scanner::EvaluatedRule,
         matched: bool,
     ) -> PyResult<ScanCallbackResult> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let m = Match::new(py, self.scanner, rule, self.allow_duplicate_metadata)?;
 
             let ret = match &self.callback {
@@ -654,7 +654,7 @@ fn match_to_callback_dict<'py>(
     Ok(d)
 }
 
-fn convert_callback_return_value(py: Python, value: &PyObject) -> ScanCallbackResult {
+fn convert_callback_return_value(py: Python, value: &Py<PyAny>) -> ScanCallbackResult {
     match value.extract::<u32>(py) {
         Ok(v) if v == super::CALLBACK_CONTINUE => ScanCallbackResult::Continue,
         Ok(v) if v == super::CALLBACK_ABORT => ScanCallbackResult::Abort,
