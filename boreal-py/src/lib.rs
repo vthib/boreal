@@ -417,7 +417,7 @@ fn call_py_include_callback(
 ) -> Result<String, String> {
     let current_path = current_path.map(|v| v.display().to_string());
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let res = include_callback
             .call1(py, (include_name, current_path, ns))
             .map_err(|err| format!("error when calling include callback: {err:?}"))?;
