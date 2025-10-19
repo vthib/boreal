@@ -1,4 +1,11 @@
-site_name: My Docs
+site_name: boreal-python documentation
+
+site_url: "https://vthib.github.io/boreal/boreal-py/"
+
+extra:
+  version:
+    default: stable
+    provider: mike
 
 theme:
   name: "material"
@@ -6,6 +13,7 @@ theme:
 plugins:
 - mike:
     deploy_prefix: 'boreal-py'
+    version_selector: true
 - search
 - mkdocstrings:
     handlers:
