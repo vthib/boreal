@@ -334,7 +334,30 @@ def test_compile_strict_escape(module, is_yara):
         }
     """
 
+    if not is_yara:
+        # default behavior for boreal is enabling this warning
+        rules = module.compile(source=data)
+        assert len(rules.warnings) == 1
+        assert "unknown escape sequence" in rules.warnings[0]
+
+    # If disabling strict_escape but making warnings fails the
+    # compilation, compilation should work
+    rules = module.compile(source=data, strict_escape=False, error_on_warning=True)
+    assert len(rules.warnings) == 0
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_compile_strict_escape_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
+        data = r"""
+            rule a {
+                strings:
+                    $a = /C:\Users/
+                condition:
+                    $a
+            }
+        """
+
         # By default, do not report unknown escape warnings
         rules = module.compile(source=data)
         assert len(rules.warnings) == 0
@@ -346,17 +369,6 @@ def test_compile_strict_escape(module, is_yara):
 
         rules = module.compile(source=data, strict_escape=False)
         assert len(rules.warnings) == 0
-
-    if not is_yara:
-        # default behavior for boreal is enabling this warning
-        rules = module.compile(source=data)
-        assert len(rules.warnings) == 1
-        assert "unknown escape sequence" in rules.warnings[0]
-
-    # If disabling strict_escape but making warnings fails the
-    # compilation, compilation should work
-    rules = module.compile(source=data, strict_escape=False, error_on_warning=True)
-    assert len(rules.warnings) == 0
 
 
 def test_compiler_profile():
