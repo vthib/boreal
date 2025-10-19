@@ -88,6 +88,7 @@ class Scanner(abc.Iterable[Rule]):
         warnings_callback: WarningCallback | None = None,
         console_callback: ConsoleCallback | None = None,
         allow_duplicate_metadata: bool | None = False,
+        max_match_data: int | None = None,
     ) -> list[Match]: ...
 
     def save(

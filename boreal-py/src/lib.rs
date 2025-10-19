@@ -305,7 +305,13 @@ enum CompilerProfile {
 ///   max_match_data: Maximum length for the match data returned in match
 ///       results. The match details returned in results will be truncated if
 ///       they exceed this limit. Default value is 512
+///
+///       It is not recommended to set this parameter using this API, as it impacts
+///       the module globally. Instead, usage of the `max_match_data` parameter
+///       of the `match` method on the scanner object is preferred.
+///
 ///   stack_size: Unused, this is accepted purely for compatibility with yara.
+///
 ///   yara_compatibility: Enable or disable full YARA compatibility. See the
 ///       global documentation of this library for more details.
 ///
