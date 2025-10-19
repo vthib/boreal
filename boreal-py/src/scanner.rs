@@ -259,13 +259,7 @@ impl Scanner {
             events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
         }
         params = params.callback_events(events);
-        let match_max_length = match max_match_data {
-            Some(v) => Some(v),
-            None => match MATCH_MAX_LENGTH.lock() {
-                Ok(v) => *v,
-                Err(_) => None,
-            },
-        };
+        let match_max_length = max_match_data.or_else(|| *MATCH_MAX_LENGTH.lock());
         if let Some(value) = match_max_length {
             params = params.match_max_length(value);
         }

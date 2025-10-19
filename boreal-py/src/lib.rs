@@ -7,8 +7,8 @@
 use std::ffi::CString;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
 
+use parking_lot::Mutex;
 use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
@@ -188,13 +188,7 @@ fn compile(
         .fail_on_warnings(error_on_warning)
         .disable_unknown_escape_warning(disable_unknown_escape_warning);
 
-    let max_strings_per_rule = match max_strings_per_rule {
-        Some(v) => Some(v),
-        None => match MAX_STRINGS_PER_RULE.lock() {
-            Ok(v) => *v,
-            Err(_) => None,
-        },
-    };
+    let max_strings_per_rule = max_strings_per_rule.or_else(|| *MAX_STRINGS_PER_RULE.lock());
     if let Some(value) = max_strings_per_rule {
         params = params.max_strings_per_rule(value);
     }
@@ -332,14 +326,10 @@ fn set_config(
     yara_compatibility: Option<bool>,
 ) {
     if let Some(value) = max_strings_per_rule {
-        if let Ok(mut lock) = MAX_STRINGS_PER_RULE.lock() {
-            *lock = Some(value);
-        }
+        *MAX_STRINGS_PER_RULE.lock() = Some(value);
     }
     if let Some(value) = max_match_data {
-        if let Ok(mut lock) = MATCH_MAX_LENGTH.lock() {
-            *lock = Some(value);
-        }
+        *MATCH_MAX_LENGTH.lock() = Some(value);
     }
     if let Some(value) = yara_compatibility {
         YARA_PYTHON_COMPATIBILITY.store(value, Ordering::SeqCst);
