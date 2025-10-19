@@ -15,6 +15,7 @@ def compile(
     include_callback: IncludeCallback | None = None,
     strict_escape: bool | None = None,
     profile: CompilerProfile | None = None,
+    max_strings_per_rule: int | None = None,
 ) -> Scanner: ...
 
 def load(
