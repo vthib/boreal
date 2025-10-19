@@ -129,6 +129,10 @@ impl Scanner {
     ///         dictionary that maps the metadata keys to a list of all values
     ///         associated with this key. This can be used when multiple
     ///         metadata with the same key are specified in the same rule.
+    ///     max_match_data: Maximum length for the match data returned in match
+    ///         results. The match details returned in results will be truncated
+    ///         if they exceed this limit. Default value is 512.
+    ///
     ///
     /// Returns: A list of all the rules that matched.
     ///
@@ -152,6 +156,7 @@ impl Scanner {
         warnings_callback=None,
         console_callback=None,
         allow_duplicate_metadata=false,
+        max_match_data=None,
     ))]
     fn r#match(
         &self,
@@ -168,6 +173,7 @@ impl Scanner {
         warnings_callback: Option<&Bound<'_, PyAny>>,
         console_callback: Option<&Bound<'_, PyAny>>,
         allow_duplicate_metadata: bool,
+        max_match_data: Option<usize>,
     ) -> PyResult<Vec<Match>> {
         let mut scanner = self.scanner.clone();
 
@@ -252,10 +258,15 @@ impl Scanner {
             events |= CallbackEvents::STRING_REACHED_MATCH_LIMIT;
         }
         params = params.callback_events(events);
-        if let Ok(lock) = MATCH_MAX_LENGTH.lock() {
-            if let Some(value) = *lock {
-                params = params.match_max_length(value);
-            }
+        let match_max_length = match max_match_data {
+            Some(v) => Some(v),
+            None => match MATCH_MAX_LENGTH.lock() {
+                Ok(v) => *v,
+                Err(_) => None,
+            },
+        };
+        if let Some(value) = match_max_length {
+            params = params.match_max_length(value);
         }
         let fast = if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
             // Default value in libyara

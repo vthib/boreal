@@ -941,3 +941,30 @@ rule a {
         rules.set_params(
             fragmented_scan_mode="unknown",
         )
+
+
+def test_max_match_data():
+    rules = boreal.compile(source="""
+    rule a {
+        strings:
+            $a = "123456"
+        condition:
+            any of them
+    }
+    """)
+
+    results = rules.match(data="<123456>", max_match_data=3)
+    s = results[0].strings[0].instances[0]
+    assert s.matched_data == b"123"
+
+    results = rules.match(data="<123456>", max_match_data=5)
+    s = results[0].strings[0].instances[0]
+    assert s.matched_data == b"12345"
+
+    results = rules.match(data="<123456>", max_match_data=10)
+    s = results[0].strings[0].instances[0]
+    assert s.matched_data == b"123456"
+
+    results = rules.match(data="<123456>")
+    s = results[0].strings[0].instances[0]
+    assert s.matched_data == b"123456"
