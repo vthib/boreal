@@ -47,7 +47,7 @@ const CALLBACK_ALL: u32 = CALLBACK_MATCHES | CALLBACK_NON_MATCHES;
 const CALLBACK_TOO_MANY_MATCHES: u32 = 6;
 
 /// Python bindings for the YARA scanner boreal.
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
 
@@ -277,7 +277,7 @@ fn compile(
 }
 
 /// Profile to use when compiling rules.
-#[pyclass(eq, eq_int, module = "boreal")]
+#[pyclass(frozen, eq, eq_int, module = "boreal")]
 #[derive(Debug, PartialEq)]
 enum CompilerProfile {
     /// Prioritize scan speed.

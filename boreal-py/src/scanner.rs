@@ -1,8 +1,9 @@
 use std::fs::File;
 use std::panic::AssertUnwindSafe;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use pyo3::create_exception;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
@@ -27,23 +28,23 @@ create_exception!(
 );
 
 /// Holds a list of rules, and provides methods to run them on files or bytes.
-#[pyclass(module = "boreal")]
+#[pyclass(frozen, module = "boreal")]
 pub struct Scanner {
-    scanner: scanner::Scanner,
+    scanner: Mutex<scanner::Scanner>,
 
     /// List of warnings generated when compiling rules.
     #[pyo3(get)]
     warnings: Vec<String>,
 
-    use_mmap: bool,
+    use_mmap: AtomicBool,
 }
 
 impl Scanner {
     pub fn new(scanner: scanner::Scanner, warnings: Vec<String>) -> Self {
         Self {
-            scanner,
+            scanner: Mutex::new(scanner),
             warnings,
-            use_mmap: false,
+            use_mmap: AtomicBool::new(false),
         }
     }
 
@@ -53,9 +54,9 @@ impl Scanner {
 
         let scanner = scanner::Scanner::from_bytes_unchecked(buf, params)?;
         Ok(Self {
-            scanner,
+            scanner: Mutex::new(scanner),
             warnings: Vec::new(),
-            use_mmap: false,
+            use_mmap: AtomicBool::new(false),
         })
     }
 }
@@ -175,7 +176,7 @@ impl Scanner {
         allow_duplicate_metadata: bool,
         max_match_data: Option<usize>,
     ) -> PyResult<Vec<Match>> {
-        let mut scanner = self.scanner.clone();
+        let mut scanner = self.scanner.lock().clone();
 
         if let Some(externals) = externals {
             set_externals(&mut scanner, externals)?;
@@ -296,7 +297,7 @@ impl Scanner {
         );
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
-                if self.use_mmap {
+                if self.use_mmap.load(Ordering::SeqCst) {
                     // Safety: unsafe because of mmap semantics, but opted in by
                     // setting the use_mmap param to true.
                     unsafe {
@@ -387,10 +388,12 @@ impl Scanner {
     ) -> PyResult<Option<Vec<u8>>> {
         let mut result = None;
 
+        let scanner = self.scanner.lock().clone();
+
         let res = match (filepath, file, to_bytes) {
             (Some(filepath), None, false) => {
                 let mut file = File::create(filepath)?;
-                self.scanner.to_bytes(&mut file)
+                scanner.to_bytes(&mut file)
             }
             (None, Some(file), false) => {
                 match (file.hasattr("write"), file.hasattr("flush")) {
@@ -402,11 +405,11 @@ impl Scanner {
                     }
                 }
                 let mut obj = PyObjectWriter { file };
-                self.scanner.to_bytes(&mut obj)
+                scanner.to_bytes(&mut obj)
             }
             (None, None, true) => {
                 let mut data = Vec::new();
-                let v = self.scanner.to_bytes(&mut data);
+                let v = scanner.to_bytes(&mut data);
                 result = Some(data);
                 v
             }
@@ -460,7 +463,7 @@ impl Scanner {
         memory_chunk_size=None,
     ))]
     fn set_params(
-        &mut self,
+        &self,
         use_mmap: Option<bool>,
         string_max_nb_matches: Option<u32>,
         fragmented_scan_mode: Option<&str>,
@@ -468,10 +471,11 @@ impl Scanner {
         max_fetched_region_size: Option<usize>,
         memory_chunk_size: Option<usize>,
     ) -> PyResult<()> {
-        let mut params = self.scanner.scan_params().clone();
+        let mut scanner = self.scanner.lock();
+        let mut params = scanner.scan_params().clone();
 
         if let Some(v) = use_mmap {
-            self.use_mmap = v;
+            self.use_mmap.store(v, Ordering::SeqCst);
         }
 
         if let Some(v) = string_max_nb_matches {
@@ -499,7 +503,7 @@ impl Scanner {
             params = params.memory_chunk_size(Some(v));
         }
 
-        self.scanner.set_scan_params(params);
+        scanner.set_scan_params(params);
         Ok(())
     }
 
@@ -508,13 +512,15 @@ impl Scanner {
         // Unfortunately, we cannot return an object with a lifetime, so
         // we need to collect all rules into a vec of owned elements before
         // generating an iterator...
+        let scanner = self.scanner.lock().clone();
         Ok(RulesIter {
-            rules_iter: self
-                .scanner
-                .rules()
-                .map(|rule| crate::rule::Rule::new(py, &self.scanner, &rule))
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter(),
+            rules_iter: Mutex::new(
+                scanner
+                    .rules()
+                    .map(|rule| crate::rule::Rule::new(py, &scanner, &rule))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter(),
+            ),
         })
     }
 }
@@ -663,9 +669,9 @@ fn convert_callback_return_value(py: Python, value: &Py<PyAny>) -> ScanCallbackR
 }
 
 /// Iterator over the rules of a `Scanner` object.
-#[pyclass(module = "boreal")]
+#[pyclass(frozen, module = "boreal")]
 pub struct RulesIter {
-    rules_iter: std::vec::IntoIter<crate::rule::Rule>,
+    rules_iter: Mutex<std::vec::IntoIter<crate::rule::Rule>>,
 }
 
 #[pymethods]
@@ -674,8 +680,10 @@ impl RulesIter {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<crate::rule::Rule> {
-        slf.rules_iter.next()
+    // Clippy complains here but it needs to be written like this for pyo3 to work.
+    #[allow(clippy::needless_pass_by_value)]
+    fn __next__(slf: PyRef<Self>) -> Option<crate::rule::Rule> {
+        slf.rules_iter.lock().next()
     }
 }
 
