@@ -83,6 +83,7 @@ rule foo {
         $mystr = "abc"
     condition:
         any of them
+}""")
 results = rules.match(data="abc")
 rule_match = results[0]
 string_matches = rule_match.strings[0]
