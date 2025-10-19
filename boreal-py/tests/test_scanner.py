@@ -366,8 +366,8 @@ rule r: tag {
         assert rules[0].namespace == "default"
 
 
-@pytest.mark.parametrize('module', MODULES)
-def test_match_callback(module):
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_match_callback(module,is_yara):
     rules = module.compile(source="""
 global rule a: tag1 tag2 {
     meta:
@@ -389,26 +389,31 @@ rule b { condition: false }
         return module.CALLBACK_CONTINUE
 
     # Compat mode to get the '$' prefix for identifiers
-    with utils.YaraCompatibilityMode():
-        matches = rules.match(
-            data='dcabc <3>',
-            which_callbacks=module.CALLBACK_MATCHES,
-            callback=my_callback
-        )
+    matches = rules.match(
+        data='dcabc <3>',
+        which_callbacks=module.CALLBACK_MATCHES,
+        callback=my_callback
+    )
     assert len(matches) == 1
     assert len(callback_rules) == 1
 
     def check_strings(strings):
         assert len(strings) == 2
         s0 = strings[0]
-        assert s0.identifier == "$a"
+        if is_yara:
+            assert s0.identifier == "$a"
+        else:
+            assert s0.identifier == "a"
         assert len(s0.instances) == 1
         assert s0.instances[0].offset == 2
         assert s0.instances[0].matched_length == 3
         assert s0.instances[0].matched_data == b'abc'
 
         s1 = strings[1]
-        assert s1.identifier == "$"
+        if is_yara:
+            assert s1.identifier == "$"
+        else:
+            assert s1.identifier == ""
         assert len(s1.instances) == 1
         assert s1.instances[0].offset == 6
         assert s1.instances[0].matched_length == 3
@@ -418,10 +423,16 @@ rule b { condition: false }
     assert r.rule == "a"
     assert r.namespace == "default"
     assert r.tags == ["tag1", "tag2"]
-    assert r.meta == {
-        's': 'str',
-        'i': -23,
-    }
+    if is_yara:
+        assert r.meta == {
+            's': 'str',
+            'i': -23,
+        }
+    else:
+        assert r.meta == {
+            's': b'str',
+            'i': -23,
+        }
     check_strings(r.strings)
 
     r = callback_rules[0]
@@ -429,10 +440,16 @@ rule b { condition: false }
     assert r['rule'] == "a"
     assert r['namespace'] == "default"
     assert r['tags'] == ["tag1", "tag2"]
-    assert r['meta'] == {
-        's': 'str',
-        'i': -23,
-    }
+    if is_yara:
+        assert r['meta'] == {
+            's': 'str',
+            'i': -23,
+        }
+    else:
+        assert r['meta'] == {
+            's': b'str',
+            'i': -23,
+        }
     check_strings(r['strings'])
 
 
@@ -489,7 +506,7 @@ rule c { condition: true }
 
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_match_modules_callback(module, is_yara):
-    rules = module.compile(source="""
+    rules = boreal.compile(source="""
 import "pe"
 
 rule a { condition: true }
@@ -499,10 +516,9 @@ rule a { condition: true }
     def modules_callback(v):
         nonlocal received_values
         received_values.append(v)
-        return module.CALLBACK_CONTINUE
+        return boreal.CALLBACK_CONTINUE
 
-    with utils.YaraCompatibilityMode():
-        rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
+    rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
 
     assert len(received_values) == 1
     v = received_values[0]
@@ -531,20 +547,37 @@ rule a { condition: true }
     assert v['delayed_import_details'] == []
     # obj
     assert v['os_version'] == { 'major': 10, 'minor': 0 }
-    # dict
-    assert v['version_info']['InternalName'] == b'MTXEX.DLL'
-    # non printable bytes
-    assert v['version_info']['ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
 
     # Without compat mode, the keys of dictionary values are byte strings.
     if not is_yara:
+        assert v['version_info'][b'InternalName'] == b'MTXEX.DLL'
+        assert v['version_info'][b'ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_match_modules_callback_yara_compat_mode(module):
+    with utils.YaraCompatibilityMode():
+        rules = module.compile(source="""
+    import "pe"
+
+    rule a { condition: true }
+    """)
+
         received_values = []
+        def modules_callback(v):
+            nonlocal received_values
+            received_values.append(v)
+            return module.CALLBACK_CONTINUE
+
         rules.match('../boreal/tests/assets/libyara/data/mtxex.dll', modules_callback=modules_callback)
 
         assert len(received_values) == 1
         v = received_values[0]
-        assert v['version_info'][b'InternalName'] == b'MTXEX.DLL'
-        assert v['version_info'][b'ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
+
+        # In compat mode, keys of dictionary values are strings.
+        assert v['version_info']['InternalName'] == b'MTXEX.DLL'
+        # non printable bytes
+        assert v['version_info']['ProductName'] == b'Microsoft\xAE Windows\xAE Operating System'
 
 
 
@@ -575,6 +608,24 @@ rule a { condition: true }
         assert received_values[0]['module'] == 'math'
 
 
+def check_received_are_all(received_values, matches):
+    assert len(received_values) == 2
+    assert received_values[0]['rule'] == 'a'
+    assert received_values[0]['matches']
+    assert received_values[1]['rule'] == 'b'
+    assert not received_values[1]['matches']
+    assert len(matches) == 1
+    assert matches[0].rule == 'a'
+
+
+def check_received_are_only_matching(received_values, matches):
+    assert len(received_values) == 1
+    assert received_values[0]['rule'] == 'a'
+    assert received_values[0]['matches']
+    assert len(matches) == 1
+    assert matches[0].rule == 'a'
+
+
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
 def test_match_which_callbacks(module, is_yara):
     rules = module.compile(source="""
@@ -588,42 +639,20 @@ rule b { condition: false }
         received_values.append(v)
         return module.CALLBACK_CONTINUE
 
-    def check_all(received_values, matches):
-        assert len(received_values) == 2
-        assert received_values[0]['rule'] == 'a'
-        assert received_values[0]['matches']
-        assert received_values[1]['rule'] == 'b'
-        assert not received_values[1]['matches']
-        assert len(matches) == 1
-        assert matches[0].rule == 'a'
-
-    def check_only_matching(received_values, matches):
-        assert len(received_values) == 1
-        assert received_values[0]['rule'] == 'a'
-        assert received_values[0]['matches']
-        assert len(matches) == 1
-        assert matches[0].rule == 'a'
-
     # check CALLBACK_ALL
     matches = rules.match(data='', which_callbacks=module.CALLBACK_ALL, callback=callback)
-    check_all(received_values, matches)
+    check_received_are_all(received_values, matches)
 
-    # In compatibility mode, not specifying defaults to ALL
-    with utils.YaraCompatibilityMode():
-        received_values = []
-        matches = rules.match(data='', callback=callback)
-        check_all(received_values, matches)
-
-    # Outside of it, it defaults to MATCHES
+    # Outside of yara compat mode, not specifying defaults to MATCHES
     if not is_yara:
         received_values = []
         matches = rules.match(data='', callback=callback)
-        check_only_matching(received_values, matches)
+        check_received_are_only_matching(received_values, matches)
 
     # only match
     received_values = []
     matches = rules.match(data='', which_callbacks=module.CALLBACK_MATCHES, callback=callback)
-    check_only_matching(received_values, matches)
+    check_received_are_only_matching(received_values, matches)
 
     # only non match
     received_values = []
@@ -634,6 +663,26 @@ rule b { condition: false }
     # Returned results still include the matched rules
     assert len(matches) == 1
     assert matches[0].rule == 'a'
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_match_which_callbacks_yara_compat_mode(module):
+    with utils.YaraCompatibilityMode():
+        rules = module.compile(source="""
+    rule a { condition: true }
+    rule b { condition: false }
+    """)
+
+        received_values = []
+        def callback(v):
+            nonlocal received_values
+            received_values.append(v)
+            return module.CALLBACK_CONTINUE
+
+        # In compatibility mode, not specifying defaults to ALL
+        received_values = []
+        matches = rules.match(data='', callback=callback)
+        check_received_are_all(received_values, matches)
 
 
 @pytest.mark.parametrize('module', MODULES)
@@ -744,10 +793,9 @@ rule my_rule {
         assert len(matches) == 0
 
 
-@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
-def test_match_fast(module, is_yara):
+def test_match_fast():
     # Compile with a rule that can be evaluated without scanning rules
-    rules = module.compile(source="""
+    rules = boreal.compile(source="""
 rule my_rule {
     strings:
         $s = "a"
@@ -756,7 +804,25 @@ rule my_rule {
 }
 """)
 
+    # outside of compat mode, fast mode is the default
+    matches = rules.match(data=b"\x00 aa")
+    assert len(matches) == 1
+    m0 = matches[0]
+    assert len(m0.strings) == 0
+
+
+@pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+def test_match_fast_yara_compat_mode(module, is_yara):
     with utils.YaraCompatibilityMode():
+        rules = module.compile(source="""
+    rule my_rule {
+        strings:
+            $s = "a"
+        condition:
+            uint8(0) == 0x00 or any of them
+    }
+    """)
+
         # In yara compat mode, all string matches are computed in all cases
         matches = rules.match(data=b"\x00 aa")
         assert len(matches) == 1
@@ -778,13 +844,6 @@ rule my_rule {
             assert len(matches) == 1
             m0 = matches[0]
             assert len(m0.strings) == 0
-
-    # outside of compat mode, fast mode is the default
-    if not is_yara:
-        matches = rules.match(data=b"\x00 aa")
-        assert len(matches) == 1
-        m0 = matches[0]
-        assert len(m0.strings) == 0
 
 
 @pytest.mark.parametrize('module', MODULES)
@@ -884,9 +943,8 @@ def test_save_load_invalid_types(module):
                 rules.save(file=f)
 
 
-@pytest.mark.parametrize('module', MODULES)
-def test_allow_duplicate_metadata(module):
-    rules = module.compile(source="""
+def test_allow_duplicate_metadata():
+    rules = boreal.compile(source="""
 rule my_rule {
     meta:
         foo = "foo #1"
@@ -896,9 +954,36 @@ rule my_rule {
         true
 }""")
 
+    matches = rules.match(data="")
+    r = matches[0]
+    assert r.meta == {
+        'foo': b'foo #2',
+        'bar': b'bar'
+    }
+
+    matches = rules.match(data="", allow_duplicate_metadata=True)
+    r = matches[0]
+    assert r.meta == {
+        'foo': [b'foo #1', b'foo #2'],
+        'bar': [b'bar']
+    }
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_allow_duplicate_metadata_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
+        rules = module.compile(source="""
+    rule my_rule {
+        meta:
+            foo = "foo #1"
+            foo = "foo #2"
+            bar = "bar"
+        condition:
+            true
+    }""")
         matches = rules.match(data="")
         r = matches[0]
+        # In compat mode, values are strings and not byte strings
         assert r.meta == {
             'foo': 'foo #2',
             'bar': 'bar'

@@ -5,8 +5,8 @@ MODULES = utils.modules()
 MODULES_DISTINCT = utils.modules_distinct()
 
 
-@pytest.mark.parametrize("module", MODULES)
-def test_match(module):
+@pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
+def test_match(module, is_yara):
     """Test all properties related to the Match object"""
 
     # Check default namespace
@@ -38,10 +38,7 @@ rule r3 { condition: true }
         'ns1': 'rule r1 { condition: true }',
         'ns2': 'rule r1 { condition: true }',
     })
-    # Enable compatibility mode to get a string in the meta object instead of
-    # a byte string, see the test_meta_bytes test.
-    with utils.YaraCompatibilityMode():
-        matches = rules.match(data='')
+    matches = rules.match(data='')
     assert len(matches) == 4
     m0 = matches[0]
     m1 = matches[1]
@@ -56,11 +53,13 @@ rule r3 { condition: true }
     assert m0.rule == 'r1'
     assert m0.namespace == 'ns1'
     assert m0.tags == ['bar', 'baz']
-    assert m0.meta == {
-        's': 'a\nz',
-        'b': True,
-        'v': -11
-    }
+    # Outside of compat mode, boreal returns a byte string
+    if not is_yara:
+        assert m0.meta == {
+            's': b'a\nz',
+            'b': True,
+            'v': -11
+        }
 
     assert m1.rule == 'r3'
     assert m1.namespace == 'ns1'
@@ -127,38 +126,7 @@ rule foo {
     condition:
         any of them
 }""")
-    # Compat mode to get the identifiers with the '$' prefix
-    with utils.YaraCompatibilityMode():
-        matches = rule.match(data=b'abca')
-
-    assert len(matches) == 1
-    m = matches[0]
-    assert len(m.strings) == 3
-    s0 = m.strings[0]
-    s1 = m.strings[1]
-    s2 = m.strings[2]
-
-    # check standard getters: identifier, instances
-    assert s0.identifier == '$'
-    assert len(s0.instances) == 2
-    assert s1.identifier == '$'
-    assert len(s1.instances) == 1
-    assert s2.identifier == '$c'
-    assert len(s2.instances) == 1
-
-    # check special method __repr__
-    assert s0.__repr__() == '$'
-    assert s1.__repr__() == '$'
-    assert s2.__repr__() == '$c'
-
-    # In yara, the hash depends on the name only
-    with utils.YaraCompatibilityMode():
-        assert hash(s0) == hash(s1)
-    # outside of compat mode, this is not true
-    if not is_yara:
-        assert hash(s0) != hash(s1)
-
-    # Outside compat mode, we do not have this '$' prefix
+    # Outside compat mode, strings are not prefixed with '$'
     if not is_yara:
         matches = rule.match(data=b'abca')
         m = matches[0]
@@ -167,8 +135,56 @@ rule foo {
         s2 = m.strings[2]
 
         assert s0.identifier == ''
+        assert len(s0.instances) == 2
         assert s1.identifier == ''
+        assert len(s1.instances) == 1
         assert s2.identifier == 'c'
+        assert len(s2.instances) == 1
+
+        # outside of compat mode, the hash does not depend on the name only
+        assert hash(s0) != hash(s1)
+
+        assert s0.__repr__() == ''
+        assert s1.__repr__() == ''
+        assert s2.__repr__() == 'c'
+
+
+@pytest.mark.parametrize("module", MODULES)
+def test_string_matches_yara_compat_mode(module):
+    with utils.YaraCompatibilityMode():
+        rule = module.compile(source="""
+    rule foo {
+        strings:
+            $ = "a"
+            $ = "b"
+            $c = "c"
+        condition:
+            any of them
+    }""")
+        matches = rule.match(data=b'abca')
+
+        assert len(matches) == 1
+        m = matches[0]
+        assert len(m.strings) == 3
+        s0 = m.strings[0]
+        s1 = m.strings[1]
+        s2 = m.strings[2]
+
+        # In yara compat mode, identifiers start with the '$' prefix
+        assert s0.identifier == '$'
+        assert len(s0.instances) == 2
+        assert s1.identifier == '$'
+        assert len(s1.instances) == 1
+        assert s2.identifier == '$c'
+        assert len(s2.instances) == 1
+
+        # check special method __repr__
+        assert s0.__repr__() == '$'
+        assert s1.__repr__() == '$'
+        assert s2.__repr__() == '$c'
+
+        # In yara compat mode, the hash depends on the name only
+        assert hash(s0) == hash(s1)
 
 
 @pytest.mark.parametrize("module,is_yara", MODULES_DISTINCT)
@@ -209,12 +225,28 @@ rule foo {
     # XXX: difference here, but i don't think this is a big deal.
     assert i2.__repr__() == '<\x00\\xff\\xfb>' if is_yara else '<\x00\uFFFD\uFFFD>'
 
-    # In yara, the hash depends only on the matched_data
-    with utils.YaraCompatibilityMode():
-        assert hash(i0) == hash(i3)
-    # outside of compat mode, this is not true
+    # outside of compat mode, the hash does not depend only on matched_data
     if not is_yara:
         assert hash(i0) != hash(i3)
+
+
+@pytest.mark.parametrize("module", MODULES)
+def test_string_match_yara_compat_mode(module):
+    with utils.YaraCompatibilityMode():
+        rule = module.compile(source="""
+    rule foo {
+        strings:
+            $ = /<.{1,3}>/
+        condition:
+            any of them
+    }""")
+        matches = rule.match(data=b'<a> <\td> <\x00\xFF\xFB> <a>')
+        s = matches[0].strings[0]
+        i0 = s.instances[0]
+        i3 = s.instances[3]
+
+        # In yara compat mode, the hash depends only on the matched_data
+        assert hash(i0) == hash(i3)
 
 
 @pytest.mark.parametrize("module", MODULES)
@@ -267,16 +299,27 @@ rule a {
         matches = rules.match(data='')
         assert matches[0].meta['s'] == b'b\xFFc'
 
-    # In compat mode, the same string conversion as done in libyara
-    # is done.
-    with utils.YaraCompatibilityMode():
-        matches = rules.match(data='')
-        assert matches[0].meta['s'] == 'bc'
-
     # Same is true when iterating on rules
     if not is_yara:
         r = list(rules)[0]
         assert r.meta['s'] == b'b\xFFc'
+
+
+@pytest.mark.parametrize("module", MODULES)
+def test_meta_bytes_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
+        rules = module.compile(source="""
+    rule a {
+        meta:
+            s = "b\\xFFc"
+        condition: true
+    }""")
+
+        # In compat mode, the same string conversion as done in libyara
+        # is done.
+        matches = rules.match(data='')
+        assert matches[0].meta['s'] == 'bc'
+
+        # Same is true when iterating on rules
         r = list(rules)[0]
         assert r.meta['s'] == 'bc'
