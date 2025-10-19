@@ -134,6 +134,8 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
 ///         otherwise.
 ///     profile: Profile to use when compiling the rules. If not specified,
 ///         `CompilerProfile::Speed` is used.
+///    max_strings_per_rule: Maximum number of strings allowed in a single rule.
+///       If a rule has more strings than this limit, its compilation will fail.
 ///
 /// Returns:
 ///   a `Scanner` object that holds the compiled rules.
@@ -155,6 +157,7 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     include_callback=None,
     strict_escape=None,
     profile=None,
+    max_strings_per_rule=None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn compile(
@@ -169,6 +172,7 @@ fn compile(
     include_callback: Option<&Bound<'_, PyAny>>,
     strict_escape: Option<bool>,
     profile: Option<&CompilerProfile>,
+    max_strings_per_rule: Option<usize>,
 ) -> PyResult<scanner::Scanner> {
     let mut compiler = build_compiler(profile);
 
@@ -183,10 +187,16 @@ fn compile(
         .disable_includes(!includes)
         .fail_on_warnings(error_on_warning)
         .disable_unknown_escape_warning(disable_unknown_escape_warning);
-    if let Ok(lock) = MAX_STRINGS_PER_RULE.lock() {
-        if let Some(value) = *lock {
-            params = params.max_strings_per_rule(value);
-        }
+
+    let max_strings_per_rule = match max_strings_per_rule {
+        Some(v) => Some(v),
+        None => match MAX_STRINGS_PER_RULE.lock() {
+            Ok(v) => *v,
+            Err(_) => None,
+        },
+    };
+    if let Some(value) = max_strings_per_rule {
+        params = params.max_strings_per_rule(value);
     }
 
     compiler.set_params(params);
@@ -287,6 +297,11 @@ enum CompilerProfile {
 /// Args:
 ///   max_strings_per_rule: Maximum number of strings allowed in a single rule.
 ///       If a rule has more strings than this limit, its compilation will fail.
+///
+///       It is not recommended to set this parameter using this API, as it impacts
+///       the module globally. Instead, usage of the `max_strings_per_rule` parameter
+///       of the `compile` method is preferred.
+///
 ///   max_match_data: Maximum length for the match data returned in match
 ///       results. The match details returned in results will be truncated if
 ///       they exceed this limit. Default value is 512

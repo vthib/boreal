@@ -374,3 +374,22 @@ def test_compiler_profile():
     rules = boreal.compile(source=data, profile=boreal.CompilerProfile.Memory)
     matches = rules.match(data='abc')
     assert len(matches) == 1
+
+
+def test_compiler_max_strings_per_rule():
+    source = """
+    rule a {
+        strings:
+            $a = "aaa"
+            $b = "bbb"
+            $c = "ccc"
+        condition:
+            any of them
+    }
+    """
+
+    with pytest.raises(boreal.SyntaxError):
+        boreal.compile(source=source, max_strings_per_rule=2)
+
+    # Parameter is not saved, so without it, the compilation works
+    boreal.compile(source=source)
