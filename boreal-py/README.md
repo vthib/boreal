@@ -38,6 +38,8 @@ while also providing improvements and saner default behavior.
 - 100% compatibility with the yara library guaranteed if needed through
   a yara compatibility mode.
 
+This library is fully compatible with free-threaded python.
+
 ## Yara compatibility
 
 This library guarantees 100% compatibility with the YARA library: the whole API
