@@ -4,7 +4,6 @@ version = "1.0.0"
 readme = "README.md"
 description = "Python bindings to the boreal YARA scanner"
 requires-python = ">=3.11"
-dependencies = []
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
@@ -13,6 +12,7 @@ build-backend = "maturin"
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
+    "pytest-run-parallel>=0.7.0",
     "yara-python>=4.5.1",
 ]
 doc = [
@@ -35,4 +35,7 @@ file = "src/**/*"
 [tool.pytest.ini_options]
 addopts = [
     "--import-mode=importlib",
+]
+markers = [
+    "global_config: tests that uses global config parameters"
 ]

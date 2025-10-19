@@ -555,6 +555,7 @@ rule a { condition: true }
 
 
 @pytest.mark.parametrize('module', MODULES)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_match_modules_callback_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
         rules = module.compile(source="""
@@ -666,6 +667,7 @@ rule b { condition: false }
 
 
 @pytest.mark.parametrize('module', MODULES)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_match_which_callbacks_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
         rules = module.compile(source="""
@@ -812,6 +814,7 @@ rule my_rule {
 
 
 @pytest.mark.parametrize('module,is_yara', MODULES_DISTINCT)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_match_fast_yara_compat_mode(module, is_yara):
     with utils.YaraCompatibilityMode():
         rules = module.compile(source="""
@@ -970,6 +973,7 @@ rule my_rule {
 
 
 @pytest.mark.parametrize('module', MODULES)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_allow_duplicate_metadata_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
         rules = module.compile(source="""

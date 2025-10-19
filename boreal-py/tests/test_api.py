@@ -22,6 +22,7 @@ def test_version(module):
 # Test is marked as to be run last because it modifies a global config
 # that impacts other tests.
 @pytest.mark.parametrize('module', MODULES)
+@pytest.mark.global_config
 def test_run_last_set_config_max_strings_per_rule(module):
     module.set_config(max_strings_per_rule=2)
 
@@ -41,6 +42,7 @@ def test_run_last_set_config_max_strings_per_rule(module):
 # Test is marked as to be run last because it modifies a global config
 # that impacts other tests.
 @pytest.mark.parametrize('module', MODULES)
+@pytest.mark.global_config
 def test_run_last_set_config_max_match_data(module):
     module.set_config(max_match_data=3)
 
@@ -58,6 +60,7 @@ def test_run_last_set_config_max_match_data(module):
 
 
 @pytest.mark.parametrize('module', MODULES)
+@pytest.mark.global_config
 def test_run_last_set_config_stack_size(module):
     # Just check isetting stack_size doesn't fail
     module.set_config(stack_size=10_000)
