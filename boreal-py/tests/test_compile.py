@@ -347,6 +347,7 @@ def test_compile_strict_escape(module, is_yara):
 
 
 @pytest.mark.parametrize('module', MODULES)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_compile_strict_escape_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
         data = r"""

@@ -33,6 +33,7 @@ source = { editable = "." }
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "pytest-run-parallel" },
     { name = "yara-python" },
 ]
 doc = [
@@ -47,6 +48,7 @@ doc = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8.3.4" },
+    { name = "pytest-run-parallel", specifier = ">=0.7.0" },
     { name = "yara-python", specifier = ">=4.5.1" },
 ]
 doc = [
@@ -554,6 +556,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a3/5c/00a0e072241553e1a7496d638deababa67c5058571567b92a7eaa258397c/pytest-8.4.2.tar.gz", hash = "sha256:86c0d0b93306b961d58d62a4db4879f27fe25513d4b969df351abdddb3c30e01", size = 1519618, upload-time = "2025-09-04T14:34:22.711Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl", hash = "sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79", size = 365750, upload-time = "2025-09-04T14:34:20.226Z" },
+]
+
+[[package]]
+name = "pytest-run-parallel"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d0/0c/2dd2d1f2f014e8d9c9f365eb4138c52eeb5b96fa8574f15c1d9436842a48/pytest_run_parallel-0.7.0.tar.gz", hash = "sha256:05088a808d26975f095739a06efc9e8ba4749c194457f9927903eaacdd1e05ce", size = 50185, upload-time = "2025-09-25T13:57:29.686Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/64/d676a217242e263a62bf30588654dba53252fb40df15d8a7023026dae109/pytest_run_parallel-0.7.0-py3-none-any.whl", hash = "sha256:0d8b981a2ac895df25c4bc27b89e8df0bbddbead57cbfdb0aed743db8533a8c0", size = 18884, upload-time = "2025-09-25T13:57:28.545Z" },
 ]
 
 [[package]]

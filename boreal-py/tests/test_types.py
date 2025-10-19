@@ -150,6 +150,7 @@ rule foo {
 
 
 @pytest.mark.parametrize("module", MODULES)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_string_matches_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
         rule = module.compile(source="""
@@ -231,6 +232,7 @@ rule foo {
 
 
 @pytest.mark.parametrize("module", MODULES)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_string_match_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
         rule = module.compile(source="""
@@ -306,6 +308,7 @@ rule a {
 
 
 @pytest.mark.parametrize("module", MODULES)
+@pytest.mark.global_config(yara_compat_mode=True)
 def test_meta_bytes_yara_compat_mode(module):
     with utils.YaraCompatibilityMode():
         rules = module.compile(source="""

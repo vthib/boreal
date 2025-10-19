@@ -83,6 +83,13 @@ jobs:
           uv sync --dev
           uv run --config-setting "build-args=--features=cuckoo --target=${{matrix.target}}" pytest
 
+      - name: Run python tests in parallel on free-threaded runtime
+        if: ${{ matrix.build == 'linux' }}
+        run: |
+          cd boreal-py
+          uv sync --dev
+          ./scripts/test-parallel.sh
+
     strategy:
       fail-fast: false
       matrix:
