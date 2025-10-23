@@ -78,3 +78,6 @@ struct_field_names = "allow"
 single_match_else = "allow"
 too_many_lines = "allow"
 unnested_or_patterns = "allow"
+
+[patch.crates-io]
+yara = { git = 'https://github.com/vthib/yara-rust.git', branch = "fix-windows-link" }
