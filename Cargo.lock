@@ -1546,8 +1546,7 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 [[package]]
 name = "yara"
 version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2860d5b9e61e482a7bb3481ae4375e9c551dc07afaf15c2172dd81009f01686c"
+source = "git+https://github.com/vthib/yara-rust.git?branch=fix-windows-link#2cdaa3fec832c77f20de8828e9fcde8fe6b1d546"
 dependencies = [
  "bitflags",
  "thiserror",
@@ -1557,8 +1556,7 @@ dependencies = [
 [[package]]
 name = "yara-sys"
 version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbeb5b2ed726cb3786945423539732a681ce2eb9911ee5e7548fad7ca96b0731"
+source = "git+https://github.com/vthib/yara-rust.git?branch=fix-windows-link#2cdaa3fec832c77f20de8828e9fcde8fe6b1d546"
 dependencies = [
  "bindgen",
  "cc",
