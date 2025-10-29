@@ -13,7 +13,6 @@ use super::nom_recipes::{map_res, rtrim};
 use super::types::{Input, ParseResult};
 
 const JUMP_LIMIT_IN_ALTERNATIVES: u32 = 200;
-const MAX_HEX_TOKEN_RECURSION: usize = 10;
 
 /// A token in an hex string.
 #[derive(Clone, Debug, PartialEq)]
@@ -308,7 +307,7 @@ fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     // tokens => hex_token => alternatives => tokens
     //
     // Use the inner recursive counter to make sure this recursion cannot grow too much.
-    if input.inner_recursion_counter >= MAX_HEX_TOKEN_RECURSION {
+    if input.inner_recursion_counter >= input.inner_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
             ErrorKind::HexStringTooDeep,
@@ -634,7 +633,7 @@ mod tests {
         // fine.
         let mut hex = String::new();
         hex.push_str("{ AB ");
-        let nb = MAX_HEX_TOKEN_RECURSION - 1;
+        let nb = Input::new("").inner_recursion_limit - 1;
         for _ in 0..nb {
             hex.push_str("( CD | ");
         }

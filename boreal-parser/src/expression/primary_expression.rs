@@ -20,7 +20,7 @@ use crate::{number, regex, string};
 pub(crate) fn primary_expression(mut input: Input) -> ParseResult<Expression> {
     let start = input.pos();
 
-    if input.expr_recursion_counter >= super::MAX_EXPR_RECURSION {
+    if input.expr_recursion_counter >= input.expr_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
             ErrorKind::ExprTooDeep,
@@ -260,7 +260,6 @@ mod tests {
     use super::{primary_expression as pe, Expression, ExpressionKind as Expr};
     use crate::error::{Error, ErrorKind};
     use crate::expression::ReadIntegerType;
-    use crate::expression::MAX_EXPR_RECURSION;
     use crate::regex::{AssertionKind, Literal, Node, Regex, RepetitionKind};
     use crate::test_helpers::parse_err_type;
     use crate::test_helpers::{parse, parse_check, parse_err};
@@ -1013,7 +1012,7 @@ mod tests {
         let mut v = String::new();
         // Since this goes into both boolean_expression and primary_expression, the counter is
         // incremented twice per recursion.
-        let nb = MAX_EXPR_RECURSION / 2 - 1;
+        let nb = Input::new("").expr_recursion_limit / 2 - 1;
         for _ in 0..nb {
             v.push_str("a.b(");
         }

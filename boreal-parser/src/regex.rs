@@ -15,8 +15,6 @@ use super::error::Error;
 use super::nom_recipes::rtrim;
 use super::types::{Input, ParseResult};
 
-const MAX_REGEX_RECURSION: usize = 10;
-
 /// A regular expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Regex {
@@ -246,7 +244,7 @@ fn alternative(mut input: Input) -> ParseResult<Node> {
     // tokens => hex_token => alternatives => tokens
     //
     // Use the inner recursive counter to make sure this recursion cannot grow too much.
-    if input.inner_recursion_counter >= MAX_REGEX_RECURSION {
+    if input.inner_recursion_counter >= input.inner_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(input.pos()),
             ErrorKind::RegexTooDeep,
@@ -1494,7 +1492,7 @@ mod tests {
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
         v.push('/');
-        let nb = MAX_REGEX_RECURSION - 1;
+        let nb = Input::new("").inner_recursion_limit - 1;
         for _ in 0..nb {
             v.push_str("a(b");
         }

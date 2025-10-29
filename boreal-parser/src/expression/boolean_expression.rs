@@ -34,7 +34,7 @@ pub(crate) fn boolean_expression(mut input: Input) -> ParseResult<Expression> {
     // recursive loop, on for example `module.function(true)`
     let start = input.pos();
 
-    if input.expr_recursion_counter >= super::MAX_EXPR_RECURSION {
+    if input.expr_recursion_counter >= input.expr_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
             ErrorKind::ExprTooDeep,
@@ -317,11 +317,9 @@ fn variable_expression(input: Input) -> ParseResult<Expression> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        expression::{Identifier, MAX_EXPR_RECURSION},
-        regex::{self, Literal},
-        test_helpers::{parse, parse_check, parse_err, parse_err_type, test_public_type},
-    };
+    use crate::expression::Identifier;
+    use crate::regex::{self, Literal};
+    use crate::test_helpers::{parse, parse_check, parse_err, parse_err_type, test_public_type};
     use std::ops::Range;
 
     #[track_caller]
@@ -1008,7 +1006,7 @@ mod tests {
 
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
-        let nb = MAX_EXPR_RECURSION - 2;
+        let nb = Input::new("").expr_recursion_limit - 2;
         for _ in 0..nb {
             v.push_str("for any of them : ( ");
         }
@@ -1055,7 +1053,7 @@ mod tests {
         let mut v = String::new();
         // Since this goes into both boolean_expression and primary_expression, the counter is
         // incremented twice per recursion.
-        let nb = MAX_EXPR_RECURSION / 2 - 1;
+        let nb = Input::new("").expr_recursion_limit / 2 - 1;
         for _ in 0..nb {
             v.push_str("a.b(");
         }

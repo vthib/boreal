@@ -28,10 +28,20 @@ pub(crate) struct Input<'a> {
     /// can be present in it.
     /// For example, recursion to parse hex-strings and regexes uses this counter, but recursion
     /// to parse expressions do not (as expressions can contain regexes).
-    pub inner_recursion_counter: usize,
+    pub inner_recursion_counter: u8,
+
+    /// Maximum value for the inner recursion counter.
+    ///
+    /// When reached, an error is immediately returned to prevent any stack overflow.
+    pub inner_recursion_limit: u8,
 
     /// Counter on expression recursion.
-    pub expr_recursion_counter: usize,
+    pub expr_recursion_counter: u8,
+
+    /// Maximum value for the expression recursion counter.
+    ///
+    /// When reached, an error is immediately returned to prevent any stack overflow.
+    pub expr_recursion_limit: u8,
 }
 
 /// Position inside the input.
@@ -49,7 +59,9 @@ impl<'a> Input<'a> {
             cursor: input,
             cursor_before_last_rtrim: input,
             inner_recursion_counter: 0,
+            inner_recursion_limit: 10,
             expr_recursion_counter: 0,
+            expr_recursion_limit: 20,
         }
     }
 
