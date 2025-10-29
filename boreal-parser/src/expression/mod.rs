@@ -13,8 +13,6 @@ use crate::regex::Regex;
 
 pub(crate) use boolean_expression::boolean_expression as expression;
 
-const MAX_EXPR_RECURSION: usize = 20;
-
 /// Integer read type, see [`ExpressionKind::ReadInteger`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ReadIntegerType {
