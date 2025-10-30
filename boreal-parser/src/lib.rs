@@ -111,17 +111,31 @@ pub mod regex;
 pub mod rule;
 mod string;
 mod types;
+pub use types::Params;
 
 /// Parse a YARA file.
+///
+/// This uses default values for a few parameters, see [`Params`].
+/// To modify those parameters, use [`parse_with_params`].
 ///
 /// # Errors
 ///
 /// Returns an error if the parsing fails, or if there are
 /// trailing data in the file that has not been parsed.
 pub fn parse(input: &str) -> Result<file::YaraFile, error::Error> {
+    parse_with_params(input, Params::default())
+}
+
+/// Parse a YARA file with the provided parameters.
+///
+/// # Errors
+///
+/// Returns an error if the parsing fails, or if there are
+/// trailing data in the file that has not been parsed.
+pub fn parse_with_params(input: &str, params: Params) -> Result<file::YaraFile, error::Error> {
     use nom::Finish;
 
-    let input = types::Input::new(input);
+    let input = types::Input::with_params(input, params);
     let (_, rules) = file::parse_yara_file(input).finish()?;
 
     Ok(rules)

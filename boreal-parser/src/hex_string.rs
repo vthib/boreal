@@ -307,7 +307,7 @@ fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     // tokens => hex_token => alternatives => tokens
     //
     // Use the string recursive counter to make sure this recursion cannot grow too much.
-    if input.string_recursion_counter >= input.string_recursion_limit {
+    if input.string_recursion_counter >= input.params.string_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
             ErrorKind::HexStringTooDeep,
@@ -633,7 +633,7 @@ mod tests {
         // fine.
         let mut hex = String::new();
         hex.push_str("{ AB ");
-        let nb = Input::new("").string_recursion_limit - 1;
+        let nb = Input::new("").params.string_recursion_limit - 1;
         for _ in 0..nb {
             hex.push_str("( CD | ");
         }
