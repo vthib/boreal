@@ -688,8 +688,11 @@ fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_helpers::{parse, parse_err, test_public_type};
+    use crate::types::Params;
+    use nom::Finish;
+
     use super::*;
-    use crate::test_helpers::{parse, parse_err, parse_err_type, test_public_type};
 
     fn lit(byte: u8, span: Range<usize>, escaped: bool) -> Literal {
         Literal {
@@ -1475,6 +1478,11 @@ mod tests {
 
     #[test]
     fn test_stack_overflow() {
+        // Use a limit below the default one. This is because the default one
+        // works well when compiled in release mode, but in debug mode the
+        // stack grows much more quickly.
+        const STRING_RECURSION_TEST_LIMIT: u8 = 10;
+
         // Parsing of a regex includes recursion, so it must be protected against
         // stack overflowing.
         let mut v = String::new();
@@ -1487,12 +1495,31 @@ mod tests {
         }
         v.push('/');
 
-        parse_err_type(regex, &v, &Error::new(30..30, ErrorKind::RegexTooDeep));
+        let input = Input::with_params(
+            &v,
+            Params::default().string_recursion_limit(STRING_RECURSION_TEST_LIMIT),
+        );
+        let res = regex(input).finish();
+        assert_eq!(
+            &res.unwrap_err(),
+            &Error::new(30..30, ErrorKind::RegexTooDeep)
+        );
+
+        // test that changing the limit works
+        let input = Input::with_params(
+            &v,
+            Params::default().string_recursion_limit(STRING_RECURSION_TEST_LIMIT + 2),
+        );
+        let res = regex(input).finish();
+        assert_eq!(
+            &res.unwrap_err(),
+            &Error::new(36..36, ErrorKind::RegexTooDeep)
+        );
 
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
         v.push('/');
-        let nb = Input::new("").params.string_recursion_limit - 1;
+        let nb = STRING_RECURSION_TEST_LIMIT - 1;
         for _ in 0..nb {
             v.push_str("a(b");
         }
@@ -1508,7 +1535,10 @@ mod tests {
         }
         v.push('/');
 
-        let input = Input::new(&v);
+        let input = Input::with_params(
+            &v,
+            Params::default().string_recursion_limit(STRING_RECURSION_TEST_LIMIT),
+        );
         let _res = regex(input).unwrap();
         assert_eq!(input.string_recursion_counter, 0);
     }

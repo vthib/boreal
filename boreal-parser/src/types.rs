@@ -56,8 +56,8 @@ pub struct Params {
 impl Default for Params {
     fn default() -> Self {
         Self {
-            expr_recursion_limit: 20,
-            string_recursion_limit: 10,
+            expr_recursion_limit: 50,
+            string_recursion_limit: 30,
         }
     }
 }
@@ -72,7 +72,7 @@ impl Params {
     /// rules written to try to trigger a stack overflow. However, should
     /// this limit be too low for real rules, it can be raised.
     ///
-    /// Default value is `20`.
+    /// Default value is `50`.
     #[must_use]
     pub fn expression_recursion_limit(mut self, limit: u8) -> Self {
         self.expr_recursion_limit = limit;
@@ -88,10 +88,10 @@ impl Params {
     /// rules written to try to trigger a stack overflow. However, should
     /// this limit be too low for real rules, it can be raised.
     ///
-    /// Default value is `10`.
+    /// Default value is `30`.
     #[must_use]
     pub fn string_recursion_limit(mut self, limit: u8) -> Self {
-        self.expr_recursion_limit = limit;
+        self.string_recursion_limit = limit;
         self
     }
 }

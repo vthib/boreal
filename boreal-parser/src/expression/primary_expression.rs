@@ -261,9 +261,9 @@ mod tests {
     use crate::error::{Error, ErrorKind};
     use crate::expression::ReadIntegerType;
     use crate::regex::{AssertionKind, Literal, Node, Regex, RepetitionKind};
-    use crate::test_helpers::parse_err_type;
     use crate::test_helpers::{parse, parse_check, parse_err};
-    use crate::types::Input;
+    use crate::types::{Input, Params};
+    use nom::Finish;
     use std::ops::Range;
 
     #[test]
@@ -996,6 +996,11 @@ mod tests {
 
     #[test]
     fn test_stack_overflow() {
+        // Use a limit below the default one. This is because the default one
+        // works well when compiled in release mode, but in debug mode the
+        // stack grows much more quickly.
+        const EXPR_RECURSION_TEST_LIMIT: u8 = 20;
+
         // primary_expression -> read_integer -> primary_expression is a recursion loop, test it.
         let mut v = String::new();
         for _ in 0..100_000 {
@@ -1006,13 +1011,21 @@ mod tests {
             v.push(')');
         }
 
-        parse_err_type(pe, &v, &Error::new(120..120, ErrorKind::ExprTooDeep));
+        let input = Input::with_params(
+            &v,
+            Params::default().expression_recursion_limit(EXPR_RECURSION_TEST_LIMIT),
+        );
+        let res = pe(input).finish();
+        assert_eq!(
+            &res.unwrap_err(),
+            &Error::new(120..120, ErrorKind::ExprTooDeep)
+        );
 
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
         // Since this goes into both boolean_expression and primary_expression, the counter is
         // incremented twice per recursion.
-        let nb = Input::new("").params.expr_recursion_limit / 2 - 1;
+        let nb = EXPR_RECURSION_TEST_LIMIT / 2 - 1;
         for _ in 0..nb {
             v.push_str("a.b(");
         }
@@ -1021,7 +1034,10 @@ mod tests {
             v.push(')');
         }
 
-        let input = Input::new(&v);
+        let input = Input::with_params(
+            &v,
+            Params::default().expression_recursion_limit(EXPR_RECURSION_TEST_LIMIT),
+        );
         let _res = pe(input).unwrap();
         assert_eq!(input.expr_recursion_counter, 0);
     }
