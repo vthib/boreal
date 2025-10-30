@@ -22,18 +22,18 @@ pub(crate) struct Input<'a> {
     /// Saved position before the last applied rtrim.
     cursor_before_last_rtrim: &'a str,
 
-    /// Counter on inner recursion.
+    /// Counter on string recursion (regex and hex-string).
     ///
     /// This is used in combinators using recursions, but only if no other recursive combinator
     /// can be present in it.
     /// For example, recursion to parse hex-strings and regexes uses this counter, but recursion
     /// to parse expressions do not (as expressions can contain regexes).
-    pub inner_recursion_counter: u8,
+    pub string_recursion_counter: u8,
 
-    /// Maximum value for the inner recursion counter.
+    /// Maximum value for the string recursion counter.
     ///
     /// When reached, an error is immediately returned to prevent any stack overflow.
-    pub inner_recursion_limit: u8,
+    pub string_recursion_limit: u8,
 
     /// Counter on expression recursion.
     pub expr_recursion_counter: u8,
@@ -58,8 +58,8 @@ impl<'a> Input<'a> {
             input,
             cursor: input,
             cursor_before_last_rtrim: input,
-            inner_recursion_counter: 0,
-            inner_recursion_limit: 10,
+            string_recursion_counter: 0,
+            string_recursion_limit: 10,
             expr_recursion_counter: 0,
             expr_recursion_limit: 20,
         }
