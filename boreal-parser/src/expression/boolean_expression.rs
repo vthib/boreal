@@ -319,7 +319,9 @@ mod tests {
     use super::*;
     use crate::expression::Identifier;
     use crate::regex::{self, Literal};
-    use crate::test_helpers::{parse, parse_check, parse_err, parse_err_type, test_public_type};
+    use crate::test_helpers::{parse, parse_check, parse_err, test_public_type};
+    use crate::types::Params;
+    use nom::Finish;
     use std::ops::Range;
 
     #[track_caller]
@@ -985,6 +987,11 @@ mod tests {
         );
     }
 
+    // Use a limit below the default one. This is because the default one
+    // works well when compiled in release mode, but in debug mode the
+    // stack grows much more quickly.
+    const EXPR_RECURSION_TEST_LIMIT: u8 = 20;
+
     #[test]
     fn test_stack_overflow_1() {
         // boolean_expression -> for_expression_full -> boolean_expression is a recursion loop,
@@ -998,15 +1005,19 @@ mod tests {
             v.push_str(" ) ");
         }
 
-        parse_err_type(
-            boolean_expression,
+        let input = Input::with_params(
             &v,
-            &Error::new(400..400, ErrorKind::ExprTooDeep),
+            Params::default().expression_recursion_limit(EXPR_RECURSION_TEST_LIMIT),
+        );
+        let res = boolean_expression(input).finish();
+        assert_eq!(
+            &res.unwrap_err(),
+            &Error::new(400..400, ErrorKind::ExprTooDeep)
         );
 
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
-        let nb = Input::new("").params.expr_recursion_limit - 2;
+        let nb = EXPR_RECURSION_TEST_LIMIT - 2;
         for _ in 0..nb {
             v.push_str("for any of them : ( ");
         }
@@ -1025,7 +1036,10 @@ mod tests {
             v.push_str(" ) ");
         }
 
-        let input = Input::new(&v);
+        let input = Input::with_params(
+            &v,
+            Params::default().expression_recursion_limit(EXPR_RECURSION_TEST_LIMIT),
+        );
         let _res = boolean_expression(input).unwrap();
         assert_eq!(input.expr_recursion_counter, 0);
     }
@@ -1043,17 +1057,21 @@ mod tests {
             v.push(')');
         }
 
-        parse_err_type(
-            boolean_expression,
+        let input = Input::with_params(
             &v,
-            &Error::new(40..40, ErrorKind::ExprTooDeep),
+            Params::default().expression_recursion_limit(EXPR_RECURSION_TEST_LIMIT),
+        );
+        let res = boolean_expression(input).finish();
+        assert_eq!(
+            &res.unwrap_err(),
+            &Error::new(40..40, ErrorKind::ExprTooDeep)
         );
 
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
         // Since this goes into both boolean_expression and primary_expression, the counter is
         // incremented twice per recursion.
-        let nb = Input::new("").params.expr_recursion_limit / 2 - 1;
+        let nb = EXPR_RECURSION_TEST_LIMIT / 2 - 1;
         for _ in 0..nb {
             v.push_str("a.b(");
         }
@@ -1062,7 +1080,10 @@ mod tests {
             v.push(')');
         }
 
-        let input = Input::new(&v);
+        let input = Input::with_params(
+            &v,
+            Params::default().expression_recursion_limit(EXPR_RECURSION_TEST_LIMIT),
+        );
         let _res = boolean_expression(input).unwrap();
         assert_eq!(input.expr_recursion_counter, 0);
     }

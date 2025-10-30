@@ -332,8 +332,11 @@ fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_helpers::{parse, parse_err, test_public_type};
+    use crate::types::Params;
+    use nom::Finish;
+
     use super::*;
-    use crate::test_helpers::{parse, parse_err, parse_err_type, test_public_type};
 
     #[test]
     fn test_parse_hex_byte() {
@@ -611,6 +614,11 @@ mod tests {
 
     #[test]
     fn test_stack_overflow() {
+        // Use a limit below the default one. This is because the default one
+        // works well when compiled in release mode, but in debug mode the
+        // stack grows much more quickly.
+        const STRING_RECURSION_TEST_LIMIT: u8 = 10;
+
         // Parsing of a hex string includes recursion, so it must be protected against
         // stack overflowing.
         let mut hex = String::new();
@@ -623,17 +631,32 @@ mod tests {
         }
         hex.push('}');
 
-        parse_err_type(
-            hex_string,
+        let input = Input::with_params(
             &hex,
-            &Error::new(70..70, ErrorKind::HexStringTooDeep),
+            Params::default().string_recursion_limit(STRING_RECURSION_TEST_LIMIT),
+        );
+        let res = hex_string(input).finish();
+        assert_eq!(
+            &res.unwrap_err(),
+            &Error::new(70..70, ErrorKind::HexStringTooDeep)
+        );
+
+        // test that changing the limit works
+        let input = Input::with_params(
+            &hex,
+            Params::default().string_recursion_limit(STRING_RECURSION_TEST_LIMIT + 2),
+        );
+        let res = hex_string(input).finish();
+        assert_eq!(
+            &res.unwrap_err(),
+            &Error::new(84..84, ErrorKind::HexStringTooDeep)
         );
 
         // counter should reset, so many imbricated alternations, but all below the limit should be
         // fine.
         let mut hex = String::new();
         hex.push_str("{ AB ");
-        let nb = Input::new("").params.string_recursion_limit - 1;
+        let nb = STRING_RECURSION_TEST_LIMIT - 1;
         for _ in 0..nb {
             hex.push_str("( CD | ");
         }
@@ -649,7 +672,10 @@ mod tests {
         }
         hex.push('}');
 
-        let input = Input::new(&hex);
+        let input = Input::with_params(
+            &hex,
+            Params::default().string_recursion_limit(STRING_RECURSION_TEST_LIMIT),
+        );
         let _res = hex_string(input).unwrap();
         assert_eq!(input.string_recursion_counter, 0);
     }
