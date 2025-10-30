@@ -244,7 +244,7 @@ fn alternative(mut input: Input) -> ParseResult<Node> {
     // tokens => hex_token => alternatives => tokens
     //
     // Use the string recursive counter to make sure this recursion cannot grow too much.
-    if input.string_recursion_counter >= input.string_recursion_limit {
+    if input.string_recursion_counter >= input.params.string_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(input.pos()),
             ErrorKind::RegexTooDeep,
@@ -1492,7 +1492,7 @@ mod tests {
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
         v.push('/');
-        let nb = Input::new("").string_recursion_limit - 1;
+        let nb = Input::new("").params.string_recursion_limit - 1;
         for _ in 0..nb {
             v.push_str("a(b");
         }

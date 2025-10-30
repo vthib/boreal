@@ -30,18 +30,70 @@ pub(crate) struct Input<'a> {
     /// to parse expressions do not (as expressions can contain regexes).
     pub string_recursion_counter: u8,
 
-    /// Maximum value for the string recursion counter.
-    ///
-    /// When reached, an error is immediately returned to prevent any stack overflow.
-    pub string_recursion_limit: u8,
-
     /// Counter on expression recursion.
     pub expr_recursion_counter: u8,
 
+    /// Parameters used during parsing.
+    pub params: Params,
+}
+
+/// Parameters used during parsing.
+#[derive(Copy, Clone, Debug)]
+pub struct Params {
+    /// Maximum value for the string recursion counter.
+    ///
+    /// When reached, an error is immediately returned to prevent any stack
+    /// overflow.
+    pub(crate) string_recursion_limit: u8,
+
     /// Maximum value for the expression recursion counter.
     ///
-    /// When reached, an error is immediately returned to prevent any stack overflow.
-    pub expr_recursion_limit: u8,
+    /// When reached, an error is immediately returned to prevent any stack
+    /// overflow.
+    pub(crate) expr_recursion_limit: u8,
+}
+
+impl Default for Params {
+    fn default() -> Self {
+        Self {
+            expr_recursion_limit: 20,
+            string_recursion_limit: 10,
+        }
+    }
+}
+
+impl Params {
+    /// Maximum recursion depth allowed when parsing an expression.
+    ///
+    /// This is a defensive limit to prevent the parsing of the rule to
+    /// trigger a stack overflow.
+    ///
+    /// The default value used for this limit should only be reached in
+    /// rules written to try to trigger a stack overflow. However, should
+    /// this limit be too low for real rules, it can be raised.
+    ///
+    /// Default value is `20`.
+    #[must_use]
+    pub fn expression_recursion_limit(mut self, limit: u8) -> Self {
+        self.expr_recursion_limit = limit;
+        self
+    }
+
+    /// Maximum recursion depth allowed when parsing a regex or a hex-string.
+    ///
+    /// This is a defensive limit to prevent the parsing of the rule to
+    /// trigger a stack overflow.
+    ///
+    /// The default value used for this limit should only be reached in
+    /// rules written to try to trigger a stack overflow. However, should
+    /// this limit be too low for real rules, it can be raised.
+    ///
+    /// Default value is `10`.
+    #[must_use]
+    pub fn string_recursion_limit(mut self, limit: u8) -> Self {
+        self.expr_recursion_limit = limit;
+        self
+    }
 }
 
 /// Position inside the input.
@@ -54,14 +106,17 @@ pub(crate) type ParseResult<'a, O> = IResult<Input<'a>, O, Error>;
 
 impl<'a> Input<'a> {
     pub(crate) fn new(input: &'a str) -> Self {
+        Self::with_params(input, Params::default())
+    }
+
+    pub(crate) fn with_params(input: &'a str, params: Params) -> Self {
         Self {
             input,
             cursor: input,
             cursor_before_last_rtrim: input,
             string_recursion_counter: 0,
-            string_recursion_limit: 10,
             expr_recursion_counter: 0,
-            expr_recursion_limit: 20,
+            params,
         }
     }
 
