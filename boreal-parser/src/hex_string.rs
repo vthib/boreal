@@ -306,17 +306,17 @@ fn tokens(mut input: Input, in_alternatives: bool) -> ParseResult<Vec<Token>> {
     //
     // tokens => hex_token => alternatives => tokens
     //
-    // Use the inner recursive counter to make sure this recursion cannot grow too much.
-    if input.inner_recursion_counter >= input.inner_recursion_limit {
+    // Use the string recursive counter to make sure this recursion cannot grow too much.
+    if input.string_recursion_counter >= input.string_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(start),
             ErrorKind::HexStringTooDeep,
         )));
     }
 
-    input.inner_recursion_counter += 1;
+    input.string_recursion_counter += 1;
     let (mut input, tokens) = many1(|input| hex_token(input, in_alternatives)).parse(input)?;
-    input.inner_recursion_counter -= 1;
+    input.string_recursion_counter -= 1;
 
     if matches!(tokens[0], Token::Jump(_))
         || (tokens.len() > 1 && matches!(tokens[tokens.len() - 1], Token::Jump(_)))
@@ -633,7 +633,7 @@ mod tests {
         // fine.
         let mut hex = String::new();
         hex.push_str("{ AB ");
-        let nb = Input::new("").inner_recursion_limit - 1;
+        let nb = Input::new("").string_recursion_limit - 1;
         for _ in 0..nb {
             hex.push_str("( CD | ");
         }
@@ -651,7 +651,7 @@ mod tests {
 
         let input = Input::new(&hex);
         let _res = hex_string(input).unwrap();
-        assert_eq!(input.inner_recursion_counter, 0);
+        assert_eq!(input.string_recursion_counter, 0);
     }
 
     #[test]

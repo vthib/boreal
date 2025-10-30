@@ -243,8 +243,8 @@ fn alternative(mut input: Input) -> ParseResult<Node> {
     //
     // tokens => hex_token => alternatives => tokens
     //
-    // Use the inner recursive counter to make sure this recursion cannot grow too much.
-    if input.inner_recursion_counter >= input.inner_recursion_limit {
+    // Use the string recursive counter to make sure this recursion cannot grow too much.
+    if input.string_recursion_counter >= input.string_recursion_limit {
         return Err(nom::Err::Failure(Error::new(
             input.get_span_from(input.pos()),
             ErrorKind::RegexTooDeep,
@@ -253,9 +253,9 @@ fn alternative(mut input: Input) -> ParseResult<Node> {
 
     let mut alts = Vec::new();
     loop {
-        input.inner_recursion_counter += 1;
+        input.string_recursion_counter += 1;
         let (mut input2, node) = concatenation(input)?;
-        input2.inner_recursion_counter -= 1;
+        input2.string_recursion_counter -= 1;
 
         let (input2, has_alt_char) = eat_opt_char('|', input2);
         if has_alt_char {
@@ -1492,7 +1492,7 @@ mod tests {
         // counter should reset, so many imbricated groups, but all below the limit should be fine.
         let mut v = String::new();
         v.push('/');
-        let nb = Input::new("").inner_recursion_limit - 1;
+        let nb = Input::new("").string_recursion_limit - 1;
         for _ in 0..nb {
             v.push_str("a(b");
         }
@@ -1510,7 +1510,7 @@ mod tests {
 
         let input = Input::new(&v);
         let _res = regex(input).unwrap();
-        assert_eq!(input.inner_recursion_counter, 0);
+        assert_eq!(input.string_recursion_counter, 0);
     }
 
     #[test]
