@@ -20,6 +20,9 @@ pub struct CompilerParams {
 
     /// Disable unknown escapes in regex warnings.
     pub(crate) disable_unknown_escape_warning: bool,
+
+    /// Parsing parameters.
+    pub(crate) parse_params: boreal_parser::Params,
 }
 
 impl Default for CompilerParams {
@@ -31,6 +34,7 @@ impl Default for CompilerParams {
             disable_includes: false,
             max_strings_per_rule: 10_000,
             disable_unknown_escape_warning: false,
+            parse_params: boreal_parser::Params::default(),
         }
     }
 }
@@ -112,6 +116,38 @@ impl CompilerParams {
     #[must_use]
     pub fn disable_unknown_escape_warning(mut self, disable_unknown_escape_warning: bool) -> Self {
         self.disable_unknown_escape_warning = disable_unknown_escape_warning;
+        self
+    }
+
+    /// Maximum recursion depth allowed when parsing an expression.
+    ///
+    /// This is a defensive limit to prevent the parsing of the rule to
+    /// trigger a stack overflow.
+    ///
+    /// The default value used for this limit should only be reached in
+    /// rules written to try to trigger a stack overflow. However, should
+    /// this limit be too low for real rules, it can be raised.
+    ///
+    /// See [`boreal_parser::Params::expression_recursion_limit`] for more details.
+    #[must_use]
+    pub fn parse_expression_recursion_limit(mut self, limit: u8) -> Self {
+        self.parse_params = self.parse_params.expression_recursion_limit(limit);
+        self
+    }
+
+    /// Maximum recursion depth allowed when parsing a regex or a hex-string.
+    ///
+    /// This is a defensive limit to prevent the parsing of the rule to
+    /// trigger a stack overflow.
+    ///
+    /// The default value used for this limit should only be reached in
+    /// rules written to try to trigger a stack overflow. However, should
+    /// this limit be too low for real rules, it can be raised.
+    ///
+    /// See [`boreal_parser::Params::string_recursion_limit`] for more details.
+    #[must_use]
+    pub fn parse_string_recursion_limit(mut self, limit: u8) -> Self {
+        self.parse_params = self.parse_params.string_recursion_limit(limit);
         self
     }
 }
