@@ -269,13 +269,19 @@ impl Compiler {
         current_filepath: Option<&Path>,
         status: &mut AddRuleStatus,
     ) -> Result<(), AddRuleError> {
-        let file = boreal_parser::parse(s).map_err(|error| {
-            AddRuleError::new(AddRuleErrorKind::Parse(error), current_filepath, s)
-        })?;
-        for component in file.components {
-            self.add_component(component, namespace, current_filepath, s, status)?;
+        match boreal_parser::parse_with_params(s, self.params.parse_params) {
+            Ok(file) => {
+                for component in file.components {
+                    self.add_component(component, namespace, current_filepath, s, status)?;
+                }
+                Ok(())
+            }
+            Err(error) => Err(AddRuleError::new(
+                AddRuleErrorKind::Parse(error),
+                current_filepath,
+                s,
+            )),
         }
-        Ok(())
     }
 
     fn add_component(

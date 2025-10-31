@@ -29,6 +29,11 @@ fn test_invalid_files() {
         let mut compiler = if directives.without_yara {
             let mut compiler = Compiler::new_without_yara();
             let mut params = CompilerParams::default();
+
+            // Get those limits down because they are too high in debug mode.
+            params = params.parse_expression_recursion_limit(20);
+            params = params.parse_string_recursion_limit(10);
+
             if let Some(limit) = directives.max_strings_per_rule {
                 // This is only done without yara because this is a global parameter
                 // for yara, and will impact other tests...
