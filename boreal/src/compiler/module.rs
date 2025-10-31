@@ -423,7 +423,7 @@ impl ModuleUse<'_, '_> {
                 #[cfg(not(feature = "serialize"))]
                 {
                     let _ = module_index;
-                    let _r = applied_subfields;
+                    drop(applied_subfields);
                 }
                 let expr = Expression::Module(ModuleExpression {
                     kind: ModuleExpressionKind::StaticFunction {
