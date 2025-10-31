@@ -117,24 +117,19 @@ struct ImportedModule {
 }
 
 /// Profile to use when compiling rules.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum CompilerProfile {
     /// Prioritize scan speed.
     ///
     /// This profile will strive to get the best possible scan speed by using more memory
     /// when possible.
+    #[default]
     Speed,
     /// Prioritize memory usage
     ///
     /// This profile will strive to reduce memory usage as much as possible, even if it means
     /// a slower scan speed overall.
     Memory,
-}
-
-impl Default for CompilerProfile {
-    fn default() -> Self {
-        Self::Speed
-    }
 }
 
 #[allow(clippy::new_without_default)]
