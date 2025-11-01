@@ -1614,6 +1614,122 @@ rule a {
 }
 
 #[test]
+fn test_max_condition_depth() {
+    let rule_file = test_file(
+        br#"
+rule a {
+    condition:
+        5 + (4 - (3 + (2 * 1)))
+}
+"#,
+    );
+
+    let input = test_file(b"");
+    test_scan(
+        &["--max-condition-depth=2"],
+        &[rule_file.path()],
+        input.path(),
+        |cmd| {
+            cmd.assert()
+                .stdout("")
+                .stderr(
+                    predicate::str::contains("error")
+                        .and(predicate::str::contains("condition is too complex")),
+                )
+                .failure();
+        },
+    );
+}
+
+#[test]
+fn test_parse_expression_recursion_limit() {
+    let rule_file = test_file(
+        br#"
+rule a {
+    condition:
+        5 + (4 - (3 + (2 * 1)))
+}
+"#,
+    );
+
+    let input = test_file(b"");
+    test_scan(
+        &["--parse-expression-recursion-limit=2"],
+        &[rule_file.path()],
+        input.path(),
+        |cmd| {
+            cmd.assert()
+                .stdout("")
+                .stderr(
+                    predicate::str::contains("error")
+                        .and(predicate::str::contains("too many imbricated expressions")),
+                )
+                .failure();
+        },
+    );
+}
+
+#[test]
+fn test_parse_string_recursion_limit() {
+    let rule_file = test_file(
+        br#"
+rule a {
+    strings:
+        $ = { A0 (B0 (C0 (D0 (E0 | F0)))) }
+    condition:
+        true
+}
+"#,
+    );
+
+    let input = test_file(b"");
+    test_scan(
+        &["--parse-string-recursion-limit=2"],
+        &[rule_file.path()],
+        input.path(),
+        |cmd| {
+            cmd.assert()
+                .stdout("")
+                .stderr(
+                    predicate::str::contains("error").and(predicate::str::contains(
+                        "too many imbricated groups in the hex string",
+                    )),
+                )
+                .failure();
+        },
+    );
+}
+
+#[test]
+fn test_disable_includes() {
+    let rule_file = test_file(
+        br#"
+include "other.yar"
+
+rule a {
+    condition: true
+}
+"#,
+    );
+
+    let input = test_file(b"");
+    test_scan(
+        &["--disable-includes"],
+        &[rule_file.path()],
+        input.path(),
+        |cmd| {
+            cmd.assert()
+                .stdout("")
+                .stderr(
+                    predicate::str::contains("error")
+                        .and(predicate::str::contains("includes are not allowed")),
+                )
+                .failure();
+        },
+    );
+}
+
+#[test]
 fn test_string_max_nb_matches() {
     let rule_file = test_file(
         br#"
