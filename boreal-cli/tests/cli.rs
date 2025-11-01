@@ -1148,6 +1148,36 @@ rule my_rule {
 }
 
 #[test]
+fn test_match_max_length() {
+    let rule_file = test_file(
+        br#"
+rule my_rule {
+    strings:
+        $a = /<.*>/
+    condition:
+        any of them
+}"#,
+    );
+
+    let input = test_file(b"<12345678> <123456> <1>");
+    let path = input.path().display();
+
+    // Test match data only
+    test_scan(&["-s", "--match-max-length=5"], &[rule_file.path()], input.path(), |cmd| {
+        cmd.assert()
+            .stdout(format!(
+                r#"my_rule {path}
+0x0:$a: <1234
+0xb:$a: <1234
+0x14:$a: <1>
+"#
+            ))
+            .stderr("")
+            .success();
+    });
+}
+
+#[test]
 fn test_print_string_xor_key() {
     let rule_file = test_file(
         br#"

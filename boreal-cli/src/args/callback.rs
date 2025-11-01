@@ -13,6 +13,7 @@ pub struct CallbackOptions {
     pub print_count: bool,
     pub print_statistics: bool,
     pub print_module_data: bool,
+    pub match_max_length: Option<usize>,
     pub count_limit: Option<u64>,
     pub identifier: Option<String>,
     pub tag: Option<String>,
@@ -32,6 +33,7 @@ impl CallbackOptions {
             print_count: args.get_flag("count"),
             print_statistics: args.get_flag("print_scan_statistics"),
             print_module_data: args.get_flag("print_module_data"),
+            match_max_length: args.get_one::<usize>("match_max_length").copied(),
             count_limit: args.get_one::<u64>("count_limit").copied(),
             identifier: args.get_one("identifier").cloned(),
             tag: args.get_one("tag").cloned(),
@@ -107,6 +109,18 @@ pub fn add_callback_args(command: Command) -> Command {
                 .long("print-tags")
                 .action(ArgAction::SetTrue)
                 .help("Print rule tags"),
+        )
+        .arg(
+            Arg::new("match_max_length")
+                .long("match-max-length")
+                .value_parser(value_parser!(usize))
+                .help("Maximum length of string matches")
+                .long_help(
+                    "Maximum length of string matches.\n\n\
+                     If string matches are printed, they will be truncated if \
+                     they exceed this limit.\n\
+                     The default value is 512."
+                )
         )
         .arg(
             Arg::new("count")

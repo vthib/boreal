@@ -447,10 +447,13 @@ fn update_scanner_params_from_callback_options(scanner: &mut Scanner, options: &
         callback_events |= CallbackEvents::RULE_MATCH;
     }
 
+    let mut params = scanner.scan_params().clone();
+    if let Some(max) = options.match_max_length {
+        params = params.match_max_length(max);
+    }
+
     scanner.set_scan_params(
-        scanner
-            .scan_params()
-            .clone()
+        params
             .compute_full_matches(options.print_strings_matches())
             .compute_statistics(options.print_statistics)
             .include_not_matched_rules(options.negate)
@@ -960,6 +963,7 @@ mod tests {
             print_count: false,
             print_statistics: false,
             print_module_data: false,
+            match_max_length: None,
             count_limit: None,
             identifier: None,
             tag: None,
