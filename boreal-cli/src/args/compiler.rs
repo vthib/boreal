@@ -7,6 +7,10 @@ pub struct CompilerOptions {
     pub profile: Option<CompilerProfile>,
     pub compute_statistics: bool,
     pub max_strings_per_rule: Option<usize>,
+    pub max_condition_depth: Option<u32>,
+    pub parse_expr_recursion_limit: Option<u8>,
+    pub parse_string_recursion_limit: Option<u8>,
+    pub disable_includes: bool,
     pub defines: Option<Values<(String, ExternalValue)>>,
     pub rules_files: Vec<String>,
 }
@@ -25,6 +29,10 @@ impl CompilerOptions {
             profile: args.remove_one::<CompilerProfile>("profile"),
             compute_statistics: args.get_flag("string_statistics"),
             max_strings_per_rule: args.remove_one::<usize>("max_strings_per_rule"),
+            max_condition_depth: args.remove_one::<u32>("max_condition_depth"),
+            parse_expr_recursion_limit: args.remove_one::<u8>("parse_expr_recursion_limit"),
+            parse_string_recursion_limit: args.remove_one::<u8>("parse_string_recursion_limit"),
+            disable_includes: args.get_flag("disable_includes"),
             defines: args.remove_many::<(String, ExternalValue)>("define"),
             rules_files,
         }
@@ -53,6 +61,51 @@ pub fn add_compiler_args(mut command: Command, in_yr_subcommand: bool) -> Comman
                 .value_name("NUMBER")
                 .value_parser(value_parser!(usize))
                 .help("Maximum number of strings in a single rule"),
+        )
+        .arg(
+            Arg::new("max_condition_depth")
+                .long("max-condition-depth")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(u32))
+                .help("Maximum depth in a rule's condition AST")
+                .long_help(
+                    "Maximum depth in a rule's condition AST.\n\n\
+                    Defensive limit used to prevent stack overflow.\n\
+                    Should this limit be reached when compiling rules, this parameter \
+                    can be used to modify it.",
+                ),
+        )
+        .arg(
+            Arg::new("parse_expr_recursion_limit")
+                .long("parse-expression-recursion-limit")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(u8))
+                .help("Maximum recursion depth allowed when parsing an expression")
+                .long_help(
+                    "Maximum recursion depth allowed when parsing an expression.\n\n\
+                    Defensive limit used to prevent stack overflow.\n\
+                    Should this limit be reached when compiling rules, this parameter \
+                    can be used to modify it.",
+                ),
+        )
+        .arg(
+            Arg::new("parse_string_recursion_limit")
+                .long("parse-string-recursion-limit")
+                .value_name("NUMBER")
+                .value_parser(value_parser!(u8))
+                .help("Maximum recursion depth allowed when parsing a regex or a hex-string")
+                .long_help(
+                    "Maximum recursion depth allowed when parsing a regex or a hex-string.\n\n\
+                    Defensive limit used to prevent stack overflow.\n\
+                    Should this limit be reached when compiling rules, this parameter \
+                    can be used to modify it.",
+                ),
+        )
+        .arg(
+            Arg::new("disable_includes")
+                .long("disable-includes")
+                .action(ArgAction::SetTrue)
+                .help("Disable the possibility to include yara files"),
         )
         .arg(
             Arg::new("define")

@@ -224,6 +224,10 @@ fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<
         profile,
         compute_statistics,
         max_strings_per_rule,
+        max_condition_depth,
+        parse_expr_recursion_limit,
+        parse_string_recursion_limit,
+        disable_includes,
         defines,
         rules_files,
     } = options;
@@ -244,9 +248,19 @@ fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<
 
     let mut params = CompilerParams::default()
         .fail_on_warnings(matches!(warning_mode, WarningMode::Fail))
-        .compute_statistics(compute_statistics);
+        .compute_statistics(compute_statistics)
+        .disable_includes(disable_includes);
     if let Some(limit) = max_strings_per_rule {
         params = params.max_strings_per_rule(limit);
+    }
+    if let Some(limit) = max_condition_depth {
+        params = params.max_condition_depth(limit);
+    }
+    if let Some(limit) = parse_expr_recursion_limit {
+        params = params.parse_expression_recursion_limit(limit);
+    }
+    if let Some(limit) = parse_string_recursion_limit {
+        params = params.parse_string_recursion_limit(limit);
     }
     compiler.set_params(params);
 
