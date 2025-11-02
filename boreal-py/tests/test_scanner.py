@@ -1015,12 +1015,16 @@ rule a {
     # parameters are properly tested in the boreal crate.
     rules.set_params(
         use_mmap=True,
-        string_max_nb_matches=100,
+        string_max_nb_matches=1,
         fragmented_scan_mode="fast",
         process_memory=False,
         max_fetched_region_size=100,
         memory_chunk_size=23,
     )
+    # Check string_max_nb_matches to ensure parameters are properly set.
+    results = rules.match(data="abc abc")
+    s = results[0].strings[0]
+    assert len(s.instances) == 1
 
     with tempfile.NamedTemporaryFile() as fp:
         fp.write(b'dcabc <3>')
