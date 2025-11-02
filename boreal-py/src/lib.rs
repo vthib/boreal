@@ -134,8 +134,16 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
 ///         otherwise.
 ///     profile: Profile to use when compiling the rules. If not specified,
 ///         `CompilerProfile::Speed` is used.
-///    max_strings_per_rule: Maximum number of strings allowed in a single rule.
-///       If a rule has more strings than this limit, its compilation will fail.
+///     max_strings_per_rule: Maximum number of strings allowed in a single rule.
+///         If a rule has more strings than this limit, its compilation will fail.
+///     max_condition_depth: Maximum depth in a rule's condition AST.
+///         Defensive limit used to prevent stack overflow.
+///     parse_expression_recursion_limit: Maximum recursion depth allowed when
+///         parsing an expression.
+///         Defensive limit used to prevent stack overflow.
+///     parse_string_recursion_limit: Maximum recursion depth allowed when
+///         parsing a regex or a hex-string.
+///         Defensive limit used to prevent stack overflow.
 ///
 /// Returns:
 ///   a `Scanner` object that holds the compiled rules.
@@ -158,6 +166,9 @@ fn boreal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     strict_escape=None,
     profile=None,
     max_strings_per_rule=None,
+    max_condition_depth=None,
+    parse_expression_recursion_limit=None,
+    parse_string_recursion_limit=None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn compile(
@@ -173,6 +184,9 @@ fn compile(
     strict_escape: Option<bool>,
     profile: Option<&CompilerProfile>,
     max_strings_per_rule: Option<usize>,
+    max_condition_depth: Option<u32>,
+    parse_expression_recursion_limit: Option<u8>,
+    parse_string_recursion_limit: Option<u8>,
 ) -> PyResult<scanner::Scanner> {
     let mut compiler = build_compiler(profile);
 
@@ -191,6 +205,15 @@ fn compile(
     let max_strings_per_rule = max_strings_per_rule.or_else(|| *MAX_STRINGS_PER_RULE.lock());
     if let Some(value) = max_strings_per_rule {
         params = params.max_strings_per_rule(value);
+    }
+    if let Some(limit) = max_condition_depth {
+        params = params.max_condition_depth(limit);
+    }
+    if let Some(limit) = parse_expression_recursion_limit {
+        params = params.parse_expression_recursion_limit(limit);
+    }
+    if let Some(limit) = parse_string_recursion_limit {
+        params = params.parse_string_recursion_limit(limit);
     }
 
     compiler.set_params(params);

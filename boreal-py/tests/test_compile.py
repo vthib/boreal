@@ -409,3 +409,50 @@ def test_compiler_max_strings_per_rule():
 
     # Parameter is not saved, so without it, the compilation works
     boreal.compile(source=source)
+
+
+def test_compiler_max_condition_depth():
+    source = """
+    rule a {
+        condition:
+            5 + (4 - (3 + (2 * 1)))
+    }
+    """
+
+    with pytest.raises(boreal.SyntaxError):
+        boreal.compile(source=source, max_condition_depth=2)
+
+    # Parameter is not saved, so without it, the compilation works
+    boreal.compile(source=source)
+
+
+def test_compiler_parse_expression_recursion_limit():
+    source = """
+    rule a {
+        condition:
+            5 + (4 - (3 + (2 * 1)))
+    }
+    """
+
+    with pytest.raises(boreal.SyntaxError):
+        boreal.compile(source=source, parse_expression_recursion_limit=2)
+
+    # Parameter is not saved, so without it, the compilation works
+    boreal.compile(source=source)
+
+
+def test_compiler_parse_string_recursion_limit():
+    source = """
+    rule a {
+        strings:
+            $ = { A0 (B0 (C0 (D0 (E0 | F0)))) }
+        condition:
+            any of them
+    }
+    """
+
+    with pytest.raises(boreal.SyntaxError):
+        boreal.compile(source=source, parse_string_recursion_limit=2)
+
+    # Parameter is not saved, so without it, the compilation works
+    boreal.compile(source=source)

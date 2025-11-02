@@ -1163,18 +1163,23 @@ rule my_rule {
     let path = input.path().display();
 
     // Test match data only
-    test_scan(&["-s", "--match-max-length=5"], &[rule_file.path()], input.path(), |cmd| {
-        cmd.assert()
-            .stdout(format!(
-                r#"my_rule {path}
+    test_scan(
+        &["-s", "--match-max-length=5"],
+        &[rule_file.path()],
+        input.path(),
+        |cmd| {
+            cmd.assert()
+                .stdout(format!(
+                    r#"my_rule {path}
 0x0:$a: <1234
 0xb:$a: <1234
 0x14:$a: <1>
 "#
-            ))
-            .stderr("")
-            .success();
-    });
+                ))
+                .stderr("")
+                .success();
+        },
+    );
 }
 
 #[test]
