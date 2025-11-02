@@ -279,3 +279,34 @@ rule a {
     checker.check(b"<abcd\x00>", true);
     checker.check(b"<\x00abcd\x00>", false);
 }
+
+#[test]
+fn test_atom_alternates_extract() {
+    // Test that extracting atoms from inside
+    // alternates still provides valid matches.
+    let mut checker = Checker::new(
+        "rule test {
+        strings:
+            $ = /a.b(c23.d|e).f/
+        condition:
+            any of them
+    }",
+    );
+    checker.check(b"<a-bc23-d-f>", true);
+    checker.check(b"<a-bc23-f>", false);
+    checker.check(b"<a-bc23--f>", false);
+    checker.check(b"<a-bc23-e-f>", false);
+    checker.check(b"<a-be-f>", true);
+
+    let mut checker = Checker::new(
+        "rule test {
+        strings:
+            $ = /a.(c.23d|e)f.g/
+        condition:
+            any of them
+    }",
+    );
+    checker.check(b"<a-c-23df-g>", true);
+    checker.check(b"<a-c-c-23df-g>", false);
+    checker.check(b"<a-ef-g>", true);
+}

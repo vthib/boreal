@@ -6,12 +6,13 @@ use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
-    let extractor = visit(hir, RunExtractor::new());
+    let mut extractor = visit(hir, RunExtractor::new());
+    extractor.close_all();
 
     let atoms = extractor
         .runs
-        .into_iter()
-        .filter_map(|run| run_into_atoms(&run))
+        .iter()
+        .filter_map(|run| run_into_atoms(run))
         .reduce(
             |best_atoms, new_atoms| match new_atoms.rank.cmp(&best_atoms.rank) {
                 Ordering::Greater => new_atoms,
@@ -32,8 +33,8 @@ pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
             post_hir: None,
         },
         Some(Atoms {
-            start_position,
-            end_position,
+            start_part,
+            end_part,
             literals,
             rank: _rank,
         }) => {
@@ -47,22 +48,21 @@ pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
             //
             // This pre hir is not needed if the hir starts with the literal
             // (ie start_position is 0).
-            let pre_hir = if start_position == 0 {
+            let pre_hir = if part_is_start_of_regex(start_part) {
                 None
+            } else if end_part.end_position.is_none() {
+                Some(hir.clone())
             } else {
-                Some(match end_position {
-                    Some(end) => visit(hir, PrePostExtractor::new(end, true)),
-                    None => hir.clone(),
-                })
+                Some(visit(hir, PrePostExtractor::new(end_part, true)))
             };
             // the post hir is not needed if the hir ends with the literal
             // (ie end_position is None)
-            let post_hir = if end_position.is_none() {
+            let post_hir = if part_is_end_of_regex(end_part) {
                 None
-            } else if start_position == 0 {
+            } else if start_part.start_position == 0 {
                 Some(hir.clone())
             } else {
-                Some(visit(hir, PrePostExtractor::new(start_position, false)))
+                Some(visit(hir, PrePostExtractor::new(start_part, false)))
             };
 
             LiteralsDetails {
@@ -71,6 +71,30 @@ pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
                 post_hir,
             }
         }
+    }
+}
+
+fn part_is_start_of_regex(part: &HirPart) -> bool {
+    if part.start_position > 0 {
+        return false;
+    }
+    match &part.kind {
+        HirPartKind::Literal(_) | HirPartKind::Class { .. } => true,
+        HirPartKind::Alts { alts } => alts
+            .iter()
+            .all(|alt| alt.first().is_some_and(part_is_start_of_regex)),
+    }
+}
+
+fn part_is_end_of_regex(part: &HirPart) -> bool {
+    if part.end_position.is_some() {
+        return false;
+    }
+    match &part.kind {
+        HirPartKind::Literal(_) | HirPartKind::Class { .. } => true,
+        HirPartKind::Alts { alts } => alts
+            .iter()
+            .all(|alt| alt.last().is_some_and(part_is_end_of_regex)),
     }
 }
 
@@ -110,8 +134,12 @@ struct RunExtractor {
     /// Current best atoms extracted.
     runs: Vec<Vec<HirPart>>,
 
-    /// Current run being constructed.
-    current_run: Vec<HirPart>,
+    /// Run open on the left.
+    run_open_left: Vec<HirPart>,
+    left_closed: bool,
+
+    /// Run open on the right.
+    run_open_right: Vec<HirPart>,
 
     /// Current position of the visitor.
     ///
@@ -120,11 +148,11 @@ struct RunExtractor {
 }
 
 #[allow(variant_size_differences)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum HirPartKind {
     Literal(Vec<u8>),
     Class { bitmap: Bitmap },
-    Alts(Vec<Vec<u8>>),
+    Alts { alts: Vec<Vec<HirPart>> },
 }
 
 impl HirPartKind {
@@ -132,16 +160,30 @@ impl HirPartKind {
         match self {
             Self::Literal(lit) => lit.len(),
             Self::Class { .. } => 1,
-            Self::Alts(lits) => lits.first().map_or(0, Vec::len),
+            Self::Alts { alts } => alts
+                .iter()
+                .map(|alt| alt.iter().map(|part| part.kind.len()).sum())
+                .min()
+                .unwrap_or(0),
         }
     }
 
-    fn combinations(&self) -> u32 {
+    fn combinations(&self, max: u32) -> Option<u32> {
         match self {
-            Self::Literal(_) => 1,
-            Self::Class { bitmap } => bitmap.count_ones(),
-            #[allow(clippy::cast_possible_truncation)]
-            Self::Alts(lits) => lits.len() as u32,
+            Self::Literal(_) => Some(1),
+            Self::Class { bitmap } => Some(bitmap.count_ones()),
+            Self::Alts { alts } => {
+                let mut res = 1;
+                for alt in alts {
+                    for part in alt {
+                        res *= part.kind.combinations(max)?;
+                        if res > max {
+                            return None;
+                        }
+                    }
+                }
+                Some(res)
+            }
         }
     }
 }
@@ -151,17 +193,24 @@ impl RunExtractor {
         Self {
             runs: Vec::new(),
 
-            current_run: Vec::new(),
+            run_open_left: Vec::new(),
+            left_closed: false,
+            run_open_right: Vec::new(),
 
             current_position: 0,
         }
     }
 
     fn add_part(&mut self, kind: HirPartKind) {
-        if let Some(last_part) = self.current_run.last_mut() {
+        let current_run = if self.left_closed {
+            &mut self.run_open_right
+        } else {
+            &mut self.run_open_left
+        };
+        if let Some(last_part) = current_run.last_mut() {
             last_part.end_position = Some(self.current_position);
         }
-        self.current_run.push(HirPart {
+        current_run.push(HirPart {
             start_position: self.current_position,
             end_position: None,
             kind,
@@ -172,68 +221,92 @@ impl RunExtractor {
     ///
     /// Only allow alternations if each one is a literal or a concat of literals.
     fn visit_alternation(&mut self, alts: &[Hir]) {
-        let mut literals = Vec::new();
+        let mut left_runs = Vec::new();
+        let mut right_runs = Vec::new();
+        let mut must_close_left = false;
 
-        for node in alts {
-            match node {
-                Hir::Literal(b) => literals.push(vec![*b]),
-                Hir::Concat(nodes) => {
-                    let mut lit = Vec::with_capacity(nodes.len());
-
-                    for subnode in nodes {
-                        match subnode {
-                            Hir::Literal(b) => lit.push(*b),
-                            _ => return,
-                        }
-                    }
-                    literals.push(lit);
-                }
-                _ => return,
+        for alt in alts {
+            let extractor = visit(alt, RunExtractor::new());
+            if extractor.left_closed {
+                must_close_left = true;
+                left_runs.push(extractor.run_open_left);
+                right_runs.push(extractor.run_open_right);
+            } else {
+                left_runs.push(extractor.run_open_left.clone());
+                right_runs.push(extractor.run_open_left);
             }
         }
 
-        self.add_part(HirPartKind::Alts(literals));
+        if must_close_left {
+            if left_runs.iter().all(|run| !run.is_empty()) {
+                // Current run is open left and all alts have stuff on the left: we
+                // can prolonged the run.
+                self.add_part(HirPartKind::Alts { alts: left_runs });
+            }
+            self.close_run(false);
+            if right_runs.iter().all(|run| !run.is_empty()) {
+                // All alts have stuff on the right: we can build a run from it.
+                self.add_part(HirPartKind::Alts { alts: right_runs });
+            }
+        } else {
+            self.add_part(HirPartKind::Alts { alts: left_runs });
+        }
     }
 
     fn close_run(&mut self, at_end: bool) {
-        if !at_end {
-            if let Some(last_part) = self.current_run.last_mut() {
-                last_part.end_position = Some(self.current_position);
+        if self.left_closed {
+            if !at_end {
+                if let Some(last_part) = self.run_open_right.last_mut() {
+                    last_part.end_position = Some(self.current_position);
+                }
             }
+            if !self.run_open_right.is_empty() {
+                self.runs.push(std::mem::take(&mut self.run_open_right));
+            }
+        } else {
+            if !at_end {
+                if let Some(last_part) = self.run_open_left.last_mut() {
+                    last_part.end_position = Some(self.current_position);
+                }
+            }
+            self.left_closed = true;
         }
-        if !self.current_run.is_empty() {
-            self.runs.push(std::mem::take(&mut self.current_run));
-            self.current_run = Vec::new();
+    }
+
+    fn close_all(&mut self) {
+        self.close_run(true);
+        if !self.run_open_left.is_empty() {
+            self.runs.push(std::mem::take(&mut self.run_open_left));
         }
     }
 
     fn add_byte(&mut self, b: u8) {
-        match self.current_run.last_mut() {
-            Some(HirPart {
-                kind: HirPartKind::Literal(lit),
-                ..
-            }) => {
-                lit.push(b);
-            }
-            _ => {
-                self.add_part(HirPartKind::Literal(vec![b]));
-            }
+        let run = if self.left_closed {
+            &mut self.run_open_right
+        } else {
+            &mut self.run_open_left
+        };
+        if let Some(HirPart {
+            kind: HirPartKind::Literal(lit),
+            ..
+        }) = run.last_mut()
+        {
+            lit.push(b);
+        } else {
+            run.push(HirPart {
+                start_position: self.current_position,
+                end_position: None,
+                kind: HirPartKind::Literal(vec![b]),
+            });
         }
     }
 }
 
 /// Description of valid atoms extracted from an HIR.
 #[derive(Debug)]
-struct Atoms {
-    start_position: usize,
-    /// The end position of the atoms.
-    ///
-    /// This is needed because `a(b)c` is for example a valid run, but
-    /// the end position is not start + 3 in that case, because of the
-    /// group node.
-    ///
-    /// If None, the end position is the end of the regex.
-    end_position: Option<usize>,
+struct Atoms<'a> {
+    start_part: &'a HirPart,
+    end_part: &'a HirPart,
     literals: Vec<Vec<u8>>,
     rank: u32,
 }
@@ -261,13 +334,16 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
                     })
                     .collect();
             }
-            HirPartKind::Alts(lits) => {
+            HirPartKind::Alts { alts } => {
                 let mut new_lits = Vec::new();
-                for suffix in lits {
-                    for lit in &literals {
-                        let mut a = lit.clone();
-                        a.extend(suffix);
-                        new_lits.push(a);
+                for alt in alts {
+                    let alt_lits = generate_literals(alt);
+                    for left in &literals {
+                        for right in &alt_lits {
+                            let mut v = left.clone();
+                            v.extend(right);
+                            new_lits.push(v);
+                        }
                     }
                 }
                 literals = new_lits;
@@ -278,7 +354,7 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
     literals
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct HirPart {
     start_position: usize,
     end_position: Option<usize>,
@@ -286,7 +362,7 @@ struct HirPart {
 }
 
 /// Extract the best possible atoms from the given run.
-fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
+fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms<'_>> {
     // First, attempt to find a run of simple literals:
     // If the parts contain 4 successive bytes of sufficient
     // quality, there is no need for further logic.
@@ -297,8 +373,8 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
         let rank = atom_quality_from_literal(lit);
         if rank >= 80 {
             return Some(Atoms {
-                start_position: part.start_position,
-                end_position: part.end_position,
+                start_part: part,
+                end_part: part,
                 literals: vec![lit.clone()],
                 rank,
             });
@@ -348,8 +424,8 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
     // Finally, generate the literals and the atoms object.
     let literals = generate_literals(&parts[start..end]);
     Some(Atoms {
-        start_position: parts[start].start_position,
-        end_position: parts[end - 1].end_position,
+        start_part: &parts[start],
+        end_part: &parts[end - 1],
         literals,
         rank: best_rank,
     })
@@ -360,7 +436,7 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
     // is a double expansion of a X? mask in a hex-string.
     let mut combinations = 1_u32;
     for part in parts {
-        combinations = combinations.saturating_mul(part.kind.combinations());
+        combinations = combinations.saturating_mul(part.kind.combinations(256)?);
         if combinations > 256 {
             return None;
         }
@@ -428,7 +504,6 @@ impl Visitor for RunExtractor {
                 VisitAction::Skip
             }
             Hir::Alternation(alts) => {
-                self.close_run(false);
                 self.visit_alternation(alts);
                 VisitAction::Skip
             }
@@ -442,8 +517,7 @@ impl Visitor for RunExtractor {
         }
     }
 
-    fn finish(mut self) -> Self::Output {
-        self.close_run(true);
+    fn finish(self) -> Self::Output {
         self
     }
 }
@@ -453,7 +527,7 @@ impl Visitor for RunExtractor {
 /// The goal is to be able to generate regex expressions to validate the regex, knowing the
 /// position of literals found by the AC pass.
 #[derive(Debug)]
-struct PrePostExtractor {
+struct PrePostExtractor<'a> {
     /// Stacks used during the visit to reconstruct compound nodes.
     stack: Vec<Vec<Hir>>,
 
@@ -462,8 +536,8 @@ struct PrePostExtractor {
     /// Is the toplevel node set. Only used for consistency checking.
     toplevel_is_set: bool,
 
-    /// Position of the Hir node that is the boundary.
-    boundary_position: usize,
+    /// Hir part that is the boundary.
+    boundary_part: &'a HirPart,
     /// Current position during the visit of the original AST.
     current_position: usize,
 
@@ -474,15 +548,15 @@ struct PrePostExtractor {
     is_pre: bool,
 }
 
-impl PrePostExtractor {
-    fn new(boundary_position: usize, is_pre: bool) -> Self {
+impl<'a> PrePostExtractor<'a> {
+    fn new(boundary_part: &'a HirPart, is_pre: bool) -> Self {
         Self {
             stack: Vec::new(),
 
             toplevel_node: Hir::Empty,
             toplevel_is_set: false,
 
-            boundary_position,
+            boundary_part,
             current_position: 0,
 
             is_pre,
@@ -494,8 +568,12 @@ impl PrePostExtractor {
     }
 
     fn add_pre_post_hir(&mut self, node: &Hir) {
-        if (self.is_pre && self.current_position < self.boundary_position)
-            || (!self.is_pre && self.current_position >= self.boundary_position)
+        if (self.is_pre
+            && self
+                .boundary_part
+                .end_position
+                .map_or(true, |end| self.current_position < end))
+            || (!self.is_pre && self.current_position >= self.boundary_part.start_position)
         {
             self.add_node(node.clone());
         }
@@ -514,7 +592,7 @@ impl PrePostExtractor {
     }
 }
 
-impl Visitor for PrePostExtractor {
+impl Visitor for PrePostExtractor<'_> {
     type Output = Hir;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
@@ -527,10 +605,52 @@ impl Visitor for PrePostExtractor {
             | Hir::Mask { .. }
             | Hir::Class(_)
             | Hir::Empty
-            | Hir::Assertion(_)
-            | Hir::Alternation(_) => {
+            | Hir::Assertion(_) => {
                 self.add_pre_post_hir(hir);
                 VisitAction::Skip
+            }
+            Hir::Alternation(alts) => {
+                // The boundary is an alternation. This alternation may have been
+                // partially used for literal generation. Notably, the alternation
+                // can be seen like this:
+                //
+                // <pre1><mid1><post1>|<pre2><mid2><post2>|...
+                //
+                // If only the pre parts were used, we need to only extract those
+                // pre parts for the "pre" hir.
+                // If only the post parts were used, we need to only extract those
+                // post parts for the "post" hir.
+                if self.current_position == self.boundary_part.start_position {
+                    let HirPartKind::Alts { alts: alt_parts } = &self.boundary_part.kind else {
+                        unreachable!();
+                    };
+
+                    let mut hirs = Vec::new();
+                    for (alt_part, hir) in alt_parts.iter().zip(alts.iter()) {
+                        if alt_part.is_empty() {
+                            // This cannot really be reached since we avoid
+                            // adding parts that contain alternates with one alt
+                            // being empty. The reason is that this does not improve
+                            // atoms at all since the empty part would not benefit
+                            // from adding the alt in the atoms. Still, this could
+                            // be reached if the algorithm changes and the right
+                            // to do here is to use Hir::Empty, so just do that.
+                            hirs.push(Hir::Empty);
+                        } else {
+                            let visitor = if self.is_pre {
+                                PrePostExtractor::new(&alt_part[alt_part.len() - 1], true)
+                            } else {
+                                PrePostExtractor::new(&alt_part[0], false)
+                            };
+                            hirs.push(visit(hir, visitor));
+                        }
+                    }
+                    self.add_node(Hir::Alternation(hirs));
+                    VisitAction::Skip
+                } else {
+                    self.add_pre_post_hir(hir);
+                    VisitAction::Skip
+                }
             }
             Hir::Group(_) | Hir::Concat(_) => {
                 self.push_stack();
@@ -705,15 +825,50 @@ mod tests {
 
         test(
             "{ AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD }",
-            &[b"\x67\xCD", b"\x89\xCD", b"\xF0\xCD"],
-            "\\xab(\\x01|\\x23E)(g|\\x89|\\xf0)\\xcd",
+            &[
+                b"\xAB\x01\x67\xCD".as_slice(),
+                b"\xAB\x23\x45\x67\xCD".as_slice(),
+                b"\xAB\x01\x89\xCD".as_slice(),
+                b"\xAB\x23\x45\x89\xCD".as_slice(),
+                b"\xAB\x01\xF0\xCD".as_slice(),
+                b"\xAB\x23\x45\xF0\xCD".as_slice(),
+            ],
+            "",
             "",
         );
 
+        test(
+            "{ CC ?? AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD ?? FF }",
+            &[
+                b"\xAB\x01\x67\xCD".as_slice(),
+                b"\xAB\x23\x45\x67\xCD".as_slice(),
+                b"\xAB\x01\x89\xCD".as_slice(),
+                b"\xAB\x23\x45\x89\xCD".as_slice(),
+                b"\xAB\x01\xF0\xCD".as_slice(),
+                b"\xAB\x23\x45\xF0\xCD".as_slice(),
+            ],
+            "\\xcc.\\xab(\\x01|\\x23E)(g|\\x89|\\xf0)\\xcd",
+            "\\xab(\\x01|\\x23E)(g|\\x89|\\xf0)\\xcd.\\xff",
+        );
+
         // Nothing can be extracted here
-        test::<&str>(
+        test(
             "{ ( 01 | ( 23 | FF ) ( ( 45 | 67 ) | 58 ( AA | BB | CC ) | DD ) ) }",
-            &[],
+            &[
+                b"\x01".as_slice(),
+                b"\x23\x45",
+                b"\x23\x67",
+                b"\xFF\x45",
+                b"\xFF\x67",
+                b"\x23\x58\xAA",
+                b"\x23\x58\xBB",
+                b"\x23\x58\xCC",
+                b"\xFF\x58\xAA",
+                b"\xFF\x58\xBB",
+                b"\xFF\x58\xCC",
+                b"\x23\xDD",
+                b"\xFF\xDD",
+            ],
             "",
             "",
         );
@@ -722,7 +877,22 @@ mod tests {
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) ( 31 | 32 ) ( 41 | 42 ) ( 51 | 52 ) ( 61 | 62 ) ( 71 | 72 ) }",
             &[
-                b"\x11", b"\x12",
+                b"\x11\x21\x31\x41",
+                b"\x12\x21\x31\x41",
+                b"\x11\x22\x31\x41",
+                b"\x12\x22\x31\x41",
+                b"\x11\x21\x32\x41",
+                b"\x12\x21\x32\x41",
+                b"\x11\x22\x32\x41",
+                b"\x12\x22\x32\x41",
+                b"\x11\x21\x31\x42",
+                b"\x12\x21\x31\x42",
+                b"\x11\x22\x31\x42",
+                b"\x12\x22\x31\x42",
+                b"\x11\x21\x32\x42",
+                b"\x12\x21\x32\x42",
+                b"\x11\x22\x32\x42",
+                b"\x12\x22\x32\x42",
             ],
             "",
             "(\\x11|\\x12)(!|\")(1|2)(A|B)(Q|R)(a|b)(q|r)",
@@ -763,9 +933,9 @@ mod tests {
         test(
             "{ 00 01 00 01 00 02 ?? ?? 00 02 00 01 00 02 ?? ?? 00 03 00 02 00 04 ?? ?? ?? ?? \
                00 04 00 02 00 04 ?? ?? }",
-            &[b"\x00\x01\x00\x01\x00\x02"],
-            "",
-            "\\x00\\x01\\x00\\x01\\x00\\x02..\\x00\\x02\\x00\\x01\\x00\\x02..\
+            &[b"\x00\x02\x00\x01\x00\x02"],
+            "\\x00\\x01\\x00\\x01\\x00\\x02..\\x00\\x02\\x00\\x01\\x00\\x02",
+            "\\x00\\x02\\x00\\x01\\x00\\x02..\
              \\x00\\x03\\x00\\x02\\x00\\x04....\\x00\\x04\\x00\\x02\\x00\\x04..",
         );
 
@@ -803,8 +973,9 @@ mod tests {
               89??00 31?? 83C504 83??04 31?? 39?? 7402 EBE8 ?? FF?? E8D0FFFFFF }",
             &[b"\x00\x83\xC5\x04\x8B"],
             "\\xfc\\xe8.\\x00\\x00\\x00.{0,32}?\\xeb\\x2b.\\x8b.\\x00\\x83\\xc5\\x04\\x8b",
-            "\\x00\\x83\\xc5\\x04\\x8b.\\x001.\\x83\\xc5\\x04U\\x8b.\\x001.\\x89.\\x001.\
-             \\x83\\xc5\\x04\\x83.\\x041.9.t\\x02\\xeb\\xe8.\\xff.\\xe8\\xd0\\xff\\xff\\xff",
+            "\\x00\\x83\\xc5\\x04\\x8b.\\x001.\\x83\\xc5\\x04U\\x8b.\
+             \\x001.\\x89.\\x001.\\x83\\xc5\\x04\\x83.\
+             \\x041.9.t\\x02\\xeb\\xe8.\\xff.\\xe8\\xd0\\xff\\xff\\xff",
         );
         test(
             "{ ( 0F 82 ?? ?? 00 00 | 72 ?? ) ( 80 | 41 80 ) ( 7? | 7C 24 ) \
@@ -871,9 +1042,9 @@ mod tests {
 
         test(
             "{ 81 EB ?? [0-8] E8 ?? 00 00 00 [0-8] 2B C3 }",
-            &[b"\x81\xEB"],
-            "",
+            &[b"\x2B\xC3"],
             r"\x81\xeb..{0,8}?\xe8.\x00\x00\x00.{0,8}?\x2b\xc3",
+            "",
         );
 
         test(
@@ -960,14 +1131,14 @@ mod tests {
 
         test(
             r"b.*a(1234567|7892345).*d",
-            &[b"1234567", b"7892345"],
+            &[b"a1234567", b"a7892345"],
             r"b.*a(1234567|7892345)",
-            r"(1234567|7892345).*d",
+            r"a(1234567|7892345).*d",
         );
 
         test("[ab]d[ef]", &[b"ade", b"adf", b"bde", b"bdf"], "", "");
 
-        test::<&str>("( () | () )", &[], "", "");
+        test("( () | () )", &[b"  ", b"  "], "", "");
 
         // Between a list of nul bytes and a single char, the single char is preferred
         test("\x00\x00\x00\x00.*a", &[b"a"], r"\x00\x00\x00\x00.*a", "");
@@ -977,6 +1148,103 @@ mod tests {
             "",
             "",
         );
+
+        test(
+            "{ 12 34 56 78 ?? 00 00 00 00 }",
+            &[b"\x12\x34\x56\x78"],
+            "",
+            r"\x124Vx.\x00\x00\x00\x00",
+        );
+    }
+
+    #[test]
+    fn test_alternates() {
+        // Closed on the left, picked as start part
+        test(
+            "a(bcd|.ef)g.h",
+            &["bcdg", "efg"],
+            "a(bcd|.ef)g",
+            "(bcd|ef)g.h",
+        );
+        test(
+            "(bcd|.ef)g.h",
+            &["bcdg", "efg"],
+            "(bcd|.ef)g",
+            "(bcd|.ef)g.h",
+        );
+        test("a(bcd|.ef)g", &["bcdg", "efg"], "a(bcd|.ef)g", "");
+        test(
+            "a(bcd|.ef|1.34)g.h",
+            &["bcdg", "efg", "34g"],
+            "a(bcd|.ef|1.34)g",
+            "(bcd|ef|34)g.h",
+        );
+
+        // Break in middle, picked as start part
+        test(
+            "a(bcd|1.34)g.h",
+            &["bcdg", "34g"],
+            "a(bcd|1.34)g",
+            "(bcd|34)g.h",
+        );
+
+        // Break in middle, picked as end part
+        test(
+            "1.a(bcd|13.4)g.h",
+            &["abcd", "a13"],
+            "1.a(bcd|13)",
+            "a(bcd|13.4)g.h",
+        );
+        test("a(bcd|13.4)g.h", &["abcd", "a13"], "", "a(bcd|13.4)g.h");
+        test("a(bcd|13.4)", &["abcd", "a13"], "", "a(bcd|13.4)");
+
+        // Closed on right, picked as end part
+        test("a(bcd|13.)", &["abcd", "a13"], "", "a(bcd|13.)");
+        test("a(bcd|13.)g.h", &["abcd", "a13"], "", "a(bcd|13.)g.h");
+        test(
+            "1.a(bcd|13.)g.h",
+            &["abcd", "a13"],
+            "1.a(bcd|13)",
+            "a(bcd|13.)g.h",
+        );
+
+        // Imbricated
+        test(
+            "1.a(b(c(de.f|gh.|ij)k|l(mn|p.)q)r)",
+            &["abcde", "abcgh", "abcij", "ablmn", "ablp"],
+            "1.a(b(c(de|gh|ij)|l(mn|p)))",
+            "a(b(c(de.f|gh.|ij)k|l(mn|p.)q)r)",
+        );
+
+        // Best runs are inside: not possible to handle
+        test(
+            "1.(a.bcde.f|h.bcde.i).2",
+            &["2"],
+            "1.(a.bcde.f|h.bcde.i).2",
+            "",
+        );
+
+        // misc
+        test("(c.d|e)f", &["df", "ef"], "(c.d|e)f", "");
+        test("a(c.d|e)", &["ac", "ae"], "", "a(c.d|e)");
+        test("1.a(c.d|e)", &["ac", "ae"], "1.a(c|e)", "a(c.d|e)");
+        test("abcd|ef.g", &["abcd", "ef"], "", "abcd|ef.g");
+        test("a.cd|efgh", &["cd", "efgh"], "a.cd|efgh", "");
+
+        test(
+            "a.b(c23.d|e).f",
+            &["bc23", "be"],
+            "a.b(c23|e)",
+            "b(c23.d|e).f",
+        );
+        test(
+            "a.(c.23d|e)f.g",
+            &["23df", "ef"],
+            "a.(c.23d|e)f",
+            "(23d|e)f.g",
+        );
+
+        test("1.(12.3|67.)xyz.t", &["xyz"], "1.(12.3|67.)xyz", "xyz.t");
     }
 
     #[test]
@@ -988,16 +1256,17 @@ mod tests {
         });
 
         test_type_traits_non_clonable(RunExtractor::new());
-        test_type_traits_non_clonable(HirPart {
+        let part = HirPart {
             start_position: 0,
             end_position: None,
             kind: HirPartKind::Literal(vec![b' ']),
-        });
+        };
+        test_type_traits_non_clonable(part.clone());
         test_type_traits_non_clonable(HirPartKind::Literal(vec![b' ']));
-        test_type_traits_non_clonable(PrePostExtractor::new(0, false));
+        test_type_traits_non_clonable(PrePostExtractor::new(&part, false));
         test_type_traits_non_clonable(Atoms {
-            start_position: 0,
-            end_position: None,
+            start_part: &part,
+            end_part: &part,
             literals: Vec::new(),
             rank: 0,
         });
