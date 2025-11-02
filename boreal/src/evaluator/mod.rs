@@ -269,10 +269,9 @@ impl Evaluator<'_, '_, '_, '_> {
             #[cfg(feature = "object")]
             Expression::Entrypoint => {
                 let res = match self.mem {
-                    Memory::Direct(mem) => entrypoint::get_pe_or_elf_entry_point(
-                        mem,
-                        self.scan_data.params.process_memory,
-                    ),
+                    Memory::Direct(mem) => {
+                        entrypoint::get_pe_or_elf_entry_point(mem, self.scan_data.process_memory)
+                    }
                     Memory::Fragmented { .. } => self.scan_data.entrypoint,
                 };
                 res.and_then(|ep| i64::try_from(ep).ok())

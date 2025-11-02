@@ -28,7 +28,7 @@ pub struct ScanParams {
     pub(crate) fragmented_scan_mode: FragmentedScanMode,
 
     /// Scanned bytes are part of a process memory.
-    pub(crate) process_memory: bool,
+    process_memory: bool,
 
     /// Maximum size of a fetched region.
     pub(crate) max_fetched_region_size: usize,

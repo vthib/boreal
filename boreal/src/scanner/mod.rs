@@ -246,6 +246,7 @@ impl Scanner {
             &self.scan_params,
             &self.external_symbols_values,
             &self.module_user_data,
+            self.scan_params.get_process_memory(),
         )
     }
 
@@ -279,6 +280,7 @@ impl Scanner {
             &self.scan_params,
             &self.external_symbols_values,
             &self.module_user_data,
+            self.scan_params.get_process_memory(),
             Box::new(callback),
         )
     }
@@ -419,6 +421,7 @@ impl Scanner {
                 &self.scan_params,
                 &self.external_symbols_values,
                 &self.module_user_data,
+                true,
             ),
             Err(err) => Err((err, ScanResult::default())),
         }
@@ -449,6 +452,7 @@ impl Scanner {
             &self.scan_params,
             &self.external_symbols_values,
             &self.module_user_data,
+            true,
             Box::new(callback),
         )
     }
@@ -483,6 +487,7 @@ impl Scanner {
             &self.scan_params,
             &self.external_symbols_values,
             &self.module_user_data,
+            self.scan_params.get_process_memory(),
         )
     }
 
@@ -509,6 +514,7 @@ impl Scanner {
             &self.scan_params,
             &self.external_symbols_values,
             &self.module_user_data,
+            self.scan_params.get_process_memory(),
             Box::new(callback),
         )
     }
@@ -804,6 +810,7 @@ impl Inner {
         params: &'scanner ScanParams,
         external_symbols_values: &'scanner [ExternalValue],
         module_user_data: &'scanner ModuleUserData,
+        process_memory: bool,
     ) -> Result<ScanResult<'scanner>, (ScanError, ScanResult<'scanner>)> {
         let mut scan_data = ScanData {
             external_symbols_values,
@@ -816,6 +823,7 @@ impl Inner {
             },
             timeout_checker: params.timeout_duration.map(TimeoutChecker::new),
             params,
+            process_memory,
             #[cfg(feature = "object")]
             entrypoint: None,
             callback: None,
@@ -841,6 +849,7 @@ impl Inner {
         params: &'scanner ScanParams,
         external_symbols_values: &'scanner [ExternalValue],
         module_user_data: &'scanner ModuleUserData,
+        process_memory: bool,
         callback: ScanCallback<'scanner, '_>,
     ) -> Result<(), ScanError> {
         let mut scan_data = ScanData {
@@ -854,6 +863,7 @@ impl Inner {
             },
             timeout_checker: params.timeout_duration.map(TimeoutChecker::new),
             params,
+            process_memory,
             #[cfg(feature = "object")]
             entrypoint: None,
             callback: Some(callback),
@@ -884,7 +894,7 @@ impl Inner {
             // We can evaluate module values and then try to evaluate rules without matches.
             scan_data
                 .module_values
-                .scan_region(&Region { start: 0, mem }, scan_data.params.process_memory);
+                .scan_region(&Region { start: 0, mem }, scan_data.process_memory);
 
             scan_data.send_module_import_events_to_cb()?;
         }
@@ -1071,7 +1081,7 @@ impl Inner {
                     if scan_data.entrypoint.is_none() {
                         scan_data.entrypoint = evaluator::entrypoint::get_pe_or_elf_entry_point(
                             region.mem,
-                            scan_data.params.process_memory,
+                            scan_data.process_memory,
                         )
                         .and_then(|ep| {
                             let start = u64::try_from(region.start).ok()?;
@@ -1083,7 +1093,7 @@ impl Inner {
                         // And finally, evaluate the module values on each region.
                         scan_data
                             .module_values
-                            .scan_region(&region, scan_data.params.process_memory);
+                            .scan_region(&region, scan_data.process_memory);
                     }
                 }
 
@@ -1275,6 +1285,9 @@ pub(crate) struct ScanData<'scanner, 'cb> {
 
     /// Parameters linked to the scan.
     pub(crate) params: &'scanner ScanParams,
+
+    /// Is the scanned memory considered as part of a process.
+    pub(crate) process_memory: bool,
 
     /// Entrypoint value for the deprecated `entrypoint` expression.
     ///
@@ -1979,6 +1992,7 @@ mod tests {
             statistics: None,
             timeout_checker: None,
             params: &ScanParams::default(),
+            process_memory: false,
             #[cfg(feature = "object")]
             entrypoint: None,
             callback: None,
@@ -2537,6 +2551,7 @@ mod tests {
             #[cfg(feature = "object")]
             entrypoint: None,
             params: &ScanParams::default(),
+            process_memory: false,
             callback: Some(Box::new(|_evt| ScanCallbackResult::Continue)),
             string_reached_match_limit: HashSet::new(),
         });

@@ -118,7 +118,7 @@ pub(super) fn evaluate_expr(
             let mut eval_ctx = EvalContext {
                 mem: evaluator.mem,
                 module_data: &evaluator.scan_data.module_values.data_map,
-                process_memory: evaluator.scan_data.params.process_memory,
+                process_memory: evaluator.scan_data.process_memory,
             };
             evaluate_ops(&mut eval_ctx, value, ops, expressions)
         }
@@ -134,7 +134,7 @@ pub(super) fn evaluate_expr(
             let mut eval_ctx = EvalContext {
                 mem: evaluator.mem,
                 module_data: &evaluator.scan_data.module_values.data_map,
-                process_memory: evaluator.scan_data.params.process_memory,
+                process_memory: evaluator.scan_data.process_memory,
             };
             let value = fun(&mut eval_ctx, arguments).ok_or(PoisonKind::Undefined)?;
             evaluate_ops(&mut eval_ctx, &value, ops, expressions)
