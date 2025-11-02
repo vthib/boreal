@@ -343,3 +343,31 @@ rule bad {
         vec![("default:good".to_owned(), vec![("good", expected)])],
     );
 }
+
+#[test]
+#[cfg(all(feature = "object", target_os = "linux"))]
+fn test_scan_process_module_elf() {
+    use crate::utils::compare_module_values_on_pid;
+
+    let helper = BinHelper::run("stack");
+    compare_module_values_on_pid("elf", "boreal-test-helpers", helper.pid(), &[]);
+}
+
+#[test]
+#[cfg(all(feature = "object", target_os = "windows"))]
+fn test_scan_process_module_pe() {
+    use crate::utils::compare_module_values_on_pid;
+
+    let helper = BinHelper::run("stack");
+    compare_module_values_on_pid("pe", "boreal-test-helpers", helper.pid(), &[]);
+}
+
+#[test]
+#[cfg(all(feature = "object", target_os = "macos"))]
+#[cfg_attr(target_os = "macos", ignore)]
+fn test_scan_process_module_macho() {
+    use crate::utils::compare_module_values_on_pid;
+
+    let helper = BinHelper::run("stack");
+    compare_module_values_on_pid("macho", "boreal-test-helpers", helper.pid(), &[]);
+}

@@ -865,12 +865,69 @@ pub fn compare_module_values_on_file(
     compare_module_values_on_mem(module_name, path, &mem, process_memory, ignored_diffs);
 }
 
+/// Compare boreal & yara module values on a given file
+#[cfg(feature = "process")]
+pub fn compare_module_values_on_pid(
+    module_name: &str,
+    mem_name: &str,
+    pid: u32,
+    ignored_diffs: &[&str],
+) {
+    compare_module_values_on_input(module_name, mem_name, InputKind::Pid(pid), ignored_diffs);
+}
+
 /// Compare boreal & yara module values on a given bytestring
 pub fn compare_module_values_on_mem(
     module_name: &str,
     mem_name: &str,
     mem: &[u8],
     process_memory: bool,
+    ignored_diffs: &[&str],
+) {
+    compare_module_values_on_input(
+        module_name,
+        mem_name,
+        InputKind::Mem {
+            mem,
+            process_memory,
+        },
+        ignored_diffs,
+    );
+}
+
+#[allow(variant_size_differences)]
+enum InputKind<'a> {
+    Mem {
+        mem: &'a [u8],
+        process_memory: bool,
+    },
+    #[cfg(feature = "process")]
+    Pid(u32),
+}
+
+impl InputKind<'_> {
+    fn describe(&self) -> &'static str {
+        match self {
+            Self::Mem {
+                mem: _mem,
+                process_memory,
+            } => {
+                if *process_memory {
+                    "mem with process memory flag"
+                } else {
+                    "mem"
+                }
+            }
+            #[cfg(feature = "process")]
+            InputKind::Pid(_) => "pid",
+        }
+    }
+}
+
+fn compare_module_values_on_input(
+    module_name: &str,
+    mem_name: &str,
+    input: InputKind,
     ignored_diffs: &[&str],
 ) {
     // Setup boreal scanner
@@ -881,10 +938,6 @@ pub fn compare_module_values_on_mem(
         ))
         .unwrap();
     let mut scanner = compiler.finalize();
-    if process_memory {
-        let params = scanner.scan_params().clone();
-        scanner.set_scan_params(params.process_memory(true));
-    }
 
     // Setup yara scanner
     let c = yara::Compiler::new().unwrap();
@@ -895,17 +948,25 @@ pub fn compare_module_values_on_mem(
         .unwrap();
     let yara_rules = c.compile_rules().unwrap();
     let mut yara_scanner = yara_rules.scanner().unwrap();
-    if process_memory {
-        yara_scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
-    }
 
     // Retrieve boreal module values.
-    let res = if process_memory {
-        scanner
-            .scan_fragmented(FragmentedSlices::new(&[(1000, Some(mem))]))
-            .unwrap()
-    } else {
-        scanner.scan_mem(mem).unwrap()
+    let res = match input {
+        InputKind::Mem {
+            mem,
+            process_memory,
+        } => {
+            if process_memory {
+                let params = scanner.scan_params().clone();
+                scanner.set_scan_params(params.process_memory(true));
+                scanner
+                    .scan_fragmented(FragmentedSlices::new(&[(1000, Some(mem))]))
+                    .unwrap()
+            } else {
+                scanner.scan_mem(mem).unwrap()
+            }
+        }
+        #[cfg(feature = "process")]
+        InputKind::Pid(pid) => scanner.scan_process(pid).unwrap(),
     };
 
     let mut evaluated_module = res
@@ -926,74 +987,85 @@ pub fn compare_module_values_on_mem(
         evaluated_module.module.get_static_values(),
     );
 
+    let mut yara_value = None;
     let yara_cb = |msg| {
         if let yara::CallbackMsg::ModuleImported(obj) = msg {
-            let mut yara_value = convert_yara_obj_to_module_value(obj);
-
-            // This is a hack to remove the "rich_signature" field from the pe module
-            // when the file is not a PE. The PE module on yara has a lot of idiosyncracies,
-            // but two of them conflates here: it is the only module that has values when it
-            // does not parse anything (the is_pe field is set, either to 1 or 0), and it
-            // always sets the rich_signature field even if it does not contain anything
-            // (because it contains two functions).
-            // This is very annoying to handle when comparing module values, so just remove
-            // this dummy value when the file is not a pe, it serves no purpose.
-            if let ModuleValue::Object(map) = &mut yara_value {
-                if matches!(map.get("is_pe"), Some(ModuleValue::Integer(0))) {
-                    map.remove("rich_signature");
-                }
-            }
-
-            let mut diffs = Vec::new();
-            compare_module_values(
-                &evaluated_module.dynamic_values,
-                yara_value,
-                module_name,
-                &mut diffs,
-            );
-
-            // Remove ignored diffs from the reported ones.
-            for path in ignored_diffs {
-                match diffs.iter().position(|d| &d.path == path) {
-                    Some(pos) => {
-                        diffs.remove(pos);
-                    }
-                    None => {
-                        panic!("ignored diff on path {path} but there is no diff on this path",);
-                    }
-                }
-            }
-
-            if !diffs.is_empty() {
-                panic!(
-                    "found {} differences for module {} on {}{}: {:#?}",
-                    diffs.len(),
-                    module_name,
-                    mem_name,
-                    if process_memory {
-                        " with process memory flag"
-                    } else {
-                        ""
-                    },
-                    diffs
-                );
-            }
+            yara_value = Some(convert_yara_obj_to_module_value(obj));
         }
         yara::CallbackReturn::Continue
     };
 
-    if process_memory {
-        yara_scanner
-            .scan_mem_blocks_callback(
-                YaraBlocks {
-                    current: 0,
-                    regions: &[(1000, Some(mem))],
-                },
-                yara_cb,
-            )
-            .unwrap();
-    } else {
-        yara_scanner.scan_mem_callback(mem, yara_cb).unwrap();
+    match input {
+        InputKind::Mem {
+            mem,
+            process_memory,
+        } => {
+            if process_memory {
+                yara_scanner.set_flags(yara::ScanFlags::PROCESS_MEMORY);
+                yara_scanner
+                    .scan_mem_blocks_callback(
+                        YaraBlocks {
+                            current: 0,
+                            regions: &[(1000, Some(mem))],
+                        },
+                        yara_cb,
+                    )
+                    .unwrap();
+            } else {
+                yara_scanner.scan_mem_callback(mem, yara_cb).unwrap();
+            }
+        }
+        #[cfg(feature = "process")]
+        InputKind::Pid(pid) => yara_scanner.scan_process_callback(pid, yara_cb).unwrap(),
+    }
+
+    let Some(mut yara_value) = yara_value else {
+        panic!("module was not imported by yara");
+    };
+
+    // This is a hack to remove the "rich_signature" field from the pe module
+    // when the file is not a PE. The PE module on yara has a lot of idiosyncracies,
+    // but two of them conflates here: it is the only module that has values when it
+    // does not parse anything (the is_pe field is set, either to 1 or 0), and it
+    // always sets the rich_signature field even if it does not contain anything
+    // (because it contains two functions).
+    // This is very annoying to handle when comparing module values, so just remove
+    // this dummy value when the file is not a pe, it serves no purpose.
+    if let ModuleValue::Object(map) = &mut yara_value {
+        if matches!(map.get("is_pe"), Some(ModuleValue::Integer(0))) {
+            map.remove("rich_signature");
+        }
+    }
+
+    let mut diffs = Vec::new();
+    compare_module_values(
+        &evaluated_module.dynamic_values,
+        yara_value,
+        module_name,
+        &mut diffs,
+    );
+
+    // Remove ignored diffs from the reported ones.
+    for path in ignored_diffs {
+        match diffs.iter().position(|d| &d.path == path) {
+            Some(pos) => {
+                diffs.remove(pos);
+            }
+            None => {
+                panic!("ignored diff on path {path} but there is no diff on this path",);
+            }
+        }
+    }
+
+    if !diffs.is_empty() {
+        panic!(
+            "found {} differences for module {} on {} with input kind {}: {:#?}",
+            diffs.len(),
+            module_name,
+            mem_name,
+            input.describe(),
+            diffs
+        );
     }
 }
 
