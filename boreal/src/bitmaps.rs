@@ -1,4 +1,4 @@
-use std::ops::BitOrAssign;
+use std::ops::{BitOr, BitOrAssign};
 
 #[derive(Debug, Clone, Copy, Default)]
 /// A bitmap with 256 bits
@@ -70,6 +70,18 @@ impl BitOrAssign for Bitmap {
     fn bitor_assign(&mut self, rhs: Self) {
         self.low |= rhs.low;
         self.high |= rhs.high;
+    }
+}
+
+/// implement `|`
+impl BitOr for Bitmap {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self {
+        Self {
+            low: self.low | rhs.low,
+            high: self.high | rhs.high,
+        }
     }
 }
 

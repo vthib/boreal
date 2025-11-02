@@ -1,10 +1,11 @@
 //! Literal extraction and computation from variable expressions.
-use crate::atoms::{atoms_rank, byte_rank};
+use crate::atoms::byte_rank;
 use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 pub fn get_literals_details(hir: &Hir, dot_all: bool) -> LiteralsDetails {
-    let extractor = visit(hir, Extractor::new(dot_all));
+    let mut extractor = visit(hir, Extractor::new(dot_all));
+    extractor.close_all();
 
     let last_position = extractor.current_position;
     let atoms = extractor.best_atoms;
@@ -69,8 +70,12 @@ struct Extractor {
     /// Current best atoms extracted.
     best_atoms: Option<Atoms>,
 
-    /// Current run being constructed.
-    current_run: Vec<HirPart>,
+    /// Run open on the left.
+    run_open_left: Vec<HirPart>,
+    left_closed: bool,
+
+    /// Run open on the right.
+    run_open_right: Vec<HirPart>,
 
     /// Current position of the visitor.
     ///
@@ -86,6 +91,7 @@ struct Extractor {
 enum HirPartKind {
     Literal(u8),
     Class { bitmap: Bitmap },
+    Alts { alts: Vec<Vec<HirPart>> },
 }
 
 impl HirPartKind {
@@ -93,6 +99,14 @@ impl HirPartKind {
         match self {
             Self::Literal(_) => 1,
             Self::Class { bitmap } => bitmap.count_ones(),
+            Self::Alts { alts } => alts
+                .iter()
+                .map(|alt| {
+                    alt.iter()
+                        .map(|part| part.kind.combinations())
+                        .product::<u32>()
+                })
+                .product(),
         }
     }
 }
@@ -102,7 +116,9 @@ impl Extractor {
         Self {
             best_atoms: None,
 
-            current_run: Vec::new(),
+            run_open_left: Vec::new(),
+            left_closed: false,
+            run_open_right: Vec::new(),
 
             current_position: 0,
             dot_all,
@@ -110,43 +126,47 @@ impl Extractor {
     }
 
     fn add_part(&mut self, kind: HirPartKind) {
-        self.current_run.push(HirPart {
+        let part = HirPart {
             start_position: self.current_position,
             kind,
-        });
+        };
+        if self.left_closed {
+            self.run_open_right.push(part);
+        } else {
+            self.run_open_left.push(part);
+        }
     }
 
     /// Visit an alternation to generate candidate atoms from it
     ///
     /// Only allow alternations if each one is a literal or a concat of literals.
     fn visit_alternation(&mut self, alts: &[Hir]) {
-        let mut literals = Vec::new();
+        let mut left_runs = Vec::new();
+        let mut right_runs = Vec::new();
+        let mut must_close_left = false;
 
-        for node in alts {
-            match node {
-                Hir::Literal(b) => literals.push(vec![*b]),
-                Hir::Concat(nodes) => {
-                    let mut lit = Vec::with_capacity(nodes.len());
-
-                    for subnode in nodes {
-                        match subnode {
-                            Hir::Literal(b) => lit.push(*b),
-                            _ => return,
-                        }
-                    }
-                    literals.push(lit);
-                }
-                _ => return,
+        for alt in alts {
+            let extractor = visit(alt, Extractor::new(self.dot_all));
+            if extractor.left_closed || extractor.run_open_left.is_empty() {
+                must_close_left = true;
             }
+            left_runs.push(extractor.run_open_left);
+            right_runs.push(extractor.run_open_right);
         }
 
-        let rank = atoms_rank(&literals);
-        self.try_atoms(Atoms {
-            start_position: self.current_position,
-            end_position: self.current_position + 1,
-            literals,
-            rank,
-        });
+        if left_runs.iter().all(|run| !run.is_empty()) {
+            // Current run is open left and all alts have stuff on the left: we
+            // can prolonged the run.
+            self.add_part(HirPartKind::Alts { alts: left_runs });
+        }
+        if must_close_left {
+            // We need to close the left run.
+            self.close_run();
+        }
+        if right_runs.iter().all(|run| !run.is_empty()) {
+            // All alts have stuff on the right: we can build a run from it.
+            self.add_part(HirPartKind::Alts { alts: right_runs });
+        }
     }
 
     fn try_atoms(&mut self, atoms: Atoms) {
@@ -158,12 +178,23 @@ impl Extractor {
     }
 
     fn close_run(&mut self) {
-        if !self.current_run.is_empty() {
-            if let Some(atoms) = run_into_atoms(&self.current_run) {
-                self.try_atoms(atoms);
+        if self.left_closed {
+            if !self.run_open_right.is_empty() {
+                if let Some(atoms) = run_into_atoms(&self.run_open_right) {
+                    self.try_atoms(atoms);
+                }
+                self.run_open_right = Vec::new();
             }
-            self.current_run = Vec::new();
+        } else {
+            self.left_closed = true;
         }
+    }
+
+    fn close_all(&mut self) {
+        if let Some(atoms) = run_into_atoms(&self.run_open_left) {
+            self.try_atoms(atoms);
+        }
+        self.close_run();
     }
 }
 
@@ -204,10 +235,77 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
                     })
                     .collect();
             }
+            HirPartKind::Alts { alts } => {
+                let mut new_lits = Vec::new();
+                for alt in alts {
+                    let alt_lits = generate_literals(alt);
+                    for left in &literals {
+                        for right in &alt_lits {
+                            let mut v = left.clone();
+                            v.extend(right);
+                            new_lits.push(v);
+                        }
+                    }
+                }
+                literals = new_lits;
+            }
         }
     }
 
     literals
+}
+
+#[derive(Default)]
+struct RunStat {
+    bitmap: Bitmap,
+    length: u32,
+}
+
+fn analyze_runs(parts: &[HirPart]) -> Vec<RunStat> {
+    let mut run_stats = vec![RunStat::default()];
+
+    for part in parts {
+        match &part.kind {
+            HirPartKind::Literal(byte) => {
+                for run_stat in &mut run_stats {
+                    run_stat.bitmap.set(*byte);
+                    run_stat.length += 1;
+                }
+            }
+            HirPartKind::Class { bitmap } => {
+                run_stats = run_stats
+                    .iter()
+                    .flat_map(|stat| {
+                        bitmap.iter().map(|b| {
+                            let mut bitmap = stat.bitmap;
+                            bitmap.set(b);
+                            RunStat {
+                                bitmap,
+                                length: stat.length + 1,
+                            }
+                        })
+                    })
+                    .collect();
+            }
+            HirPartKind::Alts { alts } => {
+                let mut new_stats = Vec::new();
+                for alt in alts {
+                    let alt_stats = analyze_runs(alt);
+                    for left in &run_stats {
+                        for right in &alt_stats {
+                            new_stats.push(RunStat {
+                                bitmap: left.bitmap | right.bitmap,
+                                length: left.length + right.length,
+                            });
+                        }
+                    }
+                }
+                run_stats = new_stats;
+            }
+        }
+    }
+
+    run_stats
 }
 
 #[derive(Debug)]
@@ -259,10 +357,6 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
 
 // TODO: move this in atoms.rs file
 fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
-    let mut quality = 0_u32;
-    let mut bitmap = Bitmap::new();
-    let mut nb_uniq = 0;
-
     // First, check the validity of the parts.
 
     // Any run that starts or ends with a part that generates a lot of
@@ -287,50 +381,35 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
         return None;
     }
 
-    for part in parts {
-        match &part.kind {
-            HirPartKind::Literal(b) => {
-                quality += byte_rank(*b);
+    let stats = analyze_runs(parts);
 
-                if !bitmap.get(*b) {
-                    bitmap.set(*b);
-                    nb_uniq += 1;
-                }
+    let best_quality = stats
+        .iter()
+        .map(|RunStat { bitmap, length }| {
+            let nb_uniq = bitmap.count_ones();
+            let mut quality: u32 = bitmap.iter().map(byte_rank).sum();
+
+            // If all the bytes in the atom are equal and very common, let's penalize
+            // it heavily.
+            if nb_uniq == 1
+                && (bitmap.get(0) || bitmap.get(0x20) || bitmap.get(0xCC) || bitmap.get(0xFF))
+            {
+                quality = quality.saturating_sub(10 * length);
             }
-            HirPartKind::Class { bitmap: class } => {
-                quality += class.iter().map(byte_rank).min().unwrap_or(0);
-                if class.iter().any(|b| !bitmap.get(b)) {
-                    nb_uniq += 1;
-                }
-                bitmap |= *class;
+            // In general atoms with more unique bytes have a better quality, so let's
+            // boost the quality in the amount of unique bytes.
+            else {
+                quality += 2 * nb_uniq;
             }
-        }
-    }
 
-    #[allow(clippy::cast_possible_truncation)]
-    let len = parts.len() as u32;
-
-    // If all the bytes in the atom are equal and very common, let's penalize
-    // it heavily.
-    if nb_uniq == 1 && (bitmap.get(0) || bitmap.get(0x20) || bitmap.get(0xCC) || bitmap.get(0xFF)) {
-        quality -= 10 * len;
-    }
-    // In general atoms with more unique bytes have a better quality, so let's
-    // boost the quality in the amount of unique bytes.
-    else {
-        quality += 2 * nb_uniq;
-    }
+            quality
+        })
+        .min()?;
 
     // For atoms of the same quality, we want to favor having as few as possible.
     // So subtract a penalty based on the number of combinations generated.
     // TODO: This is completely arbitrary, and might need some better fine tuning.
-    Some(if combinations >= 100 {
-        quality.saturating_sub(10 * len)
-    } else if combinations > 1 {
-        quality.saturating_sub(4 * len)
-    } else {
-        quality
-    })
+    Some(best_quality.saturating_sub(combinations))
 }
 
 impl Visitor for Extractor {
@@ -373,7 +452,6 @@ impl Visitor for Extractor {
                 VisitAction::Skip
             }
             Hir::Alternation(alts) => {
-                self.close_run();
                 self.visit_alternation(alts);
                 VisitAction::Skip
             }
@@ -387,8 +465,7 @@ impl Visitor for Extractor {
         }
     }
 
-    fn finish(mut self) -> Self::Output {
-        self.close_run();
+    fn finish(self) -> Self::Output {
         self
     }
 }
@@ -636,16 +713,37 @@ mod tests {
         );
 
         test(
-            "{ AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD }",
-            &[b"\xAB"],
-            "",
-            "\\xab(\\x01|\\x23E)(g|\\x89|\\xf0)\\xcd",
+            "{ CC ?? AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD ?? FF }",
+            &[
+                b"\xAB\x01\x67\xCD".as_slice(),
+                b"\xAB\x23\x45\x67\xCD".as_slice(),
+                b"\xAB\x01\x89\xCD".as_slice(),
+                b"\xAB\x23\x45\x89\xCD".as_slice(),
+                b"\xAB\x01\xF0\xCD".as_slice(),
+                b"\xAB\x23\x45\xF0\xCD".as_slice(),
+            ],
+            "\\xcc.\\xab(\\x01|\\x23E)(g|\\x89|\\xf0)\\xcd",
+            "\\xab(\\x01|\\x23E)(g|\\x89|\\xf0)\\xcd.\\xff",
         );
 
         // Nothing can be extracted here
-        test::<&str>(
+        test(
             "{ ( 01 | ( 23 | FF ) ( ( 45 | 67 ) | 58 ( AA | BB | CC ) | DD ) ) }",
-            &[],
+            &[
+                b"\x01".as_slice(),
+                b"\x23\x45",
+                b"\x23\x67",
+                b"\xFF\x45",
+                b"\xFF\x67",
+                b"\x23\x58\xAA",
+                b"\x23\x58\xBB",
+                b"\x23\x58\xCC",
+                b"\xFF\x58\xAA",
+                b"\xFF\x58\xBB",
+                b"\xFF\x58\xCC",
+                b"\x23\xDD",
+                b"\xFF\xDD",
+            ],
             "",
             "",
         );
@@ -654,7 +752,22 @@ mod tests {
         test(
             "{ ( 11 | 12 ) ( 21 | 22 ) ( 31 | 32 ) ( 41 | 42 ) ( 51 | 52 ) ( 61 | 62 ) ( 71 | 72 ) 88 }",
             &[
-                b"\x11", b"\x12",
+                b"\x11\x21\x31\x41",
+                b"\x12\x21\x31\x41",
+                b"\x11\x22\x31\x41",
+                b"\x12\x22\x31\x41",
+                b"\x11\x21\x32\x41",
+                b"\x12\x21\x32\x41",
+                b"\x11\x22\x32\x41",
+                b"\x12\x22\x32\x41",
+                b"\x11\x21\x31\x42",
+                b"\x12\x21\x31\x42",
+                b"\x11\x22\x31\x42",
+                b"\x12\x22\x31\x42",
+                b"\x11\x21\x32\x42",
+                b"\x12\x21\x32\x42",
+                b"\x11\x22\x32\x42",
+                b"\x12\x22\x32\x42",
             ],
             "",
             "(\\x11|\\x12)(!|\")(1|2)(A|B)(Q|R)(a|b)(q|r)\\x88",
@@ -703,9 +816,26 @@ mod tests {
 
         test(
             "{ c7 0? 00 00 01 00 [4-14] c7 0? 01 00 00 00 }",
-            &[b"\x00\x00\x01\x00"],
-            r"\xc7[\x00-\x0f]\x00\x00\x01\x00",
-            r"\x00\x00\x01\x00.{4,14}?\xc7[\x00-\x0f]\x01\x00\x00\x00",
+            &[
+                b"\xc7\x00\x01\x00\x00\x00",
+                b"\xc7\x01\x01\x00\x00\x00",
+                b"\xc7\x02\x01\x00\x00\x00",
+                b"\xc7\x03\x01\x00\x00\x00",
+                b"\xc7\x04\x01\x00\x00\x00",
+                b"\xc7\x05\x01\x00\x00\x00",
+                b"\xc7\x06\x01\x00\x00\x00",
+                b"\xc7\x07\x01\x00\x00\x00",
+                b"\xc7\x08\x01\x00\x00\x00",
+                b"\xc7\x09\x01\x00\x00\x00",
+                b"\xc7\x0A\x01\x00\x00\x00",
+                b"\xc7\x0B\x01\x00\x00\x00",
+                b"\xc7\x0C\x01\x00\x00\x00",
+                b"\xc7\x0D\x01\x00\x00\x00",
+                b"\xc7\x0E\x01\x00\x00\x00",
+                b"\xc7\x0F\x01\x00\x00\x00",
+            ],
+            r"\xc7[\x00-\x0f]\x00\x00\x01\x00.{4,14}?\xc7[\x00-\x0f]\x01\x00\x00\x00",
+            r"",
         );
         test(
             "{ 00 CC 00 ?? ?? ?? ?? ?? 00 64 65 66 61 75 6C 74 2E 70 72 6F 70 65 72 74 69 65 73 }",
@@ -726,11 +856,49 @@ mod tests {
         04 02 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 81 | 41 81 ) ( 3? | 3C 24 | 7D 00 ) \
         02 AA 02 C1 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 8B | 41 8B | 44 8B | 45 8B ) \
         ( 4? | 5? | 6? | 7? | ?4 24 | ?C 24 ) 06 }",
-            &[b"\x02\xAA\x02\xC1"],
+            &[
+                b"\x81\x30\x02\xAA\x02\xC1".as_slice(),
+                b"\x81\x31\x02\xAA\x02\xC1",
+                b"\x81\x32\x02\xAA\x02\xC1",
+                b"\x81\x33\x02\xAA\x02\xC1",
+                b"\x81\x34\x02\xAA\x02\xC1",
+                b"\x81\x35\x02\xAA\x02\xC1",
+                b"\x81\x36\x02\xAA\x02\xC1",
+                b"\x81\x37\x02\xAA\x02\xC1",
+                b"\x81\x38\x02\xAA\x02\xC1",
+                b"\x81\x39\x02\xAA\x02\xC1",
+                b"\x81\x3A\x02\xAA\x02\xC1",
+                b"\x81\x3B\x02\xAA\x02\xC1",
+                b"\x81\x3C\x02\xAA\x02\xC1",
+                b"\x81\x3D\x02\xAA\x02\xC1",
+                b"\x81\x3E\x02\xAA\x02\xC1",
+                b"\x81\x3F\x02\xAA\x02\xC1",
+                b"\x41\x81\x30\x02\xAA\x02\xC1",
+                b"\x41\x81\x31\x02\xAA\x02\xC1",
+                b"\x41\x81\x32\x02\xAA\x02\xC1",
+                b"\x41\x81\x33\x02\xAA\x02\xC1",
+                b"\x41\x81\x34\x02\xAA\x02\xC1",
+                b"\x41\x81\x35\x02\xAA\x02\xC1",
+                b"\x41\x81\x36\x02\xAA\x02\xC1",
+                b"\x41\x81\x37\x02\xAA\x02\xC1",
+                b"\x41\x81\x38\x02\xAA\x02\xC1",
+                b"\x41\x81\x39\x02\xAA\x02\xC1",
+                b"\x41\x81\x3A\x02\xAA\x02\xC1",
+                b"\x41\x81\x3B\x02\xAA\x02\xC1",
+                b"\x41\x81\x3C\x02\xAA\x02\xC1",
+                b"\x41\x81\x3D\x02\xAA\x02\xC1",
+                b"\x41\x81\x3E\x02\xAA\x02\xC1",
+                b"\x41\x81\x3F\x02\xAA\x02\xC1",
+                b"\x81\x3C\x24\x02\xAA\x02\xC1",
+                b"\x41\x81\x3C\x24\x02\xAA\x02\xC1",
+                b"\x81\x7D\x00\x02\xAA\x02\xC1",
+                b"\x41\x81\x7D\x00\x02\xAA\x02\xC1",
+            ],
             "(\\x0f\\x82..\\x00\\x00|r.)(\\x80|A\\x80)([p-\\x7f]|\\x7c\\x24)\\x04\\x02\
              (\\x0f\\x85..\\x00\\x00|u.)(\\x81|A\\x81)([0-\\x3f]|<\\x24|\\x7d\\x00)\
              \\x02\\xaa\\x02\\xc1",
-            "\\x02\\xaa\\x02\\xc1(\\x0f\\x85..\\x00\\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)\
+            "(\\x81|A\\x81)([0-\\x3f]|<\\x24|\\x7d\\x00)\\x02\\xaa\\x02\\xc1(\\x0f\\x85\
+             ..\\x00\\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)\
              ([@-O]|[P-_]|[`-o]|[p-\\x7f]|[\\x04\\x14\\x244DTdt\\x84\\x94\\xa4\\xb4\\xc4\\xd4\
              \\xe4\\xf4]\\x24|[\\x0c\\x1c,<L\\x5cl\\x7c\\x8c\\x9c\\xac\\xbc\\xcc\\xdc\\xec\\xfc]\
              \\x24)\\x06",
@@ -837,33 +1005,36 @@ mod tests {
 
         test(
             r"\([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\)",
-            &[
-                b"0 AM)", b"0 PM)", b"1 AM)", b"1 PM)", b"2 AM)", b"2 PM)", b"3 AM)", b"3 PM)",
-                b"4 AM)", b"4 PM)", b"5 AM)", b"5 PM)", b"6 AM)", b"6 PM)", b"7 AM)", b"7 PM)",
-                b"8 AM)", b"8 PM)", b"9 AM)", b"9 PM)",
-            ],
+            &[b" AM)", b" PM)"],
             r"\x28[0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\x29",
             "",
         );
 
         test(
             r"b.*a(1234567|7892345).*d",
-            &[b"1234567", b"7892345"],
+            &[b"a1234567", b"a7892345"],
             r"b.*a(1234567|7892345)",
-            r"(1234567|7892345).*d",
+            r"a(1234567|7892345).*d",
         );
 
         test("[ab]d[ef]", &[b"ade", b"adf", b"bde", b"bdf"], "", "");
 
-        test::<&str>("( () | () )", &[], "", "");
+        test("( () | () )", &[b"  ", b"  "], "", "");
 
         // Between a list of nul bytes and a single char, the single char is preferred
         test("\x00\x00\x00\x00.*a", &[b"a"], r"\x00\x00\x00\x00.*a", "");
         test(
             "(\x00\x00\x00\x00|abcd)a",
-            &[b"a"],
-            r"(\x00\x00\x00\x00|abcd)a",
+            &[b"\x00\x00\x00\x00a", b"abcda"],
             "",
+            "",
+        );
+
+        test(
+            "{ 12 34 56 78 ?? 00 00 00 00 }",
+            &[b"\x12\x34\x56\x78"],
+            "",
+            r"\x124Vx.\x00\x00\x00\x00",
         );
     }
 
