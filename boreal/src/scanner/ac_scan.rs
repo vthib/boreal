@@ -40,7 +40,7 @@ pub(crate) struct AcScan {
 }
 
 /// Details on a literal of a variable.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 struct LiteralInfo {
     /// Index of the variable in the variable array.
     variable_index: usize,
@@ -65,7 +65,7 @@ impl AcScan {
             } else {
                 for (literal_index, lit) in var.matcher.literals.iter().enumerate() {
                     let (start, end) = pick_atom_in_literal(lit);
-                    let mut atom = lit[start..(lit.len() - end)].to_vec();
+                    let atom = lit[start..(lit.len() - end)].to_vec();
                     let literal_info = LiteralInfo {
                         variable_index,
                         literal_index,
@@ -81,17 +81,32 @@ impl AcScan {
                     //
                     // In addition, since the aho-corasick is case insensitive,
                     // normalize before de-duplicating.
-                    atom.make_ascii_lowercase();
-
-                    match known_lits.entry(atom.clone()) {
-                        Entry::Vacant(v) => {
-                            let _r = v.insert(lits.len());
-                            aho_index_to_literal_info.push(vec![literal_info]);
-                            lits.push(atom);
+                    if var.matcher.modifiers.nocase {
+                        let cases = generate_cases(&atom);
+                        for case in cases {
+                            match known_lits.entry(case.clone()) {
+                                Entry::Vacant(v) => {
+                                    let _r = v.insert(lits.len());
+                                    aho_index_to_literal_info.push(vec![literal_info.clone()]);
+                                    lits.push(case);
+                                }
+                                Entry::Occupied(o) => {
+                                    let index = o.get();
+                                    aho_index_to_literal_info[*index].push(literal_info.clone());
+                                }
+                            }
                         }
-                        Entry::Occupied(o) => {
-                            let index = o.get();
-                            aho_index_to_literal_info[*index].push(literal_info);
+                    } else {
+                        match known_lits.entry(atom.clone()) {
+                            Entry::Vacant(v) => {
+                                let _r = v.insert(lits.len());
+                                aho_index_to_literal_info.push(vec![literal_info]);
+                                lits.push(atom);
+                            }
+                            Entry::Occupied(o) => {
+                                let index = o.get();
+                                aho_index_to_literal_info[*index].push(literal_info);
+                            }
                         }
                     }
                 }
@@ -102,7 +117,7 @@ impl AcScan {
         // optimizations are done.
 
         let mut builder = AhoCorasickBuilder::new();
-        let builder = builder.ascii_case_insensitive(true);
+        // let builder = builder.ascii_case_insensitive(true);
         let builder = builder.kind(Some(match profile {
             CompilerProfile::Speed => AhoCorasickKind::DFA,
             CompilerProfile::Memory => AhoCorasickKind::ContiguousNFA,
@@ -269,6 +284,30 @@ impl AcScan {
 
         Ok(())
     }
+}
+
+fn generate_cases(atom: &[u8]) -> Vec<Vec<u8>> {
+    let mut res = Vec::new();
+    res.push(Vec::new());
+
+    for b in atom {
+        if b.is_ascii_alphabetic() {
+            let dup = res.clone();
+            for c in &mut res {
+                c.push(b.to_ascii_lowercase());
+            }
+            for mut d in dup {
+                d.push(b.to_ascii_uppercase());
+                res.push(d);
+            }
+        } else {
+            for c in &mut res {
+                c.push(*b);
+            }
+        }
+    }
+
+    return res;
 }
 
 fn scan_single_variable(
