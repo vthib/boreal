@@ -1,6 +1,6 @@
 //! Provides the [`AcScan`] object, used to scan for all variables in a single AC pass.
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 
@@ -63,6 +63,8 @@ impl AcScan {
             if var.matcher.literals.is_empty() {
                 non_handled_var_indexes.push(variable_index);
             } else {
+                let mut known_literals_of_var = HashSet::new();
+
                 for (literal_index, lit) in var.matcher.literals.iter().enumerate() {
                     let (start, end) = pick_atom_in_literal(lit);
                     let mut atom = lit[start..(lit.len() - end)].to_vec();
@@ -71,6 +73,20 @@ impl AcScan {
                         literal_index,
                         slice_offset: (start, end),
                     };
+
+                    // Sometimes, two literals of the same variable can provide the same atom.
+                    // This can happen if the two literals are identical (for example, someone
+                    // like me writing a test on `/(abc|abc)/`), or if the literals are
+                    // different but contain the same atom (for example,
+                    // `{ ( 00 AB CD | AB CD 00 ) }`).
+                    //
+                    // In those cases, we must *not* use the same atom twice in the Aho-Corasick,
+                    // as this would result in two identical matches for the same variable.
+                    // To prevent this, a set is used here. Both the atom itself and its position
+                    // in the literal are important.
+                    if !known_literals_of_var.insert((atom.clone(), start)) {
+                        continue;
+                    }
 
                     // Ensure the literals provided to the aho corasick are not
                     // duplicated. If multiple variables uses the same atoms,

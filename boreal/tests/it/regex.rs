@@ -252,3 +252,30 @@ fn test_regex_size() {
     // Full greedy validator
     check("/a+ abcd a{0,2977952116}/");
 }
+
+#[test]
+fn test_regex_same_alternative() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /a(bcd|bcd)e/
+    condition:
+        #a == 1
+}"#,
+    );
+    checker.check(b"0abcdef", true);
+
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /(\x00abcd|abcd\x00)/
+    condition:
+        #a == 1
+}"#,
+    );
+    checker.check(b"<\x00abcd>", true);
+    checker.check(b"<abcd\x00>", true);
+    checker.check(b"<\x00abcd\x00>", false);
+}
