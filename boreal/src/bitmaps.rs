@@ -56,8 +56,8 @@ impl Bitmap {
     }
 
     #[inline(always)]
-    pub fn count_ones(&self) -> usize {
-        (self.low.count_ones() + self.high.count_ones()) as usize
+    pub fn count_ones(&self) -> u32 {
+        self.low.count_ones() + self.high.count_ones()
     }
 
     pub fn iter(&self) -> Iter {
@@ -99,7 +99,6 @@ mod test {
     use super::Bitmap;
 
     #[test]
-
     fn test_bitmap() {
         let mut bitmap = Bitmap::new();
 
@@ -112,7 +111,10 @@ mod test {
         for i in 0..=255 {
             assert_eq!(bitmap.get(i), indexes.contains(&i));
         }
-        assert_eq!(bitmap.count_ones(), indexes.len());
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            assert_eq!(bitmap.count_ones(), indexes.len() as u32);
+        }
 
         let value = bitmap.iter().collect::<Vec<_>>();
         assert_eq!(value, indexes);
