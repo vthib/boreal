@@ -24,7 +24,7 @@ pub struct HirAnalysis {
     // Number of alternative literals covering the regex.
     //
     // Only set if the regex can be entirely expressed as this literals alternation.
-    pub nb_alt_literals: Option<usize>,
+    pub nb_alt_literals: Option<u32>,
 }
 
 pub fn analyze_hir(hir: &Hir, dot_all: bool) -> HirAnalysis {
@@ -62,7 +62,7 @@ struct HirAnalyser {
     /// Current count of the number of literals needed to cover the HIR.
     ///
     /// Unset if the HIR cannot be covered with simple literals.
-    nb_alt_literals: Option<usize>,
+    nb_alt_literals: Option<u32>,
 
     /// Stack used to store counts of alternation branches.
     alt_stack: Vec<AltStack>,
@@ -71,10 +71,10 @@ struct HirAnalyser {
 /// Data related to an alternation
 struct AltStack {
     /// The count of alt literals before entering the alternation.
-    prev_nb_alt_literals: Option<usize>,
+    prev_nb_alt_literals: Option<u32>,
 
     /// The current count of alt literals in visited branches.
-    branches_nb_alt_literals: Option<usize>,
+    branches_nb_alt_literals: Option<u32>,
 }
 
 impl Visitor for HirAnalyser {
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn test_count_alt_literals() {
         #[track_caller]
-        fn test(expr: &str, dot_all: bool, expected: Option<usize>) {
+        fn test(expr: &str, dot_all: bool, expected: Option<u32>) {
             let res = analyze_expr(expr, dot_all);
             assert_eq!(res.nb_alt_literals, expected);
         }

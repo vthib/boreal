@@ -93,7 +93,7 @@ impl HirPartKind {
         }
     }
 
-    fn combinations(&self) -> usize {
+    fn combinations(&self) -> u32 {
         match self {
             Self::Literal(_) => 1,
             Self::Class { bitmap } => bitmap.count_ones(),
@@ -303,7 +303,7 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
     let combinations = parts
         .iter()
         .map(|part| part.kind.combinations())
-        .product::<usize>();
+        .product::<u32>();
     if combinations > 256 {
         return None;
     }
