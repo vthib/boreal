@@ -4,11 +4,21 @@ use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 pub fn get_literals_details(hir: &Hir, dot_all: bool) -> LiteralsDetails {
-    let mut extractor = visit(hir, Extractor::new(dot_all));
+    let mut extractor = visit(hir, RunExtractor::new(dot_all));
     extractor.close_all();
 
     let last_position = extractor.current_position;
-    let atoms = extractor.best_atoms;
+    let atoms = extractor
+        .runs
+        .into_iter()
+        .filter_map(|run| run_into_atoms(&run))
+        .reduce(|best_atoms, new_atoms| {
+            if new_atoms.rank > best_atoms.rank {
+                new_atoms
+            } else {
+                best_atoms
+            }
+        });
 
     match atoms {
         None => LiteralsDetails {
@@ -66,9 +76,9 @@ pub struct LiteralsDetails {
 /// single run that generates `ab` and `ac`), and they must only consists of
 /// concatenations of bytes.
 #[derive(Debug)]
-struct Extractor {
+struct RunExtractor {
     /// Current best atoms extracted.
-    best_atoms: Option<Atoms>,
+    runs: Vec<Vec<HirPart>>,
 
     /// Run open on the left.
     run_open_left: Vec<HirPart>,
@@ -111,10 +121,10 @@ impl HirPartKind {
     }
 }
 
-impl Extractor {
+impl RunExtractor {
     fn new(dot_all: bool) -> Self {
         Self {
-            best_atoms: None,
+            runs: Vec::new(),
 
             run_open_left: Vec::new(),
             left_closed: false,
@@ -146,7 +156,7 @@ impl Extractor {
         let mut must_close_left = false;
 
         for alt in alts {
-            let extractor = visit(alt, Extractor::new(self.dot_all));
+            let extractor = visit(alt, RunExtractor::new(self.dot_all));
             if extractor.left_closed || extractor.run_open_left.is_empty() {
                 must_close_left = true;
             }
@@ -169,21 +179,10 @@ impl Extractor {
         }
     }
 
-    fn try_atoms(&mut self, atoms: Atoms) {
-        match &mut self.best_atoms {
-            Some(v) if v.rank < atoms.rank => *v = atoms,
-            Some(_) => (),
-            None => self.best_atoms = Some(atoms),
-        }
-    }
-
     fn close_run(&mut self) {
         if self.left_closed {
             if !self.run_open_right.is_empty() {
-                if let Some(atoms) = run_into_atoms(&self.run_open_right) {
-                    self.try_atoms(atoms);
-                }
-                self.run_open_right = Vec::new();
+                self.runs.push(std::mem::take(&mut self.run_open_right));
             }
         } else {
             self.left_closed = true;
@@ -191,8 +190,8 @@ impl Extractor {
     }
 
     fn close_all(&mut self) {
-        if let Some(atoms) = run_into_atoms(&self.run_open_left) {
-            self.try_atoms(atoms);
+        if !self.run_open_left.is_empty() {
+            self.runs.push(std::mem::take(&mut self.run_open_left));
         }
         self.close_run();
     }
@@ -412,7 +411,7 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
     Some(best_quality.saturating_sub(combinations))
 }
 
-impl Visitor for Extractor {
+impl Visitor for RunExtractor {
     type Output = Self;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
@@ -1046,7 +1045,7 @@ mod tests {
             post_hir: None,
         });
 
-        test_type_traits_non_clonable(Extractor::new(false));
+        test_type_traits_non_clonable(RunExtractor::new(false));
         test_type_traits_non_clonable(HirPart {
             start_position: 0,
             kind: HirPartKind::Literal(b' '),
