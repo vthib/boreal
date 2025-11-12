@@ -1,13 +1,23 @@
 //! Literal extraction and computation from variable expressions.
-use crate::atoms::{atom_quality_from_literal, atoms_rank};
+use crate::atoms::atom_quality_from_literal;
 use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
 pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
-    let extractor = visit(hir, Extractor::new());
+    let extractor = visit(hir, RunExtractor::new());
 
     let last_position = extractor.current_position;
-    let atoms = extractor.best_atoms;
+    let atoms = extractor
+        .runs
+        .into_iter()
+        .filter_map(|run| run_into_atoms(&run))
+        .reduce(|best_atoms, new_atoms| {
+            if new_atoms.rank > best_atoms.rank {
+                new_atoms
+            } else {
+                best_atoms
+            }
+        });
 
     match atoms {
         None => LiteralsDetails {
@@ -65,9 +75,9 @@ pub struct LiteralsDetails {
 /// single run that generates `ab` and `ac`), and they must only consists of
 /// concatenations of bytes.
 #[derive(Debug)]
-struct Extractor {
+struct RunExtractor {
     /// Current best atoms extracted.
-    best_atoms: Option<Atoms>,
+    runs: Vec<Vec<HirPart>>,
 
     /// Current run being constructed.
     current_run: Vec<HirPart>,
@@ -83,6 +93,7 @@ struct Extractor {
 enum HirPartKind {
     Literal(Vec<u8>),
     Class { bitmap: Bitmap },
+    Alts(Vec<Vec<u8>>),
 }
 
 impl HirPartKind {
@@ -90,6 +101,7 @@ impl HirPartKind {
         match self {
             Self::Literal(lit) => lit.len(),
             Self::Class { .. } => 1,
+            Self::Alts(lits) => lits.first().map_or(0, Vec::len),
         }
     }
 
@@ -97,14 +109,16 @@ impl HirPartKind {
         match self {
             Self::Literal(_) => 1,
             Self::Class { bitmap } => bitmap.count_ones(),
+            #[allow(clippy::cast_possible_truncation)]
+            Self::Alts(lits) => lits.len() as u32,
         }
     }
 }
 
-impl Extractor {
+impl RunExtractor {
     fn new() -> Self {
         Self {
-            best_atoms: None,
+            runs: Vec::new(),
 
             current_run: Vec::new(),
 
@@ -144,28 +158,12 @@ impl Extractor {
             }
         }
 
-        let rank = atoms_rank(&literals);
-        self.try_atoms(Atoms {
-            start_position: self.current_position,
-            end_position: self.current_position + 1,
-            literals,
-            rank,
-        });
-    }
-
-    fn try_atoms(&mut self, atoms: Atoms) {
-        match &mut self.best_atoms {
-            Some(v) if v.rank < atoms.rank => *v = atoms,
-            Some(_) => (),
-            None => self.best_atoms = Some(atoms),
-        }
+        self.add_part(HirPartKind::Alts(literals));
     }
 
     fn close_run(&mut self) {
         if !self.current_run.is_empty() {
-            if let Some(atoms) = run_into_atoms(&self.current_run) {
-                self.try_atoms(atoms);
-            }
+            self.runs.push(std::mem::take(&mut self.current_run));
             self.current_run = Vec::new();
         }
     }
@@ -223,6 +221,17 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
                             .map(|b| prefix.iter().copied().chain(std::iter::once(b)).collect())
                     })
                     .collect();
+            }
+            HirPartKind::Alts(lits) => {
+                let mut new_lits = Vec::new();
+                for suffix in lits {
+                    for lit in &literals {
+                        let mut a = lit.clone();
+                        a.extend(suffix);
+                        new_lits.push(a);
+                    }
+                }
+                literals = new_lits;
             }
         }
     }
@@ -330,7 +339,7 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
     })
 }
 
-impl Visitor for Extractor {
+impl Visitor for RunExtractor {
     type Output = Self;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
@@ -627,16 +636,49 @@ mod tests {
 
         test(
             "{ ( AA | BB ) F? }",
-            &[b"\xAA", b"\xBB"],
+            &[
+                b"\xAA\xF0",
+                b"\xAA\xF1",
+                b"\xAA\xF2",
+                b"\xAA\xF3",
+                b"\xAA\xF4",
+                b"\xAA\xF5",
+                b"\xAA\xF6",
+                b"\xAA\xF7",
+                b"\xAA\xF8",
+                b"\xAA\xF9",
+                b"\xAA\xFA",
+                b"\xAA\xFB",
+                b"\xAA\xFC",
+                b"\xAA\xFD",
+                b"\xAA\xFE",
+                b"\xAA\xFF",
+                b"\xBB\xF0",
+                b"\xBB\xF1",
+                b"\xBB\xF2",
+                b"\xBB\xF3",
+                b"\xBB\xF4",
+                b"\xBB\xF5",
+                b"\xBB\xF6",
+                b"\xBB\xF7",
+                b"\xBB\xF8",
+                b"\xBB\xF9",
+                b"\xBB\xFA",
+                b"\xBB\xFB",
+                b"\xBB\xFC",
+                b"\xBB\xFD",
+                b"\xBB\xFE",
+                b"\xBB\xFF",
+            ],
             "",
-            "(\\xaa|\\xbb)[\\xf0-\\xff]",
+            "",
         );
 
         test(
             "{ AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD }",
-            &[b"\xAB"],
-            "",
+            &[b"\x67\xCD", b"\x89\xCD", b"\xF0\xCD"],
             "\\xab(\\x01|\\x23E)(g|\\x89|\\xf0)\\xcd",
+            "",
         );
 
         // Nothing can be extracted here
@@ -649,12 +691,12 @@ mod tests {
 
         // Do not grow alternations too much, 32 max
         test(
-            "{ ( 11 | 12 ) ( 21 | 22 ) ( 31 | 32 ) ( 41 | 42 ) ( 51 | 52 ) ( 61 | 62 ) ( 71 | 72 ) 88 }",
+            "{ ( 11 | 12 ) ( 21 | 22 ) ( 31 | 32 ) ( 41 | 42 ) ( 51 | 52 ) ( 61 | 62 ) ( 71 | 72 ) }",
             &[
                 b"\x11", b"\x12",
             ],
             "",
-            "(\\x11|\\x12)(!|\")(1|2)(A|B)(Q|R)(a|b)(q|r)\\x88",
+            "(\\x11|\\x12)(!|\")(1|2)(A|B)(Q|R)(a|b)(q|r)",
         );
 
         test(
@@ -892,7 +934,7 @@ mod tests {
             post_hir: None,
         });
 
-        test_type_traits_non_clonable(Extractor::new());
+        test_type_traits_non_clonable(RunExtractor::new());
         test_type_traits_non_clonable(HirPart {
             start_position: 0,
             end_position: 1,
