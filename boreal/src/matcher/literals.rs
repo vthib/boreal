@@ -261,6 +261,7 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
 #[derive(Default)]
 struct RunStat {
     bitmap: Bitmap,
+    quality: u32,
     length: u32,
 }
 
@@ -272,6 +273,7 @@ fn analyze_runs(parts: &[HirPart]) -> Vec<RunStat> {
             HirPartKind::Literal(byte) => {
                 for run_stat in &mut run_stats {
                     run_stat.bitmap.set(*byte);
+                    run_stat.quality += byte_rank(*byte);
                     run_stat.length += 1;
                 }
             }
@@ -284,6 +286,7 @@ fn analyze_runs(parts: &[HirPart]) -> Vec<RunStat> {
                             bitmap.set(b);
                             RunStat {
                                 bitmap,
+                                quality: stat.quality + byte_rank(b),
                                 length: stat.length + 1,
                             }
                         })
@@ -298,6 +301,7 @@ fn analyze_runs(parts: &[HirPart]) -> Vec<RunStat> {
                         for right in &alt_stats {
                             new_stats.push(RunStat {
                                 bitmap: left.bitmap | right.bitmap,
+                                quality: left.quality + right.quality,
                                 length: left.length + right.length,
                             });
                         }
@@ -1080,6 +1084,34 @@ mod tests {
             "",
             "",
         );
+    }
+
+    #[test]
+    fn test_alternates() {
+        test(
+            "{ A5 A5 68 ?? ?? ?? ?? A5 E8 }",
+            &[b"\x01\x23\x45\xEF".as_slice(), b"\x67\x89\xEF"],
+            "",
+            "",
+        );
+
+        // One alternative is closed on the left
+        test(
+            r"{ AB ( 01 23 45 | ?? 67 89 ) EF }",
+            &[b"\x01\x23\x45\xEF".as_slice(), b"\x67\x89\xEF"],
+            "",
+            "",
+        );
+
+        // One alternative is closed on the right
+
+        // Alternatives are not closed on either side
+
+        // Alternatives are not closed on either side
+
+        // Imbricated
+
+        // Best runs are inside: not possible to handle
     }
 
     #[test]
