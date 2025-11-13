@@ -796,7 +796,7 @@ fn display_diagnostic(path: &Path, err: &boreal::compiler::AddRuleError) {
         None => SimpleFile::new(path.display().to_string(), String::new()),
     };
     let writer = &mut writer.lock();
-    if let Err(e) = term::emit(writer, &config, &files, &err.to_diagnostic()) {
+    if let Err(e) = term::emit_to_write_style(writer, &config, &files, &err.to_diagnostic()) {
         eprintln!("cannot emit diagnostics: {e}");
     }
 }

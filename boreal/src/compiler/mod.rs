@@ -781,7 +781,7 @@ pub fn generate_description(diag: &Diagnostic<()>, input_name: &str, input: &str
     };
 
     let files = SimpleFile::new(input_name, &input);
-    let _res = term::emit(&mut writer, &config, &files, diag);
+    let _res = term::emit_to_write_style(&mut writer, &config, &files, diag);
     let mut res = writer.as_slice();
     // remove the trailing \n that codespan reporting adds.
     if res.ends_with(b"\n") {

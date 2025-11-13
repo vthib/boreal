@@ -202,7 +202,7 @@ deny = [
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
-    # { crate = "windows-sys@0.52.0", reason = "blocked by anstyle-query, anstyle-wincon and errno" }
+    { crate = "windows-sys@0.60.2", reason = "blocked by anstyle" },
     { crate = "nom@7.1.3", reason = "bindgen uses cexpr which uses nom 7" }
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate

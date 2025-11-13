@@ -31,7 +31,7 @@ authenticode-verify = ["boreal/authenticode-verify"]
 boreal = { path = "../boreal", version = "1.0.0", features = ["memmap"] }
 
 parking_lot = "0.12"
-pyo3 = { version = "0.26", features = ["abi3", "abi3-py311", "extension-module", "macros"] }
+pyo3 = { version = "0.27", features = ["abi3", "abi3-py311", "extension-module", "macros"] }
 
 [lints]
 workspace = true
