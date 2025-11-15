@@ -3,8 +3,8 @@ use crate::atoms::{atoms_rank, byte_rank};
 use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
-pub fn get_literals_details(hir: &Hir, dot_all: bool) -> LiteralsDetails {
-    let extractor = visit(hir, Extractor::new(dot_all));
+pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
+    let extractor = visit(hir, Extractor::new());
 
     let last_position = extractor.current_position;
     let atoms = extractor.best_atoms;
@@ -76,9 +76,6 @@ struct Extractor {
     ///
     /// This position is a simple counter of visited nodes.
     current_position: usize,
-
-    /// True if the dot all modifier is set for this regex.
-    dot_all: bool,
 }
 
 #[allow(variant_size_differences)]
@@ -98,14 +95,13 @@ impl HirPartKind {
 }
 
 impl Extractor {
-    fn new(dot_all: bool) -> Self {
+    fn new() -> Self {
         Self {
             best_atoms: None,
 
             current_run: Vec::new(),
 
             current_position: 0,
-            dot_all,
         }
     }
 
@@ -343,15 +339,6 @@ impl Visitor for Extractor {
                 VisitAction::Skip
             }
             Hir::Empty => VisitAction::Skip,
-            Hir::Dot => {
-                let mut bitmap = Bitmap::new();
-                if !self.dot_all {
-                    bitmap.set(b'\n');
-                }
-                bitmap.invert();
-                self.add_part(HirPartKind::Class { bitmap });
-                VisitAction::Skip
-            }
             Hir::Class(Class { bitmap, .. }) => {
                 self.add_part(HirPartKind::Class { bitmap: *bitmap });
                 VisitAction::Skip
@@ -377,7 +364,7 @@ impl Visitor for Extractor {
                 self.add_part(HirPartKind::Class { bitmap });
                 VisitAction::Skip
             }
-            Hir::Assertion(_) | Hir::Repetition { .. } => {
+            Hir::Dot | Hir::Assertion(_) | Hir::Repetition { .. } => {
                 self.close_run();
                 VisitAction::Skip
             }
@@ -563,7 +550,7 @@ mod tests {
         T: AsRef<[u8]>,
     {
         let hir = expr_to_hir(expr);
-        let exprs = get_literals_details(&hir, false);
+        let exprs = get_literals_details(&hir);
         let literals: Vec<_> = exprs.literals.iter().collect();
         let expected: Vec<_> = expected_lits.iter().map(AsRef::as_ref).collect();
         assert_eq!(literals, expected);
@@ -884,7 +871,7 @@ mod tests {
             post_hir: None,
         });
 
-        test_type_traits_non_clonable(Extractor::new(false));
+        test_type_traits_non_clonable(Extractor::new());
         test_type_traits_non_clonable(HirPart {
             start_position: 0,
             kind: HirPartKind::Literal(b' '),
