@@ -142,7 +142,7 @@ impl Matcher {
             mut literals,
             pre_hir,
             post_hir,
-        } = literals::get_literals_details(hir, modifiers.dot_all);
+        } = literals::get_literals_details(hir);
 
         // Dedup literals
         let mut new_lits = Vec::with_capacity(literals.len());
