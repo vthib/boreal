@@ -343,15 +343,6 @@ impl Visitor for Extractor {
                 VisitAction::Skip
             }
             Hir::Empty => VisitAction::Skip,
-            Hir::Dot => {
-                let mut bitmap = Bitmap::new();
-                if !self.dot_all {
-                    bitmap.set(b'\n');
-                }
-                bitmap.invert();
-                self.add_part(HirPartKind::Class { bitmap });
-                VisitAction::Skip
-            }
             Hir::Class(Class { bitmap, .. }) => {
                 self.add_part(HirPartKind::Class { bitmap: *bitmap });
                 VisitAction::Skip
@@ -377,7 +368,7 @@ impl Visitor for Extractor {
                 self.add_part(HirPartKind::Class { bitmap });
                 VisitAction::Skip
             }
-            Hir::Assertion(_) | Hir::Repetition { .. } => {
+            Hir::Dot | Hir::Assertion(_) | Hir::Repetition { .. } => {
                 self.close_run();
                 VisitAction::Skip
             }
