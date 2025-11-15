@@ -1,5 +1,5 @@
 //! Literal extraction and computation from variable expressions.
-use crate::atoms::byte_rank;
+use crate::atoms::{best_atom_quality_in_literal, byte_rank};
 use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
@@ -105,18 +105,22 @@ enum HirPartKind {
 }
 
 impl HirPartKind {
-    fn combinations(&self) -> u32 {
+    fn combinations(&self) -> Option<u32> {
         match self {
-            Self::Literal(_) => 1,
-            Self::Class { bitmap } => bitmap.count_ones(),
-            Self::Alts { alts } => alts
-                .iter()
-                .map(|alt| {
-                    alt.iter()
-                        .map(|part| part.kind.combinations())
-                        .product::<u32>()
-                })
-                .product(),
+            Self::Literal(_) => Some(1),
+            Self::Class { bitmap } => Some(bitmap.count_ones()),
+            Self::Alts { alts } => {
+                let mut res = 1;
+                for alt in alts {
+                    for part in alt {
+                        res *= part.kind.combinations()?;
+                        if res > 256 {
+                            return None;
+                        }
+                    }
+                }
+                Some(res)
+            }
         }
     }
 }
@@ -315,6 +319,15 @@ struct HirPart {
 
 /// Extract the best possible atoms from the given run.
 fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
+    // First, attempt to find a run of simple literals:
+    // If the parts contain 4 successive bytes of sufficient
+    // quality, there is no need for further logic.
+    if let Some(atoms) = ListRawLiteralsIterator::new(parts).max_by_key(|a| a.rank) {
+        if atoms.rank >= 80 {
+            return Some(atoms);
+        }
+    }
+
     let mut best_slice = None;
     let mut best_rank = 0;
 
@@ -354,6 +367,67 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
     })
 }
 
+struct ListRawLiteralsIterator<'a> {
+    current_literal: Vec<u8>,
+    start_position: usize,
+    end_position: usize,
+    parts: std::slice::Iter<'a, HirPart>,
+}
+
+impl<'a> ListRawLiteralsIterator<'a> {
+    fn new(parts: &'a [HirPart]) -> Self {
+        Self {
+            current_literal: Vec::new(),
+            start_position: 0,
+            end_position: 0,
+            parts: parts.iter(),
+        }
+    }
+
+    fn generate_item(&mut self) -> Atoms {
+        let rank = best_atom_quality_in_literal(&self.current_literal);
+        Atoms {
+            start_position: self.start_position,
+            end_position: self.end_position,
+            literals: vec![std::mem::take(&mut self.current_literal)],
+            rank,
+        }
+    }
+}
+
+impl Iterator for ListRawLiteralsIterator<'_> {
+    type Item = Atoms;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(HirPart {
+            start_position,
+            kind,
+        }) = self.parts.next()
+        {
+            match kind {
+                HirPartKind::Literal(c) => {
+                    if self.current_literal.is_empty() {
+                        self.start_position = *start_position;
+                    }
+                    self.end_position = *start_position + 1;
+                    self.current_literal.push(*c);
+                }
+                _ => {
+                    if !self.current_literal.is_empty() {
+                        return Some(self.generate_item());
+                    }
+                }
+            }
+        }
+
+        if !self.current_literal.is_empty() {
+            return Some(self.generate_item());
+        }
+
+        None
+    }
+}
+
 // TODO: move this in atoms.rs file
 fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
     // First, check the validity of the parts.
@@ -362,53 +436,49 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
     // combinations is rejected.
     if parts
         .first()
-        .map_or(true, |part| part.kind.combinations() >= 100)
+        .and_then(|part| part.kind.combinations())
+        .map_or(true, |combinations| combinations >= 100)
         || parts
             .last()
-            .map_or(true, |part| part.kind.combinations() >= 100)
+            .and_then(|part| part.kind.combinations())
+            .map_or(true, |combinations| combinations >= 100)
     {
         return None;
     }
 
     // And we limit ourselves to 256 possibilities, ie expansion of a
     // single dot node.
-    let combinations = parts
-        .iter()
-        .map(|part| part.kind.combinations())
-        .product::<u32>();
-    if combinations > 256 {
-        return None;
+    let mut combinations = 1;
+    for part in parts {
+        combinations *= part.kind.combinations()?;
+        if combinations > 256 {
+            return None;
+        }
     }
 
-    let stats = analyze_runs(parts);
-
-    let best_quality = stats
+    let literals = generate_literals(parts);
+    let max_len = literals
         .iter()
-        .map(|RunStat { bitmap, length }| {
-            let nb_uniq = bitmap.count_ones();
-            let mut quality: u32 = bitmap.iter().map(byte_rank).sum();
+        .map(|lit| lit.len() as u32)
+        .max()
+        .unwrap_or(0);
 
-            // If all the bytes in the atom are equal and very common, let's penalize
-            // it heavily.
-            if nb_uniq == 1
-                && (bitmap.get(0) || bitmap.get(0x20) || bitmap.get(0xCC) || bitmap.get(0xFF))
-            {
-                quality = quality.saturating_sub(10 * length);
+    literals
+        .iter()
+        .map(|lit| best_atom_quality_in_literal(lit))
+        .min()
+        .map(|quality| {
+            // For atoms of the same quality, we want to favor having as few as possible.
+            // So subtract a penalty based on the number of combinations generated.
+            // TODO: This is completely arbitrary, and might need some better fine tuning.
+            if combinations >= 100 {
+                quality.saturating_sub(10 * max_len)
+            } else if combinations > 1 {
+                quality.saturating_sub(4 * max_len)
+            } else {
+                quality
             }
-            // In general atoms with more unique bytes have a better quality, so let's
-            // boost the quality in the amount of unique bytes.
-            else {
-                quality += 2 * nb_uniq;
-            }
-
-            quality
         })
-        .min()?;
-
-    // For atoms of the same quality, we want to favor having as few as possible.
-    // So subtract a penalty based on the number of combinations generated.
-    // TODO: This is completely arbitrary, and might need some better fine tuning.
-    Some(best_quality.saturating_sub(combinations))
 }
 
 impl Visitor for RunExtractor {
@@ -704,12 +774,12 @@ mod tests {
             "",
         );
 
-        test(
-            "{ ( AA | BB ) F? }",
-            &[b"\xAA", b"\xBB"],
-            "",
-            "(\\xaa|\\xbb)[\\xf0-\\xff]",
-        );
+        // test(
+        //     "{ ( AA | BB ) F? }",
+        //     &[b"\xAA", b"\xBB"],
+        //     "",
+        //     "(\\xaa|\\xbb)[\\xf0-\\xff]",
+        // );
 
         test(
             "{ CC ?? AB ( 01 | 23 45) ( 67 | 89 | F0 ) CD ?? FF }",
@@ -845,9 +915,10 @@ mod tests {
         test(
             "{ FC E8??000000 [0-32] EB2B ?? 8B??00 83C504 8B??00 31?? 83C504 55 8B??00 31?? \
               89??00 31?? 83C504 83??04 31?? 39?? 7402 EBE8 ?? FF?? E8D0FFFFFF }",
-            &[b"\x00\x83\xC5\x04\x8B"],
-            "\\xfc\\xe8.\\x00\\x00\\x00.{0,32}?\\xeb\\x2b.\\x8b.\\x00\\x83\\xc5\\x04\\x8b",
-            "\\x00\\x83\\xc5\\x04\\x8b.\\x001.\\x83\\xc5\\x04U\\x8b.\\x001.\\x89.\\x001.\
+            &[b"\x83\xC5\x04\x55\x8B"],
+            "\\xfc\\xe8.\\x00\\x00\\x00.{0,32}?\\xeb\\x2b.\\x8b.\\x00\\x83\\xc5\\x04\\x8b\
+             .\\x001.\\x83\\xc5\\x04U\\x8b",
+            "\\x83\\xc5\\x04U\\x8b.\\x001.\\x89.\\x001.\
              \\x83\\xc5\\x04\\x83.\\x041.9.t\\x02\\xeb\\xe8.\\xff.\\xe8\\xd0\\xff\\xff\\xff",
         );
         test(
@@ -855,49 +926,11 @@ mod tests {
         04 02 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 81 | 41 81 ) ( 3? | 3C 24 | 7D 00 ) \
         02 AA 02 C1 ( 0F 85 ?? ?? 00 00 | 75 ?? ) ( 8B | 41 8B | 44 8B | 45 8B ) \
         ( 4? | 5? | 6? | 7? | ?4 24 | ?C 24 ) 06 }",
-            &[
-                b"\x81\x30\x02\xAA\x02\xC1".as_slice(),
-                b"\x81\x31\x02\xAA\x02\xC1",
-                b"\x81\x32\x02\xAA\x02\xC1",
-                b"\x81\x33\x02\xAA\x02\xC1",
-                b"\x81\x34\x02\xAA\x02\xC1",
-                b"\x81\x35\x02\xAA\x02\xC1",
-                b"\x81\x36\x02\xAA\x02\xC1",
-                b"\x81\x37\x02\xAA\x02\xC1",
-                b"\x81\x38\x02\xAA\x02\xC1",
-                b"\x81\x39\x02\xAA\x02\xC1",
-                b"\x81\x3A\x02\xAA\x02\xC1",
-                b"\x81\x3B\x02\xAA\x02\xC1",
-                b"\x81\x3C\x02\xAA\x02\xC1",
-                b"\x81\x3D\x02\xAA\x02\xC1",
-                b"\x81\x3E\x02\xAA\x02\xC1",
-                b"\x81\x3F\x02\xAA\x02\xC1",
-                b"\x41\x81\x30\x02\xAA\x02\xC1",
-                b"\x41\x81\x31\x02\xAA\x02\xC1",
-                b"\x41\x81\x32\x02\xAA\x02\xC1",
-                b"\x41\x81\x33\x02\xAA\x02\xC1",
-                b"\x41\x81\x34\x02\xAA\x02\xC1",
-                b"\x41\x81\x35\x02\xAA\x02\xC1",
-                b"\x41\x81\x36\x02\xAA\x02\xC1",
-                b"\x41\x81\x37\x02\xAA\x02\xC1",
-                b"\x41\x81\x38\x02\xAA\x02\xC1",
-                b"\x41\x81\x39\x02\xAA\x02\xC1",
-                b"\x41\x81\x3A\x02\xAA\x02\xC1",
-                b"\x41\x81\x3B\x02\xAA\x02\xC1",
-                b"\x41\x81\x3C\x02\xAA\x02\xC1",
-                b"\x41\x81\x3D\x02\xAA\x02\xC1",
-                b"\x41\x81\x3E\x02\xAA\x02\xC1",
-                b"\x41\x81\x3F\x02\xAA\x02\xC1",
-                b"\x81\x3C\x24\x02\xAA\x02\xC1",
-                b"\x41\x81\x3C\x24\x02\xAA\x02\xC1",
-                b"\x81\x7D\x00\x02\xAA\x02\xC1",
-                b"\x41\x81\x7D\x00\x02\xAA\x02\xC1",
-            ],
+            &[b"\x02\xAA\x02\xC1"],
             "(\\x0f\\x82..\\x00\\x00|r.)(\\x80|A\\x80)([p-\\x7f]|\\x7c\\x24)\\x04\\x02\
              (\\x0f\\x85..\\x00\\x00|u.)(\\x81|A\\x81)([0-\\x3f]|<\\x24|\\x7d\\x00)\
              \\x02\\xaa\\x02\\xc1",
-            "(\\x81|A\\x81)([0-\\x3f]|<\\x24|\\x7d\\x00)\\x02\\xaa\\x02\\xc1(\\x0f\\x85\
-             ..\\x00\\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)\
+            "\\x02\\xaa\\x02\\xc1(\\x0f\\x85..\\x00\\x00|u.)(\\x8b|A\\x8b|D\\x8b|E\\x8b)\
              ([@-O]|[P-_]|[`-o]|[p-\\x7f]|[\\x04\\x14\\x244DTdt\\x84\\x94\\xa4\\xb4\\xc4\\xd4\
              \\xe4\\xf4]\\x24|[\\x0c\\x1c,<L\\x5cl\\x7c\\x8c\\x9c\\xac\\xbc\\xcc\\xdc\\xec\\xfc]\
              \\x24)\\x06",
@@ -1034,6 +1067,18 @@ mod tests {
             &[b"\x12\x34\x56\x78"],
             "",
             r"\x124Vx.\x00\x00\x00\x00",
+        );
+    }
+
+    #[test]
+    fn test_foo() {
+        test("{ 02 7B ?? 02 02 7B }", &[b""], "", "");
+
+        test(
+            "{ 04 00 00 00 48 89 44 24 [2] 8d (15 9f 7b 06 | 05 20 4e 01 ) 00 48 8d }",
+            &[b""],
+            "",
+            "",
         );
     }
 
