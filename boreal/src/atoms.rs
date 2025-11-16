@@ -32,6 +32,14 @@ pub fn pick_atom_in_literal(lit: &[u8]) -> (usize, usize) {
         .map_or((0, 0), |(i, _)| (i, lit.len() - i - ATOM_SIZE))
 }
 
+pub fn atom_quality_from_literal(lit: &[u8]) -> u32 {
+    if lit.len() <= ATOM_SIZE {
+        atom_rank(lit)
+    } else {
+        lit.windows(ATOM_SIZE).map(atom_rank).max().unwrap_or(0)
+    }
+}
+
 /// Compute the rank of a set of atoms.
 ///
 /// The higher the value, the best quality (i.e., the less false positives).
