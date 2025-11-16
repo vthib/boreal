@@ -1,5 +1,5 @@
 //! Literal extraction and computation from variable expressions.
-use crate::atoms::{atoms_rank, byte_rank};
+use crate::atoms::{atom_quality_from_literal, atoms_rank};
 use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
@@ -81,11 +81,18 @@ struct Extractor {
 #[allow(variant_size_differences)]
 #[derive(Debug)]
 enum HirPartKind {
-    Literal(u8),
+    Literal(Vec<u8>),
     Class { bitmap: Bitmap },
 }
 
 impl HirPartKind {
+    fn len(&self) -> usize {
+        match self {
+            Self::Literal(lit) => lit.len(),
+            Self::Class { .. } => 1,
+        }
+    }
+
     fn combinations(&self) -> usize {
         match self {
             Self::Literal(_) => 1,
@@ -108,6 +115,7 @@ impl Extractor {
     fn add_part(&mut self, kind: HirPartKind) {
         self.current_run.push(HirPart {
             start_position: self.current_position,
+            end_position: self.current_position + 1,
             kind,
         });
     }
@@ -161,6 +169,22 @@ impl Extractor {
             self.current_run = Vec::new();
         }
     }
+
+    fn add_byte(&mut self, b: u8) {
+        match self.current_run.last_mut() {
+            Some(HirPart {
+                kind: HirPartKind::Literal(lit),
+                end_position,
+                ..
+            }) => {
+                lit.push(b);
+                *end_position = self.current_position + 1;
+            }
+            _ => {
+                self.add_part(HirPartKind::Literal(vec![b]));
+            }
+        }
+    }
 }
 
 /// Description of valid atoms extracted from an HIR.
@@ -183,9 +207,9 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
 
     for part in parts {
         match &part.kind {
-            HirPartKind::Literal(byte) => {
+            HirPartKind::Literal(v) => {
                 for lit in &mut literals {
-                    lit.push(*byte);
+                    lit.extend(v);
                 }
             }
             HirPartKind::Class { bitmap } => {
@@ -209,6 +233,7 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
 #[derive(Debug)]
 struct HirPart {
     start_position: usize,
+    end_position: usize,
     kind: HirPartKind,
 }
 
@@ -219,12 +244,17 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
 
     // Compute the rank of every subslice, and track the best one
     for i in 0..parts.len() {
-        for j in (i + 1)..=std::cmp::min(parts.len(), i + 4) {
+        let mut len = 0;
+        for j in (i + 1)..=parts.len() {
+            len += parts[j - 1].kind.len();
             if let Some(rank) = get_parts_rank(&parts[i..j]) {
                 if best_slice.is_none() || rank > best_rank {
                     best_slice = Some(i..j);
                     best_rank = rank;
                 }
+            }
+            if len >= 4 {
+                break;
             }
         }
     }
@@ -247,18 +277,13 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
     let literals = generate_literals(&parts[start..end]);
     Some(Atoms {
         start_position: parts[start].start_position,
-        end_position: parts[end - 1].start_position + 1,
+        end_position: parts[end - 1].end_position,
         literals,
         rank: best_rank,
     })
 }
 
-// TODO: move this in atoms.rs file
 fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
-    let mut quality = 0_u32;
-    let mut bitmap = Bitmap::new();
-    let mut nb_uniq = 0;
-
     // First, check the validity of the parts.
 
     // Any run that starts or ends with a part that generates a lot of
@@ -283,47 +308,23 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
         return None;
     }
 
-    for part in parts {
-        match &part.kind {
-            HirPartKind::Literal(b) => {
-                quality += byte_rank(*b);
+    let literals = generate_literals(parts);
 
-                if !bitmap.get(*b) {
-                    bitmap.set(*b);
-                    nb_uniq += 1;
-                }
-            }
-            HirPartKind::Class { bitmap: class } => {
-                quality += class.iter().map(byte_rank).min().unwrap_or(0);
-                if class.iter().any(|b| !bitmap.get(b)) {
-                    nb_uniq += 1;
-                }
-                bitmap |= *class;
-            }
-        }
-    }
-
-    #[allow(clippy::cast_possible_truncation)]
-    let len = parts.len() as u32;
-
-    // If all the bytes in the atom are equal and very common, let's penalize
-    // it heavily.
-    if nb_uniq == 1 && (bitmap.get(0) || bitmap.get(0x20) || bitmap.get(0xCC) || bitmap.get(0xFF)) {
-        quality -= 10 * len;
-    }
-    // In general atoms with more unique bytes have a better quality, so let's
-    // boost the quality in the amount of unique bytes.
-    else {
-        quality += 2 * nb_uniq;
-    }
+    let quality = literals
+        .iter()
+        .map(|v| atom_quality_from_literal(v))
+        .min()
+        .unwrap_or(0);
 
     // For atoms of the same quality, we want to favor having as few as possible.
     // So subtract a penalty based on the number of combinations generated.
     // TODO: This is completely arbitrary, and might need some better fine tuning.
     Some(if combinations >= 100 {
-        quality.saturating_sub(10 * len)
+        quality.saturating_sub(40)
+    } else if combinations > 16 {
+        quality.saturating_sub(20)
     } else if combinations > 1 {
-        quality.saturating_sub(4 * len)
+        quality.saturating_sub(10)
     } else {
         quality
     })
@@ -335,7 +336,7 @@ impl Visitor for Extractor {
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
         match hir {
             Hir::Literal(b) => {
-                self.add_part(HirPartKind::Literal(*b));
+                self.add_byte(*b);
                 VisitAction::Skip
             }
             Hir::Empty => VisitAction::Skip,
@@ -786,6 +787,30 @@ mod tests {
             "",
             r"\x81\xeb..{0,8}?\xe8.\x00\x00\x00.{0,8}?\x2b\xc3",
         );
+
+        test(
+            "{ 01 89 5? 08 8b 5? ?? 25 00 00 00 f0 89 5? }",
+            &[
+                b"\x01\x89\x50\x08\x8b",
+                b"\x01\x89\x51\x08\x8b",
+                b"\x01\x89\x52\x08\x8b",
+                b"\x01\x89\x53\x08\x8b",
+                b"\x01\x89\x54\x08\x8b",
+                b"\x01\x89\x55\x08\x8b",
+                b"\x01\x89\x56\x08\x8b",
+                b"\x01\x89\x57\x08\x8b",
+                b"\x01\x89\x58\x08\x8b",
+                b"\x01\x89\x59\x08\x8b",
+                b"\x01\x89\x5A\x08\x8b",
+                b"\x01\x89\x5B\x08\x8b",
+                b"\x01\x89\x5C\x08\x8b",
+                b"\x01\x89\x5D\x08\x8b",
+                b"\x01\x89\x5E\x08\x8b",
+                b"\x01\x89\x5F\x08\x8b",
+            ],
+            r"",
+            r"\x01\x89[P-_]\x08\x8b[P-_].%\x00\x00\x00\xf0\x89[P-_]",
+        );
     }
 
     #[test]
@@ -833,11 +858,7 @@ mod tests {
 
         test(
             r"\([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\)",
-            &[
-                b"0 AM)", b"0 PM)", b"1 AM)", b"1 PM)", b"2 AM)", b"2 PM)", b"3 AM)", b"3 PM)",
-                b"4 AM)", b"4 PM)", b"5 AM)", b"5 PM)", b"6 AM)", b"6 PM)", b"7 AM)", b"7 PM)",
-                b"8 AM)", b"8 PM)", b"9 AM)", b"9 PM)",
-            ],
+            &[b" AM)", b" PM)"],
             r"\x28[0-9]?[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M\x29",
             "",
         );
@@ -874,9 +895,10 @@ mod tests {
         test_type_traits_non_clonable(Extractor::new());
         test_type_traits_non_clonable(HirPart {
             start_position: 0,
-            kind: HirPartKind::Literal(b' '),
+            end_position: 1,
+            kind: HirPartKind::Literal(vec![b' ']),
         });
-        test_type_traits_non_clonable(HirPartKind::Literal(b' '));
+        test_type_traits_non_clonable(HirPartKind::Literal(vec![b' ']));
         test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
         test_type_traits_non_clonable(Atoms {
             start_position: 0,
