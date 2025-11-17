@@ -311,28 +311,14 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
 }
 
 fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
-    // First, check the validity of the parts.
-
-    // Any run that starts or ends with a part that generates a lot of
-    // combinations is rejected.
-    if parts
-        .first()
-        .map_or(true, |part| part.kind.combinations() >= 100)
-        || parts
-            .last()
-            .map_or(true, |part| part.kind.combinations() >= 100)
-    {
-        return None;
-    }
-
-    // And we limit ourselves to 256 possibilities, ie expansion of a
-    // single dot node.
-    let combinations = parts
-        .iter()
-        .map(|part| part.kind.combinations())
-        .product::<u32>();
-    if combinations > 256 {
-        return None;
+    // Limit ourselves to 256 possibilities max, which
+    // is a double expansion of a X? mask in a hex-string.
+    let mut combinations = 1_u32;
+    for part in parts {
+        combinations = combinations.saturating_mul(part.kind.combinations());
+        if combinations > 256 {
+            return None;
+        }
     }
 
     let literals = generate_literals(parts);
