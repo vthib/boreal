@@ -248,6 +248,24 @@ struct HirPart {
 
 /// Extract the best possible atoms from the given run.
 fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
+    // First, attempt to find a run of simple literals:
+    // If the parts contain 4 successive bytes of sufficient
+    // quality, there is no need for further logic.
+    for part in parts {
+        let HirPartKind::Literal(lit) = &part.kind else {
+            continue;
+        };
+        let rank = atom_quality_from_literal(lit);
+        if rank >= 80 {
+            return Some(Atoms {
+                start_position: part.start_position,
+                end_position: part.end_position,
+                literals: vec![lit.clone()],
+                rank,
+            });
+        }
+    }
+
     let mut best_slice = None;
     let mut best_rank = 0;
 
