@@ -1,4 +1,6 @@
 //! Literal extraction and computation from variable expressions.
+use std::cmp::Ordering;
+
 use crate::atoms::atom_quality_from_literal;
 use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
@@ -11,13 +13,18 @@ pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
         .runs
         .into_iter()
         .filter_map(|run| run_into_atoms(&run))
-        .reduce(|best_atoms, new_atoms| {
-            if new_atoms.rank > best_atoms.rank {
-                new_atoms
-            } else {
-                best_atoms
-            }
-        });
+        .reduce(
+            |best_atoms, new_atoms| match new_atoms.rank.cmp(&best_atoms.rank) {
+                Ordering::Greater => new_atoms,
+                Ordering::Equal
+                    if new_atoms.literals.iter().map(Vec::len).min()
+                        > best_atoms.literals.iter().map(Vec::len).min() =>
+                {
+                    new_atoms
+                }
+                _ => best_atoms,
+            },
+        );
 
     match atoms {
         None => LiteralsDetails {
@@ -713,25 +720,25 @@ mod tests {
         test(
             "{ 11 ?A 22 33 [1] 44 55 66 A? 77 88 }",
             &[
-                b"\x11\x0A\x22\x33",
-                b"\x11\x1A\x22\x33",
-                b"\x11\x2A\x22\x33",
-                b"\x11\x3A\x22\x33",
-                b"\x11\x4A\x22\x33",
-                b"\x11\x5A\x22\x33",
-                b"\x11\x6A\x22\x33",
-                b"\x11\x7A\x22\x33",
-                b"\x11\x8A\x22\x33",
-                b"\x11\x9A\x22\x33",
-                b"\x11\xAA\x22\x33",
-                b"\x11\xBA\x22\x33",
-                b"\x11\xCA\x22\x33",
-                b"\x11\xDA\x22\x33",
-                b"\x11\xEA\x22\x33",
-                b"\x11\xFA\x22\x33",
+                b"\x44\x55\x66\xA0\x77\x88",
+                b"\x44\x55\x66\xA1\x77\x88",
+                b"\x44\x55\x66\xA2\x77\x88",
+                b"\x44\x55\x66\xA3\x77\x88",
+                b"\x44\x55\x66\xA4\x77\x88",
+                b"\x44\x55\x66\xA5\x77\x88",
+                b"\x44\x55\x66\xA6\x77\x88",
+                b"\x44\x55\x66\xA7\x77\x88",
+                b"\x44\x55\x66\xA8\x77\x88",
+                b"\x44\x55\x66\xA9\x77\x88",
+                b"\x44\x55\x66\xAA\x77\x88",
+                b"\x44\x55\x66\xAB\x77\x88",
+                b"\x44\x55\x66\xAC\x77\x88",
+                b"\x44\x55\x66\xAD\x77\x88",
+                b"\x44\x55\x66\xAE\x77\x88",
+                b"\x44\x55\x66\xAF\x77\x88",
             ],
-            "",
             r#"\x11[\x0a\x1a\x2a:JZjz\x8a\x9a\xaa\xba\xca\xda\xea\xfa]"3.DUf[\xa0-\xaf]w\x88"#,
+            "",
         );
 
         // hex strings found in some real rules
@@ -912,9 +919,9 @@ mod tests {
 
         test(
             "a((b(c)((d)()(e(g+h)ij)))kl)m",
-            &[b"abcde"],
-            "",
+            &[b"hijklm"],
             "a((b(c)((d)()(e(g+h)ij)))kl)m",
+            "",
         );
 
         test(" { AB CD 01 }", &[b" { AB CD 01 }"], "", "");
