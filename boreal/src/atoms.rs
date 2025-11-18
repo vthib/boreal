@@ -14,7 +14,7 @@
 //! the rate of false positive matches.
 
 /// Maximum size of an atom extracted from a literal and used in the AC scan.
-const ATOM_SIZE: usize = 4;
+pub const ATOM_SIZE: usize = 4;
 
 /// Pick a shorter atom from a literal.
 ///
