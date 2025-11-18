@@ -1,7 +1,7 @@
 //! Literal extraction and computation from variable expressions.
 use std::cmp::Ordering;
 
-use crate::atoms::atom_quality_from_literal;
+use crate::atoms::{atom_quality_from_literal, ATOM_SIZE};
 use crate::bitmaps::Bitmap;
 use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 
@@ -280,14 +280,20 @@ fn run_into_atoms(parts: &[HirPart]) -> Option<Atoms> {
     for i in 0..parts.len() {
         let mut len = 0;
         for j in (i + 1)..=parts.len() {
-            len += parts[j - 1].kind.len();
             if let Some(rank) = get_parts_rank(&parts[i..j]) {
                 if best_slice.is_none() || rank > best_rank {
                     best_slice = Some(i..j);
                     best_rank = rank;
                 }
             }
-            if len >= 4 {
+            // Break if the sum of those parts is longer than the
+            // atom size, but without counting the first element:
+            // this indicates the first element no longer takes
+            // part in the atom choice.
+            if j != i + 1 {
+                len += parts[j - 1].kind.len();
+            }
+            if len >= ATOM_SIZE {
                 break;
             }
         }
@@ -881,6 +887,13 @@ mod tests {
             r"",
             r"\x01\x89[P-_]\x08\x8b[P-_].%\x00\x00\x00\xf0\x89[P-_]",
         );
+
+        test(
+            "{ ( 11 11 11 | 33 33 33 ) AB D? }",
+            &[b"\x11\x11\x11\xAB", b"\x33\x33\x33\xAB"],
+            r"",
+            r"(\x11\x11\x11|333)\xab[\xd0-\xdf]",
+        );
     }
 
     #[test]
@@ -948,8 +961,8 @@ mod tests {
         test("\x00\x00\x00\x00.*a", &[b"a"], r"\x00\x00\x00\x00.*a", "");
         test(
             "(\x00\x00\x00\x00|abcd)a",
-            &[b"a"],
-            r"(\x00\x00\x00\x00|abcd)a",
+            &[b"\x00\x00\x00\x00a", b"abcda"],
+            "",
             "",
         );
     }
