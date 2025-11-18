@@ -94,7 +94,7 @@ fn atom_rank(atom: &[u8]) -> u32 {
 
 pub fn byte_rank(b: u8) -> u32 {
     match b {
-        0x00 | 0x20 | 0xCC | 0xFF => 12,
+        0x00 | 0xCC | 0xFF => 10,
         v if v.is_ascii_lowercase() => 18,
         _ => 20,
     }
