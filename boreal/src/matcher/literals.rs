@@ -37,8 +37,33 @@ pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
             literals,
             rank: _rank,
         }) => {
-            let visitor = PrePostExtractor::new(start_position, end_position);
-            let (pre_hir, post_hir) = visit(hir, visitor);
+            // The "pre" hir is everything in the hir that is before the
+            // parts used for literal extraction, while also including those
+            // parts.
+            //
+            // For example, for `a.bcde.f`, if the part used for literal
+            // extraction is `bcde`, then the pre hir is `a.bcde` (and the
+            // post hir is `bcde.f`.
+            //
+            // This pre hir is not needed if the hir starts with the literal
+            // (ie start_position is 0).
+            let pre_hir = if start_position == 0 {
+                None
+            } else {
+                Some(match end_position {
+                    Some(end) => visit(hir, PrePostExtractor::new(end, true)),
+                    None => hir.clone(),
+                })
+            };
+            // the post hir is not needed if the hir ends with the literal
+            // (ie end_position is None)
+            let post_hir = if end_position.is_none() {
+                None
+            } else if start_position == 0 {
+                Some(hir.clone())
+            } else {
+                Some(visit(hir, PrePostExtractor::new(start_position, false)))
+            };
 
             LiteralsDetails {
                 literals,
@@ -430,81 +455,67 @@ impl Visitor for RunExtractor {
 #[derive(Debug)]
 struct PrePostExtractor {
     /// Stacks used during the visit to reconstruct compound nodes.
-    pre_stack: Vec<Vec<Hir>>,
-    post_stack: Vec<Vec<Hir>>,
+    stack: Vec<Vec<Hir>>,
 
-    /// Top level pre node.
-    ///
-    /// May end up None if the extracted literals are from the start of the regex.
-    pre_node: Option<Hir>,
+    /// Top level node.
+    toplevel_node: Hir,
+    /// Is the toplevel node set. Only used for consistency checking.
+    toplevel_is_set: bool,
 
-    /// Top level post node.
-    ///
-    /// May end up None if the extracted literals are from the end of the regex.
-    post_node: Option<Hir>,
-
-    /// Start position of the extracted literals.
-    start_position: usize,
-    /// End position of the extracted literals.
-    end_position: Option<usize>,
-
+    /// Position of the Hir node that is the boundary.
+    boundary_position: usize,
     /// Current position during the visit of the original AST.
     current_position: usize,
+
+    /// Should the start of the HIR be extracted or the end.
+    ///
+    /// If true, the hir up to (and excluding) the boundary is included.
+    /// If false, the hir from (and including) the boundary is included.
+    is_pre: bool,
 }
 
 impl PrePostExtractor {
-    fn new(start_position: usize, end_position: Option<usize>) -> Self {
+    fn new(boundary_position: usize, is_pre: bool) -> Self {
         Self {
-            pre_stack: Vec::new(),
-            post_stack: Vec::new(),
+            stack: Vec::new(),
 
-            pre_node: None,
-            post_node: None,
+            toplevel_node: Hir::Empty,
+            toplevel_is_set: false,
 
+            boundary_position,
             current_position: 0,
-            start_position,
-            end_position,
+
+            is_pre,
         }
     }
 
     fn push_stack(&mut self) {
-        self.pre_stack.push(Vec::new());
-        self.post_stack.push(Vec::new());
+        self.stack.push(Vec::new());
     }
 
     fn add_pre_post_hir(&mut self, node: &Hir) {
-        if self.start_position > 0
-            && self
-                .end_position
-                .map_or(true, |end| self.current_position < end)
+        if (self.is_pre && self.current_position < self.boundary_position)
+            || (!self.is_pre && self.current_position >= self.boundary_position)
         {
-            self.add_node(node.clone(), false);
-        }
-        if self.current_position >= self.start_position && self.end_position.is_some() {
-            self.add_node(node.clone(), true);
+            self.add_node(node.clone());
         }
     }
 
-    fn add_node(&mut self, node: Hir, post: bool) {
-        let (stack, final_node) = if post {
-            (&mut self.post_stack, &mut self.post_node)
-        } else {
-            (&mut self.pre_stack, &mut self.pre_node)
-        };
-
-        if stack.is_empty() {
+    fn add_node(&mut self, node: Hir) {
+        if self.stack.is_empty() {
             // Empty stack: we should only have a single HIR to set at top-level.
-            let res = final_node.replace(node);
-            assert!(res.is_none(), "top level HIR node already set");
+            self.toplevel_node = node;
+            assert!(!self.toplevel_is_set, "top level HIR node already set");
+            self.toplevel_is_set = true;
         } else {
-            let pos = stack.len() - 1;
-            stack[pos].push(node);
+            let pos = self.stack.len() - 1;
+            self.stack[pos].push(node);
         }
     }
 }
 
 impl Visitor for PrePostExtractor {
-    type Output = (Option<Hir>, Option<Hir>);
+    type Output = Hir;
 
     fn visit_pre(&mut self, hir: &Hir) -> VisitAction {
         // XXX: be careful here, the visit *must* have the exact same behavior as for the
@@ -540,33 +551,26 @@ impl Visitor for PrePostExtractor {
             | Hir::Alternation(_) => self.current_position += 1,
             Hir::Group(_) => {
                 // Safety: this is a post visit, the pre visit pushed an element on the stack.
-                let mut pre = self.pre_stack.pop().unwrap();
-                let mut post = self.post_stack.pop().unwrap();
+                let mut stack = self.stack.pop().unwrap();
 
-                if let Some(node) = pre.pop() {
-                    self.add_node(Hir::Group(Box::new(node)), false);
-                }
-                if let Some(node) = post.pop() {
-                    self.add_node(Hir::Group(Box::new(node)), true);
+                if let Some(node) = stack.pop() {
+                    self.add_node(Hir::Group(Box::new(node)));
                 }
             }
 
             Hir::Concat(_) => {
                 // Safety: this is a post visit, the pre visit pushed an element on the stack.
-                let pre = self.pre_stack.pop().unwrap();
-                let post = self.post_stack.pop().unwrap();
-                if !pre.is_empty() {
-                    self.add_node(Hir::Concat(pre), false);
-                }
-                if !post.is_empty() {
-                    self.add_node(Hir::Concat(post), true);
+                let stack = self.stack.pop().unwrap();
+
+                if !stack.is_empty() {
+                    self.add_node(Hir::Concat(stack));
                 }
             }
         }
     }
 
     fn finish(self) -> Self::Output {
-        (self.pre_node, self.post_node)
+        self.toplevel_node
     }
 }
 
@@ -990,7 +994,7 @@ mod tests {
             kind: HirPartKind::Literal(vec![b' ']),
         });
         test_type_traits_non_clonable(HirPartKind::Literal(vec![b' ']));
-        test_type_traits_non_clonable(PrePostExtractor::new(0, None));
+        test_type_traits_non_clonable(PrePostExtractor::new(0, false));
         test_type_traits_non_clonable(Atoms {
             start_position: 0,
             end_position: None,
