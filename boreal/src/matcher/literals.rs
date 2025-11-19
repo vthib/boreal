@@ -8,7 +8,6 @@ use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
 pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
     let extractor = visit(hir, RunExtractor::new());
 
-    let last_position = extractor.current_position;
     let atoms = extractor
         .runs
         .into_iter()
@@ -38,7 +37,7 @@ pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
             literals,
             rank: _rank,
         }) => {
-            let visitor = PrePostExtractor::new(start_position, end_position, last_position);
+            let visitor = PrePostExtractor::new(start_position, end_position);
             let (pre_hir, post_hir) = visit(hir, visitor);
 
             LiteralsDetails {
@@ -134,9 +133,12 @@ impl RunExtractor {
     }
 
     fn add_part(&mut self, kind: HirPartKind) {
+        if let Some(last_part) = self.current_run.last_mut() {
+            last_part.end_position = Some(self.current_position);
+        }
         self.current_run.push(HirPart {
             start_position: self.current_position,
-            end_position: self.current_position + 1,
+            end_position: None,
             kind,
         });
     }
@@ -168,7 +170,12 @@ impl RunExtractor {
         self.add_part(HirPartKind::Alts(literals));
     }
 
-    fn close_run(&mut self) {
+    fn close_run(&mut self, at_end: bool) {
+        if !at_end {
+            if let Some(last_part) = self.current_run.last_mut() {
+                last_part.end_position = Some(self.current_position);
+            }
+        }
         if !self.current_run.is_empty() {
             self.runs.push(std::mem::take(&mut self.current_run));
             self.current_run = Vec::new();
@@ -179,11 +186,9 @@ impl RunExtractor {
         match self.current_run.last_mut() {
             Some(HirPart {
                 kind: HirPartKind::Literal(lit),
-                end_position,
                 ..
             }) => {
                 lit.push(b);
-                *end_position = self.current_position + 1;
             }
             _ => {
                 self.add_part(HirPartKind::Literal(vec![b]));
@@ -201,7 +206,9 @@ struct Atoms {
     /// This is needed because `a(b)c` is for example a valid run, but
     /// the end position is not start + 3 in that case, because of the
     /// group node.
-    end_position: usize,
+    ///
+    /// If None, the end position is the end of the regex.
+    end_position: Option<usize>,
     literals: Vec<Vec<u8>>,
     rank: u32,
 }
@@ -249,7 +256,7 @@ fn generate_literals(parts: &[HirPart]) -> Vec<Vec<u8>> {
 #[derive(Debug)]
 struct HirPart {
     start_position: usize,
-    end_position: usize,
+    end_position: Option<usize>,
     kind: HirPartKind,
 }
 
@@ -392,11 +399,11 @@ impl Visitor for RunExtractor {
                 VisitAction::Skip
             }
             Hir::Dot | Hir::Assertion(_) | Hir::Repetition { .. } => {
-                self.close_run();
+                self.close_run(false);
                 VisitAction::Skip
             }
             Hir::Alternation(alts) => {
-                self.close_run();
+                self.close_run(false);
                 self.visit_alternation(alts);
                 VisitAction::Skip
             }
@@ -411,7 +418,7 @@ impl Visitor for RunExtractor {
     }
 
     fn finish(mut self) -> Self::Output {
-        self.close_run();
+        self.close_run(true);
         self
     }
 }
@@ -439,16 +446,14 @@ struct PrePostExtractor {
     /// Start position of the extracted literals.
     start_position: usize,
     /// End position of the extracted literals.
-    end_position: usize,
-    /// Last position of the regex.
-    last_position: usize,
+    end_position: Option<usize>,
 
     /// Current position during the visit of the original AST.
     current_position: usize,
 }
 
 impl PrePostExtractor {
-    fn new(start_position: usize, end_position: usize, last_position: usize) -> Self {
+    fn new(start_position: usize, end_position: Option<usize>) -> Self {
         Self {
             pre_stack: Vec::new(),
             post_stack: Vec::new(),
@@ -459,7 +464,6 @@ impl PrePostExtractor {
             current_position: 0,
             start_position,
             end_position,
-            last_position,
         }
     }
 
@@ -469,10 +473,14 @@ impl PrePostExtractor {
     }
 
     fn add_pre_post_hir(&mut self, node: &Hir) {
-        if self.current_position < self.end_position && self.start_position > 0 {
+        if self.start_position > 0
+            && self
+                .end_position
+                .map_or(true, |end| self.current_position < end)
+        {
             self.add_node(node.clone(), false);
         }
-        if self.current_position >= self.start_position && self.end_position != self.last_position {
+        if self.current_position >= self.start_position && self.end_position.is_some() {
             self.add_node(node.clone(), true);
         }
     }
@@ -978,14 +986,14 @@ mod tests {
         test_type_traits_non_clonable(RunExtractor::new());
         test_type_traits_non_clonable(HirPart {
             start_position: 0,
-            end_position: 1,
+            end_position: None,
             kind: HirPartKind::Literal(vec![b' ']),
         });
         test_type_traits_non_clonable(HirPartKind::Literal(vec![b' ']));
-        test_type_traits_non_clonable(PrePostExtractor::new(0, 0, 0));
+        test_type_traits_non_clonable(PrePostExtractor::new(0, None));
         test_type_traits_non_clonable(Atoms {
             start_position: 0,
-            end_position: 0,
+            end_position: None,
             literals: Vec::new(),
             rank: 0,
         });
