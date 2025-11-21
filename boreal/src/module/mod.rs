@@ -81,7 +81,7 @@ pub use macho::MachO;
 #[cfg(feature = "object")]
 mod pe;
 #[cfg(feature = "object")]
-pub use pe::Pe;
+pub use pe::{Pe, PeData};
 
 #[cfg(feature = "object")]
 mod dex;

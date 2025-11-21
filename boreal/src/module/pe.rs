@@ -34,6 +34,9 @@ const MAX_NB_DATA_DIRECTORIES: usize = 32768;
 const MAX_NB_VERSION_INFOS: usize = 32768;
 
 /// `pe` module. Allows inspecting PE inputs.
+///
+/// The `pe.is_signed` can be overriden by providing a value for it
+/// throught the `PeData` object. For more details on this, see [`PeData::is_signed`].
 #[derive(Debug)]
 pub struct Pe;
 
@@ -1107,6 +1110,15 @@ impl Module for Pe {
     }
 
     fn get_dynamic_values(&self, ctx: &mut ScanContext, out: &mut HashMap<&'static str, Value>) {
+        #[cfg(feature = "authenticode")]
+        let is_signed = ctx
+            .module_data
+            .get_user_data::<Self>()
+            .and_then(|data| data.is_signed)
+            .map(|v| Value::Integer(v.into()));
+        #[cfg(not(feature = "authenticode"))]
+        let is_signed = None;
+
         let Some(data) = ctx.module_data.get_mut::<Self>() else {
             return;
         };
@@ -1119,11 +1131,11 @@ impl Module for Pe {
         let res = match FileKind::parse(ctx.region.mem) {
             Ok(FileKind::Pe32) => {
                 data.is_32bit = true;
-                parse_file::<ImageNtHeaders32>(ctx.region, ctx.process_memory, data)
+                parse_file::<ImageNtHeaders32>(ctx.region, ctx.process_memory, is_signed, data)
             }
             Ok(FileKind::Pe64) => {
                 data.is_32bit = false;
-                parse_file::<ImageNtHeaders64>(ctx.region, ctx.process_memory, data)
+                parse_file::<ImageNtHeaders64>(ctx.region, ctx.process_memory, is_signed, data)
             }
             _ => None,
         };
@@ -1140,12 +1152,35 @@ impl Module for Pe {
 
 impl ModuleData for Pe {
     type PrivateData = Data;
-    type UserData = ();
+    type UserData = PeData;
+}
+
+/// Data used by the pe module.
+///
+/// This data must be provided by a call to
+/// [`Scanner::set_module_data`](crate::scanner::Scanner::set_module_data).
+pub struct PeData {
+    /// Value to use for the `pe.is_signed` symbol.
+    ///
+    /// If set, `pe.is_signed` will be equal to this value.
+    /// If unset, then:
+    /// - If the `authenticode-verify` feature is enabled, a simplified
+    ///   verification of the signature is done and the result is used for
+    ///   `pe.is_signed`.
+    /// - If the `authenticode-verify` feature is not enabled, the
+    ///   `pe.is_signed` value is always false.
+    ///
+    /// This parameter can thus be used on Windows to set the real status of
+    /// the file according to Windows by calling `WinVerifyTrust` on the file first,
+    /// and then providing the result in this parameter.
+    #[cfg(feature = "authenticode")]
+    pub is_signed: Option<bool>,
 }
 
 fn parse_file<HEADERS: ImageNtHeaders>(
     region: &Region,
     process_memory: bool,
+    user_data_is_signed: Option<Value>,
     data: &mut Data,
 ) -> Option<HashMap<&'static str, Value>> {
     let dos_header = ImageDosHeader::parse(region.mem).ok()?;
@@ -1316,11 +1351,14 @@ fn parse_file<HEADERS: ImageNtHeaders>(
     #[cfg(feature = "authenticode")]
     if let Some((signatures, is_signed)) = signatures::get_signatures(&data_dirs, region.mem) {
         let _r = map.insert("number_of_signatures", signatures.len().into());
-        let _r = map.insert("is_signed", is_signed);
+        let _r = map.insert("is_signed", user_data_is_signed.unwrap_or(is_signed));
         let _r = map.insert("signatures", Value::Array(signatures));
     } else {
         let _r = map.insert("number_of_signatures", Value::Integer(0));
-        let _r = map.insert("is_signed", Value::Integer(0));
+        let _r = map.insert(
+            "is_signed",
+            user_data_is_signed.unwrap_or(Value::Integer(0)),
+        );
     }
 
     Some(map)
