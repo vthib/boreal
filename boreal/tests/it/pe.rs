@@ -894,3 +894,34 @@ fn test_signatures_verify() {
         compare_module_values_on_file("pe", &path, false, &diffs);
     }
 }
+
+#[test]
+#[cfg(feature = "authenticode")]
+fn test_user_data_is_signed() {
+    use boreal::module::{Pe, PeData};
+
+    let checker = crate::utils::Checker::new(
+        "import \"pe\"
+      rule test {
+        condition: pe.is_signed
+      }",
+    );
+    let mut scanner = checker.scanner();
+
+    let mem = std::fs::read("tests/assets/libyara/data/tiny").unwrap();
+    scanner.check_boreal(&mem, false);
+    scanner.scanner.set_module_data::<Pe>(PeData {
+        is_signed: Some(true),
+    });
+    scanner.check_boreal(&mem, true);
+    scanner
+        .scanner
+        .set_module_data::<Pe>(PeData { is_signed: None });
+    scanner.check_boreal(&mem, false);
+
+    let mem2 = std::fs::read("tests/assets/pe/signed/rsa_sha1.exe").unwrap();
+    scanner.scanner.set_module_data::<Pe>(PeData {
+        is_signed: Some(false),
+    });
+    scanner.check_boreal(&mem2, false);
+}

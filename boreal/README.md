@@ -204,16 +204,12 @@ Those fields however causes a few issues:
   equivalent implementation would imply bringing a lot of dependencies to handle
   all the different algorithms that can be used in signatures.
 
-I'm unsure what the use-case for those fields are, so they are not implemented by
-default. To be able to use them, there are two possibilities:
+Those fields are `false` by default. To get a proper value for them, there are
+two possibilities:
 
-- the `authenticode-verify` feature can be enabled to get them back, but the implementation
+- the `authenticode-verify` feature can be enabled, but the implementation
   is best effort. It does not depend on OpenSSL but uses rust cryptos crates, so not
   all algorithms are implemented, and some checks might be missing.
-- on Windows, `WinVerifyTrust` can be called and the result provided as an external symbol.
-  A feature can be implemented to make this available as `pe.is_signed` instead of an
-  external symbol, but I would like to judge interest in this before implementing it.
-  The benefit here, is that the value truly reflects whether the file is considered as
-  signed or not by Windows.
-
-If you need to use those fields and those solutions are not sufficient, please open an issue.
+- A value for `pe.is_signed` can be provided before the scan. This allows calling
+- `WinVerifyTrust` on the sample first, and then exposing the value it returned
+  in the `pe.is_signed` symbol. See the `pe` module documentation for more details.
