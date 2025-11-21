@@ -7,7 +7,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 use std::{fs, io::BufReader};
 
-use assert_cmd::Command;
+use assert_cmd::{cargo_bin_cmd, Command};
 use predicates::prelude::*;
 use tempfile::{NamedTempFile, TempDir};
 
@@ -26,7 +26,7 @@ enum CmdKind {
 }
 
 fn boreal_cmd() -> Command {
-    Command::cargo_bin("boreal").unwrap()
+    cargo_bin_cmd!("boreal")
 }
 
 fn test_scan<F>(options: &[&str], rules_files: &[&Path], input: &Path, test: F)
