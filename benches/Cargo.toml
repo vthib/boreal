@@ -9,11 +9,11 @@ edition = "2021"
 
 [dependencies]
 boreal = { path = "../boreal", version = "*", features = ["authenticode"] }
-criterion = "0.5"
+criterion = "0.7"
 glob = "0.3.1"
 walkdir = "2.3"
-yara = { version = "0.30", features = ["vendored"] }
-yara-x = "0.14"
+yara = { version = "0.31", features = ["vendored"] }
+yara-x = "1.10"
 
 [features]
 serialize = ["boreal/serialize"]
