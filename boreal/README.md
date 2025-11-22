@@ -19,7 +19,7 @@ The main goals of the project are:
 
 ## Features
 
-* Full compatibility with YARA 4.5.2 and all [official modules](#modules). Any existing rule can be used as is.
+* Full compatibility with YARA 4.5.5 and all [official modules](#modules). Any existing rule can be used as is.
 * Avoid scanning for strings when not required, greatly reducing execution time on carefully crafted
   rules. See [no scan optimization](#no-scan-optimization).
 * Protection against any untrusted inputs, be it rules or scanned bytes. Ill-crafted rules or inputs should never

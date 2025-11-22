@@ -5,6 +5,106 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-11-23
+
+This releases contains primarily:
+
+- Performance improvements on rules that uses regex or hex strings with
+  complex alternations (for example, `{ ( AA ?? BB ) | ( CC ?? DD ) }`.
+  This can brings up to a 50% reduction to scan duration for rule sets
+  that contain such rules.
+- A change in some parsing limits that could be used in very complex rules.
+  The limits have been raised and are now configurable if needed.
+- A compatibility with free-threaded python for `boreal-py`.
+- A way to provide a value for the `pe.is_signed` symbol, so that this
+  value can be computed externally and used in yara rules.
+
+See the complete changelog for details.
+
+### boreal-parser
+
+#### Added
+
+- Allow configuring a few previously hardcoded parsing limits. There were two
+  limits used to prevent stack overflows that were hardcoded. Those limits
+  have been raised (since they were hit in legitimate rules), and they
+  are additionally configurable in `boreal`, `boreal-py` and `boreal-cli`
+  if needed. [#241](https://github.com/vthib/boreal/pull/241)
+
+#### Changed
+
+- The hardcoded parsing limits  used to prevent stack overflows have been
+  raised. [#241](https://github.com/vthib/boreal/pull/241)
+- `codespan-reporting` upgraded to 0.13.
+
+### boreal
+
+#### Added
+
+- Add a way to provide a value for the `pe.is_signed` symbol. A new
+  `PeData` object can be used to provide this value before scanning.
+  [#246](https://github.com/vthib/boreal/pull/246)
+- Expose the new configurable parsing limits in `CompilerParams`:
+  `parse_expression_recursion_limit` and `parse_string_recursion_limit`.
+  raised. [#241](https://github.com/vthib/boreal/pull/241)
+
+#### Changed
+
+- Some significant scan duration improvements thanks to changes in the
+  atoms extraction logic. Improvements range from 0 to up to 40-50%
+  for some rule sets. [#245](https://github.com/vthib/boreal/pull/245)
+- Some dependencies upgrade:
+  - `windows-sys` upgraded to 0.61
+  - `mach2` upgraded to 0.6 (used with `process` feature on macos targets).
+  - `tlsh2` upgraded to 1.1.0
+  - `codespan-reporting` upgraded to 0.13
+  - `object` upgraded to 0.37
+
+#### Fixed
+
+- Fix possible duplicated matches for very specific rules where the
+  same literal is repeated in alternatives branches of a regex. This
+  could impact rules that depends on a count of the number of matches
+  of those strings. [#244](https://github.com/vthib/boreal/pull/244)
+- Fix value of `process_memory` when scanning processes: this value
+  was not properly set to true in this context. This could impact
+  a few values from the `elf`, `pe`, `macho` and `dotnet` modules.
+  [#245](https://github.com/vthib/boreal/pull/245)
+
+### boreal-py
+
+#### Added
+
+- Add two new parameters that were previously only settable through
+  the global configuration (`boreal.set_config`):
+  - `max_match_data` in the match method.
+  - `max_strings_per_rule` in the compile method.
+  This allows setting those parameters without using a global config
+  which impacts all invocations. [#236](https://github.com/vthib/boreal/pull/236)
+- Expose a few additional compile options that were available in `boreal`
+  but not configurable in `boreal-py`: `max_condition_depth`,
+  `parse_expression_recursion_limit` and `parse_string_recursion_limit`.
+  [#243](https://github.com/vthib/boreal/pull/243)
+
+#### Changed
+
+- Make the library free-threaded. It can now be used with free-threaded python
+  without requiring the GIL to be used. [#238](https://github.com/vthib/boreal/pull/238)
+- `pyo3` upgraded to 0.27
+
+### boreal-cli
+
+#### Added
+
+- Add a few additional options that were previously configurable in `boreal`
+  but not exposed in `boreal-cli`: [#243](https://github.com/vthib/boreal/pull/243)
+  - `--match-max-length`
+  - `--max-condition-lepth`
+  - `--disable-includes`
+  Make the newly configurable parsing limits available in `boreal-cli` as well.
+  - `--parse-expression-recursion-limit`
+  - `--parse-string-recursion-limit`
+
 ## [1.0.0] - 2025-05-17
 
 This release marks the first stable release of Boreal as it is now entirely feature complete
@@ -605,7 +705,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/vthib/boreal/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/vthib/boreal/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/vthib/boreal/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vthib/boreal/compare/v0.7.0...v0.8.0
