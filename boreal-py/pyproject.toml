@@ -1,6 +1,6 @@
 [project]
 name = "boreal-python"
-version = "1.0.0"
+version = "1.1.0"
 readme = "README.md"
 description = "Python bindings to the boreal YARA scanner"
 requires-python = ">=3.11"

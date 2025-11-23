@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-11-23
+
+See [the global CHANGELOG file](../CHANGELOG.md) for details.
+
 ## [1.0.0] - 2025-05-17
 
 The `boreal` CLI tool has been improved and reworked greatly. It now uses subcommands to
@@ -71,6 +75,7 @@ distinguish the different invocation modes:
 
 See [the global CHANGELOG file](../CHANGELOG.md) for older versions.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/vthib/boreal/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/vthib/boreal/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/vthib/boreal/compare/v0.8.0...v0.9.0
