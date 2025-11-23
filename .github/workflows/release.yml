@@ -94,7 +94,7 @@ jobs:
       run: |
         asset_name="boreal-${{ needs.create-release.outputs.boreal_version }}-${{ matrix.target }}"
         target_path="target/${{ matrix.target }}/release"
-        if [ "${{ matrix.os }}" = "windows-2022" ]; then
+        if [ "${{ matrix.os }}" = "windows-2025" ]; then
           echo "ASSET_PATH=$target_path/boreal.exe" >> $GITHUB_ENV
           echo "ASSET_NAME=$asset_name.exe" >> $GITHUB_ENV
         else
