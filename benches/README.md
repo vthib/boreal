@@ -31,9 +31,9 @@ Percentage displayed shows the differences from YARA. The highlighted value is t
 | File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X          |
 | ---------------------- | ------- | ---------------------- | ----------------------- | --------------- |
 | vulkan-1.dll (737KiB)  | 4.21 ms | **1.46 ms (34.7%)**    | 3.43 ms (81.7%)         | 3.44 ms (8.19%) |
-| libGLESv2.dll (5.5MiB) | 10.3 ms | **10.3 ms (44.9%)**    | 24.3 ms (106%)          | 29.4 ms (128%)  |
-| firefox.msi (56MiB)    | 131 ms  | **131 ms (56.7%)**     | 259 ms (112%)           | 311 ms (135%)   |
-| tests.exe (157MiB)     | 296 ms  | **296 ms (46.8%)**     | 749 ms (118%)           | 794 ms (125%)   |
+| libGLESv2.dll (5.5MiB) | 22.9 ms | **10.3 ms (44.9%)**    | 24.3 ms (106%)          | 29.4 ms (128%)  |
+| firefox.msi (56MiB)    | 231 ms  | **131 ms (56.7%)**     | 259 ms (112%)           | 311 ms (135%)   |
+| tests.exe (157MiB)     | 632 ms  | **296 ms (46.8%)**     | 749 ms (118%)           | 794 ms (125%)   |
 
 #### [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings)
 
