@@ -8,7 +8,7 @@ use ::boreal::scanner;
 use crate::YARA_PYTHON_COMPATIBILITY;
 
 /// Details about a single match instance of a string.
-#[pyclass(frozen, module = "boreal")]
+#[pyclass(frozen, module = "boreal", skip_from_py_object)]
 #[derive(Clone, Hash)]
 pub struct StringMatchInstance {
     /// Offset of the match.

@@ -11,15 +11,15 @@ build-backend = "maturin"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.4",
-    "pytest-run-parallel>=0.7.0",
-    "yara-python>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-run-parallel>=0.8.2",
+    "yara-python>=4.5.4",
 ]
 doc = [
     "mike>=2.1.3",
-    "mkdocs-material>=9.6.9",
-    "mkdocstrings[python]>=0.29.0",
-    "ruff>=0.11.2",
+    "mkdocs-material>=9.7.1",
+    "mkdocstrings[python]>=1.0.3",
+    "ruff>=0.15.0",
 ]
 
 [tool.uv]
@@ -32,10 +32,11 @@ file = "boreal.pyi"
 [[tool.uv.cache-keys]]
 file = "src/**/*"
 
-[tool.pytest.ini_options]
+[tool.pytest]
+strict = true
 addopts = [
     "--import-mode=importlib",
 ]
 markers = [
-    "global_config: tests that uses global config parameters"
+    "global_config: tests that uses global config parameters",
 ]
