@@ -341,11 +341,11 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   msrv:
-    name: Rust 1.74.0
+    name: Rust 1.77.0
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.74.0
+      - uses: dtolnay/rust-toolchain@1.77.0
       # Only check boreal (and boreal-parser).
       # boreal-cli is a useful tool, but MSRV on it is not really useful.
       - run: |
