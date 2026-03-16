@@ -22,14 +22,14 @@ use boreal::module::{Console, ConsoleData, StaticValue, Value as ModuleValue};
 use boreal::scanner::{
     CallbackEvents, EvaluatedRule, ScanCallbackResult, ScanError, ScanEvent, ScanParams,
 };
-use boreal::{statistics, Compiler, Metadata, MetadataValue, Scanner};
+use boreal::{Compiler, Metadata, MetadataValue, Scanner, statistics};
 
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term::{
     self,
     termcolor::{ColorChoice, StandardStream},
 };
-use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use walkdir::WalkDir;
 
 mod args;
@@ -519,18 +519,19 @@ fn send_directory(path: &Path, options: &InputOptions, sender: &Sender<PathBuf>)
             continue;
         }
 
-        if let Some(max_size) = options.skip_larger {
-            if max_size > 0 && entry.depth() > 0 {
-                let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
-                if file_length >= max_size {
-                    eprintln!(
-                        "skipping {} ({} bytes) because it's larger than {} bytes.",
-                        entry.path().display(),
-                        file_length,
-                        max_size
-                    );
-                    continue;
-                }
+        if let Some(max_size) = options.skip_larger
+            && max_size > 0
+            && entry.depth() > 0
+        {
+            let file_length = entry.metadata().ok().map_or(0, |meta| meta.len());
+            if file_length >= max_size {
+                eprintln!(
+                    "skipping {} ({} bytes) because it's larger than {} bytes.",
+                    entry.path().display(),
+                    file_length,
+                    max_size
+                );
+                continue;
             }
         }
 
@@ -649,15 +650,15 @@ fn display_rule(
     what: &str,
     options: &CallbackOptions,
 ) {
-    if let Some(id) = options.identifier.as_ref() {
-        if rule.name != id {
-            return;
-        }
+    if let Some(id) = options.identifier.as_ref()
+        && rule.name != id
+    {
+        return;
     }
-    if let Some(tag) = options.tag.as_ref() {
-        if rule.tags.iter().all(|t| t != tag) {
-            return;
-        }
+    if let Some(tag) = options.tag.as_ref()
+        && rule.tags.iter().all(|t| t != tag)
+    {
+        return;
     }
 
     // <rule_namespace>:<rule_name> [<ruletags>] <matched object>

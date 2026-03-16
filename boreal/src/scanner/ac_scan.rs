@@ -9,8 +9,8 @@ use super::{
     StringMatch,
 };
 use crate::atoms::pick_atom_in_literal;
-use crate::compiler::variable::Variable;
 use crate::compiler::CompilerProfile;
+use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
 use crate::memory::Region;
 

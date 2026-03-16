@@ -1,11 +1,11 @@
 //! Parsing related to strings and identifiers.
 
+use nom::Parser;
 use nom::bytes::complete::take_while;
 use nom::character::complete::char;
 use nom::combinator::{cut, map, opt, recognize};
 use nom::error::{ErrorKind as NomErrorKind, ParseError};
 use nom::sequence::{pair, preceded};
-use nom::Parser;
 
 use super::error::Error;
 use super::nom_recipes::{rtrim, take_one};

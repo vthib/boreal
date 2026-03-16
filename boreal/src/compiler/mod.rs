@@ -1,6 +1,6 @@
 //! Provides the [`Compiler`] object used to compile YARA rules.
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Display;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -25,7 +25,7 @@ pub(crate) mod rule;
 pub(crate) mod variable;
 
 use crate::bytes_pool::BytesPoolBuilder;
-use crate::{statistics, Scanner};
+use crate::{Scanner, statistics};
 
 /// Object used to compile rules.
 #[derive(Debug)]
@@ -403,7 +403,7 @@ impl Compiler {
                             }),
                             current_filepath,
                             parsed_contents,
-                        ))
+                        ));
                     }
                 }
             }

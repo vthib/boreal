@@ -1,11 +1,11 @@
 //! Parsing methods common to several expressions.
+use nom::Parser;
 use nom::bytes::complete::tag;
 use nom::character::complete::char;
 use nom::combinator::cut;
 use nom::sequence::{separated_pair, terminated};
-use nom::Parser;
 
-use super::{primary_expression::primary_expression, Expression};
+use super::{Expression, primary_expression::primary_expression};
 use crate::nom_recipes::rtrim;
 use crate::types::{Input, ParseResult};
 

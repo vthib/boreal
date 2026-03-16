@@ -1,6 +1,6 @@
 use boreal_parser::regex::AssertionKind;
 
-use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
+use crate::regex::{Class, Hir, VisitAction, Visitor, visit};
 
 pub struct HirAnalysis {
     // Contains start or end line assertions.

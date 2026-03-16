@@ -1,5 +1,5 @@
 use crate::bitmaps::Bitmap;
-use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
+use crate::regex::{Class, Hir, VisitAction, Visitor, visit};
 
 /// Can the hex string be expressed using only literals.
 pub(super) fn hir_to_only_literals(hir: &Hir) -> Option<Vec<Vec<u8>>> {

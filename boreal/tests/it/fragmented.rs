@@ -3,7 +3,7 @@ use boreal::{
     scanner::{FragmentedScanMode, ScanParams},
 };
 
-use crate::utils::{get_boreal_full_matches, Checker};
+use crate::utils::{Checker, get_boreal_full_matches};
 
 #[test]
 fn test_fragmented_string_scan() {
@@ -198,11 +198,10 @@ rule a {
 }"#,
     );
 
-    let data = std::iter::repeat(0).take(2000).collect::<Vec<_>>();
+    let data = std::iter::repeat_n(0, 2000).collect::<Vec<_>>();
     checker.check_fragmented(&[(0, Some(&data))], false);
 
-    let data = std::iter::repeat(0)
-        .take(1000)
+    let data = std::iter::repeat_n(0, 1000)
         .chain([0x78, 0x56, 0x34, 0x12])
         .collect::<Vec<_>>();
     checker.check_fragmented(&[(0, Some(&data))], true);

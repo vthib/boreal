@@ -308,8 +308,8 @@ fn test_pe() {
             pe.imphash() == \"d49b7870cb53f29ec3f42b11cc8bea8b\"
         }",
         "tests/assets/libyara/data/e3d45a2865818756068757d7e319258fef40dad54532ee4355b86bc129f27345",
-        true
-    ) ;
+        true,
+    );
 
     #[cfg(feature = "authenticode-verify")]
     check_file(
@@ -443,7 +443,7 @@ fn test_pe() {
             pe.number_of_signatures == 2
         }",
         "tests/assets/libyara/data/3b8b90159fa9b6048cc5410c5d53f116943564e4d05b04a843f9b3d0540d0c1c",
-        true
+        true,
     );
 
     check_file(
@@ -538,13 +538,14 @@ fn test_pe() {
     );
 
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule test {
         condition:
           pe.pdb_path == \"2AC71AF3-A338-495C-834E-977A6DD5C6FD\"
       }",
-      "tests/assets/libyara/data/6c2abf4b80a87e63eee2996e5cea8f004d49ec0c1806080fa72e960529cba14c",
-      true);
+        "tests/assets/libyara/data/6c2abf4b80a87e63eee2996e5cea8f004d49ec0c1806080fa72e960529cba14c",
+        true,
+    );
 
     check_file(
         "import \"pe\"
@@ -671,15 +672,16 @@ fn test_pe() {
     );
 
     check_file(
-      "import \"pe\"
+        "import \"pe\"
       rule test {
         condition:
           pe.rich_signature.version_data == \"\\x1b\\x9d\\x9c\\x00\\x1b\\x9d\\x9e\\x00\\x1b\\x9d\
 \\xaa\\x00ov\\xab\\x00\\x09x\\x93\\x00\\x00\\x00\\x01\\x00\\x1b\\x9d\\xab\\x00\\x1b\\x9d\\x9b\
 \\x00\\x1b\\x9d\\x9a\\x00\\x1b\\x9d\\x9d\\x00\"
       }",
-      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
-      true);
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
 
     // This is the first 840 bytes (just enough to make sure the rich header is
     // parsed) of
@@ -754,7 +756,7 @@ fn test_pe() {
     );
 
     check_file(
-      "import \"pe\"
+        "import \"pe\"
 
       rule import_details_rva_32_v1_catch
       {
@@ -767,10 +769,12 @@ fn test_pe() {
                 )
             )
       }",
-      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
 
     check_file(
-      "import \"pe\"
+        "import \"pe\"
 
       rule import_details_rva_32_v2_catch
       {
@@ -783,7 +787,9 @@ fn test_pe() {
                 )
             )
       }",
-      "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885", true);
+        "tests/assets/libyara/data/079a472d22290a94ebb212aa8015cdc8dd28a968c6b4d3b88acdd58ce2d3b885",
+        true,
+    );
 
     check_file(
         "import \"pe\"

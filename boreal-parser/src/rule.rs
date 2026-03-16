@@ -1,12 +1,12 @@
 //! Parse yara rules.
 use std::ops::Range;
 
+use nom::Parser;
 use nom::branch::alt;
 use nom::character::complete::char;
 use nom::combinator::{cut, map, opt};
 use nom::multi::many1;
 use nom::sequence::{delimited, pair, preceded, separated_pair};
-use nom::Parser;
 
 use super::{
     error::{Error, ErrorKind},
@@ -1003,25 +1003,33 @@ mod tests {
             Rule {
                 name: "b".to_owned(),
                 name_span: 20..21,
-                tags: vec![RuleTag { tag: "tag1".to_owned(), span: 24..28 }, RuleTag { tag: "tag2".to_owned(), span: 29..33 }],
-                metadatas: vec![
-                    Metadata { name: "a".to_owned(), value: MetadataValue::Boolean(true) }
+                tags: vec![
+                    RuleTag {
+                        tag: "tag1".to_owned(),
+                        span: 24..28,
+                    },
+                    RuleTag {
+                        tag: "tag2".to_owned(),
+                        span: 29..33,
+                    },
                 ],
-                variables: vec![
-                    VariableDeclaration {
-                        name: "b".to_owned(),
-                        value: VariableDeclarationValue::Bytes(b"t".to_vec()),
-                        modifiers: VariableModifiers::default(),
-                        span: 60..68,
-                    }
-                ],
+                metadatas: vec![Metadata {
+                    name: "a".to_owned(),
+                    value: MetadataValue::Boolean(true),
+                }],
+                variables: vec![VariableDeclaration {
+                    name: "b".to_owned(),
+                    value: VariableDeclarationValue::Bytes(b"t".to_vec()),
+                    modifiers: VariableModifiers::default(),
+                    span: 60..68,
+                }],
                 condition: Expression {
                     expr: ExpressionKind::For {
                         selection: ForSelection::All,
                         set: VariableSet { elements: vec![] },
                         body: None,
                     },
-                    span: 80..91
+                    span: 80..91,
                 },
                 is_private: true,
                 is_global: true,

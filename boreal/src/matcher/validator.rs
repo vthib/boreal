@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::regex::Hir;
 
-use super::analysis::{analyze_hir, HirAnalysis};
+use super::analysis::{HirAnalysis, analyze_hir};
 use super::{MatchType, Matches, Modifiers};
 
 mod dfa;
@@ -249,7 +249,7 @@ mod wire {
     use crate::matcher::Modifiers;
 
     use super::simple::SimpleValidator;
-    use super::{dfa, HalfValidator, Validator};
+    use super::{HalfValidator, Validator, dfa};
 
     impl Serialize for Validator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {

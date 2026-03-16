@@ -1,16 +1,16 @@
 //! Parsing related to primary expressions.
 //!
 //! This implements the `primary_expression` element in grammar.y in libyara.
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::char;
 use nom::combinator::{cut, map, opt, value};
 use nom::sequence::delimited;
-use nom::Parser;
 
 use crate::error::{Error, ErrorKind};
 use crate::expression::{
-    expression, identifier, read_integer, string_expression, Expression, ExpressionKind,
+    Expression, ExpressionKind, expression, identifier, read_integer, string_expression,
 };
 use crate::nom_recipes::{rtrim, textual_tag as ttag};
 use crate::types::{Input, ParseResult};
@@ -257,7 +257,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::super::Identifier;
-    use super::{primary_expression as pe, Expression, ExpressionKind as Expr};
+    use super::{Expression, ExpressionKind as Expr, primary_expression as pe};
     use crate::error::{Error, ErrorKind};
     use crate::expression::ReadIntegerType;
     use crate::regex::{AssertionKind, Literal, Node, Regex, RepetitionKind};

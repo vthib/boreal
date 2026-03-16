@@ -1,4 +1,4 @@
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 
 #[derive(Debug)]
 pub struct InputOptions {

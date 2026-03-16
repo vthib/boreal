@@ -6,12 +6,12 @@
 //! - ...
 use std::ops::Range;
 
+use nom::Parser;
 use nom::branch::alt;
 use nom::character::complete::char;
 use nom::combinator::{cut, map, opt, success};
 use nom::multi::separated_list1;
 use nom::sequence::{delimited, preceded, terminated};
-use nom::Parser;
 
 use crate::expression::boolean_expression::boolean_expression;
 use crate::expression::common::range;

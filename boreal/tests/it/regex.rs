@@ -1,4 +1,4 @@
-use crate::utils::{check, check_err, Checker};
+use crate::utils::{Checker, check, check_err};
 
 fn build_rule(var: &str) -> String {
     format!(
@@ -231,11 +231,12 @@ fn test_regex_at_most_repetitions() {
 // Check the regex size is checked regardless of the matcher picked.
 #[test]
 fn test_regex_size() {
-    let check =
-        |regex| {
-            check_err(&format!("rule test {{ strings: $a = {regex} condition: $a }}"),
-        "mem:1:22: error: variable $a cannot be compiled: Compiled regex exceeds size limit");
-        };
+    let check = |regex| {
+        check_err(
+            &format!("rule test {{ strings: $a = {regex} condition: $a }}"),
+            "mem:1:22: error: variable $a cannot be compiled: Compiled regex exceeds size limit",
+        );
+    };
 
     // Raw matcher
     check("/^a{2977952116}/");

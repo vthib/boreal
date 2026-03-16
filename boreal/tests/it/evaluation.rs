@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_boreal, check_err, Checker, Compiler};
+use crate::utils::{Checker, Compiler, build_rule, check, check_boreal, check_err};
 
 fn build_empty_rule(condition: &str) -> String {
     format!(

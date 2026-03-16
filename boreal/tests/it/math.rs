@@ -1,6 +1,6 @@
 use crate::{
     libyara_compat::util::ELF32_MIPS_FILE,
-    utils::{check, check_err, Checker},
+    utils::{Checker, check, check_err},
 };
 
 fn make_rule(cond: &str) -> String {

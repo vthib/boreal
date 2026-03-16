@@ -6,9 +6,9 @@
 //! <https://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/authenticode_pe.docx>
 use const_oid::db::rfc5912;
 use md5::digest::Digest;
+use rsa::RsaPublicKey;
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::traits::SignatureScheme;
-use rsa::RsaPublicKey;
 
 use super::asn1;
 

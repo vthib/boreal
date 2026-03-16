@@ -1,11 +1,11 @@
 //! Parsing related to the expressions `(u)uintXX(value)`.
 //!
 //! This implements the `integer_function` element in grammar.y in libyara.
+use nom::Parser;
 use nom::branch::alt;
 use nom::character::complete::char;
 use nom::combinator::{cut, map};
 use nom::sequence::{delimited, pair};
-use nom::Parser;
 
 use crate::expression::primary_expression::primary_expression;
 use crate::expression::{Expression, ExpressionKind, ReadIntegerType};
@@ -66,7 +66,7 @@ pub(super) fn read_integer_expression(input: Input) -> ParseResult<Expression> {
 #[cfg(test)]
 mod tests {
     use super::{
-        read_integer_expression, read_integer_type, Expression, ExpressionKind, ReadIntegerType,
+        Expression, ExpressionKind, ReadIntegerType, read_integer_expression, read_integer_type,
     };
     use crate::test_helpers::{parse, parse_err, test_public_type};
 

@@ -951,11 +951,13 @@ mod tests {
         assert_eq!(format!("{:?}", Value::Float(0.0)), "Float(0.0)");
         assert_eq!(format!("{:?}", Value::Bytes(Vec::new())), "Bytes(\"\")");
         assert_eq!(format!("{:?}", Value::Bytes(vec![255])), "Bytes([255])");
-        assert!(format!(
-            "{:?}",
-            Value::Regex(Regex::from_string(String::new(), false, false).unwrap())
-        )
-        .starts_with("Regex("),);
+        assert!(
+            format!(
+                "{:?}",
+                Value::Regex(Regex::from_string(String::new(), false, false).unwrap())
+            )
+            .starts_with("Regex("),
+        );
         assert_eq!(format!("{:?}", Value::Boolean(true)), "Boolean(true)");
         assert_eq!(format!("{:?}", Value::Object(HashMap::new())), "Object({})");
         assert_eq!(format!("{:?}", Value::Array(Vec::new())), "Array([])");
@@ -974,14 +976,16 @@ mod tests {
             format!("{:?}", StaticValue::Object(HashMap::new())),
             "Object({})"
         );
-        assert!(format!(
-            "{:?}",
-            StaticValue::Function {
-                fun: test_fun,
-                arguments_types: Vec::new(),
-                return_type: Type::Boolean
-            }
-        )
-        .starts_with("Function"));
+        assert!(
+            format!(
+                "{:?}",
+                StaticValue::Function {
+                    fun: test_fun,
+                    arguments_types: Vec::new(),
+                    return_type: Type::Boolean
+                }
+            )
+            .starts_with("Function")
+        );
     }
 }

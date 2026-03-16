@@ -323,7 +323,7 @@ impl Scanner {
             _ => {
                 return Err(PyTypeError::new_err(
                     "one of filepath, data or pid must be passed",
-                ))
+                ));
             }
         };
 
@@ -395,7 +395,7 @@ impl Scanner {
                     _ => {
                         return Err(PyTypeError::new_err(
                             "file parameter must have a write and a flush method",
-                        ))
+                        ));
                     }
                 }
                 let mut obj = PyObjectWriter { file };
@@ -410,7 +410,7 @@ impl Scanner {
             _ => {
                 return Err(PyTypeError::new_err(
                     "one of filepath or file must be passed",
-                ))
+                ));
             }
         };
 
@@ -727,14 +727,14 @@ fn set_modules_data(
                         None => {
                             return Err(PyTypeError::new_err(
                                 "the data for the cuckoo module is invalid",
-                            ))
+                            ));
                         }
                     },
 
                     Err(_) => {
                         return Err(PyTypeError::new_err(
                             "the data for the cuckoo module must be a string",
-                        ))
+                        ));
                     }
                 }
                 continue;

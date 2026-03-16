@@ -709,7 +709,7 @@ impl Evaluator<'_, '_, '_, '_> {
                 let mut value = match self.evaluate_expr(expr).and_then(Value::unwrap_number) {
                     Ok(v) => v,
                     Err(PoisonKind::Undefined) => {
-                        return Ok(FSEvaluation::Value(Value::Boolean(false)))
+                        return Ok(FSEvaluation::Value(Value::Boolean(false)));
                     }
                     Err(e) => return Err(e),
                 };
@@ -956,11 +956,7 @@ impl ForSelectionEvaluator {
             }
             Self::Number(v) if matched => {
                 *v = v.saturating_sub(1);
-                if *v == 0 {
-                    Some(true)
-                } else {
-                    None
-                }
+                if *v == 0 { Some(true) } else { None }
             }
             Self::Number(_) => None,
         }

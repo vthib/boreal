@@ -391,10 +391,12 @@ fn test_compiler_set_include_callback() {
             match (include_name, current_path.as_deref()) {
                 ("first.yar", _) => {
                     // Check the end of the path, but the rest is from a tempdir.
-                    assert!(current_path
-                        .as_ref()
-                        .unwrap()
-                        .ends_with(&format!("subdir{}initial.yar", std::path::MAIN_SEPARATOR)));
+                    assert!(
+                        current_path
+                            .as_ref()
+                            .unwrap()
+                            .ends_with(&format!("subdir{}initial.yar", std::path::MAIN_SEPARATOR))
+                    );
                     Ok(r#"
                         include "second/../boo.yar"
                         rule r1 { condition: true }

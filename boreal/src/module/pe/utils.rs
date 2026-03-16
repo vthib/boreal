@@ -1,7 +1,7 @@
-use object::pe::{ImageDataDirectory, ImageSectionHeader};
-use object::read::pe::{ImageNtHeaders, ImageOptionalHeader};
-use object::read::ReadRef;
 use object::LittleEndian as LE;
+use object::pe::{ImageDataDirectory, ImageSectionHeader};
+use object::read::ReadRef;
+use object::read::pe::{ImageNtHeaders, ImageOptionalHeader};
 
 /// PE Section table.
 ///
@@ -117,11 +117,7 @@ fn get_adjusted_section_file_range(
 pub fn va_to_file_offset(mem: &[u8], sections: &SectionTable, va: u32) -> Option<u32> {
     va_to_file_offset_inner(sections, va).and_then(|v| {
         let len: u32 = mem.len().try_into().ok()?;
-        if v < len {
-            Some(v)
-        } else {
-            None
-        }
+        if v < len { Some(v) } else { None }
     })
 }
 

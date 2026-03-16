@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_boreal, check_err, Checker};
+use crate::utils::{Checker, build_rule, check, check_boreal, check_err};
 
 #[test]
 fn test_for_identifiers_errors() {

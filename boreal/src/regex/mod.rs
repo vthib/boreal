@@ -5,7 +5,7 @@ use std::error::Error as StdError;
 use std::fmt::Write;
 use std::ops::Range;
 
-use regex_automata::{meta, util::syntax, Input};
+use regex_automata::{Input, meta, util::syntax};
 
 use boreal_parser::regex::{
     AssertionKind, BracketedClass, BracketedClassItem, ClassKind, Literal, PerlClass,
@@ -16,7 +16,7 @@ mod hir;
 pub use hir::*;
 
 mod visitor;
-pub(crate) use visitor::{visit, VisitAction, Visitor};
+pub(crate) use visitor::{VisitAction, Visitor, visit};
 
 /// Regex following the YARA format.
 #[derive(Clone, Debug)]

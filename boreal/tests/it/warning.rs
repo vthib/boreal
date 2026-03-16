@@ -1,4 +1,4 @@
-use crate::utils::{check_warnings, Compiler};
+use crate::utils::{Compiler, check_warnings};
 
 // Test all the files stored in the assets to make sure they emit warnings
 #[test]

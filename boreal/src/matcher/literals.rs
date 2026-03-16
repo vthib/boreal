@@ -1,9 +1,9 @@
 //! Literal extraction and computation from variable expressions.
 use std::cmp::Ordering;
 
-use crate::atoms::{atom_quality_from_literal, ATOM_SIZE};
+use crate::atoms::{ATOM_SIZE, atom_quality_from_literal};
 use crate::bitmaps::Bitmap;
-use crate::regex::{visit, Class, Hir, VisitAction, Visitor};
+use crate::regex::{Class, Hir, VisitAction, Visitor, visit};
 
 pub fn get_literals_details(hir: &Hir) -> LiteralsDetails {
     let mut extractor = visit(hir, RunExtractor::new());
@@ -572,7 +572,7 @@ impl<'a> PrePostExtractor<'a> {
             && self
                 .boundary_part
                 .end_position
-                .map_or(true, |end| self.current_position < end))
+                .is_none_or(|end| self.current_position < end))
             || (!self.is_pre && self.current_position >= self.boundary_part.start_position)
         {
             self.add_node(node.clone());

@@ -229,11 +229,7 @@ impl Memory<'_> {
                     }
                 }
 
-                if has_called_cb {
-                    Some(())
-                } else {
-                    None
-                }
+                if has_called_cb { Some(()) } else { None }
             }
         }
     }

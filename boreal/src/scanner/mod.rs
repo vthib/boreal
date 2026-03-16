@@ -7,11 +7,11 @@ use crate::bytes_pool::{BytesPool, BytesSymbol, StringSymbol};
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::compiler::variable::Variable;
-use crate::evaluator::{self, evaluate_rule, EvalError};
+use crate::evaluator::{self, EvalError, evaluate_rule};
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::{Module, ModuleData, ModuleUserData};
 use crate::timeout::TimeoutChecker;
-use crate::{statistics, Compiler, Metadata};
+use crate::{Compiler, Metadata, statistics};
 
 pub use crate::evaluator::module::EvaluatedModule;
 pub use crate::evaluator::variable::StringMatch;
@@ -1522,8 +1522,8 @@ mod wire {
     use crate::module::{Module, ModuleUserData, StaticValue};
     use crate::wire::DeserializeContext;
 
-    use super::{ac_scan::AcScan, Inner, Rule, Scanner};
     use super::{BytesPool, ScanParams};
+    use super::{Inner, Rule, Scanner, ac_scan::AcScan};
 
     /// Parameters used during deserialization of a [`Scanner`].
     ///
@@ -1709,7 +1709,7 @@ mod wire {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!("unknown module to import: {name}"),
-                    ))
+                    ));
                 }
             }
         }
@@ -1756,11 +1756,13 @@ mod wire {
             let mut buf = Vec::new();
             scanner.serialize(&mut buf).unwrap();
             for offset in &truncate_offset_errors {
-                assert!(deserialize_scanner(
-                    DeserializeParams::default(),
-                    &mut io::Cursor::new(&buf[..*offset])
-                )
-                .is_err());
+                assert!(
+                    deserialize_scanner(
+                        DeserializeParams::default(),
+                        &mut io::Cursor::new(&buf[..*offset])
+                    )
+                    .is_err()
+                );
             }
 
             let scanner2 =
@@ -1801,11 +1803,13 @@ mod wire {
             let mut buf = Vec::new();
             inner.serialize(&mut buf).unwrap();
             for offset in &truncate_offset_errors {
-                assert!(deserialize_inner(
-                    DeserializeParams::default(),
-                    &mut io::Cursor::new(&buf[..*offset])
-                )
-                .is_err());
+                assert!(
+                    deserialize_inner(
+                        DeserializeParams::default(),
+                        &mut io::Cursor::new(&buf[..*offset])
+                    )
+                    .is_err()
+                );
             }
 
             let inner2 =
@@ -1839,16 +1843,14 @@ mod wire {
             let mut buf = Vec::new();
             serialize_modules(&modules, &mut buf).unwrap();
 
-            assert!(deserialize_modules(
-                build_available_modules(),
-                &mut io::Cursor::new(&buf[..1])
-            )
-            .is_err());
-            assert!(deserialize_modules(
-                build_available_modules(),
-                &mut io::Cursor::new(&buf[..5])
-            )
-            .is_err());
+            assert!(
+                deserialize_modules(build_available_modules(), &mut io::Cursor::new(&buf[..1]))
+                    .is_err()
+            );
+            assert!(
+                deserialize_modules(build_available_modules(), &mut io::Cursor::new(&buf[..5]))
+                    .is_err()
+            );
             let modules =
                 deserialize_modules(build_available_modules(), &mut io::Cursor::new(&buf)).unwrap();
             assert_eq!(modules.len(), 2);

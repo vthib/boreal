@@ -2,16 +2,16 @@
 //!
 //! This parses the [`crate::expression::Identifier`] object.
 //! See the `identifier` rule in `grammar.y` in libyara.
+use nom::Parser;
 use nom::branch::alt;
 use nom::character::complete::char;
 use nom::combinator::{cut, map, opt};
 use nom::multi::separated_list0;
 use nom::sequence::terminated;
-use nom::Parser;
 
+use crate::expression::IdentifierOperationType;
 use crate::expression::boolean_expression::boolean_expression;
 use crate::expression::primary_expression::primary_expression;
-use crate::expression::IdentifierOperationType;
 use crate::expression::{Expression, Identifier, IdentifierOperation};
 use crate::nom_recipes::{not_followed, rtrim};
 use crate::string::identifier as raw_identifier;

@@ -2,8 +2,8 @@ use std::ops::Range;
 
 use super::error::Error;
 use nom::{
-    error::{ErrorKind, ParseError as NomParseError},
     Compare, CompareResult, Err, IResult,
+    error::{ErrorKind, ParseError as NomParseError},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -417,9 +417,11 @@ mod tests {
         assert_eq!(post.get_position_offset(), 5);
 
         // split_at_position1
-        assert!(input
-            .split_at_position1::<_, Error>(|c| c == '/', ErrorKind::Char)
-            .is_err());
+        assert!(
+            input
+                .split_at_position1::<_, Error>(|c| c == '/', ErrorKind::Char)
+                .is_err()
+        );
 
         let (post, pre) = input
             .split_at_position1::<_, Error>(|c| c == ':', ErrorKind::Char)
@@ -429,9 +431,11 @@ mod tests {
         assert_eq!(post.cursor(), ": true }");
         assert_eq!(post.get_position_offset(), 18);
 
-        assert!(input
-            .split_at_position1::<_, Error>(|c| c == 'a', ErrorKind::Char)
-            .is_err());
+        assert!(
+            input
+                .split_at_position1::<_, Error>(|c| c == 'a', ErrorKind::Char)
+                .is_err()
+        );
 
         // split_at_position_complete
         let (post, pre) = input
@@ -475,9 +479,11 @@ mod tests {
         assert_eq!(post.cursor(), ": true }");
         assert_eq!(post.get_position_offset(), 18);
 
-        assert!(input
-            .split_at_position1_complete::<_, Error>(|c| c == 'a', ErrorKind::Char)
-            .is_err());
+        assert!(
+            input
+                .split_at_position1_complete::<_, Error>(|c| c == 'a', ErrorKind::Char)
+                .is_err()
+        );
     }
 
     #[test]

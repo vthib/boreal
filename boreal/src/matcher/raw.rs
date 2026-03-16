@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use regex_automata::Input;
 
-use crate::regex::{regex_hir_to_string, Hir, Regex};
+use crate::regex::{Hir, Regex, regex_hir_to_string};
 
 use super::analysis::HirAnalysis;
 use super::widener::widen_hir;

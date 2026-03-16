@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 
 use ::boreal::scanner;
 
-use crate::{string_match_instance::StringMatchInstance, YARA_PYTHON_COMPATIBILITY};
+use crate::{YARA_PYTHON_COMPATIBILITY, string_match_instance::StringMatchInstance};
 
 /// Details about the matches of a string.
 #[pyclass(frozen, module = "boreal", skip_from_py_object)]

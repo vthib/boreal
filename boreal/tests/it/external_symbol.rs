@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_err, Checker, Compiler};
+use crate::utils::{Checker, Compiler, build_rule, check, check_err};
 
 #[test]
 fn test_define_symbol_err() {

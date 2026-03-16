@@ -4,8 +4,8 @@
 //! Basically, any expression that can be resolved by simply checking each byte one by one.
 //!
 //! This mainly excludes alternations and repetitions.
-use crate::matcher::analysis::HirAnalysis;
 use crate::matcher::Modifiers;
+use crate::matcher::analysis::HirAnalysis;
 use crate::regex::Hir;
 
 #[derive(Debug, PartialEq)]
@@ -119,11 +119,7 @@ fn check_node(node: &SimpleNode, mem: &[u8], index: usize) -> Option<usize> {
         SimpleNode::NegatedMask { value, mask } => (mem[index] & *mask) != *value,
     };
 
-    if matched {
-        Some(1)
-    } else {
-        None
-    }
+    if matched { Some(1) } else { None }
 }
 
 fn add_hir_to_simple_nodes(
