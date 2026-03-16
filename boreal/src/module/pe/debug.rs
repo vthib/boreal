@@ -2,9 +2,9 @@ use std::mem::size_of;
 
 use object::read::pe::DataDirectories;
 use object::read::{Bytes, ReadRef};
-use object::{pe, LittleEndian as LE};
+use object::{LittleEndian as LE, pe};
 
-use super::{utils, Value};
+use super::{Value, utils};
 
 pub fn pdb_path(
     data_dirs: &DataDirectories,

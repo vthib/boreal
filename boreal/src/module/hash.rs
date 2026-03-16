@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use super::{hex_encode, EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value};
+use super::{EvalContext, Module, ModuleData, ModuleDataMap, StaticValue, Type, Value, hex_encode};
 use md5::{Digest, Md5};
 use sha1::Sha1;
 use sha2::Sha256;

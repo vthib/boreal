@@ -1,7 +1,7 @@
 use crate::libyara_compat::util::{
-    ELF32_FILE, ELF32_MIPS_FILE, ELF32_NOSECTIONS, ELF32_SHAREDOBJ, ELF64_FILE, ELF_X64_FILE,
+    ELF_X64_FILE, ELF32_FILE, ELF32_MIPS_FILE, ELF32_NOSECTIONS, ELF32_SHAREDOBJ, ELF64_FILE,
 };
-use crate::utils::{compare_module_values_on_file, compare_module_values_on_mem, Checker};
+use crate::utils::{Checker, compare_module_values_on_file, compare_module_values_on_mem};
 
 #[test]
 fn test_non_elf() {

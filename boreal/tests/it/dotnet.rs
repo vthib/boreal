@@ -1,4 +1,4 @@
-use crate::utils::{check_file, compare_module_values_on_file, Checker};
+use crate::utils::{Checker, check_file, compare_module_values_on_file};
 
 #[test]
 fn test_not_dotnet() {

@@ -7,10 +7,10 @@ use boreal_parser::expression as parser;
 
 use super::module::ModuleExpression;
 use super::rule::RuleCompiler;
-use super::{module, CompilationError};
-use crate::module::Type as ModuleType;
-use crate::regex::{regex_ast_to_hir, regex_hir_to_string, Regex};
+use super::{CompilationError, module};
 use crate::BytesSymbol;
+use crate::module::Type as ModuleType;
+use crate::regex::{Regex, regex_ast_to_hir, regex_hir_to_string};
 
 /// Type of a parsed expression
 ///
@@ -1106,7 +1106,7 @@ fn compile_rule_set(
                     return Err(CompilationError::UnknownIdentifier {
                         name: elem.name,
                         span: elem.span,
-                    })
+                    });
                 }
             }
         }
@@ -1343,9 +1343,9 @@ fn compile_identifier_as_iterator(
 mod wire {
     use std::io;
 
+    use crate::BytesSymbol;
     use crate::regex::Regex;
     use crate::wire::{Deserialize, Serialize};
-    use crate::BytesSymbol;
     use boreal_parser::expression::ReadIntegerType;
 
     use crate::wire::DeserializeContext;
@@ -1864,7 +1864,7 @@ mod wire {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing an expression: {v}"),
-                ))
+                ));
             }
         })
     }
@@ -2040,7 +2040,7 @@ mod wire {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!("invalid discriminant when deserializing a read integer type: {v}"),
-                    ))
+                    ));
                 }
             };
             Ok(RIType(ty))
@@ -2050,8 +2050,8 @@ mod wire {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::compiler::module::{BoundedValueIndex, ModuleExpressionKind, ModuleOperations};
         use crate::compiler::BytesPoolBuilder;
+        use crate::compiler::module::{BoundedValueIndex, ModuleExpressionKind, ModuleOperations};
         use crate::wire::tests::{
             test_invalid_deserialization, test_round_trip, test_round_trip_custom_deser,
         };

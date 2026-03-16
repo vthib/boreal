@@ -422,11 +422,7 @@ impl CurrentRegion {
 // page_size is returned.
 fn round_to_page_size(value: usize, page_size: usize) -> usize {
     let res = value - (value % page_size);
-    if res == 0 {
-        page_size
-    } else {
-        res
-    }
+    if res == 0 { page_size } else { res }
 }
 
 #[cfg(test)]

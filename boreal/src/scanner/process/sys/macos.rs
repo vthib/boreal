@@ -2,7 +2,7 @@ use std::mem::size_of;
 
 use mach2::kern_return::{KERN_NO_SPACE, KERN_SUCCESS};
 use mach2::mach_port::mach_port_deallocate;
-use mach2::port::{mach_port_name_t, MACH_PORT_NULL};
+use mach2::port::{MACH_PORT_NULL, mach_port_name_t};
 use mach2::traps::{mach_task_self, task_for_pid};
 use mach2::vm::{mach_vm_read_overwrite, mach_vm_region_recurse};
 use mach2::vm_prot::VM_PROT_READ;

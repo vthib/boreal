@@ -1,11 +1,11 @@
 //! Parsing related to expressions.
 //!
 //! This implements the `expression` element in grammar.y in libyara.
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::combinator::{cut, map};
 use nom::sequence::preceded;
-use nom::Parser;
 
 use crate::error::{Error, ErrorKind};
 use crate::expression::common::range;
@@ -15,7 +15,7 @@ use crate::expression::for_expression::{
 use crate::expression::primary_expression::primary_expression;
 use crate::expression::{Expression, ExpressionKind};
 use crate::nom_recipes::{rtrim, textual_tag as ttag};
-use crate::regex::{regex, Regex};
+use crate::regex::{Regex, regex};
 use crate::string::string_identifier;
 use crate::types::{Input, ParseResult};
 
@@ -92,7 +92,7 @@ fn expression_and(input: Input) -> ParseResult<Expression> {
                                 expr: ExpressionKind::And(ops),
                                 span: i2.get_span_from(start),
                             },
-                        ))
+                        ));
                     }
                 }
             }

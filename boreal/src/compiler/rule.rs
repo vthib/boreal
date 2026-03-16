@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use boreal_parser::rule;
 
-use super::expression::{compile_bool_expression, Expression, VariableIndex};
+use super::expression::{Expression, VariableIndex, compile_bool_expression};
 use super::external_symbol::ExternalSymbol;
-use super::{variable, CompilationError, CompilerParams, Namespace};
+use super::{CompilationError, CompilerParams, Namespace, variable};
 use crate::bytes_pool::{BytesPoolBuilder, BytesSymbol, StringSymbol};
 use crate::module::Type as ModuleType;
 use crate::statistics;

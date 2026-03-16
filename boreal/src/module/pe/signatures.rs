@@ -8,11 +8,11 @@ use std::collections::HashMap;
 use std::fmt::Write;
 
 use const_oid::db::{rfc3280, rfc4519, rfc5912};
-use der::oid::db::DB;
 use der::Decode;
+use der::oid::db::DB;
 use md5::Digest;
 use object::read::pe::{DataDirectories, ImageNtHeaders, ImageOptionalHeader};
-use object::{pe, Bytes, LittleEndian as LE, U16, U32};
+use object::{Bytes, LittleEndian as LE, U16, U32, pe};
 
 use super::Value;
 use crate::module::hex_encode;

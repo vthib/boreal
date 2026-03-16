@@ -1,6 +1,6 @@
 use boreal_parser::regex::AssertionKind;
 
-use crate::regex::{visit, Hir, VisitAction, Visitor};
+use crate::regex::{Hir, VisitAction, Visitor, visit};
 
 pub fn widen_hir(hir: &Hir) -> Hir {
     visit(hir, HirWidener::new())

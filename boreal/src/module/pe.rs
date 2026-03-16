@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::memory::Region;
 use crate::regex::Regex;
 use object::{
+    FileKind, LittleEndian as LE, StringTable,
     coff::{CoffHeader, SymbolTable},
     pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64},
     read::pe::{
@@ -10,7 +11,6 @@ use object::{
         ImageThunkData, ImportTable, ImportThunkList, ResourceDirectory,
         ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
     },
-    FileKind, LittleEndian as LE, StringTable,
 };
 
 use super::{
@@ -1450,7 +1450,7 @@ fn add_imports<Pe: ImageNtHeaders>(
                     &mut nb_functions_total,
                 )
             });
-            if functions.as_ref().map_or(true, Vec::is_empty) {
+            if functions.as_ref().is_none_or(Vec::is_empty) {
                 continue;
             }
 
@@ -2597,11 +2597,7 @@ impl Data {
                     matched = matched && t == entry.toolid;
                 }
 
-                if matched {
-                    u64::from(entry.times)
-                } else {
-                    0
-                }
+                if matched { u64::from(entry.times) } else { 0 }
             })
             .sum()
     }

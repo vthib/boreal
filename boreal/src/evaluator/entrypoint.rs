@@ -3,10 +3,10 @@
 //! This depends on the `object` feature.
 
 use object::coff::SectionTable;
-use object::elf::{FileHeader32, FileHeader64, ET_EXEC};
+use object::elf::{ET_EXEC, FileHeader32, FileHeader64};
 use object::pe::{
-    ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64, IMAGE_FILE_DLL, IMAGE_FILE_MACHINE_AMD64,
-    IMAGE_FILE_MACHINE_I386,
+    IMAGE_FILE_DLL, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_I386, ImageDosHeader,
+    ImageNtHeaders32, ImageNtHeaders64,
 };
 use object::read::elf::FileHeader;
 use object::read::pe::{ImageNtHeaders, ImageOptionalHeader};

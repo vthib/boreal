@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use object::{
+    BigEndian, Bytes, Endianness, FileKind, U32, U64,
     macho::{
         self, FatArch32, FatArch64, MachHeader32, MachHeader64, SegmentCommand32, SegmentCommand64,
         ThreadCommand,
     },
     read::macho::{FatArch, LoadCommandData, MachHeader, MachOFatFile, Section, Segment},
-    BigEndian, Bytes, Endianness, FileKind, U32, U64,
 };
 
 use crate::memory::Region;

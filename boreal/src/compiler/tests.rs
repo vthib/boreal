@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::expression::{compile_expression, Type};
+use super::expression::{Type, compile_expression};
 use super::module::compile_module;
 use super::rule::RuleCompiler;
 use super::{

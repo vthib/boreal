@@ -315,8 +315,10 @@ impl CompilationError {
                 span,
             } => Diagnostic::error()
                 .with_message("expression has an invalid type")
-                .with_labels(vec![Label::primary((), span.clone())
-                    .with_message(format!("expected {expected_type}, found {ty}"))]),
+                .with_labels(vec![
+                    Label::primary((), span.clone())
+                        .with_message(format!("expected {expected_type}, found {ty}")),
+                ]),
 
             Self::ExpressionIncompatibleTypes {
                 left_type,
@@ -364,7 +366,7 @@ impl CompilationError {
             } => Diagnostic::error()
                 .with_message(format!("expected an expression of type {expected_type}"))
                 .with_labels(vec![
-                    Label::primary((), span.clone()).with_message(format!("this has type {ty}"))
+                    Label::primary((), span.clone()).with_message(format!("this has type {ty}")),
                 ]),
 
             Self::InvalidIdentifierType {
@@ -487,8 +489,10 @@ impl CompilationError {
 
             Self::RegexUnknownEscape { c, span } => Diagnostic::warning()
                 .with_message("unknown escape sequence")
-                .with_labels(vec![Label::primary((), span.clone())
-                    .with_message(format!("this is equivalent to '{c}'"))]),
+                .with_labels(vec![
+                    Label::primary((), span.clone())
+                        .with_message(format!("this is equivalent to '{c}'")),
+                ]),
         }
     }
 }

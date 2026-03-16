@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range};
 
 use boreal_parser::expression::{Identifier, IdentifierOperation, IdentifierOperationType};
 
-use super::expression::{compile_expression, Expr, Expression, Type};
+use super::expression::{Expr, Expression, Type, compile_expression};
 use super::rule::RuleCompiler;
 use super::{CompilationError, ImportedModule};
 use crate::module::{Module as ModuleTrait, StaticFunction, StaticValue, Type as ValueType};
@@ -817,12 +817,12 @@ mod wire {
                         module_index,
                         subfields,
                     }),
-                    None => {
-                        Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("Invalid subfields {subfields:?} in expression using module with index {module_index}")
-                        ))
-                    }
+                    None => Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid subfields {subfields:?} in expression using module with index {module_index}"
+                        ),
+                    )),
                 }
             }
             v => Err(io::Error::new(

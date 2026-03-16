@@ -1,12 +1,12 @@
 //! Some common and useful nom recipes, shared by all other modules.
 
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_until};
 use nom::character::complete::{char, multispace1};
 use nom::combinator::{cut, opt, value};
 use nom::error::{ErrorKind as NomErrorKind, ParseError};
 use nom::multi::many0;
-use nom::Parser;
 
 use super::error::{Error, ErrorKind};
 use super::types::{Input, ParseResult};

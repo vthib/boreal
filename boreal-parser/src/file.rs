@@ -1,12 +1,12 @@
 //! Types related to YARA files.
 use std::ops::Range;
 
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::take_till1;
 use nom::character::complete::char;
 use nom::combinator::map;
 use nom::sequence::delimited;
-use nom::Parser;
 use nom::{combinator::cut, sequence::preceded};
 
 use crate::rule::Rule;

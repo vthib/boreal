@@ -155,22 +155,28 @@ pub(crate) mod tests {
         deserialize_header(*b"toto", &mut io::Cursor::new(&buf)).unwrap();
 
         // invalid magic
-        assert!(deserialize_header(
-            *b"toto",
-            &mut io::Cursor::new(b"wire_boreal_toto\x00\x00\x00\x00")
-        )
-        .is_err());
+        assert!(
+            deserialize_header(
+                *b"toto",
+                &mut io::Cursor::new(b"wire_boreal_toto\x00\x00\x00\x00")
+            )
+            .is_err()
+        );
         // invalid kind
-        assert!(deserialize_header(
-            *b"toto",
-            &mut io::Cursor::new(b"boreal_wire_nkgm\x00\x00\x00\x00")
-        )
-        .is_err());
+        assert!(
+            deserialize_header(
+                *b"toto",
+                &mut io::Cursor::new(b"boreal_wire_nkgm\x00\x00\x00\x00")
+            )
+            .is_err()
+        );
         // unknown version
-        assert!(deserialize_header(
-            *b"toto",
-            &mut io::Cursor::new(b"boreal_wire_toto\xCC\x00\x00\x00")
-        )
-        .is_err());
+        assert!(
+            deserialize_header(
+                *b"toto",
+                &mut io::Cursor::new(b"boreal_wire_toto\xCC\x00\x00\x00")
+            )
+            .is_err()
+        );
     }
 }

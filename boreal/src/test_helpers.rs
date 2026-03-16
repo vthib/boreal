@@ -3,7 +3,7 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 use boreal_parser::hex_string::parse_hex_string;
 use boreal_parser::regex::parse_regex;
 
-use crate::regex::{regex_ast_to_hir, Hir};
+use crate::regex::{Hir, regex_ast_to_hir};
 
 #[track_caller]
 pub fn expr_to_hir(expr: &str) -> Hir {

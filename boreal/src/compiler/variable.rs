@@ -5,8 +5,8 @@ use crate::matcher::{Matcher, Modifiers};
 use crate::regex::regex_ast_to_hir;
 use crate::statistics;
 
-use super::rule::RuleCompiler;
 use super::CompilationError;
+use super::rule::RuleCompiler;
 
 /// A compiled variable used in a rule.
 #[derive(Debug)]
@@ -100,7 +100,7 @@ pub(super) fn compile_variable(
                 variable_name: name,
                 span,
                 error,
-            })
+            });
         }
     };
 

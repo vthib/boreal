@@ -1,4 +1,5 @@
 //! AST objects related to hex strings.
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, digit1};
@@ -6,7 +7,6 @@ use nom::combinator::{cut, map, opt, value};
 use nom::error::{ErrorKind as NomErrorKind, ParseError};
 use nom::multi::{many1, separated_list1};
 use nom::sequence::{delimited, preceded, terminated};
-use nom::Parser;
 
 use super::error::{Error, ErrorKind};
 use super::nom_recipes::{map_res, rtrim};

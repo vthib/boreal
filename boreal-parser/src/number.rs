@@ -1,12 +1,12 @@
 //! Parsing related to numbers.
 //!
 //! This implements the _NUMBER_ and _DOUBLE_ lexical patterns from libyara.
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, digit1, hex_digit1, oct_digit1};
 use nom::combinator::{cut, opt, recognize};
 use nom::sequence::{pair, preceded};
-use nom::Parser;
 
 use super::error::{Error, ErrorKind};
 use super::nom_recipes::{rtrim, textual_tag as ttag};
@@ -26,7 +26,7 @@ fn decimal_number(input: Input) -> ParseResult<i64> {
             return Err(nom::Err::Failure(Error::new(
                 input.get_span_from(start),
                 ErrorKind::StrToIntError(e),
-            )))
+            )));
         }
     };
 
@@ -60,7 +60,7 @@ fn hexadecimal_number(input: Input) -> ParseResult<i64> {
             return Err(nom::Err::Failure(Error::new(
                 input.get_span_from(start),
                 ErrorKind::StrToHexIntError(e),
-            )))
+            )));
         }
     };
 
@@ -80,7 +80,7 @@ fn octal_number(input: Input) -> ParseResult<i64> {
             return Err(nom::Err::Failure(Error::new(
                 input.get_span_from(start),
                 ErrorKind::StrToOctIntError(e),
-            )))
+            )));
         }
     };
 

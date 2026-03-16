@@ -1,5 +1,5 @@
 use crate::libyara_compat::util::TEXT_1024_BYTES;
-use crate::utils::{check, Checker};
+use crate::utils::{Checker, check};
 
 const TEXT: &[u8] = TEXT_1024_BYTES.as_bytes();
 

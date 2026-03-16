@@ -1,4 +1,4 @@
-use crate::utils::{build_rule, check, check_err, Checker};
+use crate::utils::{Checker, build_rule, check, check_err};
 
 #[test]
 fn test_variable() {

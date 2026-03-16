@@ -4,7 +4,7 @@
 //! as well. Do not modify those tests in any way. Custom tests should go in the other integration
 //! tests, outside of the `libyara` directory.
 use super::util::{ISSUE_1006, PE32_FILE, TEXT_1024_BYTES};
-use crate::utils::{check, check_count, check_err, check_file, check_warnings, join_str, Checker};
+use crate::utils::{Checker, check, check_count, check_err, check_file, check_warnings, join_str};
 
 #[test]
 fn test_boolean_operators() {
@@ -3287,16 +3287,16 @@ fn test_re() {
     // Test case for issue #503, \x without two following hex-digits
     check_err(
         &build_regex_rule("\\x0"),
-        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string"
+        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string",
     );
     check_err(
         &build_regex_rule("\\x"),
-        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string"
+        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string",
     );
 
     check_err(
         &build_regex_rule("\\xxy"),
-        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string"
+        "mem:1:28: error: error converting hexadecimal notation to integer: invalid digit found in string",
     );
 
     // Test case for issue #682

@@ -2,11 +2,11 @@
 //!
 //! This implements the `string_count/offset/length` elements in grammar.y
 //! in libyara.
+use nom::Parser;
 use nom::bytes::complete::tag;
 use nom::character::complete::char;
 use nom::combinator::{cut, opt};
 use nom::sequence::{delimited, preceded};
-use nom::Parser;
 
 use crate::expression::common::range;
 use crate::expression::primary_expression::primary_expression;

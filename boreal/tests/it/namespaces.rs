@@ -1,4 +1,4 @@
-use crate::utils::{check_err, Compiler};
+use crate::utils::{Compiler, check_err};
 
 // An import is reused in the same namespace
 #[test]

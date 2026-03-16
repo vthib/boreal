@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 
 use clap::parser::Values;
-use clap::{command, value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, command, value_parser};
 
 mod callback;
 pub use callback::CallbackOptions;

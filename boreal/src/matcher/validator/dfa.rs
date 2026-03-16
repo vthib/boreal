@@ -10,7 +10,7 @@ use regex_automata::{Anchored, Input, MatchKind, PatternID};
 use crate::matcher::analysis::HirAnalysis;
 use crate::matcher::widener::widen_hir;
 use crate::matcher::{MatchType, Modifiers};
-use crate::regex::{regex_hir_to_string, Hir};
+use crate::regex::{Hir, regex_hir_to_string};
 
 type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync + UnwindSafe + RefUnwindSafe>;
 
@@ -335,7 +335,7 @@ mod wire {
 
     use crate::matcher::Modifiers;
 
-    use super::{build_dfa, DfaValidator, PoolCreateFn};
+    use super::{DfaValidator, PoolCreateFn, build_dfa};
 
     impl Serialize for DfaValidator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {

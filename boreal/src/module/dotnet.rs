@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use object::pe::{
-    ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64, IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
-    IMAGE_FILE_DLL,
+    IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR, IMAGE_FILE_DLL, ImageDosHeader, ImageNtHeaders32,
+    ImageNtHeaders64,
 };
 use object::read::pe::{DataDirectories, ImageNtHeaders};
 use object::{Bytes, FileKind, LittleEndian as LE, Pod, ReadRef, U16, U32, U64};

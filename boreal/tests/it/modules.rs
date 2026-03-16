@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use boreal::compiler::CompilerBuilder;
 use boreal::module::{Console, ConsoleData};
 
-use crate::utils::{check, check_boreal, check_err, Compiler};
+use crate::utils::{Compiler, check, check_boreal, check_err};
 
 #[track_caller]
 fn check_tests_err(condition: &str, expected_err: &str) {

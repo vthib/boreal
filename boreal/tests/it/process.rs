@@ -67,9 +67,10 @@ fn test_process_permission_denied() {
         }
         err => panic!("Unexpected last err: {err:?}"),
     }
-    assert!(err
-        .to_string()
-        .starts_with("error listing memory regions of process"));
+    assert!(
+        err.to_string()
+            .starts_with("error listing memory regions of process")
+    );
 }
 
 #[cfg(target_os = "linux")]

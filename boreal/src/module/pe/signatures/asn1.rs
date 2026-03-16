@@ -15,7 +15,7 @@
 // triggers this lint. It would be nice to find a fix for this in the `der` crate.
 #![allow(single_use_lifetimes)]
 
-use der::{asn1, Choice, Decode, Encode, Reader, Sequence, ValueOrd};
+use der::{Choice, Decode, Encode, Reader, Sequence, ValueOrd, asn1};
 use sha1::Digest;
 
 pub use const_oid::db::rfc5911::{

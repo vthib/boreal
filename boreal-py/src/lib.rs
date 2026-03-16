@@ -230,7 +230,7 @@ fn compile(
         let include_callback = cb.clone().unbind();
         compiler.set_include_callback(move |include_name, current_path, ns| {
             call_py_include_callback(&include_callback, include_name, current_path, ns)
-                .map_err(|desc| std::io::Error::new(std::io::ErrorKind::Other, desc))
+                .map_err(std::io::Error::other)
         });
     }
 
@@ -415,7 +415,7 @@ fn load(
         _ => {
             return Err(PyTypeError::new_err(
                 "one of filepath or file must be passed",
-            ))
+            ));
         }
     };
 

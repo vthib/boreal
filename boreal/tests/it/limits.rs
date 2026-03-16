@@ -17,7 +17,7 @@ rule a {
 
     let mut full_text: Vec<_> = Vec::new();
     full_text.push(b'b');
-    full_text.extend(std::iter::repeat(b'a').take(1024));
+    full_text.extend(std::iter::repeat_n(b'a', 1024));
     full_text.push(b'b');
 
     let mut checker = Checker::new(rule);
@@ -48,7 +48,7 @@ rule a {
 
 #[test]
 fn test_limit_string_max_nb_matches() {
-    let mem: Vec<_> = std::iter::repeat(0).take(1_100_000).collect();
+    let mem: Vec<_> = std::iter::repeat_n(0, 1_100_000).collect();
 
     // Default for boreal is limited to 1_000
     let mut checker = Checker::new(

@@ -1,13 +1,13 @@
 //! AST elements related to YARA regexes.
 use std::ops::Range;
 
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{anychar, char, digit0, digit1, multispace0, none_of};
 use nom::combinator::{cut, map, opt};
 use nom::multi::many0;
 use nom::sequence::{delimited, separated_pair, terminated};
-use nom::Parser;
 
 use crate::error::ErrorKind;
 
@@ -641,7 +641,7 @@ fn range_multi(input: Input) -> ParseResult<RepetitionRange> {
             return Err(nom::Err::Failure(Error::new(
                 input.get_span_from_no_rtrim(start),
                 ErrorKind::RegexRangeInvalid,
-            )))
+            )));
         }
         (Some(from), Some(to)) => RepetitionRange::Bounded(from, to),
     };
@@ -659,7 +659,7 @@ fn parse_u32(input: Input) -> ParseResult<u32> {
             return Err(nom::Err::Failure(Error::new(
                 input.get_span_from_no_rtrim(start),
                 ErrorKind::StrToIntError(e),
-            )))
+            )));
         }
     };
 
@@ -679,7 +679,7 @@ fn parse_opt_u32(input: Input) -> ParseResult<Option<u32>> {
             return Err(nom::Err::Failure(Error::new(
                 input.get_span_from_no_rtrim(start),
                 ErrorKind::StrToIntError(e),
-            )))
+            )));
         }
     };
 
