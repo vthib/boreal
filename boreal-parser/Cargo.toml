@@ -7,9 +7,9 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 keywords = ["boreal", "yara", "parser"]
 categories = ["parser-implementations"]
-edition = "2021"
+edition = "2024"
 # MSRV
-rust-version = "1.74"
+rust-version = "1.85"
 
 [dependencies]
 # Parsing library

@@ -5,7 +5,7 @@ version = "0.0.1"
 description = "Benchmarks for the boreal library"
 repository = "https://github.com/vthib/boreal"
 license = "MIT OR Apache-2.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 boreal = { path = "../boreal", version = "*", features = ["authenticode"] }

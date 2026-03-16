@@ -7,9 +7,9 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 keywords = ["boreal", "yara", "string-matching", "scan", "python"]
 categories = ["api-bindings", "text-processing"]
-edition = "2021"
+edition = "2024"
 # MSRV
-rust-version = "1.66"
+rust-version = "1.85"
 
 homepage = "https://github.com/vthib/boreal/"
 documentation = "https://vthib.github.io/boreal/boreal-py/dev/yara_compatibility_mode/"
