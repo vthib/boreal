@@ -7,7 +7,7 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 keywords = ["boreal", "yara", "string-matching", "scan"]
 categories = ["command-line-utilities", "text-processing"]
-edition = "2021"
+edition = "2024"
 
 [[bin]]
 name = "boreal"

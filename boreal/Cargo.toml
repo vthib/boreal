@@ -7,9 +7,9 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 keywords = ["boreal", "yara", "string-matching", "scan"]
 categories = ["text-processing"]
-edition = "2021"
+edition = "2024"
 # MSRV
-rust-version = "1.77"
+rust-version = "1.85"
 exclude = ["/tests"]
 
 [features]
