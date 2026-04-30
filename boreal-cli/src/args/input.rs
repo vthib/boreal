@@ -21,9 +21,7 @@ impl InputOptions {
         let nb_threads = if let Some(nb) = args.get_one::<usize>("threads") {
             std::cmp::min(1, *nb)
         } else {
-            std::thread::available_parallelism()
-                .map(std::num::NonZero::get)
-                .unwrap_or(32)
+            std::thread::available_parallelism().map_or(32, std::num::NonZero::get)
         };
 
         Self {

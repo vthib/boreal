@@ -28,14 +28,13 @@ rule test {{
         yara_scanner
             .scan_mem_callback(b"", |msg| {
                 match msg {
-                    yara::CallbackMsg::ImportModule(mut module) => {
-                        if module.name() == Some(b"cuckoo") {
-                            if let Some(report) = &mut report {
-                                // Safety: report is alive for longer than the scan.
-                                unsafe {
-                                    module
-                                        .set_module_data(report.as_mut_ptr().cast(), report.len());
-                                }
+                    yara::CallbackMsg::ImportModule(mut module)
+                        if module.name() == Some(b"cuckoo") =>
+                    {
+                        if let Some(report) = &mut report {
+                            // Safety: report is alive for longer than the scan.
+                            unsafe {
+                                module.set_module_data(report.as_mut_ptr().cast(), report.len());
                             }
                         }
                     }
