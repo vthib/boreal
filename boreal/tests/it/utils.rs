@@ -1175,7 +1175,7 @@ fn compare_module_values(
         }
         (ModuleValue::Array(a), ModuleValue::Array(b)) => {
             if a.len() == b.len() {
-                for (i, (boreal_value, yara_value)) in a.iter().zip(b.into_iter()).enumerate() {
+                for (i, (boreal_value, yara_value)) in a.iter().zip(b).enumerate() {
                     let subpath = format!("{path}[{i}]");
                     compare_module_values(boreal_value, yara_value, &subpath, diffs);
                 }

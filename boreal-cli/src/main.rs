@@ -864,7 +864,7 @@ fn print_module_dynamic_value(stdout: &mut StdoutLock, value: &ModuleValue, inde
                 return;
             }
 
-            writeln!(stdout,).unwrap();
+            writeln!(stdout).unwrap();
             for (index, subval) in array.iter().enumerate() {
                 write!(stdout, "{:indent$}[{}]", "", index).unwrap();
                 print_module_dynamic_value(stdout, subval, indent + 4);

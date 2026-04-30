@@ -232,7 +232,7 @@ mod wire {
         let regex = res.map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("unable to compile regex with expression {expr1}, {expr2}: {err:?}",),
+                format!("unable to compile regex with expression {expr1}, {expr2}: {err:?}"),
             )
         })?;
         Ok(RawMatcher {
