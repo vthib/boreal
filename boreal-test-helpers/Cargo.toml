@@ -7,5 +7,5 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-memmap2 = "0.9"
-tempfile = "3.24"
+memmap2.workspace = true
+tempfile.workspace = true
