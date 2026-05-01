@@ -8,6 +8,11 @@ members = [
     "boreal-test-helpers",
 ]
 
+[workspace.dependencies]
+codespan-reporting = "0.13"
+memmap2 = "0.9"
+tempfile = "3.24"
+
 [workspace.lints.rust]
 ambiguous_negative_literals = "deny"
 explicit_outlives_requirements = "deny"
