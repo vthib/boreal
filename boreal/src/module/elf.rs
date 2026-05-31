@@ -91,50 +91,44 @@ impl Module for Elf {
                 StaticValue::Integer(elf::PT_GNU_STACK.into()),
             ),
             // DT constants
-            ("DT_NULL", StaticValue::Integer(elf::DT_NULL.into())),
-            ("DT_NEEDED", StaticValue::Integer(elf::DT_NEEDED.into())),
-            ("DT_PLTRELSZ", StaticValue::Integer(elf::DT_PLTRELSZ.into())),
-            ("DT_PLTGOT", StaticValue::Integer(elf::DT_PLTGOT.into())),
-            ("DT_HASH", StaticValue::Integer(elf::DT_HASH.into())),
-            ("DT_STRTAB", StaticValue::Integer(elf::DT_STRTAB.into())),
-            ("DT_SYMTAB", StaticValue::Integer(elf::DT_SYMTAB.into())),
-            ("DT_RELA", StaticValue::Integer(elf::DT_RELA.into())),
-            ("DT_RELASZ", StaticValue::Integer(elf::DT_RELASZ.into())),
-            ("DT_RELAENT", StaticValue::Integer(elf::DT_RELAENT.into())),
-            ("DT_STRSZ", StaticValue::Integer(elf::DT_STRSZ.into())),
-            ("DT_SYMENT", StaticValue::Integer(elf::DT_SYMENT.into())),
-            ("DT_INIT", StaticValue::Integer(elf::DT_INIT.into())),
-            ("DT_FINI", StaticValue::Integer(elf::DT_FINI.into())),
-            ("DT_SONAME", StaticValue::Integer(elf::DT_SONAME.into())),
-            ("DT_RPATH", StaticValue::Integer(elf::DT_RPATH.into())),
-            ("DT_SYMBOLIC", StaticValue::Integer(elf::DT_SYMBOLIC.into())),
-            ("DT_REL", StaticValue::Integer(elf::DT_REL.into())),
-            ("DT_RELSZ", StaticValue::Integer(elf::DT_RELSZ.into())),
-            ("DT_RELENT", StaticValue::Integer(elf::DT_RELENT.into())),
-            ("DT_PLTREL", StaticValue::Integer(elf::DT_PLTREL.into())),
-            ("DT_DEBUG", StaticValue::Integer(elf::DT_DEBUG.into())),
-            ("DT_TEXTREL", StaticValue::Integer(elf::DT_TEXTREL.into())),
-            ("DT_JMPREL", StaticValue::Integer(elf::DT_JMPREL.into())),
-            ("DT_BIND_NOW", StaticValue::Integer(elf::DT_BIND_NOW.into())),
-            (
-                "DT_INIT_ARRAY",
-                StaticValue::Integer(elf::DT_INIT_ARRAY.into()),
-            ),
-            (
-                "DT_FINI_ARRAY",
-                StaticValue::Integer(elf::DT_FINI_ARRAY.into()),
-            ),
+            ("DT_NULL", StaticValue::Integer(elf::DT_NULL)),
+            ("DT_NEEDED", StaticValue::Integer(elf::DT_NEEDED)),
+            ("DT_PLTRELSZ", StaticValue::Integer(elf::DT_PLTRELSZ)),
+            ("DT_PLTGOT", StaticValue::Integer(elf::DT_PLTGOT)),
+            ("DT_HASH", StaticValue::Integer(elf::DT_HASH)),
+            ("DT_STRTAB", StaticValue::Integer(elf::DT_STRTAB)),
+            ("DT_SYMTAB", StaticValue::Integer(elf::DT_SYMTAB)),
+            ("DT_RELA", StaticValue::Integer(elf::DT_RELA)),
+            ("DT_RELASZ", StaticValue::Integer(elf::DT_RELASZ)),
+            ("DT_RELAENT", StaticValue::Integer(elf::DT_RELAENT)),
+            ("DT_STRSZ", StaticValue::Integer(elf::DT_STRSZ)),
+            ("DT_SYMENT", StaticValue::Integer(elf::DT_SYMENT)),
+            ("DT_INIT", StaticValue::Integer(elf::DT_INIT)),
+            ("DT_FINI", StaticValue::Integer(elf::DT_FINI)),
+            ("DT_SONAME", StaticValue::Integer(elf::DT_SONAME)),
+            ("DT_RPATH", StaticValue::Integer(elf::DT_RPATH)),
+            ("DT_SYMBOLIC", StaticValue::Integer(elf::DT_SYMBOLIC)),
+            ("DT_REL", StaticValue::Integer(elf::DT_REL)),
+            ("DT_RELSZ", StaticValue::Integer(elf::DT_RELSZ)),
+            ("DT_RELENT", StaticValue::Integer(elf::DT_RELENT)),
+            ("DT_PLTREL", StaticValue::Integer(elf::DT_PLTREL)),
+            ("DT_DEBUG", StaticValue::Integer(elf::DT_DEBUG)),
+            ("DT_TEXTREL", StaticValue::Integer(elf::DT_TEXTREL)),
+            ("DT_JMPREL", StaticValue::Integer(elf::DT_JMPREL)),
+            ("DT_BIND_NOW", StaticValue::Integer(elf::DT_BIND_NOW)),
+            ("DT_INIT_ARRAY", StaticValue::Integer(elf::DT_INIT_ARRAY)),
+            ("DT_FINI_ARRAY", StaticValue::Integer(elf::DT_FINI_ARRAY)),
             (
                 "DT_INIT_ARRAYSZ",
-                StaticValue::Integer(elf::DT_INIT_ARRAYSZ.into()),
+                StaticValue::Integer(elf::DT_INIT_ARRAYSZ),
             ),
             (
                 "DT_FINI_ARRAYSZ",
-                StaticValue::Integer(elf::DT_FINI_ARRAYSZ.into()),
+                StaticValue::Integer(elf::DT_FINI_ARRAYSZ),
             ),
-            ("DT_RUNPATH", StaticValue::Integer(elf::DT_RUNPATH.into())),
-            ("DT_FLAGS", StaticValue::Integer(elf::DT_FLAGS.into())),
-            ("DT_ENCODING", StaticValue::Integer(elf::DT_ENCODING.into())),
+            ("DT_RUNPATH", StaticValue::Integer(elf::DT_RUNPATH)),
+            ("DT_FLAGS", StaticValue::Integer(elf::DT_FLAGS)),
+            ("DT_ENCODING", StaticValue::Integer(elf::DT_ENCODING)),
             // STT constants
             ("STT_NOTYPE", StaticValue::Integer(elf::STT_NOTYPE.into())),
             ("STT_OBJECT", StaticValue::Integer(elf::STT_OBJECT.into())),
@@ -510,14 +504,14 @@ fn dynamic<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option<
     let mut res = Vec::new();
 
     for sym in dyn_table {
-        let ty = sym.d_tag(e).into();
+        let ty = sym.tag(e);
 
         res.push(Value::object([
             ("type", ty.into()),
             ("val", sym.d_val(e).into().into()),
         ]));
 
-        if ty == u64::from(elf::DT_NULL) || res.len() >= MAX_NB_DYNAMIC {
+        if ty == elf::DT_NULL || res.len() >= MAX_NB_DYNAMIC {
             break;
         }
     }
