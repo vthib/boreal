@@ -1,0 +1,29 @@
+[package]
+name = "boreal-capi"
+version = "0.1.0"
+description = "C API for boreal, providing a drop-in replacement for libyara"
+repository = "https://github.com/vthib/boreal"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["boreal", "yara", "c-api", "ffi"]
+categories = ["api-bindings"]
+edition = "2024"
+rust-version = "1.85"
+
+[lib]
+name = "boreal_capi"
+crate-type = ["cdylib", "staticlib"]
+
+[features]
+default = ["serialize"]
+serialize = ["boreal/serialize"]
+magic = ["boreal/magic"]
+cuckoo = ["boreal/cuckoo"]
+authenticode-verify = ["boreal/authenticode-verify"]
+profiling = ["boreal/profiling"]
+
+[dependencies]
+boreal = { path = "../boreal", version = "1.1.0" }
+
+[lints]
+workspace = true

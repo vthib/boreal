@@ -170,6 +170,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "boreal-capi"
+version = "0.1.0"
+dependencies = [
+ "boreal",
+]
+
+[[package]]
 name = "boreal-cli"
 version = "1.1.0"
 dependencies = [

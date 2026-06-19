@@ -8,7 +8,7 @@ use super::{
     CompilerParams, CompilerProfile, ImportedModule, IncludeCallback, ModuleLocation, Namespace,
 };
 use crate::bytes_pool::BytesPoolBuilder;
-use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable, test_type_unwind_safe};
 use boreal_parser::parse;
 
 #[track_caller]
@@ -272,6 +272,7 @@ fn test_compilation_variables() {
 #[test]
 fn test_types_traits() {
     test_type_traits_non_clonable(Compiler::new());
+    test_type_unwind_safe::<Compiler>();
     test_type_traits_non_clonable(Namespace::default());
     test_type_traits_non_clonable(AvailableModule {
         compiled_module: Arc::new(compile_module(&crate::module::Time)),

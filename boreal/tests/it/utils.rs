@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -205,7 +206,7 @@ impl Compiler {
     }
     pub fn set_include_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&str, Option<&Path>, &str) -> std::io::Result<String> + Clone + Send + Sync + 'static,
+        F: Fn(&str, Option<&Path>, &str) -> std::io::Result<String> + Clone + Send + Sync + UnwindSafe + RefUnwindSafe + 'static,
     {
         if let Some(compiler) = self.yara_compiler.as_mut() {
             let callback = callback.clone();

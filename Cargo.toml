@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "boreal",
+    "boreal-capi",
     "boreal-cli",
     "boreal-parser",
     "boreal-py",

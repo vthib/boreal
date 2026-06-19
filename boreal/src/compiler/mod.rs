@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Display;
 use std::ops::Range;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -80,7 +81,7 @@ pub struct Compiler {
 
 #[allow(clippy::type_complexity)]
 struct IncludeCallback(
-    Box<dyn FnMut(&str, Option<&Path>, &str) -> Result<String, std::io::Error> + Send + Sync>,
+    Box<dyn FnMut(&str, Option<&Path>, &str) -> Result<String, std::io::Error> + Send + Sync + UnwindSafe + RefUnwindSafe>,
 );
 
 impl std::fmt::Debug for IncludeCallback {
@@ -606,6 +607,8 @@ impl Compiler {
         F: FnMut(&str, Option<&Path>, &str) -> Result<String, std::io::Error>
             + Send
             + Sync
+            + UnwindSafe
+            + RefUnwindSafe
             + 'static,
     {
         self.include_callback = Some(IncludeCallback(Box::new(callback)));
