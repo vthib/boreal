@@ -311,3 +311,21 @@ fn test_atom_alternates_extract() {
     checker.check(b"<a-c-c-23df-g>", false);
     checker.check(b"<a-ef-g>", true);
 }
+
+#[test]
+fn test_nocase_alternate_case() {
+    // Twisted case of a variable alternating on a case, but also specifying
+    // "nocase". This used to trigger a bug where the alternation would
+    // generate two atoms, which were made lowercase before addition to the
+    // AC. This thus generated two matches instead of 1.
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /x[aA]yz/ nocase
+    condition:
+        #a == 1
+}"#,
+    );
+    checker.check(b"..xayz..", true);
+}
