@@ -75,6 +75,10 @@ fn enable_se_debug_privilege() -> Result<(), std::io::Error> {
     if res == 0 {
         return Err(std::io::Error::last_os_error());
     }
+    // Safety:
+    // - The handle is valid since the call to OpenProcessToken succeeded
+    // - The handle must be closed with `CloseHandle`.
+    let self_token = unsafe { OwnedHandle::from_raw_handle(self_token.cast()) };
 
     let mut debug_privilege_luid = LUID {
         LowPart: 0,
@@ -107,7 +111,7 @@ fn enable_se_debug_privilege() -> Result<(), std::io::Error> {
     // - Rest of arguments are optional
     let res = unsafe {
         AdjustTokenPrivileges(
-            self_token,
+            handle_to_windows_handle(self_token.as_handle()),
             0,
             &cfg,
             0,
