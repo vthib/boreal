@@ -1,6 +1,7 @@
 use std::ffi::c_void;
 use std::mem::{MaybeUninit, size_of};
 use std::os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
+use std::sync::Once;
 
 use windows_sys::Win32::Foundation::{ERROR_INVALID_PARAMETER, HANDLE, LUID};
 use windows_sys::Win32::Security::{
@@ -18,14 +19,25 @@ use windows_sys::Win32::System::Threading::{
 use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use crate::scanner::ScanError;
 
+static ADD_SE_DEBUG_PRIVILEGE: Once = Once::new();
+
 pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> {
     // Enable the SeDebug privilege on our process, so as to be able to
     // open any process.
-    if enable_se_debug_privilege().is_err() {
-        // Attempt to open the process regardless, we might not need
-        // the SE_DEBUG privilege for this one.
-        // TODO: log this once logging is added.
-    }
+    //
+    // Do this only once: this is clearly enough for basically everyone, and would
+    // only be insufficient if the caller actually removes the privilege after we
+    // added it. In such a situation though:
+    // - The caller should very much know what he is doing
+    // - Removing the permission may break ongoing processes scans? I'm not sure,
+    //   but it's clearly a grey area, which is not supported.
+    ADD_SE_DEBUG_PRIVILEGE.call_once(|| {
+        if enable_se_debug_privilege().is_err() {
+            // Attempt to open the process regardless, we might not need
+            // the SE_DEBUG privilege for this one.
+            // TODO: log this once logging is added.
+        }
+    });
 
     // Safety: this is always safe to call.
     let res = unsafe {
