@@ -84,8 +84,21 @@ impl AcScan {
                     // as this would result in two identical matches for the same variable.
                     // To prevent this, a set is used here. Both the atom itself and its position
                     // in the literal are important.
-                    if !known_literals_of_var.insert((atom.clone(), start)) {
-                        continue;
+                    {
+                        let mut dedup_atom = atom.clone();
+
+                        // See `test_nocase_alternate_case` test. If the variable is "nocase",
+                        // then make sure we don't add to the AC two different atoms that
+                        // results in the same lowercase string. This shouldn't be done outside
+                        // of the "nocase" scenario, since different cases will be validated
+                        // properly against each literal.
+                        if var.matcher.modifiers.nocase {
+                            dedup_atom.make_ascii_lowercase();
+                        }
+
+                        if !known_literals_of_var.insert((dedup_atom, start)) {
+                            continue;
+                        }
                     }
 
                     // Ensure the literals provided to the aho corasick are not
