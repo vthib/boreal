@@ -665,7 +665,7 @@ fn display_rule(
     if options.print_namespace {
         write!(stdout, "{}:", rule.namespace).unwrap();
     }
-    write!(stdout, "{}", &rule.name).unwrap();
+    write!(stdout, "{}", rule.name).unwrap();
     if options.print_tags {
         write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
     }
@@ -812,8 +812,8 @@ fn display_rule_stats(stats: &statistics::CompiledRule) {
         let lits: Vec<_> = var.literals.iter().map(|v| ByteString(v)).collect();
         let atoms: Vec<_> = var.atoms.iter().map(|v| ByteString(v)).collect();
         println!("  {}", var.expr);
-        println!("    literals: {:?}", &lits);
-        println!("    atoms: {:?}", &atoms);
+        println!("    literals: {lits:?}");
+        println!("    atoms: {atoms:?}");
         println!("    atoms quality: {}", var.atoms_quality);
         println!("    algo: {}", var.matching_algo);
     }
@@ -948,10 +948,10 @@ mod tests {
         fn test<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
             #[allow(clippy::redundant_clone)]
             let _r = t.clone();
-            let _r = format!("{:?}", &t);
+            let _r = format!("{t:?}");
         }
         fn test_non_clonable<T: std::fmt::Debug + Send + Sync>(t: T) {
-            let _r = format!("{:?}", &t);
+            let _r = format!("{t:?}");
         }
 
         test(CallbackOptions {

@@ -48,5 +48,5 @@ where
 pub(crate) fn test_public_type<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
     #[allow(clippy::redundant_clone)]
     let _r = t.clone();
-    let _r = format!("{:?}", &t);
+    let _r = format!("{t:?}");
 }
