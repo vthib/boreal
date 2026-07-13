@@ -888,7 +888,7 @@ fn test_signatures_verify() {
 
         let mem = std::fs::read(&path).unwrap();
 
-        println!("checking {}...", &path);
+        println!("checking {path}...");
         // File should be considered signed
         checker.check(&mem, true);
 

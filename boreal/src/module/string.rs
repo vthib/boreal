@@ -88,16 +88,12 @@ impl String_ {
 
         let mut res: i64 = 0;
         for c in s {
-            match (*c as char).to_digit(base) {
-                Some(c) => {
-                    res = res.checked_mul(i64::from(base))?;
-                    if is_negative {
-                        res = res.checked_sub(i64::from(c))?;
-                    } else {
-                        res = res.checked_add(i64::from(c))?;
-                    }
-                }
-                None => return None,
+            let digit = (*c as char).to_digit(base)?;
+            res = res.checked_mul(i64::from(base))?;
+            if is_negative {
+                res = res.checked_sub(i64::from(digit))?;
+            } else {
+                res = res.checked_add(i64::from(digit))?;
             }
         }
         Some(Value::Integer(res))

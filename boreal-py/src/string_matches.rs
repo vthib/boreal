@@ -26,7 +26,7 @@ impl StringMatches {
     pub fn new(s: scanner::StringMatches) -> Self {
         Self {
             identifier: if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
-                format!("${}", &s.name)
+                format!("${}", s.name)
             } else {
                 s.name.to_string()
             },

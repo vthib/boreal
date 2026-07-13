@@ -64,14 +64,14 @@ pub(super) fn deserialize_header<R: io::Read>(
     if &magic != b"boreal_wire_" {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("invalid magic: {:x?}", &magic),
+            format!("invalid magic: {magic:x?}"),
         ));
     }
     let kind = <[u8; 4]>::deserialize_reader(reader)?;
     if kind != expected_kind {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("invalid kind: {:x?}", &kind),
+            format!("invalid kind: {kind:x?}"),
         ));
     }
     let version = u32::deserialize_reader(reader)?;

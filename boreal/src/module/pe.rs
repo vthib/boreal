@@ -1580,10 +1580,8 @@ fn is_import_name_valid(name: &[u8]) -> bool {
     if name.is_empty() {
         false
     } else {
-        name.iter().all(|b| {
-            b.is_ascii_alphanumeric()
-                || [b'.', b'_', b'?', b'@', b'$', b'(', b')', b'<', b'>'].contains(b)
-        })
+        name.iter()
+            .all(|b| b.is_ascii_alphanumeric() || b"._?@$()<>".contains(b))
     }
 }
 
@@ -2422,10 +2420,10 @@ impl Pe {
                 let fun_name = fun.name.to_ascii_lowercase();
 
                 if !first {
-                    hasher.update([b',']);
+                    hasher.update(b",");
                 }
                 hasher.update(&dll_name);
-                hasher.update([b'.']);
+                hasher.update(b".");
                 hasher.update(fun_name);
                 first = false;
             }

@@ -25,7 +25,7 @@ pub fn test_type_traits<T: Clone + std::fmt::Debug + Send + Sync>(t: T) {
 }
 
 pub fn test_type_traits_non_clonable<T: std::fmt::Debug + Send + Sync>(t: T) {
-    let _r = format!("{:?}", &t);
+    let _r = format!("{t:?}");
 }
 
 pub fn test_type_unwind_safe<T: UnwindSafe + RefUnwindSafe>() {}

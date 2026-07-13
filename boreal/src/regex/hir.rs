@@ -291,8 +291,8 @@ fn perl_class_to_bitmap(cls: &PerlClass) -> Bitmap {
             }
         }
         PerlClassKind::Space => {
-            for c in [b'\t', b'\n', b'\x0B', b'\x0C', b'\r', b' '] {
-                bitmap.set(c);
+            for c in b"\t\n\x0B\x0C\r " {
+                bitmap.set(*c);
             }
         }
         PerlClassKind::Digit => {
