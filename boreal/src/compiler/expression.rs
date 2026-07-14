@@ -1,6 +1,7 @@
 //! Compiled expression used in a rule.
 //!
 //! This module contains all types describing a rule condition, built from the parsed AST.
+use std::num::NonZeroU32;
 use std::ops::Range;
 
 use boreal_parser::expression as parser;
@@ -72,7 +73,7 @@ impl Expr {
 /// If None, this indicates an unnamed variable, and the one selected in a for expression must be
 /// used (e.g. '$').
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct VariableIndex(pub Option<usize>);
+pub struct VariableIndex(pub Option<NonZeroU32>);
 
 /// Set of multiple variables.
 #[derive(Clone, Debug, PartialEq)]
@@ -1359,6 +1360,7 @@ fn compile_identifier_as_iterator(
 #[cfg(feature = "serialize")]
 mod wire {
     use std::io;
+    use std::num::NonZeroU32;
 
     use crate::BytesSymbol;
     use crate::regex::Regex;
@@ -2073,7 +2075,7 @@ mod wire {
 
     impl Deserialize for VariableIndex {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            Ok(Self(<Option<usize>>::deserialize_reader(reader)?))
+            Ok(Self(<Option<NonZeroU32>>::deserialize_reader(reader)?))
         }
     }
 
@@ -2565,7 +2567,7 @@ mod wire {
 
         #[test]
         fn test_wire_variable_index() {
-            test_round_trip(&VariableIndex(Some(3)), &[0, 1]);
+            test_round_trip(&VariableIndex(Some(NonZeroU32::new(3).unwrap())), &[0, 1]);
             test_round_trip(&VariableIndex(None), &[0]);
         }
 

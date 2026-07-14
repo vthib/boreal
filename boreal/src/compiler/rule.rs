@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::num::NonZeroU32;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -192,7 +193,17 @@ impl<'a> RuleCompiler<'a> {
         if name.is_empty() {
             Ok(VariableIndex(None))
         } else {
-            Ok(VariableIndex(Some(self.find_named_variable(name, span)?)))
+            let idx = self.find_named_variable(name, span)?;
+
+            // Cast to NonZeroU32 to gain space in expressions. we add +1 to
+            // make it non zero, hence optimizing the Option around it.
+            #[allow(clippy::cast_possible_truncation)]
+            // Safety: this is *safe*, because there cannot be more than (u32::MAX - 1)
+            // variables in a given rule. This is enforced by the `max_strings_per_rule`
+            // parameter.
+            let idx = NonZeroU32::new((idx + 1) as u32).unwrap();
+
+            Ok(VariableIndex(Some(idx)))
         }
     }
 
