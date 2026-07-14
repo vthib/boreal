@@ -341,7 +341,7 @@ pub enum Expression {
     },
 
     /// Call into a module
-    Module(ModuleExpression),
+    Module(Box<ModuleExpression>),
 
     /// Dependency on another rule.
     ///
@@ -1125,7 +1125,7 @@ fn compile_rule_set(
 #[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 #[allow(variant_size_differences)]
 pub enum ForIterator {
-    ModuleIterator(ModuleExpression),
+    ModuleIterator(Box<ModuleExpression>),
     Range {
         from: Box<Expression>,
         to: Box<Expression>,
@@ -1174,7 +1174,7 @@ fn compile_for_iterator(
                 },
             }
 
-            Ok(ForIterator::ModuleIterator(expr))
+            Ok(ForIterator::ModuleIterator(Box::new(expr)))
         }
         parser::ForIterator::Range { from, to } => {
             let from = compile_expression(compiler, *from)?;
@@ -1857,7 +1857,10 @@ mod wire {
                 let set = RuleSet::deserialize_reader(reader)?;
                 Expression::ForRules { selection, set }
             }
-            40 => Expression::Module(ModuleExpression::deserialize(ctx, reader)?),
+            40 => {
+                let expr = ModuleExpression::deserialize(ctx, reader)?;
+                Expression::Module(Box::new(expr))
+            }
             41 => Expression::Rule(usize::deserialize_reader(reader)?),
             42 => Expression::ExternalSymbol(usize::deserialize_reader(reader)?),
             43 => Expression::Bytes(BytesSymbol::deserialize_reader(reader)?),
@@ -1937,7 +1940,7 @@ mod wire {
         match discriminant {
             0 => {
                 let module_expr = ModuleExpression::deserialize(ctx, reader)?;
-                Ok(ForIterator::ModuleIterator(module_expr))
+                Ok(ForIterator::ModuleIterator(Box::new(module_expr)))
             }
             1 => {
                 let from = Box::new(deserialize_expr(ctx, reader)?);
@@ -2360,15 +2363,15 @@ mod wire {
                 &[0, 1, 2],
             );
             test_round_trip_custom_deser(
-                &Expression::Module(ModuleExpression {
+                &Expression::Module(Box::new(ModuleExpression {
                     kind: ModuleExpressionKind::BoundedModuleValueUse {
                         index: BoundedValueIndex::Module(5),
                     },
                     operations: ModuleOperations {
-                        expressions: vec![],
-                        operations: vec![],
+                        expressions: Box::new([]),
+                        operations: Box::new([]),
                     },
-                }),
+                })),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1],
             );
@@ -2435,15 +2438,15 @@ mod wire {
             let ctx = DeserializeContext::default();
 
             test_round_trip_custom_deser(
-                &ForIterator::ModuleIterator(ModuleExpression {
+                &ForIterator::ModuleIterator(Box::new(ModuleExpression {
                     kind: ModuleExpressionKind::BoundedModuleValueUse {
                         index: BoundedValueIndex::Module(5),
                     },
                     operations: ModuleOperations {
-                        expressions: vec![],
-                        operations: vec![],
+                        expressions: Box::new([]),
+                        operations: Box::new([]),
                     },
-                }),
+                })),
                 |reader| deserialize_for_iterator(&ctx, reader),
                 &[0, 1],
             );

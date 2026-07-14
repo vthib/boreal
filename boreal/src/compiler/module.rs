@@ -72,7 +72,7 @@ pub enum ModuleExpressionKind {
 
         /// List of subfields to apply to access the function.
         #[cfg(feature = "serialize")]
-        subfields: Vec<String>,
+        subfields: Box<[Box<str>]>,
     },
 }
 
@@ -87,17 +87,17 @@ pub struct ModuleOperations {
     /// as it can be done immutably.
     ///
     /// The expressions are stored in the same order the operations will be evaluated.
-    pub expressions: Vec<Expression>,
+    pub expressions: Box<[Expression]>,
 
     /// List of operations to apply to the module value.
-    pub operations: Vec<ValueOperation>,
+    pub operations: Box<[ValueOperation]>,
 }
 
 /// Operations on identifiers.
 #[derive(Debug, PartialEq)]
 pub enum ValueOperation {
     /// Object subfield, i.e. `value.subfield`.
-    Subfield(String),
+    Subfield(Box<str>),
     /// Array/dict subscript, i.e. `value[subscript]`.
     ///
     /// The value used as the subscript index is stored in [`ModuleOperations::expressions`].
@@ -247,7 +247,7 @@ pub(super) fn compile_identifier<'a, 'b>(
             kind: ModuleUseKind::Static {
                 current_value: value,
                 module_index: module.module_index,
-                applied_subfields: vec![subfield],
+                applied_subfields: vec![subfield.into_boxed_str()],
             },
         },
         None => {
@@ -300,7 +300,7 @@ enum ModuleUseKind<'a> {
     Static {
         current_value: &'a StaticValue,
         module_index: usize,
-        applied_subfields: Vec<String>,
+        applied_subfields: Vec<Box<str>>,
     },
     /// A static function.
     ///
@@ -311,7 +311,7 @@ enum ModuleUseKind<'a> {
         fun: StaticFunction,
         current_type: &'a ValueType,
         module_index: usize,
-        applied_subfields: Vec<String>,
+        applied_subfields: Vec<Box<str>>,
     },
     /// A dynamic value, coming from the `get_dynamic_values` methods.
     ///
@@ -331,9 +331,10 @@ impl ModuleUse<'_, '_> {
                 match &mut self.kind {
                     ModuleUseKind::Static {
                         applied_subfields, ..
-                    } => applied_subfields.push(subfield),
+                    } => applied_subfields.push(subfield.into_boxed_str()),
                     ModuleUseKind::StaticFunction { .. } | ModuleUseKind::Dynamic { .. } => {
-                        self.operations.push(ValueOperation::Subfield(subfield));
+                        self.operations
+                            .push(ValueOperation::Subfield(subfield.into_boxed_str()));
                     }
                 }
                 res
@@ -425,19 +426,19 @@ impl ModuleUse<'_, '_> {
                     let _ = module_index;
                     drop(applied_subfields);
                 }
-                let expr = Expression::Module(ModuleExpression {
+                let expr = Expression::Module(Box::new(ModuleExpression {
                     kind: ModuleExpressionKind::StaticFunction {
                         fun,
                         #[cfg(feature = "serialize")]
                         module_index,
                         #[cfg(feature = "serialize")]
-                        subfields: applied_subfields,
+                        subfields: applied_subfields.into_boxed_slice(),
                     },
                     operations: ModuleOperations {
-                        expressions: self.operations_expressions,
-                        operations: self.operations,
+                        expressions: self.operations_expressions.into_boxed_slice(),
+                        operations: self.operations.into_boxed_slice(),
                     },
-                });
+                }));
 
                 (expr, current_type.clone())
             }
@@ -445,15 +446,15 @@ impl ModuleUse<'_, '_> {
                 current_type,
                 bounded_value_index,
             } => {
-                let expr = Expression::Module(ModuleExpression {
+                let expr = Expression::Module(Box::new(ModuleExpression {
                     kind: ModuleExpressionKind::BoundedModuleValueUse {
                         index: bounded_value_index,
                     },
                     operations: ModuleOperations {
-                        expressions: self.operations_expressions,
-                        operations: self.operations,
+                        expressions: self.operations_expressions.into_boxed_slice(),
+                        operations: self.operations.into_boxed_slice(),
                     },
-                });
+                }));
                 (expr, current_type.clone())
             }
         };
@@ -480,8 +481,8 @@ impl ModuleUse<'_, '_> {
                         index: bounded_value_index,
                     },
                     operations: ModuleOperations {
-                        expressions: self.operations_expressions,
-                        operations: self.operations,
+                        expressions: self.operations_expressions.into_boxed_slice(),
+                        operations: self.operations.into_boxed_slice(),
                     },
                 };
                 let ty = match current_type {
@@ -765,8 +766,8 @@ mod wire {
         }
         let operations = <Vec<ValueOperation>>::deserialize_reader(reader)?;
         Ok(ModuleOperations {
-            expressions,
-            operations,
+            expressions: expressions.into_boxed_slice(),
+            operations: operations.into_boxed_slice(),
         })
     }
 
@@ -815,7 +816,7 @@ mod wire {
                     Some(fun) => Ok(ModuleExpressionKind::StaticFunction {
                         fun,
                         module_index,
-                        subfields,
+                        subfields: subfields.into_iter().map(String::into_boxed_str).collect(),
                     }),
                     None => Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -899,7 +900,10 @@ mod wire {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
             let discriminant = u8::deserialize_reader(reader)?;
             match discriminant {
-                0 => Ok(Self::Subfield(String::deserialize_reader(reader)?)),
+                0 => {
+                    let subfield = String::deserialize_reader(reader)?;
+                    Ok(Self::Subfield(subfield.into_boxed_str()))
+                }
                 1 => Ok(Self::Subscript),
                 2 => {
                     let v = usize::deserialize_reader(reader)?;
@@ -930,8 +934,8 @@ mod wire {
                         index: BoundedValueIndex::Module(5),
                     },
                     operations: ModuleOperations {
-                        expressions: vec![],
-                        operations: vec![],
+                        expressions: Box::new([]),
+                        operations: Box::new([]),
                     },
                 },
                 |reader| deserialize_module_expression(&ctx, reader),
@@ -939,11 +943,11 @@ mod wire {
             );
             test_round_trip_custom_deser(
                 &ModuleOperations {
-                    expressions: vec![Expression::Integer(23)],
-                    operations: vec![
+                    expressions: Box::new([Expression::Integer(23)]),
+                    operations: Box::new([
                         ValueOperation::Subscript,
-                        ValueOperation::Subfield("abc".to_owned()),
-                    ],
+                        ValueOperation::Subfield(<Box<str>>::from("abc")),
+                    ]),
                 },
                 |reader| deserialize_module_operations(&ctx, reader),
                 &[0, 4, 12],
@@ -984,7 +988,7 @@ mod wire {
                 &ModuleExpressionKind::StaticFunction {
                     fun: now_fun,
                     module_index: 0,
-                    subfields: vec!["now".to_owned()],
+                    subfields: Box::new([<Box<str>>::from("now")]),
                 },
                 |reader| deserialize_module_expression_kind(&ctx, reader),
                 &[0, 1, 9],
@@ -993,7 +997,7 @@ mod wire {
                 &ModuleExpressionKind::StaticFunction {
                     fun: mean_fun,
                     module_index: 1,
-                    subfields: vec!["mean".to_owned()],
+                    subfields: Box::new([<Box<str>>::from("mean")]),
                 },
                 |reader| deserialize_module_expression_kind(&ctx, reader),
                 &[0, 1, 9],
@@ -1010,24 +1014,24 @@ mod wire {
             test_fail_deser(ModuleExpressionKind::StaticFunction {
                 fun: mean_fun,
                 module_index: 5,
-                subfields: vec!["mean".to_owned()],
+                subfields: Box::new([<Box<str>>::from("mean")]),
             });
 
             // Check invalid subfield value
             test_fail_deser(ModuleExpressionKind::StaticFunction {
                 fun: mean_fun,
                 module_index: 1,
-                subfields: vec![],
+                subfields: Box::new([]),
             });
             test_fail_deser(ModuleExpressionKind::StaticFunction {
                 fun: mean_fun,
                 module_index: 1,
-                subfields: vec!["toto".to_owned()],
+                subfields: Box::new([<Box<str>>::from("toto")]),
             });
             test_fail_deser(ModuleExpressionKind::StaticFunction {
                 fun: mean_fun,
                 module_index: 1,
-                subfields: vec!["MEAN_BYTES".to_owned(), "toto".to_owned()],
+                subfields: Box::new([<Box<str>>::from("MEAN_BYTES"), <Box<str>>::from("toto")]),
             });
 
             let mut reader = io::Cursor::new(b"\x05");
@@ -1044,7 +1048,7 @@ mod wire {
 
         #[test]
         fn test_wire_value_operation() {
-            test_round_trip(&ValueOperation::Subfield("aze".to_string()), &[0, 2]);
+            test_round_trip(&ValueOperation::Subfield(<Box<str>>::from("aze")), &[0, 2]);
             test_round_trip(&ValueOperation::Subscript, &[0]);
             test_round_trip(&ValueOperation::FunctionCall(23), &[0, 2]);
 
@@ -1069,19 +1073,19 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(compile_module(&crate::module::Time));
-        test_type_traits_non_clonable(ValueOperation::Subfield("a".to_owned()));
+        test_type_traits_non_clonable(ValueOperation::Subfield(<Box<str>>::from("a")));
         test_type_traits_non_clonable(BoundedValueIndex::Module(0));
         test_type_traits_non_clonable(ModuleOperations {
-            expressions: Vec::new(),
-            operations: Vec::new(),
+            expressions: Box::new([]),
+            operations: Box::new([]),
         });
         test_type_traits_non_clonable(ModuleExpression {
             kind: ModuleExpressionKind::BoundedModuleValueUse {
                 index: BoundedValueIndex::Module(0),
             },
             operations: ModuleOperations {
-                expressions: Vec::new(),
-                operations: Vec::new(),
+                expressions: Box::new([]),
+                operations: Box::new([]),
             },
         });
         test_type_traits_non_clonable(ModuleExpressionKind::BoundedModuleValueUse {
@@ -1092,7 +1096,7 @@ mod tests {
             #[cfg(feature = "serialize")]
             module_index: 0,
             #[cfg(feature = "serialize")]
-            subfields: Vec::new(),
+            subfields: Box::new([]),
         });
         test_type_traits_non_clonable(IteratorType::Array(ValueType::Integer));
         test_type_traits_non_clonable(TypeError::UnknownSubfield("a".to_owned()));
