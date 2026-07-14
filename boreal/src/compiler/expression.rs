@@ -80,7 +80,7 @@ pub struct VariableSet {
     /// Indexes of the variables selected in the set.
     ///
     /// The indexes are relative to the array of compiled variable stored in the compiled rule.
-    pub elements: Vec<usize>,
+    pub elements: Box<[usize]>,
 }
 
 /// Set of multiple rules.
@@ -89,7 +89,7 @@ pub struct RuleSet {
     /// Indexes of the rules selected in the set.
     ///
     /// The indexes are relative to the array of rule result.
-    pub elements: Vec<usize>,
+    pub elements: Box<[usize]>,
 
     /// Number of already matched elements.
     ///
@@ -191,9 +191,9 @@ pub enum Expression {
     ShiftRight(Box<Expression>, Box<Expression>),
 
     /// Boolean and operation.
-    And(Vec<Expression>),
+    And(Box<[Expression]>),
     /// Boolean or operation.
-    Or(Vec<Expression>),
+    Or(Box<[Expression]>),
 
     /// Boolean negation.
     Not(Box<Expression>),
@@ -557,7 +557,7 @@ pub(super) fn compile_expression(
             let ops = ops
                 .into_iter()
                 .map(|op| compile_expression(compiler, op).and_then(|e| to_bool_expr(compiler, e)))
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<_, _>>()?;
 
             Ok(Expr {
                 expr: Expression::And(ops),
@@ -569,7 +569,7 @@ pub(super) fn compile_expression(
             let ops = ops
                 .into_iter()
                 .map(|op| compile_expression(compiler, op).and_then(|e| to_bool_expr(compiler, e)))
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<_, _>>()?;
 
             Ok(Expr {
                 expr: Expression::Or(ops),
@@ -1064,7 +1064,9 @@ fn compile_variable_set(
         }
     }
 
-    Ok(VariableSet { elements: indexes })
+    Ok(VariableSet {
+        elements: indexes.into_boxed_slice(),
+    })
 }
 
 fn compile_rule_set(
@@ -1113,7 +1115,7 @@ fn compile_rule_set(
     }
 
     Ok(RuleSet {
-        elements: indexes,
+        elements: indexes.into_boxed_slice(),
         already_matched,
     })
 }
@@ -1128,7 +1130,7 @@ pub enum ForIterator {
         from: Box<Expression>,
         to: Box<Expression>,
     },
-    List(Vec<Expression>),
+    List(Box<[Expression]>),
 }
 
 fn compile_for_iterator(
@@ -1225,7 +1227,7 @@ fn compile_for_iterator(
                 _ => invalid_binding(1)?,
             }
 
-            Ok(ForIterator::List(res))
+            Ok(ForIterator::List(res.into_boxed_slice()))
         }
     }
 }
@@ -1620,7 +1622,7 @@ mod wire {
     fn deserialize_exprs<R: io::Read>(
         ctx: &DeserializeContext,
         reader: &mut R,
-    ) -> io::Result<Vec<Expression>> {
+    ) -> io::Result<Box<[Expression]>> {
         let len = u32::deserialize_reader(reader)?;
         let len = usize::try_from(len).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, format!("length too big: {len}"))
@@ -1629,7 +1631,7 @@ mod wire {
         for _ in 0..len {
             exprs.push(deserialize_expr(ctx, reader)?);
         }
-        Ok(exprs)
+        Ok(exprs.into_boxed_slice())
     }
 
     pub(super) fn deserialize_expr<R: io::Read>(
@@ -1966,7 +1968,7 @@ mod wire {
             let elements = <Vec<usize>>::deserialize_reader(reader)?;
             let already_matched = usize::deserialize_reader(reader)?;
             Ok(Self {
-                elements,
+                elements: elements.into_boxed_slice(),
                 already_matched,
             })
         }
@@ -1982,7 +1984,9 @@ mod wire {
     impl Deserialize for VariableSet {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
             let elements = <Vec<usize>>::deserialize_reader(reader)?;
-            Ok(Self { elements })
+            Ok(Self {
+                elements: elements.into_boxed_slice(),
+            })
         }
     }
 
@@ -2209,12 +2213,12 @@ mod wire {
                 &[0, 1, 2],
             );
             test_round_trip_custom_deser(
-                &Expression::And(vec![Expression::Entrypoint, Expression::Filesize]),
+                &Expression::And(Box::new([Expression::Entrypoint, Expression::Filesize])),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1],
             );
             test_round_trip_custom_deser(
-                &Expression::Or(vec![Expression::Entrypoint, Expression::Filesize]),
+                &Expression::Or(Box::new([Expression::Entrypoint, Expression::Filesize])),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1],
             );
@@ -2327,7 +2331,9 @@ mod wire {
             test_round_trip_custom_deser(
                 &Expression::For {
                     selection: ForSelection::Any,
-                    set: VariableSet { elements: vec![1] },
+                    set: VariableSet {
+                        elements: Box::new([1]),
+                    },
                     body: Box::new(Expression::Filesize),
                 },
                 |reader| deserialize_expr(&ctx, reader),
@@ -2336,7 +2342,7 @@ mod wire {
             test_round_trip_custom_deser(
                 &Expression::ForIdentifiers {
                     selection: ForSelection::Any,
-                    iterator: ForIterator::List(Vec::new()),
+                    iterator: ForIterator::List(Box::new([])),
                     body: Box::new(Expression::Filesize),
                 },
                 |reader| deserialize_expr(&ctx, reader),
@@ -2346,7 +2352,7 @@ mod wire {
                 &Expression::ForRules {
                     selection: ForSelection::Any,
                     set: RuleSet {
-                        elements: vec![1],
+                        elements: Box::new([1]),
                         already_matched: 3,
                     },
                 },
@@ -2450,7 +2456,7 @@ mod wire {
                 &[0, 1, 9],
             );
             test_round_trip_custom_deser(
-                &ForIterator::List(vec![Expression::Filesize, Expression::Integer(3)]),
+                &ForIterator::List(Box::new([Expression::Filesize, Expression::Integer(3)])),
                 |reader| deserialize_for_iterator(&ctx, reader),
                 &[0, 1, 9],
             );
@@ -2463,7 +2469,7 @@ mod wire {
         fn test_wire_rule_set() {
             test_round_trip(
                 &RuleSet {
-                    elements: vec![15, 23],
+                    elements: Box::new([15, 23]),
                     already_matched: 232,
                 },
                 &[0, 22],
@@ -2474,7 +2480,7 @@ mod wire {
         fn test_wire_variable_set() {
             test_round_trip(
                 &VariableSet {
-                    elements: vec![15, 23],
+                    elements: Box::new([15, 23]),
                 },
                 &[0],
             );
@@ -2514,10 +2520,10 @@ mod tests {
         test_type_traits(Type::Integer);
         test_type_traits(VariableIndex(None));
         test_type_traits(VariableSet {
-            elements: Vec::new(),
+            elements: Box::new([]),
         });
         test_type_traits(RuleSet {
-            elements: Vec::new(),
+            elements: Box::new([]),
             already_matched: 0,
         });
         test_type_traits_non_clonable(Expr {
@@ -2527,6 +2533,6 @@ mod tests {
         });
         test_type_traits_non_clonable(Expression::Boolean(true));
         test_type_traits_non_clonable(ForSelection::Any);
-        test_type_traits_non_clonable(ForIterator::List(Vec::new()));
+        test_type_traits_non_clonable(ForIterator::List(Box::new([])));
     }
 }
