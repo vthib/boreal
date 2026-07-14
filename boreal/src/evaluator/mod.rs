@@ -36,7 +36,9 @@
 //!
 //! For all of those, an undefined value is considered to be equivalent to a false boolean value.
 use crate::bytes_pool::BytesPool;
-use crate::compiler::expression::{Expression, ForIterator, ForSelection, VariableIndex};
+use crate::compiler::expression::{
+    Expression, ForExpr, ForIdentifiers, ForIterator, ForRules, ForSelection, VariableIndex,
+};
 use crate::compiler::rule::Rule;
 use crate::memory::Memory;
 use crate::regex::Regex;
@@ -600,11 +602,12 @@ impl Evaluator<'_, '_, '_, '_> {
                 }
             }
 
-            Expression::For {
-                selection,
-                set,
-                body,
-            } => {
+            Expression::For(for_expr) => {
+                let ForExpr {
+                    selection,
+                    set,
+                    body,
+                } = &**for_expr;
                 let selection = match self.evaluate_for_selection(selection, set.elements.len())? {
                     ForSelectionEvaluation::Evaluator(e) => e,
                     ForSelectionEvaluation::Value(v) => return Ok(v),
@@ -617,11 +620,12 @@ impl Evaluator<'_, '_, '_, '_> {
                 result
             }
 
-            Expression::ForIdentifiers {
-                selection,
-                iterator,
-                body,
-            } => {
+            Expression::ForIdentifiers(for_identifiers) => {
+                let ForIdentifiers {
+                    selection,
+                    iterator,
+                    body,
+                } = &**for_identifiers;
                 if matches!(
                     selection,
                     ForSelection::Expr {
@@ -648,7 +652,8 @@ impl Evaluator<'_, '_, '_, '_> {
                 }
             }
 
-            Expression::ForRules { selection, set } => {
+            Expression::ForRules(for_rules) => {
+                let ForRules { selection, set } = &**for_rules;
                 let nb_elements = set.elements.len() + set.already_matched;
 
                 let mut selection = match self.evaluate_for_selection(selection, nb_elements)? {
@@ -688,7 +693,7 @@ impl Evaluator<'_, '_, '_, '_> {
             Expression::Integer(v) => Ok(Value::Integer(*v)),
             Expression::Double(v) => Ok(Value::Float(*v)),
             Expression::Bytes(v) => Ok(Value::Bytes(self.bytes_pool.get(*v).to_vec())),
-            Expression::Regex(v) => Ok(Value::Regex(v.clone())),
+            Expression::Regex(v) => Ok(Value::Regex(<Regex as Clone>::clone(v))),
             Expression::Boolean(v) => Ok(Value::Boolean(*v)),
         }
     }

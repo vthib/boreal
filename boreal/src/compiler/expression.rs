@@ -253,7 +253,7 @@ pub enum Expression {
     IEquals(Box<Expression>, Box<Expression>),
 
     /// Does a string matches a regex.
-    Matches(Box<Expression>, Regex),
+    Matches(Box<Expression>, Box<Regex>),
 
     /// Is a given value defined.
     ///
@@ -292,53 +292,13 @@ pub enum Expression {
     },
 
     /// Evaluate multiple variables on a given expression.
-    ///
-    /// For each variable in `set`, evaluate `body`.
-    /// Then, if the number of evaluations returning true
-    /// matches the `selection`, then this expression returns true.
-    For {
-        /// How many variables must match for this expression to be true.
-        selection: ForSelection,
-
-        /// Which variables to select.
-        set: VariableSet,
-
-        /// Expression to evaluate for each variable.
-        ///
-        /// The body can contain `$`, `#`, `@` or `!` to refer to the
-        /// currently selected variable.
-        body: Box<Expression>,
-    },
+    For(Box<ForExpr>),
 
     /// Evaluate an identifier with multiple values on a given expression.
-    ///
-    /// Same as [`Self::For`], but instead of binding a variable,
-    /// an identifier is bounded to multiple values.
-    ///
-    /// For example: `for all i in (0..#a): ( @a[i] < 100 )`
-    ForIdentifiers {
-        /// How many times the body must evaluate to true for this expresion
-        /// to be true.
-        selection: ForSelection,
-
-        /// Identifiers names & values to bind.
-        iterator: ForIterator,
-
-        /// Body to evaluate for each binding.
-        body: Box<Expression>,
-    },
+    ForIdentifiers(Box<ForIdentifiers>),
 
     /// Depend on multiple rules already declared in the namespace.
-    ///
-    /// If the number of matching rules in the set matches the `selection`,
-    /// this expression returns true.
-    ForRules {
-        /// How many rules must match for this expression to be true.
-        selection: ForSelection,
-
-        /// Which rules to select.
-        set: RuleSet,
-    },
+    ForRules(Box<ForRules>),
 
     /// Call into a module
     Module(Box<ModuleExpression>),
@@ -357,7 +317,62 @@ pub enum Expression {
     Bytes(BytesSymbol),
 
     /// A regex.
-    Regex(Regex),
+    Regex(Box<Regex>),
+}
+
+/// Evaluate multiple variables on a given expression.
+///
+/// For each variable in `set`, evaluate `body`.
+/// Then, if the number of evaluations returning true
+/// matches the `selection`, then this expression returns true.
+#[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
+pub struct ForExpr {
+    /// How many variables must match for this expression to be true.
+    pub selection: ForSelection,
+
+    /// Which variables to select.
+    pub set: VariableSet,
+
+    /// Expression to evaluate for each variable.
+    ///
+    /// The body can contain `$`, `#`, `@` or `!` to refer to the
+    /// currently selected variable.
+    pub body: Box<Expression>,
+}
+
+/// Evaluate an identifier with multiple values on a given expression.
+///
+/// Same as [`Self::For`], but instead of binding a variable,
+/// an identifier is bounded to multiple values.
+///
+/// For example: `for all i in (0..#a): ( @a[i] < 100 )`
+#[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
+pub struct ForIdentifiers {
+    /// How many times the body must evaluate to true for this expresion
+    /// to be true.
+    pub selection: ForSelection,
+
+    /// Identifiers names & values to bind.
+    pub iterator: ForIterator,
+
+    /// Body to evaluate for each binding.
+    pub body: Box<Expression>,
+}
+
+/// Depend on multiple rules already declared in the namespace.
+///
+/// If the number of matching rules in the set matches the `selection`,
+/// this expression returns true.
+#[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
+pub struct ForRules {
+    /// How many rules must match for this expression to be true.
+    pub selection: ForSelection,
+
+    /// Which rules to select.
+    pub set: RuleSet,
 }
 
 impl Expression {
@@ -704,7 +719,7 @@ pub(super) fn compile_expression(
             Ok(Expr {
                 expr: Expression::Matches(
                     expr.unwrap_expr(Type::Bytes)?,
-                    compile_regex(compiler, regex)?,
+                    Box::new(compile_regex(compiler, regex)?),
                 ),
                 ty: Type::Boolean,
                 span,
@@ -781,7 +796,7 @@ pub(super) fn compile_expression(
             set,
             body,
         } => Ok(Expr {
-            expr: Expression::For {
+            expr: Expression::For(Box::new(ForExpr {
                 selection: compile_for_selection(compiler, selection)?,
                 set: compile_variable_set(compiler, set, span.clone())?,
                 body: match body {
@@ -791,7 +806,7 @@ pub(super) fn compile_expression(
                     }
                     None => Box::new(Expression::Variable(VariableIndex(None))),
                 },
-            },
+            })),
             ty: Type::Boolean,
             span,
         }),
@@ -806,7 +821,7 @@ pub(super) fn compile_expression(
             let to = compile_expression(compiler, *to)?;
 
             Ok(Expr {
-                expr: Expression::For {
+                expr: Expression::For(Box::new(ForExpr {
                     selection: compile_for_selection(compiler, selection)?,
                     set: compile_variable_set(compiler, set, span.clone())?,
                     body: Box::new(Expression::VariableIn {
@@ -814,7 +829,7 @@ pub(super) fn compile_expression(
                         from: from.unwrap_expr(Type::Integer)?,
                         to: to.unwrap_expr(Type::Integer)?,
                     }),
-                },
+                })),
                 ty: Type::Boolean,
                 span,
             })
@@ -828,14 +843,14 @@ pub(super) fn compile_expression(
             let offset = compile_expression(compiler, *offset)?;
 
             Ok(Expr {
-                expr: Expression::For {
+                expr: Expression::For(Box::new(ForExpr {
                     selection: compile_for_selection(compiler, selection)?,
                     set: compile_variable_set(compiler, set, span.clone())?,
                     body: Box::new(Expression::VariableAt {
                         variable_index: VariableIndex(None),
                         offset: offset.unwrap_expr(Type::Integer)?,
                     }),
-                },
+                })),
                 ty: Type::Boolean,
                 span,
             })
@@ -863,21 +878,21 @@ pub(super) fn compile_expression(
             }
 
             Ok(Expr {
-                expr: Expression::ForIdentifiers {
+                expr: Expression::ForIdentifiers(Box::new(ForIdentifiers {
                     selection,
                     iterator,
                     body: Box::new(to_bool_expr(compiler, body)?),
-                },
+                })),
                 ty: Type::Boolean,
                 span,
             })
         }
 
         parser::ExpressionKind::ForRules { selection, set } => Ok(Expr {
-            expr: Expression::ForRules {
+            expr: Expression::ForRules(Box::new(ForRules {
                 selection: compile_for_selection(compiler, selection)?,
                 set: compile_rule_set(compiler, set)?,
-            },
+            })),
             ty: Type::Boolean,
             span,
         }),
@@ -893,7 +908,7 @@ pub(super) fn compile_expression(
             span,
         }),
         parser::ExpressionKind::Regex(regex) => Ok(Expr {
-            expr: Expression::Regex(compile_regex(compiler, regex)?),
+            expr: Expression::Regex(Box::new(compile_regex(compiler, regex)?)),
             ty: Type::Regex,
             span,
         }),
@@ -1353,7 +1368,10 @@ mod wire {
     use crate::wire::DeserializeContext;
 
     use super::module::ModuleExpression;
-    use super::{Expression, ForIterator, ForSelection, RuleSet, VariableIndex, VariableSet};
+    use super::{
+        Expression, ForExpr, ForIdentifiers, ForIterator, ForRules, ForSelection, RuleSet,
+        VariableIndex, VariableSet,
+    };
 
     impl Serialize for Expression {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -1569,30 +1587,17 @@ mod wire {
                     from.serialize(writer)?;
                     to.serialize(writer)?;
                 }
-                Self::For {
-                    selection,
-                    set,
-                    body,
-                } => {
+                Self::For(for_expr) => {
                     37_u8.serialize(writer)?;
-                    selection.serialize(writer)?;
-                    set.serialize(writer)?;
-                    body.serialize(writer)?;
+                    for_expr.serialize(writer)?;
                 }
-                Self::ForIdentifiers {
-                    selection,
-                    iterator,
-                    body,
-                } => {
+                Self::ForIdentifiers(for_expr) => {
                     38_u8.serialize(writer)?;
-                    selection.serialize(writer)?;
-                    iterator.serialize(writer)?;
-                    body.serialize(writer)?;
+                    for_expr.serialize(writer)?;
                 }
-                Self::ForRules { selection, set } => {
+                Self::ForRules(for_expr) => {
                     39_u8.serialize(writer)?;
-                    selection.serialize(writer)?;
-                    set.serialize(writer)?;
+                    for_expr.serialize(writer)?;
                 }
                 Self::Module(module_expr) => {
                     40_u8.serialize(writer)?;
@@ -1808,7 +1813,7 @@ mod wire {
             }
             31 => {
                 let expr = Box::new(deserialize_expr(ctx, reader)?);
-                let regex = Regex::deserialize_reader(reader)?;
+                let regex = Box::new(Regex::deserialize_reader(reader)?);
                 Expression::Matches(expr, regex)
             }
             32 => Expression::Defined(Box::new(deserialize_expr(ctx, reader)?)),
@@ -1833,29 +1838,16 @@ mod wire {
                 }
             }
             37 => {
-                let selection = deserialize_for_selection(ctx, reader)?;
-                let set = VariableSet::deserialize_reader(reader)?;
-                let body = Box::new(deserialize_expr(ctx, reader)?);
-                Expression::For {
-                    selection,
-                    set,
-                    body,
-                }
+                let for_expr = deserialize_for_expr(ctx, reader)?;
+                Expression::For(Box::new(for_expr))
             }
             38 => {
-                let selection = deserialize_for_selection(ctx, reader)?;
-                let iterator = deserialize_for_iterator(ctx, reader)?;
-                let body = Box::new(deserialize_expr(ctx, reader)?);
-                Expression::ForIdentifiers {
-                    selection,
-                    iterator,
-                    body,
-                }
+                let for_identifiers = deserialize_for_identifiers(ctx, reader)?;
+                Expression::ForIdentifiers(Box::new(for_identifiers))
             }
             39 => {
-                let selection = deserialize_for_selection(ctx, reader)?;
-                let set = RuleSet::deserialize_reader(reader)?;
-                Expression::ForRules { selection, set }
+                let for_rules = deserialize_for_rules(ctx, reader)?;
+                Expression::ForRules(Box::new(for_rules))
             }
             40 => {
                 let expr = ModuleExpression::deserialize(ctx, reader)?;
@@ -1864,7 +1856,7 @@ mod wire {
             41 => Expression::Rule(usize::deserialize_reader(reader)?),
             42 => Expression::ExternalSymbol(usize::deserialize_reader(reader)?),
             43 => Expression::Bytes(BytesSymbol::deserialize_reader(reader)?),
-            44 => Expression::Regex(Regex::deserialize_reader(reader)?),
+            44 => Expression::Regex(Box::new(Regex::deserialize_reader(reader)?)),
             v => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -1872,6 +1864,86 @@ mod wire {
                 ));
             }
         })
+    }
+
+    impl Serialize for ForExpr {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            let Self {
+                selection,
+                set,
+                body,
+            } = self;
+
+            selection.serialize(writer)?;
+            set.serialize(writer)?;
+            body.serialize(writer)?;
+
+            Ok(())
+        }
+    }
+
+    fn deserialize_for_expr<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ForExpr> {
+        let selection = deserialize_for_selection(ctx, reader)?;
+        let set = VariableSet::deserialize_reader(reader)?;
+        let body = Box::new(deserialize_expr(ctx, reader)?);
+        Ok(ForExpr {
+            selection,
+            set,
+            body,
+        })
+    }
+
+    impl Serialize for ForIdentifiers {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            let Self {
+                selection,
+                iterator,
+                body,
+            } = self;
+
+            selection.serialize(writer)?;
+            iterator.serialize(writer)?;
+            body.serialize(writer)?;
+
+            Ok(())
+        }
+    }
+
+    fn deserialize_for_identifiers<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ForIdentifiers> {
+        let selection = deserialize_for_selection(ctx, reader)?;
+        let iterator = deserialize_for_iterator(ctx, reader)?;
+        let body = Box::new(deserialize_expr(ctx, reader)?);
+        Ok(ForIdentifiers {
+            selection,
+            iterator,
+            body,
+        })
+    }
+
+    impl Serialize for ForRules {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            let Self { selection, set } = self;
+
+            selection.serialize(writer)?;
+            set.serialize(writer)?;
+
+            Ok(())
+        }
+    }
+
+    fn deserialize_for_rules<R: io::Read>(
+        ctx: &DeserializeContext,
+        reader: &mut R,
+    ) -> io::Result<ForRules> {
+        let selection = deserialize_for_selection(ctx, reader)?;
+        let set = RuleSet::deserialize_reader(reader)?;
+        Ok(ForRules { selection, set })
     }
 
     impl Serialize for ForSelection {
@@ -2294,7 +2366,7 @@ mod wire {
             test_round_trip_custom_deser(
                 &Expression::Matches(
                     Box::new(Expression::Entrypoint),
-                    Regex::from_string("ab+c{2,3}".to_owned(), true, false).unwrap(),
+                    Box::new(Regex::from_string("ab+c{2,3}".to_owned(), true, false).unwrap()),
                 ),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1, 2],
@@ -2332,33 +2404,33 @@ mod wire {
                 &[0, 1, 2, 3],
             );
             test_round_trip_custom_deser(
-                &Expression::For {
+                &Expression::For(Box::new(ForExpr {
                     selection: ForSelection::Any,
                     set: VariableSet {
                         elements: Box::new([1]),
                     },
                     body: Box::new(Expression::Filesize),
-                },
+                })),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1, 2, 14],
             );
             test_round_trip_custom_deser(
-                &Expression::ForIdentifiers {
+                &Expression::ForIdentifiers(Box::new(ForIdentifiers {
                     selection: ForSelection::Any,
                     iterator: ForIterator::List(Box::new([])),
                     body: Box::new(Expression::Filesize),
-                },
+                })),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1, 2, 7],
             );
             test_round_trip_custom_deser(
-                &Expression::ForRules {
+                &Expression::ForRules(Box::new(ForRules {
                     selection: ForSelection::Any,
                     set: RuleSet {
                         elements: Box::new([1]),
                         already_matched: 3,
                     },
-                },
+                })),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1, 2],
             );
@@ -2392,7 +2464,9 @@ mod wire {
                 &[0, 1],
             );
             test_round_trip_custom_deser(
-                &Expression::Regex(Regex::from_string("abc".to_owned(), false, true).unwrap()),
+                &Expression::Regex(Box::new(
+                    Regex::from_string("abc".to_owned(), false, true).unwrap(),
+                )),
                 |reader| deserialize_expr(&ctx, reader),
                 &[0, 1],
             );
