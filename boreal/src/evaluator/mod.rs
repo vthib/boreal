@@ -223,10 +223,12 @@ macro_rules! apply_cmp_op {
 
 impl Evaluator<'_, '_, '_, '_> {
     fn get_variable_index(&self, var_index: VariableIndex) -> Result<usize, PoisonKind> {
-        var_index
-            .0
-            .or(self.currently_selected_variable_index)
-            .ok_or(PoisonKind::Undefined)
+        match var_index.0 {
+            Some(idx) => Ok((idx.get() - 1) as usize),
+            None => self
+                .currently_selected_variable_index
+                .ok_or(PoisonKind::Undefined),
+        }
     }
 
     fn get_var_matches(&self) -> Result<&variable::VarMatches<'_>, PoisonKind> {

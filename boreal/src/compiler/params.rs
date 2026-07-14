@@ -100,10 +100,12 @@ impl CompilerParams {
     ///
     /// If a rule contains more strings than this limit, its compilation will fail.
     ///
+    /// For optimization reasons, there is a hard cap on this value to `u32::MAX - 1`.
+    ///
     /// Default value is 10 000.
     #[must_use]
     pub fn max_strings_per_rule(mut self, max_strings_per_rule: usize) -> Self {
-        self.max_strings_per_rule = max_strings_per_rule;
+        self.max_strings_per_rule = std::cmp::min(max_strings_per_rule, (u32::MAX - 1) as usize);
         self
     }
 

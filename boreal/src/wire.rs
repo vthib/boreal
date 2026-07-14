@@ -41,7 +41,7 @@ pub use borsh::BorshSerialize as Serialize;
 
 use crate::module::StaticValue;
 
-const VERSION: u32 = 0;
+const VERSION: u32 = 1;
 
 #[derive(Default)]
 pub(crate) struct DeserializeContext {
