@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-16
+
+This is mostly a bugfix release, but with a few dependencies and a MSRV bump. hence
+the minor release.
+
+### boreal
+
+#### Changed
+
+- Update edition to 2024 [#248](https://github.com/vthib/boreal/pull/248).
+- Update MSRV to 1.85 [#248](https://github.com/vthib/boreal/pull/248).
+
+- Update object to 0.39 [#252](https://github.com/vthib/boreal/pull/252).
+- Update borsh to 1.6 [#248](https://github.com/vthib/boreal/pull/248).
+
+#### Fixed
+
+- Fix windows token leak on windows process scanning [#253](https://github.com/vthib/boreal/pull/253).
+- Fix match counting bug on nocase string with case alternation [#255](https://github.com/vthib/boreal/pull/255).
+
 ## [1.1.0] - 2025-11-23
 
 This releases contains primarily:
@@ -705,7 +725,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/vthib/boreal/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vthib/boreal/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/vthib/boreal/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/vthib/boreal/compare/v0.8.0...v0.9.0
