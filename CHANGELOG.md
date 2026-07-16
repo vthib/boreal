@@ -18,7 +18,7 @@ the minor release.
 - Update MSRV to 1.85 [#248](https://github.com/vthib/boreal/pull/248).
 
 - Update object to 0.39 [#252](https://github.com/vthib/boreal/pull/252).
-- Update borsh to 1.6 [#248](https://github.com/vthib/boreal/pull/248).
+- Update borsh to 1.7 [#258](https://github.com/vthib/boreal/pull/258).
 
 #### Fixed
 
