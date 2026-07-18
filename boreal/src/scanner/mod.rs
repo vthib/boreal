@@ -207,7 +207,7 @@ impl Scanner {
                 default_value,
             } = sym;
             external_symbols_values.push(default_value);
-            _ = external_symbols_map.insert(name, index);
+            _ = external_symbols_map.insert(name.into_boxed_str(), index);
         }
 
         Self {
@@ -714,7 +714,7 @@ impl Scanner {
 pub struct RulesIter<'scanner> {
     global_rules: std::slice::Iter<'scanner, Rule>,
     rules: std::slice::Iter<'scanner, Rule>,
-    namespaces: &'scanner [String],
+    namespaces: &'scanner [Box<str>],
 }
 
 impl<'scanner> Iterator for RulesIter<'scanner> {
@@ -790,10 +790,10 @@ struct Inner {
     modules: Box<[Box<dyn Module>]>,
 
     /// Mapping from names to index for external symbols.
-    external_symbols_map: HashMap<String, usize>,
+    external_symbols_map: HashMap<Box<str>, usize>,
 
     /// Namespaces names.
-    namespaces: Box<[String]>,
+    namespaces: Box<[Box<str>]>,
 
     /// Bytes intern pool.
     bytes_pool: BytesPool,
@@ -1402,7 +1402,7 @@ impl ScanData<'_, '_> {
 fn build_matched_rule<'a>(
     rule: &'a Rule,
     variables: &'a [Variable],
-    namespaces_names: &'a [String],
+    namespaces_names: &'a [Box<str>],
     var_matches: Vec<Vec<StringMatch>>,
     matched: bool,
 ) -> EvaluatedRule<'a> {
@@ -1606,7 +1606,7 @@ mod wire {
         params: DeserializeParams,
         reader: &mut R,
     ) -> io::Result<Inner> {
-        let external_symbols_map = <HashMap<String, usize>>::deserialize_reader(reader)?;
+        let external_symbols_map = <HashMap<Box<str>, usize>>::deserialize_reader(reader)?;
         let namespaces = <Vec<String>>::deserialize_reader(reader)?;
         let bytes_pool = BytesPool::deserialize_reader(reader)?;
         let variables = <Vec<Variable>>::deserialize_reader(reader)?;
@@ -1631,7 +1631,7 @@ mod wire {
             ac_scan,
             modules: modules.into_boxed_slice(),
             external_symbols_map,
-            namespaces: namespaces.into_boxed_slice(),
+            namespaces: namespaces.into_iter().map(String::into_boxed_str).collect(),
             bytes_pool,
             profile,
         })
@@ -1780,10 +1780,10 @@ mod wire {
         #[test]
         fn test_wire_inner() {
             let inner = Inner {
-                external_symbols_map: [("abc".to_owned(), 33), ("zyx".to_owned(), 12)]
+                external_symbols_map: [("abc".into(), 33), ("zyx".into(), 12)]
                     .into_iter()
                     .collect(),
-                namespaces: Box::new(["abc".to_owned()]),
+                namespaces: Box::new(["abc".into()]),
                 bytes_pool: BytesPoolBuilder::default().into_pool(),
                 variables: Box::new([]),
                 modules: Box::new([Box::new(Math), Box::new(Time)]),
