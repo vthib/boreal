@@ -18,7 +18,7 @@ use crate::statistics;
 #[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub(crate) struct Rule {
     /// Name of the rule.
-    pub(crate) name: String,
+    pub(crate) name: Box<str>,
 
     /// Index of the namespace containing the rule.
     ///
@@ -30,7 +30,7 @@ pub(crate) struct Rule {
     pub(crate) tags: Vec<String>,
 
     /// Metadata associated with the rule.
-    pub(crate) metadatas: Vec<Metadata>,
+    pub(crate) metadatas: Box<[Metadata]>,
 
     /// Number of variables used by the rule.
     pub(crate) nb_variables: usize,
@@ -287,7 +287,7 @@ pub(super) fn compile_rule(
         }
     }
 
-    let metadatas: Vec<_> = rule
+    let metadatas = rule
         .metadatas
         .into_iter()
         .map(|rule::Metadata { name, value }| Metadata {
@@ -329,7 +329,7 @@ pub(super) fn compile_rule(
 
     Ok(CompiledRule {
         rule: Rule {
-            name: rule.name,
+            name: rule.name.into_boxed_str(),
             namespace_index,
             tags: rule.tags.into_iter().map(|v| v.tag).collect(),
             metadatas,
@@ -390,10 +390,10 @@ mod wire {
         let metadatas = <Vec<Metadata>>::deserialize_reader(reader)?;
         let condition = Expression::deserialize(ctx, reader)?;
         Ok(Rule {
-            name,
+            name: name.into_boxed_str(),
             namespace_index,
             tags,
-            metadatas,
+            metadatas: metadatas.into_boxed_slice(),
             nb_variables,
             condition,
             is_private,
@@ -466,12 +466,12 @@ mod wire {
 
             test_round_trip_custom_deser(
                 &Rule {
-                    name: "a".to_owned(),
+                    name: "a".into(),
                     namespace_index: 0,
                     nb_variables: 0,
                     is_private: false,
                     tags: Vec::new(),
-                    metadatas: Vec::new(),
+                    metadatas: Box::new([]),
                     condition: Expression::Filesize,
                 },
                 |reader| deserialize_rule(&ctx, reader),
@@ -527,10 +527,10 @@ mod tests {
             bytes_pool: &mut BytesPoolBuilder::default(),
         });
         let build_rule = || Rule {
-            name: "a".to_owned(),
+            name: "a".into(),
             namespace_index: 0,
             tags: Vec::new(),
-            metadatas: Vec::new(),
+            metadatas: Box::new([]),
             nb_variables: 0,
             condition: Expression::Filesize,
             is_private: false,
