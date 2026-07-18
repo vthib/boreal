@@ -33,10 +33,10 @@ pub(crate) struct AcScan {
     aho: AhoCorasick,
 
     /// Map from a aho pattern index to a list details on the literals.
-    aho_index_to_literal_info: Vec<Vec<LiteralInfo>>,
+    aho_index_to_literal_info: Box<[Box<[LiteralInfo]>]>,
 
     /// List of indexes for vars that are not part of the aho corasick.
-    non_handled_var_indexes: Vec<usize>,
+    non_handled_var_indexes: Box<[usize]>,
 }
 
 /// Details on a literal of a variable.
@@ -143,8 +143,11 @@ impl AcScan {
 
         Self {
             aho,
-            aho_index_to_literal_info,
-            non_handled_var_indexes,
+            aho_index_to_literal_info: aho_index_to_literal_info
+                .into_iter()
+                .map(Vec::into_boxed_slice)
+                .collect(),
+            non_handled_var_indexes: non_handled_var_indexes.into_boxed_slice(),
         }
     }
 
