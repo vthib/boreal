@@ -22,7 +22,7 @@ pub(crate) use visitor::{VisitAction, Visitor, visit};
 #[derive(Clone, Debug)]
 pub struct Regex {
     meta: meta::Regex,
-    expr: String,
+    expr: Box<str>,
     #[cfg(feature = "serialize")]
     case_insensitive: bool,
     #[cfg(feature = "serialize")]
@@ -58,7 +58,7 @@ impl Regex {
 
         Ok(Regex {
             meta,
-            expr,
+            expr: expr.into_boxed_str(),
             #[cfg(feature = "serialize")]
             case_insensitive,
             #[cfg(feature = "serialize")]
