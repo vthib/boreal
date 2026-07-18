@@ -300,7 +300,7 @@ impl Compiler {
                 let idx = self.namespaces.len();
                 let _r = v.insert(idx);
                 self.namespaces.push(Namespace {
-                    name: namespace_name.to_string(),
+                    name: namespace_name.into(),
                     ..Namespace::default()
                 });
                 idx
@@ -469,7 +469,7 @@ impl Compiler {
                     status.statistics.push(statistics::CompiledRule {
                         filepath: current_filepath.map(ToOwned::to_owned),
                         namespace: namespace.name.clone(),
-                        name: rule.name.to_string(),
+                        name: rule.name.clone(),
                         strings: variables_statistics,
                     });
                 }
@@ -627,7 +627,7 @@ impl Compiler {
 #[derive(Debug, Default)]
 pub(crate) struct Namespace {
     /// Name of the namespace.
-    pub(crate) name: String,
+    pub(crate) name: Box<str>,
 
     /// Map of a rule name to its index in the `rules` vector in [`Compiler`].
     ///

@@ -12,10 +12,10 @@ pub struct CompiledRule {
     pub filepath: Option<PathBuf>,
 
     /// Namespace containing the rule.
-    pub namespace: String,
+    pub namespace: Box<str>,
 
     /// Name of the rule.
-    pub name: String,
+    pub name: Box<str>,
 
     /// Statistics on the compiled strings.
     ///
@@ -107,8 +107,8 @@ mod tests {
     fn test_types_traits() {
         test_type_traits(CompiledRule {
             filepath: Some(PathBuf::new()),
-            namespace: String::new(),
-            name: String::new(),
+            namespace: String::new().into_boxed_str(),
+            name: String::new().into_boxed_str(),
             strings: Vec::new(),
         });
         test_type_traits(CompiledString {
