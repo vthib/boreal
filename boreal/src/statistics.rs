@@ -33,7 +33,7 @@ pub struct CompiledString {
     pub expr: String,
 
     /// Literals extracted from the string.
-    pub literals: Vec<Vec<u8>>,
+    pub literals: Box<[Box<[u8]>]>,
 
     /// Atoms picked out of those literals.
     pub atoms: Vec<Vec<u8>>,
@@ -114,7 +114,7 @@ mod tests {
         test_type_traits(CompiledString {
             name: String::new(),
             expr: String::new(),
-            literals: Vec::new(),
+            literals: Box::new([]),
             atoms: Vec::new(),
             atoms_quality: 0,
             matching_algo: String::new(),

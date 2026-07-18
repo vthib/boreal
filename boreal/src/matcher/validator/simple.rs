@@ -11,7 +11,7 @@ use crate::regex::Hir;
 #[derive(Debug, PartialEq)]
 pub(crate) struct SimpleValidator {
     /// List of nodes to match
-    nodes: Vec<SimpleNode>,
+    nodes: Box<[SimpleNode]>,
     /// Total length of the expression
     length: usize,
 }
@@ -67,7 +67,10 @@ impl SimpleValidator {
             SimpleNode::Jump(len) => acc + usize::from(*len),
             _ => acc + 1,
         });
-        Some(Self { nodes, length })
+        Some(Self {
+            nodes: nodes.into_boxed_slice(),
+            length,
+        })
     }
 
     pub(crate) fn find_anchored_fwd(
@@ -211,7 +214,10 @@ mod wire {
             let nodes = <Vec<SimpleNode>>::deserialize_reader(reader)?;
             let length = usize::deserialize_reader(reader)?;
 
-            Ok(Self { nodes, length })
+            Ok(Self {
+                nodes: nodes.into_boxed_slice(),
+                length,
+            })
         }
     }
 
@@ -279,7 +285,7 @@ mod wire {
         fn test_wire_simple_validator() {
             test_round_trip(
                 &SimpleValidator {
-                    nodes: vec![SimpleNode::Byte(23), SimpleNode::Dot],
+                    nodes: Box::new([SimpleNode::Byte(23), SimpleNode::Dot]),
                     length: 23,
                 },
                 &[0, 1, 6, 12],
