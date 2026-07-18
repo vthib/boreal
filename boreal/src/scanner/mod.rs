@@ -1865,10 +1865,10 @@ mod wire {
         fn test_wire_rules() {
             let ctx = DeserializeContext::default();
             let rules = vec![Rule {
-                name: "a".to_owned(),
+                name: "a".into(),
                 namespace_index: 0,
                 tags: Vec::new(),
-                metadatas: Vec::new(),
+                metadatas: Box::new([]),
                 nb_variables: 0,
                 condition: Expression::Filesize,
                 is_private: false,

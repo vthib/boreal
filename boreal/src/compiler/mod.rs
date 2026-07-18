@@ -469,7 +469,7 @@ impl Compiler {
                     status.statistics.push(statistics::CompiledRule {
                         filepath: current_filepath.map(ToOwned::to_owned),
                         namespace: namespace.name.clone(),
-                        name: rule.name.clone(),
+                        name: rule.name.to_string(),
                         strings: variables_statistics,
                     });
                 }
