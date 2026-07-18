@@ -26,7 +26,7 @@ pub(crate) struct Matcher {
     ///
     /// This is required in order to know which kind is a literal match, as checking its value
     /// would be buggy.
-    pub(crate) literals: Vec<Vec<u8>>,
+    pub(crate) literals: Box<[Box<[u8]>]>,
 
     kind: MatcherKind,
 
@@ -118,7 +118,7 @@ impl Matcher {
         if analysis.has_start_or_end_line {
             let kind = MatcherKind::Raw(raw::RawMatcher::new(hir, &analysis, modifiers)?);
             return Ok(Self {
-                literals: Vec::new(),
+                literals: Box::new([]),
                 kind,
                 modifiers,
             });
@@ -130,7 +130,7 @@ impl Matcher {
             if count < 100 && !modifiers.nocase && !modifiers.wide {
                 if let Some(literals) = only_literals::hir_to_only_literals(hir) {
                     return Ok(Self {
-                        literals,
+                        literals: literals.into_iter().map(Vec::into_boxed_slice).collect(),
                         kind: MatcherKind::Literals,
                         modifiers,
                     });
@@ -170,7 +170,7 @@ impl Matcher {
         };
 
         Ok(Self {
-            literals,
+            literals: literals.into_iter().map(Vec::into_boxed_slice).collect(),
             kind,
             modifiers,
         })
@@ -181,20 +181,21 @@ impl Matcher {
         if modifiers.wide {
             if modifiers.ascii {
                 let wide = string_to_wide(&value);
-                literals.push(value);
+                literals.push(value.into_boxed_slice());
                 literals.push(wide);
             } else {
                 literals.push(string_to_wide(&value));
             }
         } else {
-            literals.push(value);
+            literals.push(value.into_boxed_slice());
         }
 
         if let Some(xor_details) = modifiers.xor {
             // For each literal, for each byte in the xor range, build a new literal
             let xor_range = xor_details.0..=xor_details.1;
             let xor_range_len = xor_range.len(); // modifiers.xor_range.1.saturating_sub(modifiers.xor_range.0) + 1;
-            let mut new_literals: Vec<Vec<u8>> = Vec::with_capacity(literals.len() * xor_range_len);
+            let mut new_literals: Vec<Box<[u8]>> =
+                Vec::with_capacity(literals.len() * xor_range_len);
 
             // Ascii literals must be first, then wide literals. Since the "literals" var
             // is the ascii literals then the wide ones, the order is preserved.
@@ -204,7 +205,7 @@ impl Matcher {
                 }
             }
             return Self {
-                literals: new_literals,
+                literals: new_literals.into_boxed_slice(),
                 kind: MatcherKind::Literals,
                 modifiers: Modifiers {
                     fullword: modifiers.fullword,
@@ -232,7 +233,7 @@ impl Matcher {
                             if base64.wide {
                                 literals.push(string_to_wide(&lit));
                             }
-                            literals.push(lit);
+                            literals.push(lit.into_boxed_slice());
                         }
                     }
                 }
@@ -250,7 +251,7 @@ impl Matcher {
         }
 
         Matcher {
-            literals,
+            literals: literals.into_boxed_slice(),
             kind: MatcherKind::Literals,
             modifiers: Modifiers {
                 fullword: modifiers.fullword,
@@ -280,7 +281,7 @@ impl Matcher {
             if !literal.eq_ignore_ascii_case(&mem[mat.start..mat.end]) {
                 return None;
             }
-        } else if literal != &mem[mat.start..mat.end] {
+        } else if **literal != mem[mat.start..mat.end] {
             return None;
         }
 
@@ -437,13 +438,13 @@ fn widen_literal(literal: &[u8]) -> Vec<u8> {
 }
 
 /// Convert an ascii string to a wide string
-fn string_to_wide(s: &[u8]) -> Vec<u8> {
+fn string_to_wide(s: &[u8]) -> Box<[u8]> {
     let mut res = Vec::with_capacity(s.len() * 2);
     for b in s {
         res.push(*b);
         res.push(b'\0');
     }
-    res
+    res.into_boxed_slice()
 }
 
 #[cfg(feature = "serialize")]
@@ -473,7 +474,7 @@ mod wire {
             let modifiers = Modifiers::deserialize_reader(reader)?;
             let kind = deserialize_matcher_kind(modifiers, reader)?;
             Ok(Self {
-                literals,
+                literals: literals.into_iter().map(Vec::into_boxed_slice).collect(),
                 kind,
                 modifiers,
             })
@@ -564,7 +565,7 @@ mod wire {
         fn test_wire_matcher() {
             test_round_trip(
                 &Matcher {
-                    literals: vec![vec![3]],
+                    literals: Box::new([Box::new([3])]),
                     modifiers: Modifiers::default(),
                     kind: MatcherKind::Literals,
                 },
@@ -636,7 +637,7 @@ mod tests {
     #[test]
     fn test_types_traits() {
         test_type_traits_non_clonable(Matcher {
-            literals: vec![],
+            literals: Box::new([]),
             modifiers: Modifiers {
                 dot_all: false,
                 fullword: false,
