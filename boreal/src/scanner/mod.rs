@@ -94,8 +94,8 @@ pub struct Scanner {
 
     /// Default value of external symbols.
     ///
-    /// Compiled rules uses indexing into this vec to retrieve the symbols values.
-    external_symbols_values: Vec<ExternalValue>,
+    /// Compiled rules uses indexing into this array to retrieve the symbols values.
+    external_symbols_values: Box<[ExternalValue]>,
 
     /// User data associated to specific modules.
     ///
@@ -199,8 +199,8 @@ impl Scanner {
 
         let ac_scan = ac_scan::AcScan::new(&variables, profile);
 
-        let mut external_symbols_values = Vec::new();
-        let mut external_symbols_map = HashMap::new();
+        let mut external_symbols_values = Vec::with_capacity(external_symbols.len());
+        let mut external_symbols_map = HashMap::with_capacity(external_symbols.len());
         for (index, sym) in external_symbols.into_iter().enumerate() {
             let ExternalSymbol {
                 name,
@@ -212,11 +212,11 @@ impl Scanner {
 
         Self {
             inner: Arc::new(Inner {
-                rules,
-                global_rules,
-                variables,
+                rules: rules.into_boxed_slice(),
+                global_rules: global_rules.into_boxed_slice(),
+                variables: variables.into_boxed_slice(),
                 ac_scan,
-                modules: imported_modules,
+                modules: imported_modules.into_boxed_slice(),
                 external_symbols_map,
                 namespaces,
                 bytes_pool: bytes_pool.into_pool(),
@@ -224,7 +224,7 @@ impl Scanner {
                 profile,
             }),
             scan_params: ScanParams::default(),
-            external_symbols_values,
+            external_symbols_values: external_symbols_values.into_boxed_slice(),
             module_user_data: ModuleUserData::default(),
         }
     }
@@ -766,18 +766,18 @@ struct Inner {
     ///
     /// Order is important, as rules can depend on other rules, and uses indexes into this array
     /// to retrieve the truth value of rules it depends upon.
-    rules: Vec<Rule>,
+    rules: Box<[Rule]>,
 
     /// Compiled global rules.
     ///
     /// Those rules are interpreted first. If any of them is false, the other rules are not
     /// evaluated.
-    global_rules: Vec<Rule>,
+    global_rules: Box<[Rule]>,
 
     /// Compiled variables.
     ///
     /// Those are stored in the order the rules have been compiled in.
-    variables: Vec<Variable>,
+    variables: Box<[Variable]>,
 
     /// Regex set of all variables used in the rules.
     ///
@@ -787,13 +787,13 @@ struct Inner {
     ac_scan: ac_scan::AcScan,
 
     /// List of modules used during scanning.
-    modules: Vec<Box<dyn Module>>,
+    modules: Box<[Box<dyn Module>]>,
 
     /// Mapping from names to index for external symbols.
     external_symbols_map: HashMap<String, usize>,
 
     /// Namespaces names.
-    namespaces: Vec<String>,
+    namespaces: Box<[String]>,
 
     /// Bytes intern pool.
     bytes_pool: BytesPool,
@@ -1583,7 +1583,7 @@ mod wire {
         Ok(Scanner {
             inner: Arc::new(inner),
             scan_params,
-            external_symbols_values,
+            external_symbols_values: external_symbols_values.into_boxed_slice(),
             module_user_data: ModuleUserData::default(),
         })
     }
@@ -1625,13 +1625,13 @@ mod wire {
         let ac_scan = AcScan::new(&variables, profile);
 
         Ok(Inner {
-            rules,
-            global_rules,
-            variables,
+            rules: rules.into_boxed_slice(),
+            global_rules: global_rules.into_boxed_slice(),
+            variables: variables.into_boxed_slice(),
             ac_scan,
-            modules,
+            modules: modules.into_boxed_slice(),
             external_symbols_map,
-            namespaces,
+            namespaces: namespaces.into_boxed_slice(),
             bytes_pool,
             profile,
         })
@@ -1731,16 +1731,16 @@ mod wire {
         fn test_wire_scanner() {
             let scanner = Scanner {
                 scan_params: ScanParams::default(),
-                external_symbols_values: vec![ExternalValue::Integer(23)],
+                external_symbols_values: Box::new([ExternalValue::Integer(23)]),
                 module_user_data: ModuleUserData::default(),
                 inner: Arc::new(Inner {
                     external_symbols_map: HashMap::new(),
-                    namespaces: Vec::new(),
+                    namespaces: Box::new([]),
                     bytes_pool: BytesPoolBuilder::default().into_pool(),
-                    variables: Vec::new(),
-                    modules: vec![Box::new(Math)],
-                    global_rules: Vec::new(),
-                    rules: Vec::new(),
+                    variables: Box::new([]),
+                    modules: Box::new([Box::new(Math)]),
+                    global_rules: Box::new([]),
+                    rules: Box::new([]),
                     profile: CompilerProfile::Speed,
                     ac_scan: AcScan::new(&[], CompilerProfile::Speed),
                 }),
@@ -1783,12 +1783,12 @@ mod wire {
                 external_symbols_map: [("abc".to_owned(), 33), ("zyx".to_owned(), 12)]
                     .into_iter()
                     .collect(),
-                namespaces: vec!["abc".to_owned()],
+                namespaces: Box::new(["abc".to_owned()]),
                 bytes_pool: BytesPoolBuilder::default().into_pool(),
-                variables: Vec::new(),
-                modules: vec![Box::new(Math), Box::new(Time)],
-                global_rules: Vec::new(),
-                rules: Vec::new(),
+                variables: Box::new([]),
+                modules: Box::new([Box::new(Math), Box::new(Time)]),
+                global_rules: Box::new([]),
+                rules: Box::new([]),
                 profile: CompilerProfile::Speed,
                 ac_scan: AcScan::new(&[], CompilerProfile::Speed),
             };
