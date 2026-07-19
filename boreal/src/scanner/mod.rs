@@ -748,7 +748,9 @@ pub struct RuleDetails<'scanner> {
     pub namespace: &'scanner str,
 
     /// Tags associated with the rule.
-    pub tags: &'scanner [String],
+    ///
+    /// Use [`crate::Scanner::get_string_symbol`] to retrieve each tag.
+    pub tags: &'scanner [StringSymbol],
 
     /// Metadata associated with the rule.
     pub metadatas: &'scanner [Metadata],
@@ -1456,7 +1458,7 @@ pub struct EvaluatedRule<'scanner> {
     pub namespace: &'scanner str,
 
     /// Tags associated with the rule.
-    pub tags: &'scanner [String],
+    pub tags: &'scanner [StringSymbol],
 
     /// Metadata associated with the rule.
     pub metadatas: &'scanner [Metadata],
@@ -1867,7 +1869,7 @@ mod wire {
             let rules = vec![Rule {
                 name: "a".into(),
                 namespace_index: 0,
-                tags: Vec::new(),
+                tags: Box::new([]),
                 metadatas: Box::new([]),
                 nb_variables: 0,
                 condition: Expression::Filesize,
