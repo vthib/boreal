@@ -43,11 +43,16 @@ impl Rule {
         scanner: &scanner::Scanner,
         rule: &scanner::RuleDetails,
     ) -> PyResult<Self> {
+        let tags: Vec<_> = rule
+            .tags
+            .iter()
+            .map(|sym| scanner.get_string_symbol(*sym))
+            .collect();
         Ok(Self {
             identifier: PyString::new(py, rule.name).unbind(),
             namespace: PyString::new(py, rule.namespace).unbind(),
             meta: convert_metadatas(py, scanner, rule.metadatas, false)?.unbind(),
-            tags: PyList::new(py, rule.tags)?.unbind(),
+            tags: PyList::new(py, tags)?.unbind(),
             is_global: rule.is_global,
             is_private: rule.is_private,
         })

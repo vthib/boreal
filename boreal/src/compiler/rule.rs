@@ -27,7 +27,7 @@ pub(crate) struct Rule {
     pub(crate) namespace_index: usize,
 
     /// Tags associated with the rule.
-    pub(crate) tags: Vec<String>,
+    pub(crate) tags: Box<[StringSymbol]>,
 
     /// Metadata associated with the rule.
     pub(crate) metadatas: Box<[Metadata]>,
@@ -331,7 +331,11 @@ pub(super) fn compile_rule(
         rule: Rule {
             name: rule.name.into_boxed_str(),
             namespace_index,
-            tags: rule.tags.into_iter().map(|v| v.tag).collect(),
+            tags: rule
+                .tags
+                .into_iter()
+                .map(|v| compiler.bytes_pool.insert_str(&v.tag))
+                .collect(),
             metadatas,
             nb_variables: variables.len(),
             condition,
@@ -386,13 +390,13 @@ mod wire {
         let namespace_index = usize::deserialize_reader(reader)?;
         let nb_variables = usize::deserialize_reader(reader)?;
         let is_private = bool::deserialize_reader(reader)?;
-        let tags = <Vec<String>>::deserialize_reader(reader)?;
+        let tags = <Vec<StringSymbol>>::deserialize_reader(reader)?;
         let metadatas = <Vec<Metadata>>::deserialize_reader(reader)?;
         let condition = Expression::deserialize(ctx, reader)?;
         Ok(Rule {
             name: name.into_boxed_str(),
             namespace_index,
-            tags,
+            tags: tags.into_boxed_slice(),
             metadatas: metadatas.into_boxed_slice(),
             nb_variables,
             condition,
@@ -470,7 +474,7 @@ mod wire {
                     namespace_index: 0,
                     nb_variables: 0,
                     is_private: false,
-                    tags: Vec::new(),
+                    tags: Box::new([]),
                     metadatas: Box::new([]),
                     condition: Expression::Filesize,
                 },
@@ -529,7 +533,7 @@ mod tests {
         let build_rule = || Rule {
             name: "a".into(),
             namespace_index: 0,
-            tags: Vec::new(),
+            tags: Box::new([]),
             metadatas: Box::new([]),
             nb_variables: 0,
             condition: Expression::Filesize,

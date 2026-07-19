@@ -67,12 +67,17 @@ impl Match {
         rule: scanner::EvaluatedRule,
         allow_duplicate_metadata: bool,
     ) -> Result<Self, PyErr> {
+        let tags: Vec<_> = rule
+            .tags
+            .iter()
+            .map(|sym| scanner.get_string_symbol(*sym))
+            .collect();
         Ok(Self {
             rule: rule.name.to_string(),
             namespace: rule.namespace.to_string(),
             meta: convert_metadatas(py, scanner, rule.metadatas, allow_duplicate_metadata)?
                 .unbind(),
-            tags: PyList::new(py, rule.tags)?.unbind(),
+            tags: PyList::new(py, tags)?.unbind(),
             strings: PyList::new(py, rule.matches.into_iter().map(StringMatches::new))?.unbind(),
         })
     }

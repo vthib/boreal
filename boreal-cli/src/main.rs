@@ -656,7 +656,10 @@ fn display_rule(
         return;
     }
     if let Some(tag) = options.tag.as_ref()
-        && rule.tags.iter().all(|t| t != tag)
+        && rule
+            .tags
+            .iter()
+            .all(|t| scanner.get_string_symbol(*t) != tag)
     {
         return;
     }
@@ -667,7 +670,12 @@ fn display_rule(
     }
     write!(stdout, "{}", rule.name).unwrap();
     if options.print_tags {
-        write!(stdout, " [{}]", rule.tags.join(",")).unwrap();
+        let tags: Vec<_> = rule
+            .tags
+            .iter()
+            .map(|t| scanner.get_string_symbol(*t))
+            .collect();
+        write!(stdout, " [{}]", tags.join(",")).unwrap();
     }
     if options.print_metadata {
         print_metadata(stdout, scanner, rule.metadatas);

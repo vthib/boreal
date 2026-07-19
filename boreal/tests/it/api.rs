@@ -144,7 +144,9 @@ rule r: tag {
     let r1 = &rules[1];
     assert_eq!(r1.name, "pg");
     assert_eq!(r1.namespace, "namespace");
-    assert_eq!(r1.tags, &["tag1", "tag2"]);
+    assert_eq!(r1.tags.len(), 2);
+    assert_eq!(scanner.get_string_symbol(r1.tags[0]), "tag1");
+    assert_eq!(scanner.get_string_symbol(r1.tags[1]), "tag2");
     assert!(r1.is_global);
     assert!(r1.is_private);
     assert_eq!(r1.metadatas.len(), 2);
@@ -162,7 +164,8 @@ rule r: tag {
     let r2 = &rules[2];
     assert_eq!(r2.name, "p");
     assert_eq!(r2.namespace, "default");
-    assert_eq!(r2.tags, &["tag"]);
+    assert_eq!(r2.tags.len(), 1);
+    assert_eq!(scanner.get_string_symbol(r2.tags[0]), "tag");
     assert!(!r2.is_global);
     assert!(r2.is_private);
     assert_eq!(r2.metadatas.len(), 1);
@@ -175,7 +178,8 @@ rule r: tag {
     let r3 = &rules[3];
     assert_eq!(r3.name, "r");
     assert_eq!(r3.namespace, "namespace");
-    assert_eq!(r3.tags, &["tag"]);
+    assert_eq!(r3.tags.len(), 1);
+    assert_eq!(scanner.get_string_symbol(r3.tags[0]), "tag");
     assert!(!r3.is_global);
     assert!(!r3.is_private);
     assert_eq!(r3.metadatas.len(), 0);
