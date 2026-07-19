@@ -360,7 +360,9 @@ fn build_string_identifier(
             return Some(StringIdentifier {
                 rule_namespace: scanner.namespaces[rule.namespace_index].as_ref(),
                 rule_name: &rule.name,
-                string_name: &scanner.variables[variable_index].name,
+                string_name: scanner
+                    .bytes_pool
+                    .get_str(scanner.variables[variable_index].name),
                 string_index: variable_index - index,
             });
         }

@@ -3,7 +3,7 @@ use boreal_parser::rule::{VariableDeclaration, VariableDeclarationValue};
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::matcher::{Matcher, Modifiers};
 use crate::regex::regex_ast_to_hir;
-use crate::statistics;
+use crate::{StringSymbol, statistics};
 
 use super::CompilationError;
 use super::rule::RuleCompiler;
@@ -15,7 +15,7 @@ pub struct Variable {
     /// Name of the variable, without the '$'.
     ///
     /// Anonymous variables are just named "".
-    pub name: String,
+    pub name: StringSymbol,
 
     /// Is the variable marked as private.
     pub is_private: bool,
@@ -91,7 +91,7 @@ pub(super) fn compile_variable(
 
     let res = match res {
         Ok(matcher) => Variable {
-            name,
+            name: compiler.bytes_pool.insert_str(&name),
             is_private: modifiers.private,
             matcher,
         },
@@ -117,7 +117,7 @@ pub(super) fn compile_variable(
         let atoms_quality = atoms_rank(&atoms);
 
         Some(statistics::CompiledString {
-            name: res.name.clone(),
+            name,
             expr: parsed_contents[span.start..span.end].to_owned(),
             literals: res.matcher.literals.clone(),
             atoms,
@@ -154,6 +154,7 @@ impl std::fmt::Display for VariableCompilationError {
 mod wire {
     use std::io;
 
+    use crate::StringSymbol;
     use crate::wire::{Deserialize, Serialize};
 
     use super::{Matcher, Variable};
@@ -169,7 +170,7 @@ mod wire {
 
     impl Deserialize for Variable {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let name = String::deserialize_reader(reader)?;
+            let name = StringSymbol::deserialize_reader(reader)?;
             let is_private = bool::deserialize_reader(reader)?;
             let matcher = Matcher::deserialize_reader(reader)?;
             Ok(Self {
@@ -184,6 +185,7 @@ mod wire {
     mod tests {
         use boreal_parser::rule::VariableModifiers;
 
+        use crate::bytes_pool::BytesPoolBuilder;
         use crate::matcher::Matcher;
         use crate::wire::tests::test_round_trip;
 
@@ -191,9 +193,10 @@ mod wire {
 
         #[test]
         fn test_wire_variable() {
+            let mut pool = BytesPoolBuilder::default();
             test_round_trip(
                 &Variable {
-                    name: "abc".to_owned(),
+                    name: pool.insert_str("abc"),
                     is_private: true,
                     matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),
                 },
