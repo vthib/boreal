@@ -1218,7 +1218,7 @@ impl EvalContext {
             let matched_rule = build_matched_rule(
                 rule,
                 vars,
-                &scanner.namespaces,
+                scanner,
                 var_matches.unwrap_or_default(),
                 matched,
             );
@@ -1401,16 +1401,16 @@ impl ScanData<'_, '_> {
     }
 }
 
-fn build_matched_rule<'a>(
-    rule: &'a Rule,
-    variables: &'a [Variable],
-    namespaces_names: &'a [Box<str>],
+fn build_matched_rule<'scanner>(
+    rule: &'scanner Rule,
+    variables: &'scanner [Variable],
+    scanner: &'scanner Inner,
     var_matches: Vec<Vec<StringMatch>>,
     matched: bool,
-) -> EvaluatedRule<'a> {
+) -> EvaluatedRule<'scanner> {
     EvaluatedRule {
         name: &rule.name,
-        namespace: namespaces_names[rule.namespace_index].as_ref(),
+        namespace: scanner.namespaces[rule.namespace_index].as_ref(),
         tags: &rule.tags,
         metadatas: &rule.metadatas,
         matches: var_matches
@@ -1419,7 +1419,7 @@ fn build_matched_rule<'a>(
             .filter(|(_, var)| !var.is_private)
             .filter(|(matches, _)| !matches.is_empty())
             .map(|(matches, var)| StringMatches {
-                name: &var.name,
+                name: scanner.bytes_pool.get_str(var.name),
                 matches,
                 has_xor_modifier: var.matcher.modifiers.xor_start.is_some(),
             })
