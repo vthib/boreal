@@ -6,8 +6,8 @@ use std::sync::Arc;
 use crate::bytes_pool::{BytesPool, BytesSymbol, StringSymbol};
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
-use crate::compiler::variable::Variable;
 use crate::evaluator::{self, EvalError, evaluate_rule};
+use crate::matcher::Matcher;
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::{Module, ModuleData, ModuleUserData};
 use crate::timeout::TimeoutChecker;
@@ -187,7 +187,7 @@ impl Scanner {
         let Compiler {
             rules,
             global_rules,
-            variables,
+            matchers,
             namespaces,
             imported_modules,
             external_symbols,
@@ -197,7 +197,7 @@ impl Scanner {
         } = compiler;
         let namespaces = namespaces.into_iter().map(|v| v.name).collect();
 
-        let ac_scan = ac_scan::AcScan::new(&variables, profile);
+        let ac_scan = ac_scan::AcScan::new(&matchers, profile);
 
         let mut external_symbols_values = Vec::with_capacity(external_symbols.len());
         let mut external_symbols_map = HashMap::with_capacity(external_symbols.len());
@@ -214,7 +214,7 @@ impl Scanner {
             inner: Arc::new(Inner {
                 rules: rules.into_boxed_slice(),
                 global_rules: global_rules.into_boxed_slice(),
-                variables: variables.into_boxed_slice(),
+                matchers: matchers.into_boxed_slice(),
                 ac_scan,
                 modules: imported_modules.into_boxed_slice(),
                 external_symbols_map,
@@ -776,10 +776,10 @@ struct Inner {
     /// evaluated.
     global_rules: Box<[Rule]>,
 
-    /// Compiled variables.
+    /// Matchers for compiled variables.
     ///
     /// Those are stored in the order the rules have been compiled in.
-    variables: Box<[Variable]>,
+    matchers: Box<[Matcher]>,
 
     /// Regex set of all variables used in the rules.
     ///
@@ -1043,7 +1043,7 @@ impl Inner {
         mem: &mut Memory,
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<Vec<Vec<StringMatch>>, ScanError> {
-        let mut matches = vec![Vec::new(); self.variables.len()];
+        let mut matches = vec![Vec::new(); self.matchers.len()];
 
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
@@ -1505,9 +1505,9 @@ mod wire {
     use std::io;
     use std::sync::Arc;
 
+    use crate::matcher::Matcher;
     use crate::wire::{Deserialize, Serialize};
 
-    use crate::compiler::variable::Variable;
     use crate::compiler::{CompilerProfile, ExternalValue};
     use crate::module::{Module, ModuleUserData, StaticValue};
     use crate::wire::DeserializeContext;
@@ -1583,7 +1583,7 @@ mod wire {
             self.external_symbols_map.serialize(writer)?;
             self.namespaces.serialize(writer)?;
             self.bytes_pool.serialize(writer)?;
-            self.variables.serialize(writer)?;
+            self.matchers.serialize(writer)?;
             serialize_modules(&self.modules, writer)?;
             self.global_rules.serialize(writer)?;
             self.rules.serialize(writer)?;
@@ -1599,7 +1599,7 @@ mod wire {
         let external_symbols_map = <HashMap<Box<str>, usize>>::deserialize_reader(reader)?;
         let namespaces = <Vec<String>>::deserialize_reader(reader)?;
         let bytes_pool = BytesPool::deserialize_reader(reader)?;
-        let variables = <Vec<Variable>>::deserialize_reader(reader)?;
+        let matchers = <Vec<Matcher>>::deserialize_reader(reader)?;
         let modules = deserialize_modules(params.modules, reader)?;
 
         let ctx = DeserializeContext {
@@ -1612,12 +1612,12 @@ mod wire {
         let rules = deserialize_rules(&ctx, reader)?;
 
         let profile = CompilerProfile::deserialize_reader(reader)?;
-        let ac_scan = AcScan::new(&variables, profile);
+        let ac_scan = AcScan::new(&matchers, profile);
 
         Ok(Inner {
             rules: rules.into_boxed_slice(),
             global_rules: global_rules.into_boxed_slice(),
-            variables: variables.into_boxed_slice(),
+            matchers: matchers.into_boxed_slice(),
             ac_scan,
             modules: modules.into_boxed_slice(),
             external_symbols_map,
@@ -1727,7 +1727,7 @@ mod wire {
                     external_symbols_map: HashMap::new(),
                     namespaces: Box::new([]),
                     bytes_pool: BytesPoolBuilder::default().into_pool(),
-                    variables: Box::new([]),
+                    matchers: Box::new([]),
                     modules: Box::new([Box::new(Math)]),
                     global_rules: Box::new([]),
                     rules: Box::new([]),
@@ -1775,7 +1775,7 @@ mod wire {
                     .collect(),
                 namespaces: Box::new(["abc".into()]),
                 bytes_pool: BytesPoolBuilder::default().into_pool(),
-                variables: Box::new([]),
+                matchers: Box::new([]),
                 modules: Box::new([Box::new(Math), Box::new(Time)]),
                 global_rules: Box::new([]),
                 rules: Box::new([]),
@@ -1807,7 +1807,7 @@ mod wire {
             assert_eq!(inner.external_symbols_map, inner2.external_symbols_map);
             assert_eq!(inner.namespaces, inner2.namespaces);
             assert_eq!(inner.bytes_pool, inner2.bytes_pool);
-            assert_eq!(inner.variables, inner2.variables);
+            assert_eq!(inner.matchers, inner2.matchers);
             assert_eq!(inner2.modules.len(), 2);
             assert_eq!(inner2.modules[0].get_name(), "math");
             assert_eq!(inner2.modules[1].get_name(), "time");

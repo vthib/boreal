@@ -10,6 +10,7 @@ use super::expression::{Expression, VariableIndex, compile_bool_expression};
 use super::external_symbol::ExternalSymbol;
 use super::{CompilationError, CompilerParams, Namespace, variable};
 use crate::bytes_pool::{BytesPoolBuilder, BytesSymbol, StringSymbol};
+use crate::matcher::Matcher;
 use crate::module::Type as ModuleType;
 use crate::statistics;
 
@@ -325,7 +326,7 @@ pub(super) fn compile_rule(
     )?;
     let condition = compile_bool_expression(&mut compiler, rule.condition)?;
 
-    let mut variables = Vec::with_capacity(rule.variables.len());
+    let mut matchers = Vec::with_capacity(rule.variables.len());
     let mut variables_statistics = Vec::new();
     let mut rule_variables = Vec::new();
 
@@ -343,11 +344,11 @@ pub(super) fn compile_rule(
             has_xor_modifier: var.modifiers.xor.is_some(),
         });
 
-        let (var, stats) = variable::compile_variable(&mut compiler, var, parsed_contents)?;
+        let (matcher, stats) = variable::compile_variable(&mut compiler, var, parsed_contents)?;
         if let Some(stats) = stats {
             variables_statistics.push(stats);
         }
-        variables.push(var);
+        matchers.push(matcher);
     }
 
     Ok(CompiledRule {
@@ -364,7 +365,7 @@ pub(super) fn compile_rule(
             is_private: rule.is_private,
             variables: rule_variables.into_boxed_slice(),
         },
-        variables,
+        matchers,
         variables_statistics,
         warnings: compiler.warnings,
         rule_wildcard_uses: compiler.rule_wildcard_uses,
@@ -374,7 +375,7 @@ pub(super) fn compile_rule(
 #[derive(Debug)]
 pub(super) struct CompiledRule {
     pub rule: Rule,
-    pub variables: Vec<variable::Variable>,
+    pub matchers: Vec<Matcher>,
     pub variables_statistics: Vec<statistics::CompiledString>,
     pub warnings: Vec<CompilationError>,
     pub rule_wildcard_uses: Vec<String>,
@@ -602,7 +603,7 @@ mod tests {
         test_type_traits_non_clonable(build_rule());
         test_type_traits_non_clonable(CompiledRule {
             rule: build_rule(),
-            variables: Vec::new(),
+            matchers: Vec::new(),
             variables_statistics: Vec::new(),
             warnings: Vec::new(),
             rule_wildcard_uses: Vec::new(),

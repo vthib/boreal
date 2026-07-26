@@ -10,7 +10,6 @@ use super::{
 };
 use crate::atoms::pick_atom_in_literal;
 use crate::compiler::CompilerProfile;
-use crate::compiler::variable::Variable;
 use crate::matcher::{AcMatchStatus, Matcher};
 use crate::memory::Region;
 
@@ -39,13 +38,13 @@ pub(crate) struct AcScan {
     non_handled_var_indexes: Box<[usize]>,
 }
 
-/// Details on a literal of a variable.
+/// Details on a literal of a matcher.
 #[derive(Debug)]
 struct LiteralInfo {
-    /// Index of the variable in the variable array.
-    variable_index: usize,
+    /// Index of the matcher in the matcher array.
+    matcher_index: usize,
 
-    /// Index of the literal for the variable.
+    /// Index of the literal for the matcher.
     literal_index: usize,
 
     /// Left and right offset for the slice picked in the Aho-Corasick.
@@ -53,23 +52,23 @@ struct LiteralInfo {
 }
 
 impl AcScan {
-    pub(crate) fn new(variables: &[Variable], profile: CompilerProfile) -> Self {
+    pub(crate) fn new(matchers: &[Matcher], profile: CompilerProfile) -> Self {
         let mut lits = Vec::new();
         let mut known_lits = HashMap::new();
         let mut aho_index_to_literal_info = Vec::new();
         let mut non_handled_var_indexes = Vec::new();
 
-        for (variable_index, var) in variables.iter().enumerate() {
-            if var.matcher.literals.is_empty() {
-                non_handled_var_indexes.push(variable_index);
+        for (matcher_index, matcher) in matchers.iter().enumerate() {
+            if matcher.literals.is_empty() {
+                non_handled_var_indexes.push(matcher_index);
             } else {
                 let mut known_literals_of_var = HashSet::new();
 
-                for (literal_index, lit) in var.matcher.literals.iter().enumerate() {
+                for (literal_index, lit) in matcher.literals.iter().enumerate() {
                     let (start, end) = pick_atom_in_literal(lit);
                     let mut atom = lit[start..(lit.len() - end)].to_vec();
                     let literal_info = LiteralInfo {
-                        variable_index,
+                        matcher_index,
                         literal_index,
                         slice_offset: (start, end),
                     };
@@ -92,7 +91,7 @@ impl AcScan {
                         // results in the same lowercase string. This shouldn't be done outside
                         // of the "nocase" scenario, since different cases will be validated
                         // properly against each literal.
-                        if var.matcher.modifiers.nocase {
+                        if matcher.modifiers.nocase {
                             dedup_atom.make_ascii_lowercase();
                         }
 
@@ -156,7 +155,7 @@ impl AcScan {
         region: &Region,
         scanner: &'scanner super::Inner,
         scan_data: &mut ScanData<'scanner, '_>,
-        matches: &mut [Vec<StringMatch>],
+        all_matches: &mut [Vec<StringMatch>],
     ) -> Result<(), ScanError> {
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
@@ -169,18 +168,18 @@ impl AcScan {
             if scan_data.check_timeout() {
                 return Err(ScanError::Timeout);
             }
-            self.handle_possible_match(region, scanner, &mat, scan_data, matches)?;
+            self.handle_possible_match(region, scanner, &mat, scan_data, all_matches)?;
         }
 
         if !self.non_handled_var_indexes.is_empty() {
             #[cfg(feature = "profiling")]
             let start = std::time::Instant::now();
 
-            // For every "raw" variable, scan the memory for this variable.
-            for variable_index in &self.non_handled_var_indexes {
-                let var = &scanner.variables[*variable_index].matcher;
+            // For every "raw" matcher, scan the memory for this matcher.
+            for matcher_index in &self.non_handled_var_indexes {
+                let matcher = &scanner.matchers[*matcher_index];
 
-                scan_single_variable(region, var, scan_data, &mut matches[*variable_index]);
+                scan_single_matcher(region, matcher, scan_data, &mut all_matches[*matcher_index]);
             }
 
             #[cfg(feature = "profiling")]
@@ -198,15 +197,15 @@ impl AcScan {
         scanner: &'scanner super::Inner,
         mat: &aho_corasick::Match,
         scan_data: &mut ScanData<'scanner, '_>,
-        matches: &mut [Vec<StringMatch>],
+        all_matches: &mut [Vec<StringMatch>],
     ) -> Result<(), ScanError> {
         for literal_info in &self.aho_index_to_literal_info[mat.pattern()] {
             let LiteralInfo {
-                variable_index,
+                matcher_index,
                 literal_index,
                 slice_offset: (start_offset, end_offset),
             } = *literal_info;
-            let var = &scanner.variables[variable_index].matcher;
+            let matcher = &scanner.matchers[matcher_index];
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -227,11 +226,11 @@ impl AcScan {
             let m = start..end;
 
             // Verify the literal is valid.
-            let Some(match_type) = var.confirm_ac_literal(region.mem, &m, literal_index) else {
+            let Some(match_type) = matcher.confirm_ac_literal(region.mem, &m, literal_index) else {
                 continue;
             };
 
-            let var_matches = &mut matches[variable_index];
+            let var_matches = &mut all_matches[matcher_index];
 
             // Shorten the mem to prevent new matches on the same starting byte.
             // For example, for `a.*?bb`, and input `abbb`, this can happen:
@@ -251,12 +250,12 @@ impl AcScan {
             // share the same start.
             let mut start_position = 0;
             if let Some(mat) = var_matches.last() {
-                if mat.base == region.start && !var.has_greedy_reverse_validator() {
+                if mat.base == region.start && !matcher.has_greedy_reverse_validator() {
                     start_position = mat.offset + 1;
                 }
             }
 
-            let res = var.process_ac_match(region.mem, m, start_position, match_type);
+            let res = matcher.process_ac_match(region.mem, m, start_position, match_type);
 
             #[cfg(feature = "profiling")]
             {
@@ -275,14 +274,14 @@ impl AcScan {
                             scan_data.params.match_max_length,
                             0,
                         );
-                        add_match(var, new_match, var_matches);
+                        add_match(matcher, new_match, var_matches);
                     }
                 }
                 AcMatchStatus::Single(m) => {
-                    let xor_key = var.get_xor_key(literal_index);
+                    let xor_key = matcher.get_xor_key(literal_index);
                     let new_match =
                         StringMatch::new(region, m, scan_data.params.match_max_length, xor_key);
-                    add_match(var, new_match, var_matches);
+                    add_match(matcher, new_match, var_matches);
                 }
             }
 
@@ -290,11 +289,11 @@ impl AcScan {
                 var_matches.truncate(scan_data.params.string_max_nb_matches as usize);
                 if (scan_data.params.callback_events & CallbackEvents::STRING_REACHED_MATCH_LIMIT).0
                     != 0
-                    && scan_data.string_reached_match_limit.insert(variable_index)
+                    && scan_data.string_reached_match_limit.insert(matcher_index)
                 {
                     if let Some(cb) = &mut scan_data.callback {
                         if let Some(string_identifier) =
-                            build_string_identifier(scanner, variable_index)
+                            build_string_identifier(scanner, matcher_index)
                         {
                             match (cb)(ScanEvent::StringReachedMatchLimit(string_identifier)) {
                                 ScanCallbackResult::Continue => (),
@@ -310,7 +309,7 @@ impl AcScan {
     }
 }
 
-fn add_match(var: &Matcher, new_match: StringMatch, var_matches: &mut Vec<StringMatch>) {
+fn add_match(matcher: &Matcher, new_match: StringMatch, var_matches: &mut Vec<StringMatch>) {
     // XXX: If the left HIR has greedy repetitions, then the reverse validator
     // may give matches that replaces existing matches.
     //
@@ -322,7 +321,7 @@ fn add_match(var: &Matcher, new_match: StringMatch, var_matches: &mut Vec<String
     // To handle this, we search into the existing matches if there are existing matches
     // at the same offset. If there are, we replace them, since the longest match always
     // wins.
-    if var.has_greedy_reverse_validator() {
+    if matcher.has_greedy_reverse_validator() {
         match var_matches
             .binary_search_by_key(&(new_match.base + new_match.offset), |m| m.base + m.offset)
         {
@@ -334,7 +333,7 @@ fn add_match(var: &Matcher, new_match: StringMatch, var_matches: &mut Vec<String
     }
 }
 
-fn scan_single_variable(
+fn scan_single_matcher(
     region: &Region,
     matcher: &Matcher,
     scan_data: &mut ScanData,
@@ -352,7 +351,7 @@ fn scan_single_variable(
                     region,
                     mat,
                     scan_data.params.match_max_length,
-                    // No xor key, since this function is only used for regex variables
+                    // No xor key, since this function is only used for regex matchers
                     0,
                 ));
 
@@ -369,7 +368,7 @@ fn scan_single_variable(
 
 fn build_string_identifier(
     scanner: &super::Inner,
-    variable_index: usize,
+    matcher_index: usize,
 ) -> Option<StringIdentifier<'_>> {
     let mut index = 0;
     // Go through all the rules of the scanner to find the right one.
@@ -382,13 +381,13 @@ fn build_string_identifier(
     // the rules should not take that long.
     //
     // A solution to improve this would be to store in each rule the index
-    // of its first variable, which would make a binary search through
+    // of its first matcher, which would make a binary search through
     // the rules possible. However, this means an additional word to store
     // with each rule, only to alleviate this very specific event. For
     // the moment, this is not considered to be worth the cost.
     for rule in scanner.global_rules.iter().chain(scanner.rules.iter()) {
-        if index + rule.variables.len() > variable_index {
-            let string_index = variable_index - index;
+        if index + rule.variables.len() > matcher_index {
+            let string_index = matcher_index - index;
             return Some(StringIdentifier {
                 rule_namespace: scanner.namespaces[rule.namespace_index].as_ref(),
                 rule_name: &rule.name,
@@ -414,7 +413,7 @@ mod tests {
     fn test_types_traits() {
         test_type_traits_non_clonable(AcScan::new(&[], CompilerProfile::Speed));
         test_type_traits_non_clonable(LiteralInfo {
-            variable_index: 0,
+            matcher_index: 0,
             literal_index: 0,
             slice_offset: (0, 0),
         });
