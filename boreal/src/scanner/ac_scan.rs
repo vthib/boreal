@@ -235,21 +235,26 @@ impl AcScan {
 
             // Shorten the mem to prevent new matches on the same starting byte.
             // For example, for `a.*?bb`, and input `abbb`, this can happen:
+            //
             // - extract atom `bb`
             // - get AC match on `a(bb)b`: call check_ac_match, this will return the
             //   match `(abb)b`.
             // - get AC match on `ab(bb)`: call check_ac_match, this will return the
             //   match `(abbb)`.
+            //
             // This is invalid, only one match per starting byte can happen.
             // To avoid this, ensure the mem given to check_ac_match starts one byte after the last
             // saved match.
             //
-            // This must only be done if the match is in the same region, otherwise the offset
-            // of the previous match makes no sense for this match, and will falsify results.
-            let start_position = match var_matches.last() {
-                Some(mat) if mat.base == region.start => mat.offset + 1,
-                _ => 0,
-            };
+            // Do not do so if the reverse validator is greedy however: in that case,
+            // we actually want to replace previous matches with new, longer ones, if they
+            // share the same start.
+            let mut start_position = 0;
+            if let Some(mat) = var_matches.last() {
+                if mat.base == region.start && !var.has_greedy_reverse_validator() {
+                    start_position = mat.offset + 1;
+                }
+            }
 
             let res = var.process_ac_match(region.mem, m, start_position, match_type);
 
@@ -262,20 +267,22 @@ impl AcScan {
 
             match res {
                 AcMatchStatus::None => (),
-                AcMatchStatus::Multiple(v) if v.is_empty() => (),
                 AcMatchStatus::Multiple(found_matches) => {
-                    var_matches.extend(found_matches.into_iter().map(|m| {
-                        StringMatch::new(region, m, scan_data.params.match_max_length, 0)
-                    }));
+                    for new_match in found_matches {
+                        let new_match = StringMatch::new(
+                            region,
+                            new_match,
+                            scan_data.params.match_max_length,
+                            0,
+                        );
+                        add_match(var, new_match, var_matches);
+                    }
                 }
                 AcMatchStatus::Single(m) => {
                     let xor_key = var.get_xor_key(literal_index);
-                    var_matches.push(StringMatch::new(
-                        region,
-                        m,
-                        scan_data.params.match_max_length,
-                        xor_key,
-                    ));
+                    let new_match =
+                        StringMatch::new(region, m, scan_data.params.match_max_length, xor_key);
+                    add_match(var, new_match, var_matches);
                 }
             }
 
@@ -300,6 +307,30 @@ impl AcScan {
         }
 
         Ok(())
+    }
+}
+
+fn add_match(var: &Matcher, new_match: StringMatch, var_matches: &mut Vec<StringMatch>) {
+    // XXX: If the left HIR has greedy repetitions, then the reverse validator
+    // may give matches that replaces existing matches.
+    //
+    // For example, a regex that looks like: `a.+foo.b` will extract the literal foo,
+    // but against the string `aafoobbaafoobb`, the only match should be the
+    // entire string. A first `foo` AC match will result in `aafoobb` being found,
+    // but the second `foo` AC match should then replace the first match.
+    //
+    // To handle this, we search into the existing matches if there are existing matches
+    // at the same offset. If there are, we replace them, since the longest match always
+    // wins.
+    if var.has_greedy_reverse_validator() {
+        match var_matches
+            .binary_search_by_key(&(new_match.base + new_match.offset), |m| m.base + m.offset)
+        {
+            Ok(position) => var_matches[position] = new_match,
+            Err(_) => var_matches.push(new_match),
+        }
+    } else {
+        var_matches.push(new_match);
     }
 }
 

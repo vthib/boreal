@@ -103,7 +103,7 @@ enum MatcherKind {
     /// The literals cover entirely the variable.
     Literals,
     /// The regex can confirm matches from AC literal matches.
-    Atomized { validator: validator::Validator },
+    Atomized(validator::Validator),
 
     /// The regex cannot confirm matches from AC literal matches.
     Raw(raw::RawMatcher),
@@ -159,14 +159,11 @@ impl Matcher {
         let kind = if literals.is_empty() {
             MatcherKind::Raw(raw::RawMatcher::new(hir, &analysis, modifiers)?)
         } else {
-            MatcherKind::Atomized {
-                validator: validator::Validator::new(
-                    pre_hir.as_ref(),
-                    post_hir.as_ref(),
-                    hir,
-                    modifiers,
-                )?,
-            }
+            MatcherKind::Atomized(validator::Validator::new(
+                pre_hir.as_ref(),
+                post_hir.as_ref(),
+                modifiers,
+            )?)
         };
 
         Ok(Self {
@@ -328,7 +325,7 @@ impl Matcher {
                     AcMatchStatus::None
                 }
             }
-            MatcherKind::Atomized { validator } => {
+            MatcherKind::Atomized(validator) => {
                 match validator.validate_match(mem, mat, start_position, match_type) {
                     Matches::None => AcMatchStatus::None,
                     Matches::Single(m) => {
@@ -376,13 +373,21 @@ impl Matcher {
     pub fn to_desc(&self) -> String {
         match &self.kind {
             MatcherKind::Literals => "Literals".to_owned(),
-            MatcherKind::Atomized { validator } => format!("Atomized {{ {validator} }}"),
+            MatcherKind::Atomized(validator) => format!("Atomized {{ {validator} }}"),
             MatcherKind::Raw(_) => "Raw".to_owned(),
         }
     }
 
     fn validate_fullword(&self, mem: &[u8], mat: &Range<usize>, match_type: MatchType) -> bool {
         !self.modifiers.fullword || check_fullword(mem, mat, match_type)
+    }
+
+    pub fn has_greedy_reverse_validator(&self) -> bool {
+        match &self.kind {
+            MatcherKind::Literals => false,
+            MatcherKind::Atomized(validator) => validator.reverse_is_greedy,
+            MatcherKind::Raw(_) => false,
+        }
     }
 }
 
@@ -487,7 +492,7 @@ mod wire {
                 Self::Literals => {
                     0_u8.serialize(writer)?;
                 }
-                Self::Atomized { validator } => {
+                Self::Atomized(validator) => {
                     1_u8.serialize(writer)?;
                     validator.serialize(writer)?;
                 }
@@ -509,7 +514,7 @@ mod wire {
             0 => Ok(MatcherKind::Literals),
             1 => {
                 let validator = Validator::deserialize(modifiers, reader)?;
-                Ok(MatcherKind::Atomized { validator })
+                Ok(MatcherKind::Atomized(validator))
             }
             2 => {
                 let matcher = RawMatcher::deserialize(modifiers, reader)?;
@@ -585,9 +590,7 @@ mod wire {
                 &[0],
             );
             test_round_trip_custom_deser(
-                &MatcherKind::Atomized {
-                    validator: Validator::new(None, None, &hir, modifiers).unwrap(),
-                },
+                &MatcherKind::Atomized(Validator::new(None, None, modifiers).unwrap()),
                 |reader| deserialize_matcher_kind(modifiers, reader),
                 &[0, 1],
             );
