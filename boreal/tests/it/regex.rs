@@ -255,6 +255,82 @@ fn test_regex_size() {
 }
 
 #[test]
+fn test_regex_greedy_reverse() {
+    // The pre part (`a.+`) is greedy and unbounded, so it can reach past the first `foo`
+    // occurrence to consume the second one. Every valid start ends up reaching the very end
+    // of the data (offset + length == 14 for all three matches).
+    let mut checker = Checker::new(&build_rule(r"/a.+foo.b/"));
+    checker.check_full_matches(
+        b"aafoobbaafoobb",
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "",
+                vec![
+                    (b"aafoobbaafoobb".as_slice(), 0, 14),
+                    (b"afoobbaafoobb".as_slice(), 1, 13),
+                    (b"aafoobb".as_slice(), 7, 7),
+                ],
+            )],
+        )],
+    );
+}
+
+#[test]
+fn test_regex_greedy_reverse_bounded() {
+    // Same shape as above, but the repetition is bounded (`.{1,4}`), so it cannot reach far
+    // enough to cross over to the second `foo` occurrence.
+    let mut checker = Checker::new(&build_rule(r"/a.{1,4}foo.b/"));
+    checker.check_full_matches(
+        b"aafoobbaafoobb",
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "",
+                vec![(b"aafoobb".as_slice(), 0, 7), (b"aafoobb".as_slice(), 7, 7)],
+            )],
+        )],
+    );
+}
+
+#[test]
+fn test_regex_non_greedy_reverse() {
+    let mut checker = Checker::new(&build_rule(r"/a.+?foo.b/"));
+    checker.check_full_matches(
+        b"aafoobbaafoobb",
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "",
+                vec![
+                    (b"aafoobb".as_slice(), 0, 7),
+                    (b"afoobbaafoobb".as_slice(), 1, 13),
+                    (b"aafoobb".as_slice(), 7, 7),
+                ],
+            )],
+        )],
+    );
+}
+
+#[test]
+fn test_regex_greedy_forward() {
+    let mut checker = Checker::new(&build_rule(r"/foo.+z/"));
+    checker.check_full_matches(
+        b"xfoobbfoobbzy",
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "",
+                vec![
+                    (b"foobbfoobbz".as_slice(), 1, 11),
+                    (b"foobbz".as_slice(), 6, 6),
+                ],
+            )],
+        )],
+    );
+}
+
+#[test]
 fn test_regex_same_alternative() {
     let mut checker = Checker::new(
         r#"

@@ -690,7 +690,7 @@ rule a {
     literals: ["barbaz"]
     atoms: ["rbaz"]
     atoms quality: 80
-    algo: Atomized { NonGreedy { reverse: Dfa, forward: none } }
+    algo: Atomized { Validator { reverse: Dfa, forward: none } }
   $d = /.{10}/ fullword
     literals: []
     atoms: []
