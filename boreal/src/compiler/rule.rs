@@ -32,14 +32,30 @@ pub(crate) struct Rule {
     /// Metadata associated with the rule.
     pub(crate) metadatas: Box<[Metadata]>,
 
-    /// Number of variables used by the rule.
-    pub(crate) nb_variables: usize,
-
     /// Condition of the rule.
     pub(crate) condition: Expression,
 
     /// Is the rule marked as private.
     pub(crate) is_private: bool,
+
+    /// List of variables used in the rule
+    pub(crate) variables: Box<[RuleVariable]>,
+}
+
+/// Some details about a rule variable.
+#[derive(Debug)]
+#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
+pub(crate) struct RuleVariable {
+    /// Name of the variable, without the '$'.
+    ///
+    /// Anonymous variables are just named "".
+    pub name: StringSymbol,
+
+    /// Is the variable marked as private.
+    pub(crate) is_private: bool,
+
+    /// Does the variable have a xor modifier.
+    pub(crate) has_xor_modifier: bool,
 }
 
 impl Rule {
@@ -311,14 +327,21 @@ pub(super) fn compile_rule(
 
     let mut variables = Vec::with_capacity(rule.variables.len());
     let mut variables_statistics = Vec::new();
+    let mut rule_variables = Vec::new();
 
-    for (i, var) in rule.variables.into_iter().enumerate() {
-        if !compiler.variables[i].used && !var.name.starts_with('_') {
+    for (var_index, var) in rule.variables.into_iter().enumerate() {
+        if !compiler.variables[var_index].used && !var.name.starts_with('_') {
             return Err(CompilationError::UnusedVariable {
                 name: var.name,
                 span: var.span,
             });
         }
+
+        rule_variables.push(RuleVariable {
+            name: compiler.bytes_pool.insert_str(&var.name),
+            is_private: var.modifiers.private,
+            has_xor_modifier: var.modifiers.xor.is_some(),
+        });
 
         let (var, stats) = variable::compile_variable(&mut compiler, var, parsed_contents)?;
         if let Some(stats) = stats {
@@ -337,9 +360,9 @@ pub(super) fn compile_rule(
                 .map(|v| compiler.bytes_pool.insert_str(&v.tag))
                 .collect(),
             metadatas,
-            nb_variables: variables.len(),
             condition,
             is_private: rule.is_private,
+            variables: rule_variables.into_boxed_slice(),
         },
         variables,
         variables_statistics,
@@ -367,16 +390,16 @@ mod wire {
     use crate::wire::DeserializeContext;
     use crate::{BytesSymbol, StringSymbol};
 
-    use super::{Metadata, MetadataValue, Rule};
+    use super::{Metadata, MetadataValue, Rule, RuleVariable};
 
     impl Serialize for Rule {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.name.serialize(writer)?;
             self.namespace_index.serialize(writer)?;
-            self.nb_variables.serialize(writer)?;
             self.is_private.serialize(writer)?;
             self.tags.serialize(writer)?;
             self.metadatas.serialize(writer)?;
+            self.variables.serialize(writer)?;
             self.condition.serialize(writer)?;
             Ok(())
         }
@@ -388,20 +411,43 @@ mod wire {
     ) -> io::Result<Rule> {
         let name = String::deserialize_reader(reader)?;
         let namespace_index = usize::deserialize_reader(reader)?;
-        let nb_variables = usize::deserialize_reader(reader)?;
         let is_private = bool::deserialize_reader(reader)?;
         let tags = <Vec<StringSymbol>>::deserialize_reader(reader)?;
         let metadatas = <Vec<Metadata>>::deserialize_reader(reader)?;
+        let variables = <Vec<RuleVariable>>::deserialize_reader(reader)?;
         let condition = Expression::deserialize(ctx, reader)?;
+
         Ok(Rule {
             name: name.into_boxed_str(),
             namespace_index,
             tags: tags.into_boxed_slice(),
             metadatas: metadatas.into_boxed_slice(),
-            nb_variables,
             condition,
             is_private,
+            variables: variables.into_boxed_slice(),
         })
+    }
+
+    impl Serialize for RuleVariable {
+        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+            self.name.serialize(writer)?;
+            self.is_private.serialize(writer)?;
+            self.has_xor_modifier.serialize(writer)?;
+            Ok(())
+        }
+    }
+
+    impl Deserialize for RuleVariable {
+        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let name = StringSymbol::deserialize_reader(reader)?;
+            let is_private = bool::deserialize_reader(reader)?;
+            let has_xor_modifier = bool::deserialize_reader(reader)?;
+            Ok(Self {
+                name,
+                is_private,
+                has_xor_modifier,
+            })
+        }
     }
 
     impl Serialize for Metadata {
@@ -472,14 +518,14 @@ mod wire {
                 &Rule {
                     name: "a".into(),
                     namespace_index: 0,
-                    nb_variables: 0,
                     is_private: false,
                     tags: Box::new([]),
                     metadatas: Box::new([]),
+                    variables: Box::new([]),
                     condition: Expression::Filesize,
                 },
                 |reader| deserialize_rule(&ctx, reader),
-                &[0, 5, 13, 21, 22, 26, 30],
+                &[0, 5, 13, 14, 18, 22, 26],
             );
         }
 
@@ -508,6 +554,20 @@ mod wire {
 
             test_invalid_deserialization::<MetadataValue>(b"\x05");
         }
+
+        #[test]
+        fn test_wire_rule_variable() {
+            let mut pool = BytesPoolBuilder::default();
+
+            test_round_trip(
+                &RuleVariable {
+                    name: pool.insert_str("a"),
+                    is_private: true,
+                    has_xor_modifier: false,
+                },
+                &[0, 16, 17],
+            );
+        }
     }
 }
 
@@ -535,9 +595,9 @@ mod tests {
             namespace_index: 0,
             tags: Box::new([]),
             metadatas: Box::new([]),
-            nb_variables: 0,
             condition: Expression::Filesize,
             is_private: false,
+            variables: Box::new([]),
         };
         test_type_traits_non_clonable(build_rule());
         test_type_traits_non_clonable(CompiledRule {

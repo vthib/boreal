@@ -3,7 +3,7 @@ use boreal_parser::rule::{VariableDeclaration, VariableDeclarationValue};
 use crate::atoms::{atoms_rank, pick_atom_in_literal};
 use crate::matcher::{Matcher, Modifiers};
 use crate::regex::regex_ast_to_hir;
-use crate::{StringSymbol, statistics};
+use crate::statistics;
 
 use super::CompilationError;
 use super::rule::RuleCompiler;
@@ -12,14 +12,6 @@ use super::rule::RuleCompiler;
 #[derive(Debug)]
 #[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
 pub struct Variable {
-    /// Name of the variable, without the '$'.
-    ///
-    /// Anonymous variables are just named "".
-    pub name: StringSymbol,
-
-    /// Is the variable marked as private.
-    pub is_private: bool,
-
     /// Matcher for the variable.
     pub(crate) matcher: Matcher,
 }
@@ -90,11 +82,7 @@ pub(super) fn compile_variable(
     };
 
     let res = match res {
-        Ok(matcher) => Variable {
-            name: compiler.bytes_pool.insert_str(&name),
-            is_private: modifiers.private,
-            matcher,
-        },
+        Ok(matcher) => Variable { matcher },
         Err(error) => {
             return Err(CompilationError::VariableCompilation {
                 variable_name: name,
@@ -154,15 +142,12 @@ impl std::fmt::Display for VariableCompilationError {
 mod wire {
     use std::io;
 
-    use crate::StringSymbol;
     use crate::wire::{Deserialize, Serialize};
 
     use super::{Matcher, Variable};
 
     impl Serialize for Variable {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-            self.name.serialize(writer)?;
-            self.is_private.serialize(writer)?;
             self.matcher.serialize(writer)?;
             Ok(())
         }
@@ -170,14 +155,8 @@ mod wire {
 
     impl Deserialize for Variable {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let name = StringSymbol::deserialize_reader(reader)?;
-            let is_private = bool::deserialize_reader(reader)?;
             let matcher = Matcher::deserialize_reader(reader)?;
-            Ok(Self {
-                name,
-                is_private,
-                matcher,
-            })
+            Ok(Self { matcher })
         }
     }
 
@@ -185,7 +164,6 @@ mod wire {
     mod tests {
         use boreal_parser::rule::VariableModifiers;
 
-        use crate::bytes_pool::BytesPoolBuilder;
         use crate::matcher::Matcher;
         use crate::wire::tests::test_round_trip;
 
@@ -193,11 +171,8 @@ mod wire {
 
         #[test]
         fn test_wire_variable() {
-            let mut pool = BytesPoolBuilder::default();
             test_round_trip(
                 &Variable {
-                    name: pool.insert_str("abc"),
-                    is_private: true,
                     matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),
                 },
                 &[0, 7, 8],

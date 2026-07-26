@@ -1120,9 +1120,6 @@ struct EvalContext {
     /// Variable matches. None if evaluation is done previous the scan is done.
     var_matches: Option<std::vec::IntoIter<Vec<StringMatch>>>,
 
-    /// Current index into the variables list.
-    var_index: usize,
-
     /// Results of "previous" rules.
     ///
     /// This is filled while iterating on rules and used when rules refer to the
@@ -1143,7 +1140,6 @@ impl EvalContext {
     ) -> Self {
         Self {
             var_matches: var_matches.map(Vec::into_iter),
-            var_index: 0,
             previous_results: Vec::with_capacity(nb_rules),
             namespace_disabled: vec![false; nb_namespaces],
         }
@@ -1193,9 +1189,7 @@ impl EvalContext {
         let var_matches: Option<Vec<_>> = self
             .var_matches
             .as_mut()
-            .map(|matches| matches.take(rule.nb_variables).collect());
-        let vars = &scanner.variables[self.var_index..(self.var_index + rule.nb_variables)];
-        self.var_index += rule.nb_variables;
+            .map(|matches| matches.take(rule.variables.len()).collect());
 
         let matched = if self.namespace_disabled[rule.namespace_index] {
             false
@@ -1215,13 +1209,8 @@ impl EvalContext {
         }
 
         if matched || scan_data.params.include_not_matched_rules {
-            let matched_rule = build_matched_rule(
-                rule,
-                vars,
-                scanner,
-                var_matches.unwrap_or_default(),
-                matched,
-            );
+            let matched_rule =
+                build_matched_rule(rule, scanner, var_matches.unwrap_or_default(), matched);
             match &mut scan_data.callback {
                 Some(cb) if call_callback => {
                     let mut result = ScanCallbackResult::Continue;
@@ -1403,7 +1392,6 @@ impl ScanData<'_, '_> {
 
 fn build_matched_rule<'scanner>(
     rule: &'scanner Rule,
-    variables: &'scanner [Variable],
     scanner: &'scanner Inner,
     var_matches: Vec<Vec<StringMatch>>,
     matched: bool,
@@ -1415,13 +1403,13 @@ fn build_matched_rule<'scanner>(
         metadatas: &rule.metadatas,
         matches: var_matches
             .into_iter()
-            .zip(variables.iter())
-            .filter(|(_, var)| !var.is_private)
+            .zip(rule.variables.iter())
             .filter(|(matches, _)| !matches.is_empty())
+            .filter(|(_, var)| !var.is_private)
             .map(|(matches, var)| StringMatches {
                 name: scanner.bytes_pool.get_str(var.name),
                 matches,
-                has_xor_modifier: var.matcher.modifiers.xor_start.is_some(),
+                has_xor_modifier: var.has_xor_modifier,
             })
             .collect(),
         matched,
@@ -1871,9 +1859,9 @@ mod wire {
                 namespace_index: 0,
                 tags: Box::new([]),
                 metadatas: Box::new([]),
-                nb_variables: 0,
                 condition: Expression::Filesize,
                 is_private: false,
+                variables: Box::new([]),
             }];
             test_round_trip_custom_deser(&rules, |reader| deserialize_rules(&ctx, reader), &[0, 4]);
         }
