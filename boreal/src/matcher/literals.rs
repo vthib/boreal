@@ -444,6 +444,13 @@ fn get_parts_rank(parts: &[HirPart]) -> Option<u32> {
 
     let literals = generate_literals(parts);
 
+    // If any alternation is empty, bail out: this would result in
+    // checking for the variable on every single offset of the data,
+    // which we do not want.
+    if literals.iter().any(Vec::is_empty) {
+        return None;
+    }
+
     let quality = literals
         .iter()
         .map(|v| atom_quality_from_literal(v))
