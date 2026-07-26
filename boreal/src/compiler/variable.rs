@@ -8,19 +8,11 @@ use crate::statistics;
 use super::CompilationError;
 use super::rule::RuleCompiler;
 
-/// A compiled variable used in a rule.
-#[derive(Debug)]
-#[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
-pub struct Variable {
-    /// Matcher for the variable.
-    pub(crate) matcher: Matcher,
-}
-
 pub(super) fn compile_variable(
     compiler: &mut RuleCompiler,
     decl: VariableDeclaration,
     parsed_contents: &str,
-) -> Result<(Variable, Option<statistics::CompiledString>), CompilationError> {
+) -> Result<(Matcher, Option<statistics::CompiledString>), CompilationError> {
     let VariableDeclaration {
         name,
         value,
@@ -81,8 +73,8 @@ pub(super) fn compile_variable(
         .map_err(VariableCompilationError::Regex),
     };
 
-    let res = match res {
-        Ok(matcher) => Variable { matcher },
+    let matcher = match res {
+        Ok(matcher) => matcher,
         Err(error) => {
             return Err(CompilationError::VariableCompilation {
                 variable_name: name,
@@ -93,8 +85,7 @@ pub(super) fn compile_variable(
     };
 
     let stats = if compiler.params.compute_statistics {
-        let atoms: Vec<_> = res
-            .matcher
+        let atoms: Vec<_> = matcher
             .literals
             .iter()
             .map(|lit| {
@@ -107,16 +98,16 @@ pub(super) fn compile_variable(
         Some(statistics::CompiledString {
             name,
             expr: parsed_contents[span.start..span.end].to_owned(),
-            literals: res.matcher.literals.clone(),
+            literals: matcher.literals.clone(),
             atoms,
             atoms_quality,
-            matching_algo: res.matcher.to_desc(),
+            matching_algo: matcher.to_desc(),
         })
     } else {
         None
     };
 
-    Ok((res, stats))
+    Ok((matcher, stats))
 }
 
 /// Error during the compilation of a variable.
@@ -134,49 +125,6 @@ impl std::fmt::Display for VariableCompilationError {
         match self {
             Self::Empty => write!(f, "variable is empty"),
             Self::Regex(e) => e.fmt(f),
-        }
-    }
-}
-
-#[cfg(feature = "serialize")]
-mod wire {
-    use std::io;
-
-    use crate::wire::{Deserialize, Serialize};
-
-    use super::{Matcher, Variable};
-
-    impl Serialize for Variable {
-        fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-            self.matcher.serialize(writer)?;
-            Ok(())
-        }
-    }
-
-    impl Deserialize for Variable {
-        fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let matcher = Matcher::deserialize_reader(reader)?;
-            Ok(Self { matcher })
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use boreal_parser::rule::VariableModifiers;
-
-        use crate::matcher::Matcher;
-        use crate::wire::tests::test_round_trip;
-
-        use super::*;
-
-        #[test]
-        fn test_wire_variable() {
-            test_round_trip(
-                &Variable {
-                    matcher: Matcher::new_bytes(Vec::new(), &VariableModifiers::default()),
-                },
-                &[0, 7, 8],
-            );
         }
     }
 }

@@ -25,6 +25,7 @@ pub(crate) mod rule;
 pub(crate) mod variable;
 
 use crate::bytes_pool::BytesPoolBuilder;
+use crate::matcher::Matcher;
 use crate::{Scanner, statistics};
 
 /// Object used to compile rules.
@@ -36,8 +37,8 @@ pub struct Compiler {
     /// List of compiled, global rules.
     pub(crate) global_rules: Vec<rule::Rule>,
 
-    /// List of compiled variables.
-    pub(crate) variables: Vec<variable::Variable>,
+    /// List of matchers (matching logic for variables).
+    pub(crate) matchers: Vec<Matcher>,
 
     /// Number of variables used by global rules.
     nb_global_rules_variables: usize,
@@ -168,7 +169,7 @@ impl Compiler {
             namespaces: Vec::new(),
             rules: Vec::new(),
             global_rules: Vec::new(),
-            variables: Vec::new(),
+            matchers: Vec::new(),
             nb_global_rules_variables: 0,
             namespaces_indexes: HashMap::new(),
             imported_modules: Vec::new(),
@@ -430,7 +431,7 @@ impl Compiler {
 
                 let rule::CompiledRule {
                     rule,
-                    variables,
+                    matchers,
                     variables_statistics,
                     warnings,
                     rule_wildcard_uses,
@@ -494,17 +495,17 @@ impl Compiler {
                     // compiled global rules, but before the normal rules.
                     // This is ok to do since there is no reference to variable indexes anywhere in
                     // compiled rules.
-                    let nb_vars = variables.len();
+                    let nb_vars = matchers.len();
                     let index = self.nb_global_rules_variables;
 
-                    let _r = self.variables.splice(index..index, variables);
+                    let _r = self.matchers.splice(index..index, matchers);
                     self.nb_global_rules_variables += nb_vars;
                 } else {
                     let _r = namespace
                         .rules_indexes
                         .insert(rule_name, Some(self.rules.len()));
                     self.rules.push(rule);
-                    self.variables.extend(variables);
+                    self.matchers.extend(matchers);
                 }
             }
         }
