@@ -387,17 +387,18 @@ fn build_string_identifier(
     // with each rule, only to alleviate this very specific event. For
     // the moment, this is not considered to be worth the cost.
     for rule in scanner.global_rules.iter().chain(scanner.rules.iter()) {
-        if index + rule.nb_variables > variable_index {
+        if index + rule.variables.len() > variable_index {
+            let string_index = variable_index - index;
             return Some(StringIdentifier {
                 rule_namespace: scanner.namespaces[rule.namespace_index].as_ref(),
                 rule_name: &rule.name,
                 string_name: scanner
                     .bytes_pool
-                    .get_str(scanner.variables[variable_index].name),
-                string_index: variable_index - index,
+                    .get_str(rule.variables[string_index].name),
+                string_index,
             });
         }
-        index += rule.nb_variables;
+        index += rule.variables.len();
     }
     // Should technically be impossible to reach.
     debug_assert!(false);
