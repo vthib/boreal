@@ -106,6 +106,24 @@ impl From<ExternalValue> for Value {
     }
 }
 
+/// A list of indexes of rules that matched.
+///
+/// This is **only** filled for rules that are depended upon, and not for all rules.
+///
+/// The array is sorted, allowing binary search into it.
+#[derive(Default)]
+pub(crate) struct MatchedDependencyRules(Vec<usize>);
+
+impl MatchedDependencyRules {
+    pub(crate) fn insert(&mut self, rule_index: usize) {
+        self.0.push(rule_index);
+    }
+
+    pub(crate) fn contains(&self, rule_index: usize) -> bool {
+        self.0.binary_search(&rule_index).is_ok()
+    }
+}
+
 /// Evaluates an expression on a given byte slice.
 ///
 /// Returns true if the expression (with the associated variables) matches on the given
@@ -113,14 +131,14 @@ impl From<ExternalValue> for Value {
 pub(crate) fn evaluate_rule<'scan>(
     rule: &Rule,
     var_matches: Option<&'scan [Vec<variable::StringMatch>]>,
-    previous_rules_results: &'scan [bool],
+    matched_dependency_rules: &'scan MatchedDependencyRules,
     bytes_pool: &'scan BytesPool,
     mem: &'scan mut Memory,
     scan_data: &'scan mut ScanData,
 ) -> Result<bool, EvalError> {
     let mut evaluator = Evaluator {
         var_matches: var_matches.map(variable::VarMatches::new),
-        previous_rules_results,
+        matched_dependency_rules,
         currently_selected_variable_index: None,
         bounded_identifiers_stack: Vec::new(),
         bytes_pool,
@@ -138,10 +156,8 @@ pub(crate) fn evaluate_rule<'scan>(
 struct Evaluator<'scan, 'rule, 'mem, 'cb> {
     var_matches: Option<variable::VarMatches<'rule>>,
 
-    // Array of previous rules results.
-    //
-    // This only stores results of rules that are depended upon, not all rules.
-    previous_rules_results: &'rule [bool],
+    // List of dependency rules that matched.
+    matched_dependency_rules: &'rule MatchedDependencyRules,
 
     // Index of the currently selected variable.
     //
@@ -670,7 +686,7 @@ impl Evaluator<'_, '_, '_, '_> {
                 }
 
                 for index in &set.elements {
-                    let v = self.previous_rules_results[*index];
+                    let v = self.matched_dependency_rules.contains(*index);
                     if let Some(result) = selection.add_result_and_check(v) {
                         return Ok(Value::Boolean(result));
                     }
@@ -690,7 +706,9 @@ impl Evaluator<'_, '_, '_, '_> {
                 .map(Into::into)
                 .ok_or(PoisonKind::Undefined),
 
-            Expression::Rule(index) => Ok(Value::Boolean(self.previous_rules_results[*index])),
+            Expression::Rule(index) => Ok(Value::Boolean(
+                self.matched_dependency_rules.contains(*index),
+            )),
 
             Expression::Integer(v) => Ok(Value::Integer(*v)),
             Expression::Double(v) => Ok(Value::Float(*v)),
