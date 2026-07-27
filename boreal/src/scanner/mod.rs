@@ -1860,8 +1860,9 @@ mod wire {
                 tags: Box::new([]),
                 metadatas: Box::new([]),
                 condition: Expression::Filesize,
-                is_private: false,
                 variables: Box::new([]),
+                is_private: false,
+                is_depended_upon: false,
             }];
             test_round_trip_custom_deser(&rules, |reader| deserialize_rules(&ctx, reader), &[0, 4]);
         }

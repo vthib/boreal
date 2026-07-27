@@ -152,6 +152,7 @@ mod tests {
             params: &CompilerParams::default(),
             condition_depth: 0,
             warnings: Vec::new(),
+            rules_depended_upon: Vec::new(),
             bytes_pool: &mut BytesPoolBuilder::default(),
         };
         test_type_traits_non_clonable(
