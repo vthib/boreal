@@ -618,14 +618,27 @@ impl<'s> CallbackHandler<'s> {
         matched: bool,
     ) -> PyResult<ScanCallbackResult> {
         Python::attach(|py| {
-            let m = Match::new(py, self.scanner, rule, self.allow_duplicate_metadata)?;
+            let m = if matched
+                || (self.callback.is_some() && (self.which & CALLBACK_NON_MATCHES) != 0)
+            {
+                Some(Match::new(
+                    py,
+                    self.scanner,
+                    rule,
+                    self.allow_duplicate_metadata,
+                )?)
+            } else {
+                None
+            };
 
             let ret = match &self.callback {
                 Some(cb) => {
                     if (matched && (self.which & CALLBACK_MATCHES) != 0)
                         || (!matched && (self.which & CALLBACK_NON_MATCHES) != 0)
                     {
-                        let rule = match_to_callback_dict(py, &m, matched)?;
+                        // Safety: guaranteed to have been built earlier.
+                        let m = m.as_ref().unwrap();
+                        let rule = match_to_callback_dict(py, m, matched)?;
                         convert_callback_return_value(py, &cb.call1(py, (rule,))?)
                     } else {
                         ScanCallbackResult::Continue
@@ -638,8 +651,10 @@ impl<'s> CallbackHandler<'s> {
             // are returned from the match function call.
             // But, only the real matches are saved, not the "non match"...
             if matched {
-                self.matches.push(m);
+                // Safety: guaranteed to have been built earlier
+                self.matches.push(m.unwrap());
             }
+
             Ok(ret)
         })
     }
