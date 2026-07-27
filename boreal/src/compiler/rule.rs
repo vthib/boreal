@@ -36,11 +36,14 @@ pub(crate) struct Rule {
     /// Condition of the rule.
     pub(crate) condition: Expression,
 
+    /// List of variables used in the rule
+    pub(crate) variables: Box<[RuleVariable]>,
+
     /// Is the rule marked as private.
     pub(crate) is_private: bool,
 
-    /// List of variables used in the rule
-    pub(crate) variables: Box<[RuleVariable]>,
+    /// Is the rule depended upon by other rules.
+    pub(crate) is_depended_upon: bool,
 }
 
 /// Some details about a rule variable.
@@ -133,6 +136,9 @@ pub(super) struct RuleCompiler<'a> {
     /// Warnings emitted while compiling the rule.
     pub warnings: Vec<CompilationError>,
 
+    /// Rules depended upon by this rule.
+    pub rules_depended_upon: Vec<usize>,
+
     /// Bytes intern pool.
     pub bytes_pool: &'a mut BytesPoolBuilder,
 }
@@ -191,6 +197,7 @@ impl<'a> RuleCompiler<'a> {
             params,
             condition_depth: 0,
             warnings: Vec::new(),
+            rules_depended_upon: Vec::new(),
             bytes_pool,
         })
     }
@@ -362,13 +369,15 @@ pub(super) fn compile_rule(
                 .collect(),
             metadatas,
             condition,
-            is_private: rule.is_private,
             variables: rule_variables.into_boxed_slice(),
+            is_private: rule.is_private,
+            is_depended_upon: false,
         },
         matchers,
         variables_statistics,
         warnings: compiler.warnings,
         rule_wildcard_uses: compiler.rule_wildcard_uses,
+        rules_depended_upon: compiler.rules_depended_upon,
     })
 }
 
@@ -379,6 +388,7 @@ pub(super) struct CompiledRule {
     pub variables_statistics: Vec<statistics::CompiledString>,
     pub warnings: Vec<CompilationError>,
     pub rule_wildcard_uses: Vec<String>,
+    pub rules_depended_upon: Vec<usize>,
 }
 
 #[cfg(feature = "serialize")]
@@ -401,6 +411,7 @@ mod wire {
             self.tags.serialize(writer)?;
             self.metadatas.serialize(writer)?;
             self.variables.serialize(writer)?;
+            self.is_depended_upon.serialize(writer)?;
             self.condition.serialize(writer)?;
             Ok(())
         }
@@ -416,6 +427,7 @@ mod wire {
         let tags = <Vec<StringSymbol>>::deserialize_reader(reader)?;
         let metadatas = <Vec<Metadata>>::deserialize_reader(reader)?;
         let variables = <Vec<RuleVariable>>::deserialize_reader(reader)?;
+        let is_depended_upon = bool::deserialize_reader(reader)?;
         let condition = Expression::deserialize(ctx, reader)?;
 
         Ok(Rule {
@@ -424,8 +436,9 @@ mod wire {
             tags: tags.into_boxed_slice(),
             metadatas: metadatas.into_boxed_slice(),
             condition,
-            is_private,
             variables: variables.into_boxed_slice(),
+            is_private,
+            is_depended_upon,
         })
     }
 
@@ -523,10 +536,11 @@ mod wire {
                     tags: Box::new([]),
                     metadatas: Box::new([]),
                     variables: Box::new([]),
+                    is_depended_upon: false,
                     condition: Expression::Filesize,
                 },
                 |reader| deserialize_rule(&ctx, reader),
-                &[0, 5, 13, 14, 18, 22, 26],
+                &[0, 5, 13, 14, 18, 22, 26, 27],
             );
         }
 
@@ -589,6 +603,7 @@ mod tests {
             params: &CompilerParams::default(),
             condition_depth: 0,
             warnings: Vec::new(),
+            rules_depended_upon: Vec::new(),
             bytes_pool: &mut BytesPoolBuilder::default(),
         });
         let build_rule = || Rule {
@@ -597,8 +612,9 @@ mod tests {
             tags: Box::new([]),
             metadatas: Box::new([]),
             condition: Expression::Filesize,
-            is_private: false,
             variables: Box::new([]),
+            is_private: false,
+            is_depended_upon: false,
         };
         test_type_traits_non_clonable(build_rule());
         test_type_traits_non_clonable(CompiledRule {
@@ -607,6 +623,7 @@ mod tests {
             variables_statistics: Vec::new(),
             warnings: Vec::new(),
             rule_wildcard_uses: Vec::new(),
+            rules_depended_upon: Vec::new(),
         });
         test_type_traits_non_clonable(RuleCompilerVariable {
             name: "a".to_owned(),

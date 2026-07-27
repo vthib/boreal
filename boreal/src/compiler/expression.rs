@@ -1130,6 +1130,10 @@ fn compile_rule_set(
         }
     }
 
+    for index in &indexes {
+        compiler.rules_depended_upon.push(*index);
+    }
+
     Ok(RuleSet {
         elements: indexes.into_boxed_slice(),
         already_matched,
@@ -1298,7 +1302,10 @@ fn compile_identifier(
     } else if let Some(index) = compiler.namespace.rules_indexes.get(&identifier.name) {
         if identifier.operations.is_empty() {
             let expr = match index {
-                Some(index) => Expression::Rule(*index),
+                Some(index) => {
+                    compiler.rules_depended_upon.push(*index);
+                    Expression::Rule(*index)
+                }
                 // The referenced rule is global. Since this rule can only be evaluated if all
                 // global rules pass, then this can be just replaced by true.
                 None => Expression::Boolean(true),

@@ -435,6 +435,7 @@ impl Compiler {
                     variables_statistics,
                     warnings,
                     rule_wildcard_uses,
+                    rules_depended_upon,
                 } = rule::compile_rule(
                     *rule,
                     namespace,
@@ -484,6 +485,10 @@ impl Compiler {
                         parsed_contents,
                     )
                 }));
+
+                for rule_index in rules_depended_upon {
+                    self.rules[rule_index].is_depended_upon = true;
+                }
 
                 namespace.forbidden_rule_prefixes.extend(rule_wildcard_uses);
 
