@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::bytes_pool::{BytesPool, BytesSymbol, StringSymbol};
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
-use crate::evaluator::{self, EvalError, evaluate_rule};
+use crate::evaluator::{self, EvalError, MatchedDependencyRules, evaluate_rule};
 use crate::matcher::Matcher;
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::{Module, ModuleData, ModuleUserData};
@@ -937,8 +937,7 @@ impl Inner {
         // which variables have no miss at all.
         let var_matches = self.do_memory_scan(&mut mem, scan_data)?;
 
-        let mut eval_ctx =
-            EvalContext::new(Some(var_matches), self.rules.len(), self.namespaces.len());
+        let mut eval_ctx = EvalContext::new(Some(var_matches), self.namespaces.len());
 
         #[cfg(feature = "profiling")]
         let start = std::time::Instant::now();
@@ -982,8 +981,8 @@ impl Inner {
         scan_data.handle_already_matched_rules_and_callback()?;
 
         // Evaluate all non global rules.
-        for rule in &self.rules {
-            match eval_ctx.eval_non_global_rule(self, rule, &mut mem, scan_data, true) {
+        for (rule_index, rule) in self.rules.iter().enumerate() {
+            match eval_ctx.eval_non_global_rule(self, rule, rule_index, &mut mem, scan_data, true) {
                 Ok(()) => (),
                 Err(EvalError::Undecidable) => unreachable!(),
                 Err(EvalError::Timeout) => return Err(ScanError::Timeout),
@@ -1007,7 +1006,7 @@ impl Inner {
         mem: &mut Memory,
         scan_data: &mut ScanData<'scanner, '_>,
     ) -> Result<(), EvalError> {
-        let mut eval_ctx = EvalContext::new(None, self.rules.len(), self.namespaces.len());
+        let mut eval_ctx = EvalContext::new(None, self.namespaces.len());
 
         // First, check global rules
         let mut has_unknown_globals = false;
@@ -1031,8 +1030,8 @@ impl Inner {
         }
 
         // Then, if all global rules matched, the normal rules
-        for rule in &self.rules {
-            eval_ctx.eval_non_global_rule(self, rule, mem, scan_data, false)?;
+        for (rule_index, rule) in self.rules.iter().enumerate() {
+            eval_ctx.eval_non_global_rule(self, rule, rule_index, mem, scan_data, false)?;
         }
 
         Ok(())
@@ -1120,11 +1119,8 @@ struct EvalContext {
     /// Variable matches. None if evaluation is done previous the scan is done.
     var_matches: Option<std::vec::IntoIter<Vec<StringMatch>>>,
 
-    /// Results of "previous" rules.
-    ///
-    /// This is filled while iterating on rules and used when rules refer to the
-    /// result of previous rules.
-    previous_results: Vec<bool>,
+    /// List of dependency rules that matched.
+    matched_dependency_rules: MatchedDependencyRules,
 
     /// Is a namespace "disabled" or not.
     ///
@@ -1133,14 +1129,10 @@ struct EvalContext {
 }
 
 impl EvalContext {
-    fn new(
-        var_matches: Option<Vec<Vec<StringMatch>>>,
-        nb_rules: usize,
-        nb_namespaces: usize,
-    ) -> Self {
+    fn new(var_matches: Option<Vec<Vec<StringMatch>>>, nb_namespaces: usize) -> Self {
         Self {
             var_matches: var_matches.map(Vec::into_iter),
-            previous_results: Vec::with_capacity(nb_rules),
+            matched_dependency_rules: MatchedDependencyRules::default(),
             namespace_disabled: vec![false; nb_namespaces],
         }
     }
@@ -1169,12 +1161,15 @@ impl EvalContext {
         &mut self,
         scanner: &'scanner Inner,
         rule: &'scanner Rule,
+        rule_index: usize,
         mem: &mut Memory,
         scan_data: &mut ScanData<'scanner, '_>,
         call_callback: bool,
     ) -> Result<(), EvalError> {
         let res = self.eval_rule_inner(scanner, rule, mem, scan_data, call_callback)?;
-        self.previous_results.push(res);
+        if res && rule.is_depended_upon {
+            self.matched_dependency_rules.insert(rule_index);
+        }
         Ok(())
     }
 
@@ -1197,7 +1192,7 @@ impl EvalContext {
             evaluate_rule(
                 rule,
                 var_matches.as_deref(),
-                &self.previous_results,
+                &self.matched_dependency_rules,
                 &scanner.bytes_pool,
                 mem,
                 scan_data,
@@ -1991,25 +1986,26 @@ mod tests {
             callback: None,
             string_reached_match_limit: HashSet::new(),
         };
-        let mut previous_results = Vec::new();
+        let mut matched_dependency_rules = MatchedDependencyRules::default();
         let rules = &scanner.inner.rules;
-        for rule in &rules[..(rules.len() - 1)] {
-            previous_results.push(
-                evaluate_rule(
-                    rule,
-                    None,
-                    &previous_results,
-                    &scanner.inner.bytes_pool,
-                    &mut mem,
-                    &mut scan_data,
-                )
-                .unwrap(),
-            );
+        for (rule_index, rule) in rules[..(rules.len() - 1)].iter().enumerate() {
+            let res = evaluate_rule(
+                rule,
+                None,
+                &matched_dependency_rules,
+                &scanner.inner.bytes_pool,
+                &mut mem,
+                &mut scan_data,
+            )
+            .unwrap();
+            if res && rule.is_depended_upon {
+                matched_dependency_rules.insert(rule_index);
+            }
         }
         let last_res = evaluate_rule(
             &rules[rules.len() - 1],
             None,
-            &previous_results,
+            &matched_dependency_rules,
             &scanner.inner.bytes_pool,
             &mut mem,
             &mut scan_data,
