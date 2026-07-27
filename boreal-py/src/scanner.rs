@@ -10,7 +10,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 
 use ::boreal::module::{Console, ConsoleData, Value};
-use ::boreal::scanner::{self, CallbackEvents, FragmentedScanMode, ScanCallbackResult, ScanEvent};
+use ::boreal::scanner::{
+    self, CallbackEvents, FragmentedScanMode, ScanCallbackResult, ScanEvent, ScanParams,
+};
 
 use crate::rule_match::Match;
 use crate::rule_string::RuleString;
@@ -265,8 +267,12 @@ impl Scanner {
             params = params.match_max_length(value);
         }
         let fast = if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {
-            // Default value in libyara
-            params = params.string_max_nb_matches(1_000_000);
+            // Default value in libyara. Only set it if not already modified.
+            if params.get_string_max_nb_matches()
+                == ScanParams::default().get_string_max_nb_matches()
+            {
+                params = params.string_max_nb_matches(1_000_000);
+            }
             // In compat mode, default to false for fast mode
             fast.unwrap_or(false)
         } else {
