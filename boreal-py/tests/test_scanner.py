@@ -1081,6 +1081,31 @@ rule a {
         )
 
 
+@pytest.mark.global_config(yara_compat_mode=True)
+def test_string_max_nb_matches_yara_compat():
+    # Test that in yara mode, if string_max_nb_matches is modified,
+    # the modified value is used.
+    with utils.YaraCompatibilityMode():
+        # Only run on boreal, yara does not support this
+        rules = boreal.compile(source="""
+            rule a {
+                strings:
+                    $ = "abc"
+                condition:
+                    any of them
+            }""")
+
+        # Simply check setting those parameters work. All those
+        # parameters are properly tested in the boreal crate.
+        rules.set_params(
+            string_max_nb_matches=1,
+        )
+        # Check string_max_nb_matches to ensure parameters are properly set.
+        results = rules.match(data="abc abc")
+        s = results[0].strings[0]
+        assert len(s.instances) == 1
+
+
 def test_max_match_data():
     rules = boreal.compile(source="""
     rule a {
