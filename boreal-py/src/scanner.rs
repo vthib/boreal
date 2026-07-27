@@ -161,6 +161,7 @@ impl Scanner {
     ))]
     fn r#match(
         &self,
+        py: Python,
         filepath: Option<&str>,
         data: Option<&Bound<'_, PyAny>>,
         pid: Option<u32>,
@@ -291,25 +292,32 @@ impl Scanner {
         );
         let res = match (filepath, data, pid) {
             (Some(filepath), None, None) => {
-                if self.use_mmap.load(Ordering::SeqCst) {
-                    // Safety: unsafe because of mmap semantics, but opted in by
-                    // setting the use_mmap param to true.
-                    unsafe {
-                        scanner.scan_file_memmap_with_callback(filepath, |event| {
+                py.detach(|| {
+                    if self.use_mmap.load(Ordering::SeqCst) {
+                        // Safety: unsafe because of mmap semantics, but opted in by
+                        // setting the use_mmap param to true.
+                        unsafe {
+                            scanner.scan_file_memmap_with_callback(filepath, |event| {
+                                cb_handler.handle_event(event)
+                            })
+                        }
+                    } else {
+                        scanner.scan_file_with_callback(filepath, |event| {
                             cb_handler.handle_event(event)
                         })
                     }
-                } else {
-                    scanner
-                        .scan_file_with_callback(filepath, |event| cb_handler.handle_event(event))
-                }
+                })
             }
             (None, Some(data), None) => {
                 if let Ok(s) = data.extract::<&[u8]>() {
-                    scanner.scan_mem_with_callback(s, |event| cb_handler.handle_event(event))
+                    py.detach(|| {
+                        scanner.scan_mem_with_callback(s, |event| cb_handler.handle_event(event))
+                    })
                 } else if let Ok(s) = data.extract::<&str>() {
-                    scanner.scan_mem_with_callback(s.as_bytes(), |event| {
-                        cb_handler.handle_event(event)
+                    py.detach(|| {
+                        scanner.scan_mem_with_callback(s.as_bytes(), |event| {
+                            cb_handler.handle_event(event)
+                        })
                     })
                 } else {
                     return Err(PyTypeError::new_err(
@@ -317,9 +325,9 @@ impl Scanner {
                     ));
                 }
             }
-            (None, None, Some(pid)) => {
+            (None, None, Some(pid)) => py.detach(|| {
                 scanner.scan_process_with_callback(pid, |event| cb_handler.handle_event(event))
-            }
+            }),
             _ => {
                 return Err(PyTypeError::new_err(
                     "one of filepath, data or pid must be passed",
