@@ -173,7 +173,7 @@ impl AcScan {
 
         if !self.non_handled_var_indexes.is_empty() {
             #[cfg(feature = "profiling")]
-            let start = std::time::Instant::now();
+            let start = scan_data.statistics.is_some().then(std::time::Instant::now);
 
             // For every "raw" matcher, scan the memory for this matcher.
             for matcher_index in &self.non_handled_var_indexes {
@@ -184,7 +184,9 @@ impl AcScan {
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
-                stats.raw_regexes_eval_duration += start.elapsed();
+                if let Some(start) = start {
+                    stats.raw_regexes_eval_duration += start.elapsed();
+                }
             }
         }
 
@@ -212,7 +214,7 @@ impl AcScan {
                 stats.nb_ac_matches += 1;
             }
             #[cfg(feature = "profiling")]
-            let start_instant = std::time::Instant::now();
+            let start_instant = scan_data.statistics.is_some().then(std::time::Instant::now);
 
             // Upscale to the original literal shape before feeding it to the matcher verification
             // function.
@@ -260,7 +262,9 @@ impl AcScan {
             #[cfg(feature = "profiling")]
             {
                 if let Some(stats) = scan_data.statistics.as_mut() {
-                    stats.ac_confirm_duration += start_instant.elapsed();
+                    if let Some(start_instant) = start_instant {
+                        stats.ac_confirm_duration += start_instant.elapsed();
+                    }
                 }
             }
 

@@ -903,13 +903,15 @@ impl Inner {
 
         if can_use_no_scan_optimization(&mem, scan_data) {
             #[cfg(feature = "profiling")]
-            let start = std::time::Instant::now();
+            let start = scan_data.statistics.is_some().then(std::time::Instant::now);
 
             let res = self.evaluate_without_matches(&mut mem, scan_data);
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
-                stats.no_scan_eval_duration = start.elapsed();
+                if let Some(start) = start {
+                    stats.no_scan_eval_duration = start.elapsed();
+                }
             }
 
             match res {
@@ -940,7 +942,7 @@ impl Inner {
         let mut eval_ctx = EvalContext::new(Some(var_matches), self.namespaces.len());
 
         #[cfg(feature = "profiling")]
-        let start = std::time::Instant::now();
+        let start = scan_data.statistics.is_some().then(std::time::Instant::now);
 
         // First, evaluate global rules.
         for rule in &self.global_rules {
@@ -970,7 +972,9 @@ impl Inner {
             scan_data.rules.clear();
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
-                stats.rules_eval_duration = start.elapsed();
+                if let Some(start) = start {
+                    stats.rules_eval_duration = start.elapsed();
+                }
             }
             return Ok(());
         }
@@ -992,7 +996,9 @@ impl Inner {
 
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
-            stats.rules_eval_duration = start.elapsed();
+            if let Some(start) = start {
+                stats.rules_eval_duration = start.elapsed();
+            }
         }
         Ok(())
     }
@@ -1045,7 +1051,7 @@ impl Inner {
         let mut matches = vec![Vec::new(); self.matchers.len()];
 
         #[cfg(feature = "profiling")]
-        let start = std::time::Instant::now();
+        let start = scan_data.statistics.is_some().then(std::time::Instant::now);
 
         match mem {
             Memory::Direct(mem) => {
@@ -1061,7 +1067,7 @@ impl Inner {
                 // Scan each region for all variables occurences.
                 while fragmented.obj.next(&fragmented.params).is_some() {
                     #[cfg(feature = "profiling")]
-                    let start_fetch = std::time::Instant::now();
+                    let start_fetch = scan_data.statistics.is_some().then(std::time::Instant::now);
 
                     let Some(region) = fragmented.obj.fetch(&fragmented.params) else {
                         continue;
@@ -1069,7 +1075,9 @@ impl Inner {
 
                     #[cfg(feature = "profiling")]
                     if let Some(stats) = scan_data.statistics.as_mut() {
-                        stats.fetch_memory_duration += start_fetch.elapsed();
+                        if let Some(start_fetch) = start_fetch {
+                            stats.fetch_memory_duration += start_fetch.elapsed();
+                        }
                     }
 
                     self.ac_scan
@@ -1104,7 +1112,9 @@ impl Inner {
 
         #[cfg(feature = "profiling")]
         if let Some(stats) = scan_data.statistics.as_mut() {
-            stats.ac_duration = start.elapsed();
+            if let Some(start) = start {
+                stats.ac_duration = start.elapsed();
+            }
         }
 
         Ok(matches)
