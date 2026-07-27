@@ -453,13 +453,15 @@ fn build_compiler(profile: Option<&CompilerProfile>) -> compiler::Compiler {
             Some(CompilerProfile::Memory) => ::boreal::compiler::CompilerProfile::Memory,
         })
         .add_module(::boreal::module::Console::with_callback(|log| {
-            // XXX: when targetting python 3.12 or above, this could be simplified
-            // by using the "%.*s" format, avoiding the CString conversion.
-            if let Ok(cstr) = CString::new(log) {
-                // Safety: see <https://docs.python.org/3/c-api/unicode.html#c.PyUnicode_FromFormat>
-                // for the format. A '%s" expects a c-string pointer, which has just been built.
-                unsafe { ffi::PySys_FormatStdout(c"%s\n".as_ptr(), cstr.as_ptr()) }
-            }
+            Python::attach(|_py| {
+                // XXX: when targetting python 3.12 or above, this could be simplified
+                // by using the "%.*s" format, avoiding the CString conversion.
+                if let Ok(cstr) = CString::new(log) {
+                    // Safety: see <https://docs.python.org/3/c-api/unicode.html#c.PyUnicode_FromFormat>
+                    // for the format. A '%s" expects a c-string pointer, which has just been built.
+                    unsafe { ffi::PySys_FormatStdout(c"%s\n".as_ptr(), cstr.as_ptr()) }
+                }
+            });
         }))
         .build()
 }

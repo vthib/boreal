@@ -4,7 +4,9 @@ import platform
 import os
 import pytest
 import subprocess
+import sys
 import tempfile
+import threading
 from . import utils
 
 MODULES = utils.modules()
@@ -206,9 +208,7 @@ def test_match_scan_failed(module, is_yara):
             rules.match(pid=99999999)
 
 
-@pytest.mark.parametrize('module', MODULES)
-def test_match_timeout(module):
-    rules = module.compile(source="""
+INFINITE_LOOP_RULE = """
 rule a {
     condition:
         for all i in (0..9223372036854775807) : (
@@ -220,12 +220,55 @@ rule a {
                 )
             )
         )
-}""")
+}"""
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_match_timeout(module):
+    rules = module.compile(source=INFINITE_LOOP_RULE)
 
     with pytest.raises(module.TimeoutError):
         # Unfortunately, we cannot go below 1 second as this is the smallest timeout value
         # in the yara api
         rules.match(data='', timeout=1)
+
+
+@pytest.mark.parametrize('module', MODULES)
+def test_match_releases_gil(module):
+    rules = module.compile(source=INFINITE_LOOP_RULE)
+
+    counter = 0
+    stop = threading.Event()
+
+    def spin():
+        nonlocal counter
+        while not stop.is_set():
+            counter += 1
+
+    try:
+        # Shrink the interval between GIL switch checks. This ensures
+        # not a lot of work is done in the spin thread before entering the
+        # match call. If the GIL was not released, the counter would thus
+        # be quite small. A larger value would let the spin thread run
+        # much more, and it would be harder to measure if the match call
+        # does release the GIL or not.
+        previous_interval = sys.getswitchinterval()
+        sys.setswitchinterval(0.0001)
+
+        thread = threading.Thread(target=spin)
+        thread.start()
+
+        with pytest.raises(module.TimeoutError):
+            rules.match(data='', timeout=1)
+    finally:
+        stop.set()
+        thread.join()
+        sys.setswitchinterval(previous_interval)
+
+    # If the gil was properly released during the match call, both the
+    # match and the spin thread could run concurrently, so the counter
+    # should be large.
+    assert counter > 100_000
 
 
 @pytest.mark.parametrize('module', MODULES)
