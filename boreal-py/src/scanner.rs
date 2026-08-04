@@ -618,29 +618,30 @@ impl<'s> CallbackHandler<'s> {
         matched: bool,
     ) -> PyResult<ScanCallbackResult> {
         Python::attach(|py| {
-            let m = Match::new(py, self.scanner, rule, self.allow_duplicate_metadata)?;
-
-            let ret = match &self.callback {
-                Some(cb) => {
+            match &self.callback {
+                Some(cb)
                     if (matched && (self.which & CALLBACK_MATCHES) != 0)
-                        || (!matched && (self.which & CALLBACK_NON_MATCHES) != 0)
-                    {
-                        let rule = match_to_callback_dict(py, &m, matched)?;
-                        convert_callback_return_value(py, &cb.call1(py, (rule,))?)
-                    } else {
-                        ScanCallbackResult::Continue
-                    }
-                }
-                None => ScanCallbackResult::Continue,
-            };
+                        || (!matched && (self.which & CALLBACK_NON_MATCHES) != 0) =>
+                {
+                    let m = Match::new(py, self.scanner, rule, self.allow_duplicate_metadata)?;
+                    let rule = match_to_callback_dict(py, &m, matched)?;
 
-            // Always save the match: even if a callback is used, the matches
-            // are returned from the match function call.
-            // But, only the real matches are saved, not the "non match"...
-            if matched {
-                self.matches.push(m);
+                    if matched {
+                        self.matches.push(m);
+                    }
+                    Ok(convert_callback_return_value(py, &cb.call1(py, (rule,))?))
+                }
+                _ => {
+                    // Save matches: even if a callback is used, the matches
+                    // are returned from the match function call.
+                    if matched {
+                        let m = Match::new(py, self.scanner, rule, self.allow_duplicate_metadata)?;
+                        self.matches.push(m);
+                    }
+
+                    Ok(ScanCallbackResult::Continue)
+                }
             }
-            Ok(ret)
         })
     }
 }
