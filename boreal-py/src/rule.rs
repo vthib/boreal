@@ -96,7 +96,7 @@ fn convert_metadata_value<'py>(
 ) -> Result<Bound<'py, PyAny>, PyErr> {
     Ok(match value {
         MetadataValue::Bytes(v) => {
-            let bytes = scanner.get_bytes_symbol(v).to_vec().into_pyobject(py)?;
+            let bytes = scanner.get_bytes_symbol(v).into_pyobject(py)?;
             // XXX: Yara forces a string conversion here, losing data in the
             // process. Prefer using the right type here.
             if YARA_PYTHON_COMPATIBILITY.load(Ordering::SeqCst) {

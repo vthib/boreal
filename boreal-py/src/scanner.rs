@@ -4,10 +4,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use pyo3::create_exception;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
+use pyo3::{create_exception, intern};
 
 use ::boreal::module::{Console, ConsoleData, Value};
 use ::boreal::scanner::{
@@ -659,12 +659,12 @@ fn match_to_callback_dict<'py>(
 ) -> Result<Bound<'py, PyDict>, PyErr> {
     let d = PyDict::new(py);
 
-    d.set_item("rule", &m.rule)?;
-    d.set_item("namespace", &m.namespace)?;
-    d.set_item("meta", m.meta.clone_ref(py))?;
-    d.set_item("tags", m.tags.clone_ref(py))?;
-    d.set_item("strings", m.strings.clone_ref(py))?;
-    d.set_item("matches", matched)?;
+    d.set_item(intern!(py, "rule"), &m.rule)?;
+    d.set_item(intern!(py, "namespace"), &m.namespace)?;
+    d.set_item(intern!(py, "meta"), m.meta.clone_ref(py))?;
+    d.set_item(intern!(py, "tags"), m.tags.clone_ref(py))?;
+    d.set_item(intern!(py, "strings"), m.strings.clone_ref(py))?;
+    d.set_item(intern!(py, "matches"), matched)?;
 
     Ok(d)
 }
