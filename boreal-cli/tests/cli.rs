@@ -2223,25 +2223,38 @@ struct BinHelper {
 
 impl BinHelper {
     fn run(arg: &str) -> Self {
-        // Path to current exe
-        let path = std::env::current_exe().unwrap();
-        // Path to "deps" dir
-        let path = path.parent().unwrap();
-        // Path to parent of deps dir, ie destination of build artifacts
-        let path = path.parent().unwrap();
-        // Now select the bin helper
-        let path = path.join(if cfg!(windows) {
+        // Path to current dir
+        let current_exe = std::env::current_exe().unwrap();
+        let starting_dir = current_exe.parent().unwrap();
+
+        let filename = if cfg!(windows) {
             "boreal-test-helpers.exe"
         } else {
             "boreal-test-helpers"
-        });
-        if !path.exists() {
-            panic!(
-                "File {} not found. \
-                You need to compile the `boreal-test-helpers` crate to run this test",
-                path.display()
-            );
+        };
+
+        // Search for boreal-test-helpers in parents until finding it.
+        let path;
+        let mut current_dir = starting_dir;
+        loop {
+            let attempt = current_dir.join(filename);
+            if attempt.exists() && attempt.is_file() {
+                path = attempt;
+                break;
+            }
+            match current_dir.parent() {
+                Some(parent) => current_dir = parent,
+                None => {
+                    panic!(
+                        "File {} not found in any parent from {}. \
+                Did you compile the `boreal-test-helpers` crate before runnning this test",
+                        filename,
+                        starting_dir.display()
+                    );
+                }
+            }
         }
+
         let mut child = std::process::Command::new(path)
             .arg(arg)
             .stdout(std::process::Stdio::piped())
