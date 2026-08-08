@@ -358,7 +358,7 @@ pub(super) fn compile_rule(
         matchers.push(matcher);
     }
 
-    Ok(CompiledRule {
+    let compiled_rule = CompiledRule {
         rule: Rule {
             name: rule.name.into_boxed_str(),
             namespace_index,
@@ -378,7 +378,19 @@ pub(super) fn compile_rule(
         warnings: compiler.warnings,
         rule_wildcard_uses: compiler.rule_wildcard_uses,
         rules_depended_upon: compiler.rules_depended_upon,
-    })
+    };
+
+    // Compilation adds data to an intern pool to reduce memory usage.
+    // Addressing into this pool uses u32 values, which means the pool
+    // must not grow larger than 4GB or the addressing becomes invalid.
+    //
+    // This is highly unlikely unless specially crafted to reach it.
+    // Regardless, this situation is detected here.
+    if compiler.bytes_pool.is_full() {
+        return Err(CompilationError::BytesPoolFull);
+    }
+
+    Ok(compiled_rule)
 }
 
 #[derive(Debug)]
@@ -553,7 +565,7 @@ mod wire {
                     name: pool.insert_str("ab"),
                     value: MetadataValue::Boolean(true),
                 },
-                &[0, 16],
+                &[0, 8],
             );
 
             test_invalid_deserialization::<MetadataValue>(b"\x05");
@@ -580,7 +592,7 @@ mod wire {
                     is_private: true,
                     has_xor_modifier: false,
                 },
-                &[0, 16, 17],
+                &[0, 8, 9],
             );
         }
     }

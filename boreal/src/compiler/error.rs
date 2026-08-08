@@ -270,6 +270,13 @@ pub enum CompilationError {
         limit: usize,
     },
 
+    /// The bytes pool is full and cannot contain more data.
+    ///
+    /// This error can happen when too many strings are being compiled.
+    /// Given the limit is 4GB, this shouldn't really happen in standard
+    /// usage.
+    BytesPoolFull,
+
     /// A bytes value is used as a boolean expression.
     ///
     /// This is a warning and not an error.
@@ -467,6 +474,10 @@ impl CompilationError {
             Self::TooManyStrings { span, limit } => Diagnostic::error()
                 .with_message(format!("the rule contains more than {limit} strings"))
                 .with_labels(vec![Label::primary((), span.clone())]),
+
+            Self::BytesPoolFull => {
+                Diagnostic::error().with_message("too much data added, bytes pool is full")
+            }
 
             Self::ImplicitBytesToBooleanCast { span } => Diagnostic::warning()
                 .with_message("implicit cast from a bytes value to a boolean")
