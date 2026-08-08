@@ -28,7 +28,7 @@ use std::collections::HashMap;
 /// symbol can be a single usize.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct BytesPool {
-    buffer: Vec<u8>,
+    pool: Box<[u8]>,
 }
 
 /// Symbol for a bytes string stored in a bytes intern pool.
@@ -46,37 +46,11 @@ pub struct StringSymbol {
 }
 
 impl BytesPool {
-    /// Insert bytes into the bytes pool.
-    ///
-    /// The returned symbol can then be used to retrieve those bytes from the pool.
-    fn insert(&mut self, v: &[u8]) -> BytesSymbol {
-        let from = self.buffer.len();
-        self.buffer.extend(v);
-
-        BytesSymbol {
-            from: convert_to_u32(from),
-            to: convert_to_u32(self.buffer.len()),
-        }
-    }
-
-    /// Insert a string into the bytes pool.
-    ///
-    /// The returned symbol can then be used to retrieve the string from the pool.
-    fn insert_str(&mut self, v: &str) -> StringSymbol {
-        let from = self.buffer.len();
-        self.buffer.extend(v.as_bytes());
-
-        StringSymbol {
-            from: convert_to_u32(from),
-            to: convert_to_u32(self.buffer.len()),
-        }
-    }
-
     /// Get a byte string from the pool
     pub(crate) fn get(&self, symbol: BytesSymbol) -> &[u8] {
         let (from, to) = (symbol.from as usize, symbol.to as usize);
 
-        &self.buffer[from..to]
+        &self.pool[from..to]
     }
 
     /// Get a string from the pool
@@ -86,9 +60,9 @@ impl BytesPool {
         // Safety:
         // - A StringSymbol can only be constructed from `insert_str`
         // - Once a symbol is created, it is guaranteed that the indexes in the symbol
-        //   will always refer to the same bytes (the buffer can only grow).
+        //   will always refer to the same bytes (the pool can only grow).
         // It is thus safe to rebuild the string from the stored bytes.
-        unsafe { std::str::from_utf8_unchecked(&self.buffer[from..to]) }
+        unsafe { std::str::from_utf8_unchecked(&self.pool[from..to]) }
     }
 }
 
@@ -110,7 +84,7 @@ fn convert_to_u32(v: usize) -> u32 {
 #[derive(Default, Debug)]
 pub(crate) struct BytesPoolBuilder {
     /// The pool being constructed.
-    pool: BytesPool,
+    buffer: Vec<u8>,
     /// Map of bytes symbols already added in the pool.
     bytes_map: HashMap<Vec<u8>, BytesSymbol>,
     /// Map of string symbols already added in the pool.
@@ -125,13 +99,21 @@ pub(crate) struct BytesPoolBuilder {
 impl BytesPoolBuilder {
     /// Insert bytes into the bytes pool.
     ///
+    /// The returned symbol can then be used to retrieve those bytes from the pool.
     /// If the byte string was already added, the existing symbol will be returned.
     pub(crate) fn insert(&mut self, v: &[u8]) -> BytesSymbol {
         match self.bytes_map.get(v) {
             Some(v) => *v,
             None => {
-                let symbol = self.pool.insert(v);
+                let from = self.buffer.len();
+                self.buffer.extend(v);
+                let symbol = BytesSymbol {
+                    from: convert_to_u32(from),
+                    to: convert_to_u32(self.buffer.len()),
+                };
+
                 let _r = self.bytes_map.insert(v.to_vec(), symbol);
+
                 symbol
             }
         }
@@ -139,29 +121,39 @@ impl BytesPoolBuilder {
 
     /// Insert a string into the bytes pool.
     ///
+    /// The returned symbol can then be used to retrieve the string from the pool.
     /// If the string was already added, the existing symbol will be returned.
     pub(crate) fn insert_str(&mut self, v: &str) -> StringSymbol {
         match self.str_map.get(v) {
             Some(v) => *v,
             None => {
-                let symbol = self.pool.insert_str(v);
+                let from = self.buffer.len();
+                self.buffer.extend(v.as_bytes());
+
+                let symbol = StringSymbol {
+                    from: convert_to_u32(from),
+                    to: convert_to_u32(self.buffer.len()),
+                };
+
                 let _r = self.str_map.insert(v.to_owned(), symbol);
+
                 symbol
             }
         }
     }
 
     /// Build the final bytes pool object.
-    pub(crate) fn into_pool(mut self) -> BytesPool {
-        self.pool.buffer.shrink_to_fit();
-        self.pool
+    pub(crate) fn into_pool(self) -> BytesPool {
+        BytesPool {
+            pool: self.buffer.into_boxed_slice(),
+        }
     }
 
     /// Is the pool full.
     pub(crate) fn is_full(&self) -> bool {
         let limit = self.limit.unwrap_or(u32::MAX as usize);
 
-        self.pool.buffer.len() >= limit
+        self.buffer.len() >= limit
     }
 }
 
@@ -175,14 +167,16 @@ mod wire {
 
     impl Serialize for BytesPool {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-            self.buffer.serialize(writer)
+            self.pool.serialize(writer)
         }
     }
 
     impl Deserialize for BytesPool {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+            let pool = <Vec<u8>>::deserialize_reader(reader)?;
+
             Ok(Self {
-                buffer: <Vec<u8>>::deserialize_reader(reader)?,
+                pool: pool.into_boxed_slice(),
             })
         }
     }
@@ -228,11 +222,11 @@ mod wire {
         fn test_wire_bytes_pool() {
             test_round_trip(
                 &BytesPool {
-                    buffer: b"abcedf".to_vec(),
+                    pool: b"abcedf".to_vec().into_boxed_slice(),
                 },
                 &[2, 6],
             );
-            test_round_trip(&BytesPool { buffer: Vec::new() }, &[2]);
+            test_round_trip(&BytesPool { pool: Box::new([]) }, &[2]);
 
             test_round_trip(&StringSymbol { from: 23, to: 2 }, &[0, 4]);
             test_round_trip(&BytesSymbol { from: 3, to: 8 }, &[0, 4]);
