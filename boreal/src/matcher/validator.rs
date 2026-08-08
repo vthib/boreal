@@ -167,7 +167,7 @@ pub(super) enum HalfValidator {
     // Simplified validator for very simple regex expressions.
     Simple(simple::SimpleValidator),
     // Dfa validator, handling all the complex cases
-    Dfa(dfa::DfaValidator),
+    Dfa(Box<dfa::DfaValidator>),
 }
 
 impl HalfValidator {
@@ -179,9 +179,9 @@ impl HalfValidator {
     ) -> Result<Self, crate::regex::Error> {
         match simple::SimpleValidator::new(hir, analysis, modifiers, reverse) {
             Some(v) => Ok(Self::Simple(v)),
-            None => Ok(Self::Dfa(dfa::DfaValidator::new(
+            None => Ok(Self::Dfa(Box::new(dfa::DfaValidator::new(
                 hir, analysis, modifiers, reverse,
-            )?)),
+            )?))),
         }
     }
 }
@@ -267,7 +267,7 @@ mod wire {
             )?)),
             1 => {
                 let dfa = dfa::DfaValidator::deserialize(modifiers, reverse, reader)?;
-                Ok(HalfValidator::Dfa(dfa))
+                Ok(HalfValidator::Dfa(Box::new(dfa)))
             }
             v => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -334,7 +334,9 @@ mod wire {
                 &[0, 1],
             );
             test_round_trip_custom_deser(
-                &HalfValidator::Dfa(DfaValidator::new(&hir, &analysis, modifiers, false).unwrap()),
+                &HalfValidator::Dfa(Box::new(
+                    DfaValidator::new(&hir, &analysis, modifiers, false).unwrap(),
+                )),
                 |reader| deserialize_half_validator(modifiers, false, reader),
                 &[0, 1],
             );
