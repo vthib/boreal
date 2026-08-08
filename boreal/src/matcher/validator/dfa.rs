@@ -1,7 +1,9 @@
-use regex_automata::hybrid::dfa::{Builder, Cache, DFA};
+use regex_automata::hybrid::dfa::{Builder, DFA};
 use regex_automata::nfa::thompson;
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input, MatchKind, PatternID};
+
+pub use regex_automata::hybrid::dfa::Cache;
 
 use crate::matcher::analysis::HirAnalysis;
 use crate::matcher::widener::widen_hir;

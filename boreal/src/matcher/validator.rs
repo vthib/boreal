@@ -113,26 +113,19 @@ impl Validator {
                     mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
                 );
 
-                loop {
-                    let next = match validator {
-                        HalfValidator::Simple(validator) => {
-                            validator.find_anchored_rev(mem, start, mat.end)
-                        }
-                        HalfValidator::Dfa(validator) => {
-                            let cache = caches.get_or_insert(matcher_index, true, validator);
-                            validator.find_anchored_rev(mem, start, mat.end, match_type, cache)
-                        }
-                    };
+                let mut iterator = match validator {
+                    HalfValidator::Simple(s) => ReverseMatchesIterator::Simple(s),
+                    HalfValidator::Dfa(validator) => {
+                        let cache = caches.get_or_insert(matcher_index, true, validator);
+                        ReverseMatchesIterator::Dfa(validator, cache)
+                    }
+                };
 
-                    match next {
-                        Some(s) => {
-                            matches.push(s..end);
-                            start = s + 1;
-                            if start > mat.end {
-                                break;
-                            }
-                        }
-                        None => break,
+                while let Some(s) = iterator.find_next(mem, start, mat.end, match_type) {
+                    matches.push(s..end);
+                    start = s + 1;
+                    if start > mat.end {
+                        break;
                     }
                 }
 
@@ -191,6 +184,26 @@ impl std::fmt::Display for HalfValidator {
         match self {
             Self::Simple(_) => write!(f, "Simple"),
             Self::Dfa(_) => write!(f, "Dfa"),
+        }
+    }
+}
+
+enum ReverseMatchesIterator<'a> {
+    Simple(&'a simple::SimpleValidator),
+    Dfa(&'a dfa::DfaValidator, &'a mut dfa::Cache),
+}
+
+impl ReverseMatchesIterator<'_> {
+    fn find_next(
+        &mut self,
+        haystack: &[u8],
+        start: usize,
+        end: usize,
+        match_type: MatchType,
+    ) -> Option<usize> {
+        match self {
+            Self::Simple(s) => s.find_anchored_rev(haystack, start, end),
+            Self::Dfa(dfa, cache) => dfa.find_anchored_rev(haystack, start, end, match_type, cache),
         }
     }
 }
