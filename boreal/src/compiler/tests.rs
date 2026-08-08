@@ -270,6 +270,24 @@ fn test_compilation_variables() {
 }
 
 #[test]
+fn test_bytes_pool_limit() {
+    let mut compiler = Compiler::new();
+    compiler.bytes_pool.limit = Some(5);
+
+    let _r = compiler
+        .add_rules_str("rule a { strings: $foo = /a/ condition: $foo }")
+        .unwrap();
+    let err = compiler
+        .add_rules_str("rule b { strings: $bar = /a/ condition: $bar }")
+        .unwrap_err();
+
+    assert_eq!(
+        err.to_string(),
+        "error: too much data added, bytes pool is full"
+    );
+}
+
+#[test]
 fn test_types_traits() {
     test_type_traits_non_clonable(Compiler::new());
     test_type_traits_non_clonable(Namespace::default());

@@ -34,15 +34,15 @@ pub(crate) struct BytesPool {
 /// Symbol for a bytes string stored in a bytes intern pool.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct BytesSymbol {
-    from: usize,
-    to: usize,
+    from: u32,
+    to: u32,
 }
 
 /// Symbol for a string stored in a bytes intern pool.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct StringSymbol {
-    from: usize,
-    to: usize,
+    from: u32,
+    to: u32,
 }
 
 impl BytesPool {
@@ -54,8 +54,8 @@ impl BytesPool {
         self.buffer.extend(v);
 
         BytesSymbol {
-            from,
-            to: self.buffer.len(),
+            from: convert_to_u32(from),
+            to: convert_to_u32(self.buffer.len()),
         }
     }
 
@@ -67,25 +67,40 @@ impl BytesPool {
         self.buffer.extend(v.as_bytes());
 
         StringSymbol {
-            from,
-            to: self.buffer.len(),
+            from: convert_to_u32(from),
+            to: convert_to_u32(self.buffer.len()),
         }
     }
 
     /// Get a byte string from the pool
     pub(crate) fn get(&self, symbol: BytesSymbol) -> &[u8] {
-        &self.buffer[symbol.from..symbol.to]
+        let (from, to) = (symbol.from as usize, symbol.to as usize);
+
+        &self.buffer[from..to]
     }
 
     /// Get a string from the pool
     pub(crate) fn get_str(&self, symbol: StringSymbol) -> &str {
+        let (from, to) = (symbol.from as usize, symbol.to as usize);
+
         // Safety:
         // - A StringSymbol can only be constructed from `insert_str`
         // - Once a symbol is created, it is guaranteed that the indexes in the symbol
         //   will always refer to the same bytes (the buffer can only grow).
         // It is thus safe to rebuild the string from the stored bytes.
-        unsafe { std::str::from_utf8_unchecked(&self.buffer[symbol.from..symbol.to]) }
+        unsafe { std::str::from_utf8_unchecked(&self.buffer[from..to]) }
     }
+}
+
+#[inline(always)]
+fn convert_to_u32(v: usize) -> u32 {
+    // Convert by saturating to u32::MAX.
+    //
+    // This makes the symbol unusable, but the fact the pool
+    // is full will be detected afterwards to make the compilation fail.
+    // This keeps the code simple rather than forcing every caller of
+    // this function to handle the error case.
+    v.try_into().ok().unwrap_or(u32::MAX)
 }
 
 /// A builder for the [`BytesPool`] object.
@@ -100,6 +115,11 @@ pub(crate) struct BytesPoolBuilder {
     bytes_map: HashMap<Vec<u8>, BytesSymbol>,
     /// Map of string symbols already added in the pool.
     str_map: HashMap<String, StringSymbol>,
+
+    /// Size limit for the pool.
+    ///
+    /// Only used in testing
+    pub(crate) limit: Option<usize>,
 }
 
 impl BytesPoolBuilder {
@@ -136,6 +156,13 @@ impl BytesPoolBuilder {
         self.pool.buffer.shrink_to_fit();
         self.pool
     }
+
+    /// Is the pool full.
+    pub(crate) fn is_full(&self) -> bool {
+        let limit = self.limit.unwrap_or(u32::MAX as usize);
+
+        self.pool.buffer.len() >= limit
+    }
 }
 
 #[cfg(feature = "serialize")]
@@ -170,8 +197,8 @@ mod wire {
 
     impl Deserialize for StringSymbol {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let from = usize::deserialize_reader(reader)?;
-            let to = usize::deserialize_reader(reader)?;
+            let from = u32::deserialize_reader(reader)?;
+            let to = u32::deserialize_reader(reader)?;
             Ok(Self { from, to })
         }
     }
@@ -186,8 +213,8 @@ mod wire {
 
     impl Deserialize for BytesSymbol {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-            let from = usize::deserialize_reader(reader)?;
-            let to = usize::deserialize_reader(reader)?;
+            let from = u32::deserialize_reader(reader)?;
+            let to = u32::deserialize_reader(reader)?;
             Ok(Self { from, to })
         }
     }
@@ -207,8 +234,8 @@ mod wire {
             );
             test_round_trip(&BytesPool { buffer: Vec::new() }, &[2]);
 
-            test_round_trip(&StringSymbol { from: 23, to: 2 }, &[0, 8]);
-            test_round_trip(&BytesSymbol { from: 3, to: 8 }, &[0, 8]);
+            test_round_trip(&StringSymbol { from: 23, to: 2 }, &[0, 4]);
+            test_round_trip(&BytesSymbol { from: 3, to: 8 }, &[0, 4]);
         }
     }
 }
