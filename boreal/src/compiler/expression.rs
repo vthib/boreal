@@ -1641,6 +1641,11 @@ mod wire {
         let len = usize::try_from(len).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, format!("length too big: {len}"))
         })?;
+
+        // Cap the length to avoid preallocating too much, since the value
+        // is not sanitized.
+        let len = std::cmp::min(len, 1024);
+
         let mut exprs = Vec::with_capacity(len);
         for _ in 0..len {
             exprs.push(deserialize_expr(ctx, reader)?);
