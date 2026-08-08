@@ -255,7 +255,14 @@ impl AcScan {
                 }
             }
 
-            let res = matcher.process_ac_match(region.mem, m, start_position, match_type);
+            let res = matcher.process_ac_match(
+                region.mem,
+                m,
+                start_position,
+                match_type,
+                matcher_index,
+                &mut scan_data.validator_caches,
+            );
 
             #[cfg(feature = "profiling")]
             {

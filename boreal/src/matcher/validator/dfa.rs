@@ -1,9 +1,5 @@
-use std::panic::{RefUnwindSafe, UnwindSafe};
-use std::sync::Arc;
-
 use regex_automata::hybrid::dfa::{Builder, Cache, DFA};
 use regex_automata::nfa::thompson;
-use regex_automata::util::pool::Pool;
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input, MatchKind, PatternID};
 
@@ -12,16 +8,10 @@ use crate::matcher::widener::widen_hir;
 use crate::matcher::{MatchType, Modifiers};
 use crate::regex::{Hir, regex_hir_to_string};
 
-type PoolCreateFn = Box<dyn Fn() -> Cache + Send + Sync + UnwindSafe + RefUnwindSafe>;
-
 #[derive(Debug)]
 pub(crate) struct DfaValidator {
     /// Anchored lazy DFA, used to validate an AC match.
-    dfa: Arc<DFA>,
-    // TODO: Taking the cache out of the pool when starting scanning (and putting them in the scan
-    // data) would avoid the get/drop on every validation, and only do it once per scan.
-    // Not sure how much improvements this would be, to test.
-    pool: Pool<Cache, PoolCreateFn>,
+    dfa: DFA,
 
     /// Use the custom wide routine to validate wide matches.
     ///
@@ -74,16 +64,10 @@ impl DfaValidator {
         } else {
             (regex_hir_to_string(hir), String::new())
         };
-        let dfa = Arc::new(build_dfa(&expr1, &expr2, modifiers, reverse)?);
-        let pool = {
-            let dfa = Arc::clone(&dfa);
-            let create: PoolCreateFn = Box::new(move || dfa.create_cache());
-            Pool::new(create)
-        };
+        let dfa = build_dfa(&expr1, &expr2, modifiers, reverse)?;
 
         Ok(Self {
             dfa,
-            pool,
             use_custom_wide_runner,
             #[cfg(feature = "serialize")]
             exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
@@ -99,22 +83,25 @@ impl DfaValidator {
         wire::deserialize_dfa_validator(modifiers, reverse, reader)
     }
 
+    pub(crate) fn build_cache(&self) -> Cache {
+        self.dfa.create_cache()
+    }
+
     pub(crate) fn find_anchored_fwd(
         &self,
         haystack: &[u8],
         start: usize,
         end: usize,
         match_type: MatchType,
+        cache: &mut Cache,
     ) -> Option<usize> {
-        let mut cache = self.pool.get();
-
         if self.use_custom_wide_runner && match_type.is_wide() {
-            self.find_wide_anchored_fwd(&mut cache, haystack, start, end)
+            self.find_wide_anchored_fwd(cache, haystack, start, end)
         } else {
             let pattern_index = match_type_to_pattern_index(match_type);
             self.dfa
                 .try_search_fwd(
-                    &mut cache,
+                    cache,
                     &Input::new(haystack)
                         .span(start..end)
                         .anchored(Anchored::Pattern(pattern_index)),
@@ -131,16 +118,15 @@ impl DfaValidator {
         start: usize,
         end: usize,
         match_type: MatchType,
+        cache: &mut Cache,
     ) -> Option<usize> {
-        let mut cache = self.pool.get();
-
         if self.use_custom_wide_runner && match_type.is_wide() {
-            self.find_wide_anchored_rev(&mut cache, haystack, start, end)
+            self.find_wide_anchored_rev(cache, haystack, start, end)
         } else {
             let pattern_index = match_type_to_pattern_index(match_type);
             self.dfa
                 .try_search_rev(
-                    &mut cache,
+                    cache,
                     &Input::new(haystack)
                         .span(start..end)
                         .anchored(Anchored::Pattern(pattern_index)),
@@ -328,14 +314,13 @@ fn build_dfa(
 
 #[cfg(feature = "serialize")]
 mod wire {
-    use std::{io, sync::Arc};
+    use std::io;
 
     use crate::wire::{Deserialize, Serialize};
-    use regex_automata::util::pool::Pool;
 
     use crate::matcher::Modifiers;
 
-    use super::{DfaValidator, PoolCreateFn, build_dfa};
+    use super::{DfaValidator, build_dfa};
 
     impl Serialize for DfaValidator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -355,26 +340,18 @@ mod wire {
         let expr2 = String::deserialize_reader(reader)?;
         let use_custom_wide_runner = bool::deserialize_reader(reader)?;
 
-        let dfa = Arc::new(
-            build_dfa(&expr1, &expr2, modifiers, reverse).map_err(|err| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "unable to compile dfa with expressions \
+        let dfa = build_dfa(&expr1, &expr2, modifiers, reverse).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "unable to compile dfa with expressions \
                             `{expr1}`, `{expr2}`: {err:?}",
-                    ),
-                )
-            })?,
-        );
-        let pool = {
-            let dfa = Arc::clone(&dfa);
-            let create: PoolCreateFn = Box::new(move || dfa.create_cache());
-            Pool::new(create)
-        };
+                ),
+            )
+        })?;
 
         Ok(DfaValidator {
             dfa,
-            pool,
             use_custom_wide_runner,
             exprs: [expr1.into_boxed_str(), expr2.into_boxed_str()],
         })
@@ -424,10 +401,10 @@ mod tests {
 
     #[test]
     fn test_find_wide_anchored_fwd() {
-        fn build(expr: &str, ascii: bool) -> DfaValidator {
+        fn build(expr: &str, ascii: bool) -> (DfaValidator, Cache) {
             let hir = expr_to_hir(expr);
             let analysis = analyze_hir(&hir, false);
-            DfaValidator::new(
+            let validator = DfaValidator::new(
                 &hir,
                 &analysis,
                 Modifiers {
@@ -437,105 +414,119 @@ mod tests {
                 },
                 false,
             )
-            .unwrap()
+            .unwrap();
+            let cache = validator.build_cache();
+            (validator, cache)
         }
 
-        let validator = build(r"a\b", false);
+        let (validator, mut cache) = build(r"a\b", false);
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b\0.\0a\0.\0", 0, 10, MatchType::WideStandard),
+            validator.find_anchored_fwd(
+                b"a\0b\0.\0a\0.\0",
+                0,
+                10,
+                MatchType::WideStandard,
+                &mut cache
+            ),
             None
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b\0.\0a\0.\0", 6, 10, MatchType::WideStandard),
+            validator.find_anchored_fwd(
+                b"a\0b\0.\0a\0.\0",
+                6,
+                10,
+                MatchType::WideStandard,
+                &mut cache
+            ),
             Some(8)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0", 0, 2, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"a\0", 0, 2, MatchType::WideStandard, &mut cache),
             Some(2)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0bb", 0, 4, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"a\0bb", 0, 4, MatchType::WideStandard, &mut cache),
             Some(2)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b", 0, 3, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"a\0b", 0, 3, MatchType::WideStandard, &mut cache),
             Some(2)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"aa\0", 0, 3, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"aa\0", 0, 3, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"aa\0", 1, 3, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"aa\0", 1, 3, MatchType::WideStandard, &mut cache),
             Some(3)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b\0.\0", 4, 4, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"a\0b\0.\0", 4, 4, MatchType::WideStandard, &mut cache),
             None
         );
 
-        let validator = build(r"\bb", false);
+        let (validator, mut cache) = build(r"\bb", false);
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b\0", 0, 4, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"a\0b\0", 0, 4, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"b\0b\0", 0, 4, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"b\0b\0", 0, 4, MatchType::WideStandard, &mut cache),
             Some(2),
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"b\0b", 0, 3, MatchType::WideStandard),
-            Some(2),
+            validator.find_anchored_fwd(b"b\0b", 0, 3, MatchType::WideStandard, &mut cache),
+            Some(2)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"b\0b\0", 2, 4, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"b\0b\0", 2, 4, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_fwd(b".\0b\0", 2, 4, MatchType::WideStandard),
-            Some(4),
+            validator.find_anchored_fwd(b".\0b\0", 2, 4, MatchType::WideStandard, &mut cache),
+            Some(4)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"\0b\0", 1, 3, MatchType::WideStandard),
-            Some(3),
+            validator.find_anchored_fwd(b"\0b\0", 1, 3, MatchType::WideStandard, &mut cache),
+            Some(3)
         );
 
         // Ensure the validator does not confuse ascii and wide
-        let validator = build(r"a\x00b\b", true);
+        let (validator, mut cache) = build(r"a\x00b\b", true);
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b", 0, 3, MatchType::Ascii),
+            validator.find_anchored_fwd(b"a\0b", 0, 3, MatchType::Ascii, &mut cache),
             Some(3)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b\0", 0, 4, MatchType::Ascii),
+            validator.find_anchored_fwd(b"a\0b\0", 0, 4, MatchType::Ascii, &mut cache),
             Some(3)
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0b\0b\0", 0, 6, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"a\0b\0b\0", 0, 6, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0\0\0b\0", 0, 6, MatchType::WideStandard),
-            Some(6),
+            validator.find_anchored_fwd(b"a\0\0\0b\0", 0, 6, MatchType::WideStandard, &mut cache),
+            Some(6)
         );
 
-        let validator = build(r"\b", false);
+        let (validator, mut cache) = build(r"\b", false);
         assert_eq!(
-            validator.find_anchored_fwd(b"", 0, 0, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"", 0, 0, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_fwd(b"a\0", 0, 2, MatchType::WideStandard),
+            validator.find_anchored_fwd(b"a\0", 0, 2, MatchType::WideStandard, &mut cache),
             Some(0),
         );
     }
 
     #[test]
     fn test_find_wide_anchored_rev() {
-        fn build(expr: &str, ascii: bool) -> DfaValidator {
+        fn build(expr: &str, ascii: bool) -> (DfaValidator, Cache) {
             let hir = expr_to_hir(expr);
             let analysis = analyze_hir(&hir, false);
-            DfaValidator::new(
+            let validator = DfaValidator::new(
                 &hir,
                 &analysis,
                 Modifiers {
@@ -545,78 +536,98 @@ mod tests {
                 },
                 true,
             )
-            .unwrap()
+            .unwrap();
+            let cache = validator.build_cache();
+            (validator, cache)
         }
 
-        let validator = build(r"a\b", false);
+        let (validator, mut cache) = build(r"a\b", false);
         assert_eq!(
-            validator.find_anchored_rev(b"a\0b\0.\0a\0.\0", 0, 10, MatchType::WideStandard),
+            validator.find_anchored_rev(
+                b"a\0b\0.\0a\0.\0",
+                0,
+                10,
+                MatchType::WideStandard,
+                &mut cache
+            ),
             None
         );
         assert_eq!(
-            validator.find_anchored_rev(b"a\0b\0.\0a\0.\0", 0, 9, MatchType::WideStandard),
+            validator.find_anchored_rev(
+                b"a\0b\0.\0a\0.\0",
+                0,
+                9,
+                MatchType::WideStandard,
+                &mut cache
+            ),
             None
         );
         assert_eq!(
-            validator.find_anchored_rev(b"a\0b\0.\0a\0.\0", 0, 8, MatchType::WideStandard),
+            validator.find_anchored_rev(
+                b"a\0b\0.\0a\0.\0",
+                0,
+                8,
+                MatchType::WideStandard,
+                &mut cache
+            ),
             Some(6)
         );
         assert_eq!(
-            validator.find_anchored_rev(b"a\0", 0, 2, MatchType::WideStandard),
+            validator.find_anchored_rev(b"a\0", 0, 2, MatchType::WideStandard, &mut cache),
             Some(0)
         );
         assert_eq!(
-            validator.find_anchored_rev(b"aa\0", 0, 3, MatchType::WideStandard),
+            validator.find_anchored_rev(b"aa\0", 0, 3, MatchType::WideStandard, &mut cache),
             Some(1),
         );
         assert_eq!(
-            validator.find_anchored_rev(b"\0a\0", 0, 3, MatchType::WideStandard),
+            validator.find_anchored_rev(b"\0a\0", 0, 3, MatchType::WideStandard, &mut cache),
             Some(1),
         );
         assert_eq!(
-            validator.find_anchored_rev(b"aa\0", 0, 2, MatchType::WideStandard),
+            validator.find_anchored_rev(b"aa\0", 0, 2, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_rev(b"aa\0", 0, 1, MatchType::WideStandard),
+            validator.find_anchored_rev(b"aa\0", 0, 1, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_rev(b"", 0, 0, MatchType::WideStandard),
+            validator.find_anchored_rev(b"", 0, 0, MatchType::WideStandard, &mut cache),
             None,
         );
 
-        let validator = build(r"\bb", false);
+        let (validator, mut cache) = build(r"\bb", false);
         assert_eq!(
-            validator.find_anchored_rev(b"a\0b\0", 0, 4, MatchType::WideStandard),
+            validator.find_anchored_rev(b"a\0b\0", 0, 4, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_rev(b".\0b\0", 0, 4, MatchType::WideStandard),
+            validator.find_anchored_rev(b".\0b\0", 0, 4, MatchType::WideStandard, &mut cache),
             Some(2),
         );
         assert_eq!(
-            validator.find_anchored_rev(b"b\0b\0", 0, 4, MatchType::WideStandard),
+            validator.find_anchored_rev(b"b\0b\0", 0, 4, MatchType::WideStandard, &mut cache),
             None,
         );
         assert_eq!(
-            validator.find_anchored_rev(b"b\0b\0", 2, 4, MatchType::WideStandard),
+            validator.find_anchored_rev(b"b\0b\0", 2, 4, MatchType::WideStandard, &mut cache),
             Some(2),
         );
         assert_eq!(
-            validator.find_anchored_rev(b"b\0b\0", 0, 2, MatchType::WideStandard),
+            validator.find_anchored_rev(b"b\0b\0", 0, 2, MatchType::WideStandard, &mut cache),
             Some(0),
         );
         assert_eq!(
-            validator.find_anchored_rev(b"\0b\0", 0, 3, MatchType::WideStandard),
+            validator.find_anchored_rev(b"\0b\0", 0, 3, MatchType::WideStandard, &mut cache),
             Some(1),
         );
         assert_eq!(
-            validator.find_anchored_rev(b"b\0", 0, 2, MatchType::WideStandard),
+            validator.find_anchored_rev(b"b\0", 0, 2, MatchType::WideStandard, &mut cache),
             Some(0),
         );
         assert_eq!(
-            validator.find_anchored_rev(b"b", 0, 1, MatchType::WideStandard),
+            validator.find_anchored_rev(b"b", 0, 1, MatchType::WideStandard, &mut cache),
             None,
         );
     }

@@ -1,7 +1,10 @@
-use std::{collections::HashSet, ops::Range};
+use std::collections::{HashMap, HashSet, hash_map};
+use std::ops::Range;
 
 use boreal_parser::rule::VariableModifiers;
+use regex_automata::hybrid::dfa;
 
+use crate::matcher::validator::dfa::DfaValidator;
 use crate::regex::Hir;
 
 mod analysis;
@@ -107,6 +110,25 @@ enum MatcherKind {
 
     /// The regex cannot confirm matches from AC literal matches.
     Raw(raw::RawMatcher),
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct ValidatorCaches {
+    caches: HashMap<(usize, bool), dfa::Cache>,
+}
+
+impl ValidatorCaches {
+    fn get_or_insert(
+        &mut self,
+        index: usize,
+        reverse: bool,
+        validator: &DfaValidator,
+    ) -> &mut dfa::Cache {
+        match self.caches.entry((index, reverse)) {
+            hash_map::Entry::Occupied(o) => o.into_mut(),
+            hash_map::Entry::Vacant(v) => v.insert(validator.build_cache()),
+        }
+    }
 }
 
 impl Matcher {
@@ -316,6 +338,8 @@ impl Matcher {
         mat: Range<usize>,
         start_position: usize,
         match_type: MatchType,
+        matcher_index: usize,
+        caches: &mut ValidatorCaches,
     ) -> AcMatchStatus {
         match &self.kind {
             MatcherKind::Literals => {
@@ -326,7 +350,14 @@ impl Matcher {
                 }
             }
             MatcherKind::Atomized(validator) => {
-                match validator.validate_match(mem, mat, start_position, match_type) {
+                match validator.validate_match(
+                    mem,
+                    mat,
+                    start_position,
+                    match_type,
+                    matcher_index,
+                    caches,
+                ) {
                     Matches::None => AcMatchStatus::None,
                     Matches::Single(m) => {
                         if self.validate_fullword(mem, &m, match_type) {
@@ -663,5 +694,6 @@ mod tests {
         test_type_traits(MatchType::Ascii);
         test_type_traits_non_clonable(Matches::None);
         test_type_traits(AcMatchStatus::None);
+        test_type_traits_non_clonable(ValidatorCaches::default());
     }
 }

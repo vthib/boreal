@@ -7,7 +7,7 @@ use crate::bytes_pool::{BytesPool, BytesSymbol, StringSymbol};
 use crate::compiler::external_symbol::{ExternalSymbol, ExternalValue};
 use crate::compiler::rule::Rule;
 use crate::evaluator::{self, EvalError, MatchedDependencyRules, evaluate_rule};
-use crate::matcher::Matcher;
+use crate::matcher::{Matcher, ValidatorCaches};
 use crate::memory::{FragmentedMemory, Memory, Region};
 use crate::module::{Module, ModuleData, ModuleUserData};
 use crate::timeout::TimeoutChecker;
@@ -830,6 +830,7 @@ impl Inner {
             entrypoint: None,
             callback: None,
             string_reached_match_limit: HashSet::new(),
+            validator_caches: ValidatorCaches::default(),
         };
 
         let res = self.do_scan(mem, &mut scan_data);
@@ -870,6 +871,7 @@ impl Inner {
             entrypoint: None,
             callback: Some(callback),
             string_reached_match_limit: HashSet::new(),
+            validator_caches: ValidatorCaches::default(),
         };
 
         let res = self.do_scan(mem, &mut scan_data);
@@ -1298,6 +1300,9 @@ pub(crate) struct ScanData<'scanner, 'cb> {
     /// Only used if the callback is set and the relevant scan event is
     /// enabled.
     pub string_reached_match_limit: HashSet<usize>,
+
+    /// Caches used by validators.
+    pub(crate) validator_caches: ValidatorCaches,
 }
 
 impl std::fmt::Debug for ScanData<'_, '_> {
@@ -1985,6 +1990,7 @@ mod tests {
             entrypoint: None,
             callback: None,
             string_reached_match_limit: HashSet::new(),
+            validator_caches: ValidatorCaches::default(),
         };
         let mut matched_dependency_rules = MatchedDependencyRules::default();
         let rules = &scanner.inner.rules;
@@ -2543,6 +2549,7 @@ mod tests {
             process_memory: false,
             callback: Some(Box::new(|_evt| ScanCallbackResult::Continue)),
             string_reached_match_limit: HashSet::new(),
+            validator_caches: ValidatorCaches::default(),
         });
         test_type_traits_non_clonable(RulesIter {
             global_rules: [].iter(),

@@ -1,11 +1,12 @@
 use std::ops::Range;
 
+use crate::matcher::ValidatorCaches;
 use crate::regex::Hir;
 
 use super::analysis::{HirAnalysis, analyze_hir};
 use super::{MatchType, Matches, Modifiers};
 
-mod dfa;
+pub(crate) mod dfa;
 mod simple;
 
 // Maximum length against which a regex validator of a AC literal match will be run.
@@ -74,12 +75,25 @@ impl Validator {
         mat: Range<usize>,
         start_position: usize,
         match_type: MatchType,
+        matcher_index: usize,
+        caches: &mut ValidatorCaches,
     ) -> Matches {
         let end = match &self.forward {
             Some(validator) => {
                 let end =
                     std::cmp::min(mem.len(), mat.start.saturating_add(MAX_SPLIT_MATCH_LENGTH));
-                match validator.find_anchored_fwd(mem, mat.start, end, match_type) {
+
+                let res = match validator {
+                    HalfValidator::Simple(validator) => {
+                        validator.find_anchored_fwd(mem, mat.start, end)
+                    }
+                    HalfValidator::Dfa(validator) => {
+                        let cache = caches.get_or_insert(matcher_index, false, validator);
+                        validator.find_anchored_fwd(mem, mat.start, end, match_type, cache)
+                    }
+                };
+
+                match res {
                     Some(end) => end,
                     None => return Matches::None,
                 }
@@ -98,13 +112,30 @@ impl Validator {
                     start_position,
                     mat.end.saturating_sub(MAX_SPLIT_MATCH_LENGTH),
                 );
-                while let Some(s) = validator.find_anchored_rev(mem, start, mat.end, match_type) {
-                    matches.push(s..end);
-                    start = s + 1;
-                    if start > mat.end {
-                        break;
+
+                loop {
+                    let next = match validator {
+                        HalfValidator::Simple(validator) => {
+                            validator.find_anchored_rev(mem, start, mat.end)
+                        }
+                        HalfValidator::Dfa(validator) => {
+                            let cache = caches.get_or_insert(matcher_index, true, validator);
+                            validator.find_anchored_rev(mem, start, mat.end, match_type, cache)
+                        }
+                    };
+
+                    match next {
+                        Some(s) => {
+                            matches.push(s..end);
+                            start = s + 1;
+                            if start > mat.end {
+                                break;
+                            }
+                        }
+                        None => break,
                     }
                 }
+
                 Matches::Multiple(matches)
             }
         }
@@ -151,32 +182,6 @@ impl HalfValidator {
             None => Ok(Self::Dfa(dfa::DfaValidator::new(
                 hir, analysis, modifiers, reverse,
             )?)),
-        }
-    }
-
-    fn find_anchored_fwd(
-        &self,
-        haystack: &[u8],
-        start: usize,
-        end: usize,
-        match_type: MatchType,
-    ) -> Option<usize> {
-        match self {
-            Self::Simple(validator) => validator.find_anchored_fwd(haystack, start, end),
-            Self::Dfa(validator) => validator.find_anchored_fwd(haystack, start, end, match_type),
-        }
-    }
-
-    fn find_anchored_rev(
-        &self,
-        haystack: &[u8],
-        start: usize,
-        end: usize,
-        match_type: MatchType,
-    ) -> Option<usize> {
-        match self {
-            Self::Simple(validator) => validator.find_anchored_rev(haystack, start, end),
-            Self::Dfa(validator) => validator.find_anchored_rev(haystack, start, end, match_type),
         }
     }
 }
