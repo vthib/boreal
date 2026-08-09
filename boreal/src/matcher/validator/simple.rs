@@ -12,8 +12,6 @@ use crate::regex::Hir;
 pub(crate) struct SimpleValidator {
     /// List of nodes to match
     nodes: Box<[SimpleNode]>,
-    /// Total length of the expression
-    length: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -63,13 +61,8 @@ impl SimpleValidator {
             return None;
         }
 
-        let length = nodes.iter().fold(0, |acc, node| match node {
-            SimpleNode::Jump(len) => acc + usize::from(*len),
-            _ => acc + 1,
-        });
         Some(Self {
             nodes: nodes.into_boxed_slice(),
-            length,
         })
     }
 
@@ -80,9 +73,6 @@ impl SimpleValidator {
         end: usize,
     ) -> Option<usize> {
         let mem = &haystack[start..end];
-        if mem.len() < self.length {
-            return None;
-        }
 
         let mut index = 0;
         for node in &self.nodes {
@@ -99,9 +89,6 @@ impl SimpleValidator {
         end: usize,
     ) -> Option<usize> {
         let mem = &haystack[start..end];
-        if mem.len() < self.length {
-            return None;
-        }
 
         let mut index = mem.len();
         for node in &self.nodes {
@@ -204,7 +191,6 @@ mod wire {
     impl Serialize for SimpleValidator {
         fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
             self.nodes.serialize(writer)?;
-            self.length.serialize(writer)?;
             Ok(())
         }
     }
@@ -212,11 +198,9 @@ mod wire {
     impl Deserialize for SimpleValidator {
         fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
             let nodes = <Vec<SimpleNode>>::deserialize_reader(reader)?;
-            let length = usize::deserialize_reader(reader)?;
 
             Ok(Self {
                 nodes: nodes.into_boxed_slice(),
-                length,
             })
         }
     }
@@ -286,9 +270,8 @@ mod wire {
             test_round_trip(
                 &SimpleValidator {
                     nodes: Box::new([SimpleNode::Byte(23), SimpleNode::Dot]),
-                    length: 23,
                 },
-                &[0, 1, 6, 12],
+                &[0, 1, 6],
             );
 
             test_round_trip(&SimpleNode::Byte(23), &[0, 1]);
