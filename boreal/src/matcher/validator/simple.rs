@@ -1,9 +1,10 @@
 //! Validator able to handle "simple" expressions.
 //!
-//! "Simple" expression means any expression that do not require branching or complex logic.
-//! Basically, any expression that can be resolved by simply checking each byte one by one.
-//!
-//! This mainly excludes alternations and repetitions.
+//! This is a hand-rolled validator on a subset of the regex HIR,
+//! which for those simpler expressions, allows avoiding building a full
+//! DFA matcher. This results in smaller memory usage and faster matching.
+use boreal_parser::regex::{RepetitionKind, RepetitionRange};
+
 use crate::matcher::Modifiers;
 use crate::matcher::analysis::HirAnalysis;
 use crate::regex::Hir;
@@ -24,6 +25,8 @@ enum SimpleNode {
     NegatedMask { value: u8, mask: u8 },
     // Jump over a number of bytes
     Jump(u8),
+    // Jump over a range of bytes, non-greedy
+    JumpRange(u8, u8),
     // Dot, any byte but '\n'
     Dot,
 }
@@ -36,7 +39,6 @@ impl SimpleValidator {
         reverse: bool,
     ) -> Option<Self> {
         if analysis.has_start_or_end_line
-            || analysis.has_repetitions
             || analysis.has_word_boundaries
             // Classes are not handled because the naive solution would be to use the class bitmap
             // as a new SimpleNode, which would make its size grow to more than 32 bytes, compared
@@ -74,12 +76,13 @@ impl SimpleValidator {
     ) -> Option<usize> {
         let mem = &haystack[start..end];
 
-        let mut index = 0;
-        for node in &self.nodes {
-            index += check_node(node, mem, index)?;
-        }
+        let after_match = check_nodes(&self.nodes, mem)?;
 
-        Some(start + index)
+        // For example:
+        // - mem: "abcdef"
+        // - after_match: "ef"
+        // Hence index of match end is mem.len() - after_match.len()
+        Some(start + mem.len() - after_match.len())
     }
 
     pub(crate) fn find_anchored_rev(
@@ -90,26 +93,139 @@ impl SimpleValidator {
     ) -> Option<usize> {
         let mem = &haystack[start..end];
 
-        let mut index = mem.len();
-        for node in &self.nodes {
-            index -= check_node(node, mem, index - 1)?;
-        }
+        let before_match = check_nodes_reverse(&self.nodes, mem)?;
 
-        Some(index + start)
+        // For example:
+        // - mem: "abcdef"
+        // - before_match: "ab"
+        // Hence index of match start is simply before_match.len()
+        Some(start + before_match.len())
     }
 }
 
-#[inline(always)]
-fn check_node(node: &SimpleNode, mem: &[u8], index: usize) -> Option<usize> {
-    let matched = match node {
-        SimpleNode::Jump(v) => return Some(usize::from(*v)),
-        SimpleNode::Dot => mem[index] != b'\n',
-        SimpleNode::Byte(a) => mem[index] == *a,
-        SimpleNode::Mask { value, mask } => (mem[index] & *mask) == *value,
-        SimpleNode::NegatedMask { value, mask } => (mem[index] & *mask) != *value,
-    };
+fn check_nodes<'a>(mut nodes: &[SimpleNode], mut mem: &'a [u8]) -> Option<&'a [u8]> {
+    loop {
+        let Some(first) = split_off_first(&mut nodes) else {
+            return Some(mem);
+        };
 
-    if matched { Some(1) } else { None }
+        match first {
+            SimpleNode::Jump(v) => {
+                let len = usize::from(*v);
+
+                mem = mem.get(len..)?;
+            }
+            SimpleNode::Dot => {
+                let c = split_off_first(&mut mem)?;
+                if *c == b'\n' {
+                    return None;
+                }
+            }
+            SimpleNode::Byte(a) => {
+                let c = split_off_first(&mut mem)?;
+                if *c != *a {
+                    return None;
+                }
+            }
+            SimpleNode::Mask { value, mask } => {
+                let c = split_off_first(&mut mem)?;
+                if (*c & *mask) != *value {
+                    return None;
+                }
+            }
+            SimpleNode::NegatedMask { value, mask } => {
+                let c = split_off_first(&mut mem)?;
+                if (*c & *mask) == *value {
+                    return None;
+                }
+            }
+            SimpleNode::JumpRange(min, max) => {
+                // Non-greedy repetition: search from min to max
+                for jump_length in *min..=*max {
+                    let jump_length = usize::from(jump_length);
+
+                    // Can rethrow here: since jump_length increases on
+                    // each iteration, all future iterations will also
+                    // return None here.
+                    let mem2 = mem.get(jump_length..)?;
+
+                    if let Some(res) = check_nodes(nodes, mem2) {
+                        return Some(res);
+                    }
+                }
+                return None;
+            }
+        }
+    }
+}
+
+fn check_nodes_reverse<'a>(mut nodes: &[SimpleNode], mut mem: &'a [u8]) -> Option<&'a [u8]> {
+    loop {
+        let Some(first) = split_off_first(&mut nodes) else {
+            return Some(mem);
+        };
+
+        match first {
+            SimpleNode::Jump(v) => {
+                let jump_len = usize::from(*v);
+                let new_len = mem.len().checked_sub(jump_len)?;
+
+                mem = mem.get(..new_len)?;
+            }
+            SimpleNode::Dot => {
+                let c = split_off_last(&mut mem)?;
+                if *c == b'\n' {
+                    return None;
+                }
+            }
+            SimpleNode::Byte(a) => {
+                let c = split_off_last(&mut mem)?;
+                if *c != *a {
+                    return None;
+                }
+            }
+            SimpleNode::Mask { value, mask } => {
+                let c = split_off_last(&mut mem)?;
+                if (*c & *mask) != *value {
+                    return None;
+                }
+            }
+            SimpleNode::NegatedMask { value, mask } => {
+                let c = split_off_last(&mut mem)?;
+                if (*c & *mask) == *value {
+                    return None;
+                }
+            }
+            SimpleNode::JumpRange(from, to) => {
+                // Reverse search, so look for "smallest" start first,
+                // ie biggest reverse jump first, and keep going.
+                // This allows finding multiple matches in the right order,
+                // and greediness can be handled on how multiple matches are
+                // handled.
+                for jump_len in (*from..=*to).rev() {
+                    let jump_len = usize::from(jump_len);
+                    if let Some(new_len) = mem.len().checked_sub(jump_len) {
+                        if let Some(res) = check_nodes_reverse(nodes, &mem[..new_len]) {
+                            return Some(res);
+                        }
+                    }
+                }
+                return None;
+            }
+        }
+    }
+}
+
+fn split_off_first<'a, T>(slice: &mut &'a [T]) -> Option<&'a T> {
+    let (first, rem) = slice.split_first()?;
+    *slice = rem;
+    Some(first)
+}
+
+fn split_off_last<'a, T>(slice: &mut &'a [T]) -> Option<&'a T> {
+    let (last, rem) = slice.split_last()?;
+    *slice = rem;
+    Some(last)
 }
 
 fn add_hir_to_simple_nodes(
@@ -119,7 +235,7 @@ fn add_hir_to_simple_nodes(
     nodes: &mut Vec<SimpleNode>,
 ) -> bool {
     match hir {
-        Hir::Alternation(_) | Hir::Assertion(_) | Hir::Class(_) | Hir::Repetition { .. } => false,
+        Hir::Alternation(_) | Hir::Assertion(_) | Hir::Class(_) => false,
         Hir::Mask {
             value,
             mask,
@@ -177,6 +293,40 @@ fn add_hir_to_simple_nodes(
             true
         }
         Hir::Group(hir) => add_hir_to_simple_nodes(hir, modifiers, reverse, nodes),
+        Hir::Repetition { hir, kind, greedy } => {
+            // Only handle non-greedy ".{...}" repetitions, with dot_all set. This
+            // means the repeated byte can just be ignored, and matches
+            // the [X-Y] jumps in hex strings.
+            if !matches!(&**hir, Hir::Dot) || !modifiers.dot_all || *greedy {
+                return false;
+            }
+
+            nodes.push(match kind {
+                RepetitionKind::ZeroOrOne => SimpleNode::JumpRange(0, 1),
+                RepetitionKind::Range(RepetitionRange::Exactly(m)) => {
+                    let Ok(m) = u8::try_from(*m) else {
+                        return false;
+                    };
+                    SimpleNode::Jump(m)
+                }
+                RepetitionKind::Range(RepetitionRange::Bounded(m, n)) => {
+                    let Ok(m) = u8::try_from(*m) else {
+                        return false;
+                    };
+                    let Ok(n) = u8::try_from(*n) else {
+                        return false;
+                    };
+                    // TODO: check combination of jumps across the whole
+                    // hir, which can multiply and make this pathologic.
+                    SimpleNode::JumpRange(m, n)
+                }
+                // Unbounded jumps are not handled
+                RepetitionKind::ZeroOrMore
+                | RepetitionKind::OneOrMore
+                | RepetitionKind::Range(RepetitionRange::AtLeast(_)) => return false,
+            });
+            true
+        }
     }
 }
 
@@ -229,6 +379,11 @@ mod wire {
                 Self::Dot => {
                     4_u8.serialize(writer)?;
                 }
+                Self::JumpRange(m, n) => {
+                    5_u8.serialize(writer)?;
+                    m.serialize(writer)?;
+                    n.serialize(writer)?;
+                }
             }
 
             Ok(())
@@ -252,6 +407,11 @@ mod wire {
                 }
                 3 => Ok(Self::Jump(u8::deserialize_reader(reader)?)),
                 4 => Ok(Self::Dot),
+                5 => {
+                    let m = u8::deserialize_reader(reader)?;
+                    let n = u8::deserialize_reader(reader)?;
+                    Ok(Self::JumpRange(m, n))
+                }
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("invalid discriminant when deserializing a simple node: {v}"),
@@ -291,8 +451,9 @@ mod wire {
             );
             test_round_trip(&SimpleNode::Jump(23), &[0, 1]);
             test_round_trip(&SimpleNode::Dot, &[0]);
+            test_round_trip(&SimpleNode::JumpRange(12, 23), &[0, 1, 2]);
 
-            test_invalid_deserialization::<SimpleNode>(b"\x05");
+            test_invalid_deserialization::<SimpleNode>(b"\x10");
         }
     }
 }
@@ -521,5 +682,37 @@ mod tests {
         assert_eq!(v2.find_anchored_fwd(b"a", 0, 1), Some(1));
         assert_eq!(v1.find_anchored_fwd(b"\n", 0, 1), None);
         assert_eq!(v2.find_anchored_fwd(b"\n", 0, 1), Some(1));
+    }
+
+    #[test]
+    fn test_simple_validator_jump_range() {
+        let mods = Modifiers {
+            dot_all: true,
+            ..Default::default()
+        };
+        let expr = "{ AA [0-2] BB }";
+        let v = build_validator(expr, mods, false).unwrap();
+        let vrev = build_validator(expr, mods, true).unwrap();
+
+        assert_eq!(v.find_anchored_fwd(b"\xAA", 0, 1), None);
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xBB", 0, 1), None);
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xBB", 0, 2), Some(2));
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xBB\xBB", 0, 3), Some(2));
+        assert_eq!(v.find_anchored_fwd(b"\xAA\x00\xBB", 0, 3), Some(3));
+        assert_eq!(v.find_anchored_fwd(b"\xAA\x00\x00\xBB", 0, 4), Some(4));
+        assert_eq!(v.find_anchored_fwd(b"\xAA\x00\x00\x00\xBB", 0, 5), None);
+
+        assert_eq!(v.find_anchored_fwd(b"\xAA\x00\xAA", 0, 3), None);
+        assert_eq!(v.find_anchored_fwd(b"\xBB\x00\xAA", 0, 3), None);
+
+        assert_eq!(vrev.find_anchored_rev(b"\xAA", 0, 1), None);
+        assert_eq!(vrev.find_anchored_rev(b"\xAA\xBB", 0, 1), None);
+        assert_eq!(vrev.find_anchored_rev(b"\xAA\xBB", 0, 2), Some(0));
+        assert_eq!(vrev.find_anchored_rev(b"\xAA\xBB\xBB", 0, 3), Some(0));
+        assert_eq!(vrev.find_anchored_rev(b"\xAA\xAA\xBB", 0, 3), Some(0));
+        assert_eq!(vrev.find_anchored_rev(b"\xAA\xAA\xAA\xBB", 0, 4), Some(0));
+        assert_eq!(vrev.find_anchored_rev(b"\xBB\xAA\xAA\xBB", 0, 4), Some(1));
+
+        assert_eq!(vrev.find_anchored_rev(b"\xAA\x00\xAA", 0, 3), None);
     }
 }
