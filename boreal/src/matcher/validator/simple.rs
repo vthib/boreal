@@ -302,7 +302,11 @@ impl SimpleValidatorBuilder {
                 }
 
                 match kind {
-                    RepetitionKind::ZeroOrOne => self.nodes.push(SimpleNode::JumpRange(0, 1)),
+                    RepetitionKind::ZeroOrOne => {
+                        if !self.add_jump_range(0, 1) {
+                            return false;
+                        }
+                    }
                     RepetitionKind::Range(RepetitionRange::Exactly(m)) => {
                         let Ok(m) = u8::try_from(*m) else {
                             return false;
@@ -317,16 +321,11 @@ impl SimpleValidatorBuilder {
                             return false;
                         };
 
-                        // Cap the combinations of jumps. This does not distinguish
-                        // many small jumps from one bit jump, the goal is simply
-                        // to have a conservative cap to avoid any complications.
-                        let comb = max.saturating_sub(min) + 1;
-                        self.combinations = self.combinations.saturating_mul(comb);
-                        if self.combinations > 64 {
+                        if min == max {
+                            self.add_jump(min);
+                        } else if !self.add_jump_range(min, max) {
                             return false;
                         }
-
-                        self.nodes.push(SimpleNode::JumpRange(min, max));
                     }
                     // Unbounded jumps are not handled
                     RepetitionKind::ZeroOrMore
@@ -352,6 +351,20 @@ impl SimpleValidatorBuilder {
                 self.nodes.push(SimpleNode::Jump(jump_length));
             }
         }
+    }
+
+    fn add_jump_range(&mut self, min: u8, max: u8) -> bool {
+        // Cap the combinations of jumps. This does not distinguish
+        // many small jumps from one bit jump, the goal is simply
+        // to have a conservative cap to avoid any complications.
+        let comb = max.saturating_sub(min) + 1;
+        self.combinations = self.combinations.saturating_mul(comb);
+        if self.combinations > 64 {
+            return false;
+        }
+
+        self.nodes.push(SimpleNode::JumpRange(min, max));
+        true
     }
 }
 
@@ -515,29 +528,30 @@ mod tests {
         SimpleValidator::new(&hir, &analysis, modifiers, reverse)
     }
 
+    #[track_caller]
+    fn test_build(
+        expr: &str,
+        modifiers: Modifiers,
+        reverse: bool,
+        expected_nodes: Option<&[SimpleNode]>,
+    ) {
+        let v = build_validator(expr, modifiers, reverse);
+        assert_eq!(v.as_ref().map(|v| &*v.nodes), expected_nodes);
+    }
+
     #[test]
     fn test_simple_validator_build() {
-        fn test(
-            expr: &str,
-            modifiers: Modifiers,
-            reverse: bool,
-            expected_nodes: Option<&[SimpleNode]>,
-        ) {
-            let v = build_validator(expr, modifiers, reverse);
-            assert_eq!(v.as_ref().map(|v| &*v.nodes), expected_nodes);
-        }
-
         // Regex contains nodes that are not handled
-        test("a?", Modifiers::default(), false, None);
-        test("a|b", Modifiers::default(), false, None);
-        test("^a", Modifiers::default(), false, None);
-        test("a$", Modifiers::default(), false, None);
-        test(r"a\b", Modifiers::default(), false, None);
-        test(r"a\B", Modifiers::default(), false, None);
-        test(r"[aA]", Modifiers::default(), false, None);
+        test_build("a?", Modifiers::default(), false, None);
+        test_build("a|b", Modifiers::default(), false, None);
+        test_build("^a", Modifiers::default(), false, None);
+        test_build("a$", Modifiers::default(), false, None);
+        test_build(r"a\b", Modifiers::default(), false, None);
+        test_build(r"a\B", Modifiers::default(), false, None);
+        test_build(r"[aA]", Modifiers::default(), false, None);
 
         // Modifiers not handled
-        test(
+        test_build(
             r"a",
             Modifiers {
                 nocase: true,
@@ -546,7 +560,7 @@ mod tests {
             false,
             None,
         );
-        test(
+        test_build(
             r"a",
             Modifiers {
                 wide: true,
@@ -556,7 +570,7 @@ mod tests {
             None,
         );
 
-        test(
+        test_build(
             "a.()d",
             Modifiers::default(),
             false,
@@ -567,7 +581,7 @@ mod tests {
             ]),
         );
 
-        test(
+        test_build(
             "a.()d",
             Modifiers::default(),
             true,
@@ -578,7 +592,7 @@ mod tests {
             ]),
         );
 
-        test(
+        test_build(
             "..a.",
             Modifiers {
                 dot_all: true,
@@ -592,7 +606,7 @@ mod tests {
             ]),
         );
 
-        test(
+        test_build(
             &".".repeat(300),
             Modifiers {
                 dot_all: true,
@@ -601,7 +615,65 @@ mod tests {
             false,
             Some(&[SimpleNode::Jump(255), SimpleNode::Jump(45)]),
         );
+    }
 
+    #[test]
+    fn test_jumps() {
+        let mods = Modifiers {
+            dot_all: true,
+            ..Default::default()
+        };
+
+        // Greedy so rejected
+        test_build(".?", mods, false, None);
+
+        test_build(
+            "..??",
+            mods,
+            false,
+            Some(&[SimpleNode::Jump(1), SimpleNode::JumpRange(0, 1)]),
+        );
+        test_build(
+            ".{2}?.{3}?a.{4}?",
+            mods,
+            false,
+            Some(&[
+                SimpleNode::Jump(5),
+                SimpleNode::Byte(b'a'),
+                SimpleNode::Jump(4),
+            ]),
+        );
+        test_build(
+            ".{100}?.{100}?.{100}?.{100}?",
+            mods,
+            false,
+            Some(&[SimpleNode::Jump(200), SimpleNode::Jump(200)]),
+        );
+
+        test_build(".{300}?", mods, false, None);
+        test_build(".{300,400}?", mods, false, None);
+        test_build(".{100,400}?", mods, false, None);
+        test_build(
+            ".{0,7}?.{5,12}?",
+            mods,
+            false,
+            Some(&[SimpleNode::JumpRange(0, 7), SimpleNode::JumpRange(5, 12)]),
+        );
+        test_build(".{0,7}?.{5,13}?", mods, false, None);
+        test_build(
+            ".{0,31}?.??",
+            mods,
+            false,
+            Some(&[SimpleNode::JumpRange(0, 31), SimpleNode::JumpRange(0, 1)]),
+        );
+        test_build(".{0,32}?.??", mods, false, None);
+
+        test_build("a{2}", mods, false, None);
+        test_build("a{2}", mods, false, None);
+    }
+
+    #[test]
+    fn test_simple_validator_reject() {
         let mut builder = SimpleValidatorBuilder {
             nodes: Vec::new(),
             dot_all: false,
