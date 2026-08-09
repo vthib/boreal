@@ -6,9 +6,6 @@ pub struct HirAnalysis {
     // Contains start or end line assertions.
     pub has_start_or_end_line: bool,
 
-    // Contains repetitions.
-    pub has_repetitions: bool,
-
     // Contains greedy repetitions.
     pub has_greedy_repetitions: bool,
 
@@ -34,7 +31,6 @@ pub fn analyze_hir(hir: &Hir, dot_all: bool) -> HirAnalysis {
             dot_all,
 
             has_start_or_end_line: false,
-            has_repetitions: false,
             has_greedy_repetitions: false,
             has_word_boundaries: false,
             has_classes: false,
@@ -53,7 +49,6 @@ struct HirAnalyser {
     dot_all: bool,
 
     has_start_or_end_line: bool,
-    has_repetitions: bool,
     has_greedy_repetitions: bool,
     has_word_boundaries: bool,
     has_classes: bool,
@@ -100,7 +95,6 @@ impl Visitor for HirAnalyser {
                 self.nb_alt_literals = None;
             }
             Hir::Repetition { greedy, .. } => {
-                self.has_repetitions = true;
                 if *greedy {
                     self.has_greedy_repetitions = true;
                 }
@@ -168,7 +162,6 @@ impl Visitor for HirAnalyser {
     fn finish(self) -> Self::Output {
         HirAnalysis {
             has_start_or_end_line: self.has_start_or_end_line,
-            has_repetitions: self.has_repetitions,
             has_greedy_repetitions: self.has_greedy_repetitions,
             has_word_boundaries: self.has_word_boundaries,
             has_classes: self.has_classes,
@@ -263,7 +256,6 @@ mod tests {
     fn test_flags() {
         let res = analyze_expr("^a32+", false);
         assert!(res.has_start_or_end_line);
-        assert!(res.has_repetitions);
         assert!(res.has_greedy_repetitions);
         assert!(!res.has_word_boundaries);
         assert!(!res.has_classes);
@@ -271,7 +263,6 @@ mod tests {
 
         let res = analyze_expr(r"\b[Ww]o(r|R)d\b", false);
         assert!(!res.has_start_or_end_line);
-        assert!(!res.has_repetitions);
         assert!(!res.has_greedy_repetitions);
         assert!(res.has_word_boundaries);
         assert!(res.has_classes);
@@ -279,7 +270,6 @@ mod tests {
 
         let res = analyze_expr(r"{ 51 [-3] ( ?A ?? AF | FA ) }", false);
         assert!(!res.has_start_or_end_line);
-        assert!(res.has_repetitions);
         assert!(!res.has_greedy_repetitions);
         assert!(!res.has_word_boundaries);
         assert!(!res.has_classes);
@@ -287,7 +277,6 @@ mod tests {
 
         let res = analyze_expr(r"\Ba{1,3}?$", false);
         assert!(res.has_start_or_end_line);
-        assert!(res.has_repetitions);
         assert!(!res.has_greedy_repetitions);
         assert!(res.has_word_boundaries);
         assert!(!res.has_classes);
