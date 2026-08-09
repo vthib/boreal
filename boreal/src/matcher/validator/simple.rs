@@ -273,15 +273,7 @@ fn add_hir_to_simple_nodes(
         }
         Hir::Dot => {
             if modifiers.dot_all {
-                if nodes.is_empty() {
-                    nodes.push(SimpleNode::Jump(1));
-                } else {
-                    let last_index = nodes.len() - 1;
-                    match &mut nodes[last_index] {
-                        SimpleNode::Jump(v) if *v < 255 => *v += 1,
-                        _ => nodes.push(SimpleNode::Jump(1)),
-                    }
-                }
+                add_jump(nodes, 1);
             } else {
                 nodes.push(SimpleNode::Dot);
             }
@@ -301,13 +293,13 @@ fn add_hir_to_simple_nodes(
                 return false;
             }
 
-            nodes.push(match kind {
-                RepetitionKind::ZeroOrOne => SimpleNode::JumpRange(0, 1),
+            match kind {
+                RepetitionKind::ZeroOrOne => nodes.push(SimpleNode::JumpRange(0, 1)),
                 RepetitionKind::Range(RepetitionRange::Exactly(m)) => {
                     let Ok(m) = u8::try_from(*m) else {
                         return false;
                     };
-                    SimpleNode::Jump(m)
+                    add_jump(nodes, m);
                 }
                 RepetitionKind::Range(RepetitionRange::Bounded(m, n)) => {
                     let Ok(m) = u8::try_from(*m) else {
@@ -318,14 +310,30 @@ fn add_hir_to_simple_nodes(
                     };
                     // TODO: check combination of jumps across the whole
                     // hir, which can multiply and make this pathologic.
-                    SimpleNode::JumpRange(m, n)
+                    nodes.push(SimpleNode::JumpRange(m, n));
                 }
                 // Unbounded jumps are not handled
                 RepetitionKind::ZeroOrMore
                 | RepetitionKind::OneOrMore
                 | RepetitionKind::Range(RepetitionRange::AtLeast(_)) => return false,
-            });
+            }
             true
+        }
+    }
+}
+
+fn add_jump(nodes: &mut Vec<SimpleNode>, jump_length: u8) {
+    if nodes.is_empty() {
+        nodes.push(SimpleNode::Jump(jump_length));
+    } else {
+        let last_index = nodes.len() - 1;
+        if let SimpleNode::Jump(value) = &mut nodes[last_index] {
+            match value.checked_add(jump_length) {
+                Some(new_value) => *value = new_value,
+                None => nodes.push(SimpleNode::Jump(jump_length)),
+            }
+        } else {
+            nodes.push(SimpleNode::Jump(jump_length));
         }
     }
 }
