@@ -58,13 +58,18 @@ impl SimpleValidator {
             return None;
         }
 
-        let mut nodes = Vec::new();
-        if !add_hir_to_simple_nodes(hir, modifiers, reverse, &mut nodes) {
+        let mut builder = SimpleValidatorBuilder {
+            nodes: Vec::new(),
+            dot_all: modifiers.dot_all,
+            reverse,
+            combinations: 1,
+        };
+        if !builder.add_hir(hir) {
             return None;
         }
 
         Some(Self {
-            nodes: nodes.into_boxed_slice(),
+            nodes: builder.nodes.into_boxed_slice(),
         })
     }
 
@@ -228,112 +233,124 @@ fn split_off_last<'a, T>(slice: &mut &'a [T]) -> Option<&'a T> {
     Some(last)
 }
 
-fn add_hir_to_simple_nodes(
-    hir: &Hir,
-    modifiers: Modifiers,
+struct SimpleValidatorBuilder {
+    nodes: Vec<SimpleNode>,
+    dot_all: bool,
     reverse: bool,
-    nodes: &mut Vec<SimpleNode>,
-) -> bool {
-    match hir {
-        Hir::Alternation(_) | Hir::Assertion(_) | Hir::Class(_) => false,
-        Hir::Mask {
-            value,
-            mask,
-            negated,
-        } => {
-            nodes.push(if *negated {
-                SimpleNode::NegatedMask {
-                    value: *value,
-                    mask: *mask,
-                }
-            } else {
-                SimpleNode::Mask {
-                    value: *value,
-                    mask: *mask,
-                }
-            });
-            true
-        }
-        Hir::Concat(hirs) => {
-            if reverse {
-                for h in hirs.iter().rev() {
-                    if !add_hir_to_simple_nodes(h, modifiers, reverse, nodes) {
-                        return false;
-                    }
-                }
-            } else {
-                for h in hirs {
-                    if !add_hir_to_simple_nodes(h, modifiers, reverse, nodes) {
-                        return false;
-                    }
-                }
-            }
-
-            true
-        }
-        Hir::Dot => {
-            if modifiers.dot_all {
-                add_jump(nodes, 1);
-            } else {
-                nodes.push(SimpleNode::Dot);
-            }
-            true
-        }
-        Hir::Empty => true,
-        Hir::Literal(b) => {
-            nodes.push(SimpleNode::Byte(*b));
-            true
-        }
-        Hir::Group(hir) => add_hir_to_simple_nodes(hir, modifiers, reverse, nodes),
-        Hir::Repetition { hir, kind, greedy } => {
-            // Only handle non-greedy ".{...}" repetitions, with dot_all set. This
-            // means the repeated byte can just be ignored, and matches
-            // the [X-Y] jumps in hex strings.
-            if !matches!(&**hir, Hir::Dot) || !modifiers.dot_all || *greedy {
-                return false;
-            }
-
-            match kind {
-                RepetitionKind::ZeroOrOne => nodes.push(SimpleNode::JumpRange(0, 1)),
-                RepetitionKind::Range(RepetitionRange::Exactly(m)) => {
-                    let Ok(m) = u8::try_from(*m) else {
-                        return false;
-                    };
-                    add_jump(nodes, m);
-                }
-                RepetitionKind::Range(RepetitionRange::Bounded(m, n)) => {
-                    let Ok(m) = u8::try_from(*m) else {
-                        return false;
-                    };
-                    let Ok(n) = u8::try_from(*n) else {
-                        return false;
-                    };
-                    // TODO: check combination of jumps across the whole
-                    // hir, which can multiply and make this pathologic.
-                    nodes.push(SimpleNode::JumpRange(m, n));
-                }
-                // Unbounded jumps are not handled
-                RepetitionKind::ZeroOrMore
-                | RepetitionKind::OneOrMore
-                | RepetitionKind::Range(RepetitionRange::AtLeast(_)) => return false,
-            }
-            true
-        }
-    }
+    combinations: u8,
 }
 
-fn add_jump(nodes: &mut Vec<SimpleNode>, jump_length: u8) {
-    if nodes.is_empty() {
-        nodes.push(SimpleNode::Jump(jump_length));
-    } else {
-        let last_index = nodes.len() - 1;
-        if let SimpleNode::Jump(value) = &mut nodes[last_index] {
-            match value.checked_add(jump_length) {
-                Some(new_value) => *value = new_value,
-                None => nodes.push(SimpleNode::Jump(jump_length)),
+impl SimpleValidatorBuilder {
+    fn add_hir(&mut self, hir: &Hir) -> bool {
+        match hir {
+            Hir::Alternation(_) | Hir::Assertion(_) | Hir::Class(_) => false,
+            Hir::Mask {
+                value,
+                mask,
+                negated,
+            } => {
+                self.nodes.push(if *negated {
+                    SimpleNode::NegatedMask {
+                        value: *value,
+                        mask: *mask,
+                    }
+                } else {
+                    SimpleNode::Mask {
+                        value: *value,
+                        mask: *mask,
+                    }
+                });
+                true
             }
+            Hir::Concat(hirs) => {
+                if self.reverse {
+                    for h in hirs.iter().rev() {
+                        if !self.add_hir(h) {
+                            return false;
+                        }
+                    }
+                } else {
+                    for h in hirs {
+                        if !self.add_hir(h) {
+                            return false;
+                        }
+                    }
+                }
+
+                true
+            }
+            Hir::Dot => {
+                if self.dot_all {
+                    self.add_jump(1);
+                } else {
+                    self.nodes.push(SimpleNode::Dot);
+                }
+                true
+            }
+            Hir::Empty => true,
+            Hir::Literal(b) => {
+                self.nodes.push(SimpleNode::Byte(*b));
+                true
+            }
+            Hir::Group(hir) => self.add_hir(hir),
+            Hir::Repetition { hir, kind, greedy } => {
+                // Only handle non-greedy ".{...}" repetitions, with dot_all set. This
+                // means the repeated byte can just be ignored, and matches
+                // the [X-Y] jumps in hex strings.
+                if !matches!(&**hir, Hir::Dot) || !self.dot_all || *greedy {
+                    return false;
+                }
+
+                match kind {
+                    RepetitionKind::ZeroOrOne => self.nodes.push(SimpleNode::JumpRange(0, 1)),
+                    RepetitionKind::Range(RepetitionRange::Exactly(m)) => {
+                        let Ok(m) = u8::try_from(*m) else {
+                            return false;
+                        };
+                        self.add_jump(m);
+                    }
+                    RepetitionKind::Range(RepetitionRange::Bounded(min, max)) => {
+                        let Ok(min) = u8::try_from(*min) else {
+                            return false;
+                        };
+                        let Ok(max) = u8::try_from(*max) else {
+                            return false;
+                        };
+
+                        // Cap the combinations of jumps. This does not distinguish
+                        // many small jumps from one bit jump, the goal is simply
+                        // to have a conservative cap to avoid any complications.
+                        let comb = max.saturating_sub(min) + 1;
+                        self.combinations = self.combinations.saturating_mul(comb);
+                        if self.combinations > 64 {
+                            return false;
+                        }
+
+                        self.nodes.push(SimpleNode::JumpRange(min, max));
+                    }
+                    // Unbounded jumps are not handled
+                    RepetitionKind::ZeroOrMore
+                    | RepetitionKind::OneOrMore
+                    | RepetitionKind::Range(RepetitionRange::AtLeast(_)) => return false,
+                }
+                true
+            }
+        }
+    }
+
+    fn add_jump(&mut self, jump_length: u8) {
+        if self.nodes.is_empty() {
+            self.nodes.push(SimpleNode::Jump(jump_length));
         } else {
-            nodes.push(SimpleNode::Jump(jump_length));
+            let last_index = self.nodes.len() - 1;
+            if let SimpleNode::Jump(value) = &mut self.nodes[last_index] {
+                match value.checked_add(jump_length) {
+                    Some(new_value) => *value = new_value,
+                    None => self.nodes.push(SimpleNode::Jump(jump_length)),
+                }
+            } else {
+                self.nodes.push(SimpleNode::Jump(jump_length));
+            }
         }
     }
 }
@@ -585,24 +602,34 @@ mod tests {
             Some(&[SimpleNode::Jump(255), SimpleNode::Jump(45)]),
         );
 
-        assert!(!add_hir_to_simple_nodes(
-            &Hir::Alternation(vec![Hir::Empty]),
-            Modifiers::default(),
-            false,
-            &mut Vec::new()
-        ));
-        assert!(!add_hir_to_simple_nodes(
-            &Hir::Concat(vec![Hir::Dot, Hir::Assertion(AssertionKind::StartLine)]),
-            Modifiers::default(),
-            false,
-            &mut Vec::new()
-        ));
-        assert!(!add_hir_to_simple_nodes(
-            &Hir::Concat(vec![Hir::Dot, Hir::Assertion(AssertionKind::StartLine)]),
-            Modifiers::default(),
-            true,
-            &mut Vec::new()
-        ));
+        let mut builder = SimpleValidatorBuilder {
+            nodes: Vec::new(),
+            dot_all: false,
+            reverse: false,
+            combinations: 1,
+        };
+        assert!(!builder.add_hir(&Hir::Alternation(vec![Hir::Empty]),));
+        assert!(!builder.add_hir(&Hir::Concat(vec![
+            Hir::Dot,
+            Hir::Assertion(AssertionKind::StartLine)
+        ]),));
+        assert!(!builder.add_hir(&Hir::Repetition {
+            hir: Box::new(Hir::Dot),
+            kind: RepetitionKind::Range(RepetitionRange::Bounded(0, 200)),
+            greedy: false,
+        }));
+        assert!(!builder.add_hir(&Hir::Concat(vec![
+            Hir::Repetition {
+                hir: Box::new(Hir::Dot),
+                kind: RepetitionKind::Range(RepetitionRange::Bounded(0, 40)),
+                greedy: false,
+            },
+            Hir::Repetition {
+                hir: Box::new(Hir::Dot),
+                kind: RepetitionKind::Range(RepetitionRange::Bounded(0, 40)),
+                greedy: false,
+            }
+        ],)));
     }
 
     #[test]
