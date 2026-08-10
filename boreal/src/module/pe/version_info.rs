@@ -197,7 +197,7 @@ fn find_wide_nul(mem: &[u8]) -> usize {
 }
 
 fn unwide(mem: &[u8], max_size: usize) -> Vec<u8> {
-    let mut res = Vec::new();
+    let mut res = Vec::with_capacity(max_size);
 
     let mut i = 0;
     while i < mem.len() && res.len() < max_size {
