@@ -175,7 +175,7 @@ impl<'a> RuleCompiler<'a> {
         let mut variables = Vec::with_capacity(rule_variables.len());
         for var in rule_variables {
             // Check duplicated names, but only for non anonymous strings
-            if !var.name.is_empty() && !names_set.insert(var.name.clone()) {
+            if !var.name.is_empty() && !names_set.insert(&var.name) {
                 return Err(CompilationError::DuplicatedVariable {
                     name: var.name.clone(),
                     span: var.span.clone(),
