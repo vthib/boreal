@@ -100,15 +100,15 @@ Measure the time it takes to parse and compile all rules.
 
 Size of the compiled rules.
 
-| Rules                                                                                                | YARA         | Boreal (speed profile) | Boreal (memory profile) | Yara-X           |
-| ---------------------------------------------------------------------------------------------------- | ------------ | ---------------------- | ----------------------- | ---------------- |
-| [Orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 12.8 MiB     | 7.4 MiB (57.7%)        | **6.55 MiB (51.1%)**    | 8.62 MiB (67.2%) |
-| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 13.5 MiB     | 6.97 MiB (51.6%)       | **4.94 MiB (36.6%)**    | 23.2 MiB (172%)  |
-| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 15.2 MiB     | 10.4 MiB (68.4%)       | **8.7 MiB (57.4%)**     | 56.7 MiB (373%)  |
-| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 12.7 MiB     | 5.23 MiB (41.2%)       | **4.2 MiB (33.1%)**     | 7.51 MiB (59.3%) |
-| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 171 MiB      | 14.2 MiB (8.3%)        | **11.4 MiB (6.69%)**    | 558 MiB (327%)   |
-| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | **54.0 MiB** | 77.0 MiB (142%)        | 71.9 MiB (133%)         | 68.2 MiB (126%)  |
-| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | **30.7 MiB** | 102 MiB (332%)         | 75.6 MiB (246%)         | 84.1 MiB (273%)  |
+| Rules                                                                                                | YARA     | Boreal (speed profile) | Boreal (memory profile) | Yara-X               |
+| ---------------------------------------------------------------------------------------------------- | -------- | ----------------------- | ----------------------- | -------------------- |
+| [Orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 12.1 MiB | 2.35 MiB (19.4%)        | **1.15 MiB (9.44%)**    | 2.56 MiB (21.1%)     |
+| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 12.3 MiB | 3.63 MiB (29.4%)        | **1.56 MiB (12.7%)**    | 3.60 MiB (29.2%)     |
+| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 13.7 MiB | 4.93 MiB (36.0%)        | **3.08 MiB (22.5%)**    | 7.32 MiB (53.4%)     |
+| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 12.3 MiB | 2.47 MiB (20.1%)        | **1.04 MiB (8.47%)**    | 1.77 MiB (14.4%)     |
+| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 132 MiB  | 6.69 MiB (5.08%)        | **3.32 MiB (2.52%)**    | 131 MiB (99.7%)      |
+| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | 36.2 MiB | 26.7 MiB (73.8%)        | **20.6 MiB (57.0%)**    | 49.3 MiB (136%)      |
+| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 20.5 MiB | 49.0 MiB (239%)         | 20.8 MiB (101%)         | **20.5 MiB (99.8%)** |
 
 ## Rules serialization
 

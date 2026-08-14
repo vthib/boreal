@@ -1,13 +1,13 @@
 //! Measure the compiled size of rules.
 //!
-//! This binary must be used with a profiler such as Massif:
+//! This binary must be used with DHAT:
 //!
-//! `valgrind --tool=massif ./compiled_size boreal-speed panopticon`
+//! `valgrind --tool=dhat ./compiled_size boreal-speed panopticon`
 //!
-//! Then use the last heap measurement to get the compiled size.
+//! The t-end value in the summary indicates the compiled size.
 use boreal_benches::{
-    build_boreal_scanner, build_yara_rules, build_yara_x_rules, get_yara_files_from_path,
-    RULES_SETS,
+    RULES_SETS, build_boreal_scanner, build_yara_rules, build_yara_x_rules,
+    get_yara_files_from_path,
 };
 
 fn main() {

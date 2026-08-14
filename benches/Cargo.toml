@@ -9,10 +9,10 @@ edition = "2024"
 
 [dependencies]
 boreal = { path = "../boreal", version = "*", features = ["authenticode"] }
-criterion = "0.7"
+criterion = "0.8"
 glob = "0.3.1"
 walkdir = "2.3"
-yara = { version = "0.31", features = ["vendored"] }
+yara = { version = "0.32", features = ["vendored"] }
 yara-x = "1.10"
 
 [features]
