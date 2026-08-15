@@ -16,14 +16,14 @@ checkout() {
 
 # Checkout sources of yara rules
 
-checkout https://github.com/Neo23x0/panopticon.git panopticon f3aee9296deb4b09cbce75450526883e04add529
-checkout https://github.com/Neo23x0/signature-base.git signature-base 459fe4de6ddadfe975ad6d2e7e61b97a45eaaaa5
-checkout https://github.com/StrangerealIntel/Orion.git orion cbdebf8116cb017f944123438b700d562c388b02
+checkout https://github.com/Neo23x0/panopticon.git panopticon f40b115995d1d3e8087fb38ca6bbf97b747cc471
+checkout https://github.com/Neo23x0/signature-base.git signature-base e737ebd96c27a52ee99485d4d3e02e9c256d1d3a
+checkout https://github.com/StrangerealIntel/Orion.git orion 0166b5fc1c00c979ac640e6ba51a2375ad6f5ef2
 checkout https://github.com/Yara-Rules/rules.git yara-rules 0f93570194a80d2f2032869055808b0ddcdfb360
 # Remove one rule that depends on the cuckoo module
 sed -ie 's!include "./malware/MALW_AZORULT.yar"!!' assets/yara-rules/index.yar
-checkout https://github.com/reversinglabs/reversinglabs-yara-rules.git reversinglabs 6aacf65eb2648ca7e6bc8767ffb2fdf032951dd6
-checkout https://github.com/advanced-threat-research/Yara-Rules.git atr 4e29051f9c6d80a2d9f4b33ada7f7b377a8d9f4f
+checkout https://github.com/reversinglabs/reversinglabs-yara-rules.git reversinglabs e0a0be54aa1e11ccfd6854e4f19e9476f328fd84
+checkout https://github.com/advanced-threat-research/Yara-Rules.git atr 1919562a59f190bda60c982424f6a24c542ee3e0
 checkout https://github.com/SupportIntelligence/Icewater.git icewater 71e327039a6cfeee4bcfc045f3c6d5d039ffee78
 checkout https://github.com/Crypt-0n/C0-FF-EE.git c0ffee 4704222f828278eeec665234ea0d2166afe964ca
 
