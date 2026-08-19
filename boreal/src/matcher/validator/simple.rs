@@ -16,6 +16,7 @@ pub(crate) struct SimpleValidator {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[allow(variant_size_differences)]
 enum SimpleNode {
     // Byte to match
     Byte(u8),
@@ -29,6 +30,8 @@ enum SimpleNode {
     JumpRange(u8, u8),
     // Dot, any byte but '\n'
     Dot,
+    // Alternation
+    Alternation(Box<[Box<[SimpleNode]>]>),
 }
 
 impl SimpleValidator {
@@ -47,7 +50,6 @@ impl SimpleValidator {
             // Some classes could be handled if there is a way to encode how to check them in as
             // few bytes as possible. But for the moment, this isn't really needed.
             || analysis.has_classes
-            || analysis.has_alternations
         {
             // TODO: handle fixed size repetitions.
             return None;
@@ -63,6 +65,7 @@ impl SimpleValidator {
             dot_all: modifiers.dot_all,
             reverse,
             combinations: 1,
+            in_alternation: false,
         };
         if !builder.add_hir(hir) {
             return None;
@@ -160,6 +163,18 @@ fn check_nodes<'a>(mut nodes: &[SimpleNode], mut mem: &'a [u8]) -> Option<&'a [u
                 }
                 return None;
             }
+            SimpleNode::Alternation(alts) => {
+                for alt in alts {
+                    if let Some(rest) = check_nodes(alt, mem) {
+                        // Validate the rest, and try another branch if it
+                        // fails. See for example `(a|ab)c`, on input `abc`.
+                        if let Some(end) = check_nodes(nodes, rest) {
+                            return Some(end);
+                        }
+                    }
+                }
+                return None;
+            }
         }
     }
 }
@@ -217,6 +232,16 @@ fn check_nodes_reverse<'a>(mut nodes: &[SimpleNode], mut mem: &'a [u8]) -> Optio
                 }
                 return None;
             }
+            SimpleNode::Alternation(alts) => {
+                for alt in alts {
+                    if let Some(rest) = check_nodes_reverse(alt, mem) {
+                        if let Some(end) = check_nodes_reverse(nodes, rest) {
+                            return Some(end);
+                        }
+                    }
+                }
+                return None;
+            }
         }
     }
 }
@@ -238,12 +263,13 @@ struct SimpleValidatorBuilder {
     dot_all: bool,
     reverse: bool,
     combinations: u8,
+    in_alternation: bool,
 }
 
 impl SimpleValidatorBuilder {
     fn add_hir(&mut self, hir: &Hir) -> bool {
         match hir {
-            Hir::Alternation(_) | Hir::Assertion(_) | Hir::Class(_) => false,
+            Hir::Assertion(_) | Hir::Class(_) => false,
             Hir::Mask {
                 value,
                 mask,
@@ -334,6 +360,35 @@ impl SimpleValidatorBuilder {
                 }
                 true
             }
+            Hir::Alternation(alts) => {
+                // Refuse imbricated alternations
+                if self.in_alternation {
+                    return false;
+                }
+                let Ok(nb_alts) = u8::try_from(alts.len()) else {
+                    return false;
+                };
+                if !self.add_combinations(nb_alts) {
+                    return false;
+                }
+
+                self.in_alternation = true;
+                let mut branches = Vec::with_capacity(alts.len());
+                let current_stack = std::mem::take(&mut self.nodes);
+                for alt in alts {
+                    if !self.add_hir(alt) {
+                        return false;
+                    }
+                    let nodes = std::mem::take(&mut self.nodes);
+                    branches.push(nodes.into_boxed_slice());
+                }
+                self.nodes = current_stack;
+                self.nodes
+                    .push(SimpleNode::Alternation(branches.into_boxed_slice()));
+                self.in_alternation = false;
+
+                true
+            }
         }
     }
 
@@ -353,13 +408,35 @@ impl SimpleValidatorBuilder {
         }
     }
 
+    fn add_combinations(&mut self, nb: u8) -> bool {
+        self.combinations = self.combinations.saturating_mul(nb);
+        self.combinations <= 64
+    }
+
     fn add_jump_range(&mut self, min: u8, max: u8) -> bool {
+        if self.in_alternation {
+            // Do not accept jump ranges in alternations. This makes
+            // the matching much more difficult.
+            //
+            // For example, see:
+            //
+            // { ( AA [0-1] BB | CC ) DD }
+            //
+            // The input `AA BB BB DD` should match, using the first branch
+            // and a jump of 1. However, the jump being non-greedy, the alt
+            // branch would actually match with a jum of 0 first, and would
+            // fail after validating the next node.
+            //
+            // Handling this would require backtracking in jump attempts
+            // inside the alternation, making this overly complex. So exclude
+            // those cases.
+            return false;
+        }
+
         // Cap the combinations of jumps. This does not distinguish
         // many small jumps from one bit jump, the goal is simply
         // to have a conservative cap to avoid any complications.
-        let comb = max.saturating_sub(min) + 1;
-        self.combinations = self.combinations.saturating_mul(comb);
-        if self.combinations > 64 {
+        if !self.add_combinations(max.saturating_sub(min) + 1) {
             return false;
         }
 
@@ -422,6 +499,10 @@ mod wire {
                     m.serialize(writer)?;
                     n.serialize(writer)?;
                 }
+                Self::Alternation(alts) => {
+                    6_u8.serialize(writer)?;
+                    alts.serialize(writer)?;
+                }
             }
 
             Ok(())
@@ -449,6 +530,12 @@ mod wire {
                     let m = u8::deserialize_reader(reader)?;
                     let n = u8::deserialize_reader(reader)?;
                     Ok(Self::JumpRange(m, n))
+                }
+                6 => {
+                    let alts = <Vec<Vec<SimpleNode>>>::deserialize_reader(reader)?;
+                    Ok(Self::Alternation(
+                        alts.into_iter().map(Vec::into_boxed_slice).collect(),
+                    ))
                 }
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -543,7 +630,6 @@ mod tests {
     fn test_simple_validator_build() {
         // Regex contains nodes that are not handled
         test_build("a?", Modifiers::default(), false, None);
-        test_build("a|b", Modifiers::default(), false, None);
         test_build("^a", Modifiers::default(), false, None);
         test_build("a$", Modifiers::default(), false, None);
         test_build(r"a\b", Modifiers::default(), false, None);
@@ -673,14 +759,64 @@ mod tests {
     }
 
     #[test]
+    fn test_alternations() {
+        let mods = Modifiers {
+            dot_all: true,
+            ..Default::default()
+        };
+
+        test_build(
+            "{ ( AA ?? BB | CC | DD EE ) }",
+            mods,
+            false,
+            Some(&[SimpleNode::Alternation(Box::new([
+                Box::new([
+                    SimpleNode::Byte(b'\xAA'),
+                    SimpleNode::Jump(1),
+                    SimpleNode::Byte(b'\xBB'),
+                ]),
+                Box::new([SimpleNode::Byte(b'\xCC')]),
+                Box::new([SimpleNode::Byte(b'\xDD'), SimpleNode::Byte(b'\xEE')]),
+            ]))]),
+        );
+
+        // Imbricated is rejected
+        test_build("(a|b(c|d)e)", mods, false, None);
+        test_build("(b(c|d)e|a)", mods, false, None);
+
+        // Too many combinations is rejected
+        test_build("(0|1|2|3|4) (0|1|2|3|4) (5|6|7)", mods, false, None);
+
+        // Non fixed jumps is rejected
+        test_build("{ ( AA | BB [1-3] CC ) }", mods, false, None);
+        test_build("{ ( BB [1-3] CC | AA ) }", mods, false, None);
+        test_build("(a|cd??e)", mods, false, None);
+
+        // fixed jump is ok
+        test_build(
+            "{ ( AA | BB [3-3] CC ) }",
+            mods,
+            false,
+            Some(&[SimpleNode::Alternation(Box::new([
+                Box::new([SimpleNode::Byte(b'\xAA')]),
+                Box::new([
+                    SimpleNode::Byte(b'\xBB'),
+                    SimpleNode::Jump(3),
+                    SimpleNode::Byte(b'\xCC'),
+                ]),
+            ]))]),
+        );
+    }
+
+    #[test]
     fn test_simple_validator_reject() {
         let mut builder = SimpleValidatorBuilder {
             nodes: Vec::new(),
             dot_all: false,
             reverse: false,
             combinations: 1,
+            in_alternation: false,
         };
-        assert!(!builder.add_hir(&Hir::Alternation(vec![Hir::Empty]),));
         assert!(!builder.add_hir(&Hir::Concat(vec![
             Hir::Dot,
             Hir::Assertion(AssertionKind::StartLine)
@@ -821,5 +957,90 @@ mod tests {
         assert_eq!(vrev.find_anchored_rev(b"\xBB\xAA\xAA\xBB", 0, 4), Some(1));
 
         assert_eq!(vrev.find_anchored_rev(b"\xAA\x00\xAA", 0, 3), None);
+    }
+
+    #[test]
+    fn test_simple_validator_alternation() {
+        let mods = Modifiers::default();
+        let expr = "{ 00 ( AA ?? BB | CC | DD EE ) 11 ( 22 | 33 ) 44 }";
+        let v = build_validator(expr, mods, false).unwrap();
+        let vrev = build_validator(expr, mods, true).unwrap();
+
+        assert_eq!(
+            v.find_anchored_fwd(b"\x00\xAA\x00\xBB\x11\x22\x44", 0, 7),
+            Some(7)
+        );
+        assert_eq!(
+            vrev.find_anchored_rev(b"\x00\xAA\x00\xBB\x11\x22\x44", 0, 7),
+            Some(0)
+        );
+
+        assert_eq!(
+            v.find_anchored_fwd(b"\x00\xAA\x00\xBB\x11\x22\x44\x55", 0, 8),
+            Some(7)
+        );
+        assert_eq!(
+            vrev.find_anchored_rev(b"\x00\xAA\x00\xBB\x11\x22\x44\x55", 0, 8),
+            None
+        );
+
+        assert_eq!(
+            v.find_anchored_fwd(b"\xFF\x00\xAA\x00\xBB\x11\x22\x44", 0, 8),
+            None
+        );
+        assert_eq!(
+            vrev.find_anchored_rev(b"\xFF\x00\xAA\x00\xBB\x11\x22\x44", 0, 8),
+            Some(1)
+        );
+
+        assert_eq!(
+            v.find_anchored_fwd(b"\x00\xAA\x00\xBB\x11\x33\x44", 0, 7),
+            Some(7)
+        );
+        assert_eq!(
+            vrev.find_anchored_rev(b"\x00\xAA\x00\xBB\x11\x33\x44", 0, 7),
+            Some(0)
+        );
+
+        assert_eq!(
+            v.find_anchored_fwd(b"\x00\xDD\xEE\x11\x33\x44", 0, 6),
+            Some(6)
+        );
+        assert_eq!(
+            vrev.find_anchored_rev(b"\x00\xDD\xEE\x11\x33\x44", 0, 6),
+            Some(0)
+        );
+
+        assert_eq!(v.find_anchored_fwd(b"\x00\xCC\x11\x22\x44", 0, 5), Some(5));
+        assert_eq!(
+            vrev.find_anchored_rev(b"\x00\xCC\x11\x22\x44", 0, 5),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn test_simple_validator_alternation_backtrack() {
+        // This test that even if a branch is valid, we must test the rest
+        // of the nodes and backtrack to another branch if the rest fails.
+        let mods = Modifiers::default();
+        let expr = "{ ( AA | AA BB ) CC }";
+        let v = build_validator(expr, mods, false).unwrap();
+
+        assert_eq!(v.find_anchored_fwd(b"\xAA", 0, 1), None);
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xDD", 0, 2), None);
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xCC", 0, 2), Some(2));
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xBB", 0, 2), None);
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xBB\xDD", 0, 3), None);
+        assert_eq!(v.find_anchored_fwd(b"\xAA\xBB\xCC", 0, 3), Some(3));
+
+        let expr = "{ CC ( AA | BB AA ) }";
+        let vrev = build_validator(expr, mods, true).unwrap();
+
+        assert_eq!(vrev.find_anchored_rev(b"\xAA", 0, 1), None);
+        assert_eq!(vrev.find_anchored_rev(b"\xDD\xAA", 0, 2), None);
+        assert_eq!(vrev.find_anchored_rev(b"\xCC\xAA", 0, 2), Some(0));
+        assert_eq!(vrev.find_anchored_rev(b"\xBB\xAA", 0, 2), None);
+        assert_eq!(vrev.find_anchored_rev(b"\xDD\xBB\xAA", 0, 3), None);
+        assert_eq!(vrev.find_anchored_rev(b"\xCC\xBB\xAA", 0, 3), Some(0));
     }
 }
