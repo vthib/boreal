@@ -16,7 +16,6 @@ pub(crate) struct SimpleValidator {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-#[allow(variant_size_differences)]
 enum SimpleNode {
     // Byte to match
     Byte(u8),
@@ -30,8 +29,20 @@ enum SimpleNode {
     JumpRange(u8, u8),
     // Dot, any byte but '\n'
     Dot,
-    // Alternation
-    Alternation(Box<[Box<[SimpleNode]>]>),
+    // Start of an alternation.
+    //
+    // The value is the total length of the alternation.
+    //
+    // `[Alternation(N), <N nodes>, ...rest...]`
+    //
+    // Instead those N nodes, each branch is indicated by an `AltBranch` node.
+    Alternation(u16),
+    // Start of an alternation branch.
+    //
+    // The value is the length of the branch.
+    //
+    // `[AltBranch(N), <N nodes>, ...rest...]`
+    AltBranch(u8),
 }
 
 impl SimpleValidator {
@@ -163,18 +174,26 @@ fn check_nodes<'a>(mut nodes: &[SimpleNode], mut mem: &'a [u8]) -> Option<&'a [u
                 }
                 return None;
             }
-            SimpleNode::Alternation(alts) => {
-                for alt in alts {
-                    if let Some(rest) = check_nodes(alt, mem) {
+            SimpleNode::Alternation(length) => {
+                let nodes_after_alt = &nodes[usize::from(*length)..];
+
+                while let Some(SimpleNode::AltBranch(branch_length)) = split_off_first(&mut nodes) {
+                    let branch_length = usize::from(*branch_length);
+                    let (branch_nodes, rest_nodes) = nodes.split_at(branch_length);
+
+                    if let Some(rest) = check_nodes(branch_nodes, mem) {
                         // Validate the rest, and try another branch if it
                         // fails. See for example `(a|ab)c`, on input `abc`.
-                        if let Some(end) = check_nodes(nodes, rest) {
+                        if let Some(end) = check_nodes(nodes_after_alt, rest) {
                             return Some(end);
                         }
                     }
+                    nodes = rest_nodes;
                 }
                 return None;
             }
+            // Handled in SimpleNode::Alternation, should not appear on its own.
+            SimpleNode::AltBranch(_) => return None,
         }
     }
 }
@@ -232,16 +251,24 @@ fn check_nodes_reverse<'a>(mut nodes: &[SimpleNode], mut mem: &'a [u8]) -> Optio
                 }
                 return None;
             }
-            SimpleNode::Alternation(alts) => {
-                for alt in alts {
-                    if let Some(rest) = check_nodes_reverse(alt, mem) {
-                        if let Some(end) = check_nodes_reverse(nodes, rest) {
+            SimpleNode::Alternation(length) => {
+                let nodes_after_alt = &nodes[usize::from(*length)..];
+
+                while let Some(SimpleNode::AltBranch(branch_length)) = split_off_first(&mut nodes) {
+                    let branch_length = usize::from(*branch_length);
+                    let (branch_nodes, rest_nodes) = nodes.split_at(branch_length);
+
+                    if let Some(rest) = check_nodes_reverse(branch_nodes, mem) {
+                        if let Some(end) = check_nodes_reverse(nodes_after_alt, rest) {
                             return Some(end);
                         }
                     }
+                    nodes = rest_nodes;
                 }
                 return None;
             }
+            // Handled in SimpleNode::Alternation, should not appear on its own.
+            SimpleNode::AltBranch(_) => return None,
         }
     }
 }
@@ -373,18 +400,33 @@ impl SimpleValidatorBuilder {
                 }
 
                 self.in_alternation = true;
-                let mut branches = Vec::with_capacity(alts.len());
-                let current_stack = std::mem::take(&mut self.nodes);
+                let mut current_stack = std::mem::take(&mut self.nodes);
+                let alt_node_index = current_stack.len();
+                // Placeholder value 0, will be replaced once
+                // all branches are saved.
+                current_stack.push(SimpleNode::Alternation(0));
+
                 for alt in alts {
                     if !self.add_hir(alt) {
                         return false;
                     }
-                    let nodes = std::mem::take(&mut self.nodes);
-                    branches.push(nodes.into_boxed_slice());
+                    let branch_nodes = std::mem::take(&mut self.nodes);
+
+                    // Insert the branch nodes in the stack with
+                    // an AltBranch node first.
+                    let Ok(nb_branch_nodes) = u8::try_from(branch_nodes.len()) else {
+                        return false;
+                    };
+                    current_stack.push(SimpleNode::AltBranch(nb_branch_nodes));
+                    current_stack.extend(branch_nodes);
                 }
+
+                let Ok(alt_total_length) = u16::try_from(current_stack.len() - alt_node_index - 1)
+                else {
+                    return false;
+                };
+                current_stack[alt_node_index] = SimpleNode::Alternation(alt_total_length);
                 self.nodes = current_stack;
-                self.nodes
-                    .push(SimpleNode::Alternation(branches.into_boxed_slice()));
                 self.in_alternation = false;
 
                 true
@@ -499,9 +541,13 @@ mod wire {
                     m.serialize(writer)?;
                     n.serialize(writer)?;
                 }
-                Self::Alternation(alts) => {
+                Self::Alternation(len) => {
                     6_u8.serialize(writer)?;
-                    alts.serialize(writer)?;
+                    len.serialize(writer)?;
+                }
+                Self::AltBranch(len) => {
+                    7_u8.serialize(writer)?;
+                    len.serialize(writer)?;
                 }
             }
 
@@ -532,10 +578,12 @@ mod wire {
                     Ok(Self::JumpRange(m, n))
                 }
                 6 => {
-                    let alts = <Vec<Vec<SimpleNode>>>::deserialize_reader(reader)?;
-                    Ok(Self::Alternation(
-                        alts.into_iter().map(Vec::into_boxed_slice).collect(),
-                    ))
+                    let len = u16::deserialize_reader(reader)?;
+                    Ok(Self::Alternation(len))
+                }
+                7 => {
+                    let len = u8::deserialize_reader(reader)?;
+                    Ok(Self::AltBranch(len))
                 }
                 v => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -577,6 +625,8 @@ mod wire {
             test_round_trip(&SimpleNode::Jump(23), &[0, 1]);
             test_round_trip(&SimpleNode::Dot, &[0]);
             test_round_trip(&SimpleNode::JumpRange(12, 23), &[0, 1, 2]);
+            test_round_trip(&SimpleNode::Alternation(12), &[0, 1]);
+            test_round_trip(&SimpleNode::AltBranch(12), &[0, 1]);
 
             test_invalid_deserialization::<SimpleNode>(b"\x10");
         }
@@ -766,18 +816,23 @@ mod tests {
         };
 
         test_build(
-            "{ ( AA ?? BB | CC | DD EE ) }",
+            "{ 00 ( AA ?? BB | CC | DD EE ) 11 }",
             mods,
             false,
-            Some(&[SimpleNode::Alternation(Box::new([
-                Box::new([
-                    SimpleNode::Byte(b'\xAA'),
-                    SimpleNode::Jump(1),
-                    SimpleNode::Byte(b'\xBB'),
-                ]),
-                Box::new([SimpleNode::Byte(b'\xCC')]),
-                Box::new([SimpleNode::Byte(b'\xDD'), SimpleNode::Byte(b'\xEE')]),
-            ]))]),
+            Some(&[
+                SimpleNode::Byte(b'\x00'),
+                SimpleNode::Alternation(9),
+                SimpleNode::AltBranch(3),
+                SimpleNode::Byte(b'\xAA'),
+                SimpleNode::Jump(1),
+                SimpleNode::Byte(b'\xBB'),
+                SimpleNode::AltBranch(1),
+                SimpleNode::Byte(b'\xCC'),
+                SimpleNode::AltBranch(2),
+                SimpleNode::Byte(b'\xDD'),
+                SimpleNode::Byte(b'\xEE'),
+                SimpleNode::Byte(b'\x11'),
+            ]),
         );
 
         // Imbricated is rejected
@@ -797,14 +852,15 @@ mod tests {
             "{ ( AA | BB [3-3] CC ) }",
             mods,
             false,
-            Some(&[SimpleNode::Alternation(Box::new([
-                Box::new([SimpleNode::Byte(b'\xAA')]),
-                Box::new([
-                    SimpleNode::Byte(b'\xBB'),
-                    SimpleNode::Jump(3),
-                    SimpleNode::Byte(b'\xCC'),
-                ]),
-            ]))]),
+            Some(&[
+                SimpleNode::Alternation(6),
+                SimpleNode::AltBranch(1),
+                SimpleNode::Byte(b'\xAA'),
+                SimpleNode::AltBranch(3),
+                SimpleNode::Byte(b'\xBB'),
+                SimpleNode::Jump(3),
+                SimpleNode::Byte(b'\xCC'),
+            ]),
         );
     }
 
@@ -1042,5 +1098,28 @@ mod tests {
         assert_eq!(vrev.find_anchored_rev(b"\xBB\xAA", 0, 2), None);
         assert_eq!(vrev.find_anchored_rev(b"\xDD\xBB\xAA", 0, 3), None);
         assert_eq!(vrev.find_anchored_rev(b"\xCC\xBB\xAA", 0, 3), Some(0));
+    }
+
+    #[test]
+    fn test_simple_validator_alternations_limit() {
+        let mods = Modifiers::default();
+
+        // No more than u8::max branches
+        let mut expr = String::new();
+        expr.push_str("(a");
+        for _ in 0..u8::MAX {
+            expr.push_str("|a");
+        }
+        expr.push(')');
+        test_build(&expr, mods, false, None);
+
+        // A single branch cannot be longer than u8::max
+        let mut expr = String::new();
+        expr.push_str("(a|");
+        for _ in 0..=u8::MAX {
+            expr.push('a');
+        }
+        expr.push_str("|a)");
+        test_build(&expr, mods, false, None);
     }
 }
