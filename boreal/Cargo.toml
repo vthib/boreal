@@ -125,7 +125,7 @@ windows-sys = { version = "0.61", optional = true, features = [
 ] }
 
 [dev-dependencies]
-base64 = "0.22"
+base64 = "0.23"
 glob = "0.3.1"
 tempfile.workspace = true
 yara = { version = "0.32", features = ["vendored"] }
