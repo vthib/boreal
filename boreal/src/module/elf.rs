@@ -27,124 +27,130 @@ impl Module for Elf {
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
         [
             // ET contants
-            ("ET_NONE", StaticValue::Integer(elf::ET_NONE.into())),
-            ("ET_REL", StaticValue::Integer(elf::ET_REL.into())),
-            ("ET_EXEC", StaticValue::Integer(elf::ET_EXEC.into())),
-            ("ET_DYN", StaticValue::Integer(elf::ET_DYN.into())),
-            ("ET_CORE", StaticValue::Integer(elf::ET_CORE.into())),
+            ("ET_NONE", StaticValue::Integer(elf::ET_NONE.0.into())),
+            ("ET_REL", StaticValue::Integer(elf::ET_REL.0.into())),
+            ("ET_EXEC", StaticValue::Integer(elf::ET_EXEC.0.into())),
+            ("ET_DYN", StaticValue::Integer(elf::ET_DYN.0.into())),
+            ("ET_CORE", StaticValue::Integer(elf::ET_CORE.0.into())),
             // EM constants
-            ("EM_NONE", StaticValue::Integer(elf::EM_NONE.into())),
-            ("EM_M32", StaticValue::Integer(elf::EM_M32.into())),
-            ("EM_SPARC", StaticValue::Integer(elf::EM_SPARC.into())),
-            ("EM_386", StaticValue::Integer(elf::EM_386.into())),
-            ("EM_68K", StaticValue::Integer(elf::EM_68K.into())),
-            ("EM_88K", StaticValue::Integer(elf::EM_88K.into())),
-            ("EM_860", StaticValue::Integer(elf::EM_860.into())),
-            ("EM_MIPS", StaticValue::Integer(elf::EM_MIPS.into())),
+            ("EM_NONE", StaticValue::Integer(elf::EM_NONE.0.into())),
+            ("EM_M32", StaticValue::Integer(elf::EM_M32.0.into())),
+            ("EM_SPARC", StaticValue::Integer(elf::EM_SPARC.0.into())),
+            ("EM_386", StaticValue::Integer(elf::EM_386.0.into())),
+            ("EM_68K", StaticValue::Integer(elf::EM_68K.0.into())),
+            ("EM_88K", StaticValue::Integer(elf::EM_88K.0.into())),
+            ("EM_860", StaticValue::Integer(elf::EM_860.0.into())),
+            ("EM_MIPS", StaticValue::Integer(elf::EM_MIPS.0.into())),
             (
                 "EM_MIPS_RS3_LE",
-                StaticValue::Integer(elf::EM_MIPS_RS3_LE.into()),
+                StaticValue::Integer(elf::EM_MIPS_RS3_LE.0.into()),
             ),
-            ("EM_PPC", StaticValue::Integer(elf::EM_PPC.into())),
-            ("EM_PPC64", StaticValue::Integer(elf::EM_PPC64.into())),
-            ("EM_ARM", StaticValue::Integer(elf::EM_ARM.into())),
-            ("EM_X86_64", StaticValue::Integer(elf::EM_X86_64.into())),
-            ("EM_AARCH64", StaticValue::Integer(elf::EM_AARCH64.into())),
+            ("EM_PPC", StaticValue::Integer(elf::EM_PPC.0.into())),
+            ("EM_PPC64", StaticValue::Integer(elf::EM_PPC64.0.into())),
+            ("EM_ARM", StaticValue::Integer(elf::EM_ARM.0.into())),
+            ("EM_X86_64", StaticValue::Integer(elf::EM_X86_64.0.into())),
+            ("EM_AARCH64", StaticValue::Integer(elf::EM_AARCH64.0.into())),
             // SHT constants
-            ("SHT_NULL", StaticValue::Integer(elf::SHT_NULL.into())),
+            ("SHT_NULL", StaticValue::Integer(elf::SHT_NULL.0.into())),
             (
                 "SHT_PROGBITS",
-                StaticValue::Integer(elf::SHT_PROGBITS.into()),
+                StaticValue::Integer(elf::SHT_PROGBITS.0.into()),
             ),
-            ("SHT_SYMTAB", StaticValue::Integer(elf::SHT_SYMTAB.into())),
-            ("SHT_STRTAB", StaticValue::Integer(elf::SHT_STRTAB.into())),
-            ("SHT_RELA", StaticValue::Integer(elf::SHT_RELA.into())),
-            ("SHT_HASH", StaticValue::Integer(elf::SHT_HASH.into())),
-            ("SHT_DYNAMIC", StaticValue::Integer(elf::SHT_DYNAMIC.into())),
-            ("SHT_NOTE", StaticValue::Integer(elf::SHT_NOTE.into())),
-            ("SHT_NOBITS", StaticValue::Integer(elf::SHT_NOBITS.into())),
-            ("SHT_REL", StaticValue::Integer(elf::SHT_REL.into())),
-            ("SHT_SHLIB", StaticValue::Integer(elf::SHT_SHLIB.into())),
-            ("SHT_DYNSYM", StaticValue::Integer(elf::SHT_DYNSYM.into())),
+            ("SHT_SYMTAB", StaticValue::Integer(elf::SHT_SYMTAB.0.into())),
+            ("SHT_STRTAB", StaticValue::Integer(elf::SHT_STRTAB.0.into())),
+            ("SHT_RELA", StaticValue::Integer(elf::SHT_RELA.0.into())),
+            ("SHT_HASH", StaticValue::Integer(elf::SHT_HASH.0.into())),
+            (
+                "SHT_DYNAMIC",
+                StaticValue::Integer(elf::SHT_DYNAMIC.0.into()),
+            ),
+            ("SHT_NOTE", StaticValue::Integer(elf::SHT_NOTE.0.into())),
+            ("SHT_NOBITS", StaticValue::Integer(elf::SHT_NOBITS.0.into())),
+            ("SHT_REL", StaticValue::Integer(elf::SHT_REL.0.into())),
+            ("SHT_SHLIB", StaticValue::Integer(elf::SHT_SHLIB.0.into())),
+            ("SHT_DYNSYM", StaticValue::Integer(elf::SHT_DYNSYM.0.into())),
             // SHF constants
-            ("SHF_WRITE", StaticValue::Integer(elf::SHF_WRITE.into())),
-            ("SHF_ALLOC", StaticValue::Integer(elf::SHF_ALLOC.into())),
+            ("SHF_WRITE", StaticValue::Integer(elf::SHF_WRITE.0 as i64)),
+            ("SHF_ALLOC", StaticValue::Integer(elf::SHF_ALLOC.0 as i64)),
             (
                 "SHF_EXECINSTR",
-                StaticValue::Integer(elf::SHF_EXECINSTR.into()),
+                StaticValue::Integer(elf::SHF_EXECINSTR.0 as i64),
             ),
             // PT constants
-            ("PT_NULL", StaticValue::Integer(elf::PT_NULL.into())),
-            ("PT_LOAD", StaticValue::Integer(elf::PT_LOAD.into())),
-            ("PT_DYNAMIC", StaticValue::Integer(elf::PT_DYNAMIC.into())),
-            ("PT_INTERP", StaticValue::Integer(elf::PT_INTERP.into())),
-            ("PT_NOTE", StaticValue::Integer(elf::PT_NOTE.into())),
-            ("PT_SHLIB", StaticValue::Integer(elf::PT_SHLIB.into())),
-            ("PT_PHDR", StaticValue::Integer(elf::PT_PHDR.into())),
-            ("PT_TLS", StaticValue::Integer(elf::PT_TLS.into())),
+            ("PT_NULL", StaticValue::Integer(elf::PT_NULL.0.into())),
+            ("PT_LOAD", StaticValue::Integer(elf::PT_LOAD.0.into())),
+            ("PT_DYNAMIC", StaticValue::Integer(elf::PT_DYNAMIC.0.into())),
+            ("PT_INTERP", StaticValue::Integer(elf::PT_INTERP.0.into())),
+            ("PT_NOTE", StaticValue::Integer(elf::PT_NOTE.0.into())),
+            ("PT_SHLIB", StaticValue::Integer(elf::PT_SHLIB.0.into())),
+            ("PT_PHDR", StaticValue::Integer(elf::PT_PHDR.0.into())),
+            ("PT_TLS", StaticValue::Integer(elf::PT_TLS.0.into())),
             (
                 "PT_GNU_EH_FRAME",
-                StaticValue::Integer(elf::PT_GNU_EH_FRAME.into()),
+                StaticValue::Integer(elf::PT_GNU_EH_FRAME.0.into()),
             ),
             (
                 "PT_GNU_STACK",
-                StaticValue::Integer(elf::PT_GNU_STACK.into()),
+                StaticValue::Integer(elf::PT_GNU_STACK.0.into()),
             ),
             // DT constants
-            ("DT_NULL", StaticValue::Integer(elf::DT_NULL)),
-            ("DT_NEEDED", StaticValue::Integer(elf::DT_NEEDED)),
-            ("DT_PLTRELSZ", StaticValue::Integer(elf::DT_PLTRELSZ)),
-            ("DT_PLTGOT", StaticValue::Integer(elf::DT_PLTGOT)),
-            ("DT_HASH", StaticValue::Integer(elf::DT_HASH)),
-            ("DT_STRTAB", StaticValue::Integer(elf::DT_STRTAB)),
-            ("DT_SYMTAB", StaticValue::Integer(elf::DT_SYMTAB)),
-            ("DT_RELA", StaticValue::Integer(elf::DT_RELA)),
-            ("DT_RELASZ", StaticValue::Integer(elf::DT_RELASZ)),
-            ("DT_RELAENT", StaticValue::Integer(elf::DT_RELAENT)),
-            ("DT_STRSZ", StaticValue::Integer(elf::DT_STRSZ)),
-            ("DT_SYMENT", StaticValue::Integer(elf::DT_SYMENT)),
-            ("DT_INIT", StaticValue::Integer(elf::DT_INIT)),
-            ("DT_FINI", StaticValue::Integer(elf::DT_FINI)),
-            ("DT_SONAME", StaticValue::Integer(elf::DT_SONAME)),
-            ("DT_RPATH", StaticValue::Integer(elf::DT_RPATH)),
-            ("DT_SYMBOLIC", StaticValue::Integer(elf::DT_SYMBOLIC)),
-            ("DT_REL", StaticValue::Integer(elf::DT_REL)),
-            ("DT_RELSZ", StaticValue::Integer(elf::DT_RELSZ)),
-            ("DT_RELENT", StaticValue::Integer(elf::DT_RELENT)),
-            ("DT_PLTREL", StaticValue::Integer(elf::DT_PLTREL)),
-            ("DT_DEBUG", StaticValue::Integer(elf::DT_DEBUG)),
-            ("DT_TEXTREL", StaticValue::Integer(elf::DT_TEXTREL)),
-            ("DT_JMPREL", StaticValue::Integer(elf::DT_JMPREL)),
-            ("DT_BIND_NOW", StaticValue::Integer(elf::DT_BIND_NOW)),
-            ("DT_INIT_ARRAY", StaticValue::Integer(elf::DT_INIT_ARRAY)),
-            ("DT_FINI_ARRAY", StaticValue::Integer(elf::DT_FINI_ARRAY)),
+            ("DT_NULL", StaticValue::Integer(elf::DT_NULL.0)),
+            ("DT_NEEDED", StaticValue::Integer(elf::DT_NEEDED.0)),
+            ("DT_PLTRELSZ", StaticValue::Integer(elf::DT_PLTRELSZ.0)),
+            ("DT_PLTGOT", StaticValue::Integer(elf::DT_PLTGOT.0)),
+            ("DT_HASH", StaticValue::Integer(elf::DT_HASH.0)),
+            ("DT_STRTAB", StaticValue::Integer(elf::DT_STRTAB.0)),
+            ("DT_SYMTAB", StaticValue::Integer(elf::DT_SYMTAB.0)),
+            ("DT_RELA", StaticValue::Integer(elf::DT_RELA.0)),
+            ("DT_RELASZ", StaticValue::Integer(elf::DT_RELASZ.0)),
+            ("DT_RELAENT", StaticValue::Integer(elf::DT_RELAENT.0)),
+            ("DT_STRSZ", StaticValue::Integer(elf::DT_STRSZ.0)),
+            ("DT_SYMENT", StaticValue::Integer(elf::DT_SYMENT.0)),
+            ("DT_INIT", StaticValue::Integer(elf::DT_INIT.0)),
+            ("DT_FINI", StaticValue::Integer(elf::DT_FINI.0)),
+            ("DT_SONAME", StaticValue::Integer(elf::DT_SONAME.0)),
+            ("DT_RPATH", StaticValue::Integer(elf::DT_RPATH.0)),
+            ("DT_SYMBOLIC", StaticValue::Integer(elf::DT_SYMBOLIC.0)),
+            ("DT_REL", StaticValue::Integer(elf::DT_REL.0)),
+            ("DT_RELSZ", StaticValue::Integer(elf::DT_RELSZ.0)),
+            ("DT_RELENT", StaticValue::Integer(elf::DT_RELENT.0)),
+            ("DT_PLTREL", StaticValue::Integer(elf::DT_PLTREL.0)),
+            ("DT_DEBUG", StaticValue::Integer(elf::DT_DEBUG.0)),
+            ("DT_TEXTREL", StaticValue::Integer(elf::DT_TEXTREL.0)),
+            ("DT_JMPREL", StaticValue::Integer(elf::DT_JMPREL.0)),
+            ("DT_BIND_NOW", StaticValue::Integer(elf::DT_BIND_NOW.0)),
+            ("DT_INIT_ARRAY", StaticValue::Integer(elf::DT_INIT_ARRAY.0)),
+            ("DT_FINI_ARRAY", StaticValue::Integer(elf::DT_FINI_ARRAY.0)),
             (
                 "DT_INIT_ARRAYSZ",
-                StaticValue::Integer(elf::DT_INIT_ARRAYSZ),
+                StaticValue::Integer(elf::DT_INIT_ARRAYSZ.0),
             ),
             (
                 "DT_FINI_ARRAYSZ",
-                StaticValue::Integer(elf::DT_FINI_ARRAYSZ),
+                StaticValue::Integer(elf::DT_FINI_ARRAYSZ.0),
             ),
-            ("DT_RUNPATH", StaticValue::Integer(elf::DT_RUNPATH)),
-            ("DT_FLAGS", StaticValue::Integer(elf::DT_FLAGS)),
-            ("DT_ENCODING", StaticValue::Integer(elf::DT_ENCODING)),
+            ("DT_RUNPATH", StaticValue::Integer(elf::DT_RUNPATH.0)),
+            ("DT_FLAGS", StaticValue::Integer(elf::DT_FLAGS.0)),
+            ("DT_ENCODING", StaticValue::Integer(elf::DT_ENCODING.0)),
             // STT constants
-            ("STT_NOTYPE", StaticValue::Integer(elf::STT_NOTYPE.into())),
-            ("STT_OBJECT", StaticValue::Integer(elf::STT_OBJECT.into())),
-            ("STT_FUNC", StaticValue::Integer(elf::STT_FUNC.into())),
-            ("STT_SECTION", StaticValue::Integer(elf::STT_SECTION.into())),
-            ("STT_FILE", StaticValue::Integer(elf::STT_FILE.into())),
-            ("STT_COMMON", StaticValue::Integer(elf::STT_COMMON.into())),
-            ("STT_TLS", StaticValue::Integer(elf::STT_TLS.into())),
+            ("STT_NOTYPE", StaticValue::Integer(elf::STT_NOTYPE.0.into())),
+            ("STT_OBJECT", StaticValue::Integer(elf::STT_OBJECT.0.into())),
+            ("STT_FUNC", StaticValue::Integer(elf::STT_FUNC.0.into())),
+            (
+                "STT_SECTION",
+                StaticValue::Integer(elf::STT_SECTION.0.into()),
+            ),
+            ("STT_FILE", StaticValue::Integer(elf::STT_FILE.0.into())),
+            ("STT_COMMON", StaticValue::Integer(elf::STT_COMMON.0.into())),
+            ("STT_TLS", StaticValue::Integer(elf::STT_TLS.0.into())),
             // STB constants
-            ("STB_LOCAL", StaticValue::Integer(elf::STB_LOCAL.into())),
-            ("STB_GLOBAL", StaticValue::Integer(elf::STB_GLOBAL.into())),
-            ("STB_WEAK", StaticValue::Integer(elf::STB_WEAK.into())),
+            ("STB_LOCAL", StaticValue::Integer(elf::STB_LOCAL.0.into())),
+            ("STB_GLOBAL", StaticValue::Integer(elf::STB_GLOBAL.0.into())),
+            ("STB_WEAK", StaticValue::Integer(elf::STB_WEAK.0.into())),
             // PF constants
-            ("PF_X", StaticValue::Integer(elf::PF_X.into())),
-            ("PF_W", StaticValue::Integer(elf::PF_W.into())),
-            ("PF_R", StaticValue::Integer(elf::PF_R.into())),
+            ("PF_X", StaticValue::Integer(elf::PF_X.0.into())),
+            ("PF_W", StaticValue::Integer(elf::PF_W.0.into())),
+            ("PF_R", StaticValue::Integer(elf::PF_R.0.into())),
             // Hashes of import details
             #[cfg(feature = "hash")]
             (
@@ -373,8 +379,8 @@ fn parse_file_inner<Elf: FileHeader<Endian = Endianness>>(
     };
 
     let res = [
-        ("type", Value::from(header.e_type(e))),
-        ("machine", header.e_machine(e).into()),
+        ("type", Value::from(header.e_type(e).0)),
+        ("machine", header.e_machine(e).0.into()),
         ("entry_point", entrypoint.into()),
         ("number_of_sections", header.e_shnum(e).into()),
         ("sh_offset", header.e_shoff(e).into().into()),
@@ -452,11 +458,11 @@ fn sections<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option
             .take(MAX_NB_SECTIONS)
             .map(|section| {
                 Value::object([
-                    ("type", section.sh_type(e).into()),
-                    ("flags", section.sh_flags(e).into().into()),
-                    ("address", section.sh_addr(e).into().into()),
-                    ("size", section.sh_size(e).into().into()),
-                    ("offset", section.sh_offset(e).into().into()),
+                    ("type", section.sh_type(e).0.into()),
+                    ("flags", section.sh_flags(e).0.into()),
+                    ("address", Value::Integer(section.sh_addr(e).into() as i64)),
+                    ("size", Value::Integer(section.sh_size(e).into() as i64)),
+                    ("offset", Value::Integer(section.sh_offset(e).into() as i64)),
                     (
                         "name",
                         section_table
@@ -480,8 +486,8 @@ fn segments<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option
             .take(MAX_NB_SEGMENTS)
             .map(|segment| {
                 Value::object([
-                    ("type", segment.p_type(e).into()),
-                    ("flags", segment.p_flags(e).into()),
+                    ("type", segment.p_type(e).0.into()),
+                    ("flags", segment.p_flags(e).0.into()),
                     ("offset", segment.p_offset(e).into().into()),
                     ("virtual_address", segment.p_vaddr(e).into().into()),
                     ("physical_address", segment.p_paddr(e).into().into()),
@@ -507,7 +513,7 @@ fn dynamic<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option<
         let ty = sym.tag(e);
 
         res.push(Value::object([
-            ("type", ty.into()),
+            ("type", ty.0.into()),
             ("val", sym.d_val(e).into().into()),
         ]));
 
@@ -522,7 +528,7 @@ fn get_symbols<Elf: FileHeader>(
     header: &Elf,
     e: Elf::Endian,
     mem: &[u8],
-    symbol_type: u32,
+    symbol_type: elf::SectionType,
     data: &mut Data,
 ) -> Option<Vec<Value>> {
     let section_table = header.sections(e, mem).ok()?;
@@ -534,9 +540,9 @@ fn get_symbols<Elf: FileHeader>(
 
     for symbol in symbol_table.iter().take(MAX_NB_SYMBOLS) {
         let name = symbol.name(e, strings_table).ok();
-        let bind = symbol.st_bind();
-        let type_ = symbol.st_type();
-        let shndx = symbol.st_shndx(e);
+        let bind = symbol.st_bind().0;
+        let type_ = symbol.st_type().0;
+        let shndx = symbol.st_shndx(e).0;
         let obj = Value::object([
             ("name", name.map(<[u8]>::to_vec).into()),
             ("bind", bind.into()),
@@ -553,7 +559,7 @@ fn get_symbols<Elf: FileHeader>(
                 shndx,
                 bind,
                 type_,
-                visibility: symbol.st_other() & 0x3,
+                visibility: symbol.st_other().0 & 0x3,
             });
         }
     }
@@ -570,7 +576,7 @@ impl Elf {
 
         let data = ctx.module_data.get::<Self>()?;
         let import_string =
-            data.get_import_string(|sym| sym.shndx == elf::SHN_UNDEF && !sym.name.is_empty())?;
+            data.get_import_string(|sym| sym.shndx == elf::SHN_UNDEF.0 && !sym.name.is_empty())?;
 
         let hash = Md5::digest(import_string);
 
@@ -592,9 +598,9 @@ impl Elf {
 
         let data = ctx.module_data.get::<Self>()?;
         let import_string = data.get_import_string(|sym| {
-            if sym.bind != elf::STB_GLOBAL
-                || sym.type_ != elf::STT_FUNC
-                || sym.visibility != elf::STV_DEFAULT
+            if sym.bind != elf::STB_GLOBAL.0
+                || sym.type_ != elf::STT_FUNC.0
+                || sym.visibility != elf::STV_DEFAULT.0
             {
                 return false;
             }

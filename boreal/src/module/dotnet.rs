@@ -191,7 +191,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(
     if process_memory {
         let hdr = nt_headers.file_header();
         let characteristics = hdr.characteristics.get(LE);
-        if (characteristics & IMAGE_FILE_DLL) != 0 {
+        if (characteristics.0 & IMAGE_FILE_DLL.0) != 0 {
             return None;
         }
     }

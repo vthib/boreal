@@ -84,7 +84,7 @@ fn test_is_dll() {
             &format!(
                 "import \"pe\" rule test {{ condition: pe.is_dll() == {} }}",
                 if expected {
-                    object::pe::IMAGE_FILE_DLL
+                    object::pe::IMAGE_FILE_DLL.0
                 } else {
                     0
                 }

@@ -41,8 +41,8 @@ fn parse_pe<Pe: ImageNtHeaders>(mem: &[u8], memory: bool) -> Option<u64> {
     let ep = opt_hdr.address_of_entry_point();
 
     if memory {
-        let characteristics = hdr.characteristics.get(LE);
-        if (characteristics & IMAGE_FILE_DLL) == 0 {
+        let characteristics = hdr.characteristics.get(LE).0;
+        if (characteristics & IMAGE_FILE_DLL.0) == 0 {
             Some(u64::from(ep))
         } else {
             None

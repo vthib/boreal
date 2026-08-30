@@ -57,285 +57,288 @@ impl Module for Pe {
         HashMap::from([
             (
                 "MACHINE_UNKNOWN",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_UNKNOWN.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_UNKNOWN.0.into()),
             ),
             (
                 "MACHINE_AM33",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_AM33.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_AM33.0.into()),
             ),
             (
                 "MACHINE_AMD64",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_AMD64.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_AMD64.0.into()),
             ),
             (
                 "MACHINE_ARM",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ARM.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ARM.0.into()),
             ),
             (
                 "MACHINE_ARMNT",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ARMNT.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ARMNT.0.into()),
             ),
             (
                 "MACHINE_ARM64",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ARM64.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ARM64.0.into()),
             ),
             (
                 "MACHINE_EBC",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_EBC.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_EBC.0.into()),
             ),
             (
                 "MACHINE_I386",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_I386.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_I386.0.into()),
             ),
             (
                 "MACHINE_IA64",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_IA64.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_IA64.0.into()),
             ),
             (
                 "MACHINE_M32R",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_M32R.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_M32R.0.into()),
             ),
             (
                 "MACHINE_MIPS16",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_MIPS16.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_MIPS16.0.into()),
             ),
             (
                 "MACHINE_MIPSFPU",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_MIPSFPU.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_MIPSFPU.0.into()),
             ),
             (
                 "MACHINE_MIPSFPU16",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_MIPSFPU16.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_MIPSFPU16.0.into()),
             ),
             (
                 "MACHINE_POWERPC",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_POWERPC.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_POWERPC.0.into()),
             ),
             (
                 "MACHINE_POWERPCFP",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_POWERPCFP.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_POWERPCFP.0.into()),
             ),
             (
                 "MACHINE_R4000",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_R4000.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_R4000.0.into()),
             ),
             (
                 "MACHINE_SH3",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH3.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH3.0.into()),
             ),
             (
                 "MACHINE_SH3DSP",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH3DSP.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH3DSP.0.into()),
             ),
             (
                 "MACHINE_SH4",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH4.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH4.0.into()),
             ),
             (
                 "MACHINE_SH5",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH5.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH5.0.into()),
             ),
             (
                 "MACHINE_THUMB",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_THUMB.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_THUMB.0.into()),
             ),
             (
                 "MACHINE_WCEMIPSV2",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_WCEMIPSV2.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_WCEMIPSV2.0.into()),
             ),
             (
                 "MACHINE_TARGET_HOST",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_TARGET_HOST.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_TARGET_HOST.0.into()),
             ),
             (
                 "MACHINE_R3000",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_R3000.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_R3000.0.into()),
             ),
             (
                 "MACHINE_R10000",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_R10000.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_R10000.0.into()),
             ),
             (
                 "MACHINE_ALPHA",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ALPHA.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ALPHA.0.into()),
             ),
             (
                 "MACHINE_SH3E",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH3E.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_SH3E.0.into()),
             ),
             (
                 "MACHINE_ALPHA64",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ALPHA64.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_ALPHA64.0.into()),
             ),
             (
                 "MACHINE_AXP64",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_AXP64.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_AXP64.0.into()),
             ),
             (
                 "MACHINE_TRICORE",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_TRICORE.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_TRICORE.0.into()),
             ),
             (
                 "MACHINE_CEF",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_CEF.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_CEF.0.into()),
             ),
             (
                 "MACHINE_CEE",
-                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_CEE.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_MACHINE_CEE.0.into()),
             ),
             (
                 "SUBSYSTEM_UNKNOWN",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_UNKNOWN.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_UNKNOWN.0.into()),
             ),
             (
                 "SUBSYSTEM_NATIVE",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_NATIVE.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_NATIVE.0.into()),
             ),
             (
                 "SUBSYSTEM_WINDOWS_GUI",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_GUI.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_GUI.0.into()),
             ),
             (
                 "SUBSYSTEM_WINDOWS_CUI",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_CUI.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_CUI.0.into()),
             ),
             (
                 "SUBSYSTEM_OS2_CUI",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_OS2_CUI.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_OS2_CUI.0.into()),
             ),
             (
                 "SUBSYSTEM_POSIX_CUI",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_POSIX_CUI.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_POSIX_CUI.0.into()),
             ),
             (
                 "SUBSYSTEM_NATIVE_WINDOWS",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_NATIVE_WINDOWS.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_NATIVE_WINDOWS.0.into()),
             ),
             (
                 "SUBSYSTEM_WINDOWS_CE_GUI",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_CE_GUI.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_CE_GUI.0.into()),
             ),
             (
                 "SUBSYSTEM_EFI_APPLICATION",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_APPLICATION.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_APPLICATION.0.into()),
             ),
             (
                 "SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER.0.into()),
             ),
             (
                 "SUBSYSTEM_EFI_RUNTIME_DRIVER",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER.0.into()),
             ),
             (
                 "SUBSYSTEM_EFI_ROM_IMAGE",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_ROM.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_EFI_ROM.0.into()),
             ),
             (
                 "SUBSYSTEM_XBOX",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_XBOX.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_XBOX.0.into()),
             ),
             (
                 "SUBSYSTEM_WINDOWS_BOOT_APPLICATION",
-                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION.into()),
+                StaticValue::Integer(pe::IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION.0.into()),
             ),
             (
                 "HIGH_ENTROPY_VA",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA.0.into()),
             ),
             (
                 "DYNAMIC_BASE",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE.0.into()),
             ),
             (
                 "FORCE_INTEGRITY",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY.0.into()),
             ),
             (
                 "NX_COMPAT",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT.0.into()),
             ),
             (
                 "NO_ISOLATION",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NO_ISOLATION.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NO_ISOLATION.0.into()),
             ),
             (
                 "NO_SEH",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NO_SEH.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NO_SEH.0.into()),
             ),
             (
                 "NO_BIND",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NO_BIND.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_NO_BIND.0.into()),
             ),
             (
                 "APPCONTAINER",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_APPCONTAINER.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_APPCONTAINER.0.into()),
             ),
             (
                 "WDM_DRIVER",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_WDM_DRIVER.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_WDM_DRIVER.0.into()),
             ),
             (
                 "GUARD_CF",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_GUARD_CF.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_GUARD_CF.0.into()),
             ),
             (
                 "TERMINAL_SERVER_AWARE",
-                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE.into()),
+                StaticValue::Integer(pe::IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE.0.into()),
             ),
             (
                 "RELOCS_STRIPPED",
-                StaticValue::Integer(pe::IMAGE_FILE_RELOCS_STRIPPED.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_RELOCS_STRIPPED.0.into()),
             ),
             (
                 "EXECUTABLE_IMAGE",
-                StaticValue::Integer(pe::IMAGE_FILE_EXECUTABLE_IMAGE.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_EXECUTABLE_IMAGE.0.into()),
             ),
             (
                 "LINE_NUMS_STRIPPED",
-                StaticValue::Integer(pe::IMAGE_FILE_LINE_NUMS_STRIPPED.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_LINE_NUMS_STRIPPED.0.into()),
             ),
             (
                 "LOCAL_SYMS_STRIPPED",
-                StaticValue::Integer(pe::IMAGE_FILE_LOCAL_SYMS_STRIPPED.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_LOCAL_SYMS_STRIPPED.0.into()),
             ),
             (
                 "AGGRESIVE_WS_TRIM",
-                StaticValue::Integer(pe::IMAGE_FILE_AGGRESIVE_WS_TRIM.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_AGGRESIVE_WS_TRIM.0.into()),
             ),
             (
                 "LARGE_ADDRESS_AWARE",
-                StaticValue::Integer(pe::IMAGE_FILE_LARGE_ADDRESS_AWARE.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_LARGE_ADDRESS_AWARE.0.into()),
             ),
             (
                 "BYTES_REVERSED_LO",
-                StaticValue::Integer(pe::IMAGE_FILE_BYTES_REVERSED_LO.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_BYTES_REVERSED_LO.0.into()),
             ),
             (
                 "MACHINE_32BIT",
-                StaticValue::Integer(pe::IMAGE_FILE_32BIT_MACHINE.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_32BIT_MACHINE.0.into()),
             ),
             (
                 "DEBUG_STRIPPED",
-                StaticValue::Integer(pe::IMAGE_FILE_DEBUG_STRIPPED.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_DEBUG_STRIPPED.0.into()),
             ),
             (
                 "REMOVABLE_RUN_FROM_SWAP",
-                StaticValue::Integer(pe::IMAGE_FILE_REMOVABLE_RUN_FROM_SWAP.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_REMOVABLE_RUN_FROM_SWAP.0.into()),
             ),
             (
                 "NET_RUN_FROM_SWAP",
-                StaticValue::Integer(pe::IMAGE_FILE_NET_RUN_FROM_SWAP.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_NET_RUN_FROM_SWAP.0.into()),
             ),
-            ("SYSTEM", StaticValue::Integer(pe::IMAGE_FILE_SYSTEM.into())),
-            ("DLL", StaticValue::Integer(pe::IMAGE_FILE_DLL.into())),
+            (
+                "SYSTEM",
+                StaticValue::Integer(pe::IMAGE_FILE_SYSTEM.0.into()),
+            ),
+            ("DLL", StaticValue::Integer(pe::IMAGE_FILE_DLL.0.into())),
             (
                 "UP_SYSTEM_ONLY",
-                StaticValue::Integer(pe::IMAGE_FILE_UP_SYSTEM_ONLY.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_UP_SYSTEM_ONLY.0.into()),
             ),
             (
                 "BYTES_REVERSED_HI",
-                StaticValue::Integer(pe::IMAGE_FILE_BYTES_REVERSED_HI.into()),
+                StaticValue::Integer(pe::IMAGE_FILE_BYTES_REVERSED_HI.0.into()),
             ),
             (
                 "IMAGE_DIRECTORY_ENTRY_EXPORT",
@@ -415,119 +418,119 @@ impl Module for Pe {
             ),
             (
                 "SECTION_NO_PAD",
-                StaticValue::Integer(pe::IMAGE_SCN_TYPE_NO_PAD.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_TYPE_NO_PAD.0.into()),
             ),
             (
                 "SECTION_CNT_CODE",
-                StaticValue::Integer(pe::IMAGE_SCN_CNT_CODE.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_CNT_CODE.0.into()),
             ),
             (
                 "SECTION_CNT_INITIALIZED_DATA",
-                StaticValue::Integer(pe::IMAGE_SCN_CNT_INITIALIZED_DATA.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_CNT_INITIALIZED_DATA.0.into()),
             ),
             (
                 "SECTION_CNT_UNINITIALIZED_DATA",
-                StaticValue::Integer(pe::IMAGE_SCN_CNT_UNINITIALIZED_DATA.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_CNT_UNINITIALIZED_DATA.0.into()),
             ),
             (
                 "SECTION_LNK_OTHER",
-                StaticValue::Integer(pe::IMAGE_SCN_LNK_OTHER.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_LNK_OTHER.0.into()),
             ),
             (
                 "SECTION_LNK_INFO",
-                StaticValue::Integer(pe::IMAGE_SCN_LNK_INFO.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_LNK_INFO.0.into()),
             ),
             (
                 "SECTION_LNK_REMOVE",
-                StaticValue::Integer(pe::IMAGE_SCN_LNK_REMOVE.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_LNK_REMOVE.0.into()),
             ),
             (
                 "SECTION_LNK_COMDAT",
-                StaticValue::Integer(pe::IMAGE_SCN_LNK_COMDAT.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_LNK_COMDAT.0.into()),
             ),
             (
                 "SECTION_NO_DEFER_SPEC_EXC",
-                StaticValue::Integer(pe::IMAGE_SCN_NO_DEFER_SPEC_EXC.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_NO_DEFER_SPEC_EXC.0.into()),
             ),
             (
                 "SECTION_GPREL",
-                StaticValue::Integer(pe::IMAGE_SCN_GPREL.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_GPREL.0.into()),
             ),
             (
                 "SECTION_MEM_FARDATA",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_FARDATA.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_FARDATA.0.into()),
             ),
             (
                 "SECTION_MEM_PURGEABLE",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_PURGEABLE.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_PURGEABLE.0.into()),
             ),
             (
                 "SECTION_MEM_16BIT",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_16BIT.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_16BIT.0.into()),
             ),
             (
                 "SECTION_MEM_LOCKED",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_LOCKED.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_LOCKED.0.into()),
             ),
             (
                 "SECTION_MEM_PRELOAD",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_PRELOAD.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_PRELOAD.0.into()),
             ),
             (
                 "SECTION_ALIGN_1BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_1BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_1BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_2BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_2BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_2BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_4BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_4BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_4BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_8BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_8BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_8BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_16BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_16BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_16BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_32BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_32BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_32BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_64BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_64BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_64BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_128BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_128BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_128BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_256BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_256BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_256BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_512BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_512BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_512BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_1024BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_1024BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_1024BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_2048BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_2048BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_2048BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_4096BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_4096BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_4096BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_8192BYTES",
-                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_8192BYTES.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_ALIGN_8192BYTES.0.into()),
             ),
             (
                 "SECTION_ALIGN_MASK",
@@ -535,35 +538,35 @@ impl Module for Pe {
             ),
             (
                 "SECTION_LNK_NRELOC_OVFL",
-                StaticValue::Integer(pe::IMAGE_SCN_LNK_NRELOC_OVFL.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_LNK_NRELOC_OVFL.0.into()),
             ),
             (
                 "SECTION_MEM_DISCARDABLE",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_DISCARDABLE.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_DISCARDABLE.0.into()),
             ),
             (
                 "SECTION_MEM_NOT_CACHED",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_NOT_CACHED.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_NOT_CACHED.0.into()),
             ),
             (
                 "SECTION_MEM_NOT_PAGED",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_NOT_PAGED.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_NOT_PAGED.0.into()),
             ),
             (
                 "SECTION_MEM_SHARED",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_SHARED.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_SHARED.0.into()),
             ),
             (
                 "SECTION_MEM_EXECUTE",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_EXECUTE.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_EXECUTE.0.into()),
             ),
             (
                 "SECTION_MEM_READ",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_READ.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_READ.0.into()),
             ),
             (
                 "SECTION_MEM_WRITE",
-                StaticValue::Integer(pe::IMAGE_SCN_MEM_WRITE.into()),
+                StaticValue::Integer(pe::IMAGE_SCN_MEM_WRITE.0.into()),
             ),
             (
                 "SECTION_SCALE_INDEX",
@@ -652,71 +655,71 @@ impl Module for Pe {
             ),
             (
                 "IMAGE_DEBUG_TYPE_UNKNOWN",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_UNKNOWN.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_UNKNOWN.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_COFF",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_COFF.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_COFF.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_CODEVIEW",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_CODEVIEW.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_CODEVIEW.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_FPO",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_FPO.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_FPO.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_MISC",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_MISC.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_MISC.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_EXCEPTION",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_EXCEPTION.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_EXCEPTION.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_FIXUP",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_FIXUP.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_FIXUP.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_OMAP_TO_SRC",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_OMAP_TO_SRC.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_OMAP_TO_SRC.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_OMAP_FROM_SRC",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_OMAP_FROM_SRC.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_OMAP_FROM_SRC.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_BORLAND",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_BORLAND.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_BORLAND.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_RESERVED10",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_RESERVED10.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_RESERVED10.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_CLSID",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_CLSID.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_CLSID.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_VC_FEATURE",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_VC_FEATURE.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_VC_FEATURE.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_POGO",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_POGO.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_POGO.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_ILTCG",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_ILTCG.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_ILTCG.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_MPX",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_MPX.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_MPX.0.into()),
             ),
             (
                 "IMAGE_DEBUG_TYPE_REPRO",
-                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_REPRO.into()),
+                StaticValue::Integer(pe::IMAGE_DEBUG_TYPE_REPRO.0.into()),
             ),
             (
                 "IMPORT_DELAYED",
@@ -1190,9 +1193,9 @@ fn parse_file<HEADERS: ImageNtHeaders>(
     let sections = utils::SectionTable::new(nt_headers, region.mem, offset);
 
     let hdr = nt_headers.file_header();
-    let characteristics = hdr.characteristics.get(LE);
+    let characteristics = hdr.characteristics.get(LE).0;
 
-    if process_memory && (characteristics & pe::IMAGE_FILE_DLL) != 0 {
+    if process_memory && (characteristics & pe::IMAGE_FILE_DLL.0) != 0 {
         return None;
     }
 
@@ -1202,7 +1205,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(
     let ep = opt_hdr.address_of_entry_point();
 
     // libyara does not return a bool, but the result of the bitwise and...
-    data.is_dll = characteristics & pe::IMAGE_FILE_DLL;
+    data.is_dll = characteristics & pe::IMAGE_FILE_DLL.0;
 
     let entrypoint: Value = if process_memory {
         let ep: Option<usize> = ep.try_into().ok();
@@ -1218,7 +1221,7 @@ fn parse_file<HEADERS: ImageNtHeaders>(
     let mut map: HashMap<_, _> = [
         ("is_pe", Value::Integer(1)),
         // File header
-        ("machine", hdr.machine.get(LE).into()),
+        ("machine", hdr.machine.get(LE).0.into()),
         ("number_of_sections", hdr.number_of_sections.get(LE).into()),
         ("timestamp", hdr.time_date_stamp.get(LE).into()),
         (
@@ -1286,8 +1289,11 @@ fn parse_file<HEADERS: ImageNtHeaders>(
         ("size_of_image", opt_hdr.size_of_image().into()),
         ("size_of_headers", opt_hdr.size_of_headers().into()),
         ("checksum", opt_hdr.check_sum().into()),
-        ("subsystem", opt_hdr.subsystem().into()),
-        ("dll_characteristics", opt_hdr.dll_characteristics().into()),
+        ("subsystem", opt_hdr.subsystem().0.into()),
+        (
+            "dll_characteristics",
+            opt_hdr.dll_characteristics().0.into(),
+        ),
         (
             "size_of_stack_reserve",
             opt_hdr.size_of_stack_reserve().into(),
@@ -1742,7 +1748,7 @@ fn add_exports(
             if name.len() > MAX_EXPORT_NAME_LENGTH {
                 name = &name[..MAX_EXPORT_NAME_LENGTH];
             }
-            let ordinal_index = usize::from(ordinal_index);
+            let ordinal_index = usize::from(ordinal_index.0);
 
             if let Some(Value::Object(map)) = details.get_mut(ordinal_index) {
                 let _r = map.insert("name", Value::bytes(name));
@@ -1828,7 +1834,7 @@ fn sections_to_value(
                 Value::object([
                     ("name", name.to_vec().into()),
                     ("full_name", full_name.map(<[u8]>::to_vec).into()),
-                    ("characteristics", section.characteristics.get(LE).into()),
+                    ("characteristics", section.characteristics.get(LE).0.into()),
                     ("virtual_address", virtual_address.into()),
                     ("virtual_size", virtual_size.into()),
                     ("raw_data_size", raw_data_size.into()),
