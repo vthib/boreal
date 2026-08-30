@@ -44,16 +44,19 @@ fn test_mime_type() {
 fn test_type() {
     test(r#"magic.type() == "empty""#, b"");
     test(
-        r#"magic.type() == "ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV)""#,
+        r#"magic.type() == "ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV)" or
+        magic.type() == "ELF 32-bit LSB executable, Intel i386, version 1 (SYSV)""#,
         ELF32_FILE,
     );
     test(
-        r#"magic.type() == "ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV)""#,
+        r#"magic.type() == "ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV)" or
+        magic.type() == "ELF 32-bit LSB shared object, Intel i386, version 1 (SYSV)""#,
         ELF32_SHAREDOBJ,
     );
     test(
         r#"magic.type() == "MS-DOS executable PE32 executable (GUI) Intel 80386, for MS Windows" or
-        magic.type() == "PE32 executable (GUI) Intel 80386, for MS Windows""#,
+        magic.type() == "PE32 executable (GUI) Intel 80386, for MS Windows" or
+        magic.type() == "PE32 executable for MS Windows 4.00 (GUI), Intel i386""#,
         PE32_FILE,
     );
     test(
