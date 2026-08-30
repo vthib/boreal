@@ -25,6 +25,7 @@ impl Module for Elf {
     }
 
     fn get_static_values(&self) -> HashMap<&'static str, StaticValue> {
+        #[allow(clippy::cast_possible_wrap)]
         [
             // ET contants
             ("ET_NONE", StaticValue::Integer(elf::ET_NONE.0.into())),
@@ -457,6 +458,7 @@ fn sections<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option
             .iter()
             .take(MAX_NB_SECTIONS)
             .map(|section| {
+                #[allow(clippy::cast_possible_wrap)]
                 Value::object([
                     ("type", section.sh_type(e).0.into()),
                     ("flags", section.sh_flags(e).0.into()),
