@@ -59,56 +59,56 @@ impl Module for MachO {
             ),
             (
                 "CPU_SUBTYPE_LIB64",
-                StaticValue::Integer(macho::CPU_SUBTYPE_LIB64.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_LIB64.0.into()),
             ),
             // CPU types
             (
                 "CPU_TYPE_MC680X0",
-                StaticValue::Integer(macho::CPU_TYPE_MC680X0.into()),
+                StaticValue::Integer(macho::CPU_TYPE_MC680X0.0.into()),
             ),
             (
                 "CPU_TYPE_X86",
-                StaticValue::Integer(macho::CPU_TYPE_X86.into()),
+                StaticValue::Integer(macho::CPU_TYPE_X86.0.into()),
             ),
             (
                 "CPU_TYPE_I386",
-                StaticValue::Integer(macho::CPU_TYPE_X86.into()),
+                StaticValue::Integer(macho::CPU_TYPE_X86.0.into()),
             ),
             (
                 "CPU_TYPE_X86_64",
-                StaticValue::Integer(macho::CPU_TYPE_X86_64.into()),
+                StaticValue::Integer(macho::CPU_TYPE_X86_64.0.into()),
             ),
             (
                 "CPU_TYPE_MIPS",
-                StaticValue::Integer(macho::CPU_TYPE_MIPS.into()),
+                StaticValue::Integer(macho::CPU_TYPE_MIPS.0.into()),
             ),
             (
                 "CPU_TYPE_MC98000",
-                StaticValue::Integer(macho::CPU_TYPE_MC98000.into()),
+                StaticValue::Integer(macho::CPU_TYPE_MC98000.0.into()),
             ),
             (
                 "CPU_TYPE_ARM",
-                StaticValue::Integer(macho::CPU_TYPE_ARM.into()),
+                StaticValue::Integer(macho::CPU_TYPE_ARM.0.into()),
             ),
             (
                 "CPU_TYPE_ARM64",
-                StaticValue::Integer(macho::CPU_TYPE_ARM64.into()),
+                StaticValue::Integer(macho::CPU_TYPE_ARM64.0.into()),
             ),
             (
                 "CPU_TYPE_MC88000",
-                StaticValue::Integer(macho::CPU_TYPE_MC88000.into()),
+                StaticValue::Integer(macho::CPU_TYPE_MC88000.0.into()),
             ),
             (
                 "CPU_TYPE_SPARC",
-                StaticValue::Integer(macho::CPU_TYPE_SPARC.into()),
+                StaticValue::Integer(macho::CPU_TYPE_SPARC.0.into()),
             ),
             (
                 "CPU_TYPE_POWERPC",
-                StaticValue::Integer(macho::CPU_TYPE_POWERPC.into()),
+                StaticValue::Integer(macho::CPU_TYPE_POWERPC.0.into()),
             ),
             (
                 "CPU_TYPE_POWERPC64",
-                StaticValue::Integer(macho::CPU_TYPE_POWERPC64.into()),
+                StaticValue::Integer(macho::CPU_TYPE_POWERPC64.0.into()),
             ),
             // CPU sub-types
             (
@@ -117,342 +117,351 @@ impl Module for MachO {
             ),
             (
                 "CPU_SUBTYPE_386",
-                StaticValue::Integer(macho::CPU_SUBTYPE_386.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_386.0.into()),
             ),
             (
                 "CPU_SUBTYPE_I386_ALL",
-                StaticValue::Integer(macho::CPU_SUBTYPE_I386_ALL.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_I386_ALL.0.into()),
             ),
             (
                 "CPU_SUBTYPE_X86_64_ALL",
-                StaticValue::Integer(macho::CPU_SUBTYPE_X86_64_ALL.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_X86_64_ALL.0.into()),
             ),
             (
                 "CPU_SUBTYPE_486",
-                StaticValue::Integer(macho::CPU_SUBTYPE_486.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_486.0.into()),
             ),
             (
                 "CPU_SUBTYPE_486SX",
-                StaticValue::Integer(macho::CPU_SUBTYPE_486SX.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_486SX.0.into()),
             ),
             (
                 "CPU_SUBTYPE_586",
-                StaticValue::Integer(macho::CPU_SUBTYPE_586.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_586.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENT",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENT.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENT.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTPRO",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTPRO.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTPRO.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTII_M3",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTII_M3.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTII_M3.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTII_M5",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTII_M5.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTII_M5.0.into()),
             ),
             (
                 "CPU_SUBTYPE_CELERON",
-                StaticValue::Integer(macho::CPU_SUBTYPE_CELERON.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_CELERON.0.into()),
             ),
             (
                 "CPU_SUBTYPE_CELERON_MOBILE",
-                StaticValue::Integer(macho::CPU_SUBTYPE_CELERON_MOBILE.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_CELERON_MOBILE.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTIUM_3",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_3.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_3.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTIUM_3_M",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_3_M.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_3_M.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTIUM_3_XEON",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_3_XEON.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_3_XEON.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTIUM_M",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_M.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_M.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTIUM_4",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_4.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_4.0.into()),
             ),
             (
                 "CPU_SUBTYPE_PENTIUM_4_M",
-                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_4_M.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_PENTIUM_4_M.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ITANIUM",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ITANIUM.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ITANIUM.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ITANIUM_2",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ITANIUM_2.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ITANIUM_2.0.into()),
             ),
             (
                 "CPU_SUBTYPE_XEON",
-                StaticValue::Integer(macho::CPU_SUBTYPE_XEON.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_XEON.0.into()),
             ),
             (
                 "CPU_SUBTYPE_XEON_MP",
-                StaticValue::Integer(macho::CPU_SUBTYPE_XEON_MP.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_XEON_MP.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_ALL",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_ALL.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_ALL.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V4T",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V4T.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V4T.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V6",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V6.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V6.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V5",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V5TEJ.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V5TEJ.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V5TEJ",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V5TEJ.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V5TEJ.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_XSCALE",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_XSCALE.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_XSCALE.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V7",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V7F",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7F.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7F.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V7S",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7S.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7S.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V7K",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7K.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7K.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V6M",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V6M.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V6M.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V7M",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7M.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7M.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM_V7EM",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7EM.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM_V7EM.0.into()),
             ),
             (
                 "CPU_SUBTYPE_ARM64_ALL",
-                StaticValue::Integer(macho::CPU_SUBTYPE_ARM64_ALL.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_ARM64_ALL.0.into()),
             ),
             (
                 "CPU_SUBTYPE_SPARC_ALL",
-                StaticValue::Integer(macho::CPU_SUBTYPE_SPARC_ALL.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_SPARC_ALL.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_ALL",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_ALL.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_ALL.0.into()),
             ),
             (
                 "CPU_SUBTYPE_MC980000_ALL",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_ALL.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_ALL.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_601",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_601.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_601.0.into()),
             ),
             (
                 "CPU_SUBTYPE_MC98601",
-                StaticValue::Integer(macho::CPU_SUBTYPE_MC98601.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_MC98601.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_602",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_602.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_602.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_603",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_603.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_603.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_603e",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_603E.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_603E.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_603ev",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_603EV.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_603EV.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_604",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_604.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_604.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_604e",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_604E.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_604E.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_620",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_620.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_620.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_750",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_750.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_750.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_7400",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_7400.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_7400.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_7450",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_7450.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_7450.0.into()),
             ),
             (
                 "CPU_SUBTYPE_POWERPC_970",
-                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_970.into()),
+                StaticValue::Integer(macho::CPU_SUBTYPE_POWERPC_970.0.into()),
             ),
             // File types
-            ("MH_OBJECT", StaticValue::Integer(macho::MH_OBJECT.into())),
-            ("MH_EXECUTE", StaticValue::Integer(macho::MH_EXECUTE.into())),
-            ("MH_FVMLIB", StaticValue::Integer(macho::MH_FVMLIB.into())),
-            ("MH_CORE", StaticValue::Integer(macho::MH_CORE.into())),
-            ("MH_PRELOAD", StaticValue::Integer(macho::MH_PRELOAD.into())),
-            ("MH_DYLIB", StaticValue::Integer(macho::MH_DYLIB.into())),
+            ("MH_OBJECT", StaticValue::Integer(macho::MH_OBJECT.0.into())),
+            (
+                "MH_EXECUTE",
+                StaticValue::Integer(macho::MH_EXECUTE.0.into()),
+            ),
+            ("MH_FVMLIB", StaticValue::Integer(macho::MH_FVMLIB.0.into())),
+            ("MH_CORE", StaticValue::Integer(macho::MH_CORE.0.into())),
+            (
+                "MH_PRELOAD",
+                StaticValue::Integer(macho::MH_PRELOAD.0.into()),
+            ),
+            ("MH_DYLIB", StaticValue::Integer(macho::MH_DYLIB.0.into())),
             (
                 "MH_DYLINKER",
-                StaticValue::Integer(macho::MH_DYLINKER.into()),
+                StaticValue::Integer(macho::MH_DYLINKER.0.into()),
             ),
-            ("MH_BUNDLE", StaticValue::Integer(macho::MH_BUNDLE.into())),
+            ("MH_BUNDLE", StaticValue::Integer(macho::MH_BUNDLE.0.into())),
             (
                 "MH_DYLIB_STUB",
-                StaticValue::Integer(macho::MH_DYLIB_STUB.into()),
+                StaticValue::Integer(macho::MH_DYLIB_STUB.0.into()),
             ),
-            ("MH_DSYM", StaticValue::Integer(macho::MH_DSYM.into())),
+            ("MH_DSYM", StaticValue::Integer(macho::MH_DSYM.0.into())),
             (
                 "MH_KEXT_BUNDLE",
-                StaticValue::Integer(macho::MH_KEXT_BUNDLE.into()),
+                StaticValue::Integer(macho::MH_KEXT_BUNDLE.0.into()),
             ),
             // Header flags
             (
                 "MH_NOUNDEFS",
-                StaticValue::Integer(macho::MH_NOUNDEFS.into()),
+                StaticValue::Integer(macho::MH_NOUNDEFS.0.into()),
             ),
             (
                 "MH_INCRLINK",
-                StaticValue::Integer(macho::MH_INCRLINK.into()),
+                StaticValue::Integer(macho::MH_INCRLINK.0.into()),
             ),
             (
                 "MH_DYLDLINK",
-                StaticValue::Integer(macho::MH_DYLDLINK.into()),
+                StaticValue::Integer(macho::MH_DYLDLINK.0.into()),
             ),
             (
                 "MH_BINDATLOAD",
-                StaticValue::Integer(macho::MH_BINDATLOAD.into()),
+                StaticValue::Integer(macho::MH_BINDATLOAD.0.into()),
             ),
             (
                 "MH_PREBOUND",
-                StaticValue::Integer(macho::MH_PREBOUND.into()),
+                StaticValue::Integer(macho::MH_PREBOUND.0.into()),
             ),
             (
                 "MH_SPLIT_SEGS",
-                StaticValue::Integer(macho::MH_SPLIT_SEGS.into()),
+                StaticValue::Integer(macho::MH_SPLIT_SEGS.0.into()),
             ),
             (
                 "MH_LAZY_INIT",
-                StaticValue::Integer(macho::MH_LAZY_INIT.into()),
+                StaticValue::Integer(macho::MH_LAZY_INIT.0.into()),
             ),
             (
                 "MH_TWOLEVEL",
-                StaticValue::Integer(macho::MH_TWOLEVEL.into()),
+                StaticValue::Integer(macho::MH_TWOLEVEL.0.into()),
             ),
             (
                 "MH_FORCE_FLAT",
-                StaticValue::Integer(macho::MH_FORCE_FLAT.into()),
+                StaticValue::Integer(macho::MH_FORCE_FLAT.0.into()),
             ),
             (
                 "MH_NOMULTIDEFS",
-                StaticValue::Integer(macho::MH_NOMULTIDEFS.into()),
+                StaticValue::Integer(macho::MH_NOMULTIDEFS.0.into()),
             ),
             (
                 "MH_NOFIXPREBINDING",
-                StaticValue::Integer(macho::MH_NOFIXPREBINDING.into()),
+                StaticValue::Integer(macho::MH_NOFIXPREBINDING.0.into()),
             ),
             (
                 "MH_PREBINDABLE",
-                StaticValue::Integer(macho::MH_PREBINDABLE.into()),
+                StaticValue::Integer(macho::MH_PREBINDABLE.0.into()),
             ),
             (
                 "MH_ALLMODSBOUND",
-                StaticValue::Integer(macho::MH_ALLMODSBOUND.into()),
+                StaticValue::Integer(macho::MH_ALLMODSBOUND.0.into()),
             ),
             (
                 "MH_SUBSECTIONS_VIA_SYMBOLS",
-                StaticValue::Integer(macho::MH_SUBSECTIONS_VIA_SYMBOLS.into()),
+                StaticValue::Integer(macho::MH_SUBSECTIONS_VIA_SYMBOLS.0.into()),
             ),
             (
                 "MH_CANONICAL",
-                StaticValue::Integer(macho::MH_CANONICAL.into()),
+                StaticValue::Integer(macho::MH_CANONICAL.0.into()),
             ),
             (
                 "MH_WEAK_DEFINES",
-                StaticValue::Integer(macho::MH_WEAK_DEFINES.into()),
+                StaticValue::Integer(macho::MH_WEAK_DEFINES.0.into()),
             ),
             (
                 "MH_BINDS_TO_WEAK",
-                StaticValue::Integer(macho::MH_BINDS_TO_WEAK.into()),
+                StaticValue::Integer(macho::MH_BINDS_TO_WEAK.0.into()),
             ),
             (
                 "MH_ALLOW_STACK_EXECUTION",
-                StaticValue::Integer(macho::MH_ALLOW_STACK_EXECUTION.into()),
+                StaticValue::Integer(macho::MH_ALLOW_STACK_EXECUTION.0.into()),
             ),
             (
                 "MH_ROOT_SAFE",
-                StaticValue::Integer(macho::MH_ROOT_SAFE.into()),
+                StaticValue::Integer(macho::MH_ROOT_SAFE.0.into()),
             ),
             (
                 "MH_SETUID_SAFE",
-                StaticValue::Integer(macho::MH_SETUID_SAFE.into()),
+                StaticValue::Integer(macho::MH_SETUID_SAFE.0.into()),
             ),
             (
                 "MH_NO_REEXPORTED_DYLIBS",
-                StaticValue::Integer(macho::MH_NO_REEXPORTED_DYLIBS.into()),
+                StaticValue::Integer(macho::MH_NO_REEXPORTED_DYLIBS.0.into()),
             ),
-            ("MH_PIE", StaticValue::Integer(macho::MH_PIE.into())),
+            ("MH_PIE", StaticValue::Integer(macho::MH_PIE.0.into())),
             (
                 "MH_DEAD_STRIPPABLE_DYLIB",
-                StaticValue::Integer(macho::MH_DEAD_STRIPPABLE_DYLIB.into()),
+                StaticValue::Integer(macho::MH_DEAD_STRIPPABLE_DYLIB.0.into()),
             ),
             (
                 "MH_HAS_TLV_DESCRIPTORS",
-                StaticValue::Integer(macho::MH_HAS_TLV_DESCRIPTORS.into()),
+                StaticValue::Integer(macho::MH_HAS_TLV_DESCRIPTORS.0.into()),
             ),
             (
                 "MH_NO_HEAP_EXECUTION",
-                StaticValue::Integer(macho::MH_NO_HEAP_EXECUTION.into()),
+                StaticValue::Integer(macho::MH_NO_HEAP_EXECUTION.0.into()),
             ),
             (
                 "MH_APP_EXTENSION_SAFE",
-                StaticValue::Integer(macho::MH_APP_EXTENSION_SAFE.into()),
+                StaticValue::Integer(macho::MH_APP_EXTENSION_SAFE.0.into()),
             ),
             // Segment flags
-            ("SG_HIGHVM", StaticValue::Integer(macho::SG_HIGHVM.into())),
-            ("SG_FVMLIB", StaticValue::Integer(macho::SG_FVMLIB.into())),
-            ("SG_NORELOC", StaticValue::Integer(macho::SG_NORELOC.into())),
+            ("SG_HIGHVM", StaticValue::Integer(macho::SG_HIGHVM.0.into())),
+            ("SG_FVMLIB", StaticValue::Integer(macho::SG_FVMLIB.0.into())),
+            (
+                "SG_NORELOC",
+                StaticValue::Integer(macho::SG_NORELOC.0.into()),
+            ),
             (
                 "SG_PROTECTED_VERSION_1",
-                StaticValue::Integer(macho::SG_PROTECTED_VERSION_1.into()),
+                StaticValue::Integer(macho::SG_PROTECTED_VERSION_1.0.into()),
             ),
             // Section masks
             (
@@ -464,128 +473,131 @@ impl Module for MachO {
                 StaticValue::Integer(macho::SECTION_ATTRIBUTES.into()),
             ),
             // Section types
-            ("S_REGULAR", StaticValue::Integer(macho::S_REGULAR.into())),
-            ("S_ZEROFILL", StaticValue::Integer(macho::S_ZEROFILL.into())),
+            ("S_REGULAR", StaticValue::Integer(macho::S_REGULAR.0.into())),
+            (
+                "S_ZEROFILL",
+                StaticValue::Integer(macho::S_ZEROFILL.0.into()),
+            ),
             (
                 "S_CSTRING_LITERALS",
-                StaticValue::Integer(macho::S_CSTRING_LITERALS.into()),
+                StaticValue::Integer(macho::S_CSTRING_LITERALS.0.into()),
             ),
             (
                 "S_4BYTE_LITERALS",
-                StaticValue::Integer(macho::S_4BYTE_LITERALS.into()),
+                StaticValue::Integer(macho::S_4BYTE_LITERALS.0.into()),
             ),
             (
                 "S_8BYTE_LITERALS",
-                StaticValue::Integer(macho::S_8BYTE_LITERALS.into()),
+                StaticValue::Integer(macho::S_8BYTE_LITERALS.0.into()),
             ),
             (
                 "S_LITERAL_POINTERS",
-                StaticValue::Integer(macho::S_LITERAL_POINTERS.into()),
+                StaticValue::Integer(macho::S_LITERAL_POINTERS.0.into()),
             ),
             (
                 "S_NON_LAZY_SYMBOL_POINTERS",
-                StaticValue::Integer(macho::S_NON_LAZY_SYMBOL_POINTERS.into()),
+                StaticValue::Integer(macho::S_NON_LAZY_SYMBOL_POINTERS.0.into()),
             ),
             (
                 "S_LAZY_SYMBOL_POINTERS",
-                StaticValue::Integer(macho::S_LAZY_SYMBOL_POINTERS.into()),
+                StaticValue::Integer(macho::S_LAZY_SYMBOL_POINTERS.0.into()),
             ),
             (
                 "S_SYMBOL_STUBS",
-                StaticValue::Integer(macho::S_SYMBOL_STUBS.into()),
+                StaticValue::Integer(macho::S_SYMBOL_STUBS.0.into()),
             ),
             (
                 "S_MOD_INIT_FUNC_POINTERS",
-                StaticValue::Integer(macho::S_MOD_INIT_FUNC_POINTERS.into()),
+                StaticValue::Integer(macho::S_MOD_INIT_FUNC_POINTERS.0.into()),
             ),
             (
                 "S_MOD_TERM_FUNC_POINTERS",
-                StaticValue::Integer(macho::S_MOD_TERM_FUNC_POINTERS.into()),
+                StaticValue::Integer(macho::S_MOD_TERM_FUNC_POINTERS.0.into()),
             ),
             (
                 "S_COALESCED",
-                StaticValue::Integer(macho::S_COALESCED.into()),
+                StaticValue::Integer(macho::S_COALESCED.0.into()),
             ),
             (
                 "S_GB_ZEROFILL",
-                StaticValue::Integer(macho::S_GB_ZEROFILL.into()),
+                StaticValue::Integer(macho::S_GB_ZEROFILL.0.into()),
             ),
             (
                 "S_INTERPOSING",
-                StaticValue::Integer(macho::S_INTERPOSING.into()),
+                StaticValue::Integer(macho::S_INTERPOSING.0.into()),
             ),
             (
                 "S_16BYTE_LITERALS",
-                StaticValue::Integer(macho::S_16BYTE_LITERALS.into()),
+                StaticValue::Integer(macho::S_16BYTE_LITERALS.0.into()),
             ),
             (
                 "S_DTRACE_DOF",
-                StaticValue::Integer(macho::S_DTRACE_DOF.into()),
+                StaticValue::Integer(macho::S_DTRACE_DOF.0.into()),
             ),
             (
                 "S_LAZY_DYLIB_SYMBOL_POINTERS",
-                StaticValue::Integer(macho::S_LAZY_DYLIB_SYMBOL_POINTERS.into()),
+                StaticValue::Integer(macho::S_LAZY_DYLIB_SYMBOL_POINTERS.0.into()),
             ),
             (
                 "S_THREAD_LOCAL_REGULAR",
-                StaticValue::Integer(macho::S_THREAD_LOCAL_REGULAR.into()),
+                StaticValue::Integer(macho::S_THREAD_LOCAL_REGULAR.0.into()),
             ),
             (
                 "S_THREAD_LOCAL_ZEROFILL",
-                StaticValue::Integer(macho::S_THREAD_LOCAL_ZEROFILL.into()),
+                StaticValue::Integer(macho::S_THREAD_LOCAL_ZEROFILL.0.into()),
             ),
             (
                 "S_THREAD_LOCAL_VARIABLES",
-                StaticValue::Integer(macho::S_THREAD_LOCAL_VARIABLES.into()),
+                StaticValue::Integer(macho::S_THREAD_LOCAL_VARIABLES.0.into()),
             ),
             (
                 "S_THREAD_LOCAL_VARIABLE_POINTERS",
-                StaticValue::Integer(macho::S_THREAD_LOCAL_VARIABLE_POINTERS.into()),
+                StaticValue::Integer(macho::S_THREAD_LOCAL_VARIABLE_POINTERS.0.into()),
             ),
             (
                 "S_THREAD_LOCAL_INIT_FUNCTION_POINTERS",
-                StaticValue::Integer(macho::S_THREAD_LOCAL_INIT_FUNCTION_POINTERS.into()),
+                StaticValue::Integer(macho::S_THREAD_LOCAL_INIT_FUNCTION_POINTERS.0.into()),
             ),
             // Section attributes
             (
                 "S_ATTR_PURE_INSTRUCTIONS",
-                StaticValue::Integer(macho::S_ATTR_PURE_INSTRUCTIONS.into()),
+                StaticValue::Integer(macho::S_ATTR_PURE_INSTRUCTIONS.0.into()),
             ),
             (
                 "S_ATTR_NO_TOC",
-                StaticValue::Integer(macho::S_ATTR_NO_TOC.into()),
+                StaticValue::Integer(macho::S_ATTR_NO_TOC.0.into()),
             ),
             (
                 "S_ATTR_STRIP_STATIC_SYMS",
-                StaticValue::Integer(macho::S_ATTR_STRIP_STATIC_SYMS.into()),
+                StaticValue::Integer(macho::S_ATTR_STRIP_STATIC_SYMS.0.into()),
             ),
             (
                 "S_ATTR_NO_DEAD_STRIP",
-                StaticValue::Integer(macho::S_ATTR_NO_DEAD_STRIP.into()),
+                StaticValue::Integer(macho::S_ATTR_NO_DEAD_STRIP.0.into()),
             ),
             (
                 "S_ATTR_LIVE_SUPPORT",
-                StaticValue::Integer(macho::S_ATTR_LIVE_SUPPORT.into()),
+                StaticValue::Integer(macho::S_ATTR_LIVE_SUPPORT.0.into()),
             ),
             (
                 "S_ATTR_SELF_MODIFYING_CODE",
-                StaticValue::Integer(macho::S_ATTR_SELF_MODIFYING_CODE.into()),
+                StaticValue::Integer(macho::S_ATTR_SELF_MODIFYING_CODE.0.into()),
             ),
             (
                 "S_ATTR_DEBUG",
-                StaticValue::Integer(macho::S_ATTR_DEBUG.into()),
+                StaticValue::Integer(macho::S_ATTR_DEBUG.0.into()),
             ),
             (
                 "S_ATTR_SOME_INSTRUCTIONS",
-                StaticValue::Integer(macho::S_ATTR_SOME_INSTRUCTIONS.into()),
+                StaticValue::Integer(macho::S_ATTR_SOME_INSTRUCTIONS.0.into()),
             ),
             (
                 "S_ATTR_EXT_RELOC",
-                StaticValue::Integer(macho::S_ATTR_EXT_RELOC.into()),
+                StaticValue::Integer(macho::S_ATTR_EXT_RELOC.0.into()),
             ),
             (
                 "S_ATTR_LOC_RELOC",
-                StaticValue::Integer(macho::S_ATTR_LOC_RELOC.into()),
+                StaticValue::Integer(macho::S_ATTR_LOC_RELOC.0.into()),
             ),
             // Mach-O fat binary helper functions
             (
@@ -817,7 +829,7 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
     arch_offset: u64,
 ) -> HashMap<&'static str, Value> {
     let cputype = header.cputype(e);
-    let cpusubtype = header.cpusubtype(e);
+    let cpusubtype = header.cpusubtype(e).0;
 
     let segments = segments(header, e, region.mem);
     let nb_segments = segments.as_ref().map(Vec::len);
@@ -826,7 +838,7 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
 
     if let Some(data) = data {
         data.files.push(FileData {
-            cputype,
+            cputype: cputype.0,
             cpusubtype,
             entry_point,
             arch_offset,
@@ -835,12 +847,12 @@ fn parse_header<Mach: MachHeader<Endian = Endianness>>(
 
     [
         ("magic", header.magic().into()),
-        ("cputype", cputype.into()),
+        ("cputype", cputype.0.into()),
         ("cpusubtype", cpusubtype.into()),
-        ("filetype", header.filetype(e).into()),
+        ("filetype", header.filetype(e).0.into()),
         ("ncmds", header.ncmds(e).into()),
         ("sizeofcmds", header.sizeofcmds(e).into()),
-        ("flags", header.flags(e).into()),
+        ("flags", header.flags(e).0.into()),
         ("reserved", reserved.into()),
         ("segments", segments.map_or(Value::Undefined, Value::Array)),
         ("number_of_segments", nb_segments.into()),
@@ -891,7 +903,7 @@ fn entry_point_data<Mach: MachHeader<Endian = Endianness>>(
     e: Endianness,
     region: &Region,
     process_memory: bool,
-    cputype: u32,
+    cputype: macho::CpuType,
 ) -> (Option<u64>, Option<u64>) {
     if let Ok(mut cmds) = header.load_commands(e, region.mem, 0) {
         while let Ok(Some(cmd)) = cmds.next() {
@@ -970,7 +982,7 @@ fn file_offset_to_va<Mach: MachHeader<Endian = Endianness>>(
 fn handle_unix_thread(
     cmd: LoadCommandData<Endianness>,
     e: Endianness,
-    cputype: u32,
+    cputype: macho::CpuType,
 ) -> Option<u64> {
     let thread_cmd: &ThreadCommand<Endianness> = cmd.data().ok()?;
     let cmdsize = thread_cmd.cmdsize.get(e) as usize;
@@ -1057,10 +1069,10 @@ fn segment_to_map<S: Segment<Endian = Endianness>>(
         ("vmsize", segment.vmsize(e).into().into()),
         ("fileoff", segment.fileoff(e).into().into()),
         ("fsize", segment.filesize(e).into().into()),
-        ("maxprot", segment.maxprot(e).into()),
-        ("initprot", segment.initprot(e).into()),
+        ("maxprot", segment.maxprot(e).0.into()),
+        ("initprot", segment.initprot(e).0.into()),
         ("nsects", segment.nsects(e).into()),
-        ("flags", segment.flags(e).into()),
+        ("flags", segment.flags(e).0.into()),
     ]
     .into()
 }
@@ -1078,7 +1090,7 @@ fn sections_to_map<S: Section<Endian = Endianness>>(
         ("align", section.align(e).into()),
         ("reloff", section.reloff(e).into()),
         ("nreloc", section.nreloc(e).into()),
-        ("flags", section.flags(e).into()),
+        ("flags", section.flags(e).0.into()),
     ]
     .into()
 }
@@ -1182,8 +1194,8 @@ fn fat_arch_to_file_value<A: FatArch>(
 
 fn fat_arch_to_value<A: FatArch>(arch: &A) -> Value {
     Value::object([
-        ("cputype", arch.cputype().into()),
-        ("cpusubtype", arch.cpusubtype().into()),
+        ("cputype", arch.cputype().0.into()),
+        ("cpusubtype", arch.cpusubtype().0.into()),
         ("offset", arch.offset().into().into()),
         ("size", arch.size().into().into()),
         ("align", arch.align().into()),
