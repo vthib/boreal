@@ -2415,33 +2415,17 @@ impl Pe {
 
     #[cfg(feature = "hash")]
     fn imphash(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
-        use md5::{Digest, Md5};
-
         let data = ctx.module_data.get::<Self>()?;
 
-        let mut hasher = Md5::new();
-        let mut first = true;
-        for dll in &data.imports {
-            let mut dll_name = &*dll.dll_name;
-            if ends_with_ignore_ascii_case(dll_name, b".ocx")
-                || ends_with_ignore_ascii_case(dll_name, b".sys")
-                || ends_with_ignore_ascii_case(dll_name, b".dll")
-            {
-                dll_name = &dll_name[..(dll_name.len() - 4)];
-            }
-
-            for fun in &dll.functions {
-                if !first {
-                    hasher.update(b",");
+        match data.imphash.lock() {
+            Ok(mut locked_data) => {
+                if locked_data.is_none() {
+                    *locked_data = Some(compute_imphash(&data.imports));
                 }
-                update_hasher_with_lowercase(&mut hasher, dll_name);
-                hasher.update(b".");
-                update_hasher_with_lowercase(&mut hasher, &fun.name);
-                first = false;
+                locked_data.clone()
             }
+            Err(_) => Some(compute_imphash(&data.imports)),
         }
-
-        Some(Value::Bytes(super::hex_encode(hasher.finalize())))
     }
 
     fn rva_to_offset(ctx: &mut EvalContext, args: Vec<Value>) -> Option<Value> {
@@ -2473,6 +2457,35 @@ impl Pe {
 }
 
 #[cfg(feature = "hash")]
+fn compute_imphash(imports: &[DataImport]) -> Value {
+    use md5::{Digest, Md5};
+
+    let mut hasher = Md5::new();
+    let mut first = true;
+    for dll in imports {
+        let mut dll_name = &*dll.dll_name;
+        if ends_with_ignore_ascii_case(dll_name, b".ocx")
+            || ends_with_ignore_ascii_case(dll_name, b".sys")
+            || ends_with_ignore_ascii_case(dll_name, b".dll")
+        {
+            dll_name = &dll_name[..(dll_name.len() - 4)];
+        }
+
+        for fun in &dll.functions {
+            if !first {
+                hasher.update(b",");
+            }
+            update_hasher_with_lowercase(&mut hasher, dll_name);
+            hasher.update(b".");
+            update_hasher_with_lowercase(&mut hasher, &fun.name);
+            first = false;
+        }
+    }
+
+    Value::Bytes(super::hex_encode(hasher.finalize()))
+}
+
+#[cfg(feature = "hash")]
 fn update_hasher_with_lowercase(hasher: &mut md5::Md5, s: &[u8]) {
     use md5::digest::Update;
 
@@ -2498,6 +2511,8 @@ pub struct Data {
     is_32bit: bool,
     is_dll: u16,
     found_pe: bool,
+    #[cfg(feature = "hash")]
+    imphash: std::sync::Mutex<Option<Value>>,
 }
 
 struct DataImport {
