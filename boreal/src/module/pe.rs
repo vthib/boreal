@@ -2,16 +2,14 @@ use std::collections::HashMap;
 
 use crate::memory::Region;
 use crate::regex::Regex;
-use object::{
-    FileKind, LittleEndian as LE, StringTable,
-    coff::{CoffHeader, SymbolTable},
-    pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64},
-    read::pe::{
-        DataDirectories, DelayLoadImportTable, ExportTable, ImageNtHeaders, ImageOptionalHeader,
-        ImageThunkData, ImportTable, ImportThunkList, ResourceDirectory,
-        ResourceDirectoryEntryData, ResourceNameOrId, RichHeaderInfo,
-    },
+use object::coff::{CoffHeader, SymbolTable};
+use object::pe::{self, ImageDosHeader, ImageNtHeaders32, ImageNtHeaders64};
+use object::read::pe::{
+    DataDirectories, DelayLoadImportTable, ExportTable, ImageNtHeaders, ImageOptionalHeader,
+    ImageThunkData, ImportTable, ImportThunkList, ResourceDirectory, ResourceDirectoryEntryData,
+    ResourceNameOrId, RichHeaderInfo,
 };
+use object::{FileKind, LittleEndian as LE, StringTable};
 
 use super::{
     EvalContext, Module, ModuleData, ModuleDataMap, ScanContext, StaticValue, Type, Value,
@@ -2424,23 +2422,21 @@ impl Pe {
         let mut hasher = Md5::new();
         let mut first = true;
         for dll in &data.imports {
-            let mut dll_name = dll.dll_name.to_ascii_lowercase();
-            if dll_name.ends_with(b".ocx")
-                || dll_name.ends_with(b".sys")
-                || dll_name.ends_with(b".dll")
+            let mut dll_name = &*dll.dll_name;
+            if ends_with_ignore_ascii_case(dll_name, b".ocx")
+                || ends_with_ignore_ascii_case(dll_name, b".sys")
+                || ends_with_ignore_ascii_case(dll_name, b".dll")
             {
-                dll_name.truncate(dll_name.len() - 4);
+                dll_name = &dll_name[..(dll_name.len() - 4)];
             }
 
             for fun in &dll.functions {
-                let fun_name = fun.name.to_ascii_lowercase();
-
                 if !first {
                     hasher.update(b",");
                 }
-                hasher.update(&dll_name);
+                update_hasher_with_lowercase(&mut hasher, dll_name);
                 hasher.update(b".");
-                hasher.update(fun_name);
+                update_hasher_with_lowercase(&mut hasher, &fun.name);
                 first = false;
             }
         }
@@ -2474,6 +2470,21 @@ impl Pe {
 
         utils::va_to_file_offset(mem, &section_table, rva).map(Into::into)
     }
+}
+
+#[cfg(feature = "hash")]
+fn update_hasher_with_lowercase(hasher: &mut md5::Md5, s: &[u8]) {
+    use md5::digest::Update;
+
+    for b in s {
+        hasher.update(&[b.to_ascii_lowercase()]);
+    }
+}
+
+#[cfg(feature = "hash")]
+fn ends_with_ignore_ascii_case(s: &[u8], needle: &[u8]) -> bool {
+    let (m, n) = (s.len(), needle.len());
+    m >= n && needle.eq_ignore_ascii_case(&s[m - n..])
 }
 
 #[derive(Default)]
