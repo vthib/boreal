@@ -2,7 +2,7 @@
 
 ```bash
 # Retrieve all assets
-./retrieve-assets.sh
+./retrieve_assets.sh
 # Run the benches
 cargo bench
 ```
@@ -19,66 +19,66 @@ Percentage displayed shows the differences from YARA. The highlighted value is t
 
 #### [Orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)
 
-| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X         |
-| ---------------------- | ------- | ---------------------- | ----------------------- | -------------- |
-| vulkan-1.dll (737KiB)  | 3.52 ms | **1.16 ms (32.9%)**    | 30.7 ms (87.2%)         | 3.96 ms (112%) |
-| libGLESv2.dll (5.5MiB) | 23.4 ms | **8.81 ms (37.6%)**    | 24.1 ms (103%)          | 29.8 ms (127%) |
-| firefox.msi (56MiB)    | 257 ms  | **113 ms (43.8%)**     | 271 ms (105%)           | 321 ms (125%)  |
-| tests.exe (157MiB)     | 650 ms  | **249 ms (38.3%)**     | 732 ms (113%)           | 796 ms (123%)  |
+| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X          |
+| ---------------------- | ------- | ---------------------- | ----------------------- | --------------- |
+| vulkan-1.dll (737KiB)  | 5.34 ms | **2.03 ms (38.1%)**    | 4.35 ms (81.5%)         | 3.86 ms (72.3%) |
+| libGLESv2.dll (5.5MiB) | 32.8 ms | **15.5 ms (47.4%)**    | 34.4 ms (105%)          | 30.8 ms (93.8%) |
+| firefox.msi (56MiB)    | 352 ms  | **197 ms (55.9%)**     | 374 ms (106%)           | 246 ms (69.9%)  |
+| tests.exe (157MiB)     | 905 ms  | **447 ms (49.4%)**     | 1.04 s (115%)           | 669 ms (73.9%)  |
 
 #### [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)
 
-| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X          |
-| ---------------------- | ------- | ---------------------- | ----------------------- | --------------- |
-| vulkan-1.dll (737KiB)  | 4.21 ms | **1.46 ms (34.7%)**    | 3.43 ms (81.7%)         | 3.44 ms (8.19%) |
-| libGLESv2.dll (5.5MiB) | 22.9 ms | **10.3 ms (44.9%)**    | 24.3 ms (106%)          | 29.4 ms (128%)  |
-| firefox.msi (56MiB)    | 231 ms  | **131 ms (56.7%)**     | 259 ms (112%)           | 311 ms (135%)   |
-| tests.exe (157MiB)     | 632 ms  | **296 ms (46.8%)**     | 749 ms (118%)           | 794 ms (125%)   |
+| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X             |
+| ---------------------- | ------- | ---------------------- | ----------------------- | ------------------ |
+| vulkan-1.dll (737KiB)  | 4.91 ms | **2.52 ms (51.3%)**    | 4.72 ms (96.1%)         | 3.75 ms (76.5%)    |
+| libGLESv2.dll (5.5MiB) | 31.4 ms | **17.4 ms (55.4%)**    | 34.1 ms (108%)          | 28 ms (89%)        |
+| firefox.msi (56MiB)    | 305 ms  | 213 ms (69.8%)         | 359 ms (118%)           | **202 ms (66.1%)** |
+| tests.exe (157MiB)     | 848 ms  | **509 ms (60.1%)**     | 1.01 s (120%)           | 598 ms (70.5%)     |
 
 #### [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings)
 
-| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X           |
-| ---------------------- | ------- | ---------------------- | ----------------------- | ---------------- |
-| vulkan-1.dll (737KiB)  | 6.36 ms | **2.21 ms (34.7%)**    | 4.12 ms (64.7%)         | 5.37 ms (84.4%)  |
-| libGLESv2.dll (5.5MiB) | 25.9 ms | **11.8 ms (45.6%)**    | 25.8 ms (99.6%)         | 24.2 ms (93.4%)  |
-| firefox.msi (56MiB)    | 252 ms  | **122 ms (48.4%)**     | 265 ms (10.5%)          | 184 ms (73%)     |
-| tests.exe (157MiB)     | 774 ms  | **347 ms (44.8%)**     | 797 ms (103%)           | 646 ms (83.4%)   |
+| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X              |
+| ---------------------- | ------- | ---------------------- | ----------------------- | ------------------- |
+| vulkan-1.dll (737KiB)  | 11 ms   | **4.12 ms (37.4%)**    | 6.26 ms (56.9%)         | 5.46 ms (49.6%)     |
+| libGLESv2.dll (5.5MiB) | 37.4 ms | **21.2 ms (56.8%)**    | 37.8 ms (101%)          | 29.6 ms (79.3%)     |
+| firefox.msi (56MiB)    | 334 ms  | 203 ms (60.8%)         | 370 ms (111%)           | **53.2 ms (15.9%)** |
+| tests.exe (157MiB)     | 1.12 s  | **636 ms (56.8%)**     | 1.15 s (103%)           | 719 ms (64.2%)      |
 
 #### [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)
 
-| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X         |
-| ---------------------- | ------- | ---------------------- | ----------------------- | -------------- |
-| vulkan-1.dll (737KiB)  | 2.75 ms | **0.98 ms (35.9%)**    | 3.19 ms (112.7%)        | 3.5 ms (127%)  |
-| libGLESv2.dll (5.5MiB) | 20.4 ms | **7.49 ms (36.7%)**    | 24.7 ms (121%)          | 25.7 ms (126%) |
-| firefox.msi (56MiB)    | 244 ms  | **85.8 ms (35.2%)**    | 319 ms (131%)           | 324 ms (133%)  |
-| tests.exe (157MiB)     | 616 ms  | **202 ms (32.8%)**     | 752 ms (121%)           | 783 ms (127%)  |
+| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X              |
+| ---------------------- | ------- | ---------------------- | ----------------------- | ------------------- |
+| vulkan-1.dll (737KiB)  | 3.77 ms | **1.62 ms (42.9%)**    | 4.1 ms (109%)           | 3.08 ms (81.7%)     |
+| libGLESv2.dll (5.5MiB) | 27.5 ms | **11.9 ms (43.2%)**    | 31.8 ms (116%)          | 20.4 ms (74.1%)     |
+| firefox.msi (56MiB)    | 322 ms  | 151 ms (47%)           | 419 ms (130%)           | **55.5 ms (17.2%)** |
+| tests.exe (157MiB)     | 828 ms  | **324 ms (39.1%)**     | 975 ms (118%)           | 628 ms (75.8%)      |
 
 #### [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)
 
 | File scanned           | YARA   | Boreal (speed profile) | Boreal (memory profile) | Yara-X              |
 | ---------------------- | ------ | ---------------------- | ----------------------- | ------------------- |
-| vulkan-1.dll (737KiB)  | 89  ms | 81.6 ms (90.8%)        | 82.5 ms (91.8%)         | **52.8 ms (58.6%)** |
-| libGLESv2.dll (5.5MiB) | 311 ms | **0.1 ms (0.04%)**     | **0.3 ms (0.04%)**      | 208 ms (65.8%)      |
-| firefox.msi (56MiB)    | 468 ms | **0.1 ms (0.04%)**     | **0.3 ms (0.04%)**      | 875 ms (187%)       |
-| tests.exe (157MiB)     | 11.5 s | **0.1 ms (\<0.01%)**   | **0.3 ms (\<0.01%)**    | 7.26 s (62.8%)      |
+| vulkan-1.dll (737KiB)  | 179 ms | 198 ms (111%)          | 201 ms (112%)           | **93.7 ms (52.4%)** |
+| libGLESv2.dll (5.5MiB) | 610 ms | **189 ns (\<0.01%)**   | 189 ns (\<0.01%)        | 315 ms (51.6%)      |
+| firefox.msi (56MiB)    | 704 ms | 191 ns (\<0.01%)       | **191 ns (\<0.01%)**    | 536 ms (76.1%)      |
+| tests.exe (157MiB)     | 22 s   | **190 ns (\<0.01%)**   | 192 ns (\<0.01%)        | 11.8 s (53.4%)      |
 
 #### [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)
 
-| File scanned           | YARA       | Boreal (speed profile) | Boreal (memory profile) | Yara-X              |
-| ---------------------- | ---------- | ---------------------- | ----------------------- | ------------------- |
-| vulkan-1.dll (737KiB)  | 9.18 ms    | 5.42 ms (59%)          | 6.79 ms (73.9%)         | **4.08 ms (44.4%)** |
-| libGLESv2.dll (5.5MiB) | 23.4 ms    | **13.4 ms (57.2%)**    | 23.3 ms (99.6%)         | 22 ms (94%)         |
-| firefox.msi (56MiB)    | 173 ms     | **156 ms (90.2%)**     | 175 ms (101.2%)         | 233 ms (135%)       |
-| tests.exe (157MiB)     | 537 ms     | 1.47 ms (0.27%)        | 1.46 ms (0.27%)         | **0.26 ms (0.05%)** |
+| File scanned           | YARA    | Boreal (speed profile) | Boreal (memory profile) | Yara-X               |
+| ---------------------- | ------- | ---------------------- | ----------------------- | -------------------- |
+| vulkan-1.dll (737KiB)  | 14.9 ms | 8.01 ms (53.6%)        | 9.77 ms (65.4%)         | **2.53 ms (16.9%)**  |
+| libGLESv2.dll (5.5MiB) | 34.6 ms | 22.2 ms (64.3%)        | 34.7 ms (100%)          | **7.61 ms (22%)**    |
+| firefox.msi (56MiB)    | 256 ms  | 294 ms (115%)          | 367 ms (143%)           | **40.9 ms (16%)**    |
+| tests.exe (157MiB)     | 745 ms  | 2.45 ms (0.329%)       | 2.71 ms (0.364%)        | **272 µs (0.0365%)** |
 
 ####  [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)
 
-| File scanned           | YARA       | Boreal (speed profile) | Boreal (memory profile) | Yara-X           |
-| ---------------------- | ---------- | ---------------------- | ----------------------- | ---------------- |
-| vulkan-1.dll (737KiB)  | 7.48 ms    | **5.16 ms (68.98%)**   | 8.02 ms (107.2%)        | 7.25 ms (96.9%)  |
-| libGLESv2.dll (5.5MiB) | 36.3 ms    | **28.9 ms (79.6%)**    | 46.9 ms (129.2%)        | 44.1 ms (121.4%) |
-| firefox.msi (56MiB)    | **219 ms** | 281 ms (128.3%)        | 381 ms (174.0%)         | 236 ms (107.7%)  |
-| tests.exe (157MiB)     | 1.02 s     | **728 ms (71.02%)**    | 1.33 ms (130.0%)        | 1.04 s (101.6%)  |
+| File scanned           | YARA   | Boreal (speed profile) | Boreal (memory profile) | Yara-X              |
+| ---------------------- | ------ | ---------------------- | ----------------------- | ------------------- |
+| vulkan-1.dll (737KiB)  | 14 ms  | 14.9 ms (106%)         | 16.5 ms (118%)          | **10.2 ms (72.6%)** |
+| libGLESv2.dll (5.5MiB) | 64 ms  | 64.5 ms (101%)         | 80.1 ms (125%)          | **50.8 ms (79.4%)** |
+| firefox.msi (56MiB)    | 372 ms | 549 ms (148%)          | 541 ms (145%)           | **204 ms (54.9%)**  |
+| tests.exe (157MiB)     | 1.77 s | 1.54 s (86.7%)         | 2.08 s (117%)           | **1.15 s (64.8%)**  |
 
 ## Compilation
 
@@ -86,29 +86,29 @@ Percentage displayed shows the differences from YARA. The highlighted value is t
 
 Measure the time it takes to parse and compile all rules.
 
-| Rules                                                                                                | YARA        | Boreal (speed profile) | Boreal (memory profile) | Yara-X          |
-| ---------------------------------------------------------------------------------------------------- | ----------- | ---------------------- | ----------------------- | --------------- |
-| [Orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | **28.5 ms** | 62.5 ms (219%)         | 60.6 ms (213%)          | 139.5 ms (489%) |
-| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | **38.4 ms** | 48.4 ms (126.3%)       | 45.1 ms (117.5%)        | 221 ms (577%)   |
-| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | **159 ms**  | 340 ms (214%)          | 337 ms (212%)           | 1.02 s (644%)   |
-| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | **9.67 ms** | 12.2 ms (126.2%)       | 10.6 ms (109.6%)        | 84.9 ms (879%)  |
-| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 4.95 s      | 123 ms (2.5%)          | **111 ms (2.2%)**       | 1.54 s (31.1%)  |
-| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | **1.39 s**  | 1.50 s (107.9%)        | 1.49 s (106.9%)         | 3.57 s (256%)   |
-| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | **313 ms**  | 347 ms (110.8%)        | 315 ms (100.7%)         | 2.70 s (864%)   |
+| Rules                                                                                                | YARA        | Boreal (speed profile) | Boreal (memory profile) | Yara-X         |
+| ---------------------------------------------------------------------------------------------------- | ----------- | ---------------------- | ----------------------- | -------------- |
+| [Orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | **17 ms**   | 28.9 ms (170%)         | 27.3 ms (161%)          | 149 ms (881%)  |
+| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | **27.1 ms** | 34.7 ms (128%)         | 31.3 ms (115%)          | 176 ms (649%)  |
+| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | **110 ms**  | 191 ms (173%)          | 187 ms (170%)           | 976 ms (884%)  |
+| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 10.5 ms     | 11 ms (105%)           | **9.21 ms (88.1%)**     | 37.6 ms (360%) |
+| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 5.12 s      | 167 ms (3.27%)         | **163 ms (3.19%)**      | 514 ms (10%)   |
+| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | **601 ms**  | 610 ms (102%)          | 602 ms (100%)           | 9.83 s (1640%) |
+| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 267 ms      | 306 ms (115%)          | **241 ms (90.3%)**      | 1.42 s (533%)  |
 
 ### Compilation size
 
 Size of the compiled rules.
 
-| Rules                                                                                                | YARA         | Boreal (speed profile) | Boreal (memory profile) | Yara-X           |
-| ---------------------------------------------------------------------------------------------------- | ------------ | ---------------------- | ----------------------- | ---------------- |
-| [Orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 12.8 MiB     | 7.4 MiB (57.7%)        | **6.55 MiB (51.1%)**    | 8.62 MiB (67.2%) |
-| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 13.5 MiB     | 6.97 MiB (51.6%)       | **4.94 MiB (36.6%)**    | 23.2 MiB (172%)  |
-| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 15.2 MiB     | 10.4 MiB (68.4%)       | **8.7 MiB (57.4%)**     | 56.7 MiB (373%)  |
-| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 12.7 MiB     | 5.23 MiB (41.2%)       | **4.2 MiB (33.1%)**     | 7.51 MiB (59.3%) |
-| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 171 MiB      | 14.2 MiB (8.3%)        | **11.4 MiB (6.69%)**    | 558 MiB (327%)   |
-| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | **54.0 MiB** | 77.0 MiB (142%)        | 71.9 MiB (133%)         | 68.2 MiB (126%)  |
-| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | **30.7 MiB** | 102 MiB (332%)         | 75.6 MiB (246%)         | 84.1 MiB (273%)  |
+| Rules                                                                                                | YARA     | Boreal (speed profile) | Boreal (memory profile) | Yara-X               |
+| ---------------------------------------------------------------------------------------------------- | -------- | ---------------------- | ----------------------- | --------------------- |
+| [Orion](https://github.com/StrangerealIntel/Orion.git) (147 rules, 644 strings)                      | 12.2 MiB | 2.75 MiB (22.6%)       | **1.34 MiB (11%)**      | 2.64 MiB (21.7%)      |
+| [atr](https://github.com/advanced-threat-research/Yara-Rules) (167 rules, 1408 strings)              | 12.3 MiB | 3.65 MiB (29.6%)       | **1.58 MiB (12.8%)**    | 3.6 MiB (29.2%)       |
+| [reversinglabs](https://github.com/reversinglabs/reversinglabs-yara-rules) (632 rules, 1536 strings) | 14 MiB   | 7.1 MiB (50.6%)        | **4.76 MiB (33.9%)**    | 10.6 MiB (75.7%)      |
+| [panopticon](https://github.com/Neo23x0/panopticon) (180 rules, 1998 strings)                        | 12.3 MiB | 2.5 MiB (20.3%)        | **1.07 MiB (8.75%)**    | 1.77 MiB (14.4%)      |
+| [c0ffee](https://github.com/Crypt-0n/C0-FF-EE) (121 rules, 5290 strings)                             | 132 MiB  | 6.62 MiB (5.03%)       | **3.26 MiB (2.47%)**    | 131 MiB (99.7%)       |
+| [icewater](https://github.com/SupportIntelligence/Icewater) (16431 rules, 13155 strings)             | 36.2 MiB | 25.1 MiB (69.5%)       | **19.1 MiB (52.7%)**    | 49.3 MiB (136%)       |
+| [signature-base](https://github.com/Neo23x0/signature-base) (4297 rules, 23630 strings)              | 28.6 MiB | 73 MiB (255%)          | 39.9 MiB (140%)         | **30.2 MiB (106%)**   |
 
 ## Rules serialization
 
