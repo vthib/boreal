@@ -1119,8 +1119,6 @@ impl Module for Pe {
             .get_user_data::<Self>()
             .and_then(|data| data.is_signed)
             .map(|v| Value::Integer(v.into()));
-        #[cfg(not(feature = "authenticode"))]
-        let is_signed = None;
 
         let Some(data) = ctx.module_data.get_mut::<Self>() else {
             return;
@@ -1134,11 +1132,23 @@ impl Module for Pe {
         let res = match FileKind::parse(ctx.region.mem) {
             Ok(FileKind::Pe32) => {
                 data.is_32bit = true;
-                parse_file::<ImageNtHeaders32>(ctx.region, ctx.process_memory, is_signed, data)
+                parse_file::<ImageNtHeaders32>(
+                    ctx.region,
+                    ctx.process_memory,
+                    data,
+                    #[cfg(feature = "authenticode")]
+                    is_signed,
+                )
             }
             Ok(FileKind::Pe64) => {
                 data.is_32bit = false;
-                parse_file::<ImageNtHeaders64>(ctx.region, ctx.process_memory, is_signed, data)
+                parse_file::<ImageNtHeaders64>(
+                    ctx.region,
+                    ctx.process_memory,
+                    data,
+                    #[cfg(feature = "authenticode")]
+                    is_signed,
+                )
             }
             _ => None,
         };
@@ -1183,8 +1193,8 @@ pub struct PeData {
 fn parse_file<HEADERS: ImageNtHeaders>(
     region: &Region,
     process_memory: bool,
-    user_data_is_signed: Option<Value>,
     data: &mut Data,
+    #[cfg(feature = "authenticode")] user_data_is_signed: Option<Value>,
 ) -> Option<HashMap<&'static str, Value>> {
     let dos_header = ImageDosHeader::parse(region.mem).ok()?;
     let mut offset = dos_header.nt_headers_offset().into();
