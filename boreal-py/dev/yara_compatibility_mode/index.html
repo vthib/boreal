@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
       
 
@@ -563,11 +563,11 @@ yara compatibility mode.</p>
 optimizations, but means that results may not contain all possible match details.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">boreal</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># No need to specify fast=True. `matches` will list all matching rules,</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># but details on the string matches might be missing if the scan did not</span>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># need to compute them to complete faster.</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">matches</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">matches</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="strict-escape-on-by-default">Strict escape on by default</h2>
 <p>The <code>strict_escape</code> parameter in the <code>compile</code> function defaults to <code>True</code>
@@ -575,14 +575,14 @@ instead of <code>False</code>. This means that rules that contain invalid escapi
 in regexes produce warnings by default.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">boreal</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"""</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="s2">rule foo {</span>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="s2">    strings:</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="s2">        $ = /C:\Users/</span>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="s2">    condition:</span>
 </span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="s2">        any of them</span>
 </span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="s2">}</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="s2">"""</span><span class="p">)</span>
 </span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="c1"># A warning is emitted by default, as opposed to yara</span>
 </span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rules</span><span class="o">.</span><span class="n">warnings</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
 </span></code></pre></div>
@@ -592,8 +592,8 @@ objects is improved to avoid collision issues. Those objects are returned
 in a scan result:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">boreal</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">results</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">results</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">rule_match</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">string_matches</span> <span class="o">=</span> <span class="n">rule_match</span><span class="o">.</span><span class="n">strings</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="c1"># This is StringMatches</span>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">string_instances</span> <span class="o">=</span> <span class="n">string_matches</span><span class="o">.</span><span class="n">instances</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="c1"># This is StringMatchInstance</span>
@@ -602,33 +602,33 @@ in a scan result:</p>
 <p>The <code>identifier</code> field in <code>StringMatches</code> is not prefixed by <code>$</code>.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">boreal</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"""</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="s2">rule foo {</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s2">    strings:</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="s2">        $mystr = &quot;abc&quot;</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="s2">        $mystr = "abc"</span>
 </span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="s2">    condition:</span>
 </span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="s2">        any of them</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="s2">}&quot;&quot;&quot;</span><span class="p">)</span>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">results</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;abc&quot;</span><span class="p">)</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="s2">}"""</span><span class="p">)</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">results</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">"abc"</span><span class="p">)</span>
 </span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="n">rule_match</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 </span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="n">string_matches</span> <span class="o">=</span> <span class="n">rule_match</span><span class="o">.</span><span class="n">strings</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="k">assert</span> <span class="n">string_matches</span><span class="o">.</span><span class="n">identifier</span> <span class="o">==</span> <span class="s2">&quot;mystr&quot;</span>  <span class="c1"># as opposed to &quot;$mystr&quot; in yara</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="k">assert</span> <span class="n">string_matches</span><span class="o">.</span><span class="n">identifier</span> <span class="o">==</span> <span class="s2">"mystr"</span>  <span class="c1"># as opposed to "$mystr" in yara</span>
 </span></code></pre></div>
 <h2 id="textual-metadata-values-are-bytes">Textual metadata values are bytes</h2>
 <p>Text metadata values are returned as byte-strings instead of strings.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">boreal</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">rules</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">rules</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"""</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="s2">rule a {</span>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="s2">    meta:</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="s2">        foo = &quot;a normal string&quot;</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="s2">        bar = &quot;a string with non ascii bytes: </span><span class="se">\\</span><span class="s2">xCA</span><span class="se">\xFE</span><span class="s2">&quot;</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="s2">        foo = "a normal string"</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="s2">        bar = "a string with non ascii bytes: </span><span class="se">\\</span><span class="s2">xCA</span><span class="se">\xFE</span><span class="s2">"</span>
 </span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="s2">    condition: true</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="s2">}&quot;&quot;&quot;</span><span class="p">)</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="n">matches</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="s2">}"""</span><span class="p">)</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="n">matches</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s1">''</span><span class="p">)</span>
 </span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="k">assert</span> <span class="n">matches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">meta</span> <span class="o">==</span> <span class="p">{</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="s1">&#39;foo&#39;</span><span class="p">:</span> <span class="sa">b</span><span class="s1">&#39;a normal string&#39;</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="s1">&#39;bar&#39;</span><span class="p">:</span> <span class="sa">b</span><span class="s1">&#39;a string with non ascii bytes: </span><span class="se">\xCA\xFE</span><span class="s1">&#39;</span> <span class="c1"># yara does not return this properly</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="s1">'foo'</span><span class="p">:</span> <span class="sa">b</span><span class="s1">'a normal string'</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="s1">'bar'</span><span class="p">:</span> <span class="sa">b</span><span class="s1">'a string with non ascii bytes: </span><span class="se">\xCA\xFE</span><span class="s1">'</span> <span class="c1"># yara does not return this properly</span>
 </span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="p">}</span>
 </span></code></pre></div>
 <h2 id="match-callback-only-receive-matching-rules-by-default">Match callback only receive matching rules by default</h2>
@@ -642,8 +642,8 @@ fast mode, making it undesirable.</p>
 </span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="c1"># This callback only receives matching rules</span>
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="k">pass</span>
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="n">matches</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">callback</span><span class="o">=</span><span class="n">cb</span><span class="p">)</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="n">matches</span> <span class="o">=</span> <span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="s2">"..."</span><span class="p">,</span> <span class="n">callback</span><span class="o">=</span><span class="n">cb</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="maximum-number-of-matches-is-reduced">Maximum number of matches is reduced</h2>
 <p>The maximum number of matches for a single string is much reduced
@@ -652,23 +652,23 @@ on strings matching too often. The default value is 1000, but this can easily
 be modified:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">boreal</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">rules</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="n">string_max_nb_matches</span><span class="o">=</span><span class="mi">100000</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="dictionaries-returned-by-modules-uses-byte-strings-as-keys">Dictionaries returned by modules uses byte-strings as keys</h2>
 <p>Dictionaries that are contained in module values returned in the modules_callback
 uses bytestrings as keys instead of strings. This can happen for example in the
 <code>pe.version_info</code> dictionary:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="s2">import &quot;pe&quot;</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">rules</span> <span class="o">=</span> <span class="n">boreal</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"""</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="s2">import "pe"</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="s2">rule a { condition: true }</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="s2">"""</span><span class="p">)</span>
 </span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
 </span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">modules_callback</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="k">assert</span> <span class="n">values</span><span class="p">[</span><span class="s1">&#39;version_info&#39;</span><span class="p">][</span><span class="sa">b</span><span class="s1">&#39;InternalName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="sa">b</span><span class="s1">&#39;MTXEX.DLL&#39;</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="c1"># This is [&#39;version_info&#39;][&#39;InternalName&#39;] in yara</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="k">assert</span> <span class="n">values</span><span class="p">[</span><span class="s1">'version_info'</span><span class="p">][</span><span class="sa">b</span><span class="s1">'InternalName'</span><span class="p">]</span> <span class="o">==</span> <span class="sa">b</span><span class="s1">'MTXEX.DLL'</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="c1"># This is ['version_info']['InternalName'] in yara</span>
 </span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s1">&#39;mtxex.dll&#39;</span><span class="p">,</span> <span class="n">modules_callback</span><span class="o">=</span><span class="n">modules_callback</span><span class="p">)</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="n">rules</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s1">'mtxex.dll'</span><span class="p">,</span> <span class="n">modules_callback</span><span class="o">=</span><span class="n">modules_callback</span><span class="p">)</span>
 </span></code></pre></div>
 <p>This is required because those keys are not guaranteed to be strings.
 There is <a href="https://github.com/VirusTotal/yara-python/issues/273">a known bug</a> in
@@ -725,7 +725,7 @@ yara due to this: if a dictionary key is not a proper string, the scan will fail
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
