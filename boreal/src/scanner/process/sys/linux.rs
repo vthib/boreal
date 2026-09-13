@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use crate::scanner::ScanError;
+use crate::scanner::process::INITIAL_BUFFER_CAPACITY;
 
 pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> {
     let proc_pid_path = Path::new("/proc").join(pid.to_string());
@@ -31,7 +32,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
         mem_file,
         pagemap_file,
         page_size,
-        buffer: Vec::new(),
+        buffer: Vec::with_capacity(INITIAL_BUFFER_CAPACITY),
         current_region: None,
     }))
 }
