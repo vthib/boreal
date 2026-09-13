@@ -10,6 +10,7 @@ use mach2::vm_region::vm_region_submap_info_64;
 
 use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use crate::scanner::ScanError;
+use crate::scanner::process::INITIAL_BUFFER_CAPACITY;
 
 pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> {
     #[allow(clippy::cast_possible_wrap)]
@@ -43,7 +44,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
         task_port: MachPort {
             name: task_port_name,
         },
-        buffer: Vec::new(),
+        buffer: Vec::with_capacity(INITIAL_BUFFER_CAPACITY),
         current_region: None,
     }))
 }

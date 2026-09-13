@@ -18,6 +18,7 @@ use windows_sys::Win32::System::Threading::{
 
 use crate::memory::{FragmentedMemory, MemoryParams, Region, RegionDescription};
 use crate::scanner::ScanError;
+use crate::scanner::process::INITIAL_BUFFER_CAPACITY;
 
 static ADD_SE_DEBUG_PRIVILEGE: Once = Once::new();
 
@@ -69,7 +70,7 @@ pub fn process_memory(pid: u32) -> Result<Box<dyn FragmentedMemory>, ScanError> 
 
     Ok(Box::new(WindowsProcessMemory {
         handle,
-        buffer: Vec::new(),
+        buffer: Vec::with_capacity(INITIAL_BUFFER_CAPACITY),
         current_region: None,
     }))
 }
