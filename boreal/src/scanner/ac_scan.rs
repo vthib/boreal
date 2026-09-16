@@ -49,6 +49,20 @@ struct LiteralInfo {
 
     /// Left and right offset for the slice picked in the Aho-Corasick.
     slice_offset: (usize, usize),
+
+    /// Is the literal case insensitive.
+    nocase: bool,
+
+    /// First and last two bytes of the literal.
+    ///
+    /// The atom is only a slice of the literal, so most matches of the atom do not extend
+    /// into a match of the literal. Checking those bytes rejects almost all of them without
+    /// reaching for the matcher and its literals, which are two dependent loads away and
+    /// rarely in cache for a large rule set.
+    ///
+    /// If nocase is true, those bytes are lowercased.
+    first_bytes: [u8; 2],
+    last_bytes: [u8; 2],
 }
 
 impl AcScan {
@@ -66,10 +80,14 @@ impl AcScan {
 
                 for (literal_index, lit) in matcher.literals.iter().enumerate() {
                     let (atom, start) = pick_atom_in_literal(lit);
+                    let nocase = matcher.modifiers.nocase;
                     let literal_info = LiteralInfo {
                         matcher_index,
                         literal_index,
                         slice_offset: (start, lit.len() - start - atom.len()),
+                        first_bytes: literal_edge(lit, false, nocase),
+                        last_bytes: literal_edge(lit, true, nocase),
+                        nocase,
                     };
 
                     // Sometimes, two literals of the same variable can provide the same atom.
@@ -90,7 +108,7 @@ impl AcScan {
                         // results in the same lowercase string. This shouldn't be done outside
                         // of the "nocase" scenario, since different cases will be validated
                         // properly against each literal.
-                        if matcher.modifiers.nocase {
+                        if nocase {
                             dedup_atom.make_ascii_lowercase();
                         }
 
@@ -119,7 +137,7 @@ impl AcScan {
                         }
                     };
 
-                    if matcher.modifiers.nocase {
+                    if nocase {
                         atom.generate_case_variants(&mut add_atom);
                     } else {
                         add_atom(atom);
@@ -207,8 +225,10 @@ impl AcScan {
                 matcher_index,
                 literal_index,
                 slice_offset: (start_offset, end_offset),
+                nocase,
+                first_bytes,
+                last_bytes,
             } = *literal_info;
-            let matcher = &scanner.matchers[matcher_index];
 
             #[cfg(feature = "profiling")]
             if let Some(stats) = scan_data.statistics.as_mut() {
@@ -229,6 +249,26 @@ impl AcScan {
                 Some(v) if v <= region.mem.len() => v,
                 _ => continue,
             };
+
+            // Check the first & last bytes of the literal to cheaply reject
+            // the match if possible. Only do so if the literal is a superset
+            // of the atom.
+            if start_offset != 0 || end_offset != 0 {
+                let edge = |at: usize| {
+                    let mut a = region.mem[at];
+                    let mut b = region.mem[at + 1];
+                    if nocase {
+                        a.make_ascii_lowercase();
+                        b.make_ascii_lowercase();
+                    }
+                    [a, b]
+                };
+                if edge(start) != first_bytes || edge(end - 2) != last_bytes {
+                    continue;
+                }
+            }
+
+            let matcher = &scanner.matchers[matcher_index];
             let m = start..end;
 
             // Verify the literal is valid.
@@ -412,6 +452,23 @@ fn build_string_identifier(
     None
 }
 
+/// The first or last two bytes of a literal.
+fn literal_edge(lit: &[u8], from_end: bool, nocase: bool) -> [u8; 2] {
+    if lit.len() < 2 {
+        return [0, 0];
+    }
+    let mut s = if from_end {
+        [lit[lit.len() - 2], lit[lit.len() - 1]]
+    } else {
+        [lit[0], lit[1]]
+    };
+    if nocase {
+        s[0].make_ascii_lowercase();
+        s[1].make_ascii_lowercase();
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,6 +481,9 @@ mod tests {
             matcher_index: 0,
             literal_index: 0,
             slice_offset: (0, 0),
+            nocase: false,
+            first_bytes: [0, 0],
+            last_bytes: [0, 0],
         });
     }
 }
