@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-20
+
+This release brings a lot of incremental improvements to reduce memory consumption,
+both at rest (scanner size) and during scans, and to improve scanning speed.
+
+In doing so, it brings a few incompatible changes:
+
+- The serialization version is bumped, so rules serialized in previous versions cannot
+  be loaded and must be compiled and serialized again.
+- The `max_strings_per_rule` value is now capped at `u32::MAX - 1`.
+- The `tags` field in scan results' rules has changed from a `&[String]` to a `&[StringSymbol]`,
+  requiring a call to `scanner.get_string_symbol` to retrieve the string.
+
+While the last two are technically breaking and worthy of a semver major bump, they are
+very niche and should not impact the vast majority of users, so I arbitrarily decided to not
+do this major bump. The next release will probably include more impactful API changes and will
+bump the major version.
+
+### boreal
+
+#### Dependencies
+
+- Update `borsh` to 1.8.0 [#270](https://github.com/vthib/boreal/pull/270).
+- Update `object` to 0.40 [#271](https://github.com/vthib/boreal/pull/271).
+- Update `mach2` to 0.7 [#273](https://github.com/vthib/boreal/pull/273).
+- Update dev dependency `base64` to 0.23 [#270](https://github.com/vthib/boreal/pull/270).
+
+#### Fixed
+
+- Some lengths were not capped on deserialization, exposing big up-front allocation on adversarial data [#266](https://github.com/vthib/boreal/pull/266).
+- Fix compilation warning if only object feature is enabled [411e737](https://github.com/vthib/boreal/commit/411e73720f7749b24e21ec7c5e3cfc7ead5ec5ab).
+
+#### Changed
+
+Memory and scan speed optimizations:
+
+- Reduce Expression enum size, reduce memory footprint of compiled rules [#257](https://github.com/vthib/boreal/pull/257).
+- Remove growable types in compiled types [#259](https://github.com/vthib/boreal/pull/259).
+- Simplify match validator, remove greedy case [#260](https://github.com/vthib/boreal/pull/260).
+- Optimize "previous results" array during scan [#261](https://github.com/vthib/boreal/pull/261).
+- Use u32 for bytes pool addressing [#263](https://github.com/vthib/boreal/pull/263).
+- Miscellaneous optimizations [#268](https://github.com/vthib/boreal/pull/268).
+- Handle hex strings jumps in simple validator [#265](https://github.com/vthib/boreal/pull/265).
+- Support alternations in simple validator [#269](https://github.com/vthib/boreal/pull/269).
+- Don't call Instant::now if statistics feature is not enabled [#267](https://github.com/vthib/boreal/pull/267).
+- Optimize `pe.imphash` [#274](https://github.com/vthib/boreal/pull/274).
+- Add initial capacity for process scan buffer [#277](https://github.com/vthib/boreal/pull/277).
+
+### boreal-py
+
+#### Fixed
+
+- Release the GIL before launching scans on normal builds, allowing other threads to run while the scan is ongoing.
+  This was working properly in free-threaded mode, but not in "classic" mode. This is now fixed [#262](https://github.com/vthib/boreal/pull/262).
+- Use the custom `string_max_nb_matches` if set manually even if yara compatibility mode is enabled [#262](https://github.com/vthib/boreal/pull/262).
+
+#### Changed
+
+- Several ram improvements to avoid allocating or building python objects if not required [#262](https://github.com/vthib/boreal/pull/262).
+
 ## [1.2.0] - 2026-07-16
 
 This is mostly a bugfix release, but with a few dependencies and a MSRV bump. hence
@@ -725,7 +785,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v1.2.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/vthib/boreal/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/vthib/boreal/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vthib/boreal/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/vthib/boreal/compare/v0.9.0...v1.0.0
