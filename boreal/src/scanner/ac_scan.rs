@@ -65,12 +65,11 @@ impl AcScan {
                 let mut known_literals_of_var = HashSet::new();
 
                 for (literal_index, lit) in matcher.literals.iter().enumerate() {
-                    let (start, end) = pick_atom_in_literal(lit);
-                    let mut atom = lit[start..(lit.len() - end)].to_vec();
+                    let (mut atom, start) = pick_atom_in_literal(lit);
                     let literal_info = LiteralInfo {
                         matcher_index,
                         literal_index,
-                        slice_offset: (start, end),
+                        slice_offset: (start, lit.len() - start - atom.len()),
                     };
 
                     // Sometimes, two literals of the same variable can provide the same atom.
@@ -84,7 +83,7 @@ impl AcScan {
                     // To prevent this, a set is used here. Both the atom itself and its position
                     // in the literal are important.
                     {
-                        let mut dedup_atom = atom.clone();
+                        let mut dedup_atom = atom;
 
                         // See `test_nocase_alternate_case` test. If the variable is "nocase",
                         // then make sure we don't add to the AC two different atoms that
@@ -111,7 +110,7 @@ impl AcScan {
                     // normalize before de-duplicating.
                     atom.make_ascii_lowercase();
 
-                    match known_lits.entry(atom.clone()) {
+                    match known_lits.entry(atom) {
                         Entry::Vacant(v) => {
                             let _r = v.insert(lits.len());
                             aho_index_to_literal_info.push(vec![literal_info]);

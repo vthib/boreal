@@ -1,6 +1,6 @@
 use boreal_parser::rule::{VariableDeclaration, VariableDeclarationValue};
 
-use crate::atoms::{atoms_rank, pick_atom_in_literal};
+use crate::atoms::{atom_rank, pick_atom_in_literal};
 use crate::matcher::{Matcher, Modifiers};
 use crate::regex::regex_ast_to_hir;
 use crate::statistics;
@@ -85,15 +85,23 @@ pub(super) fn compile_variable(
     };
 
     let stats = if compiler.params.compute_statistics {
+        let mut atoms_quality = u32::MAX;
         let atoms: Vec<_> = matcher
             .literals
             .iter()
             .map(|lit| {
-                let (start_offset, end_offset) = pick_atom_in_literal(lit);
-                lit[start_offset..(lit.len() - end_offset)].to_vec()
+                let (atom, _) = pick_atom_in_literal(lit);
+                let rank = atom_rank(atom);
+                if rank < atoms_quality {
+                    atoms_quality = rank;
+                }
+                atom.as_ref().to_vec()
             })
             .collect();
-        let atoms_quality = atoms_rank(&atoms);
+
+        if atoms.is_empty() {
+            atoms_quality = 0;
+        }
 
         Some(statistics::CompiledString {
             name,
