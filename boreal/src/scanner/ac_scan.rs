@@ -39,7 +39,7 @@ pub(crate) struct AcScan {
 }
 
 /// Details on a literal of a matcher.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct LiteralInfo {
     /// Index of the matcher in the matcher array.
     matcher_index: usize,
@@ -65,7 +65,7 @@ impl AcScan {
                 let mut known_literals_of_var = HashSet::new();
 
                 for (literal_index, lit) in matcher.literals.iter().enumerate() {
-                    let (mut atom, start) = pick_atom_in_literal(lit);
+                    let (atom, start) = pick_atom_in_literal(lit);
                     let literal_info = LiteralInfo {
                         matcher_index,
                         literal_index,
@@ -99,37 +99,36 @@ impl AcScan {
                         }
                     }
 
-                    // Ensure the literals provided to the aho corasick are not
-                    // duplicated. If multiple variables uses the same atoms,
-                    // we will iterate on every variable in this module, instead
-                    // of going back into the aho-corasick just for it to
-                    // iterate over the matching ids and return immediately
-                    // to this code. This improves performances significantly.
-                    //
-                    // In addition, since the aho-corasick is case insensitive,
-                    // normalize before de-duplicating.
-                    atom.make_ascii_lowercase();
+                    let mut add_atom = |atom| {
+                        // Ensure the literals provided to the aho corasick are not
+                        // duplicated. If multiple variables uses the same atoms,
+                        // we will iterate on every variable in this module, instead
+                        // of going back into the aho-corasick just for it to
+                        // iterate over the matching ids and return immediately
+                        // to this code. This improves performances significantly.
+                        match known_lits.entry(atom) {
+                            Entry::Vacant(v) => {
+                                let _r = v.insert(lits.len());
+                                aho_index_to_literal_info.push(vec![literal_info]);
+                                lits.push(atom);
+                            }
+                            Entry::Occupied(o) => {
+                                let index = o.get();
+                                aho_index_to_literal_info[*index].push(literal_info);
+                            }
+                        }
+                    };
 
-                    match known_lits.entry(atom) {
-                        Entry::Vacant(v) => {
-                            let _r = v.insert(lits.len());
-                            aho_index_to_literal_info.push(vec![literal_info]);
-                            lits.push(atom);
-                        }
-                        Entry::Occupied(o) => {
-                            let index = o.get();
-                            aho_index_to_literal_info[*index].push(literal_info);
-                        }
+                    if matcher.modifiers.nocase {
+                        atom.generate_case_variants(&mut add_atom);
+                    } else {
+                        add_atom(atom);
                     }
                 }
             }
         }
 
-        // TODO: Should this AC be case insensitive or not? Redo some benches once other
-        // optimizations are done.
-
         let mut builder = AhoCorasickBuilder::new();
-        let builder = builder.ascii_case_insensitive(true);
         let builder = builder.kind(Some(match profile {
             CompilerProfile::Speed => AhoCorasickKind::DFA,
             CompilerProfile::Memory => AhoCorasickKind::ContiguousNFA,
