@@ -36,6 +36,30 @@ impl Atom {
     pub fn len(self) -> usize {
         usize::from(self.len)
     }
+
+    #[inline(always)]
+    pub fn generate_case_variants<F>(self, add_atom: &mut F)
+    where
+        F: FnMut(Atom),
+    {
+        self.generate_case_variants_inner(0, add_atom);
+    }
+
+    pub fn generate_case_variants_inner<F>(mut self, index: usize, add_atom: &mut F)
+    where
+        F: FnMut(Atom),
+    {
+        for i in index..self.len() {
+            let byte = self.data[i];
+
+            if byte.is_ascii_alphabetic() {
+                self.generate_case_variants_inner(i + 1, add_atom);
+                self.data[i] ^= 0x20;
+            }
+        }
+
+        add_atom(self);
+    }
 }
 
 impl AsRef<[u8]> for Atom {
