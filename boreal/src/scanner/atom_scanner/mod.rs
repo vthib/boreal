@@ -13,6 +13,9 @@ use crate::compiler::CompilerProfile;
 use crate::matcher::{LiteralMatchStatus, Matcher};
 use crate::memory::Region;
 
+mod hash_scanner;
+use hash_scanner::HashScanner;
+
 /// Factorize atoms from all variables, to scan for them in a single pass.
 ///
 /// For every variable, literals named atoms are extracted from the variables
@@ -31,13 +34,19 @@ use crate::memory::Region;
 #[derive(Debug)]
 pub(crate) struct AtomScanner {
     /// Aho Corasick for variables that are literals.
-    aho: AhoCorasick,
+    inner: Inner,
 
     /// Map from a pattern index to a list details on the literals.
     pattern_index_to_literal_info: Box<[Box<[LiteralInfo]>]>,
 
     /// List of indexes for vars that are not part of the atom scanner.
     non_handled_var_indexes: Box<[usize]>,
+}
+
+#[derive(Debug)]
+enum Inner {
+    AhoCorasick(AhoCorasick),
+    HashScanner(Box<HashScanner>),
 }
 
 /// Details on a literal of a matcher.
@@ -69,7 +78,7 @@ struct LiteralInfo {
 
 #[derive(Debug, Copy, Clone)]
 struct AtomMatch {
-    pattern: usize,
+    pattern: u32,
     start: usize,
     end: usize,
 }
@@ -161,12 +170,14 @@ impl AtomScanner {
             CompilerProfile::Memory => AhoCorasickKind::ContiguousNFA,
         }));
 
-        // First try with a smaller size to reduce memory use and improve performances, otherwise
-        // use the default version.
-        let aho = builder.build(&lits).unwrap();
+        let inner = if std::env::var_os("USE_BOREAL_HASH_SCANNER").is_some() {
+            Inner::HashScanner(Box::new(HashScanner::new(&lits)))
+        } else {
+            Inner::AhoCorasick(builder.build(&lits).unwrap())
+        };
 
         Self {
-            aho,
+            inner,
             pattern_index_to_literal_info: aho_index_to_literal_info
                 .into_iter()
                 .map(Vec::into_boxed_slice)
@@ -189,16 +200,28 @@ impl AtomScanner {
         }
 
         // Iterate over aho-corasick matches, validating those matches
-        for mat in self.aho.find_overlapping_iter(region.mem) {
-            if scan_data.check_timeout() {
-                return Err(ScanError::Timeout);
+        match &self.inner {
+            Inner::AhoCorasick(aho) => {
+                for mat in aho.find_overlapping_iter(region.mem) {
+                    if scan_data.check_timeout() {
+                        return Err(ScanError::Timeout);
+                    }
+                    let mat = AtomMatch {
+                        pattern: mat.pattern().as_u32(),
+                        start: mat.start(),
+                        end: mat.end(),
+                    };
+                    self.handle_possible_match(region, scanner, mat, scan_data, all_matches)?;
+                }
             }
-            let mat = AtomMatch {
-                pattern: mat.pattern().as_usize(),
-                start: mat.start(),
-                end: mat.end(),
-            };
-            self.handle_possible_match(region, scanner, mat, scan_data, all_matches)?;
+            Inner::HashScanner(hs) => {
+                hs.scan(region.mem, |mat| {
+                    if scan_data.check_timeout() {
+                        return Err(ScanError::Timeout);
+                    }
+                    self.handle_possible_match(region, scanner, mat, scan_data, all_matches)
+                })?;
+            }
         }
 
         if !self.non_handled_var_indexes.is_empty() {
@@ -234,7 +257,7 @@ impl AtomScanner {
         scan_data: &mut ScanData<'scanner, '_>,
         all_matches: &mut [Vec<StringMatch>],
     ) -> Result<(), ScanError> {
-        for literal_info in &self.pattern_index_to_literal_info[mat.pattern] {
+        for literal_info in &self.pattern_index_to_literal_info[mat.pattern as usize] {
             let LiteralInfo {
                 matcher_index,
                 literal_index,
