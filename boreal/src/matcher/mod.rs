@@ -17,7 +17,7 @@ mod widener;
 pub(crate) struct Matcher {
     /// Set of literals extracted from the variable.
     ///
-    /// Will be used by the AC pass to scan for the variable.
+    /// Will be used by the atom scan pass to scan for the variable.
     ///
     /// If both ascii and wide are set in the flags, it is expected that the literals are
     /// composed of:
@@ -44,16 +44,16 @@ pub(crate) struct Modifiers {
     pub xor_start: Option<u8>,
 }
 
-/// State of an aho-corasick match on a [`Matcher`] literals.
+/// Result of an literal match against its [`Matcher`] object.
 #[derive(Clone, Debug)]
-pub enum AcMatchStatus {
+pub enum LiteralMatchStatus {
     /// The literal yields multiple matches (can be empty).
     Multiple(Vec<Range<usize>>),
 
     /// The literal yields a single match (None if invalid).
     ///
-    /// This is an optim to avoid allocating a Vec for the very common case of returning a
-    /// single match.
+    /// This is an optim to avoid allocating a Vec for the very common case of
+    /// returning a single match.
     Single(Range<usize>),
 
     /// The literal does not give any match.
@@ -102,10 +102,10 @@ enum Matches {
 enum MatcherKind {
     /// The literals cover entirely the variable.
     Literals,
-    /// The regex can confirm matches from AC literal matches.
+    /// The regex can confirm matches from atom literal matches.
     Atomized(validator::Validator),
 
-    /// The regex cannot confirm matches from AC literal matches.
+    /// The regex cannot confirm matches from atom literal matches.
     Raw(raw::RawMatcher),
 }
 
@@ -113,7 +113,7 @@ impl Matcher {
     pub fn new_regex(hir: &Hir, modifiers: Modifiers) -> Result<Matcher, crate::regex::Error> {
         let analysis = analysis::analyze_hir(hir, modifiers.dot_all);
 
-        // Do not use an AC if anchors are present, it will be much efficient to just run
+        // Do not use atoms if anchors are present, it will be much efficient to just run
         // the regex directly.
         if analysis.has_start_or_end_line {
             let kind = MatcherKind::Raw(raw::RawMatcher::new(hir, &analysis, modifiers)?);
@@ -261,12 +261,12 @@ impl Matcher {
         }
     }
 
-    /// Confirm that an AC match is a match on the given literal.
+    /// Confirm that an atom match is a match on the given literal.
     ///
-    /// This is needed because the AC might optimize literals and get false positive matches.
-    /// This function is used to confirm the tentative match does match the literal with the given
-    /// index.
-    pub fn confirm_ac_literal(
+    /// This is needed because the atom is generally a subset of the literal.
+    /// This function is used to confirm the tentative match does match the literal
+    /// with the given index.
+    pub fn confirm_atom_literal(
         &self,
         mem: &[u8],
         mat: &Range<usize>,
@@ -310,32 +310,32 @@ impl Matcher {
         }
     }
 
-    pub fn process_ac_match(
+    pub fn process_literal_match(
         &self,
         mem: &[u8],
         mat: Range<usize>,
         start_position: usize,
         match_type: MatchType,
-    ) -> AcMatchStatus {
+    ) -> LiteralMatchStatus {
         match &self.kind {
             MatcherKind::Literals => {
                 if self.validate_fullword(mem, &mat, match_type) {
-                    AcMatchStatus::Single(mat)
+                    LiteralMatchStatus::Single(mat)
                 } else {
-                    AcMatchStatus::None
+                    LiteralMatchStatus::None
                 }
             }
             MatcherKind::Atomized(validator) => {
                 match validator.validate_match(mem, mat, start_position, match_type) {
-                    Matches::None => AcMatchStatus::None,
+                    Matches::None => LiteralMatchStatus::None,
                     Matches::Single(m) => {
                         if self.validate_fullword(mem, &m, match_type) {
-                            AcMatchStatus::Single(m)
+                            LiteralMatchStatus::Single(m)
                         } else {
-                            AcMatchStatus::None
+                            LiteralMatchStatus::None
                         }
                     }
-                    Matches::Multiple(ms) => AcMatchStatus::Multiple(
+                    Matches::Multiple(ms) => LiteralMatchStatus::Multiple(
                         ms.into_iter()
                             .filter(|m| self.validate_fullword(mem, m, match_type))
                             .collect(),
@@ -345,14 +345,14 @@ impl Matcher {
             MatcherKind::Raw(_) => {
                 // A raw matcher has no literals, so this is unreachable.
                 debug_assert!(false);
-                AcMatchStatus::None
+                LiteralMatchStatus::None
             }
         }
     }
 
     pub fn find_next_match_at(&self, mem: &[u8], mut offset: usize) -> Option<Range<usize>> {
         let MatcherKind::Raw(regex) = &self.kind else {
-            // This variable should have been covered by the AC pass, so we should
+            // This variable should have been covered by the atom scan pass, so we should
             // not be able to reach this code.
             debug_assert!(false);
             return None;
@@ -662,6 +662,6 @@ mod tests {
         });
         test_type_traits(MatchType::Ascii);
         test_type_traits_non_clonable(Matches::None);
-        test_type_traits(AcMatchStatus::None);
+        test_type_traits(LiteralMatchStatus::None);
     }
 }
