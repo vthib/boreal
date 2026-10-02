@@ -16,7 +16,7 @@ use crate::{Compiler, Metadata, statistics};
 pub use crate::evaluator::module::EvaluatedModule;
 pub use crate::evaluator::variable::StringMatch;
 
-mod ac_scan;
+mod atom_scanner;
 mod error;
 pub use error::ScanError;
 mod params;
@@ -197,7 +197,7 @@ impl Scanner {
         } = compiler;
         let namespaces = namespaces.into_iter().map(|v| v.name).collect();
 
-        let ac_scan = ac_scan::AcScan::new(&matchers, profile);
+        let atom_scanner = atom_scanner::AtomScanner::new(&matchers, profile);
 
         let mut external_symbols_values = Vec::with_capacity(external_symbols.len());
         let mut external_symbols_map = HashMap::with_capacity(external_symbols.len());
@@ -215,7 +215,7 @@ impl Scanner {
                 rules: rules.into_boxed_slice(),
                 global_rules: global_rules.into_boxed_slice(),
                 matchers: matchers.into_boxed_slice(),
-                ac_scan,
+                atom_scanner,
                 modules: imported_modules.into_boxed_slice(),
                 external_symbols_map,
                 namespaces,
@@ -781,12 +781,10 @@ struct Inner {
     /// Those are stored in the order the rules have been compiled in.
     matchers: Box<[Matcher]>,
 
-    /// Regex set of all variables used in the rules.
+    /// Scanner of atoms extracted from all variables.
     ///
-    /// This is used to scan the memory in one go, and find which variables are found. This
-    /// is usually sufficient for most rules. Other rules that depend on the number or length of
-    /// matches will scan the memory during their evaluation.
-    ac_scan: ac_scan::AcScan,
+    /// This is used to scan the memory in one go, and find which variables are found.
+    atom_scanner: atom_scanner::AtomScanner,
 
     /// List of modules used during scanning.
     modules: Box<[Box<dyn Module>]>,
@@ -1065,7 +1063,7 @@ impl Inner {
         match mem {
             Memory::Direct(mem) => {
                 // Scan the memory for all variables occurences.
-                self.ac_scan.scan_region(
+                self.atom_scanner.scan_region(
                     &Region { start: 0, mem },
                     self,
                     scan_data,
@@ -1092,7 +1090,7 @@ impl Inner {
                         }
                     }
 
-                    self.ac_scan
+                    self.atom_scanner
                         .scan_region(&region, self, scan_data, &mut matches)?;
 
                     // Also, compute the value for the entrypoint expression. Since
@@ -1541,8 +1539,9 @@ mod wire {
     use crate::module::{Module, ModuleUserData, StaticValue};
     use crate::wire::DeserializeContext;
 
+    use super::atom_scanner::AtomScanner;
     use super::{BytesPool, ScanParams};
-    use super::{Inner, Rule, Scanner, ac_scan::AcScan};
+    use super::{Inner, Rule, Scanner};
 
     /// Parameters used during deserialization of a [`Scanner`].
     ///
@@ -1641,13 +1640,13 @@ mod wire {
         let rules = deserialize_rules(&ctx, reader)?;
 
         let profile = CompilerProfile::deserialize_reader(reader)?;
-        let ac_scan = AcScan::new(&matchers, profile);
+        let atom_scanner = AtomScanner::new(&matchers, profile);
 
         Ok(Inner {
             rules: rules.into_boxed_slice(),
             global_rules: global_rules.into_boxed_slice(),
             matchers: matchers.into_boxed_slice(),
-            ac_scan,
+            atom_scanner,
             modules: modules.into_boxed_slice(),
             external_symbols_map,
             namespaces: namespaces.into_iter().map(String::into_boxed_str).collect(),
@@ -1772,7 +1771,7 @@ mod wire {
                     global_rules: Box::new([]),
                     rules: Box::new([]),
                     profile: CompilerProfile::Speed,
-                    ac_scan: AcScan::new(&[], CompilerProfile::Speed),
+                    atom_scanner: AtomScanner::new(&[], CompilerProfile::Speed),
                 }),
             };
 
@@ -1821,7 +1820,7 @@ mod wire {
                 global_rules: Box::new([]),
                 rules: Box::new([]),
                 profile: CompilerProfile::Speed,
-                ac_scan: AcScan::new(&[], CompilerProfile::Speed),
+                atom_scanner: AtomScanner::new(&[], CompilerProfile::Speed),
             };
 
             let truncate_offset_errors = [0, 34, 45, 49, 53, 73, 77, 81];
