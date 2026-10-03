@@ -13,12 +13,24 @@ pub struct HashScanner {
     width3: FixedWidthScanner,
     width4: FixedWidthScanner,
 
+    // 64k array indicating for a u16 value, which widths
+    // contains atoms that has this u16 value as LSB.
+    //
+    // This gives a very cheap way to skip some width scanner
+    // on non matching u32 values.
+    widths_per_hw: Box<[u8; 65536]>,
+
     // List of patterns that match on every byte
     empty_patterns: Vec<u32>,
 }
 
 impl HashScanner {
     pub fn new(atoms: &[Atom]) -> Self {
+        let mut widths_per_hw: Box<[u8; 65536]> = vec![0_u8; 65536]
+            .into_boxed_slice()
+            .try_into()
+            // Safety: the size matches, this cannot fail
+            .unwrap();
         let mut atoms1 = Vec::new();
         let mut atoms2 = Vec::new();
         let mut atoms3 = Vec::new();
@@ -35,14 +47,17 @@ impl HashScanner {
                 }
                 [a, b] => {
                     let atom_u32 = u32::from_le_bytes([*a, *b, 0, 0]);
+                    widths_per_hw[(atom_u32 & 0xFF_FF) as usize] |= 0b001;
                     atoms2.push((index, atom_u32));
                 }
                 [a, b, c] => {
                     let atom_u32 = u32::from_le_bytes([*a, *b, *c, 0]);
+                    widths_per_hw[(atom_u32 & 0xFF_FF) as usize] |= 0b010;
                     atoms3.push((index, atom_u32));
                 }
                 [a, b, c, d] => {
                     let atom_u32 = u32::from_le_bytes([*a, *b, *c, *d]);
+                    widths_per_hw[(atom_u32 & 0xFF_FF) as usize] |= 0b100;
                     atoms4.push((index, atom_u32));
                 }
                 _ => unreachable!(),
@@ -54,6 +69,7 @@ impl HashScanner {
             width2: FixedWidthScanner::new(&atoms2, 0xFF_FF),
             width3: FixedWidthScanner::new(&atoms3, 0xFF_FF_FF),
             width4: FixedWidthScanner::new(&atoms4, 0xFF_FF_FF_FF),
+            widths_per_hw,
             empty_patterns,
         }
     }
@@ -64,10 +80,19 @@ impl HashScanner {
     {
         for (index, slice) in mem.windows(4).enumerate() {
             let atom = u32::from_le_bytes(slice.try_into().unwrap());
+
             self.width1.probe(atom, index, 1, &mut on_match)?;
-            self.width2.probe(atom, index, 2, &mut on_match)?;
-            self.width3.probe(atom, index, 3, &mut on_match)?;
-            self.width4.probe(atom, index, 4, &mut on_match)?;
+
+            let widths = self.widths_per_hw[(atom & 0xFF_FF) as usize];
+            if widths & 0b001 != 0 {
+                self.width2.probe(atom, index, 2, &mut on_match)?;
+            }
+            if widths & 0b010 != 0 {
+                self.width3.probe(atom, index, 3, &mut on_match)?;
+            }
+            if widths & 0b100 != 0 {
+                self.width4.probe(atom, index, 4, &mut on_match)?;
+            }
         }
 
         let len = mem.len();
