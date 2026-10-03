@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use super::AtomMatch;
 use crate::atoms::Atom;
@@ -110,24 +111,38 @@ struct FixedWidthScanner {
     atom_mask: u32,
 
     // Map from key to pattern indices
-    map: HashMap<u32, Vec<u32>>,
+    map: HashMap<u32, u32>,
+
+    patterns: Box<[PatternNode]>,
 }
 
 impl FixedWidthScanner {
     fn new(atoms: &[(u32, u32)], atom_mask: u32) -> Self {
         let mut filter = BloomFilter::new(atoms.len());
-        let mut map: HashMap<u32, Vec<u32>> = HashMap::new();
+        let mut map: HashMap<u32, u32> = HashMap::new();
+
+        let mut patterns = PatternsBuilder::default();
 
         for (pattern_index, atom) in atoms {
             let key = *atom & atom_mask;
             filter.set(key);
-            map.entry(key).or_default().push(*pattern_index);
+            match map.entry(key) {
+                Entry::Vacant(v) => {
+                    let i = patterns.add(PatternNode::END, *pattern_index);
+                    let _r = v.insert(i);
+                }
+                Entry::Occupied(mut o) => {
+                    let i = patterns.add(*o.get(), *pattern_index);
+                    *o.get_mut() = i;
+                }
+            }
         }
 
         Self {
             filter,
             atom_mask,
             map,
+            patterns: patterns.finish(),
         }
     }
 
@@ -147,13 +162,20 @@ impl FixedWidthScanner {
             return Ok(());
         }
 
-        if let Some(patterns) = self.map.get(&key) {
-            for pattern in patterns {
+        if let Some(mut pi) = self.map.get(&key).copied() {
+            loop {
+                let PatternNode { pattern, next } = self.patterns[pi as usize];
+
                 on_match(AtomMatch {
-                    pattern: *pattern,
+                    pattern,
                     start,
                     end: start + width,
                 })?;
+
+                pi = next;
+                if pi == PatternNode::END {
+                    break;
+                }
             }
         }
 
@@ -255,4 +277,32 @@ impl BloomFilter {
 #[inline(always)]
 fn hash(key: u32) -> u32 {
     key.wrapping_mul(0x9E37_79B1)
+}
+
+#[derive(Default)]
+struct PatternsBuilder {
+    data: Vec<PatternNode>,
+}
+
+#[derive(Debug)]
+struct PatternNode {
+    pattern: u32,
+    next: u32,
+}
+
+impl PatternNode {
+    const END: u32 = u32::MAX;
+}
+
+impl PatternsBuilder {
+    fn add(&mut self, next: u32, pattern: u32) -> u32 {
+        self.data.push(PatternNode { pattern, next });
+        #[allow(clippy::cast_possible_truncation)]
+        let res = (self.data.len() - 1) as u32;
+        res
+    }
+
+    fn finish(self) -> Box<[PatternNode]> {
+        self.data.into_boxed_slice()
+    }
 }
