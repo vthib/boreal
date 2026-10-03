@@ -104,6 +104,8 @@ impl HashScanner {
 /// Scanner for atoms of a given width
 #[derive(Debug)]
 struct FixedWidthScanner {
+    filter: BloomFilter,
+
     // Mask to apply to get the given width
     atom_mask: u32,
 
@@ -113,15 +115,20 @@ struct FixedWidthScanner {
 
 impl FixedWidthScanner {
     fn new(atoms: &[(u32, u32)], atom_mask: u32) -> Self {
+        let mut filter = BloomFilter::new(atoms.len());
         let mut map: HashMap<u32, Vec<u32>> = HashMap::new();
 
         for (pattern_index, atom) in atoms {
-            map.entry(*atom & atom_mask)
-                .or_default()
-                .push(*pattern_index);
+            let key = *atom & atom_mask;
+            filter.set(key);
+            map.entry(key).or_default().push(*pattern_index);
         }
 
-        Self { atom_mask, map }
+        Self {
+            filter,
+            atom_mask,
+            map,
+        }
     }
 
     fn probe<F>(
@@ -135,6 +142,10 @@ impl FixedWidthScanner {
         F: FnMut(AtomMatch) -> Result<(), ScanError>,
     {
         let key = atom & self.atom_mask;
+
+        if !self.filter.contains(key) {
+            return Ok(());
+        }
 
         if let Some(patterns) = self.map.get(&key) {
             for pattern in patterns {
@@ -197,4 +208,51 @@ impl Width1Scanner {
 
         Ok(())
     }
+}
+
+#[derive(Debug)]
+struct BloomFilter {
+    bitmap: Box<[u64]>,
+    log2_size: u32,
+}
+
+impl BloomFilter {
+    fn new(size: usize) -> Self {
+        let log2_size = size
+            .saturating_mul(128)
+            // round up to ensure the trailing bits are addressable
+            .next_power_of_two()
+            // log2
+            .trailing_zeros()
+            // never below 65536 bits (8 KB), and never above 2^24 bits (2 MB)
+            .clamp(16, 24);
+
+        let nb_bits = 1 << (log2_size as usize);
+
+        Self {
+            bitmap: vec![0u64; nb_bits / 64].into_boxed_slice(),
+            log2_size,
+        }
+    }
+
+    fn set(&mut self, key: u32) {
+        let (bucket, mask) = self.address(key);
+        self.bitmap[bucket] |= mask;
+    }
+
+    fn contains(&self, key: u32) -> bool {
+        let (bucket, mask) = self.address(key);
+        (self.bitmap[bucket] & mask) != 0
+    }
+
+    fn address(&self, key: u32) -> (usize, u64) {
+        // Keep the log2_size MSB bits from the hash
+        let h = hash(key) >> (32 - self.log2_size);
+        ((h / 64) as usize, 1 << (h % 64))
+    }
+}
+
+#[inline(always)]
+fn hash(key: u32) -> u32 {
+    key.wrapping_mul(0x9E37_79B1)
 }
