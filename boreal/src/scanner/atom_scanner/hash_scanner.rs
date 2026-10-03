@@ -6,7 +6,7 @@ use crate::scanner::ScanError;
 
 #[derive(Debug)]
 pub struct HashScanner {
-    width1: FixedWidthScanner,
+    width1: Width1Scanner,
     width2: FixedWidthScanner,
     width3: FixedWidthScanner,
     width4: FixedWidthScanner,
@@ -29,8 +29,7 @@ impl HashScanner {
             match atom.as_ref() {
                 [] => empty_patterns.push(index),
                 [a] => {
-                    let atom_u32 = u32::from_le_bytes([*a, 0, 0, 0]);
-                    atoms1.push((index, atom_u32));
+                    atoms1.push((index, *a));
                 }
                 [a, b] => {
                     let atom_u32 = u32::from_le_bytes([*a, *b, 0, 0]);
@@ -49,9 +48,9 @@ impl HashScanner {
         }
 
         Self {
-            width1: FixedWidthScanner::new(&atoms1, 0x00_00_00_FF),
-            width2: FixedWidthScanner::new(&atoms2, 0x00_00_FF_FF),
-            width3: FixedWidthScanner::new(&atoms3, 0x00_FF_FF_FF),
+            width1: Width1Scanner::new(&atoms1),
+            width2: FixedWidthScanner::new(&atoms2, 0xFF_FF),
+            width3: FixedWidthScanner::new(&atoms3, 0xFF_FF_FF),
             width4: FixedWidthScanner::new(&atoms4, 0xFF_FF_FF_FF),
             empty_patterns,
         }
@@ -145,6 +144,55 @@ impl FixedWidthScanner {
                     end: start + width,
                 })?;
             }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct Width1Scanner {
+    present: [bool; 256],
+    map: [Vec<u32>; 256],
+}
+
+impl Width1Scanner {
+    fn new(atoms: &[(u32, u8)]) -> Self {
+        let mut map = [const { Vec::new() }; 256];
+        let mut present = [false; 256];
+
+        for (pattern_index, atom) in atoms {
+            let key = usize::from(*atom);
+
+            present[key] = true;
+            map[key].push(*pattern_index);
+        }
+
+        Self { present, map }
+    }
+
+    fn probe<F>(
+        &self,
+        atom: u32,
+        start: usize,
+        width: usize,
+        on_match: &mut F,
+    ) -> Result<(), ScanError>
+    where
+        F: FnMut(AtomMatch) -> Result<(), ScanError>,
+    {
+        let key = (atom & 0xFF) as usize;
+
+        if !self.present[key] {
+            return Ok(());
+        }
+
+        for pattern in &self.map[key] {
+            on_match(AtomMatch {
+                pattern: *pattern,
+                start,
+                end: start + width,
+            })?;
         }
 
         Ok(())
