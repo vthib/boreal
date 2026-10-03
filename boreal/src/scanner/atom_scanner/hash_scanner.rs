@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::hash::{BuildHasherDefault, Hasher};
 
 use super::AtomMatch;
 use crate::atoms::Atom;
@@ -111,7 +112,7 @@ struct FixedWidthScanner {
     atom_mask: u32,
 
     // Map from key to pattern indices
-    map: HashMap<u32, u32>,
+    map: FastMap,
 
     patterns: Box<[PatternNode]>,
 }
@@ -119,8 +120,7 @@ struct FixedWidthScanner {
 impl FixedWidthScanner {
     fn new(atoms: &[(u32, u32)], atom_mask: u32) -> Self {
         let mut filter = BloomFilter::new(atoms.len());
-        let mut map: HashMap<u32, u32> = HashMap::new();
-
+        let mut map = new_fast_map(atoms.len());
         let mut patterns = PatternsBuilder::default();
 
         for (pattern_index, atom) in atoms {
@@ -304,5 +304,33 @@ impl PatternsBuilder {
 
     fn finish(self) -> Box<[PatternNode]> {
         self.data.into_boxed_slice()
+    }
+}
+
+type FastMap = HashMap<u32, u32, BuildHasherDefault<FastHasher>>;
+
+fn new_fast_map(capacity: usize) -> FastMap {
+    FastMap::with_capacity_and_hasher(capacity, BuildHasherDefault::default())
+}
+
+/// Hashes an atom key with a single golden ratio multiply.
+///
+/// The default hasher is `SipHash`, which is chosen to resist collisions forged through a
+/// public API. This is useless here and we need to make this hash as fast as possible.
+#[derive(Default)]
+struct FastHasher(u64);
+
+impl Hasher for FastHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, _bytes: &[u8]) {
+        // This hasher is only used with u32 keys, so only write_u32 is used.
+        unreachable!();
+    }
+
+    fn write_u32(&mut self, v: u32) {
+        self.0 = u64::from(v).wrapping_mul(0x9E37_79B9_7F4A_7C15);
     }
 }
