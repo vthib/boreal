@@ -30,7 +30,14 @@ pub struct HashScanner {
 }
 
 impl HashScanner {
-    pub fn new(atoms: &[Atom]) -> Self {
+    pub fn new(atoms: &[Atom]) -> Option<Box<Self>> {
+        // Pattern indices are stored as u32, with the top bit
+        // reserved for inline tricks. This means this scanner
+        // can only handle up to 2**31-1 patterns.
+        if atoms.len() >= 1 << 31 {
+            return None;
+        }
+
         let mut can_start: Box<[bool; 65536]> = vec![false; 65536]
             .into_boxed_slice()
             .try_into()
@@ -86,7 +93,7 @@ impl HashScanner {
             }
         }
 
-        Self {
+        Some(Box::new(Self {
             width1: if atoms1.is_empty() {
                 None
             } else {
@@ -98,7 +105,7 @@ impl HashScanner {
             can_start,
             widths_per_hw,
             empty_patterns,
-        }
+        }))
     }
 
     pub fn scan<F>(&self, mem: &[u8], mut on_match: F) -> Result<(), ScanError>

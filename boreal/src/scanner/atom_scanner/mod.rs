@@ -164,16 +164,17 @@ impl AtomScanner {
             }
         }
 
-        let mut builder = AhoCorasickBuilder::new();
-        let builder = builder.kind(Some(match profile {
-            CompilerProfile::Speed => AhoCorasickKind::DFA,
-            CompilerProfile::Memory => AhoCorasickKind::ContiguousNFA,
-        }));
-
-        let inner = if std::env::var_os("USE_BOREAL_HASH_SCANNER").is_some() {
-            Inner::HashScanner(Box::new(HashScanner::new(&lits)))
-        } else {
-            Inner::AhoCorasick(builder.build(&lits).unwrap())
+        let inner = match HashScanner::new(&lits) {
+            Some(hs) => Inner::HashScanner(hs),
+            // Fallback to aho-corasick if hash scanner cannot be built.
+            None => {
+                let mut builder = AhoCorasickBuilder::new();
+                let builder = builder.kind(Some(match profile {
+                    CompilerProfile::Speed => AhoCorasickKind::DFA,
+                    CompilerProfile::Memory => AhoCorasickKind::ContiguousNFA,
+                }));
+                Inner::AhoCorasick(builder.build(&lits).unwrap())
+            }
         };
 
         Self {
