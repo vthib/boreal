@@ -155,14 +155,15 @@ impl HashScanner {
                     self.width4.probe(atom, start, 4, &mut on_match)?;
                 }
                 if widths & 0b010 != 0 {
-                    self.width3.probe(atom, start, 3, &mut on_match)?;
+                    self.width3
+                        .probe(atom & 0xFF_FF_FF, start, 3, &mut on_match)?;
                 }
                 if widths & 0b001 != 0 {
                     self.width2
                         .probe_map(atom & 0xFF_FF, start, 2, &mut on_match)?;
                 }
                 if let Some(w1) = self.width1.as_ref() {
-                    w1.probe(atom, start, 1, &mut on_match)?;
+                    w1.probe(atom & 0xFF, start, 1, &mut on_match)?;
                 }
             }
 
@@ -180,23 +181,28 @@ impl HashScanner {
                     mem[index + 3],
                 ]);
                 self.width4.probe(atom, index, 4, &mut on_match)?;
-                self.width3.probe(atom, index, 3, &mut on_match)?;
-                self.width2.probe(atom, index, 2, &mut on_match)?;
+                self.width3
+                    .probe(atom & 0xFF_FF_FF, index, 3, &mut on_match)?;
+                self.width2
+                    .probe_map(atom & 0xFF_FF, index, 2, &mut on_match)?;
                 if let Some(w1) = self.width1.as_ref() {
-                    w1.probe(atom, index, 1, &mut on_match)?;
+                    w1.probe(atom & 0xFF, index, 1, &mut on_match)?;
                 }
             } else if available >= 3 {
                 let atom = u32::from_le_bytes([mem[index], mem[index + 1], mem[index + 2], 0]);
-                self.width3.probe(atom, index, 3, &mut on_match)?;
-                self.width2.probe(atom, index, 2, &mut on_match)?;
+                self.width3
+                    .probe(atom & 0xFF_FF_FF, index, 3, &mut on_match)?;
+                self.width2
+                    .probe_map(atom & 0xFF_FF, index, 2, &mut on_match)?;
                 if let Some(w1) = self.width1.as_ref() {
-                    w1.probe(atom, index, 1, &mut on_match)?;
+                    w1.probe(atom & 0xFF, index, 1, &mut on_match)?;
                 }
             } else if available >= 2 {
                 let atom = u32::from_le_bytes([mem[index], mem[index + 1], 0, 0]);
-                self.width2.probe(atom, index, 2, &mut on_match)?;
+                self.width2
+                    .probe_map(atom & 0xFF_FF, index, 2, &mut on_match)?;
                 if let Some(w1) = self.width1.as_ref() {
-                    w1.probe(atom, index, 1, &mut on_match)?;
+                    w1.probe(atom & 0xFF, index, 1, &mut on_match)?;
                 }
             } else if available >= 1 {
                 if let Some(w1) = self.width1.as_ref() {
@@ -227,9 +233,6 @@ impl HashScanner {
 #[derive(Debug)]
 struct FixedWidthScanner {
     filter: BloomFilter,
-
-    // Mask to apply to get the given width
-    atom_mask: u32,
 
     // Map from key to pattern indices
     map: FastMap<Pattern>,
@@ -266,7 +269,6 @@ impl FixedWidthScanner {
 
         Self {
             filter,
-            atom_mask,
             map,
             patterns: patterns.finish(),
         }
@@ -276,7 +278,7 @@ impl FixedWidthScanner {
     #[inline(always)]
     fn probe<F>(
         &self,
-        atom: u32,
+        key: u32,
         start: usize,
         width: usize,
         on_match: &mut F,
@@ -284,8 +286,6 @@ impl FixedWidthScanner {
     where
         F: FnMut(AtomMatch) -> Result<(), ScanError>,
     {
-        let key = atom & self.atom_mask;
-
         if !self.filter.contains(key) {
             return Ok(());
         }
@@ -357,7 +357,7 @@ impl Width1Scanner {
     #[inline(always)]
     fn probe<F>(
         &self,
-        atom: u32,
+        key: u32,
         start: usize,
         width: usize,
         on_match: &mut F,
@@ -365,7 +365,7 @@ impl Width1Scanner {
     where
         F: FnMut(AtomMatch) -> Result<(), ScanError>,
     {
-        let key = (atom & 0xFF) as usize;
+        let key = key as usize;
 
         if !self.present[key] {
             return Ok(());
