@@ -13,6 +13,11 @@ pub struct HashScanner {
     width3: FixedWidthScanner,
     width4: FixedWidthScanner,
 
+    // Indicates if there are atoms that start with the
+    // given u16 value (or atoms of width1 starting with
+    // the least significant byte).
+    can_start: Box<[bool; 65536]>,
+
     // 64k array indicating for a u16 value, which widths
     // contains atoms that has this u16 value as LSB.
     //
@@ -26,6 +31,11 @@ pub struct HashScanner {
 
 impl HashScanner {
     pub fn new(atoms: &[Atom]) -> Self {
+        let mut can_start: Box<[bool; 65536]> = vec![false; 65536]
+            .into_boxed_slice()
+            .try_into()
+            // Safety: the size matches, this cannot fail
+            .unwrap();
         let mut widths_per_hw: Box<[u8; 65536]> = vec![0_u8; 65536]
             .into_boxed_slice()
             .try_into()
@@ -43,21 +53,33 @@ impl HashScanner {
             match atom.as_ref() {
                 [] => empty_patterns.push(index),
                 [a] => {
+                    for b in 0..=u8::MAX {
+                        let prefix = u16::from_le_bytes([*a, b]);
+                        can_start[usize::from(prefix)] = true;
+                    }
                     atoms1.push((index, *a));
                 }
                 [a, b] => {
-                    let atom_u32 = u32::from_le_bytes([*a, *b, 0, 0]);
-                    widths_per_hw[(atom_u32 & 0xFF_FF) as usize] |= 0b001;
-                    atoms2.push((index, atom_u32));
+                    let prefix = u16::from_le_bytes([*a, *b]);
+                    can_start[usize::from(prefix)] = true;
+                    widths_per_hw[usize::from(prefix)] |= 0b001;
+
+                    atoms2.push((index, u32::from(prefix)));
                 }
                 [a, b, c] => {
+                    let prefix = u16::from_le_bytes([*a, *b]);
+                    can_start[usize::from(prefix)] = true;
+                    widths_per_hw[usize::from(prefix)] |= 0b010;
+
                     let atom_u32 = u32::from_le_bytes([*a, *b, *c, 0]);
-                    widths_per_hw[(atom_u32 & 0xFF_FF) as usize] |= 0b010;
                     atoms3.push((index, atom_u32));
                 }
                 [a, b, c, d] => {
+                    let prefix = u16::from_le_bytes([*a, *b]);
+                    can_start[usize::from(prefix)] = true;
+                    widths_per_hw[usize::from(prefix)] |= 0b100;
+
                     let atom_u32 = u32::from_le_bytes([*a, *b, *c, *d]);
-                    widths_per_hw[(atom_u32 & 0xFF_FF) as usize] |= 0b100;
                     atoms4.push((index, atom_u32));
                 }
                 _ => unreachable!(),
@@ -69,6 +91,7 @@ impl HashScanner {
             width2: FixedWidthScanner::new(&atoms2, 0xFF_FF),
             width3: FixedWidthScanner::new(&atoms3, 0xFF_FF_FF),
             width4: FixedWidthScanner::new(&atoms4, 0xFF_FF_FF_FF),
+            can_start,
             widths_per_hw,
             empty_patterns,
         }
@@ -110,15 +133,8 @@ impl HashScanner {
             // in cache.
             let mut candidates = 0u64;
             for i in 0..64 {
-                // Is there atoms of width 1 that starts with the given prefix.
-                let has_width_1 = u64::from(self.width1.present[block[i] as usize]);
-
-                // Is there atoms of other widths that starts with the given prefix.
                 let prefix = u16::from_le_bytes([block[i], block[i + 1]]);
-                let has_longer_widths = u64::from(self.widths_per_hw[prefix as usize] != 0);
-
-                // Store 1 if there are atoms with this prefix.
-                candidates |= (has_width_1 | has_longer_widths) << i;
+                candidates |= u64::from(self.can_start[usize::from(prefix)]) << i;
             }
 
             // Second pass: for every set bit, probe the different tables.
