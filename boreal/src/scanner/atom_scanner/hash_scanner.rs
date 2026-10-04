@@ -1,3 +1,4 @@
+//! Provides [`HashScanner`], used to scan all atoms in a single pass.
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -6,6 +7,35 @@ use super::AtomMatch;
 use crate::atoms::Atom;
 use crate::scanner::ScanError;
 
+// Scanner of extracted atoms, in a single pass.
+//
+// This scanner is tailor made for how boreal extracts and uses atoms to
+// search for literals matches.
+//
+// The idea is fairly simple: since atoms are 4 bytes max, they can be
+// represented as a u32 value. A simple algorithm could thus just be to use a
+// `HashMap<u32, Vec<usize>>`, mapping each atom to the list of indices of
+// those atoms.
+//
+// Obviously, this would be fairly unoptimized, so the rest of the code is
+// there to make this as fast as possible by layering different levels of
+// filters, each one trying to reject non atoms as cheaply as possible
+// (since most of the scanned data won't match).
+//
+// A more detailed implementation explanation is as follows:
+//
+// - Atoms are stored per width in 4 different tables (1 byte, 2 bytes,
+//   3 bytes, 4 bytes).
+// - A bloom filter is added in front of the map of each table, to cheaply
+//   reject non matches. Each filter is between 8KB and 2MB.
+// - A prefix check is added before the bloom filters of each map. This maps
+//   the u16 prefix of the atom to a bitmap indicating which widths may
+//   contain atoms with this prefix. This prefix table is 64k.
+// - Scan is done on blocks on 64 bytes, with a double pass being used:
+//   - The first pass computes a u64 bitmap indicating which offset may
+//     have atoms (using a precomputed 64k array on u16 prefixes).
+//   - The second pass loads the u32 atom on those offsets and checks in
+//     order: the prefix table, the bloom filters, and finally the maps.
 #[derive(Debug)]
 pub struct HashScanner {
     width1: Option<Width1Table>,
@@ -55,7 +85,11 @@ impl HashScanner {
         let mut empty_patterns = Vec::new();
 
         for (index, atom) in atoms.iter().enumerate() {
-            let index = u32::try_from(index).unwrap();
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "Cannot truncate, because atoms.len() < 2**31"
+            )]
+            let index = index as u32;
 
             match atom.as_ref() {
                 [] => empty_patterns.push(index),
@@ -144,6 +178,7 @@ impl HashScanner {
             // in cache.
             let mut candidates = 0u64;
             for i in 0..64 {
+                // Safety: cannot unwrap for obvious reasons, the slice has the right size
                 let prefix = u16::from_le_bytes(block[i..(i + 2)].try_into().unwrap());
                 candidates |= u64::from(self.can_start[usize::from(prefix)]) << i;
             }
@@ -154,6 +189,7 @@ impl HashScanner {
                 // Unset the trailing "1" bit.
                 candidates &= candidates - 1;
 
+                // Safety: cannot unwrap for obvious reasons, the slice has the right size
                 let atom = u32::from_le_bytes(block[pos..(pos + 4)].try_into().unwrap());
                 let start = index + pos;
 
