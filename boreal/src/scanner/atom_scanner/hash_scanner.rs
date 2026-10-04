@@ -572,3 +572,89 @@ impl Hasher for FastHasher {
         self.0 = u64::from(v).wrapping_mul(0x9E37_79B9_7F4A_7C15);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::atoms::pick_atom_in_literal;
+    use crate::test_helpers::{test_type_traits, test_type_traits_non_clonable};
+
+    fn atom(lit: &[u8]) -> Atom {
+        pick_atom_in_literal(lit).0
+    }
+
+    #[test]
+    fn test_patterns_chaining() {
+        // The atom scanner deduplicates atoms, so patterns sharing an atom can only happen
+        // by building the hash scanner directly. The second pattern moves the inlined one
+        // into a chain, the third one is added to the existing chain.
+        let scanner =
+            HashScanner::new(&[atom(b"abcd"), atom(b"abcd"), atom(b"xbcd"), atom(b"abcd")])
+                .unwrap();
+
+        // One match in the first block, one in the tail.
+        let mut mem = vec![b'.'; 100];
+        mem[10..14].copy_from_slice(b"abcd");
+        mem[70..74].copy_from_slice(b"abcd");
+
+        let mut matches = Vec::new();
+        scanner
+            .scan(&mem, |mat| {
+                matches.push((mat.pattern, mat.start));
+                Ok(())
+            })
+            .unwrap();
+        matches.sort_unstable();
+        assert_eq!(
+            matches,
+            [(0, 10), (0, 70), (1, 10), (1, 70), (3, 10), (3, 70)]
+        );
+    }
+
+    #[test]
+    fn test_bloom_filter_size() {
+        // Never below 2^16 bits.
+        let filter = BloomFilter::new(3);
+        assert_eq!(filter.log2_size, 16);
+        assert_eq!(filter.bitmap.len(), 1 << 10);
+
+        // 128 bits per element, rounded up to the next power of two.
+        let filter = BloomFilter::new(513);
+        assert_eq!(filter.log2_size, 17);
+        assert_eq!(filter.bitmap.len(), 1 << 11);
+
+        // Never above 2^24 bits.
+        let filter = BloomFilter::new(1 << 20);
+        assert_eq!(filter.log2_size, 24);
+        assert_eq!(filter.bitmap.len(), 1 << 18);
+    }
+
+    #[test]
+    fn test_bloom_filter_address() {
+        // The bitmap is accessed without bounds checks, every key must address a bucket
+        // inside it, whatever its size.
+        for log2_size in 16..=24 {
+            let filter = BloomFilter::new(1 << (log2_size - 7));
+            assert_eq!(filter.log2_size, log2_size);
+
+            for key in [0, u32::MAX / 2, u32::MAX] {
+                let (bucket, mask) = filter.address(key);
+                assert!(bucket < filter.bitmap.len());
+                assert_eq!(mask.count_ones(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn test_types_traits() {
+        test_type_traits_non_clonable(HashScanner::new(&[atom(b"a")]).unwrap());
+        test_type_traits_non_clonable(FixedWidthTable::new(&[], 0xFF_FF));
+        test_type_traits_non_clonable(Width1Table::new(&[]));
+        test_type_traits_non_clonable(BloomFilter::new(0));
+        test_type_traits(Pattern::new(0));
+        test_type_traits(PatternNode {
+            pattern: 0,
+            next: PatternNode::END,
+        });
+    }
+}
