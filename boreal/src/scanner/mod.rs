@@ -1767,6 +1767,7 @@ mod wire {
             let truncate_offset_errors = [0, 32, 46];
 
             let mut buf = [0; 46];
+            #[allow(clippy::mut_mut)]
             for offset in &truncate_offset_errors {
                 assert!(scanner.serialize(&mut &mut buf[..*offset]).is_err());
             }
@@ -1814,6 +1815,7 @@ mod wire {
             let truncate_offset_errors = [0, 34, 45, 49, 53, 73, 77, 81];
 
             let mut buf = [0; 83];
+            #[allow(clippy::mut_mut)]
             for offset in &truncate_offset_errors {
                 assert!(inner.serialize(&mut &mut buf[..*offset]).is_err());
             }
@@ -1856,8 +1858,11 @@ mod wire {
             let modules: Vec<Box<dyn Module>> = vec![Box::new(Time), Box::new(Math)];
 
             let mut buf = [0; 5];
-            assert!(serialize_modules(&modules, &mut &mut buf[..1]).is_err());
-            assert!(serialize_modules(&modules, &mut &mut buf[..5]).is_err());
+            #[allow(clippy::mut_mut)]
+            {
+                assert!(serialize_modules(&modules, &mut &mut buf[..1]).is_err());
+                assert!(serialize_modules(&modules, &mut &mut buf[..5]).is_err());
+            }
             let mut buf = Vec::new();
             serialize_modules(&modules, &mut buf).unwrap();
 
