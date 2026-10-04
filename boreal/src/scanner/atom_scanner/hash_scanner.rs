@@ -78,8 +78,6 @@ impl HashScanner {
     where
         F: FnMut(AtomMatch) -> Result<(), ScanError>,
     {
-        let block_end = mem.len().saturating_sub(3);
-
         // The scan idea is pretty simple, and can be thought of this way:
         //
         // ```
@@ -100,9 +98,10 @@ impl HashScanner {
 
         // Iterate in steps of 64 bytes
         let mut index = 0;
-        while index < block_end {
-            let n = (block_end - index).min(64);
-            let block = &mem[index..=index + n];
+        // 64 + 3: since we check want to check all atoms that starts with a byte
+        // from the 64 range, so 3 additional bytes are needed.
+        while index + 67 <= mem.len() {
+            let block = &mem[index..index + 67];
 
             // First pass: compute a u64 value where a bit is set to 1 if the
             // u16 prefix at this given offset is the prefix of existing atoms.
@@ -110,7 +109,7 @@ impl HashScanner {
             // This is branch free and computed from values (hopefully) kept
             // in cache.
             let mut candidates = 0u64;
-            for i in 0..n {
+            for i in 0..64 {
                 // Is there atoms of width 1 that starts with the given prefix.
                 let has_width_1 = u64::from(self.width1.present[block[i] as usize]);
 
@@ -124,44 +123,63 @@ impl HashScanner {
 
             // Second pass: for every set bit, probe the different tables.
             while candidates != 0 {
-                let pos = index + candidates.trailing_zeros() as usize;
+                let pos = candidates.trailing_zeros() as usize;
                 // Unset the trailing "1" bit.
                 candidates &= candidates - 1;
 
-                let atom = u32::from_le_bytes([mem[pos], mem[pos + 1], mem[pos + 2], mem[pos + 3]]);
+                let atom = u32::from_le_bytes([
+                    block[pos],
+                    block[pos + 1],
+                    block[pos + 2],
+                    block[pos + 3],
+                ]);
 
-                self.width1.probe(atom, pos, 1, &mut on_match)?;
+                self.width1.probe(atom, index + pos, 1, &mut on_match)?;
 
                 let widths = self.widths_per_hw[(atom & 0xFF_FF) as usize];
                 if widths & 0b001 != 0 {
-                    self.width2.probe(atom, pos, 2, &mut on_match)?;
+                    self.width2.probe(atom, index + pos, 2, &mut on_match)?;
                 }
                 if widths & 0b010 != 0 {
-                    self.width3.probe(atom, pos, 3, &mut on_match)?;
+                    self.width3.probe(atom, index + pos, 3, &mut on_match)?;
                 }
                 if widths & 0b100 != 0 {
-                    self.width4.probe(atom, pos, 4, &mut on_match)?;
+                    self.width4.probe(atom, index + pos, 4, &mut on_match)?;
                 }
             }
 
-            index += n;
+            index += 64;
         }
 
-        let len = mem.len();
-        if len >= 3 {
-            let atom = u32::from_le_bytes([mem[len - 3], mem[len - 2], mem[len - 1], 0]);
-            self.width1.probe(atom, len - 3, 1, &mut on_match)?;
-            self.width2.probe(atom, len - 3, 2, &mut on_match)?;
-            self.width3.probe(atom, len - 3, 3, &mut on_match)?;
-        }
-        if len >= 2 {
-            let atom = u32::from_le_bytes([mem[len - 2], mem[len - 1], 0, 0]);
-            self.width1.probe(atom, len - 2, 1, &mut on_match)?;
-            self.width2.probe(atom, len - 2, 2, &mut on_match)?;
-        }
-        if len >= 1 {
-            let atom = u32::from_le_bytes([mem[len - 1], 0, 0, 0]);
-            self.width1.probe(atom, len - 1, 1, &mut on_match)?;
+        // Tail end of the scanned data, use a simple single pass for this.
+        while index < mem.len() {
+            let available = std::cmp::min(mem.len() - index, 4);
+            if available >= 4 {
+                let atom = u32::from_le_bytes([
+                    mem[index],
+                    mem[index + 1],
+                    mem[index + 2],
+                    mem[index + 3],
+                ]);
+                self.width1.probe(atom, index, 1, &mut on_match)?;
+                self.width2.probe(atom, index, 2, &mut on_match)?;
+                self.width3.probe(atom, index, 3, &mut on_match)?;
+                self.width4.probe(atom, index, 4, &mut on_match)?;
+            } else if available >= 3 {
+                let atom = u32::from_le_bytes([mem[index], mem[index + 1], mem[index + 2], 0]);
+                self.width1.probe(atom, index, 1, &mut on_match)?;
+                self.width2.probe(atom, index, 2, &mut on_match)?;
+                self.width3.probe(atom, index, 3, &mut on_match)?;
+            } else if available >= 2 {
+                let atom = u32::from_le_bytes([mem[index], mem[index + 1], 0, 0]);
+                self.width1.probe(atom, index, 1, &mut on_match)?;
+                self.width2.probe(atom, index, 2, &mut on_match)?;
+            } else if available >= 1 {
+                let atom = u32::from_le_bytes([mem[index], 0, 0, 0]);
+                self.width1.probe(atom, index, 1, &mut on_match)?;
+            }
+
+            index += 1;
         }
 
         if !self.empty_patterns.is_empty() {
@@ -380,12 +398,14 @@ impl BloomFilter {
 
     fn set(&mut self, key: u32) {
         let (bucket, mask) = self.address(key);
-        self.bitmap[bucket] |= mask;
+        // Safety: this access cannot fail by construction.
+        unsafe { *self.bitmap.get_unchecked_mut(bucket) |= mask };
     }
 
     fn contains(&self, key: u32) -> bool {
         let (bucket, mask) = self.address(key);
-        (self.bitmap[bucket] & mask) != 0
+        // Safety: this access cannot fail by construction.
+        (unsafe { self.bitmap.get_unchecked(bucket) } & mask) != 0
     }
 
     fn address(&self, key: u32) -> (usize, u64) {
