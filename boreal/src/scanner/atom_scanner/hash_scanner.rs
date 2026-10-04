@@ -229,6 +229,8 @@ impl FixedWidthScanner {
         }
     }
 
+    // Inline this to avoid a function call on the fast pass
+    #[inline(always)]
     fn probe<F>(
         &self,
         atom: u32,
@@ -245,6 +247,21 @@ impl FixedWidthScanner {
             return Ok(());
         }
 
+        // Keep this out of the inlined function: this is
+        // the slow path.
+        self.probe_map(key, start, width, on_match)
+    }
+
+    fn probe_map<F>(
+        &self,
+        key: u32,
+        start: usize,
+        width: usize,
+        on_match: &mut F,
+    ) -> Result<(), ScanError>
+    where
+        F: FnMut(AtomMatch) -> Result<(), ScanError>,
+    {
         if let Some(p) = self.map.get(&key).copied() {
             if p.is_inline() {
                 on_match(AtomMatch {
@@ -294,6 +311,7 @@ impl Width1Scanner {
         Self { present, map }
     }
 
+    #[inline(always)]
     fn probe<F>(
         &self,
         atom: u32,
@@ -310,6 +328,19 @@ impl Width1Scanner {
             return Ok(());
         }
 
+        self.probe_map(key, start, width, on_match)
+    }
+
+    fn probe_map<F>(
+        &self,
+        key: usize,
+        start: usize,
+        width: usize,
+        on_match: &mut F,
+    ) -> Result<(), ScanError>
+    where
+        F: FnMut(AtomMatch) -> Result<(), ScanError>,
+    {
         for pattern in &self.map[key] {
             on_match(AtomMatch {
                 pattern: *pattern,
