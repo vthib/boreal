@@ -8,10 +8,10 @@ use crate::scanner::ScanError;
 
 #[derive(Debug)]
 pub struct HashScanner {
-    width1: Option<Width1Scanner>,
-    width2: FixedWidthScanner,
-    width3: FixedWidthScanner,
-    width4: FixedWidthScanner,
+    width1: Option<Width1Table>,
+    width2: FixedWidthTable,
+    width3: FixedWidthTable,
+    width4: FixedWidthTable,
 
     // Indicates if there are atoms that start with the
     // given u16 value (or atoms of width1 starting with
@@ -90,11 +90,11 @@ impl HashScanner {
             width1: if atoms1.is_empty() {
                 None
             } else {
-                Some(Width1Scanner::new(&atoms1))
+                Some(Width1Table::new(&atoms1))
             },
-            width2: FixedWidthScanner::new(&atoms2, 0xFF_FF),
-            width3: FixedWidthScanner::new(&atoms3, 0xFF_FF_FF),
-            width4: FixedWidthScanner::new(&atoms4, 0xFF_FF_FF_FF),
+            width2: FixedWidthTable::new(&atoms2, 0xFF_FF),
+            width3: FixedWidthTable::new(&atoms3, 0xFF_FF_FF),
+            width4: FixedWidthTable::new(&atoms4, 0xFF_FF_FF_FF),
             can_start,
             widths_per_hw,
             empty_patterns,
@@ -231,7 +231,7 @@ impl HashScanner {
 
 /// Scanner for atoms of a given width
 #[derive(Debug)]
-struct FixedWidthScanner {
+struct FixedWidthTable {
     filter: BloomFilter,
 
     // Map from key to pattern indices
@@ -240,7 +240,7 @@ struct FixedWidthScanner {
     patterns: Box<[PatternNode]>,
 }
 
-impl FixedWidthScanner {
+impl FixedWidthTable {
     fn new(atoms: &[(u32, u32)], atom_mask: u32) -> Self {
         let mut filter = BloomFilter::new(atoms.len());
         let mut map = new_fast_map(atoms.len());
@@ -334,12 +334,12 @@ impl FixedWidthScanner {
 }
 
 #[derive(Debug)]
-struct Width1Scanner {
+struct Width1Table {
     present: [bool; 256],
     map: [Vec<u32>; 256],
 }
 
-impl Width1Scanner {
+impl Width1Table {
     fn new(atoms: &[(u32, u8)]) -> Self {
         let mut map = [const { Vec::new() }; 256];
         let mut present = [false; 256];
