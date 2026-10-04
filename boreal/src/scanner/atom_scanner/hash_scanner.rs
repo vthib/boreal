@@ -189,7 +189,7 @@ struct FixedWidthScanner {
     atom_mask: u32,
 
     // Map from key to pattern indices
-    map: FastMap,
+    map: FastMap<Pattern>,
 
     patterns: Box<[PatternNode]>,
 }
@@ -205,12 +205,18 @@ impl FixedWidthScanner {
             filter.set(key);
             match map.entry(key) {
                 Entry::Vacant(v) => {
-                    let i = patterns.add(PatternNode::END, *pattern_index);
-                    let _r = v.insert(i);
+                    let _r = v.insert(Pattern::new_inline(*pattern_index));
                 }
                 Entry::Occupied(mut o) => {
-                    let i = patterns.add(*o.get(), *pattern_index);
-                    *o.get_mut() = i;
+                    let existing_pattern = *o.get();
+
+                    let previous_index = if existing_pattern.is_inline() {
+                        patterns.add(PatternNode::END, existing_pattern.get())
+                    } else {
+                        existing_pattern.get()
+                    };
+                    let i = patterns.add(previous_index, *pattern_index);
+                    *o.get_mut() = Pattern::new(i);
                 }
             }
         }
@@ -239,8 +245,18 @@ impl FixedWidthScanner {
             return Ok(());
         }
 
-        if let Some(mut pi) = self.map.get(&key).copied() {
-            loop {
+        if let Some(p) = self.map.get(&key).copied() {
+            if p.is_inline() {
+                on_match(AtomMatch {
+                    pattern: p.get(),
+                    start,
+                    end: start + width,
+                })?;
+                return Ok(());
+            }
+
+            let mut pi = p.get();
+            while pi != PatternNode::END {
                 let PatternNode { pattern, next } = self.patterns[pi as usize];
 
                 on_match(AtomMatch {
@@ -250,9 +266,6 @@ impl FixedWidthScanner {
                 })?;
 
                 pi = next;
-                if pi == PatternNode::END {
-                    break;
-                }
             }
         }
 
@@ -356,12 +369,41 @@ fn hash(key: u32) -> u32 {
     key.wrapping_mul(0x9E37_79B1)
 }
 
+#[derive(Copy, Clone, Debug)]
+struct Pattern(u32);
+
+impl Pattern {
+    const INLINE_BIT: u32 = 1 << 31;
+
+    fn new_inline(pattern: u32) -> Self {
+        assert_eq!(pattern & Self::INLINE_BIT, 0);
+        Self(pattern | Self::INLINE_BIT)
+    }
+
+    fn new(pattern: u32) -> Self {
+        assert_eq!(pattern & Self::INLINE_BIT, 0);
+        Self(pattern)
+    }
+
+    fn is_inline(self) -> bool {
+        self.0 & (1 << 31) != 0
+    }
+
+    fn get(self) -> u32 {
+        if self.is_inline() {
+            self.0 & !Self::INLINE_BIT
+        } else {
+            self.0
+        }
+    }
+}
+
 #[derive(Default)]
 struct PatternsBuilder {
     data: Vec<PatternNode>,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 struct PatternNode {
     pattern: u32,
     next: u32,
@@ -384,9 +426,9 @@ impl PatternsBuilder {
     }
 }
 
-type FastMap = HashMap<u32, u32, BuildHasherDefault<FastHasher>>;
+type FastMap<V> = HashMap<u32, V, BuildHasherDefault<FastHasher>>;
 
-fn new_fast_map(capacity: usize) -> FastMap {
+fn new_fast_map<V>(capacity: usize) -> FastMap<V> {
     FastMap::with_capacity_and_hasher(capacity, BuildHasherDefault::default())
 }
 
