@@ -8,7 +8,7 @@ use crate::scanner::ScanError;
 
 #[derive(Debug)]
 pub struct HashScanner {
-    width1: Width1Scanner,
+    width1: Option<Width1Scanner>,
     width2: FixedWidthScanner,
     width3: FixedWidthScanner,
     width4: FixedWidthScanner,
@@ -87,7 +87,11 @@ impl HashScanner {
         }
 
         Self {
-            width1: Width1Scanner::new(&atoms1),
+            width1: if atoms1.is_empty() {
+                None
+            } else {
+                Some(Width1Scanner::new(&atoms1))
+            },
             width2: FixedWidthScanner::new(&atoms2, 0xFF_FF),
             width3: FixedWidthScanner::new(&atoms3, 0xFF_FF_FF),
             width4: FixedWidthScanner::new(&atoms4, 0xFF_FF_FF_FF),
@@ -133,7 +137,7 @@ impl HashScanner {
             // in cache.
             let mut candidates = 0u64;
             for i in 0..64 {
-                let prefix = u16::from_le_bytes([block[i], block[i + 1]]);
+                let prefix = u16::from_le_bytes(block[i..(i + 2)].try_into().unwrap());
                 candidates |= u64::from(self.can_start[usize::from(prefix)]) << i;
             }
 
@@ -143,18 +147,16 @@ impl HashScanner {
                 // Unset the trailing "1" bit.
                 candidates &= candidates - 1;
 
-                let atom = u32::from_le_bytes([
-                    block[pos],
-                    block[pos + 1],
-                    block[pos + 2],
-                    block[pos + 3],
-                ]);
+                let atom = u32::from_le_bytes(block[pos..(pos + 4)].try_into().unwrap());
 
-                self.width1.probe(atom, index + pos, 1, &mut on_match)?;
+                if let Some(w1) = self.width1.as_ref() {
+                    w1.probe(atom, index + pos, 1, &mut on_match)?;
+                }
 
                 let widths = self.widths_per_hw[(atom & 0xFF_FF) as usize];
                 if widths & 0b001 != 0 {
-                    self.width2.probe(atom, index + pos, 2, &mut on_match)?;
+                    self.width2
+                        .probe_map(atom & 0xFF_FF, index + pos, 2, &mut on_match)?;
                 }
                 if widths & 0b010 != 0 {
                     self.width3.probe(atom, index + pos, 3, &mut on_match)?;
@@ -177,22 +179,30 @@ impl HashScanner {
                     mem[index + 2],
                     mem[index + 3],
                 ]);
-                self.width1.probe(atom, index, 1, &mut on_match)?;
+                if let Some(w1) = self.width1.as_ref() {
+                    w1.probe(atom, index, 1, &mut on_match)?;
+                }
                 self.width2.probe(atom, index, 2, &mut on_match)?;
                 self.width3.probe(atom, index, 3, &mut on_match)?;
                 self.width4.probe(atom, index, 4, &mut on_match)?;
             } else if available >= 3 {
                 let atom = u32::from_le_bytes([mem[index], mem[index + 1], mem[index + 2], 0]);
-                self.width1.probe(atom, index, 1, &mut on_match)?;
+                if let Some(w1) = self.width1.as_ref() {
+                    w1.probe(atom, index, 1, &mut on_match)?;
+                }
                 self.width2.probe(atom, index, 2, &mut on_match)?;
                 self.width3.probe(atom, index, 3, &mut on_match)?;
             } else if available >= 2 {
                 let atom = u32::from_le_bytes([mem[index], mem[index + 1], 0, 0]);
-                self.width1.probe(atom, index, 1, &mut on_match)?;
+                if let Some(w1) = self.width1.as_ref() {
+                    w1.probe(atom, index, 1, &mut on_match)?;
+                }
                 self.width2.probe(atom, index, 2, &mut on_match)?;
             } else if available >= 1 {
                 let atom = u32::from_le_bytes([mem[index], 0, 0, 0]);
-                self.width1.probe(atom, index, 1, &mut on_match)?;
+                if let Some(w1) = self.width1.as_ref() {
+                    w1.probe(atom, index, 1, &mut on_match)?;
+                }
             }
 
             index += 1;
