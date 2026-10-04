@@ -5,7 +5,7 @@
 //! indexes or reported matches that are wrong when many variables are used, etc.
 //!
 //! This module is for tests that try to cover those cases.
-use crate::utils::Compiler;
+use crate::utils::{Checker, Compiler};
 
 #[test]
 fn test_many_vars() {
@@ -160,4 +160,43 @@ rule d {
             ),
         ],
     );
+}
+
+#[test]
+fn test_atoms_of_every_width_at_every_offset() {
+    // The atom scanner has logic for read in blocks of 64 bytes, and another logic for
+    // the tail end, so make sure that for every length of atoms, the matching is working.
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $w1 = "a"
+        $w2 = "bc"
+        $w3 = "def"
+        $w4 = "ghij"
+    condition:
+        any of them
+}"#,
+    );
+
+    for (name, atom) in [
+        ("w1", b"a".as_slice()),
+        ("w2", b"bc"),
+        ("w3", b"def"),
+        ("w4", b"ghij"),
+    ] {
+        for offset in 0..150 {
+            let mut mem = vec![b'.'; 160];
+            mem[offset..offset + atom.len()].copy_from_slice(atom);
+            let expected = vec![(
+                "default:a".to_owned(),
+                vec![(name, vec![(atom, offset, atom.len())])],
+            )];
+
+            // Atom followed by more bytes.
+            checker.check_full_matches(&mem, expected.clone());
+            // Atom at the very end of the input.
+            checker.check_full_matches(&mem[..offset + atom.len()], expected);
+        }
+    }
 }
