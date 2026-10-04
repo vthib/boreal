@@ -78,21 +78,73 @@ impl HashScanner {
     where
         F: FnMut(AtomMatch) -> Result<(), ScanError>,
     {
-        for (index, slice) in mem.windows(4).enumerate() {
-            let atom = u32::from_le_bytes(slice.try_into().unwrap());
+        let block_end = mem.len().saturating_sub(3);
 
-            self.width1.probe(atom, index, 1, &mut on_match)?;
+        // The scan idea is pretty simple, and can be thought of this way:
+        //
+        // ```
+        // for index in 0..mem.len() {
+        //     let atom = u32::from(mem[index..(index+4)]);
+        //     find_width1_atoms(atom & 0xFF);
+        //     find_width2_atoms(atom & 0xFF_FF);
+        //     find_width3_atoms(atom & 0xFF_FF_FF);
+        //     find_width4_atoms(atom);
+        // }
+        // ```
+        //
+        // This is however reworked to make this iteration as fast as possible
+        // by splitting into two passes. The first pass builds a u64 value where
+        // every bit indicating if there are atoms that are prefixed by the u16
+        // value at the given index. The second pass iterates on this u64 value
+        // to probe for atoms.
 
-            let widths = self.widths_per_hw[(atom & 0xFF_FF) as usize];
-            if widths & 0b001 != 0 {
-                self.width2.probe(atom, index, 2, &mut on_match)?;
+        // Iterate in steps of 64 bytes
+        let mut index = 0;
+        while index < block_end {
+            let n = (block_end - index).min(64);
+            let block = &mem[index..=index + n];
+
+            // First pass: compute a u64 value where a bit is set to 1 if the
+            // u16 prefix at this given offset is the prefix of existing atoms.
+            //
+            // This is branch free and computed from values (hopefully) kept
+            // in cache.
+            let mut candidates = 0u64;
+            for i in 0..n {
+                // Is there atoms of width 1 that starts with the given prefix.
+                let has_width_1 = u64::from(self.width1.present[block[i] as usize]);
+
+                // Is there atoms of other widths that starts with the given prefix.
+                let prefix = u16::from_le_bytes([block[i], block[i + 1]]);
+                let has_longer_widths = u64::from(self.widths_per_hw[prefix as usize] != 0);
+
+                // Store 1 if there are atoms with this prefix.
+                candidates |= (has_width_1 | has_longer_widths) << i;
             }
-            if widths & 0b010 != 0 {
-                self.width3.probe(atom, index, 3, &mut on_match)?;
+
+            // Second pass: for every set bit, probe the different tables.
+            while candidates != 0 {
+                let pos = index + candidates.trailing_zeros() as usize;
+                // Unset the trailing "1" bit.
+                candidates &= candidates - 1;
+
+                let atom = u32::from_le_bytes([mem[pos], mem[pos + 1], mem[pos + 2], mem[pos + 3]]);
+
+                self.width1.probe(atom, pos, 1, &mut on_match)?;
+
+                let widths = self.widths_per_hw[(atom & 0xFF_FF) as usize];
+                if widths & 0b001 != 0 {
+                    self.width2.probe(atom, pos, 2, &mut on_match)?;
+                }
+                if widths & 0b010 != 0 {
+                    self.width3.probe(atom, pos, 3, &mut on_match)?;
+                }
+                if widths & 0b100 != 0 {
+                    self.width4.probe(atom, pos, 4, &mut on_match)?;
+                }
             }
-            if widths & 0b100 != 0 {
-                self.width4.probe(atom, index, 4, &mut on_match)?;
-            }
+
+            index += n;
         }
 
         let len = mem.len();
