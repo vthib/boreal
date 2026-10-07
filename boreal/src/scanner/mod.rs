@@ -1139,7 +1139,10 @@ impl Inner {
 /// on every rule evaluation.
 struct EvalContext {
     /// Variable matches. None if evaluation is done previous the scan is done.
-    var_matches: Option<std::vec::IntoIter<Vec<StringMatch>>>,
+    var_matches: Option<Vec<Vec<StringMatch>>>,
+
+    /// Index in `var_matches` of the first variable of the next rule to evaluate.
+    next_var: usize,
 
     /// List of dependency rules that matched.
     matched_dependency_rules: MatchedDependencyRules,
@@ -1153,7 +1156,8 @@ struct EvalContext {
 impl EvalContext {
     fn new(var_matches: Option<Vec<Vec<StringMatch>>>, nb_namespaces: usize) -> Self {
         Self {
-            var_matches: var_matches.map(Vec::into_iter),
+            var_matches,
+            next_var: 0,
             matched_dependency_rules: MatchedDependencyRules::default(),
             namespace_disabled: vec![false; nb_namespaces],
         }
@@ -1203,24 +1207,21 @@ impl EvalContext {
         scan_data: &mut ScanData<'scanner, '_>,
         call_callback: bool,
     ) -> Result<bool, EvalError> {
-        let var_matches: Option<Vec<_>> = self
-            .var_matches
-            .as_mut()
-            .map(|matches| matches.take(rule.variables.len()).collect());
+        let range = self.next_var..self.next_var + rule.variables.len();
+        self.next_var = range.end;
+        let var_matches = self.var_matches.as_deref().map(|m| &m[range.clone()]);
 
         // Most rules are false as soon as none of their strings matched, and a scan of a
         // small file spends most of its time walking conditions. Skip those entirely.
         let no_string_matched = rule.false_without_string_match
-            && var_matches
-                .as_deref()
-                .is_some_and(|m| m.iter().all(Vec::is_empty));
+            && var_matches.is_some_and(|m| m.iter().all(Vec::is_empty));
 
         let matched = if self.namespace_disabled[rule.namespace_index] || no_string_matched {
             false
         } else {
             evaluate_rule(
                 rule,
-                var_matches.as_deref(),
+                var_matches,
                 &self.matched_dependency_rules,
                 &scanner.bytes_pool,
                 mem,
@@ -1233,8 +1234,12 @@ impl EvalContext {
         }
 
         if matched || scan_data.params.include_not_matched_rules {
-            let matched_rule =
-                build_matched_rule(rule, scanner, var_matches.unwrap_or_default(), matched);
+            // Take ownership of the matches to move them into the results.
+            let var_matches = match self.var_matches.as_mut() {
+                Some(m) => m[range].iter_mut().map(std::mem::take).collect(),
+                None => Vec::new(),
+            };
+            let matched_rule = build_matched_rule(rule, scanner, var_matches, matched);
             match &mut scan_data.callback {
                 Some(cb) if call_callback => {
                     let mut result = ScanCallbackResult::Continue;
