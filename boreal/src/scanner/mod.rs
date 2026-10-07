@@ -1208,7 +1208,14 @@ impl EvalContext {
             .as_mut()
             .map(|matches| matches.take(rule.variables.len()).collect());
 
-        let matched = if self.namespace_disabled[rule.namespace_index] {
+        // Most rules are false as soon as none of their strings matched, and a scan of a
+        // small file spends most of its time walking conditions. Skip those entirely.
+        let no_string_matched = rule.false_without_string_match
+            && var_matches
+                .as_deref()
+                .is_some_and(|m| m.iter().all(Vec::is_empty));
+
+        let matched = if self.namespace_disabled[rule.namespace_index] || no_string_matched {
             false
         } else {
             evaluate_rule(
@@ -1896,6 +1903,7 @@ mod wire {
                 variables: Box::new([]),
                 is_private: false,
                 is_depended_upon: false,
+                false_without_string_match: false,
             }];
             test_round_trip_custom_deser(&rules, |reader| deserialize_rules(&ctx, reader), &[0, 4]);
         }

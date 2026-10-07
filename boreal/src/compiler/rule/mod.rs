@@ -14,6 +14,8 @@ use crate::matcher::Matcher;
 use crate::module::Type as ModuleType;
 use crate::statistics;
 
+mod no_match;
+
 /// A compiled scanning rule.
 #[derive(Debug)]
 #[cfg_attr(all(test, feature = "serialize"), derive(PartialEq))]
@@ -44,6 +46,9 @@ pub(crate) struct Rule {
 
     /// Is the rule depended upon by other rules.
     pub(crate) is_depended_upon: bool,
+
+    /// Is the condition guaranteed to be false when none of the rule's strings matched.
+    pub(crate) false_without_string_match: bool,
 }
 
 /// Some details about a rule variable.
@@ -358,6 +363,7 @@ pub(super) fn compile_rule(
         matchers.push(matcher);
     }
 
+    let false_without_string_match = no_match::is_false_without_string_match(&condition);
     let compiled_rule = CompiledRule {
         rule: Rule {
             name: rule.name.into_boxed_str(),
@@ -372,6 +378,7 @@ pub(super) fn compile_rule(
             variables: rule_variables.into_boxed_slice(),
             is_private: rule.is_private,
             is_depended_upon: false,
+            false_without_string_match,
         },
         matchers,
         variables_statistics,
@@ -425,6 +432,7 @@ mod wire {
             self.variables.serialize(writer)?;
             self.is_depended_upon.serialize(writer)?;
             self.condition.serialize(writer)?;
+            self.false_without_string_match.serialize(writer)?;
             Ok(())
         }
     }
@@ -441,6 +449,7 @@ mod wire {
         let variables = <Vec<RuleVariable>>::deserialize_reader(reader)?;
         let is_depended_upon = bool::deserialize_reader(reader)?;
         let condition = Expression::deserialize(ctx, reader)?;
+        let false_without_string_match = bool::deserialize_reader(reader)?;
 
         Ok(Rule {
             name: name.into_boxed_str(),
@@ -451,6 +460,7 @@ mod wire {
             variables: variables.into_boxed_slice(),
             is_private,
             is_depended_upon,
+            false_without_string_match,
         })
     }
 
@@ -549,6 +559,7 @@ mod wire {
                     metadatas: Box::new([]),
                     variables: Box::new([]),
                     is_depended_upon: false,
+                    false_without_string_match: false,
                     condition: Expression::Filesize,
                 },
                 |reader| deserialize_rule(&ctx, reader),
@@ -627,6 +638,7 @@ mod tests {
             variables: Box::new([]),
             is_private: false,
             is_depended_upon: false,
+            false_without_string_match: false,
         };
         test_type_traits_non_clonable(build_rule());
         test_type_traits_non_clonable(CompiledRule {
