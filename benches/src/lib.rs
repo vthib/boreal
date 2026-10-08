@@ -7,17 +7,17 @@ use walkdir::WalkDir;
 pub const RULES_SETS: [(&str, &str); 7] = [
     // 100 rules, 1998 variables
     ("panopticon", "assets/panopticon/baseline_100.yar"),
-    // 4297 rules, 23630 vars
+    // 5904 rules, 33166 vars
     ("signature-base", "assets/signature-base/yara"),
-    // 147 rules, 644 variables
+    // 176 rules, 759 variables
     ("orion", "assets/orion"),
-    // 632 rules, 1536 variables
+    // 1240 rules, 1975 variables
     ("reversinglabs", "assets/reversinglabs"),
     // 167 rules, 1408 variables
     ("atr", "assets/atr"),
     // 16431 rules, 13155 variables
     ("icewater", "assets/icewater"),
-    // 121 rules, 5390 variables
+    // 123 rules, 5390 variables
     ("c0ffee", "assets/c0ffee/rules.yar"),
     // Extremely slow
     // ("assets/yara-rules/index.yar", 12771),
@@ -46,14 +46,8 @@ pub fn get_yara_files_from_path(path: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-pub fn build_boreal_compiler(speed: bool) -> boreal::Compiler {
-    let mut boreal_compiler = boreal::compiler::CompilerBuilder::new()
-        .profile(if speed {
-            boreal::compiler::CompilerProfile::Speed
-        } else {
-            boreal::compiler::CompilerProfile::Memory
-        })
-        .build();
+pub fn build_boreal_compiler() -> boreal::Compiler {
+    let mut boreal_compiler = boreal::compiler::Compiler::new();
     let _ = boreal_compiler.define_symbol("owner", "owner");
     let _ = boreal_compiler.define_symbol("filename", "filename");
     let _ = boreal_compiler.define_symbol("filepath", "filepath");
@@ -83,8 +77,8 @@ pub fn build_yara_x_compiler<'a>() -> yara_x::Compiler<'a> {
     compiler
 }
 
-pub fn build_boreal_scanner(rules: &[PathBuf], speed: bool) -> boreal::Scanner {
-    let mut boreal_compiler = build_boreal_compiler(speed);
+pub fn build_boreal_scanner(rules: &[PathBuf]) -> boreal::Scanner {
+    let mut boreal_compiler = build_boreal_compiler();
 
     for path in rules {
         boreal_compiler.add_rules_file(path).unwrap_or_else(|err| {

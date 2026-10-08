@@ -2,7 +2,7 @@
 //!
 //! This binary must be run under DHAT to get the compiled size:
 //!
-//! `valgrind --tool=dhat ./compiled_size boreal-speed panopticon`
+//! `valgrind --tool=dhat ./compiled_size boreal panopticon`
 //!
 //! Then use the "At t-end" heap size.
 use boreal_benches::{
@@ -16,7 +16,7 @@ fn main() {
     if args.len() != 2 {
         eprintln!(
             "usage: {} <engine> <rules_name>\n  \
-            engine: boreal-speed | boreal-memory | yara | yara-x\n  \
+            engine: boreal | yara | yara-x\n  \
             rules_name: orion | atr | ...",
             arg0
         );
@@ -40,11 +40,8 @@ fn main() {
 
     let rules = get_yara_files_from_path(rules_path);
 
-    if engine == "boreal-speed" {
-        let _boreal_scanner = build_boreal_scanner(&rules, true);
-        std::process::exit(0);
-    } else if engine == "boreal-memory" {
-        let _boreal_scanner = build_boreal_scanner(&rules, false);
+    if engine == "boreal" {
+        let _boreal_scanner = build_boreal_scanner(&rules);
         std::process::exit(0);
     } else if engine == "yara" {
         let _yara_rules = build_yara_rules(&rules);
@@ -52,5 +49,7 @@ fn main() {
     } else if engine == "yara-x" {
         let _yara_x_rules = build_yara_x_rules(&rules);
         std::process::exit(0);
+    } else {
+        panic!("unknown engine {}", engine);
     }
 }
