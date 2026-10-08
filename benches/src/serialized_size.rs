@@ -9,18 +9,13 @@ fn main() {
 
         let rules = get_yara_files_from_path(rules_path);
 
-        let boreal_speed_scanner = build_boreal_scanner(&rules, true);
-        let boreal_memory_scanner = build_boreal_scanner(&rules, false);
+        let boreal_scanner = build_boreal_scanner(&rules);
         let mut yara_rules = build_yara_rules(&rules);
         let yara_x_rules = build_yara_x_rules(&rules);
 
         let mut out = Vec::new();
-        boreal_speed_scanner.to_bytes(&mut out).unwrap();
-        println!("boreal-speed: {}", datasize(out.len()));
-
-        let mut out = Vec::new();
-        boreal_memory_scanner.to_bytes(&mut out).unwrap();
-        println!("boreal-memory: {}", datasize(out.len()));
+        boreal_scanner.to_bytes(&mut out).unwrap();
+        println!("boreal: {}", datasize(out.len()));
 
         let mut out = Vec::new();
         yara_rules.save_to_stream(&mut out).unwrap();
