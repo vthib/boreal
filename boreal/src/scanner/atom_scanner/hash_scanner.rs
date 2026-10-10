@@ -176,11 +176,26 @@ impl HashScanner {
             //
             // This is branch free and computed from values (hopefully) kept
             // in cache.
+            //
+            // This is a 64 loop, written in 8x8. This helps llvm understand it
+            // can get entirely unrolled, but is strictly equivalent to:
+            //
+            // ```
+            // for i in 0..64 {
+            //     let prefix = u16::from_le_bytes([block[i], block[i+1]]);
+            //     candidates |= self.can_start[prefix] << i;
+            // }
+            // ```
             let mut candidates = 0u64;
-            for i in 0..64 {
-                // Safety: cannot unwrap for obvious reasons, the slice has the right size
-                let prefix = u16::from_le_bytes(block[i..(i + 2)].try_into().unwrap());
-                candidates |= u64::from(self.can_start[usize::from(prefix)]) << i;
+            for j in 0..8 {
+                let mut group = 0u64;
+                for k in 0..8 {
+                    let i = j * 8 + k;
+                    // Safety: cannot unwrap for obvious reasons, the slice has the right size
+                    let prefix = u16::from_le_bytes(block[i..(i + 2)].try_into().unwrap());
+                    group |= u64::from(self.can_start[usize::from(prefix)]) << k;
+                }
+                candidates |= group << (j * 8);
             }
 
             // Second pass: for every set bit, probe the different tables.
