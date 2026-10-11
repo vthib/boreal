@@ -240,6 +240,7 @@ fn compile_rules(options: CompilerOptions, warning_mode: WarningMode) -> Option<
         println!("{log}");
     }));
 
+    #[allow(deprecated)]
     if let Some(profile) = profile {
         builder = builder.profile(profile);
     }

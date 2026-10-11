@@ -66,6 +66,10 @@ impl CompilerBuilder {
     ///
     /// By default, [`crate::compiler::CompilerProfile::Speed`] is used.
     #[must_use]
+    #[deprecated(
+        since = "1.4.0",
+        note = "The profile value is no longer used, both profiles are now unified"
+    )]
     pub fn profile(mut self, profile: super::CompilerProfile) -> Self {
         self.profile = profile;
         self

@@ -447,6 +447,7 @@ fn get_available_modules(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
 }
 
 fn build_compiler(profile: Option<&CompilerProfile>) -> compiler::Compiler {
+    #[allow(deprecated)]
     compiler::CompilerBuilder::new()
         .profile(match profile {
             Some(CompilerProfile::Speed) | None => ::boreal::compiler::CompilerProfile::Speed,
