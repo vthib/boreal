@@ -1,9 +1,11 @@
+#![allow(deprecated)]
 use boreal::compiler::{CompilerProfile, ExternalValue};
 use clap::parser::Values;
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 
 #[derive(Debug)]
 pub struct CompilerOptions {
+    #[allow(deprecated)]
     pub profile: Option<CompilerProfile>,
     pub compute_statistics: bool,
     pub max_strings_per_rule: Option<usize>,
@@ -26,6 +28,7 @@ impl CompilerOptions {
             });
 
         Self {
+            #[allow(deprecated)]
             profile: args.remove_one::<CompilerProfile>("profile"),
             compute_statistics: args.get_flag("string_statistics"),
             max_strings_per_rule: args.remove_one::<usize>("max_strings_per_rule"),
@@ -138,6 +141,7 @@ pub fn add_compiler_args(mut command: Command, in_yr_subcommand: bool) -> Comman
     command
 }
 
+#[allow(deprecated)]
 fn parse_compiler_profile(profile: &str) -> Result<CompilerProfile, String> {
     match profile {
         "speed" => Ok(CompilerProfile::Speed),

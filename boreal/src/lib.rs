@@ -35,6 +35,9 @@
 //! ```
 
 #![allow(unsafe_code)]
+// We mark some objects deprecated for the sake of users, but this results
+// in our code being littered with deprecated warnings...
+#![allow(deprecated)]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 // Used in integration tests, not in the library.

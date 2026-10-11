@@ -118,6 +118,10 @@ struct ImportedModule {
 }
 
 /// Profile to use when compiling rules.
+#[deprecated(
+    since = "1.4.0",
+    note = "The profile value is no longer used, both profiles are now unified"
+)]
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum CompilerProfile {
     /// Prioritize scan speed.
