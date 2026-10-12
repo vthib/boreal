@@ -2109,6 +2109,9 @@ impl Pe {
         let arg = args.next()?;
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
 
         match arg {
             Value::Bytes(section_name) => data
@@ -2139,6 +2142,9 @@ impl Pe {
         let arg = args.next()?;
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
 
         let res = match arg {
             Value::Bytes(function_name) => data.exports.iter().any(|export| {
@@ -2168,6 +2174,10 @@ impl Pe {
         let arg = args.next()?;
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
+
         // XXX: yara does this, for some reason
         if data.exports.is_empty() {
             return None;
@@ -2209,6 +2219,9 @@ impl Pe {
         let third = args.next();
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
 
         match (first, second, third) {
             (Value::Bytes(dll_name), Some(Value::Bytes(function_name)), None) => {
@@ -2308,6 +2321,9 @@ impl Pe {
         let second = args.next()?;
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
 
         match (first, second) {
             (Value::Bytes(dll_name), Value::Bytes(function_name)) => data
@@ -2326,6 +2342,9 @@ impl Pe {
         let second = args.next()?;
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
 
         match (first, second) {
             (Value::Bytes(dll_name), Value::Bytes(function_name)) => data
@@ -2343,6 +2362,10 @@ impl Pe {
         let locale: i64 = args.next()?.try_into().ok()?;
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
+
         Some(bool_to_int_value(
             data.resource_languages
                 .iter()
@@ -2355,6 +2378,10 @@ impl Pe {
         let lang: i64 = args.next()?.try_into().ok()?;
 
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
+
         Some(bool_to_int_value(
             data.resource_languages
                 .iter()
@@ -2364,16 +2391,28 @@ impl Pe {
 
     fn is_dll(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
+
         Some(data.is_dll.into())
     }
 
     fn is_32bit(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
+
         Some(bool_to_int_value(data.is_32bit))
     }
 
     fn is_64bit(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
+
         Some(bool_to_int_value(!data.is_32bit))
     }
 
@@ -2416,6 +2455,9 @@ impl Pe {
     #[cfg(feature = "hash")]
     fn imphash(ctx: &mut EvalContext, _: Vec<Value>) -> Option<Value> {
         let data = ctx.module_data.get::<Self>()?;
+        if !data.found_pe {
+            return None;
+        }
 
         match data.imphash.lock() {
             Ok(mut locked_data) => {

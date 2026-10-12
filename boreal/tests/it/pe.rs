@@ -1,4 +1,4 @@
-use crate::utils::{check_file, compare_module_values_on_file};
+use crate::utils::{check, check_file, compare_module_values_on_file};
 
 #[test]
 fn test_rva_to_offset() {
@@ -844,6 +844,36 @@ rule test {{
         "tests/assets/libyara/data/tiny",
         "1720bf764274b7a4052bbef0a71adc0d",
     );
+}
+
+#[test]
+fn test_functions_on_not_pe() {
+    // Functions called on data that is not a PE should return undefined.
+    #[track_caller]
+    fn test(cond: &str) {
+        check(
+            &format!(r#"import "pe" rule test {{ condition: {cond} }}"#),
+            b"not a pe",
+            true,
+        );
+    }
+
+    test("not defined pe.section_index(\".text\")");
+    test("not defined pe.exports(0)");
+    test("not defined pe.exports_index(0)");
+    test("not defined pe.imports(/.*/, /.*/)");
+    test("not defined pe.import_rva(\"user32.dll\", 0)");
+    test("not defined pe.delayed_import_rva(\"user32.dll\", 0)");
+    test("not defined pe.locale(0x09)");
+    test("not defined pe.language(0x09)");
+    test("not defined pe.is_dll()");
+    test("not defined pe.is_32bit()");
+    test("not defined pe.is_64bit()");
+    test("not defined pe.calculate_checksum()");
+    test("not defined pe.rva_to_offset(4096)");
+
+    #[cfg(feature = "hash")]
+    test("not defined pe.imphash()");
 }
 
 #[test]
