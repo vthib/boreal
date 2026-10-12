@@ -200,3 +200,92 @@ rule a {
         }
     }
 }
+
+// Several literals of a string can pick the same atom at the same position in the literal.
+// All of those literals must be checked when the atom is found, not only the first one.
+#[test]
+fn test_hex_literals_sharing_an_atom() {
+    let mut checker = Checker::new(
+        r#"
+rule masked {
+    strings:
+        $a = { b? 89 4d 39 8c }
+    condition:
+        $a
+}
+rule alternation {
+    strings:
+        $a = { ( b0 | b5 | bf ) 89 4d 39 8c }
+    condition:
+        $a
+}"#,
+    );
+    let expected: Vec<(&[u8], usize, usize)> = vec![
+        (b"\xb0\x89\x4d\x39\x8c", 0, 5),
+        (b"\xb5\x89\x4d\x39\x8c", 6, 5),
+        (b"\xbf\x89\x4d\x39\x8c", 12, 5),
+    ];
+    checker.check_full_matches(
+        b"\xb0\x89\x4d\x39\x8c.\xb5\x89\x4d\x39\x8c.\xbf\x89\x4d\x39\x8c",
+        vec![
+            ("default:masked".to_owned(), vec![("a", expected.clone())]),
+            ("default:alternation".to_owned(), vec![("a", expected)]),
+        ],
+    );
+}
+
+#[test]
+fn test_regex_literals_sharing_an_atom() {
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /x(a|b)yzwvu/
+        $b = /(en|de)crypt(ion|ed\.)/
+    condition:
+        all of them
+}"#,
+    );
+    checker.check_full_matches(
+        b"xayzwvu xbyzwvu encryption decryption encrypted. decrypted.",
+        vec![(
+            "default:a".to_owned(),
+            vec![
+                ("a", vec![(b"xayzwvu", 0, 7), (b"xbyzwvu", 8, 7)]),
+                (
+                    "b",
+                    vec![
+                        (b"encryption", 16, 10),
+                        (b"decryption", 27, 10),
+                        (b"encrypted.", 38, 10),
+                        (b"decrypted.", 49, 10),
+                    ],
+                ),
+            ],
+        )],
+    );
+
+    // The 63 wide literals generated from `\w'\.'` all pick the atom `.\0'\0`.
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = /\w'\.'\w/ wide
+    condition:
+        $a
+}"#,
+    );
+    checker.check_full_matches(
+        b"x\x00'\x00.\x00'\x00y\x00 \x000\x00'\x00.\x00'\x001\x00",
+        vec![(
+            "default:a".to_owned(),
+            vec![(
+                "a",
+                vec![
+                    (b"x\x00'\x00.\x00'\x00y\x00", 0, 10),
+                    (b"0\x00'\x00.\x00'\x001\x00", 12, 10),
+                ],
+            )],
+        )],
+    );
+}

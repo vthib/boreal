@@ -1,4 +1,5 @@
 //! Provides the [`AtomScanner`] object, used to scan for all variables in a single pass.
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 
@@ -94,7 +95,7 @@ impl AtomScanner {
             if matcher.literals.is_empty() {
                 non_handled_var_indexes.push(matcher_index);
             } else {
-                let mut known_literals_of_var = HashSet::new();
+                let mut known_literals_of_var: HashSet<Cow<[u8]>> = HashSet::new();
 
                 for (literal_index, lit) in matcher.literals.iter().enumerate() {
                     let (atom, start) = pick_atom_in_literal(lit);
@@ -108,31 +109,24 @@ impl AtomScanner {
                         nocase,
                     };
 
-                    // Sometimes, two literals of the same variable can provide the same atom.
-                    // This can happen if the two literals are identical (for example, someone
-                    // like me writing a test on `/(abc|abc)/`), or if the literals are
-                    // different but contain the same atom (for example,
-                    // `{ ( 00 AB CD | AB CD 00 ) }`).
+                    // Sometimes, two literals of the same variable are identical
+                    // (for example, something like `/(abc|abc)/`). We must
+                    // *not* add both, as this would result in two identical
+                    // matches for the same variable.
                     //
-                    // In those cases, we must *not* use the same atom twice in the Aho-Corasick,
-                    // as this would result in two identical matches for the same variable.
-                    // To prevent this, a set is used here. Both the atom itself and its position
-                    // in the literal are important.
-                    {
-                        let mut dedup_atom = atom;
-
-                        // See `test_nocase_alternate_case` test. If the variable is "nocase",
-                        // then make sure we don't add to the scanner two different atoms that
-                        // results in the same lowercase string. This shouldn't be done outside
-                        // of the "nocase" scenario, since different cases will be validated
-                        // properly against each literal.
-                        if nocase {
-                            dedup_atom.make_ascii_lowercase();
-                        }
-
-                        if !known_literals_of_var.insert((dedup_atom, start)) {
-                            continue;
-                        }
+                    // This must be done on the literal and not on its atom:
+                    // different literals can pick the same atom at the same
+                    // position. For example, the 16 literals of
+                    // `{ b? 89 4d 39 8c }` all pick `89 4d 39 8c`. All of
+                    // those literals must be kept, otherwise their matches
+                    // are lost.
+                    let dedup_literal = if nocase {
+                        Cow::Owned(lit.to_ascii_lowercase())
+                    } else {
+                        Cow::Borrowed(&**lit)
+                    };
+                    if !known_literals_of_var.insert(dedup_literal) {
+                        continue;
                     }
 
                     let mut add_atom = |atom| {
