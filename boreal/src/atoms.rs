@@ -27,12 +27,6 @@ pub struct Atom {
 }
 
 impl Atom {
-    pub fn make_ascii_lowercase(&mut self) {
-        for byte in self.as_mut() {
-            byte.make_ascii_lowercase();
-        }
-    }
-
     pub fn len(self) -> usize {
         usize::from(self.len)
     }
