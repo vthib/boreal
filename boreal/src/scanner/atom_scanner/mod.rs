@@ -391,26 +391,47 @@ impl AtomScanner {
 }
 
 fn add_match(matcher: &Matcher, new_match: StringMatch, var_matches: &mut Vec<StringMatch>) {
-    // XXX: If the left HIR has greedy repetitions, then the reverse validator
-    // may give matches that replaces existing matches.
+    // Matches of a variable are kept sorted by offset, with a single match per offset.
+    //
+    // Atoms are found in order, so a new match is usually after all the existing ones,
+    // but not always: the atom of a literal is not always at its start, and two literals
+    // of a variable can match at the same offset (see `test_duplicate_matches_at_same_offset`).
+    //
+    // When two matches have the same offset, the first one found is kept. libyara does
+    // not guarantee any heuristic about this and is not itself consistent, so the same
+    // is done here. The match being kept may not be the same as in libyara.
+    //
+    // For example, for /(abcd|abc)/, and input "abcd", there is no guarantee on whether
+    // the reported match is "abcd" or "abc".
+    //
+    // The exception to this "first match found is kept" rule is when the left HIR
+    // has greedy repetitions: the reverse validator may then give matches that replace
+    // existing matches.
     //
     // For example, a regex that looks like: `a.+foo.b` will extract the literal foo,
     // but against the string `aafoobbaafoobb`, the only match should be the
     // entire string. A first `foo` atom match will result in `aafoobb` being found,
-    // but the second `foo` atom match should then replace the first match.
-    //
-    // To handle this, we search into the existing matches if there are existing matches
-    // at the same offset. If there are, we replace them, since the longest match always
-    // wins.
-    if matcher.has_greedy_reverse_validator() {
-        match var_matches
-            .binary_search_by_key(&(new_match.base + new_match.offset), |m| m.base + m.offset)
-        {
-            Ok(position) => var_matches[position] = new_match,
-            Err(_) => var_matches.push(new_match),
-        }
-    } else {
+    // but the second `foo` atom match should then replace the first match, since the
+    // longest match always wins.
+    let offset = new_match.base + new_match.offset;
+
+    // Happy (and extremely common) path
+    if var_matches
+        .last()
+        .is_none_or(|last| last.base + last.offset < offset)
+    {
         var_matches.push(new_match);
+        return;
+    }
+
+    // Rare path: use a binary search to find the right place for this match.
+    match var_matches.binary_search_by_key(&offset, |m| m.base + m.offset) {
+        Ok(position) => {
+            if matcher.has_greedy_reverse_validator() {
+                var_matches[position] = new_match;
+            }
+        }
+        Err(position) => var_matches.insert(position, new_match),
     }
 }
 
