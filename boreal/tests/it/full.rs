@@ -289,3 +289,67 @@ rule a {
         )],
     );
 }
+
+#[test]
+fn test_overlapping_literals_matches_order() {
+    // Literals of the same variable can overlap, and their atoms do not necessarily end in
+    // the same order as the literals start. Matches must still be reported ordered by their
+    // offset, conditions such as `@a[i]` or `$a at` depend on it.
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { ( 61 62 63 64 | 62 63 ) }
+    condition:
+        $a
+}"#,
+    );
+
+    checker.check_full_matches(
+        b"abcd",
+        vec![(
+            "default:a".to_owned(),
+            vec![("a", vec![(b"abcd", 0, 4), (b"bc", 1, 2)])],
+        )],
+    );
+}
+
+#[test]
+fn test_overlapping_literals_inner_atom_order() {
+    // Atoms are found in order, but the atom of a literal is not always at its start. Here,
+    // the atom picked in `abcdef` starts after the `bc` atom, so the `bc` match is found
+    // first. The matches must still be reported in offset order.
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { ( 61 62 63 64 65 66 | 62 63 ) }
+    condition:
+        $a
+}"#,
+    );
+    checker.check_full_matches(
+        b"..abcdef..",
+        vec![(
+            "default:a".to_owned(),
+            vec![("a", vec![(b"abcdef", 2, 6), (b"bc", 3, 2)])],
+        )],
+    );
+}
+
+#[test]
+fn test_duplicate_matches_at_same_offset() {
+    // Two literals of a string can match at the same offset. As in libyara, a single match
+    // is kept per offset.
+    let mut checker = Checker::new(
+        r#"
+rule a {
+    strings:
+        $a = { ( 61 62 63 64 | 61 62 63 64 65 ) }
+    condition:
+        #a == 1
+}
+"#,
+    );
+    checker.check(b"xabcde", true);
+}
