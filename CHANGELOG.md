@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-10-16
+
+This release replaces the Aho-Corasick automaton used to scan for atoms with a new,
+ad-hoc scanner built specifically for boreal's needs. This brings significant improvements
+to both scan durations and memory usage. See the [benchmarks](benches/README.md) for the
+new values, where boreal now beats yara and yara-x significantly on all but one tested rulesets.
+
+Since this new scanner is always used regardless of the compiler profile selected, the speed
+and memory profiles are now unified, and `CompilerProfile` is deprecated.
+
+This release also fixes a few rare matching bugs, including one where some strings could fail
+to match. See the complete changelog for details.
+
+Note that the serialization version is bumped, so rules serialized in previous versions cannot
+be loaded and must be compiled and serialized again.
+
+### boreal
+
+#### Changed
+
+Scan speed and memory optimizations:
+
+- Replace the Aho-Corasick automaton used to scan for atoms with a new, custom made scanner.
+  This greatly reduces scan durations as well as the memory used by compiled rules [#282](https://github.com/vthib/boreal/pull/282).
+- Use an allocation-free type for atoms [#279](https://github.com/vthib/boreal/pull/279).
+- Use case sensitive atoms rather than depending on the atom scanner being case insensitive [#280](https://github.com/vthib/boreal/pull/280).
+- Reject false positive atom matches cheaply, without loading the details of the related literal [#284](https://github.com/vthib/boreal/pull/284).
+- Skip the evaluation of rules that cannot match when none of their strings matched [#285](https://github.com/vthib/boreal/pull/285).
+- Avoid allocating matches for every rule during evaluation [#287](https://github.com/vthib/boreal/pull/287).
+
+#### Deprecated
+
+- `CompilerProfile` and `CompilerBuilder::profile` are deprecated: both profiles are now unified, and the profile
+  no longer has any impact [#290](https://github.com/vthib/boreal/pull/290).
+  This also means the `--profile` option of `boreal-cli` and the `profile` parameter of `boreal-py` no longer
+  have any effect.
+
+#### Fixed
+
+- Fix matching bug on strings whose literals share the same atom: only the first of those literals was matched.
+  For example, the string `{ b? 01 02 03 04 }` would only match on `b0 01 02 03 04` [#292](https://github.com/vthib/boreal/pull/292).
+- Ensure matches are always sorted. In rare cases involving alternations, matches could end up unsorted, resulting
+  in wrong results for conditions using offsets or lengths of specific matches [#293](https://github.com/vthib/boreal/pull/293).
+- Some functions of the `pe` module, such as `pe.exports`, `pe.imports` or `pe.locale`, did not return undefined
+  when the scanned data is not a PE, unlike YARA [#291](https://github.com/vthib/boreal/pull/291).
+
 ## [1.3.0] - 2026-09-20
 
 This release brings a lot of incremental improvements to reduce memory consumption,
@@ -785,7 +831,8 @@ Main changes:
 
 Initial release.
 
-[unreleased]: https://github.com/vthib/boreal/compare/v1.3.0...HEAD
+[unreleased]: https://github.com/vthib/boreal/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/vthib/boreal/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/vthib/boreal/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/vthib/boreal/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vthib/boreal/compare/v1.0.0...v1.1.0
