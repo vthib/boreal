@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use object::elf::{self, FileHeader32, FileHeader64};
-use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, Sym};
+use object::read::StringTable;
+use object::read::elf::{Dyn, FileHeader, ProgramHeader, SectionHeader, SectionTable, Sym};
 use object::{Endianness, FileKind};
 
 use crate::memory::Region;
@@ -435,26 +436,34 @@ pub(crate) fn entry_point<Elf: FileHeader>(
                 }
             })
     } else {
-        header.sections(e, mem).ok()?.iter().find_map(|section| {
-            if matches!(section.sh_type(e), elf::SHT_NULL | elf::SHT_NOBITS) {
-                return None;
-            }
+        header
+            .section_headers(e, mem)
+            .ok()?
+            .iter()
+            .find_map(|section| {
+                if matches!(section.sh_type(e), elf::SHT_NULL | elf::SHT_NOBITS) {
+                    return None;
+                }
 
-            let addr = section.sh_addr(e).into();
-            let size = section.sh_size(e).into();
-            if (addr..addr.saturating_add(size)).contains(&entrypoint) {
-                Some((entrypoint - addr).saturating_add(section.sh_offset(e).into()))
-            } else {
-                None
-            }
-        })
+                let addr = section.sh_addr(e).into();
+                let size = section.sh_size(e).into();
+                if (addr..addr.saturating_add(size)).contains(&entrypoint) {
+                    Some((entrypoint - addr).saturating_add(section.sh_offset(e).into()))
+                } else {
+                    None
+                }
+            })
     }
 }
 
 fn sections<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option<Value> {
-    let section_table = header.sections(e, mem).ok()?;
+    // `FileHeaders::sections` now eagerly reads string tables, meaning it would
+    // error out very early and prevent us from attempting to parse whatever we
+    // could. This is circumvented by getting the parts separately.
+    let section_headers = header.section_headers(e, mem).ok()?;
+    let section_strings = header.section_strings(e, mem, section_headers).ok();
     Some(Value::Array(
-        section_table
+        section_headers
             .iter()
             .take(MAX_NB_SECTIONS)
             .map(|section| {
@@ -467,9 +476,8 @@ fn sections<Elf: FileHeader>(header: &Elf, e: Elf::Endian, mem: &[u8]) -> Option
                     ("offset", Value::Integer(section.sh_offset(e).into() as i64)),
                     (
                         "name",
-                        section_table
-                            .section_name(e, section)
-                            .ok()
+                        section_strings
+                            .and_then(|section_strings| section.name(e, section_strings).ok())
                             .map(<[u8]>::to_vec)
                             .into(),
                     ),
@@ -533,7 +541,10 @@ fn get_symbols<Elf: FileHeader>(
     symbol_type: elf::SectionType,
     data: &mut Data,
 ) -> Option<Vec<Value>> {
-    let section_table = header.sections(e, mem).ok()?;
+    // Like in `sections`: don't read the section strings because they are not
+    // needed here and it may eagerly fail.
+    let section_headers = header.section_headers(e, mem).ok()?;
+    let section_table = SectionTable::<Elf, _>::new(section_headers, StringTable::default());
     let symbol_table = section_table.symbols(e, mem, symbol_type).ok()?;
     let strings_table = symbol_table.strings();
 
